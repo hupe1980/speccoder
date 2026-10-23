@@ -158,6 +158,9 @@ pub struct RunOptions {
     /// Run although the feature's checklists have unchecked items; the
     /// override is recorded on every commit of the run.
     pub ignore_checklists: bool,
+    /// Classes a person approved "for this run": shared by every task (and
+    /// lane) of one `speccoder run`, gone with it.
+    pub run_grants: Arc<std::sync::Mutex<Vec<crate::tools::policy::Grant>>>,
 }
 
 /// The format's checklist gate: an unchecked item in the feature's

@@ -84,13 +84,21 @@ pub struct Decided {
     /// A rejection's reason.
     #[serde(default)]
     pub reason: Option<String>,
-    /// An approval for the rest of the task (not just once).
+    /// How far an approval reaches: `once`, `task` or `run` (a rejection
+    /// holds for the task).
+    #[serde(default = "task_scope")]
+    pub scope: String,
+    /// An approval's note to the model.
     #[serde(default)]
-    pub for_task: bool,
+    pub note: Option<String>,
     /// Who decided.
     pub by: Who,
     /// Seconds since the epoch.
     pub at: u64,
+}
+
+fn task_scope() -> String {
+    "task".to_owned()
 }
 
 fn now() -> u64 {
@@ -147,7 +155,8 @@ impl Decisions {
             verb: "approve".to_owned(),
             grant,
             reason: None,
-            for_task: true,
+            scope: task_scope(),
+            note: None,
             by: by.clone(),
             at: now(),
         });
@@ -176,7 +185,8 @@ impl Decisions {
             verb: "reject".to_owned(),
             grant,
             reason: Some(reason.to_owned()),
-            for_task: true,
+            scope: task_scope(),
+            note: None,
             by: by.clone(),
             at: now(),
         });
@@ -192,43 +202,144 @@ impl Decisions {
 
 // ── Inline approvals ────────────────────────────────────────────────
 
-/// A call that needs a person, as shown to them.
+pub mod present;
+
+pub use present::{PresentContext, Presentation, present};
+
+/// A call that needs a person: the identity of the journaled question, so
+/// only what the journal already holds goes in (the presentation — the diff,
+/// the sandbox line — is built live from it, F-054).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Request {
     /// `feature/task`.
     pub task: String,
+    /// The task's title.
+    #[serde(default)]
+    pub task_title: String,
+    /// The model turn (1-based).
+    #[serde(default)]
+    pub turn: u32,
     /// The tool.
     pub tool: String,
     /// Its arguments as the model sent them.
     pub arguments: serde_json::Value,
+    /// `write`, `edit`, `run`, `network` or `mcp`.
+    #[serde(default)]
+    pub kind: String,
     /// Why it needs approval.
     pub reason: String,
     /// What a "for this task" answer would cover.
     pub covers: String,
     /// `high` (runs arbitrary code or uses the network), `medium` (changes
-    /// dependencies, frozen tests or repository state) or `low`.
+    /// dependencies, frozen tests or repository state; any MCP tool) or `low`.
     pub risk: String,
+    /// What the model said in that turn: one line, at most 200 characters,
+    /// control characters escaped — a claim, not a fact.
+    #[serde(default)]
+    pub claim: Option<String>,
+    /// The choices offered, in order: of `once`, `task`, `run`, `reject`, `stop`.
+    #[serde(default)]
+    pub options: Vec<String>,
 }
 
-/// A person's answer.
+/// How far an approval reaches.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Scope {
+    /// This call.
+    Once,
+    /// The call's class for the rest of the task.
+    Task,
+    /// The call's class in every task of this run.
+    Run,
+}
+
+impl Scope {
+    /// Its name.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Once => "once",
+            Self::Task => "task",
+            Self::Run => "run",
+        }
+    }
+}
+
+/// What a person decided.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Decision {
+    /// Run the call.
+    Approve,
+    /// Refuse it; the model is told why.
+    Reject,
+    /// End the task here; the call waits for `speccoder approve`.
+    Stop,
+}
+
+/// A person's answer ("later" is no answer: nothing is journaled until one exists).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Answer {
-    /// Run the call.
-    pub approved: bool,
-    /// Also approve its class for the rest of the task (recorded like `approve`).
-    pub for_task: bool,
-    /// For a rejection: why — the model is told.
+    /// Approve, reject or stop.
+    pub decision: Decision,
+    /// How far an approval reaches.
+    pub scope: Scope,
+    /// An approval's note to the model.
+    #[serde(default)]
+    pub note: Option<String>,
+    /// A rejection's reason — the model is told.
+    #[serde(default)]
     pub reason: Option<String>,
     /// Who answered; journaled with the answer.
     #[serde(default)]
     pub by: Option<Who>,
 }
 
+impl Answer {
+    /// An approval with `scope` and an optional note to the model.
+    #[must_use]
+    pub fn approve(scope: Scope, note: Option<String>, by: Option<Who>) -> Self {
+        Self {
+            decision: Decision::Approve,
+            scope,
+            note: note.filter(|n| !n.trim().is_empty()),
+            reason: None,
+            by,
+        }
+    }
+
+    /// A rejection; the model is told `reason`.
+    #[must_use]
+    pub fn reject(reason: impl Into<String>, by: Option<Who>) -> Self {
+        Self {
+            decision: Decision::Reject,
+            scope: Scope::Once,
+            note: None,
+            reason: Some(reason.into()),
+            by,
+        }
+    }
+
+    /// Stop the task; the call waits.
+    #[must_use]
+    pub fn stop(by: Option<Who>) -> Self {
+        Self {
+            decision: Decision::Stop,
+            scope: Scope::Once,
+            note: None,
+            reason: None,
+            by,
+        }
+    }
+}
+
 /// Asks a person, synchronously, while an attempt waits (a terminal prompt
-/// in the CLI). The answer is journaled; replay never asks again.
+/// in the CLI, a permission request in an editor). The answer is journaled;
+/// replay never asks again.
 pub trait Approver: Send + Sync + std::fmt::Debug {
-    /// The person's answer to `request`.
-    fn ask(&self, request: &Request) -> Answer;
+    /// The person's answer to the presented call.
+    fn ask(&self, p: &Presentation) -> Answer;
 
     /// The person's free-text answer to a question a hosted skill asks
     ///; `None` when nobody can answer.
@@ -238,13 +349,61 @@ pub trait Approver: Send + Sync + std::fmt::Debug {
     }
 }
 
+/// The kind of call, from the call alone (it is part of the journaled
+/// question, so it never depends on the worktree): `write` (`write_file`),
+/// `edit` (`edit_file`), `run`, `network` (a command asking for the network)
+/// or `mcp`. Whether a write replaces a file is the presentation's to say.
+#[must_use]
+pub fn kind_of(tool: &str, arguments: &serde_json::Value) -> &'static str {
+    match tool {
+        "write_file" => "write",
+        "edit_file" => "edit",
+        "run_command" if arguments["network"] == true => "network",
+        "run_command" => "run",
+        t if t.starts_with(crate::mcp::PREFIX) => "mcp",
+        _ => "edit",
+    }
+}
+
+/// The choices offered: "for this run" never for high risk; neither "task"
+/// nor "run" when the class is not shown in full.
+#[must_use]
+pub fn options(risk: &str, subject_complete: bool) -> Vec<String> {
+    let mut o = vec!["once"];
+    if subject_complete {
+        o.push("task");
+        if risk != "high" {
+            o.push("run");
+        }
+    }
+    o.extend(["reject", "stop"]);
+    o.into_iter().map(str::to_owned).collect()
+}
+
+/// A model's text, one line, at most 200 characters, control characters
+/// escaped: what it claimed in the turn that asked.
+#[must_use]
+pub fn claim(text: &str) -> Option<String> {
+    let line = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let line = present::escape(&line);
+    if line.is_empty() {
+        return None;
+    }
+    Some(if line.chars().count() > 200 {
+        format!("{}…", line.chars().take(199).collect::<String>())
+    } else {
+        line
+    })
+}
+
 /// The risk tier of a call that needs approval, from the policy's reason.
 #[must_use]
 pub fn risk(tool: &str, reason: &str) -> &'static str {
     let r = reason.to_lowercase();
     if tool == "run_command" && (r.contains("arbitrary") || r.contains("network")) {
         "high"
-    } else if r.contains("manifest")
+    } else if tool.starts_with(crate::mcp::PREFIX)
+        || r.contains("manifest")
         || r.contains("frozen")
         || r.contains("repository state")
         || r.contains("recursive")
@@ -310,6 +469,7 @@ fn pending(
         if decisions.decided(feature, &saved.task, &grant) {
             continue;
         }
+        let presentation = view(root, feature, &saved.task, &saved.reference, &tool, &p);
         out.push((
             PendingCall {
                 task: saved.task.clone(),
@@ -318,11 +478,90 @@ fn pending(
                 arguments: p["arguments"].clone(),
                 reason: p["reason"].as_str().unwrap_or_default().to_owned(),
                 reference: saved.reference.clone(),
+                presentation: Some(presentation),
             },
             grant,
         ));
     }
     out
+}
+
+/// The saved call as the inline prompt would have shown it: the file as the
+/// saved attempt left it, the project's sandbox, the model's claim.
+fn view(
+    root: &Path,
+    feature: &str,
+    task: &str,
+    reference: &str,
+    tool: &str,
+    pending: &serde_json::Value,
+) -> speccoder_core::ApprovalView {
+    let arguments = pending["arguments"].clone();
+    let reason = pending["reason"].as_str().unwrap_or_default().to_owned();
+    let grant = Grant::of(tool, &arguments);
+    let risk = risk(tool, &reason);
+    let request = Request {
+        task: format!("{feature}/{task}"),
+        task_title: String::new(),
+        turn: pending["turn"]
+            .as_u64()
+            .and_then(|t| u32::try_from(t).ok())
+            .unwrap_or(0),
+        tool: tool.to_owned(),
+        kind: kind_of(tool, &arguments).to_owned(),
+        covers: grant.as_ref().map(|g| g.describe()).unwrap_or_default(),
+        risk: risk.to_owned(),
+        claim: pending["claim"].as_str().map(str::to_owned),
+        options: options(risk, grant.is_some()),
+        arguments,
+        reason,
+    };
+    let path = request.arguments["path"].as_str().unwrap_or_default();
+    let file_text = (!path.is_empty())
+        .then(|| {
+            crate::git::Git::at(root)
+                .run(&["show", &format!("{reference}:./{path}")])
+                .ok()
+                .map(|b| String::from_utf8_lossy(&b).into_owned())
+        })
+        .flatten();
+    let config = crate::verify::find_config(root)
+        .and_then(|d| std::fs::read_to_string(d.join(crate::verify::config::FILE)).ok())
+        .unwrap_or_default();
+    let sandbox = crate::sandbox::parse(&config).ok();
+    let p = present(
+        &request,
+        &PresentContext {
+            root: None,
+            sandbox: sandbox
+                .as_ref()
+                .filter(|c| c.mode != crate::sandbox::Mode::Off)
+                .map(|_| {
+                    if cfg!(target_os = "macos") {
+                        "Seatbelt".to_owned()
+                    } else {
+                        "Landlock+seccomp".to_owned()
+                    }
+                }),
+            network: match sandbox.map(|c| c.network) {
+                Some(crate::sandbox::Network::Loopback) => "loopback",
+                Some(crate::sandbox::Network::On) => "unrestricted",
+                _ => "none",
+            }
+            .to_owned(),
+            file_text,
+        },
+    );
+    speccoder_core::ApprovalView {
+        kind: request.kind.clone(),
+        title: p.title,
+        subject: p.subject,
+        body_lines: p.body,
+        sandbox: p.sandbox,
+        claim: request.claim.clone(),
+        risk: request.risk.clone(),
+        scope: format!("for the rest of {task}: {}", p.scope),
+    }
 }
 
 fn decided(feature: &str, decisions: &Decisions) -> Vec<DecidedCall> {
@@ -332,27 +571,40 @@ fn decided(feature: &str, decisions: &Decisions) -> Vec<DecidedCall> {
         let Some(task) = key.strip_prefix(&prefix) else {
             continue;
         };
-        let by = |g: &Grant| {
-            d.decided
-                .iter()
-                .rev()
-                .find(|x| x.grant == *g)
-                .map(|x| x.by.describe())
-        };
+        let last = |g: &Grant| d.decided.iter().rev().find(|x| x.grant == *g);
         out.extend(d.approved.iter().map(|g| DecidedCall {
             task: task.to_owned(),
             decision: "approved".to_owned(),
             covers: g.describe(),
             reason: None,
-            by: by(g),
+            by: last(g).map(|x| x.by.describe()),
+            scope: Some("task".to_owned()),
+            note: last(g).and_then(|x| x.note.clone()),
         }));
         out.extend(d.rejected.iter().map(|r| DecidedCall {
             task: task.to_owned(),
             decision: "rejected".to_owned(),
             covers: r.grant.describe(),
             reason: Some(r.reason.clone()),
-            by: by(&r.grant),
+            by: last(&r.grant).map(|x| x.by.describe()),
+            scope: Some("task".to_owned()),
+            note: None,
         }));
+        // "For this run" decisions live in the history only.
+        out.extend(
+            d.decided
+                .iter()
+                .filter(|x| x.verb == "approve" && x.scope == "run")
+                .map(|x| DecidedCall {
+                    task: task.to_owned(),
+                    decision: "approved".to_owned(),
+                    covers: x.grant.describe(),
+                    reason: None,
+                    by: Some(x.by.describe()),
+                    scope: Some("run".to_owned()),
+                    note: x.note.clone(),
+                }),
+        );
     }
     out
 }
@@ -364,6 +616,8 @@ pub enum Verb<'a> {
     List,
     /// Approve the task's pending call.
     Approve(&'a str),
+    /// Approve it with a note the next attempt is told.
+    ApproveNoted(&'a str, &'a str),
     /// Reject the task's pending call, with a reason.
     Reject(&'a str, &'a str),
 }
@@ -377,7 +631,7 @@ pub fn decide_with(
 ) -> CommandResult {
     let command = match verb {
         Verb::List => "approvals",
-        Verb::Approve(_) => "approve",
+        Verb::Approve(_) | Verb::ApproveNoted(..) => "approve",
         Verb::Reject(..) => "reject",
     };
     let (feature, dir, root) = match locate(command, path, feature, state) {
@@ -409,7 +663,7 @@ pub fn decide_with(
                 format!("{} call(s) await a decision", waiting.len())
             }
         }
-        Verb::Approve(task) | Verb::Reject(task, _) => {
+        Verb::Approve(task) | Verb::ApproveNoted(task, _) | Verb::Reject(task, _) => {
             let Some((call, grant)) = waiting.iter().find(|(c, _)| c.task == task) else {
                 return CommandResult::new(
                     command,
@@ -427,6 +681,23 @@ pub fn decide_with(
                 }
                 _ => {
                     decisions.approve(&feature, task, grant.clone(), &Who::local("cli"));
+                    if let Verb::ApproveNoted(_, note) = verb
+                        && !note.trim().is_empty()
+                    {
+                        let t = decisions
+                            .tasks
+                            .entry(format!("{feature}/{task}"))
+                            .or_default();
+                        if let Some(last) = t.decided.last_mut() {
+                            last.note = Some(note.trim().to_owned());
+                        }
+                        // The next attempt is told, beside the approval.
+                        t.nudges.push(format!(
+                            "A person approved {}: {}",
+                            call.covers,
+                            note.trim()
+                        ));
+                    }
                     format!("approved: {} for {task}", call.covers)
                 }
             };

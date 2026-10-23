@@ -1509,13 +1509,13 @@ fn repeated_denials_stop_the_attempt_for_a_person() {
 
 // ── inline approvals ────────────────────────────────────────────────
 
-use speccoder_runtime::approvals::{Answer, Approver, Request};
+use speccoder_runtime::approvals::{Answer, Approver};
 
 /// Answers from a script and remembers what it was asked.
 #[derive(Debug)]
 struct Scripted {
     answers: std::sync::Mutex<Vec<Answer>>,
-    asked: std::sync::Mutex<Vec<Request>>,
+    asked: std::sync::Mutex<Vec<speccoder_runtime::approvals::Request>>,
 }
 
 impl Scripted {
@@ -1528,19 +1528,19 @@ impl Scripted {
 }
 
 impl Approver for Scripted {
-    fn ask(&self, request: &Request) -> Answer {
-        self.asked.lock().unwrap().push(request.clone());
+    fn ask(&self, p: &speccoder_runtime::approvals::Presentation) -> Answer {
+        self.asked.lock().unwrap().push(p.request.clone());
         self.answers.lock().unwrap().remove(0)
     }
 }
 
 fn yes(for_task: bool) -> Answer {
-    Answer {
-        by: None,
-        approved: true,
-        for_task,
-        reason: None,
-    }
+    let scope = if for_task {
+        speccoder_runtime::approvals::Scope::Task
+    } else {
+        speccoder_runtime::approvals::Scope::Once
+    };
+    Answer::approve(scope, None, None)
 }
 
 #[test]
@@ -1600,15 +1600,7 @@ fn for_this_task_is_recorded_and_a_rejection_reaches_the_model() {
         json!({ "argv": ["curl", "https://example.com"] }),
     );
     f.will_structure(done("tried"));
-    let person = Scripted::new(vec![
-        yes(true),
-        Answer {
-            by: None,
-            approved: false,
-            for_task: false,
-            reason: Some("no network".to_owned()),
-        },
-    ]);
+    let person = Scripted::new(vec![yes(true), Answer::reject("no network", None)]);
     let res =
         speccoder_runtime::run_with_approver(r.path(), None, "T005", state.path(), d, None, person);
     let rep = report(&res);
@@ -1827,6 +1819,7 @@ fn a_run_reports_its_steps_live_and_status_reads_them() {
     let kinds: Vec<String> = events
         .iter()
         .map(|e| match e {
+            Event::RunStarted { tasks, .. } => format!("plan {}", tasks.len()),
             Event::TaskStarted { task, .. } => format!("start {task}"),
             Event::Stage { stage, state, .. } => format!(
                 "{} {}",
@@ -1850,6 +1843,7 @@ fn a_run_reports_its_steps_live_and_status_reads_them() {
     assert_eq!(
         kinds,
         [
+            "plan 11",
             "start T005",
             "baseline started",
             "baseline passed",
@@ -2644,15 +2638,14 @@ struct Slow;
 impl speccoder_runtime::approvals::Approver for Slow {
     fn ask(
         &self,
-        _: &speccoder_runtime::approvals::Request,
+        _: &speccoder_runtime::approvals::Presentation,
     ) -> speccoder_runtime::approvals::Answer {
         std::thread::sleep(std::time::Duration::from_secs(13));
-        speccoder_runtime::approvals::Answer {
-            by: None,
-            approved: true,
-            for_task: false,
-            reason: None,
-        }
+        speccoder_runtime::approvals::Answer::approve(
+            speccoder_runtime::approvals::Scope::Once,
+            None,
+            None,
+        )
     }
 }
 
@@ -2692,4 +2685,201 @@ fn a_person_who_takes_their_time_keeps_the_run() {
     );
     assert!(Path::new(&rep.worktree).join("approved.txt").exists());
     assert!(rep.earlier.is_empty(), "the run was not taken over");
+}
+
+// ── Approval experience (F-054): notes, stop, task and run scope ────────────
+
+use speccoder_runtime::approvals::Scope;
+
+#[test]
+fn a_note_rides_with_the_approved_call_to_the_model() {
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    write_manifest(&f, "c1", "{}\n");
+    f.will_structure(done("manifest"));
+    let person = Scripted::new(vec![Answer::approve(
+        Scope::Once,
+        Some("keep it to an empty object".to_owned()),
+        None,
+    )]);
+    let res = speccoder_runtime::run_with_approver(
+        r.path(),
+        None,
+        "T005",
+        state.path(),
+        d,
+        None,
+        person.clone(),
+    );
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let rep = report(&res);
+    assert_eq!(rep.tool_calls[0]["scope"], "once");
+    assert_eq!(rep.tool_calls[0]["note"], "keep it to an empty object");
+    let next = f.asked()[1]
+        .exchanges
+        .iter()
+        .map(|e| e.output.to_string())
+        .collect::<String>();
+    assert!(
+        next.contains("Note from the person who approved this call: keep it to an empty object"),
+        "{next}"
+    );
+    // The person was shown the question in full.
+    let asked = person.asked.lock().unwrap().clone();
+    assert_eq!((asked[0].kind.as_str(), asked[0].turn), ("write", 1));
+    assert_eq!(asked[0].options, ["once", "task", "run", "reject", "stop"]);
+}
+
+#[test]
+fn stop_keeps_the_call_for_speccoder_approve() {
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    write_manifest(&f, "c1", "{}\n");
+    let person = Scripted::new(vec![Answer::stop(None)]);
+    let res =
+        speccoder_runtime::run_with_approver(r.path(), None, "T005", state.path(), d, None, person);
+    assert_eq!(res.status(), CommandStatus::NeedsHuman, "{}", res.message());
+    let rep = report(&res);
+    assert_eq!(rep.attempt_status, "needs_approval");
+    assert_eq!(rep.tool_calls[0]["stopped_by"], "person");
+    let listed = decide_with(r.path(), None, Verb::List, state.path());
+    let pending = &approvals(&listed).pending;
+    assert_eq!(pending.len(), 1, "{pending:?}");
+    assert_eq!(pending[0].task, "T005");
+}
+
+#[test]
+fn a_task_answer_covers_the_rest_of_the_attempt() {
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    write_manifest(&f, "c1", "{}\n");
+    write_manifest(&f, "c2", "{\"name\": \"x\"}\n");
+    f.will_call_tool(
+        "c3",
+        "run_command",
+        json!({ "argv": ["curl", "https://example.com"] }),
+    );
+    f.will_structure(done("manifest twice"));
+    let person = Scripted::new(vec![
+        Answer::approve(Scope::Task, None, None),
+        Answer::reject("no network", None),
+    ]);
+    let res = speccoder_runtime::run_with_approver(
+        r.path(),
+        None,
+        "T005",
+        state.path(),
+        d,
+        None,
+        person.clone(),
+    );
+    let rep = report(&res);
+    assert_eq!(
+        rep.tool_calls[1]["scope"], "task-grant",
+        "{:?}",
+        rep.tool_calls
+    );
+    let asked = person.asked.lock().unwrap().clone();
+    assert_eq!(asked.len(), 2, "the second write was not asked about");
+    // A high-risk command offers no "for this run".
+    assert_eq!(asked[1].risk, "high");
+    assert!(
+        !asked[1].options.contains(&"run".to_owned()),
+        "{:?}",
+        asked[1].options
+    );
+}
+
+#[test]
+fn run_scope_covers_later_tasks_and_replays_strictly() {
+    let r = two_task_repo();
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    write_manifest(&f, "c1", "{}\n");
+    let (id, args) = edit("c2", "pub fn ok() {}\npub fn login() {}");
+    f.will_call_tool(id, "edit_file", args);
+    f.will_structure(done("login"));
+    write_manifest(&f, "c3", "{\"name\": \"x\"}\n");
+    let (id, args) = edit("c4", "pub fn ok() {}\npub fn logout() {}");
+    f.will_call_tool(id, "edit_file", args);
+    f.will_structure(done("logout"));
+    let person = Scripted::new(vec![Answer::approve(Scope::Run, None, None)]);
+    let options = speccoder_runtime::RunOptions {
+        approver: Some(person.clone()),
+        ..speccoder_runtime::RunOptions::default()
+    };
+    let res = run_feature_with(r.path(), None, state.path(), &d, None, &options);
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let fr = feature(&res);
+    assert_eq!(fr.attempts.len(), 2);
+    assert_eq!(fr.attempts[0].tool_calls[0]["scope"], "run");
+    assert_eq!(fr.attempts[1].tool_calls[0]["scope"], "run-grant");
+    assert_eq!(person.asked.lock().unwrap().len(), 1, "T003 asked nobody");
+    // Both attempts replay strictly; the grant is in T003's journaled input.
+    for a in &fr.attempts {
+        let replayed = speccoder_runtime::replay_with(r.path(), &a.run_id, state.path());
+        assert_eq!(
+            replayed.status(),
+            CommandStatus::Ok,
+            "{}",
+            replayed.message()
+        );
+    }
+    assert_eq!(person.asked.lock().unwrap().len(), 1);
+    // A new run starts without the grant.
+    assert!(
+        speccoder_runtime::RunOptions::default()
+            .run_grants
+            .lock()
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
+fn a_stopped_call_is_listed_as_it_was_asked_and_a_note_reaches_the_next_attempt() {
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    write_manifest(&f, "c1", "{}\n");
+    let person = Scripted::new(vec![Answer::stop(None)]);
+    let _ =
+        speccoder_runtime::run_with_approver(r.path(), None, "T005", state.path(), d, None, person);
+    let listed = decide_with(r.path(), None, Verb::List, state.path());
+    let p = &approvals(&listed).pending[0];
+    let v = p.presentation.as_ref().unwrap();
+    assert_eq!(
+        (v.title.as_str(), v.subject.as_str()),
+        ("Write this file?", "package.json")
+    );
+    assert_eq!(v.body_lines, ["    1 │ {}"]);
+    assert_eq!(v.scope, "for the rest of T005: this path, any content");
+    assert_eq!(v.risk, "medium");
+    let json = serde_json::to_value(&listed).unwrap();
+    assert_eq!(json["data"]["pending"][0]["presentation"]["kind"], "write");
+
+    let ok = decide_with(
+        r.path(),
+        None,
+        Verb::ApproveNoted("T005", "an empty object is enough"),
+        state.path(),
+    );
+    assert_eq!(ok.status(), CommandStatus::Ok, "{}", ok.message());
+    let decided = &approvals(&ok).decided[0];
+    assert_eq!(decided.note.as_deref(), Some("an empty object is enough"));
+    assert_eq!(decided.scope.as_deref(), Some("task"));
+    // The next attempt is told.
+    let (f, d) = fake();
+    write_manifest(&f, "c1", "{}\n");
+    f.will_structure(done("manifest"));
+    let res = run(r.path(), state.path(), "T005", d);
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let prompt = serde_json::to_string(&f.asked()[0].prompt).unwrap();
+    assert!(
+        prompt.contains("A person approved write `package.json`: an empty object is enough"),
+        "{prompt}"
+    );
 }

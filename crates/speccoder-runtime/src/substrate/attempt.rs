@@ -17,7 +17,7 @@ use serde_json::{Value, json};
 use super::model_config::{CacheTtl, PromptStyle};
 use super::propose::layout;
 use super::provenance;
-use crate::approvals::{Answer, Approver, Request};
+use crate::approvals::{Answer, Approver, Decision as Said, PresentContext, Request, Scope};
 use crate::tools::policy::{Decision, Policy};
 
 /// The capability the skill provides.
@@ -86,10 +86,13 @@ fn report_blocked() -> ToolDeclaration {
 /// back and nobody is asked. The answer is the operator's: trusted.
 #[derive(Debug, Clone)]
 pub struct AskPerson {
-    /// What the person sees; also the effect's identity.
+    /// The question; also the effect's identity.
     pub request: Request,
     /// Who asks; `None` in replay, where the answer comes from history.
     pub approver: Option<std::sync::Arc<dyn Approver>>,
+    /// What only the live run knows (the file as it is, the sandbox): read
+    /// when asking, never part of the identity.
+    pub context: PresentContext,
 }
 
 #[async_trait]
@@ -126,8 +129,9 @@ impl agentplane::core::Effect for AskPerson {
         // block).
         match &self.approver {
             Some(a) => {
-                let (a, request) = (std::sync::Arc::clone(a), self.request.clone());
-                tokio::task::spawn_blocking(move || a.ask(&request))
+                let a = std::sync::Arc::clone(a);
+                let shown = crate::approvals::present(&self.request, &self.context);
+                tokio::task::spawn_blocking(move || a.ask(&shown))
                     .await
                     .map_err(|e| {
                         agentplane::core::EffectError::Rejected(format!("the prompt failed: {e}"))
@@ -217,8 +221,12 @@ impl agentplane::core::Effect for AskQuestion {
 pub struct Asker {
     /// `feature/task`, shown to the person.
     pub task: String,
+    /// The task's title.
+    pub task_title: String,
     /// The approver; `None` in replay.
     pub approver: Option<std::sync::Arc<dyn Approver>>,
+    /// What the live run knows for the presentation.
+    pub context: PresentContext,
 }
 
 /// The coded skill.
@@ -239,6 +247,8 @@ pub struct Attempt {
     pub progress: Option<std::sync::Arc<dyn crate::progress::Progress>>,
     /// The project's spec format.
     pub format: &'static dyn crate::format::Adapter,
+    /// The sandbox, as a person asked about a command is told; live only.
+    pub present: PresentContext,
 }
 
 /// The run input: `{ bundle, settings: { checks, allow, max_turns,
@@ -271,6 +281,7 @@ pub fn input(bundle: Value, settings: &Settings<'_>, digest: Option<&Value>) -> 
         ("frozen", trusted(json!(settings.frozen))),
         ("approved", trusted(json!(settings.approved))),
         ("rejected", trusted(json!(settings.rejected))),
+        ("run_approved", trusted(json!(settings.run_approved))),
         ("nudges", trusted(json!(settings.nudges))),
         ("mcp", mcp),
         ("root", trusted(json!(settings.root))),
@@ -331,6 +342,8 @@ pub struct Settings<'a> {
     pub approved: &'a [crate::tools::policy::Grant],
     /// A person's rejections for this task.
     pub rejected: &'a [crate::tools::policy::Rejection],
+    /// Classes a person approved for every task of this run.
+    pub run_approved: &'a [crate::tools::policy::Grant],
     /// A person's notes for this task (`nudge`).
     pub nudges: &'a [String],
     /// The project's MCP tools for this run.
@@ -560,8 +573,18 @@ impl Skill for Attempt {
         // Journaled: whether this attempt asks inline decides its effects.
         let ask = (settings["ask"] == true).then(|| Asker {
             task: task_name.clone(),
+            task_title: input.peek()["bundle"]["task"]["title"]
+                .as_str()
+                .unwrap_or_default()
+                .to_owned(),
             approver: self.approver.clone(),
+            context: PresentContext {
+                root: settings["root"].as_str().map(std::path::PathBuf::from),
+                ..self.present.clone()
+            },
         });
+        let remembered: Vec<crate::tools::policy::Grant> =
+            serde_json::from_value(settings["run_approved"].clone()).unwrap_or_default();
         tool_loop(
             cx,
             &prompt,
@@ -575,6 +598,7 @@ impl Skill for Attempt {
                 root: settings["root"].as_str().map(str::to_owned),
                 frozen_additions: settings["frozen_additions"] == true,
                 ask,
+                run_approved: remembered,
                 observer: self.progress.clone().map(|p| {
                     (
                         task_name.rsplit('/').next().unwrap_or_default().to_owned(),
@@ -689,6 +713,8 @@ pub(crate) struct LoopSpec {
     pub finish: fn(&Value) -> &'static str,
     /// Ask a person instead of stopping when a call needs approval.
     pub ask: Option<Asker>,
+    /// Classes a person approved for this run: allowed without asking.
+    pub run_approved: Vec<crate::tools::policy::Grant>,
     /// Live progress: the task ID and where to report.
     pub observer: Option<(String, std::sync::Arc<dyn crate::progress::Progress>)>,
 }
@@ -712,8 +738,13 @@ pub(crate) async fn tool_loop(
         frozen_additions,
         finish,
         ask,
+        run_approved,
         observer,
     } = spec;
+    // Classes allowed without asking: this run's, then what a person
+    // answered "for the task" or "for this run" in this attempt.
+    let mut remembered: Vec<(crate::tools::policy::Grant, &'static str)> =
+        run_approved.into_iter().map(|g| (g, "run-grant")).collect();
     let catalog = crate::tools::catalog();
 
     // What the conversation has read, with its labels: agentplane checks
@@ -915,42 +946,88 @@ pub(crate) async fn tool_loop(
                     additions_only = true;
                 }
             }
-            // ask a person now, as a journaled effect, instead of stopping.
+            // A class a person already approved for this run or task.
+            let grant = crate::tools::policy::Grant::of(&asked.name, &asked.arguments);
             let mut person: Option<Value> = None;
+            let mut note: Option<String> = None;
+            if matches!(decision, Decision::Approval(_))
+                && let Some((_, scope)) = grant
+                    .as_ref()
+                    .and_then(|g| remembered.iter().find(|(r, _)| r == g))
+            {
+                person = Some(json!({ "approved_by": "person", "scope": scope }));
+                decision = Decision::Allow;
+            }
+            // ask a person now, as a journaled effect, instead of stopping.
             if let (Decision::Approval(reason), Some(asker)) = (&decision, &ask) {
+                let risk = crate::approvals::risk(&asked.name, reason);
+                let claim = crate::approvals::claim(&completion.peek().text);
                 let request = Request {
                     task: asker.task.clone(),
+                    task_title: asker.task_title.clone(),
+                    turn: turn + 1,
                     tool: asked.name.clone(),
                     arguments: asked.arguments.clone(),
+                    kind: crate::approvals::kind_of(&asked.name, &asked.arguments).to_owned(),
                     reason: reason.clone(),
-                    covers: crate::tools::policy::Grant::of(&asked.name, &asked.arguments)
-                        .map(|g| g.describe())
-                        .unwrap_or_default(),
-                    risk: crate::approvals::risk(&asked.name, reason).to_owned(),
+                    covers: grant.as_ref().map(|g| g.describe()).unwrap_or_default(),
+                    risk: risk.to_owned(),
+                    claim: claim.clone(),
+                    options: crate::approvals::options(risk, grant.is_some()),
                 };
                 needs_person(observer.as_ref(), &asked.name, &asked.arguments);
                 let answer = cx
                     .effect(AskPerson {
                         request,
                         approver: asker.approver.clone(),
+                        context: asker.context.clone(),
                     })
                     .await?;
-                let answer = answer.peek().clone();
+                let answer: Answer = answer.peek().clone();
                 // Who answered is journaled with the answer.
                 let approver = serde_json::to_value(&answer.by).unwrap_or(Value::Null);
-                if answer.approved {
-                    person = Some(
-                        json!({ "approved_by": "person", "for_task": answer.for_task, "approver": approver }),
-                    );
-                    decision = Decision::Allow;
-                } else {
-                    let why = answer
-                        .reason
-                        .unwrap_or_else(|| "no reason given".to_owned());
-                    person = Some(
-                        json!({ "rejected_by": "person", "approver": approver, "rejection": why }),
-                    );
-                    decision = Decision::Deny(format!("a person rejected this: {why}"));
+                match answer.decision {
+                    Said::Approve => {
+                        person = Some(json!({
+                            "approved_by": "person",
+                            "scope": answer.scope.name(),
+                            "note": answer.note,
+                            "approver": approver,
+                        }));
+                        if let (Some(g), Scope::Task | Scope::Run) = (&grant, answer.scope) {
+                            let remembered_as = if answer.scope == Scope::Run {
+                                "run-grant"
+                            } else {
+                                "task-grant"
+                            };
+                            remembered.push((g.clone(), remembered_as));
+                        }
+                        note = answer.note;
+                        decision = Decision::Allow;
+                    }
+                    Said::Reject => {
+                        let why = answer
+                            .reason
+                            .unwrap_or_else(|| "no reason given".to_owned());
+                        person = Some(
+                            json!({ "rejected_by": "person", "approver": approver, "rejection": why }),
+                        );
+                        decision = Decision::Deny(format!("a person rejected this: {why}"));
+                    }
+                    Said::Stop => {
+                        // Exactly the unattended stop: the call waits for
+                        // `speccoder approve`.
+                        let entry = json!({ "tool": asked.name, "arguments": asked.arguments, "decision": "approval", "reason": reason, "stopped_by": "person", "approver": approver });
+                        emit(observer.as_ref(), turn + 1, &entry);
+                        log.push(entry);
+                        return end(
+                            "needs_approval",
+                            json!({ "pending": { "tool": asked.name, "arguments": asked.arguments, "reason": reason, "claim": claim, "turn": turn + 1 } }),
+                            &log,
+                            usage,
+                            &conversation,
+                        );
+                    }
                 }
             }
             let with_person = |mut entry: Value| {
@@ -1079,7 +1156,20 @@ pub(crate) async fn tool_loop(
                             asked,
                             Tainted::with_label(error.to_owned(), result.label().clone()),
                         ),
-                        _ => transcript.answered(asked, &result),
+                        // A person's note rides with the result it approved.
+                        _ => match &note {
+                            Some(n) => {
+                                let n = format!("Note from the person who approved this call: {n}");
+                                transcript.answered(
+                                    asked,
+                                    &result.map(|mut v| {
+                                        v["note_from_person"] = Value::String(n);
+                                        v
+                                    }),
+                                );
+                            }
+                            None => transcript.answered(asked, &result),
+                        },
                     }
                 }
             }

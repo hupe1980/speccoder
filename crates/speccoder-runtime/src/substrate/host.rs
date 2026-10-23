@@ -71,6 +71,8 @@ pub struct Host {
     pub progress: Option<std::sync::Arc<dyn crate::progress::Progress>>,
     /// The project's spec format.
     pub format: &'static dyn crate::format::Adapter,
+    /// The sandbox, as a person asked about a command is told; live only.
+    pub present: crate::approvals::PresentContext,
 }
 
 #[async_trait]
@@ -124,7 +126,9 @@ impl Skill for Host {
         tools.push(ask_person());
         let ask = (settings["ask"] == true).then(|| Asker {
             task: format!("skill/{skill}"),
+            task_title: skill.clone(),
             approver: self.approver.clone(),
+            context: self.present.clone(),
         });
         tool_loop(
             cx,
@@ -139,6 +143,7 @@ impl Skill for Host {
                 root: settings["root"].as_str().map(str::to_owned),
                 frozen_additions: false,
                 ask,
+                run_approved: Vec::new(),
                 observer: self.progress.clone().map(|p| (skill.clone(), p)),
                 finish: |report| {
                     if report["status"] == "incomplete" {

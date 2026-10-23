@@ -150,6 +150,8 @@ pub struct Hooks {
     pub mcp_tools: Vec<crate::mcp::McpTool>,
     /// The project's spec format; the reference format when unset.
     pub format: Option<&'static dyn crate::format::Adapter>,
+    /// The sandbox as a person asked about a command is told.
+    pub present: crate::approvals::PresentContext,
 }
 
 /// An open plane.
@@ -256,12 +258,14 @@ fn builder(
             approver: hooks.approver.clone(),
             progress: hooks.progress.clone(),
             format,
+            present: hooks.present.clone(),
         })
         .skill(host::Host {
             style: model.prompt_style(),
             approver: hooks.approver,
             progress: hooks.progress,
             format,
+            present: hooks.present,
         })
         .skill(acceptance::Acceptance {
             style: model.prompt_style(),

@@ -13,7 +13,7 @@ use agentplane::model::fake::FakeProvider;
 use serde_json::json;
 use speccoder_core::{CommandData, CommandResult, CommandStatus, SkillRunReport};
 use speccoder_runtime::RunOptions;
-use speccoder_runtime::approvals::{Answer, Approver, Request};
+use speccoder_runtime::approvals::{Answer, Approver};
 use speccoder_runtime::hosting::{list, run_with};
 
 const SKILL: &str = "---\nname: \"demo-specify\"\ndescription: \"Write a feature spec.\"\nuser-invocable: true\n---\n\n## User Input\n\n$ARGUMENTS\n\nWrite specs/002-login/spec.md for the feature; ask the user about anything unclear.\n";
@@ -93,13 +93,8 @@ fn done() -> serde_json::Value {
 #[derive(Debug)]
 struct Answers;
 impl Approver for Answers {
-    fn ask(&self, _: &Request) -> Answer {
-        Answer {
-            by: None,
-            approved: false,
-            for_task: false,
-            reason: Some("no".to_owned()),
-        }
+    fn ask(&self, _: &speccoder_runtime::approvals::Presentation) -> Answer {
+        Answer::reject("no", None)
     }
     fn answer(&self, _: &str) -> Option<String> {
         Some("email and password only".to_owned())

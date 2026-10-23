@@ -326,12 +326,16 @@ fn main() {
         ),
         Command::Approve {
             task,
+            note,
             path,
             feature,
         } => speccoder_runtime::approvals::decide(
             path,
             feature.as_deref(),
-            speccoder_runtime::approvals::Verb::Approve(task),
+            match note {
+                Some(n) => speccoder_runtime::approvals::Verb::ApproveNoted(task, n),
+                None => speccoder_runtime::approvals::Verb::Approve(task),
+            },
         ),
         Command::Reject {
             task,

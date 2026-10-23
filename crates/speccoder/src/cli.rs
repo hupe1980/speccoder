@@ -204,6 +204,9 @@ pub enum Command {
         /// Task ID, e.g. T005.
         #[arg(long)]
         task: String,
+        /// A note the next attempt is told with the approval.
+        #[arg(long)]
+        note: Option<String>,
         /// A path inside the project (default: the current directory).
         #[arg(default_value = ".")]
         path: PathBuf,

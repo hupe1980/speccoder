@@ -36,12 +36,15 @@ pub(crate) fn record_inline_approvals(
     feature: &str,
     task: &str,
     calls: &[serde_json::Value],
+    run_grants: &std::sync::Mutex<Vec<tools::policy::Grant>>,
 ) {
-    // Every inline decision, with who made it; an approval for the
-    // task also joins the task's approvals.
-    let decided: Vec<(approvals::Decided, bool)> = calls
+    // Every decision a person made in this attempt, with who made it and how
+    // far it reaches; calls an earlier decision allowed (`*-grant`) are not
+    // new decisions.
+    let decided: Vec<approvals::Decided> = calls
         .iter()
         .filter(|c| c["approved_by"] == "person" || c["rejected_by"] == "person")
+        .filter(|c| !c["scope"].as_str().is_some_and(|s| s.ends_with("-grant")))
         .filter_map(|c| {
             let grant = tools::policy::Grant::of(c["tool"].as_str()?, &c["arguments"])?;
             let by = serde_json::from_value::<approvals::Who>(c["approver"].clone())
@@ -50,31 +53,46 @@ pub(crate) fn record_inline_approvals(
                     via: "inline".to_owned(),
                 });
             let approved = c["approved_by"] == "person";
-            let for_task = approved && c["for_task"] == true;
-            Some((
-                approvals::Decided {
-                    verb: if approved { "approve" } else { "reject" }.to_owned(),
-                    grant,
-                    reason: c["rejection"].as_str().map(str::to_owned),
-                    for_task,
-                    by,
-                    at: std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .map_or(0, |d| d.as_secs()),
-                },
-                for_task,
-            ))
+            Some(approvals::Decided {
+                verb: if approved { "approve" } else { "reject" }.to_owned(),
+                grant,
+                reason: c["rejection"].as_str().map(str::to_owned),
+                scope: c["scope"].as_str().unwrap_or("once").to_owned(),
+                note: c["note"].as_str().map(str::to_owned),
+                by,
+                at: std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map_or(0, |d| d.as_secs()),
+            })
         })
         .collect();
     if decided.is_empty() {
         return;
     }
     if let Ok(mut d) = approvals::Decisions::load(dir) {
-        for (decision, for_task) in decided {
-            if for_task {
-                d.approve(feature, task, decision.grant.clone(), &decision.by);
-            } else {
-                d.note(feature, task, decision);
+        for decision in decided {
+            match (decision.verb.as_str(), decision.scope.as_str()) {
+                // For the task: it joins the task's approvals, for later attempts.
+                ("approve", "task") => {
+                    d.approve(feature, task, decision.grant.clone(), &decision.by);
+                    if let Some(last) = d
+                        .tasks
+                        .get_mut(&format!("{feature}/{task}"))
+                        .and_then(|t| t.decided.last_mut())
+                    {
+                        last.note.clone_from(&decision.note);
+                    }
+                }
+                // For this run: every later task of the run; the history only.
+                ("approve", "run") => {
+                    if let Ok(mut g) = run_grants.lock()
+                        && !g.contains(&decision.grant)
+                    {
+                        g.push(decision.grant.clone());
+                    }
+                    d.note(feature, task, decision);
+                }
+                _ => d.note(feature, task, decision),
             }
         }
         let _ = d.save(dir);

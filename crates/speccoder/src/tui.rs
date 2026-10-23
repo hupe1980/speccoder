@@ -361,6 +361,30 @@ fn approvals(f: &mut Frame<'_>, app: &App, area: Rect) {
     if items.is_empty() {
         items.push(ListItem::new("nothing waits for a decision"));
     }
+    // The selected call in detail, as the inline prompt shows it (F-054).
+    if let Some(v) = pending
+        .get(app.approval.min(pending.len().saturating_sub(1)))
+        .and_then(|p| p.presentation.as_ref())
+    {
+        items.push(ListItem::new(""));
+        items.push(ListItem::new(format!(
+            "  {}  {}   risk {}",
+            v.title,
+            v.subject,
+            crate::prompt::risk_bar(&v.risk)
+        )));
+        for line in v.body_lines.iter().take(6) {
+            items.push(ListItem::new(format!("    {line}")));
+        }
+        if v.body_lines.len() > 6 {
+            items.push(ListItem::new(format!(
+                "    … {} more lines (speccoder approvals)",
+                v.body_lines.len() - 6
+            )));
+        }
+        items.push(ListItem::new(format!("  Sandbox  {}", v.sandbox)));
+        items.push(ListItem::new(format!("  a → {}", v.scope)));
+    }
     let decided = app.snap.approvals.as_ref().map_or(0, |a| a.decided.len());
     let mut state = ListState::default().with_selected(
         (!pending.is_empty()).then_some(app.approval.min(pending.len().saturating_sub(1))),
@@ -541,6 +565,16 @@ mod tests {
                     arguments: serde_json::json!({}),
                     reason: "a dependency manifest".to_owned(),
                     reference: "refs/x".to_owned(),
+                    presentation: Some(speccoder_core::ApprovalView {
+                        kind: "write".to_owned(),
+                        title: "Write this file?".to_owned(),
+                        subject: "package.json".to_owned(),
+                        body_lines: vec!["    1 │ {}".to_owned()],
+                        sandbox: "a file write — nothing is executed".to_owned(),
+                        claim: None,
+                        risk: "medium".to_owned(),
+                        scope: "for the rest of T002: this path, any content".to_owned(),
+                    }),
                 }],
                 decided: Vec::new(),
             }),
@@ -577,6 +611,9 @@ mod tests {
             "turn 1  read_file src/lib.rs (allow)",
             "Approvals (1 waiting, 0 decided)",
             "? T002 write `package.json` — a dependency manifest",
+            "Write this file?  package.json   risk ■■□ medium",
+            "1 │ {}",
+            "a → for the rest of T002: this path, any content",
             "1 verified",
             "Next: speccoder approve --task T002 — allow it",
         ] {

@@ -91,6 +91,13 @@ ticks a task only on evidence the model cannot produce or edit.
   `approve`, `reject`); every decision records who made it.
 - `accept`, `skip`, `nudge`, `cost`, `report`, `status`, `pr` (a draft pull
   request with every task's evidence, after you confirm).
+- Approvals show one question with its full scope: a diff of the file (or
+  the whole command, or the MCP arguments), why it stopped, what the sandbox
+  allows, the model's claim, and what each answer covers. Answers: once, for
+  the task, for this run (never for high-risk calls), reject with a required
+  reason, or stop; a note on an approval reaches the model. The same view in
+  editors (diff, reason form, the run's tasks as a plan), in `speccoder
+  approvals` and in the dashboard; `approve --note`.
 - Every stop says what to do next (`Next:`, `data.next`); notifications and
   a terminal title from your own `~/.config/speccoder/config.toml`;
   `-q`/`-v`; `--json` on every command with documented exit codes.

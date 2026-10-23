@@ -181,6 +181,7 @@ pub fn run_feature_with(
             );
         }
     }
+    let mut planned = false;
     while budget > 0 {
         if options
             .cancel
@@ -221,6 +222,48 @@ pub fn run_feature_with(
                 tasks: Vec::new(),
                 totals: speccoder_core::snapshot::ScheduleTotals::default(),
             });
+        if !planned {
+            planned = true;
+            if let Some(p) = &options.progress {
+                let skipped = controls::skipped(&project, &w.feature);
+                let titles: std::collections::HashMap<&str, &str> = snap
+                    .feature
+                    .as_ref()
+                    .and_then(|f| f.tasks.as_ref())
+                    .map(|t| {
+                        t.tasks
+                            .iter()
+                            .map(|x| (x.id.as_str(), x.title.as_str()))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                p.event(&crate::progress::Event::RunStarted {
+                    feature: w.feature.clone(),
+                    tasks: schedule
+                        .tasks
+                        .iter()
+                        .map(|t| crate::progress::PlannedTask {
+                            id: t.id.clone(),
+                            title: titles
+                                .get(t.id.as_str())
+                                .copied()
+                                .unwrap_or_default()
+                                .to_owned(),
+                            state: if skipped.contains_key(&t.id) {
+                                "skipped".to_owned()
+                            } else {
+                                match t.state {
+                                    TaskState::Done => "done",
+                                    TaskState::Ready => "ready",
+                                    _ => "blocked",
+                                }
+                                .to_owned()
+                            },
+                        })
+                        .collect(),
+                });
+            }
+        }
         // Skipped tasks are passed by; what depends on them stays blocked.
         let skipped = controls::skipped(&project, feature_name.as_deref().unwrap_or_default());
         let Some(next) = schedule

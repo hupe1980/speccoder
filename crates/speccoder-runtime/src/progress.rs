@@ -18,6 +18,17 @@ use crate::substrate::model_config::Prices;
 /// The live file in a project's state directory.
 pub const FILE: &str = "live.json";
 
+/// One task of a feature run's plan.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct PlannedTask {
+    /// Task ID.
+    pub id: String,
+    /// Title.
+    pub title: String,
+    /// `done`, `ready`, `blocked` or `skipped`.
+    pub state: String,
+}
+
 /// Tool calls `live.json` keeps for watchers (`speccoder tui`).
 pub const RECENT: usize = 12;
 
@@ -25,6 +36,14 @@ pub const RECENT: usize = 12;
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "event", rename_all = "snake_case")]
 pub enum Event {
+    /// A feature run begins: its tasks, as the graph has them (editors show
+    /// them as a plan).
+    RunStarted {
+        /// Feature directory name.
+        feature: String,
+        /// Every task, in document order.
+        tasks: Vec<PlannedTask>,
+    },
     /// A task attempt run begins.
     TaskStarted {
         /// Feature directory name.
@@ -302,7 +321,7 @@ impl Progress for Live {
                 Event::TaskFinished {
                     outcome, message, ..
                 } => s.finished = Some(format!("{outcome}: {message}")),
-                Event::Notice { .. } => {}
+                Event::Notice { .. } | Event::RunStarted { .. } => {}
             }
             s.updated_at = now();
             self.write(&s);

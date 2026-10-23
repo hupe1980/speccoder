@@ -19,7 +19,7 @@ group = "Use"
 }
 ```
 
-speccoder's commands are offered as slash commands: `/run`, `/run T005`, `/run --converge`, `/run --parallel 2`, `/converge`, `/report`, `/status`, `/cost`, and the planning skills `/specify <what to build>`, `/clarify`, `/plan`, `/tasks`, `/analyze`. Tasks and the model's tool calls appear as tool calls in the editor; a call that needs a person becomes the editor's permission dialog (allow once, allow for this task, reject). Cancelling stops a feature run before its next task. The model and key come from `speccoder.toml` and the environment, as on the command line.
+speccoder's commands are offered as slash commands: `/run`, `/run T005`, `/run --converge`, `/run --parallel 2`, `/converge`, `/report`, `/status`, `/cost`, and the planning skills `/specify <what to build>`, `/clarify`, `/plan`, `/tasks`, `/analyze`. Tasks and the model's tool calls appear as tool calls in the editor; a call that needs a person becomes the editor's permission dialog with the same question as the terminal prompt — a diff of the file, why it stopped, the sandbox, the model's claim — and the choices once, for the task, for this run (not for high-risk calls), reject and stop. A rejection asks for the reason in a form when the editor can show one; dismissing the dialog stops the task, it never rejects. During `/run` the feature's tasks appear as the editor's plan, updated as they finish. Cancelling stops a feature run before its next task. The model and key come from `speccoder.toml` and the environment, as on the command line.
 
 ## MCP servers
 

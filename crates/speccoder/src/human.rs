@@ -651,18 +651,55 @@ pub fn cost(w: &mut impl Write, c: &CostReport, message: &str) -> io::Result<()>
 pub fn approvals(w: &mut impl Write, a: &ApprovalsReport, message: &str) -> io::Result<()> {
     writeln!(w, "Feature    {}", a.feature)?;
     for p in &a.pending {
-        writeln!(w, "  ? {} {} — {}", p.task, p.covers, p.reason)?;
+        match &p.presentation {
+            Some(v) => {
+                let head = format!("  △ {:<5} {}  {}", p.task, v.title, v.subject);
+                let pad = 70usize.saturating_sub(head.chars().count()).max(3);
+                writeln!(
+                    w,
+                    "{head}{}risk {}",
+                    " ".repeat(pad),
+                    crate::prompt::risk_bar(&v.risk)
+                )?;
+                for line in &v.body_lines {
+                    writeln!(w, "      {line}")?;
+                }
+                writeln!(w, "      Why stopped  {}", p.reason)?;
+                writeln!(w, "      Sandbox      {}", v.sandbox)?;
+                if let Some(c) = &v.claim {
+                    writeln!(w, "      Model says   \"{c}\"   (a claim)")?;
+                }
+                writeln!(w, "      approve → {}", v.scope)?;
+            }
+            None => writeln!(w, "  ? {} {} — {}", p.task, p.covers, p.reason)?,
+        }
         writeln!(
             w,
-            "      speccoder approve --task {0}   |   speccoder reject --task {0} --reason \"…\"",
+            "      speccoder approve --task {0} [--note \"…\"]   |   speccoder reject --task {0} --reason \"…\"",
             p.task
         )?;
     }
-    let by = |b: &Option<String>| b.as_ref().map(|b| format!(" — by {b}")).unwrap_or_default();
+    let by = |b: &Option<String>| b.as_ref().map(|b| format!(" — {b}")).unwrap_or_default();
     for d in &a.decided {
+        let scope = match d.scope.as_deref() {
+            Some("run") => " for this run",
+            Some("once") => " once",
+            _ => " for the task",
+        };
+        let note = d
+            .note
+            .as_ref()
+            .map(|n| format!(" (note: {n})"))
+            .unwrap_or_default();
         match &d.reason {
             Some(r) => writeln!(w, "  ✗ {} {} rejected: {r}{}", d.task, d.covers, by(&d.by))?,
-            None => writeln!(w, "  ✓ {} {} approved{}", d.task, d.covers, by(&d.by))?,
+            None => writeln!(
+                w,
+                "  ✓ {} {} approved{scope}{note}{}",
+                d.task,
+                d.covers,
+                by(&d.by)
+            )?,
         }
     }
     writeln!(w, "{message}")

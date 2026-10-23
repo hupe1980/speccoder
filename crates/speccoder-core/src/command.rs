@@ -596,6 +596,30 @@ pub struct PendingCall {
     pub reason: String,
     /// The saved attempt.
     pub reference: String,
+    /// The call as the inline prompt shows it (F-054).
+    pub presentation: Option<ApprovalView>,
+}
+
+/// A pending call as a person sees it: what, why, what it can reach, what
+/// the model claimed, and what approving it grants.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ApprovalView {
+    /// `write`, `edit`, `run`, `network` or `mcp`.
+    pub kind: String,
+    /// `Edit this file?`, `Run this command?`, ….
+    pub title: String,
+    /// The path, the whole command, or the MCP tool.
+    pub subject: String,
+    /// The diff, the file's head, the command or the arguments.
+    pub body_lines: Vec<String>,
+    /// What the call can reach.
+    pub sandbox: String,
+    /// What the model said when it asked (a claim).
+    pub claim: Option<String>,
+    /// `low`, `medium` or `high`.
+    pub risk: String,
+    /// What `approve` grants: `for the rest of T004: this path, any content`.
+    pub scope: String,
 }
 
 /// A person's decision.
@@ -611,6 +635,10 @@ pub struct DecidedCall {
     pub reason: Option<String>,
     /// Who decided, as `name (via)`.
     pub by: Option<String>,
+    /// How far an approval reaches: `once`, `task` or `run`.
+    pub scope: Option<String>,
+    /// An approval's note to the model.
+    pub note: Option<String>,
 }
 
 /// Result of `speccoder report`: what the branch's history shows.

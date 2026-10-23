@@ -47,7 +47,7 @@ Every stop and finish ends with a `Next:` block — the commands that continue, 
 | Command | What it does |
 |---|---|
 | `speccoder approvals` | Calls waiting for a decision, and the decisions made, with who made them |
-| `speccoder approve --task T` | Approve the waiting call's class for the task |
+| `speccoder approve --task T [--note "…"]` | Approve the waiting call's class for the task; the note is told to the next attempt |
 | `speccoder reject --task T --reason R` | Reject it; the model is told why |
 | `speccoder accept --task T --reason R` | Tick a task on your word (`attested`) |
 | `speccoder skip --task T [--reason R] [--undo]` | Skip a task; its dependents stay blocked |

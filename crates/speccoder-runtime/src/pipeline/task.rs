@@ -399,6 +399,23 @@ pub(crate) fn run_task(
                 mcp: connected.clients.clone(),
                 mcp_tools: connected.tools.clone(),
                 format: Some(format),
+                present: crate::approvals::PresentContext {
+                    root: None,
+                    sandbox: runner.is_sandboxed().then(|| {
+                        if cfg!(target_os = "macos") {
+                            "Seatbelt".to_owned()
+                        } else {
+                            "Landlock+seccomp".to_owned()
+                        }
+                    }),
+                    network: match sandbox_config.network {
+                        sandbox::Network::Off => "none",
+                        sandbox::Network::Loopback => "loopback",
+                        sandbox::Network::On => "unrestricted",
+                    }
+                    .to_owned(),
+                    file_text: None,
+                },
             },
         )
     }) {
@@ -644,6 +661,12 @@ pub(crate) fn run_task(
         let mut digest: Option<serde_json::Value> = None;
         let mut attempt_no = 1u32;
         let (mut report, attempt_status) = loop {
+            // This run's grants as they stand now: journaled with the input.
+            let run_approved: Vec<crate::tools::policy::Grant> = options
+                .run_grants
+                .lock()
+                .map(|g| g.clone())
+                .unwrap_or_default();
             // Everything the attempt's decisions depend on is in its journaled input.
             let input = substrate::attempt::input(
                 bundle_value.clone(),
@@ -655,6 +678,7 @@ pub(crate) fn run_task(
                     frozen: &frozen,
                     approved: &decisions.approved,
                     rejected: &decisions.rejected,
+                    run_approved: &run_approved,
                     nudges: &decisions.nudges,
                     mcp: &connected.tools,
                     root: &wt_root_canonical,
@@ -835,7 +859,13 @@ pub(crate) fn run_task(
                 notices: notices.clone(),
                 ..bare_report(&feature_name, task, &wt_path, &attempt_status)
             };
-            record_inline_approvals(&s.plane_dir, &feature_name, task, &report.tool_calls);
+            record_inline_approvals(
+                &s.plane_dir,
+                &feature_name,
+                task,
+                &report.tool_calls,
+                &options.run_grants,
+            );
             // A person approving an MCP call reviewed the tool as it is now.
             for c in report
                 .tool_calls

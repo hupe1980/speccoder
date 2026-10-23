@@ -233,6 +233,7 @@ impl Skill for Converge {
                 max_tool_calls: limit("max_tool_calls", 100),
                 schema: schema(),
                 ask: None,
+                run_approved: Vec::new(),
                 observer: None,
                 routes: Vec::new(),
                 root: None,

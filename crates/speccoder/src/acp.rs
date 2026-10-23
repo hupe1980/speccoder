@@ -19,7 +19,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
 
 use serde_json::{Value, json};
-use speccoder_runtime::approvals::{Answer, Approver, Request};
+use speccoder_runtime::approvals::{Answer, Approver, Presentation, Scope, Who};
 use speccoder_runtime::progress::{Event, Progress};
 
 /// The commands an editor offers (ACP `available_commands_update`).
@@ -59,6 +59,8 @@ struct Conn {
     next: AtomicU64,
     /// The editor, as it names itself at `initialize` (`clientInfo.name`).
     client: Mutex<String>,
+    /// The editor can show a form (`clientCapabilities.elicitation.form`).
+    forms: AtomicBool,
 }
 
 impl Conn {
@@ -103,6 +105,37 @@ struct Updates {
     conn: Arc<ConnRef>,
     session: String,
     tasks: Mutex<HashMap<String, String>>,
+    /// The run's plan: (id, title, status, outcome suffix).
+    plan: Mutex<Vec<(String, String, &'static str, String)>>,
+}
+
+impl Updates {
+    /// The whole plan, as the editor's checklist.
+    fn send_plan(&self) {
+        let Ok(plan) = self.plan.lock() else { return };
+        if plan.is_empty() {
+            return;
+        }
+        let entries: Vec<Value> = plan
+            .iter()
+            .map(|(id, title, status, suffix)| {
+                json!({ "content": format!("{id} {title}{suffix}"), "priority": "medium", "status": status })
+            })
+            .collect();
+        self.conn.0.update(
+            &self.session,
+            json!({ "sessionUpdate": "plan", "entries": entries }),
+        );
+    }
+
+    fn set(&self, task: &str, status: &'static str, suffix: String) {
+        if let Ok(mut plan) = self.plan.lock()
+            && let Some(e) = plan.iter_mut().find(|e| e.0 == task)
+        {
+            e.2 = status;
+            e.3 = suffix;
+        }
+    }
 }
 
 /// `Conn` behind a `Debug` the traits require.
@@ -132,7 +165,25 @@ impl Progress for Updates {
     fn event(&self, event: &Event) {
         let c = &self.conn.0;
         match event {
+            Event::RunStarted { tasks, .. } => {
+                if let Ok(mut plan) = self.plan.lock() {
+                    *plan = tasks
+                        .iter()
+                        .map(|t| {
+                            let (status, suffix) = match t.state.as_str() {
+                                "done" => ("completed", String::new()),
+                                "skipped" => ("completed", " — skipped".to_owned()),
+                                _ => ("pending", String::new()),
+                            };
+                            (t.id.clone(), t.title.clone(), status, suffix)
+                        })
+                        .collect();
+                }
+                self.send_plan();
+            }
             Event::TaskStarted { task, title, .. } => {
+                self.set(task, "in_progress", String::new());
+                self.send_plan();
                 let id = c.id("task");
                 if let Ok(mut t) = self.tasks.lock() {
                     t.insert(task.clone(), id.clone());
@@ -189,6 +240,18 @@ impl Progress for Updates {
                 message,
                 ..
             } => {
+                match outcome.as_str() {
+                    "verified" => self.set(task, "completed", String::new()),
+                    "regression_only" | "attested" | "skipped" => {
+                        self.set(
+                            task,
+                            "completed",
+                            format!(" — {}", outcome.replace('_', " ")),
+                        );
+                    }
+                    other => self.set(task, "pending", format!(" — {}", other.replace('_', " "))),
+                }
+                self.send_plan();
                 if let Some(id) = self.tasks.lock().ok().and_then(|t| t.get(task).cloned()) {
                     let ok = matches!(
                         outcome.as_str(),
@@ -213,8 +276,46 @@ struct Permissions {
     cancel: Arc<AtomicBool>,
 }
 
+/// The editor's kind for a call.
+fn approval_kind(kind: &str) -> &'static str {
+    match kind {
+        "write" | "edit" => "edit",
+        "run" => "execute",
+        "network" => "fetch",
+        _ => "other",
+    }
+}
+
+/// The permission request's `toolCall.content`: a diff for a write or
+/// edit, and what the person needs to decide as text.
+fn approval_content(p: &Presentation) -> Value {
+    let mut content = Vec::new();
+    if let (Some(path), Some(new)) = (&p.file, &p.new_text) {
+        let mut diff = json!({ "type": "diff", "path": path, "newText": new });
+        if let Some(old) = &p.old_text {
+            diff["oldText"] = json!(old);
+        }
+        content.push(diff);
+    }
+    let mut text = String::new();
+    if !matches!(p.request.kind.as_str(), "write" | "edit") || p.new_text.is_none() {
+        text.push_str(&p.body.join("\n"));
+        text.push('\n');
+    }
+    text.push_str(&format!(
+        "Why stopped: {}\nSandbox: {}\n",
+        p.request.reason, p.sandbox
+    ));
+    if let Some(claim) = &p.request.claim {
+        text.push_str(&format!("Model says (a claim): \"{claim}\"\n"));
+    }
+    text.push_str(&format!("Risk: {}", p.request.risk));
+    content.push(json!({ "type": "content", "content": { "type": "text", "text": text } }));
+    Value::Array(content)
+}
+
 impl Approver for Permissions {
-    fn ask(&self, request: &Request) -> Answer {
+    fn ask(&self, p: &Presentation) -> Answer {
         // Who answers in the editor: the local person, through it.
         let editor = self
             .conn
@@ -223,62 +324,95 @@ impl Approver for Permissions {
             .lock()
             .map(|c| c.clone())
             .unwrap_or_default();
-        let by = Some(speccoder_runtime::approvals::Who::local(&format!(
-            "editor {}",
-            if editor.is_empty() {
-                "unknown"
-            } else {
-                editor.as_str()
-            }
-        )));
-        let reject = |reason: &str| Answer {
-            approved: false,
-            for_task: false,
-            reason: Some(reason.to_owned()),
-            by: by.clone(),
+        let editor = if editor.is_empty() {
+            "unknown".to_owned()
+        } else {
+            editor
         };
+        let by = || Some(Who::local(&format!("editor {editor}")));
         if self.cancel.load(Ordering::SeqCst) {
-            return reject("the person cancelled the run");
+            return Answer::stop(by());
         }
         let c = &self.conn.0;
+        let call_id = c.id("approval");
+        let task = p.request.task.rsplit('/').next().unwrap_or(&p.request.task);
+        let options: Vec<Value> = p
+            .options
+            .iter()
+            .map(|o| {
+                let kind = match o.choice.as_str() {
+                    "once" => "allow_once",
+                    "task" | "run" => "allow_always",
+                    _ => "reject_once",
+                };
+                json!({ "optionId": o.choice, "name": o.label, "kind": kind })
+            })
+            .collect();
         let reply = c.request(
             "session/request_permission",
             json!({
                 "sessionId": self.session,
                 "toolCall": {
-                    "toolCallId": c.id("approval"),
-                    "title": format!("{} {} — {} ({} risk)", request.task, request.tool, request.reason, request.risk),
-                    "kind": kind(&request.tool),
+                    "toolCallId": call_id,
+                    "title": format!("{} {} — {task} · risk {}", p.title, p.subject, p.request.risk),
+                    "kind": approval_kind(&p.request.kind),
                     "status": "pending",
-                    "rawInput": request.arguments,
+                    "rawInput": p.request.arguments,
+                    "content": approval_content(p),
                 },
-                "options": [
-                    { "optionId": "once", "name": "Allow once", "kind": "allow_once" },
-                    { "optionId": "task", "name": format!("Allow for this task: {}", request.covers), "kind": "allow_always" },
-                    { "optionId": "reject", "name": "Reject", "kind": "reject_once" },
-                ],
+                "options": options,
             }),
         );
-        let outcome = reply.as_ref().map(|r| &r["result"]["outcome"]);
-        match outcome
-            .and_then(|o| (o["outcome"] == "selected").then(|| o["optionId"].as_str()))
-            .flatten()
-        {
-            Some("once") => Answer {
-                approved: true,
-                for_task: false,
-                reason: None,
-                by: by.clone(),
-            },
-            Some("task") => Answer {
-                approved: true,
-                for_task: true,
-                reason: None,
-                by: by.clone(),
-            },
-            Some(_) => reject("rejected in the editor"),
-            None => reject("the person cancelled the request"),
+        let Some(reply) = reply else {
+            return Answer::reject("the person cancelled the request", by());
+        };
+        let outcome = &reply["result"]["outcome"];
+        if outcome["outcome"] == "cancelled" {
+            return Answer::stop(by());
         }
+        match outcome["optionId"].as_str() {
+            Some("once") => Answer::approve(Scope::Once, None, by()),
+            Some("task") => Answer::approve(Scope::Task, None, by()),
+            Some("run") => Answer::approve(Scope::Run, None, by()),
+            Some("stop") => Answer::stop(by()),
+            _ => {
+                let reason = self
+                    .reason(&call_id, p)
+                    .unwrap_or_else(|| format!("rejected in {editor}; the editor gave no reason"));
+                Answer::reject(reason, by())
+            }
+        }
+    }
+}
+
+impl Permissions {
+    /// Asks the editor why, with a form, when it said it can show one.
+    fn reason(&self, call_id: &str, p: &Presentation) -> Option<String> {
+        let c = &self.conn.0;
+        if !c.forms.load(Ordering::SeqCst) {
+            return None;
+        }
+        let reply = c.request(
+            "elicitation/create",
+            json!({
+                "sessionId": self.session,
+                "toolCallId": call_id,
+                "mode": "form",
+                "message": format!("Why reject `{}`? The model is told.", p.subject),
+                "requestedSchema": {
+                    "type": "object",
+                    "properties": { "reason": { "type": "string", "minLength": 1, "title": "Reason" } },
+                    "required": ["reason"],
+                },
+            }),
+        )?;
+        let result = &reply["result"];
+        (result["action"] == "accept")
+            .then(|| result["content"]["reason"].as_str())
+            .flatten()
+            .map(str::trim)
+            .filter(|r| !r.is_empty())
+            .map(str::to_owned)
     }
 }
 
@@ -317,6 +451,7 @@ fn prompt(
             conn: Arc::clone(conn),
             session: session.to_owned(),
             tasks: Mutex::new(HashMap::new()),
+            plan: Mutex::new(Vec::new()),
         })),
         cancel: Some(Arc::clone(cancel)),
         ..speccoder_runtime::RunOptions::default()
@@ -377,6 +512,7 @@ pub fn serve(input: impl BufRead, output: Box<dyn Write + Send>) {
         pending: Mutex::new(HashMap::new()),
         next: AtomicU64::new(1),
         client: Mutex::new(String::new()),
+        forms: AtomicBool::new(false),
     }));
     let mut sessions: HashMap<String, (PathBuf, Arc<AtomicBool>)> = HashMap::new();
     let mut workers = Vec::new();
@@ -408,6 +544,10 @@ pub fn serve(input: impl BufRead, output: Box<dyn Write + Send>) {
                 {
                     *client = name.to_owned();
                 }
+                c.forms.store(
+                    !params["clientCapabilities"]["elicitation"]["form"].is_null(),
+                    Ordering::SeqCst,
+                );
                 c.respond(
                 &id,
                 json!({
@@ -493,38 +633,29 @@ mod tests {
         }
     }
 
-    #[test]
-    fn a_call_that_needs_a_person_is_a_permission_request() {
+    fn conn(forms: bool) -> (Arc<ConnRef>, mpsc::Receiver<Vec<u8>>) {
         let (tx, rx) = mpsc::channel();
         let conn = Arc::new(ConnRef(Conn {
             out: Mutex::new(Box::new(Pipe(tx))),
             pending: Mutex::new(HashMap::new()),
             next: AtomicU64::new(1),
             client: Mutex::new("Zed".to_owned()),
+            forms: AtomicBool::new(forms),
         }));
-        let perms = Permissions {
-            conn: Arc::clone(&conn),
-            session: "s".to_owned(),
-            cancel: Arc::new(AtomicBool::new(false)),
-        };
-        let asking = std::thread::spawn(move || {
-            perms.ask(&Request {
-                task: "001/T005".to_owned(),
-                tool: "run_command".to_owned(),
-                arguments: json!({ "argv": ["cargo", "build"] }),
-                reason: "not a configured check".to_owned(),
-                covers: "`cargo build`".to_owned(),
-                risk: "high".to_owned(),
-            })
-        });
+        (conn, rx)
+    }
+
+    /// The next JSON line the agent sent.
+    fn next(rx: &mpsc::Receiver<Vec<u8>>) -> Value {
         let mut line = String::new();
         while !line.ends_with('\n') {
             line.push_str(&String::from_utf8_lossy(&rx.recv().unwrap_or_default()));
         }
-        let req: Value = serde_json::from_str(line.trim()).unwrap_or_default();
-        assert_eq!(req["method"], "session/request_permission");
-        assert_eq!(req["params"]["toolCall"]["kind"], "execute");
-        assert_eq!(req["params"]["options"][1]["kind"], "allow_always");
+        serde_json::from_str(line.trim()).unwrap_or_default()
+    }
+
+    /// Answers the agent's request `req` with `result`.
+    fn reply(conn: &ConnRef, req: &Value, result: Value) {
         let id = req["id"].as_str().unwrap_or_default().to_owned();
         let tx = conn
             .0
@@ -532,16 +663,259 @@ mod tests {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .remove(&id);
-        let _ = tx.map(|t| t.send(json!({ "id": id, "result": { "outcome": { "outcome": "selected", "optionId": "task" } } })));
-        let answer = asking.join().unwrap_or(Answer {
-            approved: false,
-            for_task: false,
-            reason: None,
-            by: None,
-        });
-        assert!(answer.approved && answer.for_task);
+        let _ = tx.map(|t| t.send(json!({ "id": id, "result": result })));
+    }
+
+    fn presentation(tool: &str, arguments: Value, kind: &str, risk: &str) -> Presentation {
+        let dir = tempfile::tempdir().unwrap_or_else(|e| panic!("{e}"));
+        std::fs::write(
+            dir.path().join("Cargo.toml"),
+            "[dependencies]\nserde = \"1\"\n",
+        )
+        .unwrap_or_else(|e| panic!("{e}"));
+        speccoder_runtime::approvals::present(
+            &speccoder_runtime::approvals::Request {
+                task: "001/T004".to_owned(),
+                task_title: "Handle Unicode".to_owned(),
+                turn: 2,
+                tool: tool.to_owned(),
+                arguments,
+                kind: kind.to_owned(),
+                reason: "why".to_owned(),
+                covers: "c".to_owned(),
+                risk: risk.to_owned(),
+                claim: Some("it is needed".to_owned()),
+                options: speccoder_runtime::approvals::options(risk, true),
+            },
+            &speccoder_runtime::approvals::PresentContext {
+                root: Some(dir.path().to_path_buf()),
+                sandbox: Some("Seatbelt".to_owned()),
+                network: "none".to_owned(),
+                file_text: None,
+            },
+        )
+    }
+
+    fn ask(conn: &Arc<ConnRef>, p: Presentation) -> std::thread::JoinHandle<Answer> {
+        let perms = Permissions {
+            conn: Arc::clone(conn),
+            session: "s".to_owned(),
+            cancel: Arc::new(AtomicBool::new(false)),
+        };
+        std::thread::spawn(move || perms.ask(&p))
+    }
+
+    #[test]
+    fn an_edit_is_a_permission_request_with_a_diff() {
+        let (conn, rx) = conn(false);
+        let asking = ask(
+            &conn,
+            presentation(
+                "edit_file",
+                json!({ "path": "Cargo.toml", "old_string": "serde = \"1\"\n", "new_string": "serde = \"1\"\nx = \"2\"\n" }),
+                "edit",
+                "medium",
+            ),
+        );
+        let req = next(&rx);
+        assert_eq!(req["method"], "session/request_permission");
+        let call = &req["params"]["toolCall"];
+        assert_eq!(call["kind"], "edit");
+        assert_eq!(
+            call["title"],
+            "Edit this file? Cargo.toml — T004 · risk medium"
+        );
+        assert_eq!(call["content"][0]["type"], "diff");
+        assert!(
+            call["content"][0]["path"]
+                .as_str()
+                .unwrap_or_default()
+                .ends_with("/Cargo.toml")
+        );
+        assert_eq!(
+            call["content"][0]["oldText"],
+            "[dependencies]\nserde = \"1\"\n"
+        );
+        assert_eq!(
+            call["content"][0]["newText"],
+            "[dependencies]\nserde = \"1\"\nx = \"2\"\n"
+        );
+        assert!(
+            call["content"][1]["content"]["text"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("Model says (a claim): \"it is needed\"")
+        );
+        let ids: Vec<&str> = req["params"]["options"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|o| o["optionId"].as_str())
+            .collect();
+        assert_eq!(ids, ["once", "task", "run", "reject", "stop"]);
+        reply(
+            &conn,
+            &req,
+            json!({ "outcome": { "outcome": "selected", "optionId": "run" } }),
+        );
+        let a = asking.join().unwrap_or_else(|_| panic!("asking"));
+        assert_eq!(
+            (a.decision, a.scope),
+            (speccoder_runtime::approvals::Decision::Approve, Scope::Run)
+        );
         // the local person, through the editor that asked.
-        let by = answer.by.unwrap_or_else(|| panic!("no approver"));
-        assert_eq!(by.via, "editor Zed");
+        assert_eq!(a.by.map(|b| b.via), Some("editor Zed".to_owned()));
+    }
+
+    #[test]
+    fn a_new_file_has_no_old_text_and_high_risk_no_run_option() {
+        let (conn, rx) = conn(false);
+        let asking = ask(
+            &conn,
+            presentation(
+                "write_file",
+                json!({ "path": "src/new.rs", "content": "fn x() {}\n" }),
+                "write",
+                "low",
+            ),
+        );
+        let req = next(&rx);
+        assert!(
+            req["params"]["toolCall"]["content"][0]
+                .get("oldText")
+                .is_none()
+        );
+        reply(
+            &conn,
+            &req,
+            json!({ "outcome": { "outcome": "cancelled" } }),
+        );
+        let a = asking.join().unwrap_or_else(|_| panic!("asking"));
+        assert_eq!(
+            a.decision,
+            speccoder_runtime::approvals::Decision::Stop,
+            "cancelled is a stop, never a rejection"
+        );
+
+        let asking = ask(
+            &conn,
+            presentation(
+                "run_command",
+                json!({ "argv": ["curl", "x"] }),
+                "run",
+                "high",
+            ),
+        );
+        let req = next(&rx);
+        assert_eq!(req["params"]["toolCall"]["kind"], "execute");
+        let ids: Vec<&str> = req["params"]["options"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|o| o["optionId"].as_str())
+            .collect();
+        assert_eq!(ids, ["once", "task", "reject", "stop"]);
+        reply(
+            &conn,
+            &req,
+            json!({ "outcome": { "outcome": "selected", "optionId": "reject" } }),
+        );
+        let a = asking.join().unwrap_or_else(|_| panic!("asking"));
+        assert_eq!(
+            a.reason.as_deref(),
+            Some("rejected in Zed; the editor gave no reason")
+        );
+    }
+
+    #[test]
+    fn a_rejection_asks_for_the_reason_with_a_form() {
+        let (conn, rx) = conn(true);
+        let asking = ask(
+            &conn,
+            presentation(
+                "run_command",
+                json!({ "argv": ["curl", "x"] }),
+                "run",
+                "high",
+            ),
+        );
+        let req = next(&rx);
+        reply(
+            &conn,
+            &req,
+            json!({ "outcome": { "outcome": "selected", "optionId": "reject" } }),
+        );
+        let form = next(&rx);
+        assert_eq!(form["method"], "elicitation/create");
+        assert_eq!(
+            form["params"]["toolCallId"],
+            req["params"]["toolCall"]["toolCallId"]
+        );
+        assert_eq!(form["params"]["requestedSchema"]["required"][0], "reason");
+        reply(
+            &conn,
+            &form,
+            json!({ "action": "accept", "content": { "reason": "no network" } }),
+        );
+        let a = asking.join().unwrap_or_else(|_| panic!("asking"));
+        assert_eq!(a.reason.as_deref(), Some("no network"));
+    }
+
+    #[test]
+    fn the_plan_follows_the_run() {
+        use speccoder_runtime::progress::PlannedTask;
+        let (conn, rx) = conn(false);
+        let u = Updates {
+            conn: Arc::clone(&conn),
+            session: "s".to_owned(),
+            tasks: Mutex::new(HashMap::new()),
+            plan: Mutex::new(Vec::new()),
+        };
+        let t = |id: &str, state: &str| PlannedTask {
+            id: id.to_owned(),
+            title: format!("do {id}"),
+            state: state.to_owned(),
+        };
+        u.event(&Event::RunStarted {
+            feature: "f".to_owned(),
+            tasks: vec![t("T001", "done"), t("T002", "ready"), t("T003", "blocked")],
+        });
+        let plan = next(&rx);
+        let statuses: Vec<&str> = plan["params"]["update"]["entries"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|e| e["status"].as_str())
+            .collect();
+        assert_eq!(statuses, ["completed", "pending", "pending"]);
+        u.event(&Event::TaskStarted {
+            feature: "f".to_owned(),
+            task: "T002".to_owned(),
+            title: "do T002".to_owned(),
+        });
+        let plan = next(&rx);
+        assert_eq!(
+            plan["params"]["update"]["entries"][1]["status"],
+            "in_progress"
+        );
+        let _tool_call = next(&rx);
+        u.event(&Event::TaskFinished {
+            task: "T002".to_owned(),
+            outcome: "regression_only".to_owned(),
+            message: "m".to_owned(),
+            input_tokens: 0,
+            output_tokens: 0,
+            cache_read_tokens: 0,
+            usd: None,
+        });
+        let plan = next(&rx);
+        assert_eq!(
+            plan["params"]["update"]["entries"][1]["content"],
+            "T002 do T002 — regression only"
+        );
+        assert_eq!(
+            plan["params"]["update"]["entries"][1]["status"],
+            "completed"
+        );
     }
 }

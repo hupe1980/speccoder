@@ -81,7 +81,7 @@ use agentplane::model::ModelProvider;
 use agentplane::model::fake::FakeProvider;
 use serde_json::json;
 use speccoder_core::{CommandData, CommandResult, CommandStatus, RunReport};
-use speccoder_runtime::approvals::{Answer, Approver, Request};
+use speccoder_runtime::approvals::{Answer, Approver};
 
 fn git(dir: &Path, args: &[&str]) {
     let ok = Command::new("git")
@@ -164,16 +164,15 @@ fn done() -> serde_json::Value {
 #[derive(Debug)]
 struct Yes;
 impl Approver for Yes {
-    fn ask(&self, _: &Request) -> Answer {
-        Answer {
-            by: Some(speccoder_runtime::approvals::Who {
+    fn ask(&self, _: &speccoder_runtime::approvals::Presentation) -> Answer {
+        Answer::approve(
+            speccoder_runtime::approvals::Scope::Once,
+            None,
+            Some(speccoder_runtime::approvals::Who {
                 name: "dana".to_owned(),
                 via: "terminal".to_owned(),
             }),
-            approved: true,
-            for_task: false,
-            reason: None,
-        }
+        )
     }
 }
 
@@ -222,9 +221,9 @@ fn mcp_tools_are_offered_allowed_or_approved_and_replay_strictly() {
         (
             decided[0].verb.as_str(),
             decided[0].by.name.as_str(),
-            decided[0].for_task
+            decided[0].scope.as_str()
         ),
-        ("approve", "dana", false)
+        ("approve", "dana", "once")
     );
     // The write the server made in the worktree is in the diff and the commit.
     assert!(

@@ -20,6 +20,7 @@ async-trait.workspace = true
 globset.workspace = true
 ignore.workspace = true
 regex.workspace = true
+similar.workspace = true
 schemars.workspace = true
 tokio = { workspace = true, features = ["rt"] }
 nix.workspace = true
