@@ -1,0 +1,56 @@
+schema_version: "1.0"
+workflow:
+  id: "speccoder"
+  name: "Spec-driven cycle with speccoder"
+  version: "0.1.0"
+  author: "speccoder (written by `speccoder workflow install`)"
+  description: "specify -> plan -> tasks with review gates, then speccoder implements with verification evidence"
+
+requires:
+  speckit_version: ">=1.1.0"
+
+inputs:
+  spec:
+    type: string
+    required: true
+    prompt: "Describe what you want to build"
+
+steps:
+  - id: specify
+    type: speccoder
+    skill: specify
+    args: "{{ inputs.spec }}"
+
+  - id: review-spec
+    type: gate
+    message: "Review the spec (uncommitted, in specs/) before planning."
+    options: [approve, reject]
+    on_reject: abort
+
+  - id: plan
+    type: speccoder
+    skill: plan
+
+  - id: review-plan
+    type: gate
+    message: "Review the plan before generating tasks."
+    options: [approve, reject]
+    on_reject: abort
+
+  - id: tasks
+    type: speccoder
+    skill: tasks
+
+  - id: review-tasks
+    type: gate
+    message: "Review tasks.md; approving commits the spec, plan and tasks (speccoder implements from committed files)."
+    options: [approve, reject]
+    on_reject: abort
+
+  - id: commit-artifacts
+    type: shell
+    run: "git add -A specs .specify/memory && git commit -q -m 'spec, plan and tasks' || true"
+
+  - id: implement
+    type: speccoder
+    converge: true

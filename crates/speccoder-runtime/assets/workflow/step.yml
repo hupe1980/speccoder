@@ -1,0 +1,7 @@
+schema_version: "1.0"
+step:
+  type_key: "speccoder"
+  name: "speccoder"
+  version: "0.1.0"
+  description: "Run speccoder: implement a feature's tasks with verification evidence, or a planning skill"
+  author: "speccoder (written by `speccoder workflow install`)"

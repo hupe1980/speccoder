@@ -1,0 +1,31 @@
+[package]
+name = "speccoder"
+description = "Spec-driven coding agent for GitHub Spec Kit projects: the spec is the intent, tasks.md the plan, verification evidence decides done"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "README.md"
+authors.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[[bin]]
+name = "speccoder"
+path = "src/main.rs"
+
+[dependencies]
+speccoder-core.workspace = true
+speccoder-runtime.workspace = true
+clap.workspace = true
+ratatui.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+assert_cmd.workspace = true
+tempfile.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true

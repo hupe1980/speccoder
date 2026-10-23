@@ -1,0 +1,7 @@
+# The `speccoder` profile writes a JUnit report, the format speccoder's own
+# verifier will read from target projects.
+[profile.speccoder]
+fail-fast = false
+
+[profile.speccoder.junit]
+path = "junit.xml"

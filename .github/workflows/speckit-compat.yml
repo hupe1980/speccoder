@@ -1,0 +1,39 @@
+name: Spec Kit compatibility
+
+# The committed fixtures (crates/speccoder-speckit/tests/fixtures/compat/)
+# are checked by every `just ci`. This job checks the newest Spec Kit
+# release too, weekly and on demand, so a release that breaks speccoder is
+# seen before a user meets it. Nothing here publishes.
+on:
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Spec Kit version (default: the newest release)"
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  newest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup toolchain install # from rust-toolchain.toml
+      - uses: Swatinem/rust-cache@v2
+      - uses: astral-sh/setup-uv@v6
+      - name: Pick the version
+        id: v
+        run: |
+          v="${{ github.event.inputs.version }}"
+          if [ -z "$v" ]; then
+            v=$(git ls-remote --tags https://github.com/github/spec-kit \
+              | grep -oE 'refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$' | sed 's|refs/tags/v||' | sort -V | tail -1)
+          fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+      - run: scripts/speckit-fixture.sh "${{ steps.v.outputs.version }}"
+      - run: cargo test -p speccoder-runtime --test compat
+        env:
+          SPECCODER_COMPAT_VERSIONS: ${{ steps.v.outputs.version }}

@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  # The sandbox escape suite fails instead of skipping where there is no sandbox.
+  SPECCODER_REQUIRE_SANDBOX: "1"
+
+# One job per OS, each running exactly `just ci`, so a green local `just ci`
+# predicts a green run here. Nothing in this workflow publishes.
+jobs:
+  ci:
+    name: just ci (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup toolchain install # from rust-toolchain.toml
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just,cargo-nextest,cargo-deny
+      - run: just ci

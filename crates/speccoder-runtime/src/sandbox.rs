@@ -1,0 +1,740 @@
+//! The OS sandbox for commands speccoder starts.
+//!
+//! Checks, the model's `run_command`, the formatter, acceptance tests and MCP
+//! servers run code the model may have written. The policy decides *which*
+//! commands run; the sandbox confines *what they do*:
+//!
+//! - writes only to the workspace, a private temporary directory and the
+//!   package caches builds need (never the rest of the state directory —
+//!   approvals live there — and never `~/.cargo/bin`);
+//! - credentials unreadable (`~/.ssh`, `~/.aws`, `~/.cargo/credentials*`, …);
+//! - no network beyond loopback, unless the command is allowed it
+//!   (`[sandbox] network_allow`) or a person approved it.
+//!
+//! macOS: Seatbelt (`sandbox-exec`) with a generated profile. Linux: the
+//! `speccoder` binary re-executes itself as a helper (`__sandbox`) that
+//! applies Landlock and a seccomp filter to itself, sets `no_new_privs` and
+//! executes the command — so the workspace keeps `unsafe_code` forbidden.
+
+use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
+
+use serde::{Deserialize, Serialize};
+
+use crate::verify::process::{CommandRunner, Invocation, LocalRunner, Outcome};
+
+/// What a sandboxed command may reach on the network.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Network {
+    /// Nothing (on Linux also not loopback).
+    Off,
+    /// Loopback only: local test servers work, the outside does not. On
+    /// Linux this is [`Network::Off`] (seccomp cannot tell addresses apart).
+    Loopback,
+    /// Everything.
+    On,
+}
+
+/// Whether to sandbox.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Mode {
+    /// Sandbox where the OS supports it; otherwise run unsandboxed and say so.
+    Auto,
+    /// Refuse to run commands unsandboxed.
+    Required,
+    /// Do not sandbox.
+    Off,
+}
+
+/// `[sandbox]` in `speccoder.toml`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Config {
+    /// Whether to sandbox.
+    pub mode: Mode,
+    /// The network for every command.
+    pub network: Network,
+    /// Command prefixes that get the network (`[["cargo", "fetch"]]`).
+    pub network_allow: Vec<Vec<String>>,
+    /// More writable paths (`~` is the home directory).
+    pub writable: Vec<String>,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            mode: Mode::Auto,
+            network: Network::Loopback,
+            network_allow: Vec::new(),
+            writable: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Raw {
+    mode: Option<String>,
+    network: Option<String>,
+    #[serde(default)]
+    network_allow: Vec<Vec<String>>,
+    #[serde(default)]
+    writable: Vec<String>,
+}
+
+/// Reads `[sandbox]`.
+pub fn parse(text: &str) -> Result<Config, String> {
+    let table: toml::Table = toml::from_str(text).map_err(|e| e.to_string())?;
+    let Some(v) = table.get("sandbox") else {
+        return Ok(Config::default());
+    };
+    let raw: Raw = v
+        .clone()
+        .try_into()
+        .map_err(|e| format!("[sandbox]: {e}"))?;
+    let mode = match raw.mode.as_deref() {
+        None | Some("auto") => Mode::Auto,
+        Some("required") => Mode::Required,
+        Some("off") => Mode::Off,
+        Some(o) => return Err(format!("[sandbox] mode = \"{o}\" (auto, required or off)")),
+    };
+    let network = match raw.network.as_deref() {
+        None | Some("loopback") => Network::Loopback,
+        Some("off") => Network::Off,
+        Some("on") => Network::On,
+        Some(o) => return Err(format!("[sandbox] network = \"{o}\" (off, loopback or on)")),
+    };
+    Ok(Config {
+        mode,
+        network,
+        network_allow: raw
+            .network_allow
+            .into_iter()
+            .filter(|p| !p.is_empty())
+            .collect(),
+        writable: raw.writable,
+    })
+}
+
+/// Credentials a command never reads, relative to the home directory.
+pub const HIDDEN: &[&str] = &[
+    ".ssh",
+    ".aws",
+    ".azure",
+    ".gnupg",
+    ".netrc",
+    ".docker",
+    ".kube",
+    ".npmrc",
+    ".pypirc",
+    ".git-credentials",
+    ".password-store",
+    ".config/gh",
+    ".config/gcloud",
+    ".config/hub",
+    ".cargo/credentials",
+    ".cargo/credentials.toml",
+    ".local/share/keyrings",
+    "Library/Keychains",
+];
+
+/// Package caches builds write to, relative to the home directory. Not
+/// `~/.cargo` as a whole: `~/.cargo/bin` would let a test replace `cargo`.
+pub const CACHES: &[&str] = &[
+    ".cargo/registry",
+    ".cargo/git",
+    ".cargo/.package-cache",
+    ".cargo/.package-cache-mutate",
+    ".cargo/.global-cache",
+    ".cache",
+    ".npm",
+    ".pnpm-store",
+    ".yarn/berry/cache",
+    "go/pkg/mod",
+    "Library/Caches",
+];
+
+/// One command's confinement.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Profile {
+    /// Writable trees (the workspace first).
+    pub writable: Vec<PathBuf>,
+    /// Unreadable trees.
+    pub hidden: Vec<PathBuf>,
+    /// The network.
+    pub network: Network,
+    /// The private temporary directory (`TMPDIR`), writable.
+    pub tmp: PathBuf,
+}
+
+fn canonical(p: &Path) -> PathBuf {
+    std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf())
+}
+
+impl Profile {
+    /// The profile for commands working in `root`, for the home directory `home`.
+    #[must_use]
+    pub fn new(root: &Path, config: &Config, home: Option<&Path>) -> Self {
+        let root = canonical(root);
+        let expand = |p: &str| -> Option<PathBuf> {
+            match (p.strip_prefix("~/"), home) {
+                (Some(rest), Some(h)) => Some(h.join(rest)),
+                (Some(_), None) => None,
+                (None, _) => Some(PathBuf::from(p)),
+            }
+        };
+        let home = home.map(canonical);
+        let home = home.as_deref();
+        let mut writable = vec![root.clone()];
+        writable.extend(
+            home.into_iter()
+                .flat_map(|h| CACHES.iter().map(move |c| h.join(c))),
+        );
+        writable.extend(
+            config
+                .writable
+                .iter()
+                .filter_map(|p| expand(p))
+                .map(|p| canonical(&p)),
+        );
+        let hidden = home
+            .into_iter()
+            .flat_map(|h| HIDDEN.iter().map(move |c| h.join(c)))
+            .collect();
+        let digest = {
+            use sha2::{Digest as _, Sha256};
+            let d = Sha256::digest(root.to_string_lossy().as_bytes());
+            d.iter()
+                .take(6)
+                .map(|b| format!("{b:02x}"))
+                .collect::<String>()
+        };
+        // Short (Unix socket paths are limited to ~104 bytes) and per workspace.
+        let tmp = canonical(&std::env::temp_dir()).join(format!("speccoder-{digest}"));
+        Self {
+            writable,
+            hidden,
+            network: config.network,
+            tmp,
+        }
+    }
+
+    /// The same profile with another network.
+    #[must_use]
+    pub fn with_network(mut self, network: Network) -> Self {
+        self.network = network;
+        self
+    }
+}
+
+/// How this machine sandboxes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Backend {
+    /// macOS Seatbelt.
+    Seatbelt,
+    /// Linux Landlock + seccomp through the `speccoder` helper at this path.
+    Landlock(PathBuf),
+}
+
+const SANDBOX_EXEC: &str = "/usr/bin/sandbox-exec";
+
+/// The helper subcommand (`speccoder __sandbox <profile> -- argv…`).
+pub const HELPER_ARG: &str = "__sandbox";
+
+/// The sandbox this machine offers, or why there is none.
+pub fn backend() -> Result<Backend, String> {
+    static CACHED: OnceLock<Result<Backend, String>> = OnceLock::new();
+    CACHED.get_or_init(detect).clone()
+}
+
+fn detect() -> Result<Backend, String> {
+    if cfg!(target_os = "macos") {
+        return if Path::new(SANDBOX_EXEC).exists() {
+            Ok(Backend::Seatbelt)
+        } else {
+            Err(format!("{SANDBOX_EXEC} is missing"))
+        };
+    }
+    if cfg!(target_os = "linux") {
+        let helper = std::env::var_os("SPECCODER_SANDBOX_HELPER")
+            .map(PathBuf::from)
+            .or_else(|| {
+                std::env::current_exe()
+                    .ok()
+                    .filter(|p| p.file_stem().is_some_and(|n| n == "speccoder"))
+            })
+            .ok_or_else(|| "the speccoder helper binary was not found".to_owned())?;
+        return with_helper(helper);
+    }
+    Err(format!("no sandbox for {}", std::env::consts::OS))
+}
+
+/// The Linux backend with the helper binary at `helper`, if the kernel
+/// supports Landlock.
+pub fn with_helper(helper: PathBuf) -> Result<Backend, String> {
+    linux_supported()?;
+    Ok(Backend::Landlock(helper))
+}
+
+#[cfg(target_os = "linux")]
+fn linux_supported() -> Result<(), String> {
+    linux::probe()
+}
+
+#[cfg(not(target_os = "linux"))]
+fn linux_supported() -> Result<(), String> {
+    Err("not Linux".to_owned())
+}
+
+fn quote(p: &Path) -> String {
+    let s = p.to_string_lossy();
+    format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\""))
+}
+
+/// The Seatbelt profile for `p`. Later rules win.
+#[must_use]
+pub fn seatbelt(p: &Profile) -> String {
+    let mut out = String::from("(version 1)\n(allow default)\n(deny file-write*)\n");
+    out.push_str("(allow file-write*");
+    for w in p.writable.iter().chain([&p.tmp]) {
+        out.push_str(&format!(" (subpath {})", quote(w)));
+    }
+    out.push_str(
+        " (literal \"/dev/null\") (literal \"/dev/zero\") (literal \"/dev/tty\") (literal \"/dev/dtracehelper\") (regex #\"^/dev/fd/\") (regex #\"^/dev/ttys\"))\n",
+    );
+    if !p.hidden.is_empty() {
+        out.push_str("(deny file-read* file-write*");
+        for h in &p.hidden {
+            out.push_str(&format!(" (subpath {})", quote(h)));
+        }
+        out.push_str(")\n");
+    }
+    // Opening applications (and Apple events) would run code outside the sandbox.
+    out.push_str("(deny appleevent-send)\n");
+    out.push_str("(deny mach-lookup (global-name-regex #\"^com\\.apple\\.lsd\\.\") (global-name \"com.apple.coreservices.launchservicesd\") (global-name \"com.apple.coreservices.appleevents\"))\n");
+    match p.network {
+        Network::On => {}
+        Network::Off | Network::Loopback => {
+            out.push_str("(deny network*)\n");
+            if p.network == Network::Loopback {
+                // Not `(local ip "localhost:*")` for all operations: it also
+                // matches outbound connections to anywhere.
+                out.push_str("(allow network-outbound (remote ip \"localhost:*\"))\n(allow network-bind network-inbound (local ip \"localhost:*\"))\n");
+            }
+            // Unix sockets inside the writable trees (not the Docker socket).
+            out.push_str("(allow network-outbound network-bind network-inbound");
+            for w in p.writable.iter().chain([&p.tmp]) {
+                out.push_str(&format!(
+                    " (remote unix-socket (subpath {q})) (local unix-socket (subpath {q}))",
+                    q = quote(w)
+                ));
+            }
+            out.push_str(")\n");
+        }
+    }
+    out
+}
+
+/// `argv` confined by `p` on `backend`.
+pub fn wrap(p: &Profile, backend: &Backend, argv: &[String]) -> Result<Vec<String>, String> {
+    match backend {
+        Backend::Seatbelt => {
+            let mut out = vec![SANDBOX_EXEC.to_owned(), "-p".to_owned(), seatbelt(p)];
+            out.extend_from_slice(argv);
+            Ok(out)
+        }
+        Backend::Landlock(helper) => {
+            let mut out = vec![
+                helper.to_string_lossy().into_owned(),
+                HELPER_ARG.to_owned(),
+                serde_json::to_string(p).map_err(|e| e.to_string())?,
+                "--".to_owned(),
+            ];
+            out.extend_from_slice(argv);
+            Ok(out)
+        }
+    }
+}
+
+/// A runner that confines every command.
+#[derive(Debug, Clone)]
+pub struct Sandboxed {
+    /// The confinement.
+    pub profile: Profile,
+    /// The OS mechanism.
+    pub backend: Backend,
+    /// Prefixes that get the network.
+    pub network_allow: Vec<Vec<String>>,
+}
+
+impl Sandboxed {
+    /// The network `argv` gets: its profile's, or all of it for an allowed prefix.
+    #[must_use]
+    pub fn network_for(&self, argv: &[String]) -> Network {
+        if self.network_allow.iter().any(|p| argv.starts_with(p)) {
+            Network::On
+        } else {
+            self.profile.network
+        }
+    }
+
+    /// Runs `inv` with `network` instead of the profile's.
+    #[must_use]
+    pub fn run_with_network(&self, inv: &Invocation, network: Network) -> Outcome {
+        let profile = self.profile.clone().with_network(network);
+        let failed = |e: String| Outcome {
+            exit_code: None,
+            timed_out: false,
+            spawn_error: Some(e),
+            started: std::time::SystemTime::now(),
+            duration: std::time::Duration::ZERO,
+            stdout: crate::verify::process::Captured::default(),
+            stderr: crate::verify::process::Captured::default(),
+        };
+        // Through the wrapper a missing program would be the wrapper's
+        // failure; report it as the plain runner does.
+        if let Some(program) = inv.argv.first()
+            && !resolvable(program, &inv.cwd, &inv.env)
+        {
+            return failed(format!(
+                "could not start `{program}`: No such file or directory"
+            ));
+        }
+        if let Err(e) = std::fs::create_dir_all(&profile.tmp) {
+            return failed(format!("the sandbox's temporary directory: {e}"));
+        }
+        let argv = match wrap(&profile, &self.backend, &inv.argv) {
+            Ok(a) => a,
+            Err(e) => return failed(e),
+        };
+        let tmp = profile.tmp.to_string_lossy().into_owned();
+        let mut env: Vec<(String, String)> = inv
+            .env
+            .iter()
+            .filter(|(k, _)| !matches!(k.as_str(), "TMPDIR" | "TMP" | "TEMP"))
+            .cloned()
+            .collect();
+        env.extend(["TMPDIR", "TMP", "TEMP"].map(|k| (k.to_owned(), tmp.clone())));
+        LocalRunner.run(&Invocation {
+            argv,
+            env,
+            ..inv.clone()
+        })
+    }
+}
+
+/// Whether `program` names an executable file, directly or on `PATH`.
+fn resolvable(program: &str, cwd: &Path, env: &[(String, String)]) -> bool {
+    if program.contains('/') {
+        return cwd.join(program).is_file();
+    }
+    let path = env
+        .iter()
+        .find(|(k, _)| k == "PATH")
+        .map(|(_, v)| v.as_str());
+    path.unwrap_or("/usr/bin:/bin")
+        .split(':')
+        .any(|d| Path::new(d).join(program).is_file())
+}
+
+impl CommandRunner for Sandboxed {
+    fn run(&self, inv: &Invocation) -> Outcome {
+        self.run_with_network(inv, self.network_for(&inv.argv))
+    }
+}
+
+/// The runner for commands working in `root`: sandboxed when configured and
+/// possible; otherwise the plain runner and a notice (or, with `required`,
+/// an error).
+pub fn runner(root: &Path, config: &Config) -> Result<(Runner, Option<String>), String> {
+    if config.mode == Mode::Off {
+        return Ok((
+            Runner::Plain,
+            Some("commands run unsandboxed ([sandbox] mode = \"off\")".to_owned()),
+        ));
+    }
+    match backend() {
+        Ok(backend) => {
+            let home = std::env::var_os("HOME").map(PathBuf::from);
+            Ok((
+                Runner::Sandboxed(Sandboxed {
+                    profile: Profile::new(root, config, home.as_deref()),
+                    backend,
+                    network_allow: config.network_allow.clone(),
+                }),
+                None,
+            ))
+        }
+        Err(e) if config.mode == Mode::Required => Err(format!(
+            "[sandbox] mode = \"required\", but there is no sandbox: {e}"
+        )),
+        Err(e) => Ok((
+            Runner::Plain,
+            Some(format!("commands run unsandboxed: {e}")),
+        )),
+    }
+}
+
+/// [`runner`] with `[sandbox]` read from the `speccoder.toml` that governs `root`.
+pub fn runner_at(root: &Path) -> Result<(Runner, Option<String>), String> {
+    let text = crate::verify::find_config(root)
+        .and_then(|d| std::fs::read_to_string(d.join(crate::verify::config::FILE)).ok())
+        .unwrap_or_default();
+    let config = parse(&text).map_err(|e| format!("speccoder.toml: {e}"))?;
+    runner(root, &config)
+}
+
+/// A sandboxed or a plain runner.
+#[derive(Debug, Clone)]
+pub enum Runner {
+    /// Confined.
+    Sandboxed(Sandboxed),
+    /// Not confined.
+    Plain,
+}
+
+impl Runner {
+    /// Whether commands are confined (the network rule then matters).
+    #[must_use]
+    pub fn is_sandboxed(&self) -> bool {
+        matches!(self, Self::Sandboxed(_))
+    }
+
+    /// Runs `inv`; `network` (a person's approval) widens the network.
+    #[must_use]
+    pub fn run_with(&self, inv: &Invocation, network: bool) -> Outcome {
+        match self {
+            Self::Plain => LocalRunner.run(inv),
+            Self::Sandboxed(s) if network => s.run_with_network(inv, Network::On),
+            Self::Sandboxed(s) => s.run(inv),
+        }
+    }
+
+    /// Where commands may write scratch files: the sandbox's private
+    /// temporary directory (created), or `None` unsandboxed.
+    #[must_use]
+    pub fn scratch(&self) -> Option<PathBuf> {
+        match self {
+            Self::Plain => None,
+            Self::Sandboxed(s) => std::fs::create_dir_all(&s.profile.tmp)
+                .ok()
+                .map(|()| s.profile.tmp.clone()),
+        }
+    }
+
+    /// `argv` as it will be started (for long-running servers started elsewhere).
+    pub fn wrap(&self, argv: &[String]) -> Result<(Vec<String>, Option<PathBuf>), String> {
+        match self {
+            Self::Plain => Ok((argv.to_vec(), None)),
+            Self::Sandboxed(s) => {
+                let profile = s.profile.clone().with_network(s.network_for(argv));
+                std::fs::create_dir_all(&profile.tmp).map_err(|e| e.to_string())?;
+                Ok((wrap(&profile, &s.backend, argv)?, Some(profile.tmp)))
+            }
+        }
+    }
+}
+
+impl CommandRunner for Runner {
+    fn run(&self, inv: &Invocation) -> Outcome {
+        self.run_with(inv, false)
+    }
+}
+
+/// The helper's entry (`speccoder __sandbox <profile> -- argv…`): confines
+/// this process and executes the command; returns only on failure.
+pub fn helper_main(args: &[String]) -> String {
+    let (Some(profile), Some("--")) = (args.first(), args.get(1).map(String::as_str)) else {
+        return format!("usage: speccoder {HELPER_ARG} <profile> -- <argv…>");
+    };
+    let profile: Profile = match serde_json::from_str(profile) {
+        Ok(p) => p,
+        Err(e) => return format!("the sandbox profile: {e}"),
+    };
+    let argv = &args[2..];
+    if argv.is_empty() {
+        return "nothing to run".to_owned();
+    }
+    enter(&profile, argv)
+}
+
+#[cfg(target_os = "linux")]
+fn enter(profile: &Profile, argv: &[String]) -> String {
+    linux::enter(profile, argv)
+}
+
+#[cfg(not(target_os = "linux"))]
+fn enter(_profile: &Profile, _argv: &[String]) -> String {
+    format!("the {HELPER_ARG} helper is for Linux")
+}
+
+#[cfg(target_os = "linux")]
+mod linux {
+    //! Landlock (filesystem) and seccomp (network) for this process, then exec.
+
+    use std::collections::BTreeMap;
+    use std::path::{Path, PathBuf};
+
+    use landlock::{
+        ABI, Access, AccessFs, CompatLevel, Compatible, PathBeneath, PathFd, Ruleset, RulesetAttr,
+        RulesetCreatedAttr, RulesetStatus,
+    };
+    use seccompiler::{
+        SeccompAction, SeccompCmpArgLen, SeccompCmpOp, SeccompCondition, SeccompFilter,
+        SeccompRule, TargetArch,
+    };
+
+    use super::{Network, Profile};
+
+    const ABI_LEVEL: ABI = ABI::V3;
+
+    pub(super) fn probe() -> Result<(), String> {
+        Ruleset::default()
+            .set_compatibility(CompatLevel::HardRequirement)
+            .handle_access(AccessFs::from_all(ABI_LEVEL))
+            .and_then(|r| r.create())
+            .map(|_| ())
+            .map_err(|e| format!("Landlock is not available: {e}"))
+    }
+
+    /// Readable everywhere except the hidden trees: rules for every path
+    /// that contains no hidden tree, descending into those that do.
+    fn readable(dir: &Path, hidden: &[PathBuf], out: &mut Vec<PathBuf>) {
+        if hidden.iter().any(|h| h == dir) {
+            return;
+        }
+        if !hidden.iter().any(|h| h.starts_with(dir)) {
+            out.push(dir.to_path_buf());
+            return;
+        }
+        if let Ok(entries) = std::fs::read_dir(dir) {
+            for e in entries.flatten() {
+                readable(&e.path(), hidden, out);
+            }
+        }
+    }
+
+    pub(super) fn enter(profile: &Profile, argv: &[String]) -> String {
+        match confine(profile) {
+            Ok(()) => {
+                use std::os::unix::process::CommandExt as _;
+                let e = std::process::Command::new(&argv[0]).args(&argv[1..]).exec();
+                format!("could not start `{}`: {e}", argv[0])
+            }
+            Err(e) => format!("the sandbox could not be applied: {e}"),
+        }
+    }
+
+    fn confine(profile: &Profile) -> Result<(), String> {
+        let read = AccessFs::from_read(ABI_LEVEL);
+        let all = AccessFs::from_all(ABI_LEVEL);
+        let mut readable_paths = Vec::new();
+        readable(Path::new("/"), &profile.hidden, &mut readable_paths);
+        let mut ruleset = Ruleset::default()
+            .set_compatibility(CompatLevel::HardRequirement)
+            .handle_access(all)
+            .and_then(|r| r.create())
+            .map_err(|e| e.to_string())?;
+        for p in &readable_paths {
+            if let Ok(fd) = PathFd::new(p) {
+                let access = if p.is_dir() {
+                    read
+                } else {
+                    read & AccessFs::from_file(ABI_LEVEL)
+                };
+                ruleset = ruleset
+                    .add_rule(PathBeneath::new(fd, access))
+                    .map_err(|e| e.to_string())?;
+            }
+        }
+        for w in profile.writable.iter().chain([&profile.tmp]) {
+            if let Ok(fd) = PathFd::new(w) {
+                let access = if w.is_dir() {
+                    all
+                } else {
+                    AccessFs::from_file(ABI_LEVEL)
+                };
+                ruleset = ruleset
+                    .add_rule(PathBeneath::new(fd, access))
+                    .map_err(|e| e.to_string())?;
+            }
+        }
+        for dev in ["/dev/null", "/dev/zero", "/dev/tty", "/dev/ptmx"] {
+            if let Ok(fd) = PathFd::new(dev) {
+                ruleset = ruleset
+                    .add_rule(PathBeneath::new(fd, AccessFs::from_file(ABI_LEVEL)))
+                    .map_err(|e| e.to_string())?;
+            }
+        }
+        let status = ruleset.restrict_self().map_err(|e| e.to_string())?;
+        if status.ruleset != RulesetStatus::FullyEnforced {
+            return Err(format!("Landlock only {:?}", status.ruleset));
+        }
+        if profile.network != Network::On {
+            no_inet()?;
+        }
+        Ok(())
+    }
+
+    /// `socket(AF_INET | AF_INET6, …)` fails with EACCES.
+    fn no_inet() -> Result<(), String> {
+        let rule = |domain: u64| {
+            SeccompCondition::new(0, SeccompCmpArgLen::Dword, SeccompCmpOp::Eq, domain)
+                .and_then(|c| SeccompRule::new(vec![c]))
+                .map_err(|e| e.to_string())
+        };
+        let rules = vec![
+            rule(u64::from(libc::AF_INET.unsigned_abs()))?,
+            rule(u64::from(libc::AF_INET6.unsigned_abs()))?,
+        ];
+        let arch: TargetArch = std::env::consts::ARCH
+            .try_into()
+            .map_err(|e: seccompiler::BackendError| e.to_string())?;
+        let filter = SeccompFilter::new(
+            BTreeMap::from([(libc::SYS_socket, rules)]),
+            SeccompAction::Allow,
+            SeccompAction::Errno(libc::EACCES.unsigned_abs()),
+            arch,
+        )
+        .map_err(|e| e.to_string())?;
+        let program: seccompiler::BpfProgram = filter
+            .try_into()
+            .map_err(|e: seccompiler::BackendError| e.to_string())?;
+        seccompiler::apply_filter(&program).map_err(|e| e.to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn config_parses_and_defaults_to_loopback() {
+        assert_eq!(parse("").unwrap_or_default(), Config::default());
+        let c = parse("[sandbox]\nmode = \"required\"\nnetwork = \"off\"\nnetwork_allow = [[\"cargo\", \"fetch\"]]\nwritable = [\"~/.m2\"]\n")
+            .unwrap_or_default();
+        assert_eq!((c.mode, c.network), (Mode::Required, Network::Off));
+        assert!(parse("[sandbox]\nnetwork = \"some\"\n").is_err());
+    }
+
+    #[test]
+    fn the_profile_keeps_the_state_directory_and_cargo_bin_out() {
+        let home = Path::new("/home/u");
+        let p = Profile::new(
+            Path::new("/s/proj/worktrees/001"),
+            &Config::default(),
+            Some(home),
+        );
+        assert_eq!(p.writable[0], Path::new("/s/proj/worktrees/001"));
+        assert!(
+            !p.writable
+                .iter()
+                .any(|w| w == Path::new("/s/proj") || w == &home.join(".cargo"))
+        );
+        assert!(p.hidden.contains(&home.join(".ssh")));
+        let sb = seatbelt(&p);
+        assert!(sb.contains("(deny network*)"));
+        assert!(sb.contains("(subpath \"/home/u/.cargo/registry\")"));
+        assert!(!sb.contains("(local ip \"localhost:*\"))\n(allow network*"));
+    }
+}

@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{% block head_extra %}<meta name="robots" content="noindex">{% endblock %}
+
+{% block content %}
+<section class="hero">
+  <div class="wrap narrow">
+    <p class="eyebrow">404</p>
+    <h1>This page isn’t here.</h1>
+    <p class="lead">It may have moved when the documentation was reorganised. Search the docs, or start from the overview.</p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="{{ get_url(path='@/docs/_index.md') }}">Documentation</a>
+      <button class="btn btn-ghost" type="button" data-search-open>Search</button>
+    </div>
+  </div>
+</section>
+{% endblock %}

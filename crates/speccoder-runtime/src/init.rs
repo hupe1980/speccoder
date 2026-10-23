@@ -1,0 +1,665 @@
+//! `speccoder init`: detect a project's checks and write
+//! `speccoder.toml`.
+//!
+//! Detection looks only at the project root's manifests and lockfiles (and
+//! whether `cargo nextest` is installed); it runs nothing of the project's.
+//! What it finds becomes a commented file the person reviews and commits.
+//! The result is parsed back with speccoder's own parsers before it is
+//! written, so `init` never leaves a file `run` would refuse.
+
+use std::path::{Path, PathBuf};
+
+use serde::Serialize;
+use speccoder_core::{CommandData, CommandResult, CommandStatus};
+
+use crate::verify::config::FILE;
+
+/// What `init` saw at the project root.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Found {
+    /// `Cargo.toml` exists.
+    pub cargo: bool,
+    /// `cargo nextest` is installed.
+    pub nextest: bool,
+    /// `package.json`'s scripts, by name.
+    pub npm_scripts: Vec<String>,
+    /// `npm`, `pnpm`, `yarn` or `bun`, from the lockfile; `None` without `package.json`.
+    pub node_manager: Option<String>,
+    /// `pyproject.toml`, `setup.cfg`, `setup.py` or `pytest.ini` exists.
+    pub python: bool,
+    /// `[tool.ruff]` (or `ruff.toml`) is configured.
+    pub ruff: bool,
+    /// `[tool.mypy]` (or `mypy.ini`) is configured.
+    pub mypy: bool,
+    /// `go.mod` exists.
+    pub go: bool,
+    /// A `Makefile` with a `test:` target exists.
+    pub make_test: bool,
+}
+
+/// One check `init` proposes.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Proposed {
+    /// `[checks.<name>]`.
+    pub name: String,
+    /// The command.
+    pub argv: Vec<String>,
+    /// `fast` or `full`.
+    pub tier: String,
+    /// A JUnit report the check writes.
+    pub junit: Option<String>,
+    /// Why this check.
+    pub why: String,
+}
+
+fn check(name: &str, argv: &[&str], tier: &str, junit: Option<&str>, why: &str) -> Proposed {
+    Proposed {
+        name: name.to_owned(),
+        argv: argv.iter().map(|a| (*a).to_owned()).collect(),
+        tier: tier.to_owned(),
+        junit: junit.map(str::to_owned),
+        why: why.to_owned(),
+    }
+}
+
+/// The checks for what was found (pure: no IO).
+#[must_use]
+pub fn propose(found: &Found) -> Vec<Proposed> {
+    let mut out = Vec::new();
+    if found.cargo {
+        out.push(if found.nextest {
+            check(
+                "test",
+                // A new project has no tests yet: warn, do not fail the baseline.
+                &[
+                    "cargo",
+                    "nextest",
+                    "run",
+                    "--workspace",
+                    "--profile",
+                    "speccoder",
+                    "--no-tests=warn",
+                ],
+                "fast",
+                Some("target/nextest/speccoder/junit.xml"),
+                "Cargo.toml; cargo-nextest is installed (its JUnit report names every test)",
+            )
+        } else {
+            check(
+                "test",
+                &["cargo", "test", "--workspace"],
+                "fast",
+                None,
+                "Cargo.toml (install cargo-nextest for per-test results)",
+            )
+        });
+        out.push(check(
+            "fmt",
+            &["cargo", "fmt", "--all", "--check"],
+            "fast",
+            None,
+            "Cargo.toml",
+        ));
+        out.push(check(
+            "clippy",
+            &[
+                "cargo",
+                "clippy",
+                "--workspace",
+                "--all-targets",
+                "--",
+                "-D",
+                "warnings",
+            ],
+            "full",
+            None,
+            "Cargo.toml",
+        ));
+    }
+    if let Some(pm) = &found.node_manager {
+        let has = |s: &str| found.npm_scripts.iter().any(|x| x == s);
+        // `<pm> run <script>`: the allowed prefix is that one script.
+        let run = |script: &str| -> Vec<String> { vec![pm.clone(), "run".into(), script.into()] };
+        let mut add = |name: &str, script: &str, tier: &str| {
+            out.push(Proposed {
+                name: name.to_owned(),
+                argv: run(script),
+                tier: tier.to_owned(),
+                junit: None,
+                why: format!("package.json script `{script}` ({pm})"),
+            });
+        };
+        if has("test") {
+            add(
+                if found.cargo { "node-test" } else { "test" },
+                "test",
+                "fast",
+            );
+        }
+        if has("typecheck") {
+            add("typecheck", "typecheck", "fast");
+        }
+        if has("lint") {
+            add("lint", "lint", "full");
+        }
+    }
+    if found.python {
+        let name = if found.cargo || found.node_manager.is_some() {
+            "pytest"
+        } else {
+            "test"
+        };
+        out.push(check(
+            name,
+            &[
+                "python3",
+                "-m",
+                "pytest",
+                "-q",
+                "--junitxml=.speccoder/junit.xml",
+            ],
+            "fast",
+            Some(".speccoder/junit.xml"),
+            "a Python project (pytest)",
+        ));
+        if found.ruff {
+            out.push(check(
+                "ruff",
+                &["ruff", "check", "."],
+                "fast",
+                None,
+                "ruff is configured",
+            ));
+        }
+        if found.mypy {
+            out.push(check(
+                "mypy",
+                &["mypy", "."],
+                "full",
+                None,
+                "mypy is configured",
+            ));
+        }
+    }
+    if found.go {
+        let name = if out.iter().any(|c| c.name == "test") {
+            "go-test"
+        } else {
+            "test"
+        };
+        out.push(check(
+            name,
+            &["go", "test", "./..."],
+            "fast",
+            None,
+            "go.mod",
+        ));
+        out.push(check(
+            "vet",
+            &["go", "vet", "./..."],
+            "full",
+            None,
+            "go.mod",
+        ));
+    }
+    if out.is_empty() && found.make_test {
+        out.push(check(
+            "test",
+            &["make", "test"],
+            "fast",
+            None,
+            "a Makefile `test` target",
+        ));
+    }
+    out
+}
+
+/// Commands the model (and the spec-derived acceptance tests) need besides
+/// the checks: narrow prefixes per toolchain, written to `[commands] allow`.
+#[must_use]
+pub fn allow(found: &Found) -> Vec<Vec<String>> {
+    let v = |a: &[&str]| a.iter().map(|x| (*x).to_owned()).collect::<Vec<String>>();
+    let mut out = Vec::new();
+    if found.cargo {
+        out.extend([
+            v(&["cargo", "test"]),
+            v(&["cargo", "check"]),
+            v(&["cargo", "build"]),
+        ]);
+    }
+    if let Some(pm) = &found.node_manager {
+        out.extend([v(&[pm, "test"]), v(&[pm, "run", "test"])]);
+    }
+    if found.python {
+        out.push(v(&["python3", "-m", "pytest"]));
+    }
+    if found.go {
+        out.extend([v(&["go", "test"]), v(&["go", "build"]), v(&["go", "vet"])]);
+    }
+    out
+}
+
+/// The formatter speccoder runs after each attempt, when the toolchain has one.
+#[must_use]
+pub fn formatter(found: &Found) -> Option<Vec<String>> {
+    let v = |a: &[&str]| Some(a.iter().map(|x| (*x).to_owned()).collect());
+    if found.cargo {
+        v(&["cargo", "fmt", "--all"])
+    } else if found.go {
+        v(&["gofmt", "-w", "."])
+    } else if found.python && found.ruff {
+        v(&["ruff", "format", "."])
+    } else {
+        None
+    }
+}
+
+/// Looks at `root` (and whether `cargo nextest` runs).
+#[must_use]
+pub fn detect(root: &Path) -> Found {
+    let exists = |p: &str| root.join(p).exists();
+    let read = |p: &str| std::fs::read_to_string(root.join(p)).unwrap_or_default();
+    let cargo = exists("Cargo.toml");
+    let nextest = cargo
+        && std::process::Command::new("cargo")
+            .args(["nextest", "--version"])
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .is_ok_and(|s| s.success());
+    let (node_manager, npm_scripts) = if exists("package.json") {
+        let manager = if exists("pnpm-lock.yaml") {
+            "pnpm"
+        } else if exists("yarn.lock") {
+            "yarn"
+        } else if exists("bun.lockb") || exists("bun.lock") {
+            "bun"
+        } else {
+            "npm"
+        };
+        let scripts = serde_json::from_str::<serde_json::Value>(&read("package.json"))
+            .ok()
+            .and_then(|v| {
+                v["scripts"]
+                    .as_object()
+                    .map(|o| o.keys().cloned().collect())
+            })
+            .unwrap_or_default();
+        (Some(manager.to_owned()), scripts)
+    } else {
+        (None, Vec::new())
+    };
+    let pyproject = read("pyproject.toml");
+    let makefile = read("Makefile");
+    Found {
+        cargo,
+        nextest,
+        npm_scripts,
+        node_manager,
+        python: ["pyproject.toml", "setup.cfg", "setup.py", "pytest.ini"]
+            .iter()
+            .any(|p| exists(p)),
+        ruff: pyproject.contains("[tool.ruff") || exists("ruff.toml") || exists(".ruff.toml"),
+        mypy: pyproject.contains("[tool.mypy") || exists("mypy.ini"),
+        go: exists("go.mod"),
+        make_test: makefile.lines().any(|l| l.starts_with("test:")),
+    }
+}
+
+/// A TOML basic string (JSON's escapes are valid TOML).
+fn quote(s: &str) -> String {
+    serde_json::to_string(s).unwrap_or_else(|_| "\"\"".to_owned())
+}
+
+/// The provider and model `init` writes: the flag, else the provider whose
+/// key variable is set (presence only — the value is never read).
+fn model_choice(
+    provider: Option<&str>,
+    model: Option<&str>,
+    env: &dyn Fn(&str) -> bool,
+) -> (String, String) {
+    let provider = provider.map_or_else(
+        || {
+            if env("ANTHROPIC_API_KEY") || !env("OPENAI_API_KEY") {
+                "anthropic".to_owned()
+            } else {
+                "openai".to_owned()
+            }
+        },
+        str::to_owned,
+    );
+    let model = model.map_or_else(
+        || match provider.as_str() {
+            "openai" => "gpt-5.4-mini".to_owned(),
+            _ => "claude-sonnet-5-5".to_owned(),
+        },
+        str::to_owned,
+    );
+    (provider, model)
+}
+
+/// The file `init` writes.
+#[must_use]
+pub fn render(
+    checks: &[Proposed],
+    allow: &[Vec<String>],
+    format: Option<&[String]>,
+    provider: &str,
+    model: &str,
+) -> String {
+    let mut out = String::from(
+        "# speccoder configuration — written by `speccoder init`; review it, then commit it\n\
+         # (runs read the committed file in their worktree).\n\n\
+         # Checks: speccoder runs them before and after every attempt and decides the\n\
+         # verdict from them. `fast` runs per task; `full` at phase ends and `verify --tier full`.\n",
+    );
+    if checks.is_empty() {
+        out.push_str(
+            "# No checks were detected. Add at least one, e.g.:\n\
+             # [checks.test]\n# argv = [\"make\", \"test\"]\n",
+        );
+    }
+    for c in checks {
+        out.push_str(&format!("\n# {}\n[checks.{}]\nargv = [", c.why, c.name));
+        out.push_str(
+            &c.argv
+                .iter()
+                .map(|a| quote(a))
+                .collect::<Vec<_>>()
+                .join(", "),
+        );
+        out.push_str("]\n");
+        if c.tier != "fast" {
+            out.push_str(&format!("tier = {}\n", quote(&c.tier)));
+        }
+        if let Some(j) = &c.junit {
+            out.push_str(&format!("junit = {}\n", quote(j)));
+        }
+    }
+    out.push_str(&format!(
+        "\n# The model. The API key comes only from the environment ({}).\n\
+         [model]\nprovider = {}\nmodel = {}\n\
+         # price_input_per_mtok = 0.0       # USD per million tokens, for `speccoder cost`\n\
+         # price_output_per_mtok = 0.0\n\
+         # price_cache_read_per_mtok = 0.0\n\
+         \n# Limits per attempt, and attempts per task (a failed verdict is retried once).\n\
+         # [budget]\n# max_turns = 30\n# max_tool_calls = 100\n# max_attempts = 2\n\
+         \n# Test files that existed before an attempt: \"ask\" before any change (default), or\n\
+         # \"additions\" to let new tests be added without asking (changed lines still ask).\n\
+         # [tests]\n# frozen = \"additions\"\n\
+         \n# Commands run in an OS sandbox: writes only to the worktree, credentials unreadable,\n\
+         # no network beyond loopback. Give commands that fetch the network, or switch it off.\n\
+         # [sandbox]\n# network_allow = [[\"cargo\", \"fetch\"]]\n# mode = \"auto\"           # \"required\" refuses to run unsandboxed; \"off\"\n\
+         \n# Commands the model may run besides the checks (argv prefixes); others need approval.\n",
+        if provider == "openai" {
+            "OPENAI_API_KEY"
+        } else {
+            "ANTHROPIC_API_KEY"
+        },
+        quote(provider),
+        quote(model)
+    ));
+    if let Some(argv) = format {
+        out.push_str(&format!(
+            "\n# The formatter speccoder runs after each attempt, before the checks.\n[format]\nargv = [{}]\n\n",
+            argv.iter().map(|a| quote(a)).collect::<Vec<_>>().join(", ")
+        ));
+    }
+    if allow.is_empty() {
+        out.push_str("# [commands]\n# allow = [[\"make\", \"check\"]]\n");
+    } else {
+        let lists: Vec<String> = allow
+            .iter()
+            .map(|a| {
+                format!(
+                    "[{}]",
+                    a.iter().map(|x| quote(x)).collect::<Vec<_>>().join(", ")
+                )
+            })
+            .collect();
+        out.push_str(&format!("[commands]\nallow = [{}]\n", lists.join(", ")));
+    }
+    out
+}
+
+/// The nextest profile speccoder's JUnit report path expects.
+pub const NEXTEST_PROFILE: &str = "\n# Written by `speccoder init`: speccoder reads this JUnit report.\n[profile.speccoder]\nfail-fast = false\n\n[profile.speccoder.junit]\npath = \"junit.xml\"\n";
+
+/// `speccoder init [PATH] [--provider] [--model] [--force]` with an
+/// explicit view of the environment and of what is installed.
+pub fn init_with(
+    path: &Path,
+    provider: Option<&str>,
+    model: Option<&str>,
+    force: bool,
+    found: Option<Found>,
+    env: &dyn Fn(&str) -> bool,
+) -> CommandResult {
+    let refuse = |status, m: String| CommandResult::new("init", status, &m);
+    // The Spec Kit root when there is one; else the path itself.
+    let root = match crate::inspect(path, None).data() {
+        Some(CommandData::Inspect(s)) => PathBuf::from(&s.root),
+        _ => path.to_path_buf(),
+    };
+    let file = root.join(FILE);
+    if file.exists() && !force {
+        return refuse(
+            CommandStatus::ConfigError,
+            format!("{} exists; pass --force to replace it", file.display()),
+        );
+    }
+    if let Some(p) = provider.filter(|p| !matches!(*p, "anthropic" | "openai")) {
+        return refuse(
+            CommandStatus::UsageError,
+            format!("--provider {p}: anthropic or openai"),
+        );
+    }
+    let found = found.unwrap_or_else(|| detect(&root));
+    let checks = propose(&found);
+    let (provider, model) = model_choice(provider, model, env);
+    let text = render(
+        &checks,
+        &allow(&found),
+        formatter(&found).as_deref(),
+        &provider,
+        &model,
+    );
+    // Never write what speccoder itself would refuse.
+    if let Err(e) = crate::verify::config::parse(&text)
+        .and_then(|_| crate::substrate::model_config::parse(&text).map(|_| ()))
+        .and_then(|()| crate::substrate::run_config::parse(&text).map(|_| ()))
+    {
+        return refuse(
+            CommandStatus::Error,
+            format!("generated configuration is invalid: {e}"),
+        );
+    }
+    let mut wrote = Vec::new();
+    if let Err(e) = std::fs::write(&file, &text) {
+        return refuse(CommandStatus::Error, format!("{}: {e}", file.display()));
+    }
+    wrote.push(FILE.to_owned());
+    // The nextest profile the `test` check names, unless one is there.
+    if checks.iter().any(|c| c.argv.iter().any(|a| a == "nextest")) {
+        let nextest = root.join(".config/nextest.toml");
+        let existing = std::fs::read_to_string(&nextest).unwrap_or_default();
+        if !existing.contains("[profile.speccoder]") {
+            let _ = std::fs::create_dir_all(root.join(".config"));
+            if std::fs::write(&nextest, format!("{existing}{NEXTEST_PROFILE}")).is_ok() {
+                wrote.push(".config/nextest.toml".to_owned());
+            }
+        }
+    }
+    let message = if checks.is_empty() {
+        format!("wrote {FILE} without checks — add one before `speccoder run`")
+    } else {
+        format!(
+            "wrote {} with {} check(s) and {provider}/{model}; review, run `speccoder verify`, then commit",
+            wrote.join(" and "),
+            checks.len()
+        )
+    };
+    CommandResult::new("init", CommandStatus::Ok, &message).with_data(CommandData::Init(Box::new(
+        speccoder_core::InitReport {
+            path: file.display().to_string(),
+            checks: checks
+                .iter()
+                .map(|c| speccoder_core::InitCheck {
+                    name: c.name.clone(),
+                    argv: c.argv.clone(),
+                    tier: c.tier.clone(),
+                    why: c.why.clone(),
+                })
+                .collect(),
+            model: format!("{provider}/{model}"),
+            wrote,
+        },
+    )))
+}
+
+/// [`init_with`] for this machine.
+#[must_use]
+pub fn init(
+    path: &Path,
+    provider: Option<&str>,
+    model: Option<&str>,
+    force: bool,
+) -> CommandResult {
+    init_with(path, provider, model, force, None, &|v| {
+        std::env::var_os(v).is_some_and(|x| !x.is_empty())
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn proposals_follow_what_was_found() {
+        let rust = propose(&Found {
+            cargo: true,
+            nextest: true,
+            ..Found::default()
+        });
+        let names: Vec<&str> = rust.iter().map(|c| c.name.as_str()).collect();
+        assert_eq!(names, ["test", "fmt", "clippy"]);
+        assert_eq!(
+            rust[0].junit.as_deref(),
+            Some("target/nextest/speccoder/junit.xml")
+        );
+        assert_eq!(rust[2].tier, "full");
+        let plain = propose(&Found {
+            cargo: true,
+            ..Found::default()
+        });
+        assert_eq!(plain[0].argv, ["cargo", "test", "--workspace"]);
+
+        let node = propose(&Found {
+            node_manager: Some("pnpm".to_owned()),
+            npm_scripts: vec!["test".into(), "lint".into(), "build".into()],
+            ..Found::default()
+        });
+        let shown: Vec<(String, String)> = node
+            .iter()
+            .map(|c| (c.name.clone(), c.argv.join(" ")))
+            .collect();
+        assert_eq!(
+            shown,
+            [
+                ("test".into(), "pnpm run test".into()),
+                ("lint".into(), "pnpm run lint".into())
+            ]
+        );
+        let npm = propose(&Found {
+            node_manager: Some("npm".to_owned()),
+            npm_scripts: vec!["test".into()],
+            ..Found::default()
+        });
+        assert_eq!(npm[0].argv, ["npm", "run", "test"]);
+
+        let py = propose(&Found {
+            python: true,
+            ruff: true,
+            ..Found::default()
+        });
+        assert_eq!(
+            py.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(),
+            ["test", "ruff"]
+        );
+        let go = propose(&Found {
+            go: true,
+            ..Found::default()
+        });
+        assert_eq!(go[0].argv, ["go", "test", "./..."]);
+        let make = propose(&Found {
+            make_test: true,
+            ..Found::default()
+        });
+        assert_eq!(make[0].argv, ["make", "test"]);
+        assert!(propose(&Found::default()).is_empty());
+    }
+
+    #[test]
+    fn the_model_follows_the_key_that_is_set() {
+        let none = |_: &str| false;
+        let openai = |v: &str| v == "OPENAI_API_KEY";
+        assert_eq!(model_choice(None, None, &none).0, "anthropic");
+        assert_eq!(
+            model_choice(None, None, &openai),
+            ("openai".to_owned(), "gpt-5.4-mini".to_owned())
+        );
+        assert_eq!(
+            model_choice(Some("anthropic"), Some("m"), &openai),
+            ("anthropic".to_owned(), "m".to_owned())
+        );
+    }
+
+    #[test]
+    fn every_rendered_file_parses() {
+        for found in [
+            Found {
+                cargo: true,
+                nextest: true,
+                ..Found::default()
+            },
+            Found {
+                python: true,
+                ruff: true,
+                mypy: true,
+                go: true,
+                ..Found::default()
+            },
+            Found::default(),
+        ] {
+            let text = render(
+                &propose(&found),
+                &allow(&found),
+                formatter(&found).as_deref(),
+                "openai",
+                "gpt-5.4-mini",
+            );
+            if found.cargo {
+                assert!(
+                    text.contains("[format]\nargv = [\"cargo\", \"fmt\", \"--all\"]"),
+                    "{text}"
+                );
+                assert_eq!(
+                    crate::substrate::run_config::parse(&text)
+                        .ok()
+                        .and_then(|c| c.format),
+                    Some(vec![
+                        "cargo".to_owned(),
+                        "fmt".to_owned(),
+                        "--all".to_owned()
+                    ])
+                );
+            }
+            let checks =
+                crate::verify::config::parse(&text).unwrap_or_else(|e| panic!("{e}\n{text}"));
+            assert_eq!(checks.len(), propose(&found).len());
+            assert!(crate::substrate::model_config::parse(&text).is_ok_and(|m| m.is_some()));
+            assert!(crate::substrate::run_config::parse(&text).is_ok());
+        }
+    }
+}

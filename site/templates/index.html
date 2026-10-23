@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+
+{% block body_class %}home{% endblock %}
+
+{% block structured_data %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "SoftwareApplication",
+      "name": "speccoder",
+      "applicationCategory": "DeveloperApplication",
+      "operatingSystem": "macOS, Linux",
+      "description": {{ section.description | json_encode() | safe }},
+      "url": {{ config.base_url | json_encode() | safe }},
+      "codeRepository": {{ config.extra.repo | json_encode() | safe }},
+      "license": "MIT OR Apache-2.0",
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+    },
+    {
+      "@type": "FAQPage",
+      "mainEntity": [
+        {% for item in section.extra.faq %}
+        { "@type": "Question", "name": {{ item.q | json_encode() | safe }},
+          "acceptedAnswer": { "@type": "Answer", "text": {{ item.a | json_encode() | safe }} } }{% if not loop.last %},{% endif %}
+        {% endfor %}
+      ]
+    }
+  ]
+}
+</script>
+{% endblock %}
+
+{% block content %}
+<section class="hero">
+  <div class="wrap hero-grid">
+    <div class="hero-copy">
+      <p class="eyebrow">For GitHub Spec Kit projects</p>
+      <h1>Spec-driven coding,<br><span class="accent-text">decided by evidence.</span></h1>
+      <p class="lead">speccoder implements your feature task by task. Before each attempt it turns the spec's acceptance examples into tests that must fail; after it, it runs your checks and audits the diff. A task is ticked only when the evidence holds — never on the model's word.</p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="{{ get_url(path='@/docs/quickstart.md') }}">Get started</a>
+        <a class="btn btn-ghost" href="{{ get_url(path='@/docs/how-it-works.md') }}">How it works</a>
+      </div>
+      <div class="install" aria-label="Install">
+        <code>cargo install --git {{ config.extra.repo }} speccoder</code>
+        <button class="copy" type="button" data-copy="cargo install --git {{ config.extra.repo }} speccoder" aria-label="Copy the install command">Copy</button>
+      </div>
+    </div>
+    <figure class="terminal" aria-label="A speccoder run">
+      <div class="terminal-bar"><span></span><span></span><span></span><p>speccoder run</p></div>
+<pre><code><span class="t-run">▶ T002</span> Implement <span class="t-code">slugify(text)</span> in src/lib.rs
+  <span class="t-dim">· baseline checks</span>
+  <span class="t-dim">· acceptance tests</span>   <span class="t-red">2 failing</span> <span class="t-dim">— as they must</span>
+  <span class="t-dim">· attempt 1</span>
+    turn 1  read_file    src/lib.rs        <span class="t-ok">allow</span>
+    turn 3  write_file   src/lib.rs        <span class="t-ok">allow</span>
+    turn 4  run_command  cargo test        <span class="t-ok">allow</span>
+  <span class="t-dim">· verifying</span>          acceptance <span class="t-ok">red → green</span>
+<span class="t-ok">✓ T002 verified</span> <span class="t-dim">· 10.2k in / 798 out · $0.0031 · 9s</span>
+<span class="t-dim">  committed on speccoder/001-slugify</span></code></pre>
+    </figure>
+  </div>
+</section>
+
+<section class="band" aria-labelledby="why">
+  <div class="wrap">
+    <h2 id="why" class="section-title">A coding agent that cannot mark its own homework</h2>
+    <p class="section-lead">Agents are good at writing code and too good at declaring victory. speccoder separates the two: a model proposes, and code decides.</p>
+    <ol class="steps">
+      <li><span class="step-n">1</span><div><h3>Ready</h3><p>The next task whose dependencies in <code>tasks.md</code> are met.</p></div></li>
+      <li><span class="step-n">2</span><div><h3>Red</h3><p>Tests derived from the spec's acceptance examples, which must fail now. The implementer cannot change them.</p></div></li>
+      <li><span class="step-n">3</span><div><h3>Attempt</h3><p>The model works in an isolated worktree. Every tool call is allowed, sent to you, or denied — before it runs.</p></div></li>
+      <li><span class="step-n">4</span><div><h3>Judge</h3><p>Your checks again, the acceptance tests green, and an audit that catches deleted or weakened tests.</p></div></li>
+      <li><span class="step-n">5</span><div><h3>Record</h3><p>A passing task is ticked and committed. Everything else is saved in git and undone, and you decide.</p></div></li>
+    </ol>
+  </div>
+</section>
+
+<section aria-labelledby="features">
+  <div class="wrap">
+    <h2 id="features" class="section-title">Everything around the model, done properly</h2>
+    <div class="cards">
+      <article class="card">
+        <h3>Evidence decides</h3>
+        <p><code>verified</code> means spec-derived tests went red → green and nothing regressed. Optional mutation testing and a reasoning-blind gaming monitor catch tests written to pass.</p>
+      </article>
+      <article class="card">
+        <h3>Spec Kit native</h3>
+        <p>Reads <code>spec.md</code>, <code>plan.md</code> and <code>tasks.md</code> as Spec Kit 0.13–1.2 write them, runs Spec Kit's planning skills, its extension hooks and its workflow engine.</p>
+      </article>
+      <article class="card">
+        <h3>Isolated and sandboxed</h3>
+        <p>Work happens on <code>speccoder/&lt;feature&gt;</code> in its own worktree. Commands run in an OS sandbox: no writes outside, no credentials, no network.</p>
+      </article>
+      <article class="card">
+        <h3>Every call governed</h3>
+        <p>A policy classifies each call before it runs. Approvals are inline, in your editor or later — and every decision records who made it.</p>
+      </article>
+      <article class="card">
+        <h3>Durable and replayable</h3>
+        <p>Every model and tool call is journaled. A killed run resumes without repeating finished calls; any recorded run replays offline, without a model.</p>
+      </article>
+      <article class="card">
+        <h3>Your model, or your agent</h3>
+        <p>Anthropic, OpenAI or a local OpenAI-compatible server — or let Claude Code or Codex make the attempts and keep speccoder's judgement.</p>
+      </article>
+      <article class="card">
+        <h3>Built to scale out</h3>
+        <p>Run independent <code>[P]</code> tasks in parallel worktrees, verified together after merging; keep the best of several attempts by evidence.</p>
+      </article>
+      <article class="card">
+        <h3>Ready for review</h3>
+        <p>Hand off a draft pull request whose description is the evidence behind every tick. speccoder never merges.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section class="band" aria-labelledby="quickstart">
+  <div class="wrap split">
+    <div>
+      <h2 id="quickstart" class="section-title">From spec to verified branch in minutes</h2>
+      <p class="section-lead">You need git, a Spec Kit project and a model. speccoder reads committed files only, so your configuration is reviewed like code.</p>
+      <a class="btn btn-primary" href="{{ get_url(path='@/docs/quickstart.md') }}">Read the quickstart</a>
+    </div>
+<pre class="code-panel"><code><span class="t-dim"># detect your checks, review, commit</span>
+speccoder init &amp;&amp; speccoder verify
+git add -A &amp;&amp; git commit -m "speccoder config"
+
+<span class="t-dim"># key from the environment only</span>
+export OPENAI_API_KEY=…
+
+speccoder run      <span class="t-dim"># task by task, with evidence</span>
+speccoder report   <span class="t-dim"># the evidence behind every tick</span>
+git merge speccoder/001-my-feature</code></pre>
+  </div>
+</section>
+
+<section aria-labelledby="honest">
+  <div class="wrap">
+    <div class="callout">
+      <h2 id="honest">What <code>verified</code> does not mean</h2>
+      <p>It means the acceptance tests derived from your spec went from red to green and no check regressed. It does not mean the change is correct, complete or safe. speccoder makes review cheaper and better informed; it does not replace it. When it cannot demonstrate something — a gap no failing test shows, a task that contradicts its spec — it stops and says so instead of guessing.</p>
+    </div>
+  </div>
+</section>
+
+<section class="band" aria-labelledby="faq">
+  <div class="wrap narrow">
+    <h2 id="faq" class="section-title">Questions</h2>
+    <div class="faq">
+      {% for item in section.extra.faq %}
+      <details>
+        <summary>{{ item.q }}</summary>
+        <p>{{ item.a }}</p>
+      </details>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<section class="final-cta">
+  <div class="wrap">
+    <h2>Let evidence decide.</h2>
+    <div class="cta-row center">
+      <a class="btn btn-primary" href="{{ get_url(path='@/docs/quickstart.md') }}">Get started</a>
+      <a class="btn btn-ghost" href="{{ config.extra.repo }}" rel="noopener">View on GitHub</a>
+    </div>
+  </div>
+</section>
+{% endblock %}

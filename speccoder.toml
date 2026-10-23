@@ -1,0 +1,31 @@
+# speccoder's own checks: `speccoder verify` runs them (and later, so does
+# every task speccoder implements on itself).
+
+[checks.test]
+argv = ["cargo", "nextest", "run", "--workspace", "--all-features", "--profile", "speccoder"]
+junit = "target/nextest/speccoder/junit.xml"
+when_exists = "Cargo.toml"
+timeout_secs = 900
+
+[checks.fmt]
+argv = ["cargo", "fmt", "--all", "--check"]
+
+[checks.clippy]
+argv = ["cargo", "clippy", "--workspace", "--all-targets", "--all-features", "--", "-D", "warnings"]
+tier = "full"
+timeout_secs = 900
+
+[checks.deny]
+argv = ["cargo", "deny", "check"]
+tier = "full"
+
+# The model `speccoder propose` (and later the agent loop) calls. The API key
+# comes only from the environment (OPENAI_API_KEY for openai,
+# ANTHROPIC_API_KEY for anthropic); speccoder never reads key files. With a
+# gitignored .env:  set -a; . ./.env; set +a
+[model]
+provider = "openai"
+model = "gpt-5.4-mini"
+max_output_tokens = 4096
+max_run_tokens = 200000
+cache_ttl = "5m"

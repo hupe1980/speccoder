@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block body_class %}docs{% endblock %}
+{% block structured_data %}
+<script type="application/ld+json">
+{ "@context": "https://schema.org", "@type": "TechArticle",
+  "headline": {{ section.title | json_encode() | safe }},
+  "description": {{ section.description | json_encode() | safe }},
+  "url": {{ section.permalink | json_encode() | safe }} }
+</script>
+{% endblock %}
+{% block content %}
+<div class="wrap docs-layout">
+  <aside class="docs-sidebar"><details class="docs-menu" open data-docs-menu><summary>Documentation menu</summary>{% include "partials/docs-nav.html" %}</details></aside>
+  <article class="prose docs-content">
+    <h1>{{ section.title }}</h1>
+    {% if section.description %}<p class="lead">{{ section.description }}</p>{% endif %}
+    {{ section.content | safe }}
+    <div class="doc-cards">
+      {% for p in section.pages %}
+      <a class="doc-card" href="{{ p.permalink }}"><span>{{ p.extra.group }}</span><strong>{{ p.title }}</strong><small>{{ p.description }}</small></a>
+      {% endfor %}
+    </div>
+  </article>
+</div>
+{% endblock %}

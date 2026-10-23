@@ -1,0 +1,27 @@
+[package]
+name = "speccoder-speckit"
+description = "GitHub Spec Kit adapter for speccoder: artifact discovery and tasks.md parsing."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "README.md"
+authors.workspace = true
+keywords.workspace = true
+categories.workspace = true
+# The Spec Kit fixture corpus is for this repository's tests, not for users.
+exclude = ["tests/fixtures"]
+
+[dependencies]
+speccoder-core.workspace = true
+pulldown-cmark.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

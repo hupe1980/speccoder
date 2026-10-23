@@ -1,0 +1,2309 @@
+//! `speccoder run` end to end with a scripted model.
+
+// Test code: panicking on unexpected input is the failure report.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::process::Command;
+use std::sync::Arc;
+
+use agentplane::model::ModelProvider;
+use agentplane::model::fake::FakeProvider;
+use serde_json::{Value, json};
+use speccoder_core::verify::Verdict;
+use speccoder_core::{CommandData, CommandResult, CommandStatus, RunReport};
+use speccoder_runtime::{run_feature_with, run_with};
+
+const MODEL: &str = "[model]\nprovider = \"openai\"\nmodel = \"gpt-5.4-mini\"\n";
+/// The check, and `grep` allowed for the scripted acceptance tests (a
+/// check whose prefix is a bare program allows only itself).
+const CHECK: &str = "[checks.has-ok]\nargv = [\"grep\", \"-q\", \"fn ok\", \"src/lib.rs\"]\n";
+const GREP: &str = "[commands]\nallow = [[\"grep\"]]\n";
+
+fn git(dir: &Path, args: &[&str]) {
+    let ok = Command::new("git")
+        .args([
+            "-c",
+            "user.name=t",
+            "-c",
+            "user.email=t@example.com",
+            "-c",
+            "commit.gpgsign=false",
+        ])
+        .args([
+            "-c",
+            "init.defaultBranch=main",
+            "-c",
+            "core.hooksPath=/dev/null",
+        ])
+        .args(args)
+        .current_dir(dir)
+        .status()
+        .unwrap()
+        .success();
+    assert!(ok, "git {args:?}");
+}
+
+/// The `graph` fixture as a committed git repository with code and checks.
+fn repo(extra_config: &str) -> tempfile::TempDir {
+    let dir = tempfile::tempdir().unwrap();
+    let fixture =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../speccoder-speckit/tests/fixtures/graph");
+    assert!(
+        Command::new("cp")
+            .arg("-R")
+            .arg(fixture.join("."))
+            .arg(dir.path())
+            .status()
+            .unwrap()
+            .success()
+    );
+    let r = dir.path();
+    fs::write(
+        r.join("specs/001-graph/spec.md"),
+        "# Spec\n\n### User Story 1 - Login\n\nUsers log in.\n",
+    )
+    .unwrap();
+    fs::write(r.join("specs/001-graph/plan.md"), "# Plan\n\nRust.\n").unwrap();
+    fs::create_dir_all(r.join("src")).unwrap();
+    fs::write(r.join("src/lib.rs"), "pub fn ok() {}\n").unwrap();
+    fs::write(
+        r.join("speccoder.toml"),
+        format!("{MODEL}{CHECK}{}", with_grep(extra_config)),
+    )
+    .unwrap();
+    git(r, &["init", "-q"]);
+    git(r, &["add", "-A"]);
+    git(r, &["commit", "-q", "-m", "init"]);
+    dir
+}
+
+/// [`repo`] plus extra committed files.
+fn repo_with(extra_config: &str, files: &[(&str, &str)]) -> tempfile::TempDir {
+    let dir = repo(extra_config);
+    for (path, text) in files {
+        let p = dir.path().join(path);
+        fs::create_dir_all(p.parent().unwrap()).unwrap();
+        fs::write(p, text).unwrap();
+    }
+    git(dir.path(), &["add", "-A"]);
+    git(dir.path(), &["commit", "-q", "-m", "more"]);
+    dir
+}
+
+/// `extra_config` with `grep` added to its `[commands] allow` (or a new one).
+fn with_grep(extra_config: &str) -> String {
+    if extra_config.contains("[commands]") {
+        extra_config.replace("allow = [", "allow = [[\"grep\"], ")
+    } else {
+        format!("{GREP}{extra_config}")
+    }
+}
+
+fn fake() -> (Arc<FakeProvider>, Arc<dyn ModelProvider>) {
+    let f = FakeProvider::new();
+    let d: Arc<dyn ModelProvider> = f.clone();
+    (f, d)
+}
+
+fn done(summary: &str) -> Value {
+    json!({ "summary": summary, "status": "done", "files_changed": ["src/lib.rs"], "checks_run": [], "notes": [] })
+}
+
+fn report(r: &CommandResult) -> &RunReport {
+    match r.data() {
+        Some(CommandData::Run(rep)) => rep,
+        other => panic!("{} → {other:?}", r.message()),
+    }
+}
+
+fn run(repo: &Path, state: &Path, task: &str, driver: Arc<dyn ModelProvider>) -> CommandResult {
+    run_with(repo, None, task, state, driver, None)
+}
+
+// ── US1 ────────────────────────────────────────────────────────────────────
+
+#[test]
+fn an_attempt_that_keeps_the_checks_green_is_regression_only() {
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_call_tool("c1", "read_file", json!({ "path": "src/lib.rs" }));
+    f.will_call_tool("c2", "edit_file", json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\npub fn login() {}" }));
+    f.will_structure(done("added login"));
+
+    let res = run(r.path(), state.path(), "T005", d);
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let rep = report(&res);
+    assert_eq!(rep.attempt_status, "completed");
+    assert_eq!(rep.verdict, Some(Verdict::RegressionOnly));
+    assert_eq!(
+        rep.changes,
+        [("src/lib.rs".to_owned(), "modified".to_owned())]
+    );
+    assert_eq!(rep.model_report.as_ref().unwrap()["summary"], "added login");
+    let decisions: Vec<&str> = rep
+        .tool_calls
+        .iter()
+        .map(|c| c["decision"].as_str().unwrap())
+        .collect();
+    assert_eq!(decisions, ["allow", "allow"]);
+
+    // The worktree lives in the state directory this run was given — never
+    // in the user's real one (a bug found by the first real evaluation).
+    let state_root = fs::canonicalize(state.path()).unwrap();
+    assert!(
+        Path::new(&rep.worktree).starts_with(&state_root),
+        "{} not under {}",
+        rep.worktree,
+        state_root.display()
+    );
+
+    // the engine ticked the task and committed the attempt.
+    assert!(rep.ticked);
+    assert!(rep.commit.is_some());
+    let wt_tasks =
+        fs::read_to_string(Path::new(&rep.worktree).join("specs/001-graph/tasks.md")).unwrap();
+    assert!(wt_tasks.contains("- [X] T005"), "{wt_tasks}");
+
+    // The work is in the worktree, not in the user's checkout.
+    assert_eq!(
+        fs::read_to_string(r.path().join("src/lib.rs")).unwrap(),
+        "pub fn ok() {}\n"
+    );
+    assert!(
+        fs::read_to_string(Path::new(&rep.worktree).join("src/lib.rs"))
+            .unwrap()
+            .contains("login")
+    );
+}
+
+#[test]
+fn an_attempt_that_breaks_a_check_fails_the_verdict() {
+    let r = repo("[budget]\nmax_attempts = 1\n");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_call_tool(
+        "c1",
+        "write_file",
+        json!({ "path": "src/lib.rs", "content": "pub fn renamed() {}\n" }),
+    );
+    f.will_structure(done("rewrote lib"));
+    let res = run(r.path(), state.path(), "T005", d);
+    assert_eq!(
+        res.status(),
+        CommandStatus::VerificationFailed,
+        "{}",
+        res.message()
+    );
+    assert_eq!(res.exit_code().code(), 20);
+    assert!(matches!(report(&res).verdict, Some(Verdict::Failed { .. })));
+    // One attempt allowed: no retry.
+    assert!(report(&res).earlier.is_empty());
+    assert_eq!(
+        report(&res).retry_stop.as_deref(),
+        Some("1 of 1 attempts used")
+    );
+}
+
+#[test]
+fn a_failing_command_shows_its_output_to_the_model() {
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    // `grep` (allowed by the configured check) exits 1 here: a result, not a tool failure.
+    f.will_call_tool(
+        "c1",
+        "run_command",
+        json!({ "argv": ["grep", "-q", "fn missing", "src/lib.rs"] }),
+    );
+    f.will_structure(done("looked"));
+    run(r.path(), state.path(), "T005", d);
+    let second = &f.asked()[1];
+    let exchange = &second.exchanges[0];
+    assert!(
+        !exchange.failed,
+        "a non-zero exit was reported as a failed call"
+    );
+    assert_eq!(
+        exchange.output["exit_code"], 1,
+        "the model got no output: {}",
+        exchange.output
+    );
+}
+
+#[test]
+fn an_attempt_the_model_calls_incomplete_needs_a_human() {
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_call_tool("c1", "read_file", json!({ "path": "src/lib.rs" }));
+    f.will_structure(json!({ "summary": "not finished", "status": "incomplete", "files_changed": [], "checks_run": [], "notes": [] }));
+    let res = run(r.path(), state.path(), "T005", d);
+    assert_eq!(res.status(), CommandStatus::NeedsHuman, "{}", res.message());
+    assert_eq!(report(&res).attempt_status, "incomplete");
+    assert!(res.message().contains("no files changed"));
+}
+
+#[test]
+fn the_attempt_prompt_does_not_carry_the_planning_instruction() {
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_structure(done("nothing"));
+    run(r.path(), state.path(), "T005", d);
+    let prompt = serde_json::to_string(&f.asked()[0].prompt).unwrap();
+    assert!(prompt.contains("implementing exactly one GitHub Spec"));
+    assert!(
+        !prompt.contains("planning step"),
+        "contradictory instructions: {prompt}"
+    );
+    assert!(!prompt.contains("You cannot run tools"));
+}
+
+// ── US2 ────────────────────────────────────────────────────────────────────
+
+#[test]
+fn denied_calls_are_refused_and_the_loop_continues() {
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_call_tool(
+        "c1",
+        "run_command",
+        json!({ "argv": ["git", "push", "origin", "main"] }),
+    );
+    f.will_call_tool(
+        "c2",
+        "write_file",
+        json!({ "path": "specs/001-graph/tasks.md", "content": "all done" }),
+    );
+    f.will_structure(done("tried"));
+    let res = run(r.path(), state.path(), "T005", d);
+    let rep = report(&res);
+    assert_eq!(rep.attempt_status, "completed");
+    let decisions: Vec<&str> = rep
+        .tool_calls
+        .iter()
+        .map(|c| c["decision"].as_str().unwrap())
+        .collect();
+    assert_eq!(decisions, ["deny", "deny"]);
+    let tasks =
+        fs::read_to_string(Path::new(&rep.worktree).join("specs/001-graph/tasks.md")).unwrap();
+    assert!(tasks.contains("T005"), "the spec was not overwritten");
+    // The model was told: its second turn carried the refusal.
+    assert!(f.asked().len() >= 2);
+}
+
+#[test]
+fn a_call_needing_approval_stops_the_attempt_unexecuted() {
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_call_tool(
+        "c1",
+        "run_command",
+        json!({ "argv": ["touch", "approved-only"] }),
+    );
+    let res = run(r.path(), state.path(), "T005", d);
+    assert_eq!(res.status(), CommandStatus::NeedsHuman, "{}", res.message());
+    assert_eq!(res.exit_code().code(), 23);
+    let rep = report(&res);
+    assert_eq!(rep.attempt_status, "needs_approval");
+    assert_eq!(rep.pending.as_ref().unwrap()["tool"], "run_command");
+    assert!(
+        !Path::new(&rep.worktree).join("approved-only").exists(),
+        "nothing was executed"
+    );
+    assert!(rep.verdict.is_none());
+}
+
+#[test]
+fn report_blocked_ends_the_attempt_honestly() {
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_call_tool(
+        "c1",
+        "report_blocked",
+        json!({ "reason": "T005 contradicts FR-002" }),
+    );
+    let res = run(r.path(), state.path(), "T005", d);
+    assert_eq!(res.status(), CommandStatus::NeedsHuman);
+    let rep = report(&res);
+    assert_eq!(rep.attempt_status, "blocked");
+    assert_eq!(rep.reason.as_deref(), Some("T005 contradicts FR-002"));
+}
+
+#[test]
+fn the_tool_call_limit_is_enforced() {
+    let r = repo("[budget]\nmax_tool_calls = 1\n");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_call_tool("c1", "list_files", json!({}));
+    f.will_call_tool("c2", "list_files", json!({}));
+    let res = run(r.path(), state.path(), "T005", d);
+    assert_eq!(report(&res).attempt_status, "budget_exhausted");
+    assert_eq!(res.status(), CommandStatus::NeedsHuman);
+}
+
+// ── US3 ────────────────────────────────────────────────────────────────────
+
+#[test]
+fn blocked_and_unknown_tasks_are_refused_before_any_model_call() {
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    let blocked = run(r.path(), state.path(), "T006", d.clone());
+    assert_eq!(blocked.status(), CommandStatus::TaskNotReady);
+    assert!(blocked.message().contains("blocked by T005"));
+    let done_task = run(r.path(), state.path(), "T001", d.clone());
+    assert_eq!(done_task.status(), CommandStatus::TaskNotReady);
+    assert_eq!(
+        run(r.path(), state.path(), "T999", d).status(),
+        CommandStatus::NotFound
+    );
+    assert_eq!(f.calls(), 0);
+}
+
+#[test]
+fn a_recorded_attempt_replays_strictly() {
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_call_tool("c1", "edit_file", json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\npub fn login() {}" }));
+    // Allowed only by the project's configured check: replay must know that
+    // without reading speccoder.toml (the policy rides in the run's input).
+    f.will_call_tool(
+        "c2",
+        "run_command",
+        json!({ "argv": ["grep", "-q", "fn ok", "src/lib.rs"] }),
+    );
+    f.will_structure(done("added login"));
+    let res = run(r.path(), state.path(), "T005", d);
+    assert_eq!(report(&res).tool_calls[1]["decision"], "allow");
+    let run_id = report(&res).run_id.clone();
+    let calls = f.calls();
+    let replayed = speccoder_runtime::replay_with(r.path(), &run_id, state.path());
+    assert_eq!(
+        replayed.status(),
+        CommandStatus::Ok,
+        "{}",
+        replayed.message()
+    );
+    assert_eq!(f.calls(), calls, "replay called the model");
+}
+
+// ── test integrity ──────────────────────────────────────────────────
+
+const EXISTING_TEST: (&str, &str) = ("tests/existing.rs", "#[test]\nfn existing() {}\n");
+
+#[test]
+fn editing_a_frozen_test_stops_for_approval() {
+    let r = repo_with("", &[EXISTING_TEST]);
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_call_tool("c1", "edit_file", json!({ "path": "tests/existing.rs", "old_string": "fn existing() {}", "new_string": "fn existing() { }" }));
+    let res = run(r.path(), state.path(), "T005", d);
+    let rep = report(&res);
+    assert_eq!(rep.attempt_status, "needs_approval");
+    assert!(
+        rep.pending.as_ref().unwrap()["reason"]
+            .as_str()
+            .unwrap()
+            .contains("frozen test")
+    );
+    let untouched = fs::read_to_string(Path::new(&rep.worktree).join("tests/existing.rs")).unwrap();
+    assert_eq!(untouched, EXISTING_TEST.1);
+}
+
+#[test]
+fn new_test_files_are_free_to_write() {
+    let r = repo_with("", &[EXISTING_TEST]);
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_call_tool(
+        "c1",
+        "write_file",
+        json!({ "path": "tests/login.rs", "content": "#[test]\nfn login() {}\n" }),
+    );
+    f.will_structure(done("added a test"));
+    let res = run(r.path(), state.path(), "T005", d);
+    let rep = report(&res);
+    assert_eq!(rep.tool_calls[0]["decision"], "allow");
+    assert!(rep.integrity.is_empty(), "{:?}", rep.integrity);
+    assert_eq!(rep.verdict, Some(Verdict::RegressionOnly));
+}
+
+#[test]
+fn a_command_that_deletes_a_frozen_test_fails_the_verdict() {
+    let r = repo_with("[commands]\nallow = [[\"rm\"]]\n", &[EXISTING_TEST]);
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_call_tool(
+        "c1",
+        "run_command",
+        json!({ "argv": ["rm", "tests/existing.rs"] }),
+    );
+    f.will_structure(done("cleaned up"));
+    let res = run(r.path(), state.path(), "T005", d);
+    let rep = report(&res);
+    assert_eq!(
+        rep.integrity,
+        ["integrity: frozen test deleted: tests/existing.rs"]
+    );
+    assert!(
+        matches!(&rep.verdict, Some(Verdict::Failed { reasons }) if reasons[0].starts_with("integrity:"))
+    );
+    assert_eq!(res.status(), CommandStatus::VerificationFailed);
+}
+
+#[test]
+fn skip_markers_and_ci_changes_are_flagged() {
+    let r = repo("[commands]\nallow = [[\"cp\"]]\n");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_call_tool("c1", "edit_file", json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\n\n#[test]\n#[ignore]\nfn slow() {}" }));
+    f.will_call_tool(
+        "c2",
+        "run_command",
+        json!({ "argv": ["cp", "src/lib.rs", ".gitlab-ci.yml"] }),
+    );
+    f.will_structure(done("done"));
+    let res = run(r.path(), state.path(), "T005", d);
+    let rep = report(&res);
+    assert!(
+        rep.integrity
+            .contains(&"integrity: skip marker added in src/lib.rs".to_owned()),
+        "{:?}",
+        rep.integrity
+    );
+    assert!(
+        rep.integrity
+            .contains(&"integrity: verification input changed: .gitlab-ci.yml".to_owned()),
+        "{:?}",
+        rep.integrity
+    );
+    assert_eq!(res.status(), CommandStatus::VerificationFailed);
+}
+
+// ── feature runs ────────────────────────────────────────────────────
+
+const TWO_TASKS: &str = "# Tasks\n\n## Phase 1: Setup\n\n- [x] T001 Create the crate\n\n## Phase 2: User Story 1 - Login\n\n- [ ] T002 [US1] Add login in src/lib.rs\n- [ ] T003 [US1] Add logout in src/lib.rs\n";
+
+fn two_task_repo() -> tempfile::TempDir {
+    repo_with("", &[("specs/001-graph/tasks.md", TWO_TASKS)])
+}
+
+fn edit(id: &str, new: &str) -> (String, Value) {
+    (
+        id.to_owned(),
+        json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": new }),
+    )
+}
+
+fn feature(res: &CommandResult) -> &speccoder_core::FeatureReport {
+    match res.data() {
+        Some(CommandData::Feature(f)) => f,
+        other => panic!("{} → {other:?}", res.message()),
+    }
+}
+
+fn git_out(dir: &Path, args: &[&str]) -> String {
+    String::from_utf8(
+        Command::new("git")
+            .args(args)
+            .current_dir(dir)
+            .output()
+            .unwrap()
+            .stdout,
+    )
+    .unwrap()
+}
+
+#[test]
+fn a_feature_runs_task_by_task_to_done() {
+    let r = two_task_repo();
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    let (id, args) = edit("c1", "pub fn ok() {}\npub fn login() {}");
+    f.will_call_tool(id, "edit_file", args);
+    f.will_structure(done("login"));
+    let (id, args) = edit("c2", "pub fn ok() {}\npub fn logout() {}");
+    f.will_call_tool(id, "edit_file", args);
+    f.will_structure(done("logout"));
+
+    let user_tasks = fs::read_to_string(r.path().join("specs/001-graph/tasks.md")).unwrap();
+    let res = run_feature_with(
+        r.path(),
+        None,
+        state.path(),
+        &d,
+        None,
+        &speccoder_runtime::RunOptions::default(),
+    );
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let fr = feature(&res);
+    assert_eq!(fr.stop, "feature done: every task is ticked");
+    let tasks: Vec<&str> = fr.attempts.iter().map(|a| a.task.as_str()).collect();
+    assert_eq!(tasks, ["T002", "T003"]);
+    assert!(fr.attempts.iter().all(|a| a.ticked && a.commit.is_some()));
+
+    let wt = Path::new(&fr.attempts[1].worktree);
+    let ticked = fs::read_to_string(wt.join("specs/001-graph/tasks.md")).unwrap();
+    assert!(
+        ticked.contains("- [X] T002") && ticked.contains("- [X] T003"),
+        "{ticked}"
+    );
+    let log = git_out(wt, &["log", "--format=%s", "speccoder/001-graph"]);
+    assert_eq!(
+        log.lines().take(2).collect::<Vec<_>>(),
+        [
+            "speccoder: T003 Add logout in src/lib.rs",
+            "speccoder: T002 Add login in src/lib.rs"
+        ]
+    );
+    let body = git_out(wt, &["log", "-1", "--format=%b", "speccoder/001-graph"]);
+    assert!(
+        body.contains("Verdict: regression_only") && body.contains("Spec-Task: 001-graph/T003"),
+        "{body}"
+    );
+
+    // The user's checkout is untouched.
+    assert_eq!(
+        fs::read_to_string(r.path().join("specs/001-graph/tasks.md")).unwrap(),
+        user_tasks
+    );
+    assert_eq!(
+        fs::read_to_string(r.path().join("src/lib.rs")).unwrap(),
+        "pub fn ok() {}\n"
+    );
+}
+
+#[test]
+fn a_failing_task_stops_the_feature_and_a_rerun_resumes_there() {
+    let r = two_task_repo();
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    let (id, args) = edit("c1", "pub fn ok() {}\npub fn login() {}");
+    f.will_call_tool(id, "edit_file", args);
+    f.will_structure(done("login"));
+    // T003 breaks the check (removes `fn ok`), twice: retried, then stopped.
+    for id in ["c2", "c2b"] {
+        f.will_call_tool(
+            id,
+            "write_file",
+            json!({ "path": "src/lib.rs", "content": "pub fn logout() {}\n" }),
+        );
+        f.will_structure(done("logout"));
+    }
+
+    let res = run_feature_with(
+        r.path(),
+        None,
+        state.path(),
+        &d,
+        None,
+        &speccoder_runtime::RunOptions::default(),
+    );
+    assert_eq!(
+        res.status(),
+        CommandStatus::VerificationFailed,
+        "{}",
+        res.message()
+    );
+    let fr = feature(&res);
+    assert_eq!(fr.attempts.len(), 2);
+    assert!(fr.attempts[0].ticked && fr.attempts[0].commit.is_some());
+    assert!(!fr.attempts[1].ticked && fr.attempts[1].commit.is_none());
+    assert!(fr.stop.starts_with("T003:"), "{}", fr.stop);
+
+    // The failed attempt is saved and undone: a re-run resumes at
+    // T003 from the branch tip, with nothing to clean up by hand.
+    let wt = PathBuf::from(&fr.attempts[1].worktree);
+    assert!(fr.attempts[1].saved_attempt.is_some());
+    assert!(speccoder_runtime::worktree::require_clean(&wt).is_ok());
+    let (f2, d2) = fake();
+    f2.will_call_tool("c3", "edit_file", json!({ "path": "src/lib.rs", "old_string": "pub fn login() {}", "new_string": "pub fn login() {}\npub fn logout() {}" }));
+    f2.will_structure(done("logout"));
+    let again = run_feature_with(
+        r.path(),
+        None,
+        state.path(),
+        &d2,
+        None,
+        &speccoder_runtime::RunOptions::default(),
+    );
+    assert_eq!(again.status(), CommandStatus::Ok, "{}", again.message());
+    let tasks: Vec<String> = feature(&again)
+        .attempts
+        .iter()
+        .map(|a| a.task.clone())
+        .collect();
+    assert_eq!(tasks, ["T003"]);
+}
+
+// ── spec-derived acceptance tests ───────────────────────────────────
+
+const ACCEPTANCE_SPEC: (&str, &str) = (
+    "specs/001-graph/spec.md",
+    "# Spec\n\n### User Story 1 - Login\n\nUsers log in.\n\n**Acceptance**: a `login` function exists.\n",
+);
+
+fn acceptance(path: &str, argv: &[&str]) -> Value {
+    json!({ "files": [{ "path": path, "content": "acceptance: login exists\n" }], "argv": argv, "notes": [] })
+}
+
+const GREP_LOGIN: &[&str] = &["grep", "-q", "fn login", "src/lib.rs"];
+
+#[test]
+fn red_then_green_acceptance_makes_the_verdict_verified() {
+    let r = repo_with("", &[ACCEPTANCE_SPEC]);
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_structure(acceptance("tests/acceptance_login.txt", GREP_LOGIN));
+    f.will_call_tool("c1", "edit_file", json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\npub fn login() {}" }));
+    f.will_structure(done("login"));
+    let res = run(r.path(), state.path(), "T005", d);
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let rep = report(&res);
+    assert_eq!(rep.verdict, Some(Verdict::Verified));
+    let a = rep.acceptance.as_ref().unwrap();
+    assert_eq!(
+        (a["red"].as_bool(), a["green"].as_bool()),
+        (Some(true), Some(true)),
+        "{a}"
+    );
+    // The implementing model saw the acceptance file as frozen: it existed at its checkpoint.
+    let wt = Path::new(&rep.worktree);
+    assert!(wt.join("tests/acceptance_login.txt").exists());
+    // The judge-side call came first and had no tools.
+    assert!(f.asked()[0].tools.is_empty());
+    assert!(!f.asked()[1].tools.is_empty());
+}
+
+#[test]
+fn a_wrong_implementation_fails_acceptance() {
+    let r = repo_with("", &[ACCEPTANCE_SPEC]);
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_structure(acceptance("tests/acceptance_login.txt", GREP_LOGIN));
+    for id in ["c1", "c2"] {
+        f.will_call_tool(id, "edit_file", json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\npub fn logon() {}" }));
+        f.will_structure(done("login, I promise"));
+    }
+    let res = run(r.path(), state.path(), "T005", d);
+    assert_eq!(
+        res.status(),
+        CommandStatus::VerificationFailed,
+        "{}",
+        res.message()
+    );
+    assert!(
+        matches!(&report(&res).verdict, Some(Verdict::Failed { reasons }) if reasons.iter().any(|r| r.contains("acceptance")))
+    );
+    assert!(!report(&res).ticked);
+    // Retried once from the same checkpoint (the second edit applied to the
+    // original file), the same failure again stops it.
+    assert_eq!(report(&res).earlier.len(), 1);
+    assert!(
+        report(&res)
+            .retry_stop
+            .as_deref()
+            .unwrap()
+            .starts_with("same failure twice"),
+        "{:?}",
+        report(&res).retry_stop
+    );
+    // The acceptance file was not regenerated: one judge-side call only.
+    assert_eq!(f.asked().iter().filter(|a| a.tools.is_empty()).count(), 1);
+}
+
+#[test]
+fn acceptance_that_is_already_green_is_no_evidence() {
+    let r = repo_with("", &[ACCEPTANCE_SPEC]);
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_structure(acceptance(
+        "tests/acceptance_ok.txt",
+        &["grep", "-q", "fn ok", "src/lib.rs"],
+    ));
+    f.will_call_tool("c1", "edit_file", json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\npub fn login() {}" }));
+    f.will_structure(done("login"));
+    let res = run(r.path(), state.path(), "T005", d);
+    let rep = report(&res);
+    assert_eq!(rep.verdict, Some(Verdict::RegressionOnly));
+    assert_eq!(rep.acceptance.as_ref().unwrap()["red"], false);
+}
+
+#[test]
+fn acceptance_files_outside_test_paths_are_refused() {
+    let r = repo_with("", &[ACCEPTANCE_SPEC]);
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_structure(acceptance("src/sneaky.rs", GREP_LOGIN));
+    f.will_structure(done("nothing"));
+    let res = run(r.path(), state.path(), "T005", d);
+    let rep = report(&res);
+    assert!(
+        rep.acceptance.as_ref().unwrap()["skipped"]
+            .as_str()
+            .unwrap()
+            .contains("not a new test file")
+    );
+    assert!(!Path::new(&rep.worktree).join("src/sneaky.rs").exists());
+}
+
+// ── retries with a failure digest ───────────────────────────────────
+
+/// A check that says what is wrong on stderr, so the digest has an excerpt.
+const SAYS: &str = "[checks.says]\nargv = [\"sh\", \"-c\", \"grep -q 'fn ok' src/lib.rs || { echo 'error: fn ok is missing from line 7' >&2; exit 1; }\"]\n";
+
+fn break_lib(f: &FakeProvider, id: &str) {
+    f.will_call_tool(
+        id,
+        "write_file",
+        json!({ "path": "src/lib.rs", "content": "pub fn renamed() {}\n" }),
+    );
+    f.will_structure(done("rewrote lib, all good"));
+}
+
+#[test]
+fn a_failed_attempt_is_retried_with_the_verifiers_digest() {
+    let r = repo(SAYS);
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    break_lib(&f, "c1");
+    // The second attempt edits the ORIGINAL text: the first attempt's
+    // changes must have been undone, or this edit would not apply.
+    f.will_call_tool("c2", "edit_file", json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\npub fn login() {}" }));
+    f.will_structure(done("added login"));
+
+    let res = run(r.path(), state.path(), "T005", d);
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let rep = report(&res);
+    assert_eq!(rep.verdict, Some(Verdict::RegressionOnly));
+    assert!(rep.ticked && rep.commit.is_some());
+    assert_eq!(rep.earlier.len(), 1);
+    let first = &rep.earlier[0];
+    assert!(matches!(first.verdict, Some(Verdict::Failed { .. })));
+    assert_ne!(first.run_id, rep.run_id);
+    assert!(
+        first
+            .fingerprint
+            .contains("says: error: fn ok is missing from line #"),
+        "{}",
+        first.fingerprint
+    );
+    assert_eq!(first.digest.discarded, ["src/lib.rs"]);
+
+    // The second attempt's prompt has the verifier's facts …
+    let asked = f.asked();
+    let second = asked
+        .iter()
+        .map(|a| serde_json::to_string(&a.prompt).unwrap())
+        .find(|p| p.contains("Previous attempt"))
+        .expect("a prompt with the digest");
+    assert!(
+        second.contains("error: fn ok is missing from line 7"),
+        "{second}"
+    );
+    assert!(second.contains("has-ok"));
+    // … and nothing of the model's own account or transcript.
+    assert!(!second.contains("rewrote lib, all good"));
+    assert!(!second.contains("pub fn renamed"));
+    // The first attempt's prompt had no digest.
+    assert!(
+        !serde_json::to_string(&asked[0].prompt)
+            .unwrap()
+            .contains("Previous attempt")
+    );
+    // Usage covers both attempts.
+    assert!(rep.usage.is_some());
+}
+
+#[test]
+fn the_same_failure_twice_stops_retrying() {
+    let r = repo(&format!("{SAYS}[budget]\nmax_attempts = 3\n"));
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    break_lib(&f, "c1");
+    break_lib(&f, "c2");
+    // A third attempt is scripted but must not be asked for.
+    f.will_structure(done("third"));
+    let res = run(r.path(), state.path(), "T005", d);
+    assert_eq!(
+        res.status(),
+        CommandStatus::VerificationFailed,
+        "{}",
+        res.message()
+    );
+    let rep = report(&res);
+    assert_eq!(rep.earlier.len(), 1);
+    assert!(
+        rep.retry_stop
+            .as_deref()
+            .unwrap()
+            .starts_with("same failure twice"),
+        "{:?}",
+        rep.retry_stop
+    );
+    // The last attempt is saved under an attempt ref and undone.
+    let saved = rep.saved_attempt.as_deref().expect("saved");
+    assert!(
+        git_out(
+            Path::new(&rep.worktree),
+            &["show", &format!("{saved}:src/lib.rs")]
+        )
+        .contains("renamed")
+    );
+    assert_eq!(
+        fs::read_to_string(Path::new(&rep.worktree).join("src/lib.rs")).unwrap(),
+        "pub fn ok() {}\n"
+    );
+    assert_eq!(f.asked().len(), 4);
+}
+
+#[test]
+fn integrity_findings_and_self_stops_are_not_retried() {
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_call_tool("c1", "edit_file", json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\n\n#[test]\n#[ignore]\nfn slow() {}" }));
+    f.will_structure(done("done"));
+    let res = run(r.path(), state.path(), "T005", d);
+    let rep = report(&res);
+    assert_eq!(
+        rep.retry_stop.as_deref(),
+        Some("integrity findings are not retried")
+    );
+    assert!(rep.earlier.is_empty());
+
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_call_tool("b", "report_blocked", json!({ "reason": "contradiction" }));
+    let res = run(r.path(), state.path(), "T005", d);
+    let rep = report(&res);
+    assert_eq!(rep.attempt_status, "blocked");
+    assert!(rep.earlier.is_empty() && rep.retry_stop.is_none());
+}
+
+#[test]
+fn a_check_that_cannot_run_is_not_retried() {
+    let r = repo("[checks.gone]\nargv = [\"speccoder-no-such-tool\"]\n");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_structure(done("nothing"));
+    let res = run(r.path(), state.path(), "T005", d);
+    let rep = report(&res);
+    assert!(
+        rep.retry_stop
+            .as_deref()
+            .unwrap_or_default()
+            .starts_with("not retried: check gone could not run"),
+        "{:?} / {}",
+        rep.retry_stop,
+        res.message()
+    );
+}
+
+// ── durable attempts ────────────────────────────────────────────────
+
+#[test]
+fn a_failed_attempt_is_saved_under_a_ref_and_undone() {
+    let r = repo("[budget]\nmax_attempts = 1\n");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_call_tool(
+        "c1",
+        "write_file",
+        json!({ "path": "src/lib.rs", "content": "pub fn renamed() {}\n" }),
+    );
+    f.will_call_tool(
+        "c2",
+        "write_file",
+        json!({ "path": "tests/new_test.rs", "content": "#[test]\nfn t() {}\n" }),
+    );
+    f.will_structure(done("rewrote lib"));
+    let res = run(r.path(), state.path(), "T005", d);
+    assert_eq!(
+        res.status(),
+        CommandStatus::VerificationFailed,
+        "{}",
+        res.message()
+    );
+    let rep = report(&res);
+    let wt = Path::new(&rep.worktree);
+    let saved = rep.saved_attempt.clone().expect("saved");
+    assert!(
+        saved.starts_with("refs/speccoder/attempts/001-graph/T005/run_"),
+        "{saved}"
+    );
+    // The ref holds the attempt as it ended, on top of the branch tip …
+    assert_eq!(
+        git_out(wt, &["show", &format!("{saved}:src/lib.rs")]).trim(),
+        "pub fn renamed() {}"
+    );
+    assert!(git_out(wt, &["show", &format!("{saved}:tests/new_test.rs")]).contains("fn t()"));
+    assert_eq!(
+        git_out(wt, &["rev-parse", &format!("{saved}^")]),
+        git_out(wt, &["rev-parse", "HEAD"])
+    );
+    let message = git_out(wt, &["log", "-1", "--format=%B", &saved]);
+    assert!(
+        message.contains("Outcome: verification_failed"),
+        "{message}"
+    );
+    assert!(
+        message.contains(&format!("Run: {}", rep.run_id)),
+        "{message}"
+    );
+    // … and the worktree is back where the attempt started: the next attempt
+    // will not freeze the failed attempt's test file.
+    assert!(speccoder_runtime::worktree::require_clean(wt).is_ok());
+    assert!(!wt.join("tests/new_test.rs").exists());
+    // The user's repository knows the ref (worktrees share refs).
+    assert!(!git_out(r.path(), &["for-each-ref", "refs/speccoder/attempts/"]).is_empty());
+}
+
+#[test]
+fn leftovers_of_an_interrupted_run_are_set_aside_before_the_next() {
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    // A first run creates the worktree; then a "crash" leaves edits behind.
+    let (f, d) = fake();
+    f.will_call_tool("b", "report_blocked", json!({ "reason": "first" }));
+    let first = run(r.path(), state.path(), "T005", d);
+    let wt = PathBuf::from(&report(&first).worktree);
+    fs::write(
+        wt.join("src/lib.rs"),
+        "pub fn ok() {}\npub fn half_done() {}\n",
+    )
+    .unwrap();
+
+    let (f2, d2) = fake();
+    f2.will_call_tool("c", "read_file", json!({ "path": "src/lib.rs" }));
+    f2.will_structure(done("looked"));
+    let res = run(r.path(), state.path(), "T005", d2);
+    let rep = report(&res);
+    let aside = rep.set_aside.clone().expect("set aside");
+    assert!(
+        aside.starts_with("refs/speccoder/attempts/001-graph/T005/interrupted-"),
+        "{aside}"
+    );
+    assert!(git_out(&wt, &["show", &format!("{aside}:src/lib.rs")]).contains("half_done"));
+    // The model read the branch tip, not the leftovers.
+    let read = rep
+        .tool_calls
+        .iter()
+        .find(|c| c["tool"] == "read_file")
+        .unwrap();
+    assert_eq!(read["decision"], "allow");
+    assert!(
+        !fs::read_to_string(wt.join("src/lib.rs"))
+            .unwrap()
+            .contains("half_done")
+    );
+}
+
+// ── approvals ───────────────────────────────────────────────────────
+
+use speccoder_runtime::approvals::{Verb, decide_with};
+
+fn approvals(r: &CommandResult) -> &speccoder_core::ApprovalsReport {
+    match r.data() {
+        Some(CommandData::Approvals(a)) => a,
+        other => panic!("{} → {other:?}", r.message()),
+    }
+}
+
+fn write_manifest(f: &FakeProvider, id: &str, content: &str) {
+    f.will_call_tool(
+        id,
+        "write_file",
+        json!({ "path": "package.json", "content": content }),
+    );
+}
+
+#[test]
+fn an_approved_call_lets_the_next_attempt_through() {
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    // 1. The attempt stops for approval: package.json is a dependency manifest.
+    let (f, d) = fake();
+    write_manifest(&f, "c1", "{}\n");
+    let first = run(r.path(), state.path(), "T005", d);
+    assert_eq!(
+        first.status(),
+        CommandStatus::NeedsHuman,
+        "{}",
+        first.message()
+    );
+    assert_eq!(report(&first).attempt_status, "needs_approval");
+
+    // 2. It is listed with what a decision would cover.
+    let listed = decide_with(r.path(), None, Verb::List, state.path());
+    let a = approvals(&listed);
+    assert_eq!(a.pending.len(), 1, "{}", listed.message());
+    assert_eq!(
+        (a.pending[0].task.as_str(), a.pending[0].covers.as_str()),
+        ("T005", "write `package.json`")
+    );
+
+    // 3. Approve: the path, any content.
+    let ok = decide_with(r.path(), None, Verb::Approve("T005"), state.path());
+    assert_eq!(ok.status(), CommandStatus::Ok, "{}", ok.message());
+    assert!(approvals(&ok).pending.is_empty());
+    assert_eq!(approvals(&ok).decided[0].decision, "approved");
+
+    // 4. The next attempt (fresh context) writes it with other content: allowed.
+    let (f2, d2) = fake();
+    write_manifest(&f2, "c2", "{ \"name\": \"x\" }\n");
+    f2.will_structure(done("manifest"));
+    let second = run(r.path(), state.path(), "T005", d2);
+    assert_eq!(second.status(), CommandStatus::Ok, "{}", second.message());
+    let rep = report(&second);
+    assert_eq!(rep.tool_calls[0]["decision"], "allow");
+    assert!(rep.ticked);
+    // Strict replay holds: the decision is in the journaled input.
+    let replayed = speccoder_runtime::replay_with(r.path(), &rep.run_id, state.path());
+    assert_eq!(
+        replayed.status(),
+        CommandStatus::Ok,
+        "{}",
+        replayed.message()
+    );
+}
+
+#[test]
+fn a_rejected_call_is_denied_with_the_persons_reason() {
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    write_manifest(&f, "c1", "{}\n");
+    run(r.path(), state.path(), "T005", d);
+    let no = decide_with(
+        r.path(),
+        None,
+        Verb::Reject("T005", "no new dependencies"),
+        state.path(),
+    );
+    assert_eq!(no.status(), CommandStatus::Ok, "{}", no.message());
+
+    let (f2, d2) = fake();
+    write_manifest(&f2, "c2", "{}\n");
+    f2.will_structure(done("gave up on the manifest"));
+    let res = run(r.path(), state.path(), "T005", d2);
+    let rep = report(&res);
+    assert_eq!(rep.tool_calls[0]["decision"], "deny");
+    assert_eq!(
+        rep.tool_calls[0]["reason"],
+        "a person rejected this: no new dependencies"
+    );
+    // The model was told before it asked.
+    let prompt = serde_json::to_string(&f2.asked()[0].prompt).unwrap();
+    assert!(
+        prompt.contains("Rejected by a person") && prompt.contains("no new dependencies"),
+        "{prompt}"
+    );
+    // Nothing awaits a decision any more.
+    let listed = decide_with(r.path(), None, Verb::List, state.path());
+    assert!(approvals(&listed).pending.is_empty());
+    // Approving a task with nothing pending is refused.
+    let again = decide_with(r.path(), None, Verb::Approve("T005"), state.path());
+    assert_eq!(again.status(), CommandStatus::NotFound);
+}
+
+#[test]
+fn repeated_denials_stop_the_attempt_for_a_person() {
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    for id in ["a", "b", "c"] {
+        f.will_call_tool(
+            id,
+            "write_file",
+            json!({ "path": "speccoder.toml", "content": "" }),
+        );
+    }
+    f.will_structure(done("never reached"));
+    let res = run(r.path(), state.path(), "T005", d);
+    assert_eq!(res.status(), CommandStatus::NeedsHuman, "{}", res.message());
+    let rep = report(&res);
+    assert_eq!(rep.attempt_status, "denied");
+    assert!(
+        rep.reason
+            .as_deref()
+            .unwrap()
+            .starts_with("3 calls in a row were denied")
+    );
+}
+
+// ── inline approvals ────────────────────────────────────────────────
+
+use speccoder_runtime::approvals::{Answer, Approver, Request};
+
+/// Answers from a script and remembers what it was asked.
+#[derive(Debug)]
+struct Scripted {
+    answers: std::sync::Mutex<Vec<Answer>>,
+    asked: std::sync::Mutex<Vec<Request>>,
+}
+
+impl Scripted {
+    fn new(answers: Vec<Answer>) -> Arc<Self> {
+        Arc::new(Self {
+            answers: std::sync::Mutex::new(answers),
+            asked: std::sync::Mutex::new(Vec::new()),
+        })
+    }
+}
+
+impl Approver for Scripted {
+    fn ask(&self, request: &Request) -> Answer {
+        self.asked.lock().unwrap().push(request.clone());
+        self.answers.lock().unwrap().remove(0)
+    }
+}
+
+fn yes(for_task: bool) -> Answer {
+    Answer {
+        by: None,
+        approved: true,
+        for_task,
+        reason: None,
+    }
+}
+
+#[test]
+fn an_inline_approval_continues_the_same_attempt_and_replays_without_asking() {
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    write_manifest(&f, "c1", "{}\n");
+    f.will_structure(done("manifest"));
+    let person = Scripted::new(vec![yes(false)]);
+    let res = speccoder_runtime::run_with_approver(
+        r.path(),
+        None,
+        "T005",
+        state.path(),
+        d,
+        None,
+        person.clone(),
+    );
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let rep = report(&res);
+    assert_eq!(rep.tool_calls[0]["decision"], "allow");
+    assert_eq!(rep.tool_calls[0]["approved_by"], "person");
+    assert!(rep.ticked);
+    // The person saw what and why.
+    let asked = person.asked.lock().unwrap().clone();
+    assert_eq!(asked.len(), 1);
+    assert_eq!(asked[0].task, "001-graph/T005");
+    assert_eq!(
+        (asked[0].covers.as_str(), asked[0].risk.as_str()),
+        ("write `package.json`", "medium")
+    );
+    // "Once" records no decision for the task.
+    let listed = decide_with(r.path(), None, Verb::List, state.path());
+    assert!(approvals(&listed).decided.is_empty());
+    // Strict replay reads the answer from the journal: nobody is asked.
+    let replayed = speccoder_runtime::replay_with(r.path(), &rep.run_id, state.path());
+    assert_eq!(
+        replayed.status(),
+        CommandStatus::Ok,
+        "{}",
+        replayed.message()
+    );
+    assert_eq!(person.asked.lock().unwrap().len(), 1);
+}
+
+#[test]
+fn for_this_task_is_recorded_and_a_rejection_reaches_the_model() {
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    // "For this task": recorded like `speccoder approve`.
+    let (f, d) = fake();
+    write_manifest(&f, "c1", "{}\n");
+    f.will_call_tool(
+        "c2",
+        "run_command",
+        json!({ "argv": ["curl", "https://example.com"] }),
+    );
+    f.will_structure(done("tried"));
+    let person = Scripted::new(vec![
+        yes(true),
+        Answer {
+            by: None,
+            approved: false,
+            for_task: false,
+            reason: Some("no network".to_owned()),
+        },
+    ]);
+    let res =
+        speccoder_runtime::run_with_approver(r.path(), None, "T005", state.path(), d, None, person);
+    let rep = report(&res);
+    assert_eq!(rep.tool_calls[1]["decision"], "deny");
+    assert_eq!(
+        rep.tool_calls[1]["reason"],
+        "a person rejected this: no network"
+    );
+    assert_eq!(rep.tool_calls[1]["rejected_by"], "person");
+    let listed = decide_with(r.path(), None, Verb::List, state.path());
+    let decided = &approvals(&listed).decided;
+    assert_eq!(decided.len(), 1);
+    assert_eq!(
+        (decided[0].decision.as_str(), decided[0].covers.as_str()),
+        ("approved", "write `package.json`")
+    );
+}
+
+// ── human controls ──────────────────────────────────────────────────
+
+fn status_of(r: &Path) -> speccoder_core::StatusReport {
+    match speccoder_runtime::status::report(r, None).data() {
+        Some(CommandData::Report(s)) => (**s).clone(),
+        other => panic!("{other:?}"),
+    }
+}
+
+fn state_of<'a>(s: &'a speccoder_core::StatusReport, id: &str) -> &'a speccoder_core::TaskStatus {
+    s.tasks.iter().find(|t| t.id == id).unwrap()
+}
+
+#[test]
+fn an_accepted_task_is_attested_never_verified_and_the_feature_moves_on() {
+    let r = two_task_repo();
+    let state = tempfile::tempdir().unwrap();
+    let ok = speccoder_runtime::controls::accept_with(
+        r.path(),
+        None,
+        "T002",
+        "done by hand in PR 12",
+        state.path(),
+    );
+    assert_eq!(ok.status(), CommandStatus::Ok, "{}", ok.message());
+    let s = status_of(r.path());
+    let t2 = state_of(&s, "T002");
+    assert_eq!(t2.state, "attested");
+    assert_eq!(t2.note.as_deref(), Some("done by hand in PR 12"));
+    assert_eq!(s.totals.verified, 0);
+    // Accepting it again is refused.
+    let again = speccoder_runtime::controls::accept_with(r.path(), None, "T002", "x", state.path());
+    assert_eq!(again.status(), CommandStatus::TaskNotReady);
+    // The feature run continues with T003.
+    let (f, d) = fake();
+    let (id, args) = edit("c1", "pub fn ok() {}\npub fn logout() {}");
+    f.will_call_tool(id, "edit_file", args);
+    f.will_structure(done("logout"));
+    let res = run_feature_with(
+        r.path(),
+        None,
+        state.path(),
+        &d,
+        None,
+        &speccoder_runtime::RunOptions::default(),
+    );
+    let tasks: Vec<String> = feature(&res)
+        .attempts
+        .iter()
+        .map(|a| a.task.clone())
+        .collect();
+    assert_eq!(tasks, ["T003"], "{}", res.message());
+}
+
+#[test]
+fn a_skipped_task_is_passed_by_and_its_dependents_stay_blocked() {
+    let r = two_task_repo();
+    let state = tempfile::tempdir().unwrap();
+    let skip = speccoder_runtime::controls::skip(
+        r.path(),
+        None,
+        "T002",
+        Some("out of scope for this release"),
+    );
+    assert_eq!(skip.status(), CommandStatus::Ok, "{}", skip.message());
+    let s = status_of(r.path());
+    assert_eq!(state_of(&s, "T002").state, "skipped");
+    assert_eq!(
+        state_of(&s, "T002").note.as_deref(),
+        Some("out of scope for this release")
+    );
+    assert_eq!(state_of(&s, "T003").state, "blocked");
+
+    // No model call: nothing can run.
+    let (f, d) = fake();
+    let res = run_feature_with(
+        r.path(),
+        None,
+        state.path(),
+        &d,
+        None,
+        &speccoder_runtime::RunOptions::default(),
+    );
+    assert_eq!(
+        res.status(),
+        CommandStatus::TaskNotReady,
+        "{}",
+        res.message()
+    );
+    assert!(
+        feature(&res).stop.contains("T002 (skipped)"),
+        "{}",
+        feature(&res).stop
+    );
+    assert!(f.asked().is_empty());
+
+    // Undo: ready again.
+    let undo = speccoder_runtime::controls::skip(r.path(), None, "T002", None);
+    assert_eq!(undo.status(), CommandStatus::Ok);
+    assert_eq!(state_of(&status_of(r.path()), "T002").state, "ready");
+    // Skipping a task that is not open is refused.
+    let no = speccoder_runtime::controls::skip(r.path(), None, "T001", Some("x"));
+    assert_eq!(no.status(), CommandStatus::NotFound);
+}
+
+#[test]
+fn a_nudge_reaches_the_next_attempt_and_can_be_cleared() {
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    let n = speccoder_runtime::controls::nudge_with(
+        r.path(),
+        None,
+        "T005",
+        Some("keep `ok` untouched; add a new fn"),
+        state.path(),
+    );
+    assert_eq!(n.status(), CommandStatus::Ok, "{}", n.message());
+    // Each attempt stops honestly, so the task stays open for the next one.
+    let (f, d) = fake();
+    f.will_call_tool("b1", "report_blocked", json!({ "reason": "waiting" }));
+    run(r.path(), state.path(), "T005", d);
+    let prompt = serde_json::to_string(&f.asked()[0].prompt).unwrap();
+    assert!(
+        prompt.contains("Notes from a person") && prompt.contains("keep `ok` untouched"),
+        "{prompt}"
+    );
+
+    speccoder_runtime::controls::nudge_with(r.path(), None, "T005", None, state.path());
+    let (f2, d2) = fake();
+    f2.will_call_tool("b2", "report_blocked", json!({ "reason": "waiting" }));
+    run(r.path(), state.path(), "T005", d2);
+    let prompt = serde_json::to_string(&f2.asked()[0].prompt).unwrap();
+    assert!(!prompt.contains("Notes from a person"));
+}
+
+#[test]
+fn cost_counts_every_recorded_attempt_per_task() {
+    let r = repo("[budget]\nmax_attempts = 1\n");
+    let state = tempfile::tempdir().unwrap();
+    // A failed attempt (saved), then a passing one (committed).
+    let (f, d) = fake();
+    f.will_call_tool(
+        "c1",
+        "write_file",
+        json!({ "path": "src/lib.rs", "content": "pub fn renamed() {}\n" }),
+    );
+    f.will_structure(done("broke it"));
+    run(r.path(), state.path(), "T005", d);
+    let (f2, d2) = fake();
+    f2.will_structure(done("fine"));
+    run(r.path(), state.path(), "T005", d2);
+
+    let res = speccoder_runtime::controls::cost(r.path(), None);
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let Some(CommandData::Cost(c)) = res.data() else {
+        panic!()
+    };
+    assert_eq!(c.tasks.len(), 1);
+    assert_eq!((c.tasks[0].task.as_str(), c.tasks[0].attempts), ("T005", 2));
+    // Without prices: tokens only.
+    assert!(c.total.usd.is_none() && c.priced_model.is_none());
+    assert!(res.message().contains("price_input_per_mtok"));
+}
+
+// ── live progress ───────────────────────────────────────────────────
+
+use speccoder_runtime::progress::{Event, Progress};
+
+#[derive(Debug, Default)]
+struct Recorder(std::sync::Mutex<Vec<Event>>);
+
+impl Progress for Recorder {
+    fn event(&self, e: &Event) {
+        self.0.lock().unwrap().push(e.clone());
+    }
+}
+
+#[test]
+fn a_run_reports_its_steps_live_and_status_reads_them() {
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_call_tool("c1", "read_file", json!({ "path": "src/lib.rs" }));
+    f.will_call_tool(
+        "c2",
+        "write_file",
+        json!({ "path": "speccoder.toml", "content": "" }),
+    );
+    f.will_structure(done("looked"));
+    let rec = Arc::new(Recorder::default());
+    let options = speccoder_runtime::RunOptions {
+        max_tasks: Some(1),
+        progress: Some(rec.clone()),
+        ..speccoder_runtime::RunOptions::default()
+    };
+    let res = run_feature_with(r.path(), None, state.path(), &d, None, &options);
+    let events = rec.0.lock().unwrap().clone();
+    let kinds: Vec<String> = events
+        .iter()
+        .map(|e| match e {
+            Event::TaskStarted { task, .. } => format!("start {task}"),
+            Event::Phase { phase, .. } => phase.clone(),
+            Event::ToolCall {
+                tool,
+                decision,
+                turn,
+                ..
+            } => format!("{turn} {tool} {decision}"),
+            Event::Usage { .. } => "usage".to_owned(),
+            Event::TaskFinished { outcome, .. } => format!("end {outcome}"),
+            Event::Notice { text } => text.clone(),
+        })
+        .filter(|k| k != "usage")
+        .collect();
+    assert_eq!(
+        kinds,
+        [
+            "start T005",
+            "baseline checks",
+            "acceptance tests (judge-side)",
+            "attempt 1",
+            "1 read_file allow",
+            "2 write_file deny",
+            "verifying",
+            "end regression_only",
+        ],
+        "{}",
+        res.message()
+    );
+
+    // `status` from "another terminal": the run is over.
+    let st = speccoder_runtime::progress::status_with(r.path(), state.path());
+    assert_eq!(st.status(), CommandStatus::Ok);
+    assert!(
+        st.message()
+            .starts_with("last run: 001-graph T005 — regression_only"),
+        "{}",
+        st.message()
+    );
+}
+
+#[test]
+fn status_tells_an_interrupted_run_from_a_running_one() {
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    let dir = speccoder_runtime::worktree::project_state_dir(
+        state.path(),
+        &fs::canonicalize(r.path()).unwrap(),
+    );
+    fs::create_dir_all(&dir).unwrap();
+    let write = |pid: u32| {
+        let live = speccoder_runtime::progress::LiveState {
+            pid,
+            feature: "001-graph".to_owned(),
+            task: "T005".to_owned(),
+            phase: "attempt 1".to_owned(),
+            ..Default::default()
+        };
+        fs::write(dir.join("live.json"), serde_json::to_string(&live).unwrap()).unwrap();
+    };
+    // This test process is alive: "running".
+    write(std::process::id());
+    let st = speccoder_runtime::progress::status_with(r.path(), state.path());
+    assert!(st.message().starts_with("running (pid"), "{}", st.message());
+    // A pid that does not exist: "interrupted".
+    write(u32::MAX / 2);
+    let st = speccoder_runtime::progress::status_with(r.path(), state.path());
+    assert!(st.message().starts_with("interrupted:"), "{}", st.message());
+}
+
+// ── the gaming monitor ──────────────────────────────────────────────
+
+fn monitor_says(suspected: bool) -> Value {
+    if suspected {
+        json!({ "suspected": true, "findings": [{ "kind": "hardcoded_output", "evidence": "pub fn login() -> u32 { 42 }", "explanation": "returns the test's expected value" }] })
+    } else {
+        json!({ "suspected": false, "findings": [] })
+    }
+}
+
+#[test]
+fn a_suspected_attempt_is_saved_for_a_person_not_ticked() {
+    let r = repo("[monitor]\nenabled = true\n");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_call_tool("c1", "edit_file", json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\npub fn login() -> u32 { 42 }" }));
+    f.will_structure(done("SECRET-SUMMARY implemented login properly"));
+    f.will_structure(monitor_says(true));
+    let res = run(r.path(), state.path(), "T005", d);
+    assert_eq!(res.status(), CommandStatus::NeedsHuman, "{}", res.message());
+    assert!(
+        res.message().contains("hardcoded_output"),
+        "{}",
+        res.message()
+    );
+    let rep = report(&res);
+    // The checks passed — the verdict stands — but nothing was ticked.
+    assert_eq!(rep.verdict, Some(Verdict::RegressionOnly));
+    assert!(!rep.ticked && rep.commit.is_none());
+    let saved = rep.saved_attempt.as_deref().unwrap();
+    let wt = Path::new(&rep.worktree);
+    assert!(
+        git_out(wt, &["log", "-1", "--format=%B", saved]).contains("Outcome: suspected_gaming")
+    );
+    // Reasoning-blind: the monitor saw the diff and the calls, not the model's account.
+    let asked = f.asked();
+    let monitor = serde_json::to_string(&asked.last().unwrap().prompt).unwrap();
+    assert!(asked.last().unwrap().tools.is_empty());
+    assert!(
+        monitor.contains("pub fn login() -> u32 { 42 }")
+            && monitor.contains("edit_file src/lib.rs"),
+        "{monitor}"
+    );
+    assert!(!monitor.contains("SECRET-SUMMARY"), "{monitor}");
+}
+
+#[test]
+fn a_clean_monitor_verdict_ticks_and_a_failed_task_is_not_monitored() {
+    let r = repo("[monitor]\nenabled = true\n[budget]\nmax_attempts = 1\n");
+    let state = tempfile::tempdir().unwrap();
+    // A failing attempt: no monitor call.
+    let (f, d) = fake();
+    f.will_call_tool(
+        "c1",
+        "write_file",
+        json!({ "path": "src/lib.rs", "content": "pub fn renamed() {}\n" }),
+    );
+    f.will_structure(done("broke it"));
+    let failed = run(r.path(), state.path(), "T005", d);
+    assert_eq!(failed.status(), CommandStatus::VerificationFailed);
+    assert!(report(&failed).monitor.is_none());
+    assert_eq!(f.asked().len(), 2);
+    // A passing one the monitor finds clean: ticked as usual.
+    let (f2, d2) = fake();
+    f2.will_structure(done("nothing to change"));
+    f2.will_structure(monitor_says(false));
+    let ok = run(r.path(), state.path(), "T005", d2);
+    assert_eq!(ok.status(), CommandStatus::Ok, "{}", ok.message());
+    assert!(report(&ok).ticked);
+    assert_eq!(report(&ok).monitor.as_ref().unwrap()["suspected"], false);
+}
+
+#[test]
+fn the_monitor_is_off_by_default() {
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_structure(done("fine"));
+    let res = run(r.path(), state.path(), "T005", d);
+    assert_eq!(res.status(), CommandStatus::Ok);
+    assert!(report(&res).monitor.is_none());
+    assert_eq!(f.asked().len(), 1);
+}
+
+#[test]
+fn an_approved_frozen_test_edit_passes_but_an_approved_weakening_does_not() {
+    // Adding a test to an existing file, approved: a pass.
+    let r = repo_with("", &[EXISTING_TEST]);
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_call_tool("c1", "write_file", json!({ "path": "tests/existing.rs", "content": "#[test]\nfn existing() {}\n#[test]\nfn added() {}\n" }));
+    let first = run(r.path(), state.path(), "T005", d);
+    assert_eq!(report(&first).attempt_status, "needs_approval");
+    decide_with(r.path(), None, Verb::Approve("T005"), state.path());
+    let (f2, d2) = fake();
+    f2.will_call_tool("c2", "write_file", json!({ "path": "tests/existing.rs", "content": "#[test]\nfn existing() {}\n#[test]\nfn added() {}\n" }));
+    f2.will_structure(done("added a test"));
+    let ok = run(r.path(), state.path(), "T005", d2);
+    assert_eq!(ok.status(), CommandStatus::Ok, "{}", ok.message());
+    assert!(
+        report(&ok).integrity.is_empty(),
+        "{:?}",
+        report(&ok).integrity
+    );
+
+    // Removing the test, approved: still a failed verdict.
+    let r = repo_with("[budget]\nmax_attempts = 1\n", &[EXISTING_TEST]);
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_call_tool(
+        "c1",
+        "write_file",
+        json!({ "path": "tests/existing.rs", "content": "// nothing\n" }),
+    );
+    run(r.path(), state.path(), "T005", d);
+    decide_with(r.path(), None, Verb::Approve("T005"), state.path());
+    let (f2, d2) = fake();
+    f2.will_call_tool(
+        "c2",
+        "write_file",
+        json!({ "path": "tests/existing.rs", "content": "// nothing\n" }),
+    );
+    f2.will_structure(done("simplified"));
+    let bad = run(r.path(), state.path(), "T005", d2);
+    assert_eq!(
+        bad.status(),
+        CommandStatus::VerificationFailed,
+        "{}",
+        bad.message()
+    );
+    assert!(
+        report(&bad)
+            .integrity
+            .iter()
+            .any(|i| i.contains("test removed")),
+        "{:?}",
+        report(&bad).integrity
+    );
+}
+
+#[test]
+fn a_spec_without_template_story_headings_still_yields_acceptance_tests() {
+    // Written by a model that skipped `### User Story 1 - …` headings.
+    let spec = (
+        "specs/001-graph/spec.md",
+        "# Spec\n\n## User Story\n\nUsers log in.\n\n**Acceptance**: a `login` function exists.\n",
+    );
+    let r = repo_with("", &[spec]);
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_structure(acceptance("tests/acceptance_login.txt", GREP_LOGIN));
+    f.will_call_tool("c1", "edit_file", json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\npub fn login() {}" }));
+    f.will_structure(done("login"));
+    let res = run(r.path(), state.path(), "T005", d);
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    assert_eq!(report(&res).verdict, Some(Verdict::Verified));
+    assert!(
+        f.asked()[0].tools.is_empty(),
+        "the judge-side acceptance call came first"
+    );
+}
+
+// ── [tests] frozen = "additions" ───────────────────────────────────────────
+
+#[test]
+fn in_additions_mode_new_tests_in_a_frozen_file_need_no_approval() {
+    let r = repo_with("[tests]\nfrozen = \"additions\"\n", &[EXISTING_TEST]);
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_call_tool("c1", "edit_file", json!({ "path": "tests/existing.rs", "old_string": "fn existing() {}\n", "new_string": "fn existing() {}\n\n#[test]\nfn added() {}\n" }));
+    f.will_structure(done("added a test"));
+    let res = run(r.path(), state.path(), "T005", d);
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let rep = report(&res);
+    assert_eq!(rep.tool_calls[0]["decision"], "allow");
+    assert_eq!(rep.tool_calls[0]["frozen_additions"], true);
+    assert!(rep.integrity.is_empty(), "{:?}", rep.integrity);
+    assert!(
+        fs::read_to_string(Path::new(&rep.worktree).join("tests/existing.rs"))
+            .unwrap()
+            .contains("fn added()")
+    );
+    // The check read the file through a journaled call: replay holds.
+    let replayed = speccoder_runtime::replay_with(r.path(), &rep.run_id, state.path());
+    assert_eq!(
+        replayed.status(),
+        CommandStatus::Ok,
+        "{}",
+        replayed.message()
+    );
+}
+
+#[test]
+fn in_additions_mode_changing_an_existing_test_line_still_asks() {
+    let r = repo_with("[tests]\nfrozen = \"additions\"\n", &[EXISTING_TEST]);
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_call_tool("c1", "edit_file", json!({ "path": "tests/existing.rs", "old_string": "fn existing() {}", "new_string": "fn renamed() {}" }));
+    let res = run(r.path(), state.path(), "T005", d);
+    assert_eq!(res.status(), CommandStatus::NeedsHuman, "{}", res.message());
+    assert_eq!(report(&res).attempt_status, "needs_approval");
+    let untouched =
+        fs::read_to_string(Path::new(&report(&res).worktree).join("tests/existing.rs")).unwrap();
+    assert_eq!(untouched, EXISTING_TEST.1);
+}
+
+#[test]
+fn the_configured_formatter_runs_after_the_attempt_and_before_the_checks() {
+    let r = repo(
+        "[format]\nargv = [\"sh\", \"-c\", \"printf 'formatted\\\\n' > src/formatted.txt\"]\n[checks.formatted]\nargv = [\"grep\", \"-q\", \"formatted\", \"src/formatted.txt\"]\n",
+    );
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_call_tool("c1", "edit_file", json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\npub fn login() {}" }));
+    f.will_structure(done("login"));
+    let res = run(r.path(), state.path(), "T005", d);
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let rep = report(&res);
+    // The formatter's output is part of the attempt (and of its commit).
+    assert!(
+        rep.changes
+            .iter()
+            .any(|(p, k)| p == "src/formatted.txt" && k == "added"),
+        "{:?}",
+        rep.changes
+    );
+}
+
+// ── mutation evidence ───────────────────────────────────────────────
+
+/// A mutation tool that reports one killed and one surviving mutant.
+const MUTATION: &str = "[mutation]\ntool = \"command\"\nreport = \"{out}/r.json\"\nargv = [\"sh\", \"-c\", \"mkdir -p \\\"$1\\\" && echo \\\"$2\\\" > \\\"$1/files\\\" && printf '%s' '{\\\"files\\\":{\\\"src/lib.rs\\\":{\\\"mutants\\\":[{\\\"status\\\":\\\"Killed\\\"},{\\\"status\\\":\\\"Survived\\\",\\\"mutatorName\\\":\\\"BlockStatement\\\",\\\"replacement\\\":\\\"{}\\\",\\\"location\\\":{\\\"start\\\":{\\\"line\\\":2}}}]}}}' > \\\"$1/r.json\\\"\", \"sh\", \"{out}\", \"{files_csv}\"]\n";
+
+fn login_attempt(f: &FakeProvider) {
+    f.will_call_tool("c1", "edit_file", json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\npub fn login() {}" }));
+    f.will_structure(done("added login"));
+}
+
+#[test]
+fn mutation_results_are_evidence_and_a_trailer() {
+    let r = repo(MUTATION);
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    login_attempt(&f);
+    let res = run(r.path(), state.path(), "T005", d);
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let rep = report(&res);
+    let m = rep.mutation.as_ref().unwrap();
+    assert_eq!(
+        (m["caught"].as_u64(), m["missed"].as_u64()),
+        (Some(1), Some(1)),
+        "{m}"
+    );
+    assert_eq!(m["files"], json!(["src/lib.rs"]));
+    let body = git_out(Path::new(&rep.worktree), &["log", "-1", "--format=%B"]);
+    assert!(body.contains("Mutation: caught=1 missed=1"), "{body}");
+}
+
+#[test]
+fn required_mutation_coverage_fails_the_verdict_with_the_survivors() {
+    let r = repo(&format!(
+        "{}mode = \"require\"\n[budget]\nmax_attempts = 1\n",
+        MUTATION
+    ));
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    login_attempt(&f);
+    let res = run(r.path(), state.path(), "T005", d);
+    assert_eq!(
+        res.status(),
+        CommandStatus::VerificationFailed,
+        "{}",
+        res.message()
+    );
+    let rep = report(&res);
+    let Some(Verdict::Failed { reasons }) = &rep.verdict else {
+        panic!("{:?}", rep.verdict)
+    };
+    assert!(
+        reasons[0].starts_with("mutation: 1 of 2 mutants") && reasons[0].contains("src/lib.rs:2"),
+        "{reasons:?}"
+    );
+}
+
+// ── best-of-n ───────────────────────────────────────────────────────
+
+#[test]
+fn best_of_n_keeps_the_passing_sample_with_the_smallest_change() {
+    let r = repo("[budget]\nbest_of = 3\nmax_attempts = 1\n");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    // 1: small and passing. 2: breaks the check. 3: passing but larger.
+    f.will_call_tool("a", "edit_file", json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\npub fn login() {}" }));
+    f.will_structure(done("small"));
+    f.will_call_tool(
+        "b",
+        "write_file",
+        json!({ "path": "src/lib.rs", "content": "pub fn renamed() {}\n" }),
+    );
+    f.will_structure(done("broken"));
+    f.will_call_tool("c", "edit_file", json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\npub fn login() {}\npub fn logout() {}\npub fn audit() {}" }));
+    f.will_structure(done("large"));
+    let res = run(r.path(), state.path(), "T005", d);
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let rep = report(&res);
+    assert_eq!(rep.samples.len(), 3);
+    let kept: Vec<bool> = rep.samples.iter().map(|s| s["kept"] == true).collect();
+    assert_eq!(kept, [true, false, false], "{:?}", rep.samples);
+    assert_eq!(rep.samples[1]["rank"], 0);
+    assert_eq!(rep.model_report.as_ref().unwrap()["summary"], "small");
+    // The worktree (and the commit) hold the kept sample, not the last one.
+    let lib = fs::read_to_string(Path::new(&rep.worktree).join("src/lib.rs")).unwrap();
+    assert_eq!(lib, "pub fn ok() {}\npub fn login() {}\n");
+    assert!(rep.ticked && rep.commit.is_some());
+}
+
+// ── parallel [P] tasks in lanes ─────────────────────────────────────
+
+/// Answers each lane from its own script: a request goes to the fake whose
+/// key occurs in it (the task titles differ).
+#[derive(Debug)]
+struct Router(Vec<(&'static str, Arc<FakeProvider>)>);
+
+#[agentplane::prelude::async_trait]
+impl ModelProvider for Router {
+    async fn complete(
+        &self,
+        request: agentplane::model::Request<'_>,
+    ) -> Result<agentplane::model::Completion, agentplane::model::ModelError> {
+        let text = format!("{request:?}");
+        let fake = self
+            .0
+            .iter()
+            .find(|(k, _)| text.contains(k))
+            .map(|(_, f)| Arc::clone(f))
+            .unwrap_or_else(|| panic!("no script for this request"));
+        fake.complete(request).await
+    }
+}
+
+const PARALLEL_TASKS: &str = "# Tasks\n\n## Phase 1: Setup\n\n- [x] T001 Create the crate\n\n## Phase 2: User Story 1 - Login\n\n- [ ] T002 [P] [US1] Add alpha in src/alpha.rs\n- [ ] T003 [P] [US1] Add beta in src/beta.rs\n";
+
+fn lanes(
+    alpha: impl Fn(&FakeProvider),
+    beta: impl Fn(&FakeProvider),
+) -> (tempfile::TempDir, Arc<dyn ModelProvider>) {
+    let r = repo_with("", &[("specs/001-graph/tasks.md", PARALLEL_TASKS)]);
+    let (a, b) = (FakeProvider::new(), FakeProvider::new());
+    alpha(&a);
+    beta(&b);
+    let d: Arc<dyn ModelProvider> = Arc::new(Router(vec![("alpha", a), ("beta", b)]));
+    (r, d)
+}
+
+fn write(f: &FakeProvider, path: &str, content: &str) {
+    f.will_call_tool(
+        "w",
+        "write_file",
+        json!({ "path": path, "content": content }),
+    );
+    f.will_structure(done("wrote it"));
+}
+
+#[test]
+fn parallel_tasks_run_in_lanes_and_merge_with_both_ticks() {
+    let (r, d) = lanes(
+        |f| write(f, "src/alpha.rs", "pub fn alpha() {}\n"),
+        |f| write(f, "src/beta.rs", "pub fn beta() {}\n"),
+    );
+    let state = tempfile::tempdir().unwrap();
+    let options = speccoder_runtime::RunOptions {
+        parallel: 2,
+        ..speccoder_runtime::RunOptions::default()
+    };
+    let res = run_feature_with(r.path(), None, state.path(), &d, None, &options);
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let fr = feature(&res);
+    assert_eq!(fr.attempts.len(), 2);
+    assert!(
+        fr.parallel
+            .iter()
+            .any(|l| l.contains("T002, T003 ran in parallel")),
+        "{:?}",
+        fr.parallel
+    );
+    let wt = Path::new(&fr.attempts[0].worktree);
+    // The lanes' worktrees are gone; the feature's holds both changes.
+    let feature_wt = wt.parent().unwrap().join("001-graph");
+    assert!(
+        !wt.ends_with("001-graph") && !wt.exists(),
+        "lane left behind: {}",
+        wt.display()
+    );
+    let tasks = fs::read_to_string(feature_wt.join("specs/001-graph/tasks.md")).unwrap();
+    assert!(
+        tasks.contains("- [X] T002") && tasks.contains("- [X] T003"),
+        "{tasks}"
+    );
+    assert!(feature_wt.join("src/alpha.rs").exists() && feature_wt.join("src/beta.rs").exists());
+    let log = git_out(&feature_wt, &["log", "--format=%s"]);
+    assert_eq!(
+        log.lines()
+            .filter(|l| l.starts_with("speccoder: T00"))
+            .count(),
+        2,
+        "{log}"
+    );
+}
+
+#[test]
+fn a_lane_that_conflicts_runs_again_on_its_own() {
+    let (r, d) = lanes(
+        |f| write(f, "src/shared.rs", "pub fn alpha() {}\n"),
+        |f| {
+            write(f, "src/shared.rs", "pub fn beta() {}\n");
+            // Its second run, alone, on top of alpha's.
+            write(f, "src/beta.rs", "pub fn beta() {}\n");
+        },
+    );
+    let state = tempfile::tempdir().unwrap();
+    let options = speccoder_runtime::RunOptions {
+        parallel: 2,
+        ..speccoder_runtime::RunOptions::default()
+    };
+    let res = run_feature_with(r.path(), None, state.path(), &d, None, &options);
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let fr = feature(&res);
+    assert!(
+        fr.parallel
+            .iter()
+            .any(|l| l.contains("T003: not merged (conflicts in src/shared.rs)")),
+        "{:?}",
+        fr.parallel
+    );
+    assert_eq!(fr.attempts.len(), 3);
+    assert_eq!(fr.stop, "feature done: every task is ticked");
+}
+
+#[test]
+fn lanes_that_fail_together_are_undone_and_run_one_at_a_time() {
+    let r = repo_with(
+        "[budget]\nmax_attempts = 1\n[checks.not-both]\nargv = [\"sh\", \"-c\", \"! (test -f src/alpha.rs && test -f src/beta.rs)\"]\n",
+        &[("specs/001-graph/tasks.md", PARALLEL_TASKS)],
+    );
+    let (a, b) = (FakeProvider::new(), FakeProvider::new());
+    for _ in 0..2 {
+        write(&a, "src/alpha.rs", "pub fn alpha() {}\n");
+        write(&b, "src/beta.rs", "pub fn beta() {}\n");
+    }
+    let d: Arc<dyn ModelProvider> = Arc::new(Router(vec![("alpha", a), ("beta", b)]));
+    let state = tempfile::tempdir().unwrap();
+    let options = speccoder_runtime::RunOptions {
+        parallel: 2,
+        ..speccoder_runtime::RunOptions::default()
+    };
+    let res = run_feature_with(r.path(), None, state.path(), &d, None, &options);
+    let fr = feature(&res);
+    assert!(
+        fr.parallel
+            .iter()
+            .any(|l| l.contains("passed alone but not together")),
+        "{:?}",
+        fr.parallel
+    );
+    // One at a time: T002 passes, T003 then fails the check honestly.
+    assert_eq!(
+        res.status(),
+        CommandStatus::VerificationFailed,
+        "{}",
+        res.message()
+    );
+    assert!(fr.stop.starts_with("T003"), "{}", fr.stop);
+    assert_eq!(fr.attempts.len(), 4);
+}
+
+#[test]
+fn files_the_checks_generate_do_not_empty_a_lane_merge() {
+    // Like `cargo test` writing Cargo.lock: every check run leaves gen.lock.
+    let r = repo_with(
+        "[checks.gen]\nargv = [\"sh\", \"-c\", \"echo v1 > gen.lock\"]\n",
+        &[("specs/001-graph/tasks.md", PARALLEL_TASKS)],
+    );
+    let (a, b) = (FakeProvider::new(), FakeProvider::new());
+    write(&a, "src/alpha.rs", "pub fn alpha() {}\n");
+    write(&b, "src/beta.rs", "pub fn beta() {}\n");
+    let d: Arc<dyn ModelProvider> = Arc::new(Router(vec![("alpha", a), ("beta", b)]));
+    let state = tempfile::tempdir().unwrap();
+    let options = speccoder_runtime::RunOptions {
+        parallel: 2,
+        ..speccoder_runtime::RunOptions::default()
+    };
+    let res = run_feature_with(r.path(), None, state.path(), &d, None, &options);
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let fr = feature(&res);
+    let feature_wt = Path::new(&fr.attempts[0].worktree)
+        .parent()
+        .unwrap()
+        .join("001-graph");
+    // Every ticked task's work is on the branch.
+    for f in ["src/alpha.rs", "src/beta.rs"] {
+        let shown = Command::new("git")
+            .args(["show", &format!("HEAD:{f}")])
+            .current_dir(&feature_wt)
+            .output()
+            .unwrap();
+        assert!(
+            shown.status.success(),
+            "{f} missing on the branch: {:?}",
+            fr.parallel
+        );
+    }
+}
+
+#[test]
+fn a_spec_fixed_in_the_checkout_reaches_the_worktree() {
+    let r = two_task_repo();
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    let (id, args) = edit("T002", "pub fn ok() {}\npub fn login() {}");
+    f.will_call_tool(&id, "edit_file", args);
+    f.will_structure(done("login"));
+    let first = run(r.path(), state.path(), "T002", d);
+    assert_eq!(first.status(), CommandStatus::Ok, "{}", first.message());
+    // The person clarifies the spec and commits it.
+    fs::write(
+        r.path().join("specs/001-graph/spec.md"),
+        "# Spec\n\n### User Story 1 - Login\n\nUsers log in. Logout clears the session.\n",
+    )
+    .unwrap();
+    git(r.path(), &["commit", "-qam", "clarify logout"]);
+    let (f, d) = fake();
+    let (id, args) = edit("T003", "pub fn ok() {}\npub fn logout() {}");
+    f.will_call_tool(&id, "edit_file", args);
+    f.will_structure(done("logout"));
+    let second = run(r.path(), state.path(), "T003", d);
+    assert_eq!(second.status(), CommandStatus::Ok, "{}", second.message());
+    let wt = Path::new(&report(&second).worktree);
+    let spec = fs::read_to_string(wt.join("specs/001-graph/spec.md")).unwrap();
+    assert!(spec.contains("Logout clears the session"), "{spec}");
+    // T002's tick survived the merge.
+    let tasks = fs::read_to_string(wt.join("specs/001-graph/tasks.md")).unwrap();
+    assert!(
+        tasks.contains("- [X] T002") && tasks.contains("- [X] T003"),
+        "{tasks}"
+    );
+}
+
+// ── pull request handoff ────────────────────────────────────────────
+
+#[test]
+fn pr_is_a_dry_run_until_confirmed_then_a_draft_with_the_evidence() {
+    use speccoder_runtime::handoff::{PrOptions, pr};
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    login_attempt(&f);
+    let res = run(r.path(), state.path(), "T005", d);
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let remote = tempfile::tempdir().unwrap();
+    git(remote.path(), &["init", "-q", "--bare"]);
+    git(
+        r.path(),
+        &[
+            "remote",
+            "add",
+            "origin",
+            &remote.path().display().to_string(),
+        ],
+    );
+    // A stand-in for `gh` that records its arguments.
+    let bin = tempfile::tempdir().unwrap();
+    let gh = bin.path().join("gh");
+    fs::write(
+        &gh,
+        format!(
+            "#!/bin/sh\necho \"$@\" > '{}/args'\necho https://example.invalid/pr/1\n",
+            bin.path().display()
+        ),
+    )
+    .unwrap();
+    assert!(
+        Command::new("chmod")
+            .arg("+x")
+            .arg(&gh)
+            .status()
+            .unwrap()
+            .success()
+    );
+    let gh = gh.display().to_string();
+    let mut o = PrOptions {
+        remote: "origin",
+        base: Some("main"),
+        gh: &gh,
+        open: false,
+    };
+
+    let dry = pr(r.path(), None, &o);
+    assert_eq!(dry.status(), CommandStatus::Ok, "{}", dry.message());
+    let Some(CommandData::Pr(p)) = dry.data() else {
+        panic!("{}", dry.message())
+    };
+    assert!(!p.opened && p.branch == "speccoder/001-graph");
+    assert!(
+        p.body.contains("| T005 ") && p.body.contains("regression only"),
+        "{}",
+        p.body
+    );
+    assert!(p.body.contains("speccoder never merges"));
+    assert!(
+        git_out(remote.path(), &["branch", "--list"])
+            .trim()
+            .is_empty(),
+        "pushed in a dry run"
+    );
+
+    o.open = true;
+    let opened = pr(r.path(), None, &o);
+    assert_eq!(opened.status(), CommandStatus::Ok, "{}", opened.message());
+    let Some(CommandData::Pr(p)) = opened.data() else {
+        panic!()
+    };
+    assert_eq!(p.url.as_deref(), Some("https://example.invalid/pr/1"));
+    assert!(git_out(remote.path(), &["branch", "--list"]).contains("speccoder/001-graph"));
+    let args = fs::read_to_string(bin.path().join("args")).unwrap();
+    assert!(
+        args.starts_with("pr create --draft --base main --head speccoder/001-graph"),
+        "{args}"
+    );
+}
+
+// ── provenance and replay verdicts ─────────────────────────────────
+
+fn admitted(repo: &Path, state: &Path, run_id: &str) -> speccoder_runtime::substrate::Admitted {
+    let plane = speccoder_runtime::worktree::project_state_dir(state, repo);
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    rt.block_on(speccoder_runtime::substrate::admitted(&plane, run_id))
+        .unwrap()
+        .unwrap()
+}
+
+#[test]
+fn a_retry_input_names_the_verifier_as_the_source_of_its_check_output() {
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    break_lib(&f, "b1");
+    f.will_call_tool(
+        "ok",
+        "write_file",
+        json!({ "path": "src/lib.rs", "content": "pub fn ok() {}\npub fn login() {}\n" }),
+    );
+    f.will_structure(done("fixed"));
+    let res = run(r.path(), state.path(), "T005", d);
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let rep = report(&res);
+    assert_eq!(rep.earlier.len(), 1);
+    // The first attempt read nothing untrusted; the retry quotes the checks.
+    let first = admitted(r.path(), state.path(), &rep.earlier[0].run_id);
+    assert!(!first.label.is_untrusted(), "{:?}", first.label);
+    let retry = admitted(r.path(), state.path(), &rep.run_id);
+    assert!(retry.label.is_untrusted());
+    // by part, as admitted — the spec trusted, the digest the verifier's.
+    assert!(
+        !retry.fields["/bundle"].is_untrusted(),
+        "{:?}",
+        retry.fields
+    );
+    assert!(!retry.fields["/settings/nudges"].is_untrusted());
+    let digest = &retry.fields["/digest"];
+    assert!(
+        digest
+            .provenance
+            .iter()
+            .any(|s| s.to_string() == "speccoder://verifier"),
+        "{digest:?}"
+    );
+}
+
+#[test]
+fn failed_and_blocked_runs_replay_as_reproduced() {
+    // Blocked: the model stops honestly.
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_call_tool("b", "report_blocked", json!({ "reason": "contradiction" }));
+    let blocked = run(r.path(), state.path(), "T005", d);
+    let id = report(&blocked).run_id.clone();
+    let replayed = speccoder_runtime::replay_with(r.path(), &id, state.path());
+    assert_eq!(
+        replayed.status(),
+        CommandStatus::Ok,
+        "{}",
+        replayed.message()
+    );
+    assert!(
+        replayed.message().starts_with("reproduced"),
+        "{}",
+        replayed.message()
+    );
+
+    // Failed: the model's answer is unusable, so the run itself fails.
+    let r = repo("[budget]\nmax_attempts = 1\n");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_structure(json!({ "not": "a report" }));
+    let failed = run(r.path(), state.path(), "T005", d);
+    let rep = report(&failed);
+    assert_eq!(rep.attempt_status, "failed", "{}", failed.message());
+    let replayed = speccoder_runtime::replay_with(r.path(), &rep.run_id, state.path());
+    assert_eq!(
+        replayed.status(),
+        CommandStatus::Ok,
+        "{}",
+        replayed.message()
+    );
+}
+
+/// Approves after thinking for longer than three leases.
+#[derive(Debug)]
+struct Slow;
+
+impl speccoder_runtime::approvals::Approver for Slow {
+    fn ask(
+        &self,
+        _: &speccoder_runtime::approvals::Request,
+    ) -> speccoder_runtime::approvals::Answer {
+        std::thread::sleep(std::time::Duration::from_secs(13));
+        speccoder_runtime::approvals::Answer {
+            by: None,
+            approved: true,
+            for_task: false,
+            reason: None,
+        }
+    }
+}
+
+// A long wait completes in the same run. In one process nobody can take a
+// run over (the journal is locked to it), so this guards the outcome, not
+// the mechanism: the prompt waits off the runtime's thread because
+// agentplane's `Effect::perform` must not block — a blocked thread starves
+// lease renewal and every other task on it (MCP servers, progress).
+#[test]
+fn a_person_who_takes_their_time_keeps_the_run() {
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    // `touch` needs approval; the person answers after 13 s (the lease is 4 s).
+    f.will_call_tool(
+        "t",
+        "run_command",
+        json!({ "argv": ["touch", "approved.txt"] }),
+    );
+    f.will_call_tool("e", "edit_file", json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\npub fn login() {}" }));
+    f.will_structure(done("added login"));
+    let res = speccoder_runtime::run_with_approver(
+        r.path(),
+        None,
+        "T005",
+        state.path(),
+        d,
+        None,
+        Arc::new(Slow),
+    );
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let rep = report(&res);
+    assert_eq!(
+        rep.tool_calls[0]["approved_by"], "person",
+        "{:?}",
+        rep.tool_calls
+    );
+    assert!(Path::new(&rep.worktree).join("approved.txt").exists());
+    assert!(rep.earlier.is_empty(), "the run was not taken over");
+}
