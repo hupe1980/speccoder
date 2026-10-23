@@ -474,6 +474,9 @@ pub(crate) fn run_task(
     {
         if !run_config.held_out {
             a.report["held_out"] = serde_json::json!({ "state": "off" });
+        } else if a.argv.is_none() {
+            a.report["held_out"] =
+                serde_json::json!({ "state": "absent", "reason": "no_visible_tests" });
         } else if !a.red {
             a.report["held_out"] = serde_json::json!({ "state": "absent", "reason": "not_red" });
         } else if scenarios.is_empty() {
@@ -540,6 +543,35 @@ pub(crate) fn run_task(
             )),
             Some(began),
         ),
+    }
+
+    // The author call itself failed: without its tests the task could only
+    // be ticked on the regression checks, which would look like "the spec
+    // has no examples". A person decides; nothing was attempted.
+    if let Some(why) = acceptance
+        .as_ref()
+        .and_then(|a| a.generation_failed.clone())
+    {
+        let reason = format!(
+            "the acceptance tests could not be written ({why}); nothing was attempted — run again once the model answers, or set [acceptance] generate = false to rely on the checks alone"
+        );
+        let _ = worktree::restore(&wt_root, &tmp, &start);
+        let report = RunReport {
+            reason: Some(reason.clone()),
+            acceptance: acceptance.as_ref().map(|a| a.report.clone()),
+            set_aside,
+            notices: notices.clone(),
+            ..bare_report(&feature_name, task, &wt_path, "acceptance_failed")
+        };
+        live.event(&finished_event(
+            task,
+            &report,
+            "acceptance_failed",
+            false,
+            redact(&reason, secret),
+        ));
+        return CommandResult::new("run", CommandStatus::NeedsHuman, &redact(&reason, secret))
+            .with_data(CommandData::Run(Box::new(report)));
     }
 
     if demand_red && !acceptance.as_ref().is_some_and(|a| a.red) {

@@ -44,6 +44,8 @@ Acceptance tests are evidence only if they failed before the task's work existed
 | `assertion` | A collected test failed on an assertion |
 | `absent` | The tests could not build or import only because what the task adds does not exist yet (rustc `E0425`, Python `ImportError`, TypeScript `TS2305`, Go `undefined:`, …) — the usual start of a task that adds a function |
 
+If the call that writes the acceptance tests fails — the provider refuses it (no credits, a rejected key) or the run breaks — nothing is attempted: the task stops for you instead of being judged on the regression checks alone, which would look like a spec without examples.
+
 Anything else is **not demonstrated**: another build or syntax error, a collection error, a timeout, no tests collected, or output speccoder does not recognise. The task can then be at most `regression_only`, and the report quotes the first lines of the error. Red is confirmed by a second run; red once and not again is `flaky`, not red.
 
 A check that fails and then passes when run again is marked `flaky`. It does not fail the task, but a flaky task-specific check is never evidence for `verified`.
@@ -60,7 +62,7 @@ What can happen to a held-out test, and what the report says:
 |---|---|
 | `passed` | every held-out test passed; the commit carries `Held-Out: passed=2/2 manifest=sha256:…` |
 | `failed` | some failed: the attempt failed (`gap on attempt 1: US1-2`) and is retried |
-| `absent` | none was kept — not generated, or every file discarded (`not_red`, `unknown_scenario`, `path`, `command`, `limit`, `collision`); the commit says `Held-Out: absent=<reason>` and the verdict rests on the visible tests |
+| `absent` | none was kept — not generated, no visible tests to vary (`no_visible_tests`), or every file discarded (`not_red`, `unknown_scenario`, `path`, `command`, `limit`, `collision`); the commit says `Held-Out: absent=<reason>` and the verdict rests on the visible tests |
 | `tampered`, `leak_suspected` | the stored set changed, or the attempt contains a literal only the held-out tests hold: stopped for a person, saved, not ticked |
 
 The last task of a story with two or more scenarios also gets a composition test that exercises them together. When a feature run ends with every task ticked, its held-out sets are published under `refs/speccoder/held-out/<feature>` — each manifest hashes to its task's `Held-Out:` trailer — so anyone can check what judged each task. speccoder never pushes that ref itself.

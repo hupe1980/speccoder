@@ -35,6 +35,10 @@ pub(crate) struct PreparedAcceptance {
     /// attempt reuses it, never re-authors it.
     #[serde(default)]
     pub(crate) held_out: Option<String>,
+    /// Why the author call itself failed (the provider refused, the run
+    /// failed) — not "the spec has no examples": the task stops for a person.
+    #[serde(default)]
+    pub(crate) generation_failed: Option<String>,
 }
 
 pub(crate) const MANIFESTS: &[&str] = &[
@@ -56,7 +60,12 @@ pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance 
             red: false,
             red_class: None,
             held_out: None,
+            generation_failed: None,
         }
+    };
+    let failed = |why: String, report: serde_json::Value| PreparedAcceptance {
+        generation_failed: Some(why.clone()),
+        ..skipped(why, report)
     };
 
     let files: Vec<String> = worktree::checkpoint(a.worktree, a.tmp)
@@ -78,7 +87,7 @@ pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance 
     let outcome = a.rt.block_on(a.plane.acceptance(a.feature, a.task, input));
     let outcome = match outcome {
         Ok(o) => o,
-        Err(e) => return skipped(format!("generation failed: {}", e.0), json!({})),
+        Err(e) => return failed(format!("generation failed: {}", e.0), json!({})),
     };
     let output = outcome
         .output
@@ -88,10 +97,12 @@ pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance 
     let answer = output["answer"].clone();
     let base = json!({ "run_id": outcome.run_id.to_string(), "usage": output["usage"], "notes": answer["notes"] });
     if !matches!(outcome.status, agentplane::prelude::RunStatus::Succeeded) || answer.is_null() {
-        return skipped(
-            format!("generation did not succeed: {}", outcome.status.as_str()),
-            base,
+        let status = format!("{:?}", outcome.status);
+        let why = substrate::provider_refusal(&status).map_or_else(
+            || format!("generation did not succeed: {}", outcome.status.as_str()),
+            |r| format!("the model provider refused the request: {r}"),
         );
+        return failed(why, base);
     }
 
     // Validate: new test files only, a command the policy allows.
@@ -175,6 +186,7 @@ pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance 
         red,
         red_class: Some(class),
         held_out: None,
+        generation_failed: None,
     }
 }
 

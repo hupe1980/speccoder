@@ -254,3 +254,25 @@ fn repeated_rounds_run_every_case_again_and_keep_them_apart() {
     assert!(keep.path().join("round-1/impossible-add/repo").exists());
     assert!(keep.path().join("round-2/impossible-add/repo").exists());
 }
+
+#[test]
+fn an_account_the_provider_refuses_stops_the_suite() {
+    let fake = FakeProvider::new();
+    fake.will_fail(agentplane::model::ModelError::Refused {
+        model: agentplane::model::ModelId::new("openai", "gpt-5.4-mini"),
+        detail: "credit_balance_exhausted: You have no credits remaining.".to_owned(),
+    });
+    let driver: Arc<dyn ModelProvider> = fake.clone();
+    let r = run_suite(&suite(), None, &driver, None, None, 3);
+    assert_eq!(r.status(), CommandStatus::RunFailed, "{}", r.message());
+    assert!(
+        r.message().starts_with("stopped after 1 case(s)"),
+        "{}",
+        r.message()
+    );
+    assert!(r.message().contains("credit_balance_exhausted"));
+    let Some(CommandData::Eval(e)) = r.data() else {
+        panic!("{}", r.message())
+    };
+    assert_eq!(e.cases.len(), 1, "the other cases were not run");
+}

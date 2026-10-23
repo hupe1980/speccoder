@@ -344,3 +344,34 @@ fn a_finished_feature_publishes_its_held_out_sets() {
         "{body}"
     );
 }
+
+fn no_credits() -> agentplane::model::ModelError {
+    agentplane::model::ModelError::Refused {
+        model: agentplane::model::ModelId::new("openai", "gpt-5.4-mini"),
+        detail: "credit_balance_exhausted: You have no credits remaining.".to_owned(),
+    }
+}
+
+#[test]
+fn a_refused_author_call_stops_the_task_instead_of_ticking_it() {
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_fail(no_credits());
+    let res = run(r.path(), state.path(), d);
+    assert_eq!(res.status(), CommandStatus::NeedsHuman, "{}", res.message());
+    assert!(
+        res.message()
+            .contains("the acceptance tests could not be written")
+            && res.message().contains("credit_balance_exhausted"),
+        "{}",
+        res.message()
+    );
+    let rep = report(&res);
+    assert!(!rep.ticked && rep.verdict.is_none());
+    assert_eq!(rep.attempt_status, "acceptance_failed");
+    assert!(
+        f.asked().iter().all(|a| a.tools.is_empty()),
+        "no attempt was made"
+    );
+}

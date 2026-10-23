@@ -62,6 +62,10 @@ ticks a task only on evidence the model cannot produce or edit.
   published under `refs/speccoder/held-out/<feature>`; `eval` reports the
   gap and supports `expect = "reject"` (a tailoring case, `tailor-slugify`,
   is caught).
+- A failed call to write the acceptance tests (the provider refused it, the
+  run broke) stops the task for a person instead of letting it be ticked on
+  the regression checks alone; `eval` stops the suite at the first refusal
+  that concerns the account (no credits, quota, a rejected key).
 - `speccoder converge`: a finished feature assessed against its spec; gaps
   become new tasks, run with `run --converge`.
 - `[executor] kind = "claude" | "codex" | "command"`: Claude Code, Codex or

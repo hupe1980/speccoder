@@ -201,6 +201,39 @@ fn open_or_replace(dir: &Path) -> Result<(Arc<RedbStore>, Option<std::path::Path
     }
 }
 
+/// What a model provider refused, from a run's failure: the text after
+/// agentplane's "refused the request:" — a refusal, which no retry changes.
+#[must_use]
+pub fn provider_refusal(failure: &str) -> Option<String> {
+    let start = failure.find("refused the request: ")? + "refused the request: ".len();
+    let rest = &failure[start..];
+    let end = rest
+        .find("); ")
+        .or_else(|| rest.rfind(')'))
+        .unwrap_or(rest.len());
+    Some(rest[..end].trim_end_matches(['"', ')']).trim().to_owned())
+}
+
+/// Whether a provider refusal concerns the account (no credits, quota,
+/// a key it does not accept) rather than one request: every later call
+/// would be refused too.
+#[must_use]
+pub fn account_refusal(refusal: &str) -> bool {
+    let r = refusal.to_lowercase();
+    [
+        "credit",
+        "billing",
+        "quota",
+        "insufficient",
+        "api key",
+        "api_key",
+        "authentication",
+        "unauthorized",
+    ]
+    .iter()
+    .any(|w| r.contains(w))
+}
+
 /// The runtime every plane shares: the journal, the agent with speccoder's
 /// skills under its manifest, and the lease. What answers model and tool
 /// calls is registered by the caller — live drivers or replay-only ones.
@@ -585,6 +618,21 @@ impl agentplane::tools::ToolClient for Unbound {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_provider_refusal_is_read_from_the_run_failure() {
+        let failure = "Failed(\"effect ek:21 was refused on attempt 1, and the refusal is an answer rather than a fault (effect refused: 'openai/gpt-5.4-mini' refused the request: credit_balance_exhausted: You have no credits remaining. Add credits at https://platform.openai.com/settings/organization/billing/.); no retry would change it\")";
+        let r = provider_refusal(failure).unwrap();
+        assert_eq!(
+            r,
+            "credit_balance_exhausted: You have no credits remaining. Add credits at https://platform.openai.com/settings/organization/billing/."
+        );
+        assert!(account_refusal(&r));
+        assert!(!account_refusal(
+            "the continuation was not an Anthropic assistant-content array"
+        ));
+        assert_eq!(provider_refusal("Failed(\"timeout\")"), None);
+    }
 
     #[test]
     fn an_unreadable_journal_is_moved_aside_and_a_locked_one_is_an_error() {

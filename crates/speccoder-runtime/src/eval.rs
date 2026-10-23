@@ -160,7 +160,10 @@ pub fn run_suite_as(
 
     let repeat = repeat.max(1);
     let mut results: Vec<EvalCase> = Vec::new();
-    for round in 1..=repeat {
+    // An account the provider refuses (no credits, a rejected key) refuses
+    // every later case too: the suite stops instead of running them all.
+    let mut stopped: Option<String> = None;
+    'rounds: for round in 1..=repeat {
         let round_keep = keep.map(|k| {
             if repeat > 1 {
                 k.join(format!("round-{round}"))
@@ -171,7 +174,13 @@ pub fn run_suite_as(
         for p in &paths {
             let mut case = run_case(p, &suite, provider, secret, round_keep.as_deref());
             case.round = round;
+            let refusal = crate::substrate::provider_refusal(&case.outcome)
+                .filter(|r| crate::substrate::account_refusal(r));
             results.push(case);
+            if let Some(r) = refusal {
+                stopped = Some(r);
+                break 'rounds;
+            }
         }
     }
     let summary = summarise(&results);
@@ -194,10 +203,16 @@ pub fn run_suite_as(
             .precision
             .map_or("n/a".to_owned(), |p| format!("{p:.2}")),
     );
-    let status = if failed {
-        CommandStatus::EvalFailed
-    } else {
-        CommandStatus::Ok
+    let (status, message) = match &stopped {
+        Some(r) => (
+            CommandStatus::RunFailed,
+            format!(
+                "stopped after {} case(s): the model provider refused the request: {r}; the remaining cases were not run — {message}",
+                results.len()
+            ),
+        ),
+        None if failed => (CommandStatus::EvalFailed, message),
+        None => (CommandStatus::Ok, message),
     };
     CommandResult::new("eval", status, &message).with_data(CommandData::Eval(Box::new(
         EvalReport {
