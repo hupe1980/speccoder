@@ -1,6 +1,7 @@
 //! `speccoder.task.propose`: one governed model call that proposes how to do
 //! a task. The answer is recorded, never executed.
 
+use crate::format::{Adapter, Wording};
 use agentplane::prelude::*;
 use serde_json::{Value, json};
 
@@ -11,12 +12,17 @@ pub const CAPABILITY: &str = "speccoder.task.propose";
 
 /// What speccoder tells every model call first. Stable across tasks, so it
 /// sits inside the cached prefix.
-pub const POLICY: &str = "You are the planning step of speccoder, a coding agent that executes \
-GitHub Spec Kit tasks. Propose how to implement exactly one task. You cannot run tools in this \
+pub fn policy(w: &Wording) -> String {
+    format!(
+        "You are the planning step of speccoder, a coding agent that executes \
+{product} tasks. Propose how to implement exactly one task. You cannot run tools in this \
 step and nothing you write is executed: a deterministic engine decides what happens, and \
 verification evidence — not your claims — decides when a task is done. Stay inside the task's \
 scope; name the files you expect to touch and the checks that would show the task works; say \
-what is unclear or risky instead of guessing. Answer only in the requested structure.";
+what is unclear or risky instead of guessing. Answer only in the requested structure.",
+        product = w.product
+    )
+}
 
 /// The proposal's JSON schema.
 #[must_use]
@@ -49,7 +55,13 @@ fn breakpoint(ttl: CacheTtl) -> Value {
 /// project), then the plan (identical for the feature), then the task. A
 /// breakpoint closes each stable part.
 #[must_use]
-pub fn layout(bundle: &Value, ttl: CacheTtl, style: PromptStyle, policy: &str) -> Value {
+pub fn layout(
+    bundle: &Value,
+    ttl: CacheTtl,
+    style: PromptStyle,
+    policy: &str,
+    format: &dyn Adapter,
+) -> Value {
     let text = |key: &str| bundle[key].as_str().unwrap_or_default().to_owned();
     let task = &bundle["task"];
     let mut task_text = format!(
@@ -82,20 +94,19 @@ pub fn layout(bundle: &Value, ttl: CacheTtl, style: PromptStyle, policy: &str) -
         }
     }
 
-    let constitution = format!(
-        "# Project constitution\n\n{}",
-        or_none(&text("constitution"))
-    );
+    let w = format.wording();
+    let constitution = format!("# {}\n\n{}", w.constitution, or_none(&text("constitution")));
     let plan = format!(
-        "# Feature plan ({})\n\n{}",
+        "# {} ({})\n\n{}",
+        w.plan,
         text("feature"),
         or_none(&text("plan"))
     );
     let story = text("story");
-    let heading = if crate::context::is_convergence(task["phase"].as_str().unwrap_or_default()) {
-        "# Specification (this task closes a gap found against it)"
+    let heading = if format.is_convergence(task["phase"].as_str().unwrap_or_default()) {
+        "# Specification (this task closes a gap found against it)".to_owned()
     } else {
-        "# User story"
+        format!("# {}", format.wording().story)
     };
     let story = (!story.is_empty()).then(|| format!("{heading}\n\n{story}"));
 
@@ -147,6 +158,8 @@ pub struct Propose {
     pub cache_ttl: CacheTtl,
     /// The provider's prompt dialect.
     pub style: PromptStyle,
+    /// The project's spec format.
+    pub format: &'static dyn Adapter,
 }
 
 #[async_trait]
@@ -161,7 +174,8 @@ impl Skill for Propose {
         input: Tainted<Value>,
     ) -> Result<Outcome, SkillError> {
         let (ttl, style) = (self.cache_ttl, self.style);
-        let prompt = input.map(|bundle| layout(&bundle, ttl, style, POLICY));
+        let policy = policy(self.format.wording());
+        let prompt = input.map(|bundle| layout(&bundle, ttl, style, &policy, self.format));
         let completion = cx
             .complete_with(&prompt, |call| call.expecting(schema()))
             .await?;

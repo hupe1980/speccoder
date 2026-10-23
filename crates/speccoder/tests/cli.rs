@@ -8,6 +8,7 @@ use assert_cmd::Command;
 fn speccoder() -> Command {
     let mut cmd = Command::cargo_bin("speccoder").unwrap();
     cmd.env_remove("SPECIFY_FEATURE_DIRECTORY");
+    cmd.env_remove("SPECCODER_FORMAT");
     cmd
 }
 
@@ -439,5 +440,57 @@ fn a_ui_table_in_speccoder_toml_is_refused() {
                     .to_string()
             ),
         "{err}"
+    );
+}
+
+#[test]
+fn a_format_is_chosen_by_flag_or_environment() {
+    for (flag, env) in [(Some("kiro"), None), (None, Some("kiro"))] {
+        let mut cmd = speccoder();
+        if let Some(f) = flag {
+            cmd.args(["--format", f]);
+        }
+        if let Some(e) = env {
+            cmd.env("SPECCODER_FORMAT", e);
+        }
+        let out = cmd
+            .args(["--json", "inspect", &fixture("valid")])
+            .assert()
+            .code(10)
+            .get_output()
+            .clone();
+        let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+        assert_eq!(v["status"], "not_a_project", "{v}");
+        assert!(
+            v["message"]
+                .as_str()
+                .unwrap()
+                .contains("not yet supported by this version of speccoder"),
+            "{v}"
+        );
+    }
+    speccoder()
+        .args(["--format", "speckit", "inspect", &fixture("valid")])
+        .assert()
+        .success();
+    let out = speccoder()
+        .args([
+            "--json",
+            "--format",
+            "openspec",
+            "inspect",
+            &fixture("valid"),
+        ])
+        .assert()
+        .code(10)
+        .get_output()
+        .clone();
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert!(
+        v["message"]
+            .as_str()
+            .unwrap()
+            .starts_with("no OpenSpec project (openspec/)"),
+        "{v}"
     );
 }

@@ -171,12 +171,13 @@ pub(crate) fn merge_lane(
         "-c",
         "commit.gpgsign=false",
     ];
-    let tasks_file = speccoder_speckit::inspect(project, Some(feature))
-        .ok()
+    let format = crate::format::at(project);
+    let tasks_file = format
+        .inspect(project, Some(feature))
         .and_then(|s| s.feature)
         .and_then(|f| f.tasks)
         .map(|t| project.join(t.path))
-        .ok_or("the feature has no tasks.md")?;
+        .ok_or_else(|| format!("the feature has no {}", format.messages().tasks_file))?;
     let tasks_arg = tasks_file.to_string_lossy().into_owned();
     // Untracked files the commit adds were generated here by speccoder's own
     // check runs (a `Cargo.lock`, say); they would stop the cherry-pick.
@@ -228,14 +229,20 @@ pub(crate) fn merge_lane(
     }
     g.run(&["checkout", "HEAD", "--", &tasks_arg])
         .map_err(|e| e.0)?;
-    let line_hash = speccoder_speckit::inspect(project, Some(feature))
-        .ok()
+    let line_hash = format
+        .inspect(project, Some(feature))
         .and_then(|s| s.feature)
         .and_then(|f| f.tasks)
         .and_then(|t| t.tasks.into_iter().find(|t| t.id == task))
         .map(|t| t.line_hash)
-        .ok_or_else(|| format!("{task} is not in the feature's tasks.md"))?;
-    speccoder_speckit::mark_task_complete(&tasks_file, task, &line_hash)
+        .ok_or_else(|| {
+            format!(
+                "{task} is not in the feature's {}",
+                format.messages().tasks_file
+            )
+        })?;
+    format
+        .tick(&tasks_file, task, &line_hash)
         .map_err(|e| e.to_string())?;
     let mut add = ident.to_vec();
     add.extend(["add", "-A"]);

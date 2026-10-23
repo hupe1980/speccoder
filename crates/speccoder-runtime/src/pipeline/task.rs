@@ -8,8 +8,8 @@ use speccoder_core::{CommandData, CommandResult, CommandStatus};
 
 use crate::pipeline::*;
 use crate::{
-    approvals, attempts, context, external, git, integrity, mcp, mutation, progress, resume,
-    sandbox, substrate, tools, verify, worktree,
+    approvals, attempts, external, git, integrity, mcp, mutation, progress, resume, sandbox,
+    substrate, tools, verify, worktree,
 };
 
 /// `speccoder run`: one attempt at a ready task in its worktree, judged by
@@ -175,14 +175,12 @@ pub(crate) fn run_task(
     }
 
     // 3. Spec, checks and policy as committed in the worktree.
-    let snap = match speccoder_speckit::inspect(&project, Some(&feature_name)) {
-        Ok(snap) => snap,
-        Err(_) => {
-            return refuse(
-                CommandStatus::NotAProject,
-                "the worktree has no Spec Kit project".to_owned(),
-            );
-        }
+    let format = crate::format::at(&project);
+    let Some(snap) = format.inspect(&project, Some(&feature_name)) else {
+        return refuse(
+            CommandStatus::NotAProject,
+            format.messages().no_project_in_worktree.to_owned(),
+        );
     };
     // The task must exist and be ready in the worktree, where progress
     // (ticks committed on speccoder/<feature>) lives.
@@ -230,7 +228,7 @@ pub(crate) fn run_task(
         .and_then(|f| f.tasks.as_ref())
         .map(|t| project.join(&t.path));
 
-    let bundle = match context::bundle(&snap, task) {
+    let bundle = match format.bundle(&snap, task) {
         Ok(b) => b,
         Err(_) => {
             return refuse(
@@ -269,7 +267,7 @@ pub(crate) fn run_task(
         Err(e) => return refuse(CommandStatus::ConfigError, format!("speccoder.toml: {e}")),
     };
     let check_argvs = verify::check_argvs(&config_root);
-    let policy = tools::policy::Policy::new(&check_argvs, &run_config.allow);
+    let policy = tools::policy::Policy::new(&check_argvs, &run_config.allow).rules(format.rules());
 
     let wt_root_canonical = std::fs::canonicalize(&wt_root)
         .unwrap_or_else(|_| wt_root.clone())
@@ -400,6 +398,7 @@ pub(crate) fn run_task(
                 progress: Some(Arc::clone(&live)),
                 mcp: connected.clients.clone(),
                 mcp_tools: connected.tools.clone(),
+                format: Some(format),
             },
         )
     }) {
@@ -431,7 +430,7 @@ pub(crate) fn run_task(
 
     // A Convergence task is the converge model's claim that a gap exists;
     // it changes no code until a failing test demonstrates the gap.
-    let demand_red = run_config.acceptance && context::is_convergence(&bundle.task.phase);
+    let demand_red = run_config.acceptance && format.is_convergence(&bundle.task.phase);
     // Where this run started: an attempt that does not pass is undone to here.
     let start = match worktree::checkpoint(&wt_root, &tmp) {
         Ok(c) => c,
@@ -448,7 +447,7 @@ pub(crate) fn run_task(
     {
         // The interrupted attempt's tests, already in the worktree.
         Some(prepared)
-    } else if run_config.acceptance && bundle.story.to_lowercase().contains("acceptance") {
+    } else if run_config.acceptance && format.acceptance_testable(&bundle) {
         stage(&*live, task, Stage::Red, StageState::Started, None, None);
         Some(prepare_acceptance(&AcceptanceSetup {
             rt: &rt,
@@ -613,7 +612,7 @@ pub(crate) fn run_task(
                     .chain(&run_config.allow)
                     .cloned()
                     .collect();
-                let prompt = external::prompt(&bundle_value, digest.as_ref());
+                let prompt = external::prompt_in(format.wording(), &bundle_value, digest.as_ref());
                 let o = external::run(exec, &wt_root, &prompt, &allow, &tmp);
                 (o.run_id, true, o.output)
             } else {
@@ -1046,7 +1045,7 @@ pub(crate) fn run_task(
     if passed && let (Some(t), Some(file)) = (&parsed_task, &tasks_file) {
         let began = std::time::Instant::now();
         stage(&*live, task, Stage::Commit, StageState::Started, None, None);
-        match speccoder_speckit::mark_task_complete(file, task, &t.line_hash) {
+        match format.tick(file, task, &t.line_hash) {
             Ok(()) => report.ticked = true,
             Err(e) => report.integrity.push(format!("tick refused: {e}")),
         }

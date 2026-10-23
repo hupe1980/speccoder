@@ -24,6 +24,13 @@ pub struct ProjectSnapshot {
     pub feature: Option<FeatureSnapshot>,
     /// Problems found while discovering and parsing.
     pub diagnostics: Vec<Diagnostic>,
+    /// The spec format (omitted for Spec Kit, the reference format).
+    #[serde(skip_serializing_if = "crate::spec::FormatKind::is_reference")]
+    pub format: crate::spec::FormatKind,
+    /// What an OpenSpec project adds: its schema, context and the selected
+    /// change's requirements.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub openspec: Option<crate::spec::OpenSpecMeta>,
 }
 
 impl ProjectSnapshot {
@@ -159,6 +166,9 @@ pub enum DependencyMode {
     /// The Format line documents `(depends on …)`: written references are the
     /// complete order within a phase; only phase order is added.
     Declared,
+    /// A chain (OpenSpec): each group waits on every earlier group, each task
+    /// on the one before it in its group; written references are added.
+    Chain,
 }
 
 /// A level-2 heading of `tasks.md`.

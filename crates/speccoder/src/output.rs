@@ -95,6 +95,30 @@ fn human_body(
             writeln!(out, "Run        {}", k.run_id)?;
             writeln!(out, "{}", result.message())
         }
+        (_, Some(CommandData::Archive(a))) => {
+            writeln!(
+                out,
+                "Change     {} ({})",
+                a.change,
+                a.stage.replace('_', " ")
+            )?;
+            if !a.unverified_tasks.is_empty() {
+                writeln!(
+                    out,
+                    "Unverified {} (ticked without a speccoder verdict)",
+                    a.unverified_tasks.join(", ")
+                )?;
+            }
+            if a.stage == "awaiting_confirmation"
+                && let Some(diff) = &a.diff
+            {
+                writeln!(out, "{}", diff.trim_end())?;
+            }
+            if let Some(c) = &a.commit {
+                writeln!(out, "Commit     {c}")?;
+            }
+            writeln!(out, "{}", result.message())
+        }
         (_, Some(CommandData::Init(i))) => {
             for c in &i.checks {
                 writeln!(

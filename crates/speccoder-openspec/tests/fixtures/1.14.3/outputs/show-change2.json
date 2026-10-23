@@ -1,0 +1,82 @@
+{
+  "id": "add-farewell-and-locale",
+  "title": "add-farewell-and-locale",
+  "deltaCount": 3,
+  "deltas": [
+    {
+      "spec": "greeting",
+      "operation": "ADDED",
+      "description": "Add requirement: The system SHALL print `Goodbye, <name>!` when invoked with `--bye`.",
+      "requirement": {
+        "name": "Farewell",
+        "text": "The system SHALL print `Goodbye, <name>!` when invoked with `--bye`.",
+        "scenarios": [
+          {
+            "name": "Farewell with name",
+            "rawText": "- **WHEN** the user runs `greet --bye Ada`\n- **THEN** the output is `Goodbye, Ada!`"
+          }
+        ]
+      },
+      "requirements": [
+        {
+          "name": "Farewell",
+          "text": "The system SHALL print `Goodbye, <name>!` when invoked with `--bye`.",
+          "scenarios": [
+            {
+              "name": "Farewell with name",
+              "rawText": "- **WHEN** the user runs `greet --bye Ada`\n- **THEN** the output is `Goodbye, Ada!`"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "spec": "greeting",
+      "operation": "MODIFIED",
+      "description": "Modify requirement: The system MUST greet the value of `GREET_DEFAULT` when no name argument is given, and \"World\" when it is unset.",
+      "requirement": {
+        "name": "Default greeting",
+        "text": "The system MUST greet the value of `GREET_DEFAULT` when no name argument is given, and \"World\" when it is unset.",
+        "scenarios": [
+          {
+            "name": "No name given",
+            "rawText": "- **WHEN** the user runs `greet` with no arguments and `GREET_DEFAULT` is unset\n- **THEN** the output is `Hello, World!`"
+          },
+          {
+            "name": "Configured default",
+            "rawText": "- **GIVEN** `GREET_DEFAULT=Grace`\n- **WHEN** the user runs `greet` with no arguments\n- **THEN** the output is `Hello, Grace!`"
+          }
+        ]
+      },
+      "requirements": [
+        {
+          "name": "Default greeting",
+          "text": "The system MUST greet the value of `GREET_DEFAULT` when no name argument is given, and \"World\" when it is unset.",
+          "scenarios": [
+            {
+              "name": "No name given",
+              "rawText": "- **WHEN** the user runs `greet` with no arguments and `GREET_DEFAULT` is unset\n- **THEN** the output is `Hello, World!`"
+            },
+            {
+              "name": "Configured default",
+              "rawText": "- **GIVEN** `GREET_DEFAULT=Grace`\n- **WHEN** the user runs `greet` with no arguments\n- **THEN** the output is `Hello, Grace!`"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "spec": "greeting",
+      "operation": "RENAMED",
+      "description": "Rename requirement from \"Greet a named person\" to \"Greet by name\"",
+      "rename": {
+        "from": "Greet a named person",
+        "to": "Greet by name"
+      }
+    }
+  ],
+  "root": {
+    "path": "/tmp/openspec-try/sample",
+    "source": "nearest"
+  }
+}

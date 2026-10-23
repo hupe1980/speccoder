@@ -14,15 +14,15 @@ use speccoder_core::{CommandData, CommandResult, CommandStatus};
 pub const FILES: [(&str, &str); 3] = [
     (
         ".specify/workflows/steps/speccoder/step.yml",
-        include_str!("../assets/workflow/step.yml"),
+        include_str!("../../../assets/workflow/step.yml"),
     ),
     (
         ".specify/workflows/steps/speccoder/__init__.py",
-        include_str!("../assets/workflow/__init__.py"),
+        include_str!("../../../assets/workflow/__init__.py"),
     ),
     (
         ".specify/workflows/speccoder/workflow.yml",
-        include_str!("../assets/workflow/workflow.yml"),
+        include_str!("../../../assets/workflow/workflow.yml"),
     ),
 ];
 

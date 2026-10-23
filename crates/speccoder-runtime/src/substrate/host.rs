@@ -5,6 +5,7 @@
 //! anything else needs approval) and an `ask_person` tool for clarifying
 //! questions. Everything it decides by is in the journaled input.
 
+use crate::format::Wording;
 use agentplane::prelude::*;
 use serde_json::{Value, json};
 
@@ -16,15 +17,21 @@ use crate::tools::policy::Policy;
 pub const CAPABILITY: &str = "speccoder.skill.run";
 
 /// What the host tells the model, before the skill itself.
-pub const POLICY: &str = "You are speccoder, running the Agent Skill below for a person in their \
-GitHub Spec Kit project. Follow the skill's instructions. You can read the project, write Spec \
-Kit artifacts (specs/, .specify/feature.json, .specify/memory/) and run Spec Kit's own scripts \
-under .specify/scripts/ with run_command (argv, no shell). Do not write source code — \
-implementation is a separate step that speccoder runs with tests; other writes need a person's \
-approval. When the skill says to ask the user, call ask_person with one question at a time; if \
-nobody can answer, follow the skill's rule for unanswered questions. Skip steps about extension \
-hooks, other agents' slash commands, committing, branching or pushing unless a Spec Kit script \
-does it. Finish with the requested structured report.";
+pub fn policy(w: &Wording) -> String {
+    format!(
+        "You are speccoder, running the Agent Skill below for a person in their {product} \
+project. Follow the skill's instructions. You can read the project, {authoring} with run_command \
+(argv, no shell). Do not write source code — implementation is a separate step that \
+speccoder runs with tests; other writes need a person's approval. When the skill says to \
+ask the user, call ask_person with one question at a time; if nobody can answer, follow \
+the skill's rule for unanswered questions. Skip steps about extension hooks, other \
+agents' slash commands, committing, branching or pushing unless {authoring_tool} does it. \
+Finish with the requested structured report.",
+        product = w.product,
+        authoring = w.authoring,
+        authoring_tool = w.authoring_tool,
+    )
+}
 
 /// The closing report's schema.
 #[must_use]
@@ -62,6 +69,8 @@ pub struct Host {
     pub approver: Option<std::sync::Arc<dyn Approver>>,
     /// Where live progress goes.
     pub progress: Option<std::sync::Arc<dyn crate::progress::Progress>>,
+    /// The project's spec format.
+    pub format: &'static dyn crate::format::Adapter,
 }
 
 #[async_trait]
@@ -99,12 +108,12 @@ impl Skill for Host {
                 );
                 match style {
                     super::model_config::PromptStyle::OpenAi => json!({
-                        "system": POLICY,
+                        "system": policy(self.format.wording()),
                         "input": [{ "role": "user", "content": [{ "type": "input_text", "text": text }] }],
                     }),
                     super::model_config::PromptStyle::Anthropic
                     | super::model_config::PromptStyle::Chat => json!({
-                        "system": POLICY,
+                        "system": policy(self.format.wording()),
                         "messages": [{ "role": "user", "content": [{ "type": "text", "text": text }] }],
                     }),
                 }
@@ -122,7 +131,7 @@ impl Skill for Host {
             &prompt,
             LoopSpec {
                 tools,
-                policy: Policy::new(&[], &[]).authoring(),
+                policy: Policy::new(&[], &[]).rules(self.format.rules()).authoring(),
                 max_turns: limit("max_turns", 30).max(1),
                 max_tool_calls: limit("max_tool_calls", 100),
                 schema: schema(),

@@ -1,0 +1,54 @@
+{
+  "changeName": "add-greeting-cli",
+  "changeDir": "/tmp/openspec-try/sample/openspec/changes/add-greeting-cli",
+  "schemaName": "spec-driven",
+  "contextFiles": {
+    "proposal": [
+      "/tmp/openspec-try/sample/openspec/changes/add-greeting-cli/proposal.md"
+    ],
+    "specs": [
+      "/tmp/openspec-try/sample/openspec/changes/add-greeting-cli/specs/greeting/spec.md"
+    ],
+    "design": [
+      "/tmp/openspec-try/sample/openspec/changes/add-greeting-cli/design.md"
+    ],
+    "tasks": [
+      "/tmp/openspec-try/sample/openspec/changes/add-greeting-cli/tasks.md"
+    ]
+  },
+  "progress": {
+    "total": 3,
+    "complete": 0,
+    "remaining": 3
+  },
+  "tasks": [
+    {
+      "id": "1",
+      "description": "1.1 Create the `greet` entry point and verify it runs with exit code 0",
+      "done": false,
+      "sourcePath": "/tmp/openspec-try/sample/openspec/changes/add-greeting-cli/tasks.md",
+      "line": 5
+    },
+    {
+      "id": "2",
+      "description": "2.1 Print `Hello, <name>!` for a name argument and verify the \"Name given\" test passes",
+      "done": false,
+      "sourcePath": "/tmp/openspec-try/sample/openspec/changes/add-greeting-cli/tasks.md",
+      "line": 9
+    },
+    {
+      "id": "3",
+      "description": "2.2 Default to \"World\" and verify the \"No name given\" test passes",
+      "done": false,
+      "sourcePath": "/tmp/openspec-try/sample/openspec/changes/add-greeting-cli/tasks.md",
+      "line": 10
+    }
+  ],
+  "taskTrackingConfigured": true,
+  "state": "ready",
+  "instruction": "Read context files, work through pending tasks, mark complete as you go.\nPause if you hit blockers or need clarification.",
+  "root": {
+    "path": "/tmp/openspec-try/sample",
+    "source": "nearest"
+  }
+}

@@ -7,6 +7,7 @@
 //! model's closing report is recorded as its claim — the verdict is computed
 //! afterwards by the verifier, never here.
 
+use crate::format::Wording;
 use agentplane::core::Label;
 use agentplane::model::{ToolDeclaration, Transcript};
 use agentplane::prelude::*;
@@ -27,20 +28,27 @@ pub const CAPABILITY: &str = "speccoder.task.attempt";
 pub const REPORT_BLOCKED: &str = "report_blocked";
 
 /// What speccoder tells the model about an attempt; stable for the project.
-pub const POLICY: &str = "You are speccoder, a coding agent implementing exactly one GitHub Spec \
-Kit task in a git worktree. Use the tools to inspect the code, make the smallest change that \
-completes the task, and run the project's checks with run_command to see whether it works. Stay \
-inside the task's scope. You cannot edit the spec (.specify/, specs/), the checks' configuration \
-or .git; such calls are refused. Some commands need a person's approval and will end the attempt — \
-prefer configured checks. If the task cannot be done as written — it contradicts the spec, needs \
-information or access you lack, or a test is wrong — call report_blocked with the reason instead \
-of working around it. Test files that existed when the attempt started are frozen: add new tests in new files (or \
-next to the code), never by editing those. Never weaken, skip or delete tests to make checks pass. Never return values copied from \
-tests or examples in place of the specified behaviour (a constant where the spec asks for a \
-computed, fetched or current value is a cheat): if the specified behaviour is impossible under \
-the stated constraints, call report_blocked. You are not the \
-judge: when you finish, speccoder runs the checks itself and decides. Finish with the requested \
-structured report.";
+pub fn policy(w: &Wording) -> String {
+    format!(
+        "You are speccoder, a coding agent implementing exactly one {product} task in a git \
+worktree. Use the tools to inspect the code, make the smallest change that completes the \
+task, and run the project's checks with run_command to see whether it works. Stay inside \
+the task's scope. You cannot edit the spec ({intent}), the checks' configuration or \
+.git; such calls are refused. Some commands need a person's approval and will end the \
+attempt — prefer configured checks. If the task cannot be done as written — it \
+contradicts the spec, needs information or access you lack, or a test is wrong — call \
+report_blocked with the reason instead of working around it. Test files that existed \
+when the attempt started are frozen: add new tests in new files (or next to the code), \
+never by editing those. Never weaken, skip or delete tests to make checks pass. Never \
+return values copied from tests or examples in place of the specified behaviour (a \
+constant where the spec asks for a computed, fetched or current value is a cheat): if \
+the specified behaviour is impossible under the stated constraints, call report_blocked. \
+You are not the judge: when you finish, speccoder runs the checks itself and decides. \
+Finish with the requested structured report.",
+        product = w.product,
+        intent = w.intent_paths,
+    )
+}
 
 /// The final report's schema (the model's claim).
 #[must_use]
@@ -229,6 +237,8 @@ pub struct Attempt {
     pub approver: Option<std::sync::Arc<dyn Approver>>,
     /// Where live progress goes; not journaled, `None` in replay.
     pub progress: Option<std::sync::Arc<dyn crate::progress::Progress>>,
+    /// The project's spec format.
+    pub format: &'static dyn crate::format::Adapter,
 }
 
 /// The run input: `{ bundle, settings: { checks, allow, max_turns,
@@ -459,6 +469,7 @@ impl Skill for Attempt {
         let mcp: Vec<crate::mcp::McpTool> =
             serde_json::from_value(settings["mcp"].clone()).unwrap_or_default();
         let policy = Policy::new(&argvs(&settings["checks"]), &argvs(&settings["allow"]))
+            .rules(self.format.rules())
             .with_frozen(frozen)
             .with_decisions(approved, rejected)
             .with_mcp(mcp.iter().map(|t| (t.name.clone(), t.decision.clone())))
@@ -477,7 +488,13 @@ impl Skill for Attempt {
         let prompt = provenance::labelled_prompt(
             {
                 let input = raw;
-                let mut p = layout(&input["bundle"], ttl, style, POLICY);
+                let mut p = layout(
+                    &input["bundle"],
+                    ttl,
+                    style,
+                    &self::policy(self.format.wording()),
+                    self.format,
+                );
                 if !input["digest"].is_null() {
                     let (key, kind) = match style {
                         PromptStyle::OpenAi => ("input", "input_text"),

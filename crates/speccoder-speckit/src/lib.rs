@@ -8,6 +8,7 @@ pub mod checklists;
 mod features;
 mod hash;
 mod metadata;
+pub mod stories;
 pub mod tasks;
 pub mod workspace;
 
@@ -65,6 +66,8 @@ pub fn inspect_with(
         selection,
         feature,
         diagnostics: diags,
+        format: speccoder_core::spec::FormatKind::Speckit,
+        openspec: None,
     })
 }
 

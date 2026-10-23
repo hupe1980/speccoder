@@ -1,0 +1,15 @@
+{
+  "archive": null,
+  "root": {
+    "path": "/tmp/openspec-try/sample",
+    "source": "nearest"
+  },
+  "status": [
+    {
+      "severity": "error",
+      "code": "archive_tasks_incomplete",
+      "message": "3 incomplete task(s) found for change 'add-greeting-cli'.",
+      "fix": "Complete the tasks or rerun with --yes."
+    }
+  ]
+}

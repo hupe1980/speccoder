@@ -148,6 +148,8 @@ pub struct Hooks {
     pub mcp: Vec<(String, Arc<dyn agentplane::tools::ToolClient>)>,
     /// Their tools, granted in the manifest.
     pub mcp_tools: Vec<crate::mcp::McpTool>,
+    /// The project's spec format; the reference format when unset.
+    pub format: Option<&'static dyn crate::format::Adapter>,
 }
 
 /// An open plane.
@@ -208,33 +210,40 @@ fn builder(
     hooks: Hooks,
 ) -> Result<(agentplane::runtime::RuntimeBuilder, Manifest), PlaneError> {
     let manifest = manifest_with(model, &hooks.mcp_tools)?;
+    let format = hooks.format.unwrap_or_else(crate::format::reference);
     let agent = Agent::new(&manifest)
         .skill(Propose {
             cache_ttl: model.cache_ttl,
             style: model.prompt_style(),
+            format,
         })
         .skill(attempt::Attempt {
             style: model.prompt_style(),
             cache_ttl: model.cache_ttl,
             approver: hooks.approver.clone(),
             progress: hooks.progress.clone(),
+            format,
         })
         .skill(host::Host {
             style: model.prompt_style(),
             approver: hooks.approver,
             progress: hooks.progress,
+            format,
         })
         .skill(acceptance::Acceptance {
             style: model.prompt_style(),
             cache_ttl: model.cache_ttl,
+            format,
         })
         .skill(converge::Converge {
             style: model.prompt_style(),
             cache_ttl: model.cache_ttl,
+            format,
         })
         .skill(monitor::Monitor {
             style: model.prompt_style(),
             cache_ttl: model.cache_ttl,
+            format,
         });
     // One process owns the journal (redb locks it): a lease left by an
     // earlier process is a dead owner's, and a short one lets the next run
@@ -514,6 +523,7 @@ pub async fn replay_strict(
     dir: &Path,
     model: &ModelConfig,
     run: &str,
+    format: &'static dyn crate::format::Adapter,
 ) -> Result<Option<agentplane::runtime::Verdict>, PlaneError> {
     let id = agentplane::core::RunId::parse(run)
         .map_err(|_| PlaneError(format!("`{run}` is not a run id")))?;
@@ -535,6 +545,7 @@ pub async fn replay_strict(
         .unwrap_or_default();
     let hooks = Hooks {
         mcp_tools,
+        format: Some(format),
         ..Hooks::default()
     };
     let (builder, manifest) = builder(store, model, hooks)?;

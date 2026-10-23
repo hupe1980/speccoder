@@ -12,6 +12,7 @@ use serde_json::Value;
 
 const CORE: &str = "speccoder-core";
 const SPECKIT: &str = "speccoder-speckit";
+const OPENSPEC: &str = "speccoder-openspec";
 const RUNTIME: &str = "speccoder-runtime";
 const BIN: &str = "speccoder";
 
@@ -109,18 +110,24 @@ fn closure(g: &Graph, krate: &str) -> BTreeSet<String> {
 fn allowed_workspace_deps(krate: &str) -> &'static [&'static str] {
     match krate {
         CORE => &[],
-        SPECKIT => &[CORE],
-        RUNTIME => &[CORE, SPECKIT],
-        BIN => &[CORE, SPECKIT, RUNTIME],
+        SPECKIT | OPENSPEC => &[CORE],
+        RUNTIME => &[CORE, SPECKIT, OPENSPEC],
+        BIN => &[CORE, SPECKIT, OPENSPEC, RUNTIME],
         _ => &[],
     }
 }
 
 fn violations(g: &Graph) -> Vec<String> {
-    let workspace = [CORE, SPECKIT, RUNTIME, BIN];
+    let workspace = [CORE, SPECKIT, OPENSPEC, RUNTIME, BIN];
     let mut errors = Vec::new();
 
-    for (rule, krate) in [(1, CORE), (2, SPECKIT), (3, RUNTIME), (4, BIN)] {
+    for (rule, krate) in [
+        (1, CORE),
+        (2, SPECKIT),
+        (2, OPENSPEC),
+        (3, RUNTIME),
+        (4, BIN),
+    ] {
         let allowed = allowed_workspace_deps(krate);
         for dep in direct(g, krate) {
             if workspace.contains(&dep.as_str()) && !allowed.contains(&dep.as_str()) {
@@ -159,11 +166,16 @@ fn workspace_respects_the_layering_rules() {
 fn rules_reject_forbidden_edges() {
     let mut g = graph();
     g.get_mut(SPECKIT).unwrap().insert(RUNTIME.to_owned());
+    g.get_mut(OPENSPEC).unwrap().insert(SPECKIT.to_owned());
     g.get_mut(CORE).unwrap().insert("tokio".to_owned());
     g.get_mut(BIN).unwrap().insert("agentplane".to_owned());
     let errors = violations(&g).join("\n");
     assert!(
         errors.contains("speccoder-speckit must not depend on speccoder-runtime (rule 2"),
+        "{errors}"
+    );
+    assert!(
+        errors.contains("speccoder-openspec must not depend on speccoder-speckit (rule 2"),
         "{errors}"
     );
     assert!(
@@ -173,5 +185,137 @@ fn rules_reject_forbidden_edges() {
     assert!(
         errors.contains("speccoder must not depend on agentplane (rule 6"),
         "{errors}"
+    );
+}
+
+/// Spec Kit's paths, files and commands, as string contents: only the Spec
+/// Kit adapter (`speccoder-runtime/src/format/speckit/`) may name them
+/// (F-050). `specs` matches a whole string only.
+const SPECKIT_LITERALS: &[&str] = &[
+    ".specify",
+    "specs/",
+    "User Story",
+    "speckit",
+    "specify init",
+    "specify workflow",
+    "SPECIFY_",
+    "tasks.md",
+    "spec.md",
+    "plan.md",
+];
+
+/// Spec Kit's parser crate, which only the adapter calls.
+const SPECKIT_CRATE: &str = "speccoder_speckit";
+
+/// The (line, literal) pairs of `text`: Spec Kit literals inside string
+/// literals and the parser crate anywhere in code; comments and everything
+/// from the first `#[cfg(test)]` are skipped.
+fn scan(text: &str) -> Vec<(usize, &'static str)> {
+    let mut found = Vec::new();
+    let mut in_string = false;
+    let mut string = String::new();
+    let mut start = 0;
+    for (i, line) in text.lines().enumerate() {
+        if !in_string && line.trim_start().starts_with("#[cfg(test)]") {
+            break;
+        }
+        let mut code = String::new();
+        let mut chars = line.chars().peekable();
+        while let Some(c) = chars.next() {
+            if in_string {
+                match c {
+                    '\\' => {
+                        // An escape, or a line continuation at the end.
+                        if let Some(n) = chars.next() {
+                            string.push(n);
+                        }
+                    }
+                    '"' => {
+                        in_string = false;
+                        let hits = SPECKIT_LITERALS
+                            .iter()
+                            .filter(|l| string.contains(*l))
+                            .copied()
+                            .chain((string == "specs").then_some("\"specs\""));
+                        found.extend(hits.map(|l| (start + 1, l)));
+                        string.clear();
+                    }
+                    c => string.push(c),
+                }
+            } else if c == '/' && chars.peek() == Some(&'/') {
+                break;
+            } else if c == '"' {
+                in_string = true;
+                start = i;
+            } else if c == '\'' {
+                // A char literal (`'"'`), not a lifetime.
+                let rest: String = chars.clone().take(3).collect();
+                if rest.starts_with("\"'") || rest.starts_with("\\\"'") {
+                    let skip = if rest.starts_with('"') { 2 } else { 3 };
+                    for _ in 0..skip {
+                        chars.next();
+                    }
+                }
+            } else {
+                code.push(c);
+            }
+        }
+        if code.contains(SPECKIT_CRATE) {
+            found.push((i + 1, SPECKIT_CRATE));
+        }
+    }
+    found
+}
+
+fn rust_files(dir: &Path, out: &mut Vec<std::path::PathBuf>) {
+    for e in std::fs::read_dir(dir).unwrap().flatten() {
+        let p = e.path();
+        if p.is_dir() {
+            rust_files(&p, out);
+        } else if p.extension().is_some_and(|x| x == "rs") {
+            out.push(p);
+        }
+    }
+}
+
+#[test]
+fn runtime_has_no_speckit_literals_outside_the_adapter() {
+    let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("../speccoder-runtime/src");
+    // Each format's own adapter names its own files.
+    let adapters = [
+        src.join("format/speckit"),
+        src.join("format/openspec"),
+        src.join("format/stubs.rs"),
+    ];
+    let mut files = Vec::new();
+    rust_files(&src, &mut files);
+    files.sort();
+    let mut errors = Vec::new();
+    for f in files
+        .iter()
+        .filter(|f| !adapters.iter().any(|a| f.starts_with(a)))
+    {
+        let text = std::fs::read_to_string(f).unwrap();
+        let rel = f.strip_prefix(&src).unwrap().display();
+        for (line, lit) in scan(&text) {
+            errors.push(format!(
+                "layering: {rel}:{line} contains Spec Kit literal `{lit}` outside format/speckit"
+            ));
+        }
+    }
+    assert!(errors.is_empty(), "\n{}", errors.join("\n"));
+}
+
+#[test]
+fn scan_finds_a_planted_literal() {
+    let text = "// a comment about .specify/\nuse crate::format::speckit;\nfn f(a: A) {\n    let p = \".specify/memory\"; // tasks.md\n    let q = a.specify_dir;\n    let c = '\"';\n    speccoder_speckit::inspect(\"x \\\n tasks.md\");\n    let d = \"specs\";\n}\n#[cfg(test)]\nmod tests { const X: &str = \"tasks.md\"; }\n";
+    assert_eq!(
+        scan(text),
+        [
+            (4, ".specify"),
+            (7, "speccoder_speckit"),
+            (7, "tasks.md"),
+            (9, "\"specs\""),
+        ]
     );
 }

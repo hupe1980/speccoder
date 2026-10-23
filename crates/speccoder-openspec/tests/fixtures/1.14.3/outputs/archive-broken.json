@@ -1,0 +1,15 @@
+{
+  "archive": null,
+  "root": {
+    "path": "/tmp/openspec-try/sample",
+    "source": "nearest"
+  },
+  "status": [
+    {
+      "severity": "error",
+      "code": "archive_spec_update_failed",
+      "message": "greeting MODIFIED failed for header \"### Requirement: Does not exist\" - not found",
+      "fix": "Fix the change delta specs and rerun. No files were changed."
+    }
+  ]
+}

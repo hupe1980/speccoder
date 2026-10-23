@@ -22,6 +22,13 @@ fn classify(result: &CommandResult) -> Option<Outcome> {
     let status = result.status();
     match (result.command(), status, result.data()) {
         (_, _, Some(CommandData::Checklists(_))) => Some(Outcome::ChecklistsOpen),
+        ("spec", CommandStatus::NeedsHuman, Some(CommandData::Archive(a)))
+            if a.stage == "awaiting_confirmation" =>
+        {
+            Some(Outcome::ArchiveAwaiting {
+                change: a.change.clone(),
+            })
+        }
         ("run", _, Some(CommandData::Run(r))) => Some(of_run(status, r)),
         ("run", _, Some(CommandData::Feature(f))) => match (status, f.attempts.last()) {
             (CommandStatus::Ok, _) if f.stop.starts_with("feature done") => {

@@ -47,6 +47,18 @@ pub struct Instance {
     pub test_cmd: Option<Value>,
 }
 
+/// The issue a benchmark case is built around.
+pub struct Issue<'a> {
+    /// The instance id.
+    pub id: &'a str,
+    /// `owner/name`.
+    pub repo: &'a str,
+    /// The commit the issue was reported against.
+    pub base_commit: &'a str,
+    /// The issue text.
+    pub statement: &'a str,
+}
+
 /// How to import.
 #[derive(Debug, Clone)]
 pub struct ImportOptions<'a> {
@@ -185,59 +197,19 @@ fn import_one(inst: &Instance, opts: &ImportOptions<'_>) -> Result<PathBuf, Stri
         .or_else(|| detect_test_cmd(&project))
         .ok_or("no test command: pass --test-cmd")?;
 
-    // The Spec Kit project around the issue.
-    let feature = format!("001-{}", slug(&inst.instance_id));
-    let fdir = project.join("specs").join(&feature);
-    fs::create_dir_all(&fdir).map_err(|e| e.to_string())?;
-    fs::create_dir_all(project.join(".specify/memory")).map_err(|e| e.to_string())?;
+    // The spec project around the issue.
+    crate::format::speckit::bench::scaffold(
+        &project,
+        &slug(&inst.instance_id),
+        &Issue {
+            id: &inst.instance_id,
+            repo: &inst.repo,
+            base_commit: &inst.base_commit,
+            statement: &inst.problem_statement,
+        },
+        &test_cmd,
+    )?;
     let write = |p: PathBuf, text: String| fs::write(p, text).map_err(|e| e.to_string());
-    write(
-        project.join(".specify/init-options.json"),
-        "{\"speckit_version\": \"1.2.3\", \"integration\": \"claude\", \"script\": \"sh\"}\n"
-            .to_owned(),
-    )?;
-    write(
-        project.join(".specify/memory/constitution.md"),
-        "# Constitution\n\n### I. Minimal\nChange only what the issue needs; keep existing behaviour and tests.\n\n### II. Honest\nA requirement that cannot be met as written is reported, never worked around.\n".to_owned(),
-    )?;
-    let first_line = inst
-        .problem_statement
-        .lines()
-        .find(|l| !l.trim().is_empty())
-        .unwrap_or("Resolve the issue");
-    let title: String = first_line
-        .trim()
-        .trim_start_matches('#')
-        .trim()
-        .chars()
-        .take(70)
-        .collect();
-    write(
-        fdir.join("spec.md"),
-        format!(
-            "# Feature Specification: {}\n\n## User Scenarios & Testing\n\n### User Story 1 - {title} (Priority: P1)\n\nAn issue reported against `{}`:\n\n{}\n\n## Requirements\n\n- **FR-001**: The behaviour the issue asks for works.\n- **FR-002**: Existing behaviour and tests are unchanged.\n",
-            inst.instance_id,
-            inst.repo,
-            inst.problem_statement.trim()
-        ),
-    )?;
-    write(
-        fdir.join("plan.md"),
-        format!(
-            "# Implementation Plan: {}\n\nExisting repository `{}` at `{}`. Find the code the issue concerns and change it there; do not rewrite unrelated code. Tests: `{}`.\n",
-            inst.instance_id,
-            inst.repo,
-            inst.base_commit,
-            test_cmd.join(" ")
-        ),
-    )?;
-    write(
-        fdir.join("tasks.md"),
-        format!(
-            "# Tasks: {}\n\n## Phase 1: User Story 1 - {title} (Priority: P1)\n\n- [ ] T001 [US1] Resolve the issue described in spec.md, with a test that fails before the change and passes after\n",
-            inst.instance_id
-        ),
-    )?;
     write(
         project.join("speccoder.toml"),
         format!(

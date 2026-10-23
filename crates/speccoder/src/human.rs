@@ -28,20 +28,60 @@ pub fn inspect(w: &mut impl Write, s: &ProjectSnapshot) -> io::Result<()> {
         kit = format!(" ({kit})");
     }
     let version = s.speckit.version.as_deref().unwrap_or("version unknown");
-    writeln!(w, "Project    {name:<24} Spec Kit {version}{kit}")?;
+    match &s.openspec {
+        Some(o) => writeln!(w, "Project    {name:<24} OpenSpec (schema {})", o.schema)?,
+        None => writeln!(w, "Project    {name:<24} Spec Kit {version}{kit}")?,
+    }
     writeln!(w, "Root       {}", s.root)?;
+    let unit = if s.openspec.is_some() {
+        "Change "
+    } else {
+        "Feature"
+    };
 
     match &s.feature {
         Some(f) => {
-            let why = match s.selection.reason {
-                SelectionReason::Argument => "from --feature",
-                SelectionReason::Environment => "from SPECIFY_FEATURE_DIRECTORY",
-                SelectionReason::Recorded => "recorded in .specify/feature.json",
-                SelectionReason::OnlyFeature => "the only feature",
-                SelectionReason::None => "",
+            let why = match (s.selection.reason, s.openspec.is_some()) {
+                (SelectionReason::Argument, false) => "from --feature",
+                (SelectionReason::Argument, true) => "from --change",
+                (SelectionReason::Environment, _) => "from SPECIFY_FEATURE_DIRECTORY",
+                (SelectionReason::Recorded, _) => "recorded in .specify/feature.json",
+                (SelectionReason::OnlyFeature, false) => "the only feature",
+                (SelectionReason::OnlyFeature, true) => "the only active change",
+                (SelectionReason::None, _) => "",
             };
-            writeln!(w, "Feature    {:<24} ({why})", f.feature.name)?;
-            writeln!(w, "Artifacts  {}", artifacts(s.constitution, &f.artifacts))?;
+            writeln!(w, "{unit}    {:<24} ({why})", f.feature.name)?;
+            match &s.openspec {
+                Some(o) => {
+                    let mark = |b: bool| if b { "✓" } else { "–" };
+                    writeln!(
+                        w,
+                        "Artifacts  context {}  proposal {}  design {}  deltas {}  tasks {}",
+                        mark(o.context.is_some()),
+                        mark(f.artifacts.research),
+                        mark(f.artifacts.plan),
+                        mark(f.artifacts.spec),
+                        mark(f.artifacts.tasks),
+                    )?;
+                    if !o.requirements.is_empty() {
+                        writeln!(w, "Requirements")?;
+                        for r in &o.requirements {
+                            let n = r.scenarios.len();
+                            let scenarios = match (r.operation.as_str(), n) {
+                                ("renamed" | "removed", _) => String::new(),
+                                (_, 1) => " (1 scenario)".to_owned(),
+                                (_, n) => format!(" ({n} scenarios)"),
+                            };
+                            writeln!(
+                                w,
+                                "  {:<9}{}: {}{scenarios}",
+                                r.operation, r.capability, r.name
+                            )?;
+                        }
+                    }
+                }
+                None => writeln!(w, "Artifacts  {}", artifacts(s.constitution, &f.artifacts))?,
+            }
             match (&f.tasks, &f.schedule) {
                 (Some(t), Some(sched)) => {
                     writeln!(
@@ -54,6 +94,9 @@ pub fn inspect(w: &mut impl Write, s: &ProjectSnapshot) -> io::Result<()> {
                             w,
                             "           dependencies as declared per task (Format line)"
                         )?;
+                    }
+                    if t.dependency_mode == DependencyMode::Chain {
+                        writeln!(w, "           a chain: groups in order, tasks in order")?;
                     }
                     for (task, st) in t.tasks.iter().zip(&sched.tasks) {
                         writeln!(w, "  {}", task_line(task, st))?;
@@ -69,7 +112,7 @@ pub fn inspect(w: &mut impl Write, s: &ProjectSnapshot) -> io::Result<()> {
                 (None, _) => writeln!(w, "Tasks      none (no tasks.md)")?,
             }
         }
-        None => writeln!(w, "Feature    none")?,
+        None => writeln!(w, "{unit}    none")?,
     }
 
     if !s.diagnostics.is_empty() {
@@ -90,11 +133,16 @@ pub fn selection_needed(w: &mut impl Write, s: &ProjectSnapshot) -> io::Result<(
     {
         writeln!(w, "speccoder inspect: {}", d.message)?;
     }
-    writeln!(w, "Features:")?;
+    let (units, how) = if s.openspec.is_some() {
+        ("Changes:", "Select one with --change <id>.")
+    } else {
+        ("Features:", "Select one with --feature <name or number>.")
+    };
+    writeln!(w, "{units}")?;
     for f in &s.features {
         writeln!(w, "  {}", f.name)?;
     }
-    writeln!(w, "Select one with --feature <name or number>.")
+    writeln!(w, "{how}")
 }
 
 fn artifacts(constitution: ConstitutionState, a: &Artifacts) -> String {

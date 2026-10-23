@@ -1,0 +1,18 @@
+{
+  "archive": {
+    "change": "add-greeting-cli",
+    "archivedAs": "2026-10-23-add-greeting-cli",
+    "path": "/tmp/openspec-try/sample/openspec/changes/archive/2026-10-23-add-greeting-cli",
+    "specsUpdated": true,
+    "totals": {
+      "added": 2,
+      "modified": 0,
+      "removed": 0,
+      "renamed": 0
+    }
+  },
+  "root": {
+    "path": "/tmp/openspec-try/sample",
+    "source": "nearest"
+  }
+}

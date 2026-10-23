@@ -147,6 +147,7 @@ pub fn report(path: &Path, feature: Option<&str>) -> CommandResult {
     let Some(CommandData::Inspect(snapshot)) = inspected.data() else {
         return CommandResult::new("report", inspected.status(), inspected.message());
     };
+    let format = crate::format::of(snapshot);
     let Some(f) = snapshot.feature.as_ref() else {
         return CommandResult::new(
             "report",
@@ -158,7 +159,11 @@ pub fn report(path: &Path, feature: Option<&str>) -> CommandResult {
         return CommandResult::new(
             "report",
             CommandStatus::NotFound,
-            &format!("{} has no tasks.md yet", f.feature.name),
+            &format!(
+                "{} has no {} yet",
+                f.feature.name,
+                format.messages().tasks_file
+            ),
         );
     };
     let name = f.feature.name.clone();
@@ -201,7 +206,7 @@ pub fn report(path: &Path, feature: Option<&str>) -> CommandResult {
                 &format!("{branch} has no {repo_path}"),
             );
         };
-        let (parsed, _) = speccoder_speckit::tasks::parse(&checkout_tasks.path, &text);
+        let (parsed, _) = format.parse_tasks(&checkout_tasks.path, &text);
         let format = format!(
             "--format=%H{FS}%s{FS}%(trailers:key=Spec-Task,valueonly){FS}%(trailers:key=Verdict,valueonly){FS}%(trailers:key=Run,valueonly){FS}%(trailers:key=Reason,valueonly){FS}%b{RS}"
         );

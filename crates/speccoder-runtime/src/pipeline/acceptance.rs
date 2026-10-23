@@ -90,7 +90,7 @@ pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance 
     }
 
     // Validate: new test files only, a command the policy allows.
-    let protected = tools::paths::Protected::default();
+    let protected = a.policy.protected();
     let mut written = Vec::new();
     let mut planned = Vec::new();
     for f in answer["files"].as_array().into_iter().flatten() {

@@ -81,6 +81,12 @@ Keep the list narrow: an allowed command runs whatever the model passes after th
 |---|---|---|
 | `frozen` | `"ask"` | Tests that existed before an attempt: `ask` before any change, or `additions` — new lines may be added without asking; changing or removing lines still asks |
 
+## `[spec]`
+
+| Key | Default | Meaning |
+|---|---|---|
+| `[spec] format` | detected | The spec format: `speckit`, `openspec` or `kiro`. `--format` and `SPECCODER_FORMAT` override it. This version runs Spec Kit; OpenSpec and Kiro are recognised and refused as not yet supported |
+
 ## `[acceptance]`, `[converge]`, `[monitor]`, `[git]`, `[format]`
 
 | Key | Default | Meaning |
@@ -89,7 +95,7 @@ Keep the list narrow: an allowed command runs whatever the model passes after th
 | `[converge] max_rounds` | `3` | Convergence phases a feature may get |
 | `[monitor] enabled` | `false` | Review every passing attempt with the [gaming monitor](@/docs/evidence.md#the-gaming-monitor) |
 | `[git] commit` | `"per-task"` | `per-task` commits each passed task; `none` leaves changes uncommitted |
-| `[format] argv` | — | A formatter speccoder runs after each attempt (e.g. `["cargo", "fmt"]`); its changes are part of the attempt and audited |
+| `[format] argv` | — | A formatter speccoder runs after each attempt (e.g. `["cargo", "fmt"]`); its changes are part of the attempt and audited. Not the spec format: that is `[spec] format` |
 
 ## `[sandbox]`
 
@@ -155,4 +161,5 @@ stall_after = "15m"    # Ns | Nm | Nh, at least 30s
 | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` | Model credentials |
 | `SPECCODER_STATE_DIR` | Where speccoder keeps worktrees, journals and decisions (default `$XDG_STATE_HOME/speccoder`, else `~/.local/state/speccoder`) |
 | `SPECIFY_FEATURE_DIRECTORY` | Spec Kit's feature selection, honoured by every command |
+| `SPECCODER_FORMAT` | The spec format, like `--format` |
 | `SPECCODER_CALL_ID` | Set *for* commands the model runs: the call's id, stable across a resume |

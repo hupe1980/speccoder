@@ -1,0 +1,61 @@
+{
+  "changeName": "add-farewell-and-locale",
+  "changeDir": "/tmp/openspec-try/sample/openspec/changes/add-farewell-and-locale",
+  "schemaName": "spec-driven",
+  "contextFiles": {
+    "proposal": [
+      "/tmp/openspec-try/sample/openspec/changes/add-farewell-and-locale/proposal.md"
+    ],
+    "specs": [
+      "/tmp/openspec-try/sample/openspec/changes/add-farewell-and-locale/specs/greeting/spec.md"
+    ],
+    "design": [
+      "/tmp/openspec-try/sample/openspec/changes/add-farewell-and-locale/design.md"
+    ],
+    "tasks": [
+      "/tmp/openspec-try/sample/openspec/changes/add-farewell-and-locale/tasks.md"
+    ]
+  },
+  "progress": {
+    "total": 4,
+    "complete": 1,
+    "remaining": 3
+  },
+  "tasks": [
+    {
+      "id": "1",
+      "description": "1.1 Read `GREET_DEFAULT` and verify the \"Configured default\" test passes",
+      "done": true,
+      "sourcePath": "/tmp/openspec-try/sample/openspec/changes/add-farewell-and-locale/tasks.md",
+      "line": 5
+    },
+    {
+      "id": "2",
+      "description": "1.2 Treat an empty `GREET_DEFAULT` as unset and verify with a unit test",
+      "done": false,
+      "sourcePath": "/tmp/openspec-try/sample/openspec/changes/add-farewell-and-locale/tasks.md",
+      "line": 6
+    },
+    {
+      "id": "3",
+      "description": "2.1 Add the `--bye` flag and verify the \"Farewell with name\" test passes",
+      "done": false,
+      "sourcePath": "/tmp/openspec-try/sample/openspec/changes/add-farewell-and-locale/tasks.md",
+      "line": 10
+    },
+    {
+      "id": "4",
+      "description": "2.2 Document `--bye` in README.md and verify the example runs as written",
+      "done": false,
+      "sourcePath": "/tmp/openspec-try/sample/openspec/changes/add-farewell-and-locale/tasks.md",
+      "line": 11
+    }
+  ],
+  "taskTrackingConfigured": true,
+  "state": "ready",
+  "instruction": "Read context files, work through pending tasks, mark complete as you go.\nPause if you hit blockers or need clarification.",
+  "root": {
+    "path": "/tmp/openspec-try/sample",
+    "source": "nearest"
+  }
+}

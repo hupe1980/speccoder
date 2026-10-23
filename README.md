@@ -4,7 +4,7 @@
 [![Docs](https://img.shields.io/badge/docs-hupe1980.github.io%2Fspeccoder-5b4bff)](https://hupe1980.github.io/speccoder/)
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue)](#license)
 
-**Spec-driven coding, decided by evidence.** speccoder implements [GitHub Spec Kit](https://github.com/github/spec-kit) features task by task, and ticks a task only when tests derived from your spec go from red to green — never on the model's word.
+**Spec-driven coding, decided by evidence.** speccoder implements [GitHub Spec Kit](https://github.com/github/spec-kit) features and [OpenSpec](https://github.com/Fission-AI/OpenSpec) changes task by task, and ticks a task only when tests derived from your spec go from red to green — never on the model's word.
 
 **[Documentation](https://hupe1980.github.io/speccoder/docs/)** · [Quickstart](https://hupe1980.github.io/speccoder/docs/quickstart/) · [How it works](https://hupe1980.github.io/speccoder/docs/how-it-works/) · [Configuration](https://hupe1980.github.io/speccoder/docs/configuration/) · [CLI](https://hupe1980.github.io/speccoder/docs/cli/)
 
@@ -20,10 +20,12 @@ Coding agents are good at writing code and too good at declaring victory. specco
 
 ## Quickstart
 
-You need git, a Spec Kit project (Spec Kit 0.13 to 1.2) and a model.
+You need git, a Spec Kit project (Spec Kit 0.13 to 1.2) or an OpenSpec project (1.0 or newer), and a model.
 
 ```sh
-cargo install --git https://github.com/hupe1980/speccoder speccoder
+brew install hupe1980/speccoder/speccoder
+# or: curl -LsSf https://github.com/hupe1980/speccoder/releases/latest/download/speccoder-installer.sh | sh
+# or: cargo install speccoder --locked
 
 cd my-project
 speccoder init                       # detects your checks, writes speccoder.toml — review it
@@ -62,7 +64,7 @@ Pre-release (0.x): it works end to end on small projects with OpenAI, Anthropic 
 | `speccoder-runtime` | Everything that executes: checks, tools, sandbox, git, the embedded [agentplane](https://crates.io/crates/agentplane) runtime |
 | `speccoder` | The CLI |
 
-`just ci` runs every gate CI runs: formatting, clippy, tests, cargo-deny, layering, docs and a package dry run. It needs `just`, `cargo-nextest` and `cargo-deny`; the toolchain is pinned in `rust-toolchain.toml`. `just site` serves the documentation site (needs [Zola](https://www.getzola.org/)). [`evals/`](https://github.com/hupe1980/speccoder/tree/main/evals) holds Spec Kit projects with hidden oracles and impossible tasks that measure whether completions are really correct.
+`just ci` runs every gate CI runs: formatting, clippy, tests, cargo-deny, layering, docs, a package dry run, the `status` cold-start budget and the release scripts' tests. It needs `just`, `cargo-nextest` and `cargo-deny`; the toolchain is pinned in `rust-toolchain.toml`. `just site` serves the documentation site (needs [Zola](https://www.getzola.org/)). [`evals/`](https://github.com/hupe1980/speccoder/tree/main/evals) holds Spec Kit projects with hidden oracles and impossible tasks that measure whether completions are really correct.
 
 ## License
 

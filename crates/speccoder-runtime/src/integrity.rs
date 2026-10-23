@@ -7,6 +7,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 use regex::Regex;
+use sha2::{Digest, Sha256};
 
 use crate::tools::paths::{Class, Protected};
 use crate::tools::policy::Policy;
@@ -75,7 +76,7 @@ impl JudgeSnapshot {
                 continue;
             }
             if let Ok(bytes) = std::fs::read(entry.path()) {
-                files.insert(rel, speccoder_speckit::sha256_hex(&bytes));
+                files.insert(rel, sha256_hex(&bytes));
             }
         }
         Self(files)
@@ -145,7 +146,26 @@ pub fn audit(
     additions_ok: bool,
     approved: &BTreeSet<String>,
 ) -> Vec<String> {
-    let protected = Protected::default();
+    audit_in(
+        &Protected::default(),
+        changes,
+        patch,
+        frozen,
+        additions_ok,
+        approved,
+    )
+}
+
+/// [`audit`] against the protected set of the project's format.
+#[must_use]
+pub fn audit_in(
+    protected: &Protected,
+    changes: &[Change],
+    patch: &str,
+    frozen: &BTreeSet<String>,
+    additions_ok: bool,
+    approved: &BTreeSet<String>,
+) -> Vec<String> {
     let mut findings = Vec::new();
     let removed_lines = removed_lines(patch);
 
@@ -232,6 +252,16 @@ fn removed_lines(patch: &str) -> BTreeMap<String, usize> {
         }
     }
     out
+}
+
+/// Lowercase hex SHA-256 of `bytes`: the content hash of a judge input or a
+/// task list, as the format adapters' write guards compare it.
+#[must_use]
+pub fn sha256_hex(bytes: &[u8]) -> String {
+    Sha256::digest(bytes)
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
 }
 
 #[cfg(test)]

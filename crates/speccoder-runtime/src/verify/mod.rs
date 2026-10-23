@@ -8,9 +8,9 @@ pub mod summary;
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
+use crate::format::Workspace;
 use speccoder_core::verify::{CheckResult, CheckStatus, VerifyReport, compare, passes};
 use speccoder_core::{CommandData, CommandResult, CommandStatus, SCHEMA_VERSION};
-use speccoder_speckit::workspace::Workspace;
 
 use self::config::{Check, Tier};
 use self::process::{CommandRunner, Invocation, OUTPUT_CAP, scrubbed_env};

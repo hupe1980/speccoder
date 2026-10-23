@@ -8,7 +8,7 @@ group = "Reference"
 nav = "CLI reference"
 +++
 
-Every command takes `--json` (one JSON object on stdout), `-q`/`--quiet` (only stops, finishes, resumes and what needs you), `-v`/`--verbose` (also durations, skipped stages and the last lines of what failed) and `--help`. Commands that work on a project take an optional `PATH` inside it (default: the current directory) and `--feature <name or number>`.
+Every command takes `--json` (one JSON object on stdout), `-q`/`--quiet` (only stops, finishes, resumes and what needs you), `-v`/`--verbose` (also durations, skipped stages and the last lines of what failed), `--format <speckit|openspec|kiro>` (the project's spec format, also `SPECCODER_FORMAT`; default: `[spec] format`, else detected) and `--help`. Commands that work on a project take an optional `PATH` inside it (default: the current directory) and `--feature <name or number>` (for an [OpenSpec](@/docs/openspec.md) change also `--change <id>`).
 
 Every stop and finish ends with a `Next:` block — the commands that continue, copy-pasteable, the same in `--json` as `data.next` (`[{"command", "why"}]`).
 
@@ -17,7 +17,8 @@ Every stop and finish ends with a `Next:` block — the commands that continue, 
 | Command | What it does |
 |---|---|
 | `speccoder init [--provider P] [--model M] [--force]` | Detect the project's checks and write `speccoder.toml` |
-| `speccoder skill [NAME] [ARGS…] [--no-prompt]` | List the installed Agent Skills, or run one of Spec Kit's planning skills |
+| `speccoder spec [SKILL] [ARGS…] [--no-prompt]` | List the format's installed planning skills, or run one (Spec Kit: `specify`, `clarify`, `plan`, `tasks`, …; OpenSpec: `propose`, `explore`, `update-change`). `speccoder skill` is the same |
+| `speccoder spec archive [CHANGE] [--yes] [--allow-unverified TASK]…` | Archive an OpenSpec change: OpenSpec's checks first, then the diff, then your yes, then one commit |
 | `speccoder inspect` | Show the features, artifacts and tasks speccoder sees, with what blocks what |
 | `speccoder verify [--tier fast\|full] [--against FILE]` | Run the configured checks; compare with a saved result |
 | `speccoder workflow install [--force]` | Add a speccoder step type and an example Spec Kit workflow |

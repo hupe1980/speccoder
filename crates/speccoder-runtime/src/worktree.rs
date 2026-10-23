@@ -13,6 +13,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use sha2::{Digest, Sha256};
 
+use crate::format::CommitPrecondition;
 use crate::git::{Git, GitError, nul_fields};
 
 /// Why speccoder will not work in a worktree here.
@@ -100,20 +101,20 @@ pub struct Worktree {
 
 /// Creates or reuses the worktree for `feature`.
 ///
-/// `repo_root` is the git working tree of the user's checkout; `artifacts`
-/// are the repository-relative Spec Kit paths that must be committed
-/// (`.specify` and the feature directory).
+/// `repo_root` is the git working tree of the user's checkout; `committed`
+/// says which repository-relative spec paths must be committed.
 pub fn ensure_worktree(
     repo_root: &Path,
     state: &Path,
     feature: &str,
-    artifacts: &Artifacts,
+    committed: impl Into<CommitPrecondition>,
 ) -> Result<Worktree, Refusal> {
+    let artifacts = &committed.into();
     let repo = Git::at(repo_root);
     let Some(_head) = repo.head()? else {
         return Err(Refusal::new(
             "the repository has no commits yet; a worktree needs one",
-            "commit the Spec Kit artifacts first (git add .specify specs && git commit)",
+            artifacts.no_commits_hint,
         ));
     };
     require_committed(&repo, artifacts)?;
@@ -172,7 +173,7 @@ pub fn ensure_worktree(
     })
 }
 
-/// When the person's checkout changed the Spec Kit artifacts after the
+/// When the person's checkout changed the spec artifacts after the
 /// speccoder branch forked (a fixed example, a clarified requirement), the
 /// worktree would work from the old spec: merge their `HEAD` in first. A
 /// conflict is theirs to resolve; nothing is half-merged.
@@ -180,19 +181,14 @@ fn bring_spec_changes(
     repo: &Git,
     worktree: &Path,
     branch: &str,
-    artifacts: &Artifacts,
+    artifacts: &CommitPrecondition,
 ) -> Result<(), Refusal> {
     let head = repo.line(&["rev-parse", "HEAD"])?;
     let base = repo.line(&["merge-base", branch, &head])?;
-    let moved = !repo.succeeds(&[
-        "diff",
-        "--quiet",
-        &base,
-        &head,
-        "--",
-        &artifacts.specify_dir,
-        &artifacts.feature_dir,
-    ])?;
+    let paths = artifacts.paths();
+    let mut diff = vec!["diff", "--quiet", &base, &head, "--"];
+    diff.extend(paths.iter().map(String::as_str));
+    let moved = !repo.succeeds(&diff)?;
     if !moved {
         return Ok(());
     }
@@ -318,63 +314,57 @@ pub struct Artifacts {
     pub feature_dir: String,
 }
 
-/// Refuses unless the Spec Kit artifacts are committed as they are on disk
-///: a worktree contains only commits, so anything else would be an
-/// agent working from a different spec than the user's.
-fn require_committed(repo: &Git, a: &Artifacts) -> Result<(), Refusal> {
+impl From<&Artifacts> for CommitPrecondition {
+    fn from(a: &Artifacts) -> Self {
+        crate::format::speckit::precondition(&a.specify_dir, &a.feature_dir)
+    }
+}
+
+/// Refuses unless the spec artifacts are committed as they are on disk:
+/// a worktree contains only commits, so anything else would be an agent
+/// working from a different spec than the user's.
+fn require_committed(repo: &Git, a: &CommitPrecondition) -> Result<(), Refusal> {
     let mut paths: Vec<(String, String)> = Vec::new();
 
-    // The feature directory: nothing untracked, ignored or modified.
-    let feature = repo.run(&[
-        "status",
-        "--porcelain=v1",
-        "-z",
-        "--untracked-files=all",
-        "--ignored=traditional",
-        "--",
-        &a.feature_dir,
-    ])?;
-    paths.extend(status_entries(&feature));
-
-    // .specify: Spec Kit ignores its own per-checkout files (feature.json);
-    // those are fine. Untracked or modified files are not.
-    let specify = repo.run(&[
-        "status",
-        "--porcelain=v1",
-        "-z",
-        "--untracked-files=all",
-        "--",
-        &a.specify_dir,
-    ])?;
-    // Runtime state is not an artifact: Spec Kit's own workflow runs
-    // (`.specify/workflows/runs/`, dirty while `specify workflow run` drives
-    // speccoder) and Python bytecode caches of installed step types.
-    let runtime = |p: &str| {
-        p.contains("/workflows/runs/")
-            || p.starts_with(".specify/workflows/runs/")
-            || p.split('/').any(|c| c == "__pycache__")
-    };
-    paths.extend(
-        status_entries(&specify)
-            .into_iter()
-            .filter(|(p, _)| !runtime(p)),
-    );
+    for dir in &a.strict {
+        let out = repo.run(&[
+            "status",
+            "--porcelain=v1",
+            "-z",
+            "--untracked-files=all",
+            "--ignored=traditional",
+            "--",
+            dir,
+        ])?;
+        paths.extend(status_entries(&out));
+    }
+    for dir in &a.tracked {
+        let out = repo.run(&[
+            "status",
+            "--porcelain=v1",
+            "-z",
+            "--untracked-files=all",
+            "--",
+            dir,
+        ])?;
+        paths.extend(
+            status_entries(&out)
+                .into_iter()
+                .filter(|(p, _)| !(a.runtime)(p)),
+        );
+    }
 
     // And the essentials must be tracked at all (a fully ignored directory
     // has no status entries of its own here).
-    let essentials = [
-        format!("{}/init-options.json", a.specify_dir),
-        format!("{}/spec.md", a.feature_dir),
-    ];
-    for p in essentials {
-        let tracked = !repo.run(&["ls-files", "--", &p])?.is_empty();
-        if !tracked && repo.dir().join(&p).exists() && !paths.iter().any(|(q, _)| *q == p) {
-            let reason = if repo.succeeds(&["check-ignore", "-q", "--", &p])? {
+    for p in &a.essentials {
+        let tracked = !repo.run(&["ls-files", "--", p])?.is_empty();
+        if !tracked && repo.dir().join(p).exists() && !paths.iter().any(|(q, _)| q == p) {
+            let reason = if repo.succeeds(&["check-ignore", "-q", "--", p])? {
                 "ignored"
             } else {
                 "untracked"
             };
-            paths.push((p, reason.to_owned()));
+            paths.push((p.clone(), reason.to_owned()));
         }
     }
 
@@ -384,9 +374,9 @@ fn require_committed(repo: &Git, a: &Artifacts) -> Result<(), Refusal> {
     paths.sort();
     paths.dedup();
     Err(Refusal {
-        message: "the feature's Spec Kit artifacts are not committed, so a worktree would not contain them".to_owned(),
+        message: a.message.to_owned(),
         paths,
-        hint: "commit them (git add .specify specs/<feature> && git commit), or wait for in-place mode".to_owned(),
+        hint: a.hint.to_owned(),
     })
 }
 

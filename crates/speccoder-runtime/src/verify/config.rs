@@ -76,6 +76,7 @@ pub const SECTIONS: &[&str] = &[
     "mutation",
     "executor",
     "mcp",
+    "spec",
 ];
 
 /// Parses the configuration text; checks keep their file order.

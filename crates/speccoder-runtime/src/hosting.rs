@@ -2,8 +2,8 @@
 //!
 //! A hosted planning skill works in your checkout, because what it writes —
 //! the feature's spec, plan and tasks — belongs there; the planning policy
-//! lets it write only Spec Kit's artifacts and run Spec Kit's scripts, and
-//! the changes are left uncommitted for you to review.
+//! lets it write only the format's artifacts and run the format's scripts,
+//! and the changes are left uncommitted for you to review.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -13,16 +13,18 @@ use speccoder_core::{
     CommandData, CommandResult, CommandStatus, SkillEntry, SkillRunReport, SkillsReport,
 };
 
+use crate::format::Planning;
 use crate::{RunOptions, progress, redact, skills, substrate, tools, verify, worktree};
 
 fn root_of(path: &Path) -> Result<PathBuf, Box<CommandResult>> {
-    match crate::inspect(path, None).data() {
-        Some(CommandData::Inspect(s)) => Ok(PathBuf::from(&s.root)),
-        _ => Err(Box::new(CommandResult::new(
+    match crate::format::open(path, None) {
+        Ok(opened) => Ok(PathBuf::from(&opened.snapshot.root)),
+        Err(r) if r.unmarked => Err(Box::new(CommandResult::new(
             "skill",
             CommandStatus::NotAProject,
-            "not a Spec Kit project (no .specify/ found)",
+            crate::format::reference().messages().no_project,
         ))),
+        Err(r) => Err(Box::new(CommandResult::new("skill", r.status, &r.message))),
     }
 }
 
@@ -33,9 +35,10 @@ pub fn list(path: &Path) -> CommandResult {
         Ok(r) => r,
         Err(r) => return *r,
     };
-    let found = skills::discover(&root);
+    let format = crate::format::at(&root);
+    let found = skills::discover_with(&root, format.planning());
     let message = if found.is_empty() {
-        "no skills installed (Spec Kit installs them with `specify init --ai claude`, under .claude/skills/)".to_owned()
+        format.messages().no_skills.to_owned()
     } else {
         format!(
             "{} skill(s); run one with `speccoder skill <name> [arguments]`",
@@ -73,10 +76,11 @@ pub fn run_with(
         Err(r) => return *r,
     };
     let root = PathBuf::from(&s.snapshot.root);
-    let installed = skills::discover(&root);
+    let planning = s.format.planning();
+    let installed = skills::discover_with(&root, planning);
     let Some(skill) = installed
         .iter()
-        .find(|k| k.name == name || k.name == format!("speckit-{name}"))
+        .find(|k| k.name == name || k.name == format!("{}{name}", planning.prefix))
     else {
         return refuse(
             CommandStatus::NotFound,
@@ -95,8 +99,8 @@ pub fn run_with(
             format!("`{}` is marked user-invocable: false", skill.name),
         );
     }
-    // Extension hooks around Spec Kit's core skills.
-    let event = core_event(&skill.name).map(str::to_owned);
+    // Extension hooks around the format's core skills.
+    let event = core_event(planning, &skill.name).map(str::to_owned);
     let mut hook_lines = Vec::new();
     if let Some(e) = &event {
         match run_hooks(
@@ -151,16 +155,20 @@ pub fn run_with(
         Ok(rt) => rt,
         Err(e) => return refuse(CommandStatus::RunFailed, e),
     };
-    // Spec Kit's scripts run confined to the checkout.
+    // The format's scripts run confined to the checkout.
     let runner = match crate::sandbox::runner_at(&root) {
         Ok((r, _)) => r,
         Err(e) => return refuse(CommandStatus::ConfigError, e),
     };
-    let server =
-        match tools::WorkspaceTools::new(&root, tools::policy::Policy::new(&[], &[]).authoring()) {
-            Ok(t) => Arc::new(t.with_runner(runner)),
-            Err(e) => return refuse(CommandStatus::Error, e.to_string()),
-        };
+    let server = match tools::WorkspaceTools::new(
+        &root,
+        tools::policy::Policy::new(&[], &[])
+            .rules(s.format.rules())
+            .authoring(),
+    ) {
+        Ok(t) => Arc::new(t.with_runner(runner)),
+        Err(e) => return refuse(CommandStatus::Error, e.to_string()),
+    };
     let canonical = std::fs::canonicalize(&root).unwrap_or_else(|_| root.clone());
     let input = substrate::host::input(
         &skill.name,
@@ -178,10 +186,11 @@ pub fn run_with(
             substrate::Hooks {
                 approver: options.approver.clone(),
                 progress: Some(Arc::clone(&live)),
+                format: Some(s.format),
                 ..substrate::Hooks::default()
             },
         )?;
-        // Spec Kit's installed skill and the person's arguments: trusted.
+        // The installed skill and the person's arguments: trusted.
         plane
             .skill(&skill.name, agentplane::core::Tainted::trusted(input))
             .await
@@ -333,18 +342,6 @@ pub fn run(path: &Path, name: &str, arguments: &str, options: &RunOptions) -> Co
     })
 }
 
-/// Spec Kit's core skills, whose `before_<name>` / `after_<name>` hooks
-/// speccoder runs (a hook's own skill gets none: no recursion).
-const CORE: [&str; 7] = [
-    "specify",
-    "clarify",
-    "plan",
-    "tasks",
-    "analyze",
-    "checklist",
-    "constitution",
-];
-
 /// Runs the mandatory hooks of `event` as hosted skills and lists the
 /// optional ones. `Ok(lines)` to show; `Err` when a mandatory hook
 /// did not complete — the caller stops with it.
@@ -419,7 +416,7 @@ pub fn run_hooks(
 }
 
 /// The `before_` / `after_` event name for a hosted core skill.
-fn core_event(skill: &str) -> Option<&str> {
-    let short = skill.strip_prefix("speckit-").unwrap_or(skill);
-    CORE.contains(&short).then_some(short)
+fn core_event<'a>(planning: &Planning, skill: &'a str) -> Option<&'a str> {
+    let short = skill.strip_prefix(planning.prefix).unwrap_or(skill);
+    planning.core.contains(&short).then_some(short)
 }

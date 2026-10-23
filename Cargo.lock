@@ -2689,6 +2689,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "speccoder-openspec"
+version = "0.1.0-dev"
+dependencies = [
+ "proptest",
+ "pulldown-cmark",
+ "regex",
+ "serde",
+ "serde-saphyr",
+ "serde_json",
+ "sha2",
+ "speccoder-core",
+ "tempfile",
+]
+
+[[package]]
 name = "speccoder-runtime"
 version = "0.1.0-dev"
 dependencies = [
@@ -2708,6 +2723,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "speccoder-core",
+ "speccoder-openspec",
  "speccoder-speckit",
  "tempfile",
  "tokio",

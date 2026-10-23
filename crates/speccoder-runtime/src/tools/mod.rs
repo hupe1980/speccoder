@@ -454,7 +454,7 @@ impl WorkspaceTools {
         if let Some(class) = self.policy.write_protected(&self.rel(&path)) {
             return Err(failure(format!(
                 "denied: `{rel}` is protected: {}",
-                class.reason()
+                self.policy.protected().reason(class)
             )));
         }
         Ok(path)
@@ -527,6 +527,10 @@ impl WorkspaceTools {
         };
         let secs = a.timeout_secs.unwrap_or(120).clamp(1, MAX_COMMAND_SECS);
         let mut env = scrubbed_env(std::env::vars());
+        for (k, v) in self.policy.protected().rules().env {
+            env.retain(|(name, _)| name != k);
+            env.push(((*k).to_owned(), (*v).to_owned()));
+        }
         if let Some(id) = &a.call_id {
             env.push(("SPECCODER_CALL_ID".to_owned(), id.clone()));
         }

@@ -9,28 +9,19 @@ use speccoder_core::{CommandData, CommandResult, CommandStatus};
 use crate::pipeline::*;
 use crate::{context, git, substrate};
 
-/// `speccoder inspect`: report what speccoder sees in the Spec Kit project
+/// `speccoder inspect`: report what speccoder sees in the project
 /// containing `path`. Read-only.
 #[must_use]
 pub fn inspect(path: &Path, feature: Option<&str>) -> CommandResult {
-    let env = std::env::var("SPECIFY_FEATURE_DIRECTORY")
-        .ok()
-        .filter(|v| !v.is_empty());
-    match speccoder_speckit::inspect_with(path, feature, env.as_deref()) {
-        Ok(snapshot) => {
+    match crate::format::open(path, feature) {
+        Ok(opened) => {
+            let snapshot = opened.snapshot;
             let status = status_of(&snapshot);
-            let message = summary(&snapshot);
+            let message = summary(&snapshot, opened.adapter.messages());
             CommandResult::new("inspect", status, &message)
                 .with_data(CommandData::Inspect(Box::new(snapshot)))
         }
-        Err(speccoder_speckit::NotAProject) => CommandResult::new(
-            "inspect",
-            CommandStatus::NotAProject,
-            &format!(
-                "no Spec Kit project (.specify/) at or above {}; run `specify init` first",
-                path.display()
-            ),
-        ),
+        Err(r) => CommandResult::new("inspect", r.status, &r.message),
     }
 }
 
@@ -49,7 +40,7 @@ pub(crate) fn status_of(s: &ProjectSnapshot) -> CommandStatus {
     }
 }
 
-pub(crate) fn summary(s: &ProjectSnapshot) -> String {
+pub(crate) fn summary(s: &ProjectSnapshot, m: &crate::format::Messages) -> String {
     let features = match s.features.len() {
         1 => "1 feature".to_owned(),
         n => format!("{n} features"),
@@ -60,7 +51,7 @@ pub(crate) fn summary(s: &ProjectSnapshot) -> String {
                 "{} selected: {} tasks, {} done, {} open",
                 f.feature.name, t.totals.total, t.totals.done, t.totals.open
             ),
-            None => format!("{} selected: no tasks.md", f.feature.name),
+            None => format!("{} selected: no {}", f.feature.name, m.tasks_file),
         },
         None => "none selected".to_owned(),
     };
@@ -78,7 +69,7 @@ pub(crate) fn summary(s: &ProjectSnapshot) -> String {
 }
 
 /// `speccoder worktree`: create or reuse the git worktree speccoder works in
-/// for the selected feature of the Spec Kit project containing `path`.
+/// for the selected feature of the project containing `path`.
 #[must_use]
 pub fn worktree(path: &Path, feature: Option<&str>) -> CommandResult {
     match crate::worktree::state_dir() {
@@ -107,6 +98,7 @@ pub fn worktree_with(path: &Path, feature: Option<&str>, state: &Path) -> Comman
             inspected.message(),
         );
     };
+    let format = crate::format::of(&snapshot);
     let name = f.feature.name.clone();
     let mut report = WorktreeReport {
         feature: name.clone(),
@@ -130,25 +122,22 @@ pub fn worktree_with(path: &Path, feature: Option<&str>, state: &Path) -> Comman
         Ok(None) => {
             return refuse(
                 report,
-                "the Spec Kit project is not inside a git repository",
+                format.messages().not_in_git,
                 "run `git init` and commit the project",
             );
         }
         Err(e) => return refuse(report, &e.0, "install git"),
     };
-    // The Spec Kit root may be a subdirectory of the repository (monorepo).
+    // The project root may be a subdirectory of the repository (monorepo).
     let rel = project.strip_prefix(&repo_root).unwrap_or(Path::new(""));
     let join = |p: &str| {
         let joined = rel.join(p);
         let s = joined.to_string_lossy().replace('\\', "/");
         if s.is_empty() { ".".to_owned() } else { s }
     };
-    let artifacts = crate::worktree::Artifacts {
-        specify_dir: join(".specify"),
-        feature_dir: join(&f.feature.dir),
-    };
+    let precondition = format.commit_precondition(project, &join, &f.feature.dir);
 
-    match crate::worktree::ensure_worktree(&repo_root, state, &name, &artifacts) {
+    match crate::worktree::ensure_worktree(&repo_root, state, &name, precondition) {
         Ok(wt) => {
             report.project_dir = Some(wt.path.join(rel).display().to_string());
             report.path = Some(wt.path.display().to_string());
@@ -190,13 +179,16 @@ pub fn propose(path: &Path, feature: Option<&str>, task: &str) -> CommandResult 
     match setup(path, feature, &state, "propose") {
         Err(r) => return *r,
         Ok(s) => {
-            if let Err(e) = context::bundle(&s.snapshot, task) {
+            if let Err(e) = s.format.bundle(&s.snapshot, task) {
                 let msg = match e {
                     context::BundleError::NotFound(id) => {
                         format!("no task {id} in the selected feature")
                     }
                     context::BundleError::NoTasks => {
-                        "the selected feature has no tasks.md".to_owned()
+                        format!(
+                            "the selected feature has no {}",
+                            s.format.messages().tasks_file
+                        )
                     }
                     context::BundleError::NoFeature => {
                         "no feature selected; pass --feature".to_owned()
@@ -243,7 +235,7 @@ pub fn propose_with(
         Ok(s) => s,
         Err(r) => return *r,
     };
-    let bundle = match context::bundle(&s.snapshot, task) {
+    let bundle = match s.format.bundle(&s.snapshot, task) {
         Ok(b) => b,
         Err(context::BundleError::NotFound(id)) => {
             return CommandResult::new(
@@ -256,7 +248,10 @@ pub fn propose_with(
             return CommandResult::new(
                 "propose",
                 CommandStatus::NotFound,
-                "the selected feature has no tasks.md",
+                &format!(
+                    "the selected feature has no {}",
+                    s.format.messages().tasks_file
+                ),
             );
         }
         Err(context::BundleError::NoFeature) => {
@@ -280,7 +275,16 @@ pub fn propose_with(
         Err(e) => return fail(e),
     };
     let outcome = rt.block_on(async {
-        let plane = substrate::Plane::open(&s.plane_dir, &s.model, provider)?;
+        let plane = substrate::Plane::open_with(
+            &s.plane_dir,
+            &s.model,
+            provider,
+            None,
+            substrate::Hooks {
+                format: Some(s.format),
+                ..substrate::Hooks::default()
+            },
+        )?;
         // The person's committed spec, plan and task: trusted.
         plane
             .propose(
@@ -355,7 +359,12 @@ pub fn replay_with(path: &Path, run: &str, state: &Path) -> CommandResult {
         Ok(rt) => rt,
         Err(e) => return CommandResult::new("replay", CommandStatus::RunFailed, &e),
     };
-    let result = rt.block_on(substrate::replay_strict(&s.plane_dir, &s.model, run));
+    let result = rt.block_on(substrate::replay_strict(
+        &s.plane_dir,
+        &s.model,
+        run,
+        s.format,
+    ));
     let report = |result: &str, detail: String| ReplayReport {
         run_id: run.to_owned(),
         result: result.to_owned(),

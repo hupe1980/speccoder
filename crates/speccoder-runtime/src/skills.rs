@@ -1,5 +1,5 @@
 //! Installed Agent Skills: `SKILL.md` files under `.claude/skills/`
-//! and `.agents/skills/`, as Spec Kit installs its commands.
+//! and `.agents/skills/`, as spec formats install their commands.
 //!
 //! speccoder hosts the planning skills (`speckit-specify`, `-clarify`,
 //! `-plan`, `-tasks`, `-analyze`, `-checklist`, `-constitution`, and others)
@@ -10,6 +10,8 @@
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
+
+use crate::format::Planning;
 
 /// Where skills are installed, relative to the project root.
 pub const DIRS: [&str; 2] = [".claude/skills", ".agents/skills"];
@@ -29,22 +31,11 @@ pub struct Skill {
     pub refused: Option<String>,
 }
 
-/// Skills speccoder does not host, and what to use instead.
+/// Skills speccoder does not host in a project of the reference format, and
+/// what to use instead.
 #[must_use]
 pub fn refusal(name: &str) -> Option<String> {
-    match name {
-        "speckit-implement" => Some(
-            "speccoder implements tasks itself, with evidence: use `speccoder run`".to_owned(),
-        ),
-        "speckit-converge" => Some(
-            "speccoder converges with a read-only assessment and a guarded append: use `speccoder converge`"
-                .to_owned(),
-        ),
-        "speckit-taskstoissues" => Some(
-            "it creates GitHub issues; speccoder never talks to a remote".to_owned(),
-        ),
-        _ => None,
-    }
+    (crate::format::reference().planning().refused)(name)
 }
 
 /// The frontmatter's simple `key: value` lines and the body after it.
@@ -72,9 +63,16 @@ pub fn split(text: &str) -> (Vec<(String, String)>, String) {
     (fields, body)
 }
 
-/// Every installed skill under `root`, by name.
+/// Every installed skill under `root`, by name, for a project of the
+/// reference format.
 #[must_use]
 pub fn discover(root: &Path) -> Vec<Skill> {
+    discover_with(root, crate::format::reference().planning())
+}
+
+/// [`discover`] for a project whose format hosts `planning`.
+#[must_use]
+pub fn discover_with(root: &Path, planning: &Planning) -> Vec<Skill> {
     let mut out: Vec<Skill> = Vec::new();
     for dir in DIRS {
         let Ok(entries) = std::fs::read_dir(root.join(dir)) else {
@@ -92,7 +90,7 @@ pub fn discover(root: &Path) -> Vec<Skill> {
                 continue; // the first directory wins
             }
             out.push(Skill {
-                refused: refusal(&name),
+                refused: (planning.refused)(&name),
                 description: get("description").unwrap_or_default(),
                 path: format!("{dir}/{}/SKILL.md", e.file_name().to_string_lossy()),
                 invocable: get("user-invocable").is_none_or(|v| v != "false"),

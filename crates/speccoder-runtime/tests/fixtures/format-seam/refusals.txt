@@ -1,0 +1,3 @@
+it is Spec Kit intent (.specify/, specs/): the spec is not edited during implementation
+a planning skill writes Spec Kit artifacts (specs/, .specify/feature.json, .specify/memory/); `src/lib.rs` is not one
+`specs/001-x/spec.md` is protected: it is Spec Kit intent (.specify/, specs/): the spec is not edited during implementation

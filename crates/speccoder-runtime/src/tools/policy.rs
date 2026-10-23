@@ -107,39 +107,11 @@ pub struct Policy {
     rejected: Vec<Rejection>,
     /// MCP tools by model-facing name: `allow`, `approval` or `deny`.
     mcp: std::collections::BTreeMap<String, String>,
-    /// The planning profile for hosted Spec Kit skills.
+    /// The planning profile for hosted planning skills.
     authoring: bool,
     /// Commands run without the network; these prefixes get it,
     /// asking for it otherwise needs approval.
     network: Vec<Vec<String>>,
-}
-
-/// What a hosted planning skill writes: the feature's artifacts, the
-/// feature selection and the constitution — Spec Kit's own outputs.
-fn is_authoring_path(p: &str) -> bool {
-    p.starts_with("specs/") || p == ".specify/feature.json" || p.starts_with(".specify/memory/")
-}
-
-/// One of Spec Kit's own scripts, run directly or by `bash`/`sh`.
-fn is_speckit_script(argv: &[String]) -> bool {
-    let script = |a: &str| {
-        let a = a.strip_prefix("./").unwrap_or(a);
-        // Spec Kit's scripts and those of installed extensions
-        // (`.specify/extensions/<ext>/scripts/…`): the person installed them,
-        // and the model can write neither.
-        let ext_script = a
-            .strip_prefix(".specify/extensions/")
-            .is_some_and(|rest| rest.split('/').nth(1) == Some("scripts"));
-        !a.contains("..")
-            && (a.starts_with(".specify/scripts/bash/") && a.ends_with(".sh")
-                || a.starts_with(".specify/scripts/powershell/") && a.ends_with(".ps1")
-                || ext_script && (a.ends_with(".sh") || a.ends_with(".ps1")))
-    };
-    match argv {
-        [first, ..] if script(first) => true,
-        [shell, second, ..] if matches!(shell.as_str(), "bash" | "sh") => script(second),
-        _ => false,
-    }
 }
 
 const SHELLS: &[&str] = &[
@@ -198,12 +170,20 @@ impl Policy {
         }
     }
 
-    /// The planning profile: Spec Kit's artifacts and scripts are the
-    /// work; Spec Kit's machinery, verification inputs and secrets stay
-    /// denied; anything else — source code included — needs approval.
+    /// The planning profile: the format's artifacts and scripts are the
+    /// work; its machinery, verification inputs and secrets stay denied;
+    /// anything else — source code included — needs approval.
     #[must_use]
     pub fn authoring(mut self) -> Self {
         self.authoring = true;
+        self
+    }
+
+    /// The project's format's rules (intent, planning artifacts); the
+    /// reference format's by default.
+    #[must_use]
+    pub fn rules(mut self, rules: &'static crate::format::Rules) -> Self {
+        self.protected = Protected::new(rules);
         self
     }
 
@@ -251,11 +231,14 @@ impl Policy {
     }
 
     /// Whether this (resolved, workspace-relative) path is protected for
-    /// writing under this policy: the authoring profile writes Spec Kit's
+    /// writing under this policy: the authoring profile writes the format's
     /// artifacts, nothing else of the protected set.
     #[must_use]
     pub fn write_protected(&self, rel: &str) -> Option<super::paths::Class> {
-        if self.authoring && is_authoring_path(rel) && !self.protected.is_secret(rel) {
+        if self.authoring
+            && (self.protected.rules().authoring_path)(rel)
+            && !self.protected.is_secret(rel)
+        {
             return None;
         }
         self.protected.write_class(rel)
@@ -351,16 +334,20 @@ impl Policy {
             Ok(p) => p,
             Err(e) => return Decision::Deny(e.0),
         };
-        if self.authoring && is_authoring_path(&p) && !self.protected.is_secret(&p) {
+        if self.authoring
+            && (self.protected.rules().authoring_path)(&p)
+            && !self.protected.is_secret(&p)
+        {
             return Decision::Allow;
         }
         if let Some(class) = self.protected.write_class(&p) {
-            return Decision::Deny(format!("`{p}` is protected: {}", class.reason()));
+            return Decision::Deny(format!(
+                "`{p}` is protected: {}",
+                self.protected.reason(class)
+            ));
         }
         if self.authoring {
-            return Decision::Approval(format!(
-                "a planning skill writes Spec Kit artifacts (specs/, .specify/feature.json, .specify/memory/); `{p}` is not one"
-            ));
+            return Decision::Approval((self.protected.rules().authoring_refusal)(&p));
         }
         if self.protected.is_context(&p) {
             return Decision::Approval(format!(
@@ -388,8 +375,10 @@ impl Policy {
                     .collect()
             })
             .unwrap_or_default();
-        if self.authoring && is_speckit_script(&argv) {
-            return Decision::Allow;
+        match (self.protected.rules().command)(&argv, self.authoring) {
+            Some(Ok(())) => return Decision::Allow,
+            Some(Err(why)) => return Decision::Deny(why),
+            None => {}
         }
         let Some(program) = argv.first() else {
             return Decision::Deny("empty `argv`".to_owned());

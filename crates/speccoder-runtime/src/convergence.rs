@@ -158,16 +158,21 @@ fn assess(
         );
     }
 
-    let Ok(snap) = speccoder_speckit::inspect(&project, Some(&feature_name)) else {
+    let format = crate::format::at(&project);
+    let Some(snap) = format.inspect(&project, Some(&feature_name)) else {
         return refuse(
             CommandStatus::NotAProject,
-            "the worktree has no Spec Kit project".to_owned(),
+            format.messages().no_project_in_worktree.to_owned(),
         );
     };
     let Some(tasks) = snap.feature.as_ref().and_then(|f| f.tasks.as_ref()) else {
         return refuse(
             CommandStatus::NotFound,
-            format!("{feature_name} has no tasks.md; run /speckit-tasks first"),
+            format!(
+                "{feature_name} has no {}; {}",
+                format.messages().tasks_file,
+                format.messages().make_tasks
+            ),
         );
     };
     let open: Vec<&str> = tasks
@@ -191,7 +196,7 @@ fn assess(
         .map_or_else(|| project.clone(), Path::to_path_buf);
     let read = |p: &Path| std::fs::read_to_string(p).unwrap_or_default();
     let tasks_text = read(&tasks_path);
-    let tasks_hash = speccoder_speckit::sha256_hex(tasks_text.as_bytes());
+    let tasks_hash = crate::integrity::sha256_hex(tasks_text.as_bytes());
 
     let Some(config_root) = verify::find_config(&project) else {
         return refuse(
@@ -206,7 +211,7 @@ fn assess(
         Err(e) => return refuse(CommandStatus::ConfigError, format!("speccoder.toml: {e}")),
     };
 
-    let is_convergence = crate::context::is_convergence;
+    let is_convergence = |phase: &str| format.is_convergence(phase);
     let done_rounds = tasks
         .phases
         .iter()
@@ -253,14 +258,10 @@ fn assess(
         .into_iter()
         .take(400)
         .collect();
+    let [constitution, spec, plan, _] = format.convergence_texts(&project, &feature_dir);
     let input = substrate::converge::input(
         &feature_name,
-        [
-            &read(&project.join(".specify/memory/constitution.md")),
-            &read(&feature_dir.join("spec.md")),
-            &read(&feature_dir.join("plan.md")),
-            &tasks_text,
-        ],
+        [&constitution, &spec, &plan, &tasks_text],
         &files,
         run_config.max_turns,
         run_config.max_tool_calls,
@@ -273,13 +274,24 @@ fn assess(
         Ok((r, _)) => r,
         Err(e) => return refuse(CommandStatus::ConfigError, e),
     };
-    let server = match tools::WorkspaceTools::new(&wt_root, tools::policy::Policy::new(&[], &[])) {
+    let server = match tools::WorkspaceTools::new(
+        &wt_root,
+        tools::policy::Policy::new(&[], &[]).rules(format.rules()),
+    ) {
         Ok(t) => Arc::new(t.with_runner(runner)),
         Err(e) => return refuse(CommandStatus::Error, e.to_string()),
     };
     let outcome = rt.block_on(async {
-        let plane =
-            substrate::Plane::open_with_tools(&s.plane_dir, &s.model, provider, Some(server))?;
+        let plane = substrate::Plane::open_with(
+            &s.plane_dir,
+            &s.model,
+            provider,
+            Some(server),
+            substrate::Hooks {
+                format: Some(format),
+                ..substrate::Hooks::default()
+            },
+        )?;
         plane.converge(&feature_name, input).await
     });
     let outcome = match outcome {
@@ -383,7 +395,7 @@ fn assess(
     }
 
     let items: Vec<String> = actionable.iter().map(task_line).collect();
-    let ids = match speccoder_speckit::append_convergence(&tasks_path, &tasks_hash, &items) {
+    let ids = match format.append(&tasks_path, &tasks_hash, &items) {
         Ok(ids) => ids,
         Err(e) => {
             report.outcome = "failed".to_owned();

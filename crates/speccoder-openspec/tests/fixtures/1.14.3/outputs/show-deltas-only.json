@@ -1,0 +1,65 @@
+{
+  "id": "add-greeting-cli",
+  "title": "add-greeting-cli",
+  "deltaCount": 2,
+  "deltas": [
+    {
+      "spec": "greeting",
+      "operation": "ADDED",
+      "description": "Add requirement: The system SHALL print `Hello, <name>!` when invoked with a name argument.",
+      "requirement": {
+        "name": "Greet a named person",
+        "text": "The system SHALL print `Hello, <name>!` when invoked with a name argument.",
+        "scenarios": [
+          {
+            "name": "Name given",
+            "rawText": "- **WHEN** the user runs `greet Ada`\n- **THEN** the output is `Hello, Ada!`\n- **AND** the exit code is 0"
+          }
+        ]
+      },
+      "requirements": [
+        {
+          "name": "Greet a named person",
+          "text": "The system SHALL print `Hello, <name>!` when invoked with a name argument.",
+          "scenarios": [
+            {
+              "name": "Name given",
+              "rawText": "- **WHEN** the user runs `greet Ada`\n- **THEN** the output is `Hello, Ada!`\n- **AND** the exit code is 0"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "spec": "greeting",
+      "operation": "ADDED",
+      "description": "Add requirement: The system MUST greet \"World\" when no name argument is given.",
+      "requirement": {
+        "name": "Default greeting",
+        "text": "The system MUST greet \"World\" when no name argument is given.",
+        "scenarios": [
+          {
+            "name": "No name given",
+            "rawText": "- **WHEN** the user runs `greet` with no arguments\n- **THEN** the output is `Hello, World!`"
+          }
+        ]
+      },
+      "requirements": [
+        {
+          "name": "Default greeting",
+          "text": "The system MUST greet \"World\" when no name argument is given.",
+          "scenarios": [
+            {
+              "name": "No name given",
+              "rawText": "- **WHEN** the user runs `greet` with no arguments\n- **THEN** the output is `Hello, World!`"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "root": {
+    "path": "/tmp/openspec-try/sample",
+    "source": "nearest"
+  }
+}

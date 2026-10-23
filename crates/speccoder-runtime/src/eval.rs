@@ -322,7 +322,8 @@ fn run_case(
                 rt.block_on(crate::substrate::replay_strict(
                     &plane_dir,
                     &model,
-                    &report.run_id
+                    &report.run_id,
+                    crate::format::at(&repo),
                 )),
                 Ok(Some(agentplane::runtime::Verdict {
                     finding: agentplane::runtime::Finding::Verified { .. },

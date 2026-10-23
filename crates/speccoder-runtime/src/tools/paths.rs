@@ -1,6 +1,7 @@
 //! Path rules for tools: normalisation, containment,
 //! secrets, and the protected set the model may never write.
 
+use crate::format::Rules;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 
@@ -59,9 +60,6 @@ const SECRETS: &[&str] = &[
     "**/.npmrc",
     "**/.pypirc",
 ];
-
-/// Spec Kit intent: the spec the work is judged against.
-const INTENT: &[&str] = &[".specify", ".specify/**", "specs/**", "**/.specify/**"];
 
 /// Inputs that decide verification.
 const JUDGE: &[&str] = &[
@@ -154,7 +152,7 @@ pub fn is_test_path(rel: &str) -> bool {
 /// Why a path is protected.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Class {
-    /// Spec Kit intent.
+    /// The spec format's intent: the spec the work is judged against.
     Intent,
     /// Verification inputs.
     Judge,
@@ -165,13 +163,16 @@ pub enum Class {
 }
 
 impl Class {
-    /// What the model is told.
+    /// What the model is told, for a project in the reference format
+    /// ([`Protected::reason`] for the project's own).
     #[must_use]
-    pub const fn reason(self) -> &'static str {
+    pub fn reason(self) -> &'static str {
+        self.reason_with(crate::format::reference().rules())
+    }
+
+    fn reason_with(self, rules: &Rules) -> &'static str {
         match self {
-            Self::Intent => {
-                "it is Spec Kit intent (.specify/, specs/): the spec is not edited during implementation"
-            }
+            Self::Intent => rules.intent_reason,
             Self::Judge => {
                 "it decides verification or configures an agent (speccoder.toml, CI and test-runner configuration, agent hooks, settings, skills and MCP servers)"
             }
@@ -184,6 +185,7 @@ impl Class {
 /// The protected set, compiled once.
 #[derive(Debug, Clone)]
 pub struct Protected {
+    rules: &'static Rules,
     secrets: GlobSet,
     intent: GlobSet,
     judge: GlobSet,
@@ -193,17 +195,36 @@ pub struct Protected {
 
 impl Default for Protected {
     fn default() -> Self {
+        Self::new(crate::format::reference().rules())
+    }
+}
+
+impl Protected {
+    /// The protected set of a project whose format has `rules`.
+    #[must_use]
+    pub fn new(rules: &'static Rules) -> Self {
         Self {
+            rules,
             secrets: set(SECRETS),
-            intent: set(INTENT),
+            intent: set(rules.intent),
             judge: set(JUDGE),
             context: set(CONTEXT),
             manifests: set(MANIFESTS),
         }
     }
-}
 
-impl Protected {
+    /// The format's rules this set was built from.
+    #[must_use]
+    pub fn rules(&self) -> &'static Rules {
+        self.rules
+    }
+
+    /// What the model is told about a write to a path of `class`.
+    #[must_use]
+    pub fn reason(&self, class: Class) -> &'static str {
+        class.reason_with(self.rules)
+    }
+
     /// Whether a normalised path is a secret (refused for reading too).
     #[must_use]
     pub fn is_secret(&self, rel: &str) -> bool {

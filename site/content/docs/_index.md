@@ -9,7 +9,7 @@ page_template = "doc.html"
 seo_title = "Documentation · speccoder"
 +++
 
-speccoder is a command-line coding agent for [GitHub Spec Kit](https://github.com/github/spec-kit) projects. You write the specification — or let Spec Kit's planning skills draft it — and speccoder implements the feature task by task. What makes it different is who decides when a task is done: not the model, but evidence.
+speccoder is a command-line coding agent for [GitHub Spec Kit](https://github.com/github/spec-kit) projects, and for [OpenSpec](@/docs/openspec.md) changes. You write the specification — or let Spec Kit's planning skills draft it — and speccoder implements the feature task by task. What makes it different is who decides when a task is done: not the model, but evidence.
 
 ## The idea in one paragraph
 

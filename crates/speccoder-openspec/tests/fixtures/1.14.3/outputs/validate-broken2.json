@@ -1,0 +1,36 @@
+{
+  "items": [
+    {
+      "id": "broken-example",
+      "type": "change",
+      "valid": true,
+      "issues": [
+        {
+          "level": "INFO",
+          "path": "greeting/spec.md",
+          "message": "Archive would refuse this delta: greeting MODIFIED failed for header \"### Requirement: Does not exist\" - not found"
+        }
+      ],
+      "durationMs": 11
+    }
+  ],
+  "summary": {
+    "totals": {
+      "items": 1,
+      "passed": 1,
+      "failed": 0
+    },
+    "byType": {
+      "change": {
+        "items": 1,
+        "passed": 1,
+        "failed": 0
+      }
+    }
+  },
+  "version": "1.0",
+  "root": {
+    "path": "/tmp/openspec-try/sample",
+    "source": "nearest"
+  }
+}

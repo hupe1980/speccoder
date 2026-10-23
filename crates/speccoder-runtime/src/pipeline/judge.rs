@@ -74,7 +74,8 @@ pub(crate) fn attempt_findings(a: &Audited<'_>) -> Vec<String> {
         .filter(|p| !a.approved_writes.contains(*p))
         .cloned()
         .collect();
-    let mut findings: Vec<String> = integrity::audit(
+    let mut findings: Vec<String> = integrity::audit_in(
+        a.policy.protected(),
         a.raw_changes,
         a.patch,
         &frozen,

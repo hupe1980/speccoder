@@ -164,6 +164,32 @@ pub enum CommandData {
     Skill(Box<SkillRunReport>),
     /// `run` stopped by unfinished checklists.
     Checklists(Vec<ChecklistStatus>),
+    /// `spec archive`: an OpenSpec change merged into the main specs.
+    Archive(Box<ArchiveReport>),
+}
+
+/// Result of `speccoder spec archive` (an OpenSpec change).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ArchiveReport {
+    /// The change.
+    pub change: String,
+    /// `probe`, `incomplete`, `unverified`, `awaiting_confirmation`,
+    /// `declined`, `archived` or `failed`.
+    pub stage: String,
+    /// OpenSpec's own `{severity, code, message, fix}` from its last answer.
+    pub openspec_status: Option<serde_json::Value>,
+    /// Tasks ticked without a speccoder verdict commit.
+    pub unverified_tasks: Vec<String>,
+    /// What archiving changes (`openspec show <id> --diff`), when shown.
+    pub diff: Option<String>,
+    /// Where OpenSpec moved the change.
+    pub archived_as: Option<String>,
+    /// OpenSpec's counts of added, modified, removed and renamed requirements.
+    pub totals: Option<serde_json::Value>,
+    /// The commit `archive <id>`.
+    pub commit: Option<String>,
+    /// Who confirmed.
+    pub confirmed_by: Option<String>,
 }
 
 /// One Spec Kit checklist (`specs/<feature>/checklists/*.md`).

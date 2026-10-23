@@ -86,12 +86,18 @@ pub fn parse(text: &str) -> Result<Option<Executor>, String> {
 /// the rules speccoder will check afterwards, and how to stop honestly.
 #[must_use]
 pub fn prompt(bundle: &Value, digest: Option<&Value>) -> String {
+    prompt_in(crate::format::reference().wording(), bundle, digest)
+}
+
+/// [`prompt`] for a project whose format is worded `w`.
+#[must_use]
+pub fn prompt_in(w: &crate::format::Wording, bundle: &Value, digest: Option<&Value>) -> String {
     let s = |k: &str| bundle[k].as_str().unwrap_or_default();
     let task = &bundle["task"];
     let mut out = format!(
-        "You are implementing exactly one task of a GitHub Spec Kit feature in this git worktree.\n\n\
+        "You are implementing exactly one task of a {product} {unit} in this git worktree.\n\n\
 Rules — speccoder checks them after you finish, from the diff:\n\
-- Change only what the task needs. Do not edit the spec (`.specify/`, `specs/`), the checks' configuration (`speccoder.toml`, CI files, test-runner config) or anything under `.git`.\n\
+- Change only what the task needs. Do not edit the spec ({intent}), the checks' configuration (`speccoder.toml`, CI files, test-runner config) or anything under `.git`.\n\
 - Test files that exist now are frozen: add new tests in new files; never weaken, skip or delete tests.\n\
 - Do not commit, branch or push; speccoder commits a task that passes.\n\
 - Run the project's tests to see whether your change works; speccoder runs them again and decides.\n\
@@ -100,11 +106,14 @@ Rules — speccoder checks them after you finish, from the diff:\n\
         task["id"].as_str().unwrap_or_default(),
         task["title"].as_str().unwrap_or_default(),
         task["phase"].as_str().unwrap_or_default(),
+        product = w.product,
+        unit = w.unit,
+        intent = w.intent_code,
     );
     for (title, key) in [
-        ("User story", "story"),
-        ("Plan", "plan"),
-        ("Project constitution", "constitution"),
+        (w.story, "story"),
+        (w.plan_short, "plan"),
+        (w.constitution, "constitution"),
     ] {
         if !s(key).trim().is_empty() {
             out.push_str(&format!("\n# {title}\n\n{}\n", s(key)));

@@ -25,6 +25,60 @@ fn no_state(command: &str) -> speccoder_core::CommandResult {
     )
 }
 
+/// `speccoder spec archive [<change>] [--yes] [--allow-unverified TASK]…`:
+/// flags given after the change are read from the trailing arguments too.
+fn archive(
+    cli: &Cli,
+    path: &std::path::Path,
+    arguments: &[String],
+    yes: bool,
+    allow_unverified: &[String],
+) -> speccoder_core::CommandResult {
+    use speccoder_runtime::format::openspec::archive;
+    use std::io::IsTerminal;
+    let mut change = None;
+    let mut yes = yes;
+    let mut allowed = allow_unverified.to_vec();
+    let mut args = arguments.iter();
+    while let Some(a) = args.next() {
+        match a.as_str() {
+            "--yes" | "-y" => yes = true,
+            "--allow-unverified" => allowed.extend(args.next().cloned()),
+            other => {
+                if let Some(v) = other.strip_prefix("--allow-unverified=") {
+                    allowed.push(v.to_owned());
+                } else if change.is_none() {
+                    change = Some(other.to_owned());
+                }
+            }
+        }
+    }
+    let ask = |r: &speccoder_core::ArchiveReport| {
+        if let Some(diff) = &r.diff {
+            eprintln!("{diff}");
+        }
+        eprint!(
+            "Archive {} into the main specs and commit it? [y/N] ",
+            r.change
+        );
+        let mut line = String::new();
+        let _ = std::io::stdin().read_line(&mut line);
+        matches!(line.trim(), "y" | "Y" | "yes")
+    };
+    let interactive =
+        !cli.json && std::io::stdin().is_terminal() && std::io::stderr().is_terminal();
+    archive::archive(
+        path,
+        &archive::Options {
+            change: change.as_deref(),
+            yes,
+            allow_unverified: &allowed,
+            confirm: interactive.then_some(&ask as &dyn Fn(&speccoder_core::ArchiveReport) -> bool),
+            program: None,
+        },
+    )
+}
+
 fn main() {
     // The Linux sandbox helper: confine this process, then exec.
     let args: Vec<String> = std::env::args().collect();
@@ -43,6 +97,9 @@ fn main() {
     }
     // clap prints usage errors itself and exits with status 2 (ExitCode::USAGE).
     let cli = Cli::parse();
+    if let Some(f) = cli.format {
+        speccoder_runtime::format::request(f.into());
+    }
     let result = match &cli.command {
         Command::Inspect { path, feature } => speccoder_runtime::inspect(path, feature.as_deref()),
         Command::Worktree { path, feature } => {
@@ -140,6 +197,32 @@ fn main() {
             path,
             no_prompt,
         } => match name {
+            None => speccoder_runtime::hosting::list(path),
+            Some(name) => {
+                use std::io::IsTerminal;
+                let interactive = !cli.json
+                    && !*no_prompt
+                    && std::io::stdin().is_terminal()
+                    && std::io::stderr().is_terminal();
+                let (progress, _attention) = live_progress(&cli);
+                let options = speccoder_runtime::RunOptions {
+                    max_tasks: None,
+                    approver: interactive.then(|| std::sync::Arc::new(prompt::Terminal) as _),
+                    progress,
+                    ..speccoder_runtime::RunOptions::default()
+                };
+                speccoder_runtime::hosting::run(path, name, &arguments.join(" "), &options)
+            }
+        },
+        Command::Spec {
+            name,
+            arguments,
+            path,
+            no_prompt,
+            yes,
+            allow_unverified,
+        } => match name.as_deref() {
+            Some("archive") => archive(&cli, path, arguments, *yes, allow_unverified),
             None => speccoder_runtime::hosting::list(path),
             Some(name) => {
                 use std::io::IsTerminal;

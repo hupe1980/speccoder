@@ -6,6 +6,7 @@
 //! section, appended behind a prefix guard. `unrequested` findings go to a
 //! person and are never turned into tasks.
 
+use crate::format::Wording;
 use agentplane::prelude::*;
 use serde_json::{Value, json};
 
@@ -25,24 +26,36 @@ pub const READ_ONLY: [&str; 5] = [
     "git_diff",
 ];
 
-/// What the assessor is told (after Spec Kit's `/speckit-converge`).
-pub const POLICY: &str = "You are the convergence step of speccoder. Assess the CURRENT code of \
-a GitHub Spec Kit feature against its spec.md, plan.md and tasks.md — the sole source of intent — \
-with the constitution as governing constraints. Ticked tasks are not evidence: read the code. You \
-can only read (read_file, list_files, search_code, git_status, git_diff); you change nothing. For \
-every functional requirement (FR-###), success criterion that needs buildable work (SC-###), user \
-story acceptance scenario (USn/ACm), plan decision and constitution MUST principle, report a \
-finding only where there is a gap, classified as `missing` (absent), `partial` (exists but does \
-not fully satisfy), `contradicts` (conflicts with stated intent or a constitution MUST) or \
-`unrequested` (code that exists although the spec, plan and tasks do not call for it). A \
-requirement or rule the code does not meet is ALWAYS missing, partial or contradicts — never \
-unrequested. Severity: CRITICAL (constitution \
-MUST violation, or missing/contradicts that blocks a P1 story), HIGH (missing/partial on a core \
-requirement), MEDIUM, LOW. For each finding give `task`: one imperative sentence that a coding \
-agent can complete (no task ID, no checkbox, no file contents), `source_ref` (e.g. FR-003, \
-US1/AC2, plan: storage, Constitution II), and `evidence` (the file or area you observed). Do not \
-report what is already satisfied; do not invent requirements. If nothing remains, return no \
-findings. Finish with the requested structured answer.";
+/// What the assessor is told (after Spec Kit's converge command).
+pub fn policy(w: &Wording) -> String {
+    format!(
+        "You are the convergence step of speccoder. Assess the CURRENT code of a {product} \
+{unit} against its {documents} — the sole source of intent — with {rules} as \
+governing constraints. Ticked tasks are not evidence: read the code. You can only read \
+(read_file, list_files, search_code, git_status, git_diff); you change nothing. For \
+every {targets}, report a finding only where there is a gap, classified as `missing` (absent), \
+`partial` (exists but does not fully satisfy), `contradicts` (conflicts with stated \
+intent or {must}) or `unrequested` (code that exists although the {sources} \
+do not call for it). A requirement or rule the code does not meet is \
+ALWAYS missing, partial or contradicts — never unrequested. Severity: CRITICAL \
+({critical}), HIGH \
+(missing/partial on a core requirement), MEDIUM, LOW. For each finding give `task`: one \
+imperative sentence that a coding agent can complete (no task ID, no checkbox, no file \
+contents), `source_ref` (e.g. {refs}), and \
+`evidence` (the file or area you observed). Do not report what is already satisfied; do \
+not invent requirements. If nothing remains, return no findings. Finish with the \
+requested structured answer.",
+        product = w.product,
+        unit = w.unit,
+        documents = w.documents,
+        rules = w.assess.rules,
+        targets = w.assess.targets,
+        must = w.assess.must,
+        sources = w.assess.sources,
+        critical = w.assess.critical,
+        refs = w.assess.refs,
+    )
+}
 
 /// The answer's schema.
 #[must_use]
@@ -105,7 +118,8 @@ pub fn input(
     ])
 }
 
-fn prompt_raw(input: &Value, ttl: CacheTtl, style: PromptStyle) -> Value {
+fn prompt_raw(input: &Value, ttl: CacheTtl, style: PromptStyle, w: &Wording) -> Value {
+    let system_policy = policy(w);
     let text = |key: &str| {
         let t = input[key].as_str().unwrap_or_default();
         if t.trim().is_empty() {
@@ -125,13 +139,14 @@ fn prompt_raw(input: &Value, ttl: CacheTtl, style: PromptStyle) -> Value {
         .unwrap_or_default();
     let feature = input["feature"].as_str().unwrap_or_default();
     let parts = [
-        format!("# spec.md ({feature})\n\n{}", text("spec")),
-        format!("# plan.md\n\n{}", text("plan")),
-        format!("# tasks.md\n\n{}", text("tasks")),
+        format!("# {} ({feature})\n\n{}", w.files[0], text("spec")),
+        format!("# {}\n\n{}", w.files[1], text("plan")),
+        format!("# {}\n\n{}", w.files[2], text("tasks")),
         format!("# Project files\n\n{files}"),
     ];
     let system = format!(
-        "{POLICY}\n\n# Project constitution\n\n{}",
+        "{system_policy}\n\n# {}\n\n{}",
+        w.constitution,
         text("constitution")
     );
     match style {
@@ -163,8 +178,8 @@ fn prompt_raw(input: &Value, ttl: CacheTtl, style: PromptStyle) -> Value {
     }
 }
 
-fn prompt(input: &Value, ttl: CacheTtl, style: PromptStyle) -> Value {
-    let mut out = prompt_raw(input, ttl, style);
+fn prompt(input: &Value, ttl: CacheTtl, style: PromptStyle, w: &Wording) -> Value {
+    let mut out = prompt_raw(input, ttl, style, w);
     if style == PromptStyle::Chat {
         super::model_config::strip_cache_control(&mut out);
     }
@@ -178,6 +193,8 @@ pub struct Converge {
     pub style: PromptStyle,
     /// Cache breakpoint lifetime.
     pub cache_ttl: CacheTtl,
+    /// The project's spec format.
+    pub format: &'static dyn crate::format::Adapter,
 }
 
 #[async_trait]
@@ -199,7 +216,7 @@ impl Skill for Converge {
                 .map_or(default, |n| u32::try_from(n).unwrap_or(u32::MAX))
         };
         let prompt = super::provenance::labelled_prompt(
-            prompt(input.peek(), ttl, style),
+            prompt(input.peek(), ttl, style, self.format.wording()),
             &super::provenance::from(super::provenance::WORKTREE),
         );
         let tools = crate::tools::declarations()
@@ -211,7 +228,7 @@ impl Skill for Converge {
             &prompt,
             LoopSpec {
                 tools,
-                policy: Policy::new(&[], &[]),
+                policy: Policy::new(&[], &[]).rules(self.format.rules()),
                 max_turns: limit("max_turns", 30).max(1),
                 max_tool_calls: limit("max_tool_calls", 100),
                 schema: schema(),

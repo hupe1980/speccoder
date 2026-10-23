@@ -1,0 +1,229 @@
+//! GitHub Spec Kit, the reference format: `.specify/` and `specs/NNN-name/`
+//! with `spec.md`, `plan.md` and `tasks.md`. Parsing is the
+//! `speccoder-speckit` crate's; this adapter is the only runtime code that
+//! knows Spec Kit's paths and words.
+
+pub mod bench;
+pub mod hooks;
+mod texts;
+pub mod workflow;
+
+use std::path::{Path, PathBuf};
+
+use speccoder_core::ChecklistStatus;
+use speccoder_core::snapshot::{Diagnostic, FeatureSnapshot, ParsedTasks, ProjectSnapshot};
+use speccoder_core::spec::FormatKind;
+
+pub use speccoder_speckit::stories::story_section;
+pub use speccoder_speckit::workspace::Workspace;
+pub use texts::{MESSAGES, PLANNING, RULES, WORDING};
+
+use crate::context::{Bundle, BundleError, DependencyContext, TaskContext, cap};
+use crate::format::{Adapter, CommitPrecondition, Detect, Messages, Planning, Rules, Wording};
+
+/// The Spec Kit adapter.
+#[derive(Debug)]
+pub struct SpecKit;
+
+/// The one instance.
+pub static SPECKIT: SpecKit = SpecKit;
+
+impl Detect for SpecKit {
+    fn kind(&self) -> FormatKind {
+        FormatKind::Speckit
+    }
+
+    fn root(&self, start: &Path) -> Option<PathBuf> {
+        speccoder_speckit::workspace::find_root(start).map(|ws| ws.root().to_path_buf())
+    }
+
+    fn adapter(&self) -> Option<&'static dyn Adapter> {
+        Some(&SPECKIT)
+    }
+}
+
+impl Adapter for SpecKit {
+    fn kind(&self) -> FormatKind {
+        FormatKind::Speckit
+    }
+
+    fn detect(&self, start: &Path) -> Option<PathBuf> {
+        Detect::root(self, start)
+    }
+
+    fn inspect(&self, start: &Path, feature: Option<&str>) -> Option<ProjectSnapshot> {
+        speccoder_speckit::inspect(start, feature).ok()
+    }
+
+    fn open(&self, start: &Path, feature: Option<&str>) -> Option<ProjectSnapshot> {
+        let env = std::env::var(texts::FEATURE_ENV)
+            .ok()
+            .filter(|v| !v.is_empty());
+        speccoder_speckit::inspect_with(start, feature, env.as_deref()).ok()
+    }
+
+    fn parse_tasks(&self, path: &str, text: &str) -> (ParsedTasks, Vec<Diagnostic>) {
+        speccoder_speckit::tasks::parse(path, text)
+    }
+
+    fn rules(&self) -> &'static Rules {
+        &RULES
+    }
+
+    fn wording(&self) -> &'static Wording {
+        &WORDING
+    }
+
+    fn messages(&self) -> &'static Messages {
+        &MESSAGES
+    }
+
+    fn planning(&self) -> &'static Planning {
+        &PLANNING
+    }
+
+    fn bundle(&self, snapshot: &ProjectSnapshot, task_id: &str) -> Result<Bundle, BundleError> {
+        let feature: &FeatureSnapshot = snapshot.feature.as_ref().ok_or(BundleError::NoFeature)?;
+        let tasks = feature.tasks.as_ref().ok_or(BundleError::NoTasks)?;
+        let task = tasks
+            .tasks
+            .iter()
+            .find(|t| t.id == task_id)
+            .ok_or_else(|| BundleError::NotFound(task_id.to_owned()))?;
+        let ws = Workspace::at(Path::new(&snapshot.root));
+        let read = |rel: &str| {
+            ws.as_ref()
+                .and_then(|ws| ws.read_text(rel).ok())
+                .map(|t| cap(&t))
+                .unwrap_or_default()
+        };
+        let dir = &feature.feature.dir;
+        let spec = read(&format!("{dir}/spec.md"));
+
+        let dependencies = feature
+            .schedule
+            .as_ref()
+            .and_then(|s| s.tasks.iter().find(|t| t.id == task.id))
+            .map(|st| {
+                st.depends_on
+                    .iter()
+                    .filter_map(|d| tasks.tasks.iter().find(|t| t.id == d.id))
+                    .map(|t| DependencyContext {
+                        id: t.id.clone(),
+                        title: t.title.clone(),
+                        done: t.done,
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        Ok(Bundle {
+            feature: feature.feature.name.clone(),
+            constitution: read(texts::CONSTITUTION),
+            plan: read(&format!("{dir}/plan.md")),
+            // A Convergence task closes a gap found against the whole spec; it
+            // gets the whole spec, so its acceptance tests have a source.
+            story: match task.story.as_deref() {
+                // A labelled task whose `### User Story N` section is missing
+                // (a spec that left the template's headings) still has the spec
+                // as its intent: acceptance tests are derived from all of it.
+                Some(label) => {
+                    let section = story_section(&spec, label);
+                    if section.trim().is_empty() {
+                        spec.clone()
+                    } else {
+                        section
+                    }
+                }
+                None if self.is_convergence(task.phase.as_deref().unwrap_or_default()) => {
+                    spec.clone()
+                }
+                None => String::new(),
+            },
+            task: TaskContext {
+                id: task.id.clone(),
+                title: task.title.clone(),
+                phase: task.phase.clone().unwrap_or_default(),
+                subsection: task.subsection.clone().unwrap_or_default(),
+                story: task.story.clone().unwrap_or_default(),
+                parallel: task.parallel,
+            },
+            dependencies,
+        })
+    }
+
+    fn acceptance_testable(&self, bundle: &Bundle) -> bool {
+        bundle.story.to_lowercase().contains("acceptance")
+    }
+
+    /// A Convergence phase, appended by converge.
+    fn is_convergence(&self, phase: &str) -> bool {
+        phase.to_lowercase().contains("convergence")
+    }
+
+    fn convergence_texts(&self, root: &Path, unit_dir: &Path) -> [String; 4] {
+        let read = |p: PathBuf| std::fs::read_to_string(p).unwrap_or_default();
+        [
+            read(root.join(texts::CONSTITUTION)),
+            read(unit_dir.join("spec.md")),
+            read(unit_dir.join("plan.md")),
+            read(unit_dir.join("tasks.md")),
+        ]
+    }
+
+    fn checklists(&self, root: &Path, unit_dir: &str) -> Vec<ChecklistStatus> {
+        speccoder_speckit::checklists::status(root, unit_dir)
+    }
+
+    fn tick(&self, tasks_file: &Path, task: &str, line_hash: &str) -> Result<(), String> {
+        speccoder_speckit::mark_task_complete(tasks_file, task, line_hash)
+    }
+
+    fn append(
+        &self,
+        tasks_file: &Path,
+        file_hash: &str,
+        items: &[String],
+    ) -> Result<Vec<String>, String> {
+        speccoder_speckit::append_convergence(tasks_file, file_hash, items)
+    }
+
+    fn commit_precondition(
+        &self,
+        _root: &Path,
+        join: &dyn Fn(&str) -> String,
+        unit_dir: &str,
+    ) -> CommitPrecondition {
+        precondition(&join(texts::MARKER), &join(unit_dir))
+    }
+}
+
+/// What a Spec Kit worktree needs committed, given the repository-relative
+/// `.specify` and feature directories.
+#[must_use]
+pub fn precondition(specify_dir: &str, feature_dir: &str) -> CommitPrecondition {
+    CommitPrecondition {
+        // The feature directory: nothing untracked, ignored or modified.
+        strict: vec![feature_dir.to_owned()],
+        // .specify: Spec Kit ignores its own per-checkout files (feature.json);
+        // those are fine. Untracked or modified files are not.
+        tracked: vec![specify_dir.to_owned()],
+        runtime,
+        essentials: vec![
+            format!("{specify_dir}/init-options.json"),
+            format!("{feature_dir}/spec.md"),
+        ],
+        message: "the feature's Spec Kit artifacts are not committed, so a worktree would not contain them",
+        hint: "commit them (git add .specify specs/<feature> && git commit), or wait for in-place mode",
+        no_commits_hint: "commit the Spec Kit artifacts first (git add .specify specs && git commit)",
+    }
+}
+
+/// Runtime state is not an artifact: Spec Kit's own workflow runs
+/// (`.specify/workflows/runs/`, dirty while `specify workflow run` drives
+/// speccoder) and Python bytecode caches of installed step types.
+fn runtime(p: &str) -> bool {
+    p.contains("/workflows/runs/")
+        || p.starts_with(".specify/workflows/runs/")
+        || p.split('/').any(|c| c == "__pycache__")
+}

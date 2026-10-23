@@ -1,0 +1,15 @@
+{
+  "changes": [
+    {
+      "name": "add-greeting-cli",
+      "completedTasks": 0,
+      "totalTasks": 3,
+      "lastModified": "2026-10-23T09:33:49.179Z",
+      "status": "in-progress"
+    }
+  ],
+  "root": {
+    "path": "/tmp/openspec-try/sample",
+    "source": "nearest"
+  }
+}

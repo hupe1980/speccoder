@@ -4,6 +4,7 @@
 use std::path::Path;
 use std::sync::Arc;
 
+use speccoder_core::snapshot::{Diagnostic, ProjectSnapshot, Severity};
 use speccoder_core::{CommandData, CommandResult, CommandStatus};
 
 use crate::commands::*;
@@ -33,6 +34,8 @@ pub(crate) struct Setup {
     pub(crate) snapshot: Box<speccoder_core::snapshot::ProjectSnapshot>,
     pub(crate) model: substrate::model_config::ModelConfig,
     pub(crate) plane_dir: std::path::PathBuf,
+    /// The project's format.
+    pub(crate) format: &'static dyn crate::format::Adapter,
 }
 
 pub(crate) fn setup(
@@ -50,6 +53,7 @@ pub(crate) fn setup(
         )));
     };
     let snapshot = snapshot.clone();
+    preflight(&snapshot, command)?;
     let config_error =
         |m: String| Box::new(CommandResult::new(command, CommandStatus::ConfigError, &m));
     let root = Path::new(&snapshot.root);
@@ -65,10 +69,58 @@ pub(crate) fn setup(
         .map_err(|e| config_error(format!("speccoder.toml: {e}")))?
         .ok_or_else(|| config_error("speccoder.toml has no [model] section".to_owned()))?;
     Ok(Setup {
+        format: crate::format::of(&snapshot),
         plane_dir: worktree::project_state_dir(state, root),
         snapshot,
         model,
     })
+}
+
+/// The format's preflight: errors of the selected unit (and, for `run`,
+/// what the format's own installed tools say) stop a run or proposal before
+/// any model call.
+fn preflight(snapshot: &ProjectSnapshot, command: &str) -> Result<(), Box<CommandResult>> {
+    if !matches!(command, "run" | "propose") {
+        return Ok(());
+    }
+    let format = crate::format::of(snapshot);
+    let mut extra = Vec::new();
+    if command == "run" {
+        match crate::sandbox::runner_at(Path::new(&snapshot.root)) {
+            Ok((runner, _)) => extra = format.crosscheck(snapshot, &runner),
+            Err(e) => extra.push(Diagnostic::new(
+                Severity::Info,
+                "crosscheck_skipped",
+                format!("cross-check skipped: {e}"),
+            )),
+        }
+    }
+    let problems = format.blocking(snapshot).len()
+        + extra
+            .iter()
+            .filter(|d| d.severity == Severity::Error)
+            .count();
+    if problems == 0 {
+        return Ok(());
+    }
+    let mut shown = snapshot.clone();
+    shown.diagnostics.extend(extra);
+    let name = shown
+        .feature
+        .as_ref()
+        .map(|f| f.feature.name.clone())
+        .unwrap_or_default();
+    Err(Box::new(
+        CommandResult::new(
+            command,
+            CommandStatus::DiagnosticsError,
+            &format!(
+                "{} {name} cannot run: {problems} problem(s)",
+                format.wording().unit
+            ),
+        )
+        .with_data(CommandData::Inspect(Box::new(shown))),
+    ))
 }
 
 pub(crate) fn tokio_runtime() -> Result<tokio::runtime::Runtime, String> {
@@ -108,21 +160,22 @@ pub struct RunOptions {
     pub ignore_checklists: bool,
 }
 
-/// Spec Kit's checklist gate: an unchecked item in the feature's
-/// `checklists/*.md` stops a run before any model call, unless a person
+/// The format's checklist gate: an unchecked item in the feature's
+/// checklists stops a run before any model call, unless a person
 /// overrides it (`run --ignore-checklists`). `Ok(true)`: overridden.
 pub(crate) fn checklist_gate(
     project: &Path,
     feature: Option<&str>,
     ignore: bool,
 ) -> Result<bool, Box<CommandResult>> {
-    let Ok(snap) = speccoder_speckit::inspect(project, feature) else {
+    let format = crate::format::at(project);
+    let Some(snap) = format.inspect(project, feature) else {
         return Ok(false);
     };
     let Some(f) = snap.feature.as_ref() else {
         return Ok(false);
     };
-    let lists = speccoder_speckit::checklists::status(Path::new(&snap.root), &f.feature.dir);
+    let lists = format.checklists(Path::new(&snap.root), &f.feature.dir);
     let open: Vec<String> = lists
         .iter()
         .filter(|c| c.open > 0)
@@ -138,10 +191,7 @@ pub(crate) fn checklist_gate(
         CommandResult::new(
             "run",
             CommandStatus::NeedsHuman,
-            &format!(
-                "unfinished checklists: {}; Spec Kit treats an unchecked item as a stop — finish them, or run with --ignore-checklists",
-                open.join(", ")
-            ),
+            &(format.messages().checklists)(&open.join(", ")),
         )
         .with_data(CommandData::Checklists(lists)),
     ))

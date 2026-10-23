@@ -1,0 +1,36 @@
+{
+  "id": "greeting",
+  "title": "greeting",
+  "overview": "Lets users print friendly greetings for a person from the command line.",
+  "requirementCount": 2,
+  "requirements": [
+    {
+      "name": "Greet a named person",
+      "text": "The system SHALL print `Hello, <name>!` when invoked with a name argument.",
+      "scenarios": [
+        {
+          "name": "Name given",
+          "rawText": "- **WHEN** the user runs `greet Ada`\n- **THEN** the output is `Hello, Ada!`\n- **AND** the exit code is 0"
+        }
+      ]
+    },
+    {
+      "name": "Default greeting",
+      "text": "The system MUST greet \"World\" when no name argument is given.",
+      "scenarios": [
+        {
+          "name": "No name given",
+          "rawText": "- **WHEN** the user runs `greet` with no arguments\n- **THEN** the output is `Hello, World!`"
+        }
+      ]
+    }
+  ],
+  "metadata": {
+    "version": "1.0.0",
+    "format": "openspec"
+  },
+  "root": {
+    "path": "/tmp/openspec-try/sample",
+    "source": "nearest"
+  }
+}

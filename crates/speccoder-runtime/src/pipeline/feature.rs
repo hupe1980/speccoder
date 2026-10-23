@@ -161,7 +161,7 @@ pub fn run_feature_with(
     if let Err(stop) = checklist_gate(path, feature, options.ignore_checklists) {
         return *stop;
     }
-    // Spec Kit's `before_implement` hooks.
+    // The format's `before_implement` hooks.
     match hosting::run_hooks(
         "before_implement",
         "",
@@ -205,11 +205,12 @@ pub fn run_feature_with(
         }
         feature_name = Some(w.feature.clone());
         let project = std::path::PathBuf::from(w.project_dir.clone().unwrap_or_default());
-        let Ok(snap) = speccoder_speckit::inspect(&project, Some(&w.feature)) else {
+        let format = crate::format::at(&project);
+        let Some(snap) = format.inspect(&project, Some(&w.feature)) else {
             return CommandResult::new(
                 "run",
                 CommandStatus::NotAProject,
-                "the worktree has no Spec Kit project",
+                format.messages().no_project_in_worktree,
             );
         };
         let schedule = snap
@@ -262,7 +263,7 @@ pub fn run_feature_with(
                         );
                     }
                 }
-                // Spec Kit's `after_implement` hooks.
+                // The format's `after_implement` hooks.
                 match hosting::run_hooks(
                     "after_implement",
                     "",

@@ -18,6 +18,9 @@
 //! written references are the complete order within a phase:
 //! subsection and `[P]` edges are dropped, phase order is kept.
 //!
+//! In **chain** mode (OpenSpec) a group waits on every earlier group and a
+//! task on the one before it in its group; written references are added.
+//!
 //! Dangling references and cycles are errors; the tasks involved are blocked.
 
 use std::collections::{BTreeSet, HashMap};
@@ -126,8 +129,23 @@ pub fn schedule(parsed: &ParsedTasks) -> (Schedule, Vec<Diagnostic>) {
     // Structural dependencies, as task indices.
     let mut structural: Vec<Vec<usize>> = vec![Vec::new(); tasks.len()];
     let declared = parsed.dependency_mode == DependencyMode::Declared;
+    let chain = parsed.dependency_mode == DependencyMode::Chain;
     let groups = groups(tasks);
     for (g, group) in groups.iter().enumerate() {
+        if chain {
+            let earlier: Vec<usize> = groups[..g]
+                .iter()
+                .flat_map(|e| e.blocks.iter().flatten().copied())
+                .collect();
+            let mut previous: Option<usize> = None;
+            for &i in group.blocks.iter().flatten() {
+                let mut deps = earlier.clone();
+                deps.extend(previous);
+                structural[i] = deps;
+                previous = Some(i);
+            }
+            continue;
+        }
         let phase_barrier: Vec<usize> = groups[..g]
             .iter()
             .filter(|earlier| group.kind != PhaseKind::Story || earlier.kind != PhaseKind::Story)

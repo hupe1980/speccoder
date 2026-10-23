@@ -90,6 +90,11 @@ pub enum Outcome {
     ConfigError,
     /// git refused (dirty tree, uncommitted artifacts, …).
     GitPrecondition,
+    /// An OpenSpec archive waits for a person's yes.
+    ArchiveAwaiting {
+        /// The change.
+        change: String,
+    },
 }
 
 /// The steps that continue after `outcome`; `--feature F` is appended to
@@ -255,6 +260,16 @@ pub fn next(outcome: &Outcome, feature: Option<&str>) -> Vec<NextStep> {
         O::GitPrecondition => vec![
             ("git status".to_owned(), "see what is uncommitted"),
             ("speccoder run".to_owned(), "run again once it is committed"),
+        ],
+        O::ArchiveAwaiting { change } => vec![
+            (
+                format!("openspec show {change} --diff"),
+                "see what archiving changes in the main specs",
+            ),
+            (
+                format!("speccoder spec archive {change} --yes"),
+                "archive it and commit the result",
+            ),
         ],
     };
     steps

@@ -1,0 +1,26 @@
+{
+  "feature": "001-calc-add",
+  "constitution": "# Constitution\n\n### I. Tested\nEvery public function has unit tests for the examples in its specification.\n\n### II. Honest\nA requirement that cannot be met as written is reported, never worked around.\n",
+  "plan": "# Plan\n\nRust 2024 library crate without dependencies. The function lives in src/lib.rs with unit tests in a `#[cfg(test)] mod tests` in the same file.\n",
+  "story": "# Feature Specification: Calc\n\n### User Story 1 - Add numbers (Priority: P1)\n\nA caller adds two signed 64-bit integers and gets their sum.\n\n**Acceptance**: `add(2, 3) == 5`; `add(-4, 4) == 0`.\n",
+  "task": {
+    "id": "T099",
+    "title": "Close the gap the converge step found",
+    "phase": "Phase 9: Convergence",
+    "subsection": "",
+    "story": "",
+    "parallel": false
+  },
+  "dependencies": [
+    {
+      "id": "T001",
+      "title": "Create the crate",
+      "done": true
+    },
+    {
+      "id": "T002",
+      "title": "Implement `pub fn add(a: i64, b: i64) -> i64` in src/lib.rs with a unit test `adds_two_numbers`",
+      "done": false
+    }
+  ]
+}

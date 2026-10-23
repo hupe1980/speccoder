@@ -2,9 +2,30 @@
 
 use std::path::PathBuf;
 
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 
-/// Spec-driven coding agent for GitHub Spec Kit projects.
+/// A spec format (`--format`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum SpecFormat {
+    /// GitHub Spec Kit.
+    Speckit,
+    /// OpenSpec.
+    Openspec,
+    /// Kiro and cc-sdd.
+    Kiro,
+}
+
+impl From<SpecFormat> for speccoder_core::spec::FormatKind {
+    fn from(f: SpecFormat) -> Self {
+        match f {
+            SpecFormat::Speckit => Self::Speckit,
+            SpecFormat::Openspec => Self::Openspec,
+            SpecFormat::Kiro => Self::Kiro,
+        }
+    }
+}
+
+/// Spec-driven coding agent for GitHub Spec Kit and OpenSpec projects.
 #[derive(Debug, Parser)]
 #[command(name = "speccoder", version, about, long_about = None)]
 pub struct Cli {
@@ -19,6 +40,10 @@ pub struct Cli {
     /// Also print durations, skipped stages and the tails of what failed.
     #[arg(short, long, global = true)]
     pub verbose: bool,
+
+    /// The project's spec format, instead of `[spec] format` or detection.
+    #[arg(long, global = true, value_enum, env = "SPECCODER_FORMAT")]
+    pub format: Option<SpecFormat>,
 
     #[command(subcommand)]
     pub command: Command,
@@ -56,13 +81,36 @@ pub enum Command {
         #[arg(long)]
         no_prompt: bool,
     },
-    /// Report the Spec Kit project's artifacts and tasks (read-only).
+    /// Planning in the project's spec format: run one of its skills (Spec
+    /// Kit: specify, clarify, plan, tasks, …; OpenSpec: propose, explore,
+    /// update-change), list them, or archive an OpenSpec change.
+    Spec {
+        /// The skill, or `archive`; without it, list the installed skills.
+        name: Option<String>,
+        /// What the skill is asked ($ARGUMENTS); for `archive`, the change.
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        arguments: Vec<String>,
+        /// A path inside the project (default: the current directory).
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+        /// Never ask inline: questions are left as [NEEDS CLARIFICATION]; approvals stop the run.
+        #[arg(long)]
+        no_prompt: bool,
+        /// archive: confirmed in advance (OpenSpec's checks still run first).
+        #[arg(long)]
+        yes: bool,
+        /// archive: a task ticked without a speccoder verdict that you accept, by ID.
+        #[arg(long, value_name = "TASK")]
+        allow_unverified: Vec<String>,
+    },
+    /// Report the project's artifacts and tasks (read-only).
     Inspect {
         /// A path inside the project (default: the current directory).
         #[arg(default_value = ".")]
         path: PathBuf,
-        /// Feature to inspect: directory name or numeric prefix.
-        #[arg(long)]
+        /// Feature to inspect: directory name or numeric prefix (an OpenSpec
+        /// change: its id, also as --change).
+        #[arg(long, visible_alias = "change")]
         feature: Option<String>,
     },
     /// Run the checks declared in speccoder.toml and report the evidence.
@@ -100,8 +148,9 @@ pub enum Command {
         /// A path inside the project (default: the current directory).
         #[arg(default_value = ".")]
         path: PathBuf,
-        /// Feature: directory name or numeric prefix.
-        #[arg(long)]
+        /// Feature: directory name or numeric prefix (an OpenSpec change: its
+        /// id, also as --change).
+        #[arg(long, visible_alias = "change")]
         feature: Option<String>,
     },
     /// Assess a finished feature against its spec, plan and tasks (read-only) and append what remains.
@@ -109,8 +158,9 @@ pub enum Command {
         /// A path inside the project (default: the current directory).
         #[arg(default_value = ".")]
         path: PathBuf,
-        /// Feature: directory name or numeric prefix.
-        #[arg(long)]
+        /// Feature: directory name or numeric prefix (an OpenSpec change: its
+        /// id, also as --change).
+        #[arg(long, visible_alias = "change")]
         feature: Option<String>,
     },
     /// Show a feature's tasks and the evidence behind each tick (read-only, no model).
@@ -118,8 +168,9 @@ pub enum Command {
         /// A path inside the project (default: the current directory).
         #[arg(default_value = ".")]
         path: PathBuf,
-        /// Feature: directory name or numeric prefix.
-        #[arg(long)]
+        /// Feature: directory name or numeric prefix (an OpenSpec change: its
+        /// id, also as --change).
+        #[arg(long, visible_alias = "change")]
         feature: Option<String>,
     },
     /// What the project's current (or last) run is doing, from another terminal.
@@ -133,8 +184,9 @@ pub enum Command {
         /// A path inside the project (default: the current directory).
         #[arg(default_value = ".")]
         path: PathBuf,
-        /// Feature: directory name or numeric prefix.
-        #[arg(long)]
+        /// Feature: directory name or numeric prefix (an OpenSpec change: its
+        /// id, also as --change).
+        #[arg(long, visible_alias = "change")]
         feature: Option<String>,
     },
     /// List calls that stopped a task for approval, and the decisions made.
@@ -142,8 +194,9 @@ pub enum Command {
         /// A path inside the project (default: the current directory).
         #[arg(default_value = ".")]
         path: PathBuf,
-        /// Feature: directory name or numeric prefix.
-        #[arg(long)]
+        /// Feature: directory name or numeric prefix (an OpenSpec change: its
+        /// id, also as --change).
+        #[arg(long, visible_alias = "change")]
         feature: Option<String>,
     },
     /// Approve the call a task stopped for (its path, or its exact command) for that task.
@@ -154,8 +207,9 @@ pub enum Command {
         /// A path inside the project (default: the current directory).
         #[arg(default_value = ".")]
         path: PathBuf,
-        /// Feature: directory name or numeric prefix.
-        #[arg(long)]
+        /// Feature: directory name or numeric prefix (an OpenSpec change: its
+        /// id, also as --change).
+        #[arg(long, visible_alias = "change")]
         feature: Option<String>,
     },
     /// Reject the call a task stopped for; the model is told the reason.
@@ -169,8 +223,9 @@ pub enum Command {
         /// A path inside the project (default: the current directory).
         #[arg(default_value = ".")]
         path: PathBuf,
-        /// Feature: directory name or numeric prefix.
-        #[arg(long)]
+        /// Feature: directory name or numeric prefix (an OpenSpec change: its
+        /// id, also as --change).
+        #[arg(long, visible_alias = "change")]
         feature: Option<String>,
     },
     /// Tick a task as done on a person's word (`attested`, never shown as verified).
@@ -184,8 +239,9 @@ pub enum Command {
         /// A path inside the project (default: the current directory).
         #[arg(default_value = ".")]
         path: PathBuf,
-        /// Feature: directory name or numeric prefix.
-        #[arg(long)]
+        /// Feature: directory name or numeric prefix (an OpenSpec change: its
+        /// id, also as --change).
+        #[arg(long, visible_alias = "change")]
         feature: Option<String>,
     },
     /// Skip a task: runs pass it by, and what depends on it stays blocked.
@@ -202,8 +258,9 @@ pub enum Command {
         /// A path inside the project (default: the current directory).
         #[arg(default_value = ".")]
         path: PathBuf,
-        /// Feature: directory name or numeric prefix.
-        #[arg(long)]
+        /// Feature: directory name or numeric prefix (an OpenSpec change: its
+        /// id, also as --change).
+        #[arg(long, visible_alias = "change")]
         feature: Option<String>,
     },
     /// Leave a note for a task's next attempts (the model reads it).
@@ -220,8 +277,9 @@ pub enum Command {
         /// A path inside the project (default: the current directory).
         #[arg(default_value = ".")]
         path: PathBuf,
-        /// Feature: directory name or numeric prefix.
-        #[arg(long)]
+        /// Feature: directory name or numeric prefix (an OpenSpec change: its
+        /// id, also as --change).
+        #[arg(long, visible_alias = "change")]
         feature: Option<String>,
     },
     /// Tokens (and money, if `[model]` has prices) per task, from the speccoder branch.
@@ -229,8 +287,9 @@ pub enum Command {
         /// A path inside the project (default: the current directory).
         #[arg(default_value = ".")]
         path: PathBuf,
-        /// Feature: directory name or numeric prefix.
-        #[arg(long)]
+        /// Feature: directory name or numeric prefix (an OpenSpec change: its
+        /// id, also as --change).
+        #[arg(long, visible_alias = "change")]
         feature: Option<String>,
     },
     /// Push `speccoder/<feature>` and open a draft pull request with every task's evidence (asks first).
@@ -238,8 +297,9 @@ pub enum Command {
         /// A path inside the project (default: the current directory).
         #[arg(default_value = ".")]
         path: PathBuf,
-        /// Feature: directory name or numeric prefix.
-        #[arg(long)]
+        /// Feature: directory name or numeric prefix (an OpenSpec change: its
+        /// id, also as --change).
+        #[arg(long, visible_alias = "change")]
         feature: Option<String>,
         /// The git remote to push to.
         #[arg(long, default_value = "origin")]
@@ -303,8 +363,9 @@ pub enum Command {
         /// A path inside the project (default: the current directory).
         #[arg(default_value = ".")]
         path: PathBuf,
-        /// Feature: directory name or numeric prefix.
-        #[arg(long)]
+        /// Feature: directory name or numeric prefix (an OpenSpec change: its
+        /// id, also as --change).
+        #[arg(long, visible_alias = "change")]
         feature: Option<String>,
     },
     /// Create or reuse the git worktree speccoder works in for a feature.
@@ -312,8 +373,9 @@ pub enum Command {
         /// A path inside the project (default: the current directory).
         #[arg(default_value = ".")]
         path: PathBuf,
-        /// Feature: directory name or numeric prefix.
-        #[arg(long)]
+        /// Feature: directory name or numeric prefix (an OpenSpec change: its
+        /// id, also as --change).
+        #[arg(long, visible_alias = "change")]
         feature: Option<String>,
     },
 }

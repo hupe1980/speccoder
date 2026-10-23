@@ -1,0 +1,52 @@
+{
+  "items": [
+    {
+      "id": "broken-example",
+      "type": "change",
+      "valid": false,
+      "issues": [
+        {
+          "level": "INFO",
+          "path": "greeting/spec.md",
+          "line": 9,
+          "message": "Header \"### Scenario: wrong level\" in ADDED Requirements is not a \"### Requirement:\" header and is ignored by validation. Use \"### Requirement: Scenario: wrong level\" if it should be validated as a requirement."
+        },
+        {
+          "level": "WARNING",
+          "path": "greeting/spec.md",
+          "message": "ADDED \"No scenario here\" should contain SHALL or MUST (RFC 2119 best practice for English specs)"
+        },
+        {
+          "level": "ERROR",
+          "path": "greeting/spec.md",
+          "message": "ADDED \"No scenario here\" must include at least one scenario"
+        },
+        {
+          "level": "ERROR",
+          "path": "greeting/spec.md",
+          "message": "ADDED \"Three hashes\" must include at least one scenario"
+        }
+      ],
+      "durationMs": 10
+    }
+  ],
+  "summary": {
+    "totals": {
+      "items": 1,
+      "passed": 0,
+      "failed": 1
+    },
+    "byType": {
+      "change": {
+        "items": 1,
+        "passed": 0,
+        "failed": 1
+      }
+    }
+  },
+  "version": "1.0",
+  "root": {
+    "path": "/tmp/openspec-try/sample",
+    "source": "nearest"
+  }
+}

@@ -1,0 +1,53 @@
+You are implementing exactly one task of a GitHub Spec Kit feature in this git worktree.
+
+Rules — speccoder checks them after you finish, from the diff:
+- Change only what the task needs. Do not edit the spec (`.specify/`, `specs/`), the checks' configuration (`speccoder.toml`, CI files, test-runner config) or anything under `.git`.
+- Test files that exist now are frozen: add new tests in new files; never weaken, skip or delete tests.
+- Do not commit, branch or push; speccoder commits a task that passes.
+- Run the project's tests to see whether your change works; speccoder runs them again and decides.
+- If the task cannot be done as written (it contradicts the spec, a test is wrong, information is missing), stop and make your final message start with `BLOCKED:` and the reason.
+
+# Task T002
+
+Implement `pub fn add(a: i64, b: i64) -> i64` in src/lib.rs with a unit test `adds_two_numbers`
+
+Phase: Phase 2: User Story 1 - Add numbers (Priority: P1)
+
+# User story
+
+### User Story 1 - Add numbers (Priority: P1)
+
+A caller adds two signed 64-bit integers and gets their sum.
+
+**Acceptance**: `add(2, 3) == 5`; `add(-4, 4) == 0`.
+
+# Plan
+
+# Plan
+
+Rust 2024 library crate without dependencies. The function lives in src/lib.rs with unit tests in a `#[cfg(test)] mod tests` in the same file.
+
+
+# Project constitution
+
+# Constitution
+
+### I. Tested
+Every public function has unit tests for the examples in its specification.
+
+### II. Honest
+A requirement that cannot be met as written is reported, never worked around.
+
+
+# Previous attempt (failed; its changes were undone)
+
+The verifier's facts:
+
+```json
+{
+  "attempt": 1,
+  "reasons": [
+    "checks failed"
+  ]
+}
+```

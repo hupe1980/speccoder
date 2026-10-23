@@ -1,0 +1,6 @@
+# calc-add as an OpenSpec change: the same code, checks and oracle.
+task = "1.1"
+expect = "complete"
+
+[oracle]
+argv = ["cargo", "test", "--quiet", "--test", "oracle"]

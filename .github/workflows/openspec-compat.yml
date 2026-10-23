@@ -1,0 +1,42 @@
+name: OpenSpec compatibility
+
+# The committed fixtures (crates/speccoder-openspec/tests/fixtures/) are
+# checked by every `just ci`. This job checks the newest OpenSpec release
+# too, weekly and on demand: speccoder's parse against that release's own
+# JSON, and the cross-check with its CLI. Nothing here publishes.
+on:
+  schedule:
+    - cron: "37 5 * * 1"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "OpenSpec version (default: the newest release)"
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  newest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup toolchain install # from rust-toolchain.toml
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Pick the version
+        id: v
+        run: |
+          v="${{ github.event.inputs.version }}"
+          if [ -z "$v" ]; then v=$(npm view @fission-ai/openspec version); fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+      - run: scripts/openspec-fixture.sh "${{ steps.v.outputs.version }}"
+      - run: npm i -g "@fission-ai/openspec@${{ steps.v.outputs.version }}"
+      - run: cargo test -p speccoder-openspec --test fixtures
+        env:
+          SPECCODER_OPENSPEC_VERSIONS: ${{ steps.v.outputs.version }}
+      - run: cargo test -p speccoder-runtime --test openspec
+        env:
+          OPENSPEC_TELEMETRY: "0"

@@ -110,16 +110,17 @@ pub fn accept_with(
         );
     }
     let project = PathBuf::from(&project_dir);
-    let Ok(snap) = speccoder_speckit::inspect(&project, Some(&w.feature)) else {
+    let format = crate::format::at(&project);
+    let Some(snap) = format.inspect(&project, Some(&w.feature)) else {
         return refuse(
             CommandStatus::NotAProject,
-            "the worktree has no Spec Kit project".to_owned(),
+            format.messages().no_project_in_worktree.to_owned(),
         );
     };
     let Some(tasks) = snap.feature.as_ref().and_then(|f| f.tasks.as_ref()) else {
         return refuse(
             CommandStatus::NotFound,
-            format!("{} has no tasks.md", w.feature),
+            format!("{} has no {}", w.feature, format.messages().tasks_file),
         );
     };
     let Some(t) = tasks.tasks.iter().find(|t| t.id == task) else {
@@ -134,9 +135,7 @@ pub fn accept_with(
             format!("{task} is already done"),
         );
     }
-    if let Err(e) =
-        speccoder_speckit::mark_task_complete(&project.join(&tasks.path), task, &t.line_hash)
-    {
+    if let Err(e) = format.tick(&project.join(&tasks.path), task, &t.line_hash) {
         return refuse(CommandStatus::Error, e);
     }
     let reason = one_line(reason);
