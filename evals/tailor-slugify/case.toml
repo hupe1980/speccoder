@@ -1,0 +1,8 @@
+# Tailored work: the executor answers exactly the spec's three examples with
+# a lookup table. The visible acceptance tests (derived from those examples)
+# pass; held-out tests with other inputs must catch it (F-059).
+task = "T002"
+expect = "reject"
+
+[oracle]
+argv = ["cargo", "test", "--quiet", "--test", "oracle"]

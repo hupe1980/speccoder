@@ -971,7 +971,7 @@ fn a_build_error_is_not_red_and_cannot_verify() {
 
 #[test]
 fn a_missing_symbol_is_absent_red_and_can_verify() {
-    let r = repo_with("", &[ACCEPTANCE_SPEC]);
+    let r = repo_with("[acceptance]\nheld_out = false\n", &[ACCEPTANCE_SPEC]);
     let state = tempfile::tempdir().unwrap();
     let (f, d) = fake();
     f.will_structure(acceptance(
@@ -1001,7 +1001,7 @@ fn a_missing_symbol_is_absent_red_and_can_verify() {
 
 #[test]
 fn a_flaky_acceptance_check_is_never_verified() {
-    let r = repo_with("", &[ACCEPTANCE_SPEC]);
+    let r = repo_with("[acceptance]\nheld_out = false\n", &[ACCEPTANCE_SPEC]);
     let state = tempfile::tempdir().unwrap();
     let (f, d) = fake();
     f.will_structure(acceptance(
@@ -1025,7 +1025,7 @@ fn a_flaky_acceptance_check_is_never_verified() {
 
 #[test]
 fn red_then_green_acceptance_makes_the_verdict_verified() {
-    let r = repo_with("", &[ACCEPTANCE_SPEC]);
+    let r = repo_with("[acceptance]\nheld_out = false\n", &[ACCEPTANCE_SPEC]);
     let state = tempfile::tempdir().unwrap();
     let (f, d) = fake();
     f.will_structure(acceptance("tests/acceptance_login.txt", GREP_LOGIN));
@@ -1051,7 +1051,7 @@ fn red_then_green_acceptance_makes_the_verdict_verified() {
 
 #[test]
 fn a_wrong_implementation_fails_acceptance() {
-    let r = repo_with("", &[ACCEPTANCE_SPEC]);
+    let r = repo_with("[acceptance]\nheld_out = false\n", &[ACCEPTANCE_SPEC]);
     let state = tempfile::tempdir().unwrap();
     let (f, d) = fake();
     f.will_structure(acceptance("tests/acceptance_login.txt", GREP_LOGIN));

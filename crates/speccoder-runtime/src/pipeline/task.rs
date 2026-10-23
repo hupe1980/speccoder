@@ -440,7 +440,7 @@ pub(crate) fn run_task(
     let began = std::time::Instant::now();
     // 4b. Acceptance tests derived from the spec, written before the
     //     attempt so they are frozen, and required to be red now.
-    let acceptance = if let Some(prepared) = interrupted
+    let mut acceptance = if let Some(prepared) = interrupted
         .as_ref()
         .and_then(|m| m.acceptance.clone())
         .and_then(|a| serde_json::from_value::<PreparedAcceptance>(a).ok())
@@ -464,6 +464,54 @@ pub(crate) fn run_task(
     } else {
         None
     };
+    // 4c. The held-out set (F-059): written after a red visible set, kept in
+    //     the state directory, never shown to the implementer.
+    let scenarios = format.scenarios(&snap, task);
+    let held_out_store = crate::held_out::dir(&s.plane_dir, &feature_name, task);
+    if let Some(a) = acceptance
+        .as_mut()
+        .filter(|a| a.report.get("held_out").is_none())
+    {
+        if !run_config.held_out {
+            a.report["held_out"] = serde_json::json!({ "state": "off" });
+        } else if !a.red {
+            a.report["held_out"] = serde_json::json!({ "state": "absent", "reason": "not_red" });
+        } else if scenarios.is_empty() {
+            a.report["held_out"] =
+                serde_json::json!({ "state": "absent", "reason": "no_scenarios" });
+        } else {
+            let (held, sha) = prepare_held_out(
+                &AcceptanceSetup {
+                    rt: &rt,
+                    plane: &plane,
+                    project: &project,
+                    worktree: &wt_root,
+                    tmp: &tmp,
+                    policy: &policy,
+                    feature: &feature_name,
+                    task,
+                    bundle: bundle_value.clone(),
+                    runner: &runner,
+                },
+                a,
+                &scenarios,
+                &held_out_store,
+                story_checkpoint(
+                    snap.feature.as_ref().and_then(|f| f.tasks.as_ref()),
+                    task,
+                    &scenarios,
+                ),
+            );
+            a.report["held_out"] = held;
+            a.held_out = sha;
+        }
+    }
+    if run_config.held_out && !run_config.acceptance {
+        notices.push(
+            "[acceptance] held_out has no effect while generate = false: no held-out tests"
+                .to_owned(),
+        );
+    }
     match &acceptance {
         None => stage(
             &*live,
@@ -557,6 +605,8 @@ pub(crate) fn run_task(
     // Best-of-n: independent samples from the same checkpoint, each
     // with its own retries; the best by evidence is kept.
     let mut samples: Vec<(RunReport, String, worktree::Checkpoint, serde_json::Value)> = Vec::new();
+    // Each judged attempt's held-out outcome, across samples and retries.
+    let mut held_out_log: Vec<serde_json::Value> = Vec::new();
     let (mut report, attempt_status) = loop {
         let mut earlier: Vec<speccoder_core::EarlierAttempt> = Vec::new();
         let mut digest: Option<serde_json::Value> = None;
@@ -613,7 +663,18 @@ pub(crate) fn run_task(
                     .cloned()
                     .collect();
                 let prompt = external::prompt_in(format.wording(), &bundle_value, digest.as_ref());
-                let o = external::run(exec, &wt_root, &prompt, &allow, &tmp);
+                let withheld = acceptance
+                    .as_ref()
+                    .and_then(|a| a.held_out.as_ref())
+                    .map(|_| held_out_store.as_path());
+                if withheld.is_some()
+                    && !notices
+                        .iter()
+                        .any(|n| n.starts_with("held-out set withheld"))
+                {
+                    notices.push("held-out set withheld from the external agent, not sealed: it runs with your permissions; a copied held-out literal stops the tick".to_owned());
+                }
+                let o = external::run(exec, &wt_root, &prompt, &allow, &tmp, withheld);
                 (o.run_id, true, o.output)
             } else {
                 // The same key as an interrupted attempt resumes it.
@@ -721,7 +782,7 @@ pub(crate) fn run_task(
                     "the attempt was interrupted while a tool call was running; whether it finished cannot be known, so it was not run again. The attempt is saved and undone; run again to start a fresh attempt".to_owned(),
                 );
             }
-            let attempt_status = if succeeded {
+            let mut attempt_status = if succeeded {
                 output["status"].as_str().unwrap_or("failed").to_owned()
             } else if quarantined {
                 "interrupted".to_owned()
@@ -834,6 +895,100 @@ pub(crate) fn run_task(
                         .map(|f| f.trim_start_matches("integrity: ").to_owned()),
                     None,
                 );
+            }
+
+            // 7.5 The held-out tests, on an attempt that passed visibly with a
+            //     clean audit: a failure fails the verdict naming the scenarios
+            //     only; tampering or a leak stops for a person.
+            let visibly_passed = judged
+                && findings.is_empty()
+                && attempt_status == "completed"
+                && matches!(
+                    report.verdict,
+                    Some(
+                        speccoder_core::verify::Verdict::Verified
+                            | speccoder_core::verify::Verdict::RegressionOnly
+                    )
+                );
+            if let Some(sha) = acceptance
+                .as_ref()
+                .and_then(|a| a.held_out.clone())
+                .filter(|_| visibly_passed)
+            {
+                let patch = worktree::patch(&wt_root, &before, &after).unwrap_or_default();
+                let mut known = format!(
+                    "{}\n{}\n{}",
+                    bundle_value["story"].as_str().unwrap_or_default(),
+                    bundle_value["plan"].as_str().unwrap_or_default(),
+                    bundle_value["constitution"].as_str().unwrap_or_default()
+                );
+                for p in report
+                    .acceptance
+                    .as_ref()
+                    .and_then(|a| a["files"].as_array().cloned())
+                    .unwrap_or_default()
+                {
+                    if let Some(p) = p.as_str() {
+                        known.push_str(
+                            &std::fs::read_to_string(project.join(p)).unwrap_or_default(),
+                        );
+                    }
+                }
+                match judge_held_out(
+                    &held_out_store,
+                    &sha,
+                    &scenarios,
+                    &known,
+                    &wt_root,
+                    &project,
+                    &tmp,
+                    &before,
+                    &patch,
+                    &runner,
+                    &policy,
+                ) {
+                    Ok(j) => {
+                        let failed_ids: Vec<String> =
+                            j.failed.iter().map(|s| s.id.clone()).collect();
+                        held_out_log.push(serde_json::json!({
+                            "attempt": held_out_log.len() + 1,
+                            "outcome": if failed_ids.is_empty() { "passed" } else { "failed" },
+                            "scenarios": failed_ids,
+                        }));
+                        if let Some(v) = report.verdict.take() {
+                            let mut v = speccoder_core::verify::with_held_out(v, &j.held_out);
+                            if let speccoder_core::verify::Verdict::Failed { reasons } = &mut v
+                                && !j.failed.is_empty()
+                                && let Some(last) = reasons.last_mut()
+                            {
+                                *last = speccoder_core::retry::held_out_reason(&j.failed);
+                            }
+                            report.verdict = Some(v);
+                        }
+                    }
+                    Err((outcome, why)) => {
+                        held_out_log.push(serde_json::json!({
+                            "attempt": held_out_log.len() + 1,
+                            "outcome": outcome,
+                        }));
+                        report.verdict = None;
+                        report.reason = Some(why);
+                        attempt_status = "held_out".to_owned();
+                    }
+                }
+            }
+            if let Some(h) = report
+                .acceptance
+                .as_mut()
+                .and_then(|a| a.get_mut("held_out"))
+                .filter(|h| h["state"] == "on")
+            {
+                let failed = held_out_log
+                    .iter()
+                    .filter(|o| o["outcome"] == "failed")
+                    .count();
+                h["attempts"] = serde_json::json!(held_out_log);
+                h["gap"] = serde_json::json!(failed > 0);
             }
 
             // 7a. Mutation testing of a passing attempt's changes.

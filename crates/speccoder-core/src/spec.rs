@@ -93,6 +93,16 @@ pub struct Scenario {
     pub source: SourceRange,
 }
 
+/// A scenario a task's acceptance tests cite: `US1-2` (Spec Kit), or
+/// `capability: requirement / scenario` (OpenSpec), with the spec's words.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ScenarioRef {
+    /// Stable within the unit.
+    pub id: String,
+    /// The scenario as written in the spec.
+    pub text: String,
+}
+
 /// One requirement (a Spec Kit user story, an OpenSpec requirement, a Kiro
 /// requirement) and its scenarios.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

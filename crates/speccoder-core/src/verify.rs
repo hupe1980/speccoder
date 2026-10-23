@@ -403,6 +403,52 @@ pub fn verdict(task_checks: &[&str], checks: &[CheckResult], cmp: Option<&Compar
     }
 }
 
+/// What the held-out acceptance tests said about an attempt that passed
+/// visibly (F-059, D-061): the judge's own tests, never shown to the model.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "outcome")]
+pub enum HeldOut {
+    /// `[acceptance] held_out = false`.
+    Off,
+    /// No held-out test was kept (none generated, all discarded, …).
+    Absent {
+        /// Why.
+        reason: String,
+    },
+    /// Every kept held-out test passed.
+    Passed {
+        /// How many files.
+        files: usize,
+    },
+    /// These scenarios' held-out tests failed.
+    Failed {
+        /// Scenario IDs, sorted.
+        scenarios: Vec<String>,
+    },
+}
+
+/// The verdict after the held-out tests: a failure fails it (naming the
+/// scenarios only); anything else leaves it as it was.
+#[must_use]
+pub fn with_held_out(verdict: Verdict, held_out: &HeldOut) -> Verdict {
+    let HeldOut::Failed { scenarios } = held_out else {
+        return verdict;
+    };
+    let mut ids = scenarios.clone();
+    ids.sort();
+    ids.dedup();
+    let reason = format!("held-out acceptance failed: {}", ids.join(", "));
+    match verdict {
+        Verdict::Failed { mut reasons } => {
+            reasons.push(reason);
+            Verdict::Failed { reasons }
+        }
+        Verdict::Verified | Verdict::RegressionOnly => Verdict::Failed {
+            reasons: vec![reason],
+        },
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -680,7 +726,33 @@ mod tests {
             })
         }
 
+        fn held_outs() -> impl Strategy<Value = HeldOut> {
+            prop_oneof![
+                Just(HeldOut::Off),
+                Just(HeldOut::Absent {
+                    reason: "not_red".to_owned()
+                }),
+                (0..4usize).prop_map(|files| HeldOut::Passed { files }),
+                proptest::collection::vec("US[1-3]-[1-4]", 1..4)
+                    .prop_map(|scenarios| HeldOut::Failed { scenarios }),
+            ]
+        }
+
         proptest! {
+            #[test]
+            fn a_held_out_failure_is_never_a_pass(cs in checks(), pick in 0..5usize, h in held_outs()) {
+                let name = format!("c{pick}");
+                let before = verdict(&[name.as_str()], &cs, None);
+                let after = with_held_out(before.clone(), &h);
+                match h {
+                    HeldOut::Failed { .. } => {
+                        let failed = matches!(after, Verdict::Failed { .. });
+                        prop_assert!(failed);
+                    }
+                    _ => prop_assert_eq!(after, before),
+                }
+            }
+
             #[test]
             fn any_failing_check_means_failed(cs in checks(), pick in 0..5usize) {
                 let task = [format!("c{pick}")];

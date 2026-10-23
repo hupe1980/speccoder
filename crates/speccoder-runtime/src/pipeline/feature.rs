@@ -263,6 +263,23 @@ pub fn run_feature_with(
                         );
                     }
                 }
+                // The held-out sets, now that no later task can read them.
+                if let (Some(name), Ok(opened)) =
+                    (feature_name.as_deref(), crate::format::open(path, feature))
+                {
+                    let wt_root = std::path::PathBuf::from(w.path.clone().unwrap_or_default());
+                    let plane = crate::worktree::project_state_dir(
+                        state,
+                        std::path::Path::new(&opened.snapshot.root),
+                    );
+                    if let Err(e) =
+                        crate::held_out::publish(&wt_root, &plane, name, &plane.join("tmp"))
+                    {
+                        hook_lines
+                            .borrow_mut()
+                            .push(format!("held-out sets not published: {e}"));
+                    }
+                }
                 // The format's `after_implement` hooks.
                 match hosting::run_hooks(
                     "after_implement",

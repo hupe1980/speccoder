@@ -77,7 +77,11 @@ pub(crate) fn status_and_message(
             format!("verdict: failed — {}", reasons.join("; ")),
         ),
         (Some(v), _) => (CommandStatus::Ok, format!("verdict: {}", verdict_word(v))),
-        (None, "blocked" | "needs_approval" | "budget_exhausted" | "denied" | "interrupted") => (
+        (
+            None,
+            "blocked" | "needs_approval" | "budget_exhausted" | "denied" | "interrupted"
+            | "held_out",
+        ) => (
             CommandStatus::NeedsHuman,
             format!(
                 "attempt {attempt_status}: {}",

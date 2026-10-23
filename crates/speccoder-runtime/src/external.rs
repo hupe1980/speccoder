@@ -139,13 +139,16 @@ pub struct Outcome {
 }
 
 /// The argv for an executor; `allow` are the commands speccoder allows
-/// (checks and `[commands] allow`), passed to agents with a permission system.
+/// (checks and `[commands] allow`), passed to agents with a permission system;
+/// `withheld` is a directory the agent is told not to read (the held-out
+/// tests, F-059) — withheld, not sealed: only Claude Code takes such a rule.
 #[must_use]
 pub fn argv(
     exec: &Executor,
     worktree: &Path,
     last_message: &Path,
     allow: &[Vec<String>],
+    withheld: Option<&Path>,
 ) -> Vec<String> {
     match &exec.kind {
         Kind::Claude => {
@@ -164,7 +167,10 @@ pub fn argv(
                 "--allowedTools".to_owned(),
                 tools.join(","),
                 "--disallowedTools".to_owned(),
-                "WebFetch,WebSearch".to_owned(),
+                match withheld {
+                    Some(dir) => format!("WebFetch,WebSearch,Read({}/**)", dir.display()),
+                    None => "WebFetch,WebSearch".to_owned(),
+                },
             ];
             if let Some(m) = &exec.model {
                 a.extend(["--model".to_owned(), m.clone()]);
@@ -267,6 +273,7 @@ pub fn run(
     prompt: &str,
     allow: &[Vec<String>],
     tmp: &Path,
+    withheld: Option<&Path>,
 ) -> Outcome {
     use crate::verify::process::{CommandRunner as _, Invocation, LocalRunner, OUTPUT_CAP};
     let _ = std::fs::create_dir_all(tmp);
@@ -284,7 +291,7 @@ pub fn run(
     // The prompt arrives on stdin (a shell redirect keeps the runner's
     // closed-stdin rule for everything else); the agent keeps the person's
     // environment, because it needs its own credentials.
-    let mut inner = argv(exec, worktree, &last, allow);
+    let mut inner = argv(exec, worktree, &last, allow, withheld);
     let quoted: Vec<String> = inner
         .drain(..)
         .map(|a| format!("'{}'", a.replace('\'', "'\\''")))
@@ -355,16 +362,28 @@ mod tests {
             Path::new("/w"),
             Path::new("/t/last"),
             &[vec!["cargo".to_owned(), "test".to_owned()]],
+            None,
         );
         assert!(
             a.contains(&"Read,Edit,Write,MultiEdit,Glob,Grep,LS,Bash(cargo test:*)".to_owned()),
             "{a:?}"
         );
         assert!(a.ends_with(&["--model".to_owned(), "sonnet".to_owned()]));
+        let held = argv(
+            &c,
+            Path::new("/w"),
+            Path::new("/t/last"),
+            &[],
+            Some(Path::new("/s/held-out/f/T1")),
+        );
+        assert!(
+            held.contains(&"WebFetch,WebSearch,Read(/s/held-out/f/T1/**)".to_owned()),
+            "{held:?}"
+        );
         let x = parse("[executor]\nkind = \"codex\"\n")
             .unwrap_or_default()
             .unwrap_or_else(|| panic!("codex"));
-        let a = argv(&x, Path::new("/w"), Path::new("/t/last"), &[]);
+        let a = argv(&x, Path::new("/w"), Path::new("/t/last"), &[], None);
         assert_eq!(&a[..4], ["codex", "exec", "--sandbox", "workspace-write"]);
         assert!(parse("[executor]\nkind = \"command\"\n").is_err());
         assert!(parse("[executor]\nkind = \"gpt\"\n").is_err());

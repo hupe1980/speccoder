@@ -504,6 +504,9 @@ pub fn run(w: &mut impl Write, r: &RunReport, message: &str) -> io::Result<()> {
                 )?;
             }
         }
+        if let Some(line) = held_out_line(&a["held_out"]) {
+            writeln!(w, "Held-out   {line}")?;
+        }
     }
     for f in &r.integrity {
         writeln!(w, "  ! {f}")?;
@@ -827,10 +830,69 @@ pub fn eval(w: &mut impl Write, e: &EvalReport, message: &str) -> io::Result<()>
             m.false_negatives
         )?;
     }
+    if let Some(g) = &e.summary.held_out_gap {
+        writeln!(
+            w,
+            "Held-out   gap {:.2} ({}/{} visible passes failed the held-out tests) · {} tailoring case(s) caught",
+            g.rate, g.held_out_failed, g.visible_passed, e.summary.caught
+        )?;
+    }
+    if let Some(o) = &e.summary.held_out_oracle {
+        writeln!(
+            w,
+            "           oracle agreed with {} held-out pass(es), disagreed with {}",
+            o.agree, o.disagree
+        )?;
+    }
     if let Some(t) = e.summary.tokens_per_correct {
         writeln!(w, "Tokens     {t} per correct case")?;
     }
     writeln!(w, "{message}")
+}
+
+/// `2/2 passed (gap on attempt 1: US1-2)`, `absent: not_red`, `off`.
+fn held_out_line(h: &serde_json::Value) -> Option<String> {
+    match h["state"].as_str()? {
+        "off" => Some("off ([acceptance] held_out = false)".to_owned()),
+        "absent" => Some(format!(
+            "absent: {}",
+            h["reason"]
+                .as_str()
+                .unwrap_or("none generated")
+                .replace('_', " ")
+        )),
+        _ => {
+            let kept = h["kept"].as_u64().unwrap_or(0);
+            let attempts = h["attempts"].as_array().cloned().unwrap_or_default();
+            let last = attempts
+                .last()
+                .and_then(|a| a["outcome"].as_str())
+                .unwrap_or("not run");
+            let gaps: Vec<String> = attempts
+                .iter()
+                .enumerate()
+                .filter(|(_, a)| a["outcome"] == "failed")
+                .map(|(i, a)| {
+                    let ids: Vec<&str> = a["scenarios"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .filter_map(|s| s.as_str())
+                        .collect();
+                    format!("gap on attempt {}: {}", i + 1, ids.join(", "))
+                })
+                .collect();
+            let state = match last {
+                "passed" => format!("{kept}/{kept} passed"),
+                other => format!("{} ({kept} file(s))", other.replace('_', " ")),
+            };
+            Some(if gaps.is_empty() {
+                state
+            } else {
+                format!("{state} ({})", gaps.join("; "))
+            })
+        }
+    }
 }
 
 /// The `Next:` block: each command padded to the longest (at most 44), then

@@ -315,7 +315,10 @@ fn the_round_limit_stops_before_any_model_call() {
 
 #[test]
 fn run_converge_works_the_appended_tasks_until_converged() {
-    let r = repo(&DONE.replace("- [x] T002", "- [ ] T002"), "");
+    let r = repo(
+        &DONE.replace("- [x] T002", "- [ ] T002"),
+        "[acceptance]\nheld_out = false\n",
+    );
     with_acceptance(r.path());
     let state = tempfile::tempdir().unwrap();
     let (f, d) = fake();
@@ -384,7 +387,7 @@ fn a_convergence_task_gets_acceptance_tests_from_the_whole_spec() {
     let tasks = format!(
         "{DONE}\n## Phase 3: Convergence\n\n- [ ] T003 Reject empty names in login per FR-002 (missing)\n"
     );
-    let r = repo(&tasks, "");
+    let r = repo(&tasks, "[acceptance]\nheld_out = false\n");
     with_acceptance(r.path());
     let state = tempfile::tempdir().unwrap();
     let (f, d) = fake();
@@ -463,7 +466,10 @@ fn status(r: &CommandResult) -> &speccoder_core::StatusReport {
 
 #[test]
 fn the_report_shows_each_ticks_evidence_from_the_branch() {
-    let r = repo(&DONE.replace("- [x] T002", "- [ ] T002"), "");
+    let r = repo(
+        &DONE.replace("- [x] T002", "- [ ] T002"),
+        "[acceptance]\nheld_out = false\n",
+    );
     with_acceptance(r.path());
 
     // Before speccoder: the checkout's ticks, none with evidence.

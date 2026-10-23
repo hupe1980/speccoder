@@ -31,6 +31,10 @@ pub(crate) struct PreparedAcceptance {
     /// What the red run showed.
     #[serde(default)]
     pub(crate) red_class: Option<speccoder_core::verify::RedClass>,
+    /// The held-out manifest's hash, when a held-out set was kept: a resumed
+    /// attempt reuses it, never re-authors it.
+    #[serde(default)]
+    pub(crate) held_out: Option<String>,
 }
 
 pub(crate) const MANIFESTS: &[&str] = &[
@@ -51,6 +55,7 @@ pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance 
             argv: None,
             red: false,
             red_class: None,
+            held_out: None,
         }
     };
 
@@ -169,6 +174,7 @@ pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance 
         argv: Some(argv),
         red,
         red_class: Some(class),
+        held_out: None,
     }
 }
 
@@ -199,6 +205,18 @@ fn excerpt(result: &speccoder_core::verify::CheckResult) -> String {
         .copied()
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+/// One run of an acceptance command, with the runner's summary.
+pub(crate) fn acceptance_run(
+    project: &Path,
+    argv: &[String],
+    runner: &sandbox::Runner,
+) -> (
+    speccoder_core::verify::CheckResult,
+    Option<speccoder_core::verify::RunnerSummary>,
+) {
+    execute(project, argv, runner)
 }
 
 pub(crate) fn run_acceptance(
@@ -261,4 +279,332 @@ fn execute(
         flaky: false,
     };
     (result, summary)
+}
+
+/// The held-out set's author, store and red check (F-059): after a visible
+/// set that was red. Returns the report part (`acceptance.held_out`) and
+/// the stored manifest's hash when files were kept.
+pub(crate) fn prepare_held_out(
+    a: &AcceptanceSetup<'_>,
+    visible: &PreparedAcceptance,
+    scenarios: &[speccoder_core::spec::ScenarioRef],
+    store: &Path,
+    composition: bool,
+) -> (serde_json::Value, Option<String>) {
+    use serde_json::json;
+    let absent = |reason: &str, mut report: serde_json::Value| {
+        report["state"] = json!("absent");
+        report["reason"] = json!(reason);
+        (report, None)
+    };
+    let visible_files: Vec<(String, String)> = visible.report["files"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|p| p.as_str())
+        .map(|p| {
+            (
+                p.to_owned(),
+                std::fs::read_to_string(a.project.join(p)).unwrap_or_default(),
+            )
+        })
+        .collect();
+    let files: Vec<String> = worktree::checkpoint(a.worktree, a.tmp)
+        .and_then(|c| worktree::files(a.worktree, &c))
+        .unwrap_or_default()
+        .into_iter()
+        .take(400)
+        .collect();
+    let manifest_text = MANIFESTS
+        .iter()
+        .find_map(|m| {
+            std::fs::read_to_string(a.project.join(m))
+                .ok()
+                .map(|t| format!("{m}:\n{t}"))
+        })
+        .map(|t| t.chars().take(8192).collect::<String>())
+        .unwrap_or_default();
+    let input = substrate::acceptance::held_out_input(
+        a.bundle.clone(),
+        &files,
+        &manifest_text,
+        scenarios,
+        &visible_files,
+        composition,
+    );
+    let outcome = match a.rt.block_on(a.plane.acceptance(a.feature, a.task, input)) {
+        Ok(o) => o,
+        Err(e) => return absent("generation_failed", json!({ "error": e.0 })),
+    };
+    let output = outcome
+        .output
+        .as_ref()
+        .map(|o| o.peek().clone())
+        .unwrap_or_default();
+    let answer = output["answer"].clone();
+    let base = json!({ "run_id": outcome.run_id.to_string(), "usage": output["usage"], "notes": answer["notes"] });
+    if !matches!(outcome.status, agentplane::prelude::RunStatus::Succeeded) || answer.is_null() {
+        return absent("generation_failed", base);
+    }
+
+    // Validate (research R4): new test paths, known scenarios, an allowed
+    // command each, at most `LIMIT`.
+    let known: std::collections::BTreeSet<&str> = scenarios.iter().map(|s| s.id.as_str()).collect();
+    let protected = a.policy.protected();
+    let mut kept: Vec<(crate::held_out::HeldOutFile, String)> = Vec::new();
+    let mut discarded: Vec<crate::held_out::Discarded> = Vec::new();
+    let mut discard = |path: &str, reason: &str| {
+        discarded.push(crate::held_out::Discarded {
+            path: path.to_owned(),
+            reason: reason.to_owned(),
+        });
+    };
+    let given = answer["files"].as_array().cloned().unwrap_or_default();
+    if given.is_empty() {
+        return absent("none_generated", base);
+    }
+    for f in &given {
+        let path = f["path"].as_str().unwrap_or_default();
+        let content = f["content"].as_str().unwrap_or_default();
+        let cited: Vec<String> = f["scenarios"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|s| s.as_str().map(str::to_owned))
+            .collect();
+        let argv: Vec<String> = f["argv"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|s| s.as_str().map(str::to_owned))
+            .collect();
+        let rel = match tools::paths::normalise(path) {
+            Ok(r) => r,
+            Err(_) => {
+                discard(path, "path");
+                continue;
+            }
+        };
+        let taken =
+            visible_files.iter().any(|(p, _)| *p == rel) || kept.iter().any(|(k, _)| k.path == rel);
+        if !tools::paths::is_test_path(&rel)
+            || protected.write_class(&rel).is_some()
+            || a.project.join(&rel).exists()
+            || taken
+        {
+            discard(&rel, "path");
+            continue;
+        }
+        if cited.is_empty() || cited.iter().any(|c| !known.contains(c.as_str())) {
+            discard(&rel, "unknown_scenario");
+            continue;
+        }
+        let composed = f["composition"].as_bool().unwrap_or(false);
+        if composed && (!composition || cited.len() < 2) {
+            discard(&rel, "composition");
+            continue;
+        }
+        if a.policy.classify("run_command", &json!({ "argv": argv }))
+            != tools::policy::Decision::Allow
+        {
+            discard(&rel, "command");
+            continue;
+        }
+        if kept.len() >= crate::held_out::LIMIT {
+            discard(&rel, "limit");
+            continue;
+        }
+        kept.push((
+            crate::held_out::HeldOutFile {
+                path: rel,
+                sha256: crate::integrity::sha256_hex(content.as_bytes()),
+                scenarios: cited,
+                argv,
+                composition: composed,
+            },
+            content.to_owned(),
+        ));
+    }
+
+    // Red now, on the tree the attempt starts from.
+    let checkpoint = worktree::checkpoint(a.worktree, a.tmp)
+        .map(|c| c.0)
+        .unwrap_or_default();
+    match crate::held_out::overlay_run(a.worktree, a.project, a.tmp, &kept, a.runner, a.policy) {
+        Ok(runs) => {
+            let mut red = Vec::new();
+            for ((file, content), ran) in kept.into_iter().zip(runs) {
+                match ran.result {
+                    None => discard(&file.path, "collision"),
+                    Some((result, summary)) if classify_red(&result, summary.as_ref()).is_red() => {
+                        red.push((file, content));
+                    }
+                    Some(_) => discard(&file.path, "not_red"),
+                }
+            }
+            kept = red;
+        }
+        Err(e) => {
+            return absent(
+                "generation_failed",
+                json!({ "error": e, "run_id": base["run_id"] }),
+            );
+        }
+    }
+    let mut report = base;
+    report["discarded"] = json!(discarded);
+    if kept.is_empty() {
+        return absent("all_discarded", report);
+    }
+    let manifest = crate::held_out::Manifest {
+        version: 1,
+        feature: a.feature.to_owned(),
+        task: a.task.to_owned(),
+        author_run: report["run_id"].as_str().unwrap_or_default().to_owned(),
+        checkpoint,
+        visible_scenarios: scenarios.iter().map(|s| s.id.clone()).collect(),
+        files: kept.iter().map(|(f, _)| f.clone()).collect(),
+        discarded,
+    };
+    let contents: Vec<(String, String)> = kept
+        .iter()
+        .map(|(f, c)| (f.path.clone(), c.clone()))
+        .collect();
+    match crate::held_out::store(store, &manifest, &contents) {
+        Ok(sha) => {
+            report["state"] = json!("on");
+            report["manifest"] = json!(format!("sha256:{sha}"));
+            report["kept"] = json!(kept.len());
+            (report, Some(sha))
+        }
+        Err(e) => absent("generation_failed", json!({ "error": e })),
+    }
+}
+
+/// The held-out verdict on the tree an attempt left: `Ok` with what the
+/// tests said, or `Err` with why a person must look (tampering, a leak, a
+/// run that would not leave the tree as it was).
+pub(crate) struct HeldOutJudged {
+    /// The verdict input.
+    pub(crate) held_out: speccoder_core::verify::HeldOut,
+    /// The failed scenarios, with the spec's words, for the retry digest.
+    pub(crate) failed: Vec<speccoder_core::spec::ScenarioRef>,
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn judge_held_out(
+    store: &Path,
+    manifest_sha: &str,
+    scenarios: &[speccoder_core::spec::ScenarioRef],
+    known_text: &str,
+    wt_root: &Path,
+    project: &Path,
+    tmp: &Path,
+    start: &worktree::Checkpoint,
+    patch: &str,
+    runner: &sandbox::Runner,
+    policy: &tools::policy::Policy,
+) -> Result<HeldOutJudged, (&'static str, String)> {
+    use speccoder_core::verify::{CheckStatus, HeldOut};
+    let (manifest, contents) =
+        crate::held_out::load_verified(store, manifest_sha).map_err(|t| ("tampered", t.0))?;
+    let files: Vec<(crate::held_out::HeldOutFile, String)> = manifest
+        .files
+        .iter()
+        .cloned()
+        .zip(contents.into_iter().map(|(_, c)| c))
+        .collect();
+    let leaks = crate::held_out::leaked(&files, known_text, wt_root, start, patch);
+    if !leaks.is_empty() {
+        return Err((
+            "leak_suspected",
+            format!(
+                "the attempt contains {} literal(s) only the held-out tests hold; a person reviews it",
+                leaks.len()
+            ),
+        ));
+    }
+    let runs = crate::held_out::overlay_run(wt_root, project, tmp, &files, runner, policy)
+        .map_err(|e| ("tampered", e))?;
+    let mut failed_ids: Vec<String> = Vec::new();
+    for ((file, _), ran) in files.iter().zip(&runs) {
+        let passed = ran
+            .result
+            .as_ref()
+            .is_some_and(|(r, _)| r.status == CheckStatus::Passed);
+        if !passed {
+            failed_ids.extend(file.scenarios.iter().cloned());
+        }
+    }
+    failed_ids.sort();
+    failed_ids.dedup();
+    let held_out = if failed_ids.is_empty() {
+        HeldOut::Passed { files: files.len() }
+    } else {
+        HeldOut::Failed {
+            scenarios: failed_ids.clone(),
+        }
+    };
+    let failed = failed_ids
+        .iter()
+        .map(|id| {
+            scenarios
+                .iter()
+                .find(|s| &s.id == id)
+                .cloned()
+                .unwrap_or_else(|| speccoder_core::spec::ScenarioRef {
+                    id: id.clone(),
+                    text: String::new(),
+                })
+        })
+        .collect();
+    Ok(HeldOutJudged { held_out, failed })
+}
+
+/// Whether `task` completes its story: the last task carrying its story
+/// label, in a story with at least two scenarios (F-059, US4).
+pub(crate) fn story_checkpoint(
+    tasks: Option<&speccoder_core::snapshot::ParsedTasks>,
+    task: &str,
+    scenarios: &[speccoder_core::spec::ScenarioRef],
+) -> bool {
+    let Some(tasks) = tasks else { return false };
+    let Some(label) = tasks
+        .tasks
+        .iter()
+        .find(|t| t.id == task)
+        .and_then(|t| t.story.as_deref())
+    else {
+        return false;
+    };
+    let last = tasks
+        .tasks
+        .iter()
+        .rfind(|t| t.story.as_deref() == Some(label))
+        .map(|t| t.id.as_str());
+    last == Some(task) && scenarios.len() >= 2
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_last_task_of_a_story_with_two_scenarios_composes() {
+        let (tasks, _) = speccoder_speckit::tasks::parse(
+            "tasks.md",
+            "## Phase 3: User Story 1 - Login\n\n- [ ] T005 [US1] a\n- [ ] T006 [US1] b\n\n## Phase 4: User Story 2 - X\n\n- [ ] T007 [US2] c\n",
+        );
+        let two: Vec<speccoder_core::spec::ScenarioRef> = ["US1-1", "US1-2"]
+            .iter()
+            .map(|id| speccoder_core::spec::ScenarioRef {
+                id: (*id).to_owned(),
+                text: String::new(),
+            })
+            .collect();
+        assert!(story_checkpoint(Some(&tasks), "T006", &two));
+        assert!(!story_checkpoint(Some(&tasks), "T005", &two));
+        assert!(!story_checkpoint(Some(&tasks), "T006", &two[..1]));
+        assert!(!story_checkpoint(None, "T006", &two));
+    }
 }

@@ -19,7 +19,8 @@ pub use command::{
     ApprovalsReport, ArchiveReport, BenchReport, ChecklistStatus, CommandData, CommandResult,
     CommandStatus, ControlReport, ConvergeReport, ConvergenceRound, CostReport, DecidedCall,
     EarlierAttempt, EvalCase, EvalReport, EvalSummary, ExitCode, FeatureReport, FullTier,
-    InitCheck, InitReport, LastAttempt, MonitorScore, PendingCall, PrReport, ProposeReport,
-    RefusedPath, ReplayReport, RunReport, SCHEMA_VERSION, SkillEntry, SkillRunReport, SkillsReport,
-    StatusReport, StatusTotals, TaskCost, TaskStatus, Usage, WorktreeReport,
+    HeldOutGap, HeldOutOracle, InitCheck, InitReport, LastAttempt, MonitorScore, PendingCall,
+    PrReport, ProposeReport, RefusedPath, ReplayReport, RunReport, SCHEMA_VERSION, SkillEntry,
+    SkillRunReport, SkillsReport, StatusReport, StatusTotals, TaskCost, TaskStatus, Usage,
+    WorktreeReport,
 };

@@ -15,6 +15,7 @@ struct RawBudget {
 #[serde(deny_unknown_fields)]
 struct RawAcceptance {
     generate: Option<bool>,
+    held_out: Option<bool>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -71,6 +72,9 @@ pub struct RunConfig {
     pub commit_per_task: bool,
     /// Derive acceptance tests from the spec before attempts (`[acceptance] generate`).
     pub acceptance: bool,
+    /// Also author held-out acceptance tests the implementer never sees
+    /// (`[acceptance] held_out`, default on; nothing without `generate`).
+    pub held_out: bool,
     /// Convergence phases a feature may get (`[converge] max_rounds`).
     pub max_converge_rounds: u32,
     /// Ask the gaming monitor about every passing task (`[monitor] enabled`).
@@ -93,6 +97,7 @@ impl Default for RunConfig {
             allow: Vec::new(),
             commit_per_task: true,
             acceptance: true,
+            held_out: true,
             max_converge_rounds: 3,
             monitor: false,
             frozen_additions: false,
@@ -179,6 +184,7 @@ pub fn parse(text: &str) -> Result<RunConfig, String> {
             .collect(),
         commit_per_task,
         acceptance: acceptance.generate.unwrap_or(true),
+        held_out: acceptance.held_out.unwrap_or(true),
         max_converge_rounds: converge.max_rounds.unwrap_or(d.max_converge_rounds),
         monitor: monitor.enabled.unwrap_or(false),
         frozen_additions,
@@ -189,6 +195,14 @@ pub fn parse(text: &str) -> Result<RunConfig, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn held_out_is_on_by_default_and_can_be_switched_off() {
+        assert!(parse("").unwrap().held_out);
+        let c = parse("[acceptance]\nheld_out = false\n").unwrap();
+        assert!(!c.held_out && c.acceptance);
+        assert!(parse("[acceptance]\nheldout = true\n").is_err());
+    }
 
     #[test]
     fn defaults_and_overrides() {

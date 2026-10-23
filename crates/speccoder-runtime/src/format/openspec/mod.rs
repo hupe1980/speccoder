@@ -13,7 +13,7 @@ use speccoder_core::ChecklistStatus;
 use speccoder_core::snapshot::{
     Diagnostic, FeatureSnapshot, ParsedTasks, ProjectSnapshot, Severity,
 };
-use speccoder_core::spec::FormatKind;
+use speccoder_core::spec::{FormatKind, ScenarioRef};
 
 pub use texts::{MESSAGES, PLANNING, RULES, WORDING};
 
@@ -146,6 +146,41 @@ impl Adapter for OpenSpec {
             },
             dependencies,
         })
+    }
+
+    /// Every scenario of the change's ADDED and MODIFIED requirements: the
+    /// format does not link a task to a requirement (D-060).
+    fn scenarios(&self, snapshot: &ProjectSnapshot, _task: &str) -> Vec<ScenarioRef> {
+        let Some(f) = snapshot.feature.as_ref() else {
+            return Vec::new();
+        };
+        let schema = snapshot
+            .openspec
+            .as_ref()
+            .map_or(speccoder_openspec::discover::SCHEMA, |m| m.schema.as_str());
+        let (change, _) =
+            speccoder_openspec::load_change(Path::new(&snapshot.root), &f.feature.name, schema);
+        change
+            .deltas
+            .iter()
+            .flat_map(|d| {
+                d.requirements
+                    .iter()
+                    .filter(|r| {
+                        matches!(
+                            r.operation,
+                            speccoder_openspec::delta::Operation::Added
+                                | speccoder_openspec::delta::Operation::Modified
+                        )
+                    })
+                    .flat_map(move |r| {
+                        r.scenarios.iter().map(move |sc| ScenarioRef {
+                            id: format!("{}: {} / {}", d.capability, r.name, sc.name),
+                            text: sc.raw.clone(),
+                        })
+                    })
+            })
+            .collect()
     }
 
     /// A delta with a `#### Scenario:`: the scenarios are the examples.

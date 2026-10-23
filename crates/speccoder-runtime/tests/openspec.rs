@@ -172,7 +172,7 @@ fn a_change_runs_as_a_chain_and_is_ticked_only_on_a_verdict() {
 
 #[test]
 fn acceptance_tests_come_from_the_scenarios() {
-    let r = repo("sample", "");
+    let r = repo("sample", "\n[acceptance]\nheld_out = false\n");
     let state = tempfile::tempdir().unwrap();
     let (f, d) = fake();
     f.will_structure(json!({ "files": [{ "path": "tests/acceptance_1_2.txt", "content": "greeting / Default greeting / Configured default\n" }], "argv": ["./accept.sh", "fn empty_default"], "notes": [] }));

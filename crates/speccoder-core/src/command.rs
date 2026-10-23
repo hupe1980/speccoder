@@ -250,6 +250,10 @@ pub struct EvalCase {
     /// Whether the recorded attempt replays strictly from its journal
     ///; `None` when there is no journaled run (external executors).
     pub replays: Option<bool>,
+    /// The held-out tests' part (`acceptance.held_out` of the run report).
+    pub held_out: Option<serde_json::Value>,
+    /// An attempt passed the visible checks and failed the held-out tests.
+    pub gap: bool,
 }
 
 /// Suite counts and metrics.
@@ -279,6 +283,33 @@ pub struct EvalSummary {
     pub replay_checked: usize,
     /// Of those, the ones that replayed exactly.
     pub replayed: usize,
+    /// `expect = "reject"` cases that were not ticked.
+    pub caught: usize,
+    /// Attempts that passed visibly, and how many of them the held-out tests
+    /// failed (F-059); `None` when no held-out test ran.
+    pub held_out_gap: Option<HeldOutGap>,
+    /// Ticked cases whose held-out tests passed, against the oracle.
+    pub held_out_oracle: Option<HeldOutOracle>,
+}
+
+/// Visible passes the held-out tests caught.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct HeldOutGap {
+    /// Attempts the held-out tests judged (they had passed visibly).
+    pub visible_passed: usize,
+    /// Of those, the ones the held-out tests failed.
+    pub held_out_failed: usize,
+    /// `held_out_failed / visible_passed`.
+    pub rate: f64,
+}
+
+/// Held-out passes the hidden oracle agreed with, or not.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct HeldOutOracle {
+    /// The oracle passed too.
+    pub agree: usize,
+    /// The oracle failed: the held-out tests missed something.
+    pub disagree: usize,
 }
 
 /// The gaming monitor against the oracle's ground truth: a positive is a

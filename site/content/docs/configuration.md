@@ -92,6 +92,7 @@ Keep the list narrow: an allowed command runs whatever the model passes after th
 | Key | Default | Meaning |
 |---|---|---|
 | `[acceptance] generate` | `true` | Derive acceptance tests from the spec before each attempt |
+| `[acceptance] held_out` | `true` | Also write [held-out tests](@/docs/evidence.md#held-out-tests) the implementer never sees; `verified` needs them to pass. No effect without `generate`. Costs one more author call per task and one run per held-out file |
 | `[converge] max_rounds` | `3` | Convergence phases a feature may get |
 | `[monitor] enabled` | `false` | Review every passing attempt with the [gaming monitor](@/docs/evidence.md#the-gaming-monitor) |
 | `[git] commit` | `"per-task"` | `per-task` commits each passed task; `none` leaves changes uncommitted |

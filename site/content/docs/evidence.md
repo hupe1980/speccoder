@@ -48,6 +48,25 @@ Anything else is **not demonstrated**: another build or syntax error, a collecti
 
 A check that fails and then passes when run again is marked `flaky`. It does not fail the task, but a flaky task-specific check is never evidence for `verified`.
 
+## Held-out tests
+
+Frozen visible tests stop an implementer from editing the tests, but not from tailoring to them: code that returns exactly the examples the tests check passes them. So the judge keeps part of the oracle. After the visible acceptance tests are written and red, a second author call writes **held-out** tests for the same scenarios with other inputs and the edge cases the spec states. They never enter the worktree or any prompt the implementer gets; speccoder keeps them in its state directory and checks they are red too.
+
+After an attempt passes the visible checks, speccoder writes the held-out tests over the final tree, runs them in the sandbox, and puts the tree back exactly as it was. `verified` needs both. If a held-out test fails, the verdict fails, and the retry is told only which scenario — `held-out acceptance failed: US1-2 ("Given …")`, the spec's own words — never a path, test name, input or output. The same scenarios failing twice stop the retries.
+
+What can happen to a held-out test, and what the report says:
+
+| Outcome | Means |
+|---|---|
+| `passed` | every held-out test passed; the commit carries `Held-Out: passed=2/2 manifest=sha256:…` |
+| `failed` | some failed: the attempt failed (`gap on attempt 1: US1-2`) and is retried |
+| `absent` | none was kept — not generated, or every file discarded (`not_red`, `unknown_scenario`, `path`, `command`, `limit`, `collision`); the commit says `Held-Out: absent=<reason>` and the verdict rests on the visible tests |
+| `tampered`, `leak_suspected` | the stored set changed, or the attempt contains a literal only the held-out tests hold: stopped for a person, saved, not ticked |
+
+The last task of a story with two or more scenarios also gets a composition test that exercises them together. When a feature run ends with every task ticked, its held-out sets are published under `refs/speccoder/held-out/<feature>` — each manifest hashes to its task's `Held-Out:` trailer — so anyone can check what judged each task. speccoder never pushes that ref itself.
+
+**External agents** (`[executor]`) run with your permissions, so the held-out set is *withheld, not sealed*: Claude Code is told not to read its directory, and a held-out literal copied into the attempt stops the tick. `[acceptance] held_out = false` switches held-out tests off; the commit then says `Held-Out: off`.
+
 ## Where the evidence lives
 
 Each passed task is one commit on `speccoder/<feature>`, with trailers:
@@ -63,7 +82,7 @@ Usage: input=40250 output=3383 cache_read=30976 cache_write=0
 Mutation: caught=26 missed=13 timeout=0 unviable=6
 ```
 
-Other trailers appear when they apply: `Flaky:` (checks that passed only when run again), `Scope-Outside:` (changed files the task line did not name — reported, never a failure), `Checklists: overridden` (the run was started with `--ignore-checklists`).
+Other trailers appear when they apply: `Held-Out:` (the [held-out tests](#held-out-tests)), `Flaky:` (checks that passed only when run again), `Scope-Outside:` (changed files the task line did not name — reported, never a failure), `Checklists: overridden` (the run was started with `--ignore-checklists`).
 
 After a run ticks the feature's last task, the `full` checks run once; the result is recorded under `refs/speccoder/full/<feature>`, and `speccoder pr` refuses a branch whose full checks failed unless `--force`.
 

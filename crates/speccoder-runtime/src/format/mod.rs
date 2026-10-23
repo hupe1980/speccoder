@@ -15,7 +15,7 @@ use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 use speccoder_core::snapshot::{Diagnostic, ParsedTasks, ProjectSnapshot, Severity};
-use speccoder_core::spec::FormatKind;
+use speccoder_core::spec::{FormatKind, ScenarioRef};
 use speccoder_core::{ChecklistStatus, CommandStatus};
 
 use crate::context::{Bundle, BundleError};
@@ -57,6 +57,10 @@ pub trait Adapter: Send + Sync + std::fmt::Debug {
 
     /// The context bundle for `task` of the selected unit.
     fn bundle(&self, snapshot: &ProjectSnapshot, task: &str) -> Result<Bundle, BundleError>;
+
+    /// The scenarios `task`'s acceptance tests cite, with the spec's words
+    /// (judge-side: the implementer sees the spec text, not this list).
+    fn scenarios(&self, snapshot: &ProjectSnapshot, task: &str) -> Vec<ScenarioRef>;
 
     /// Whether the bundle states acceptance examples to derive tests from.
     fn acceptance_testable(&self, bundle: &Bundle) -> bool;

@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 
 use speccoder_core::ChecklistStatus;
 use speccoder_core::snapshot::{Diagnostic, FeatureSnapshot, ParsedTasks, ProjectSnapshot};
-use speccoder_core::spec::FormatKind;
+use speccoder_core::spec::{FormatKind, ScenarioRef};
 
 pub use speccoder_speckit::stories::story_section;
 pub use speccoder_speckit::workspace::Workspace;
@@ -150,6 +150,28 @@ impl Adapter for SpecKit {
             },
             dependencies,
         })
+    }
+
+    fn scenarios(&self, snapshot: &ProjectSnapshot, task: &str) -> Vec<ScenarioRef> {
+        let Some(f) = snapshot.feature.as_ref() else {
+            return Vec::new();
+        };
+        let label = f
+            .tasks
+            .as_ref()
+            .and_then(|t| t.tasks.iter().find(|t| t.id == task))
+            .and_then(|t| t.story.clone());
+        let spec = Workspace::at(Path::new(&snapshot.root))
+            .and_then(|ws| ws.read_text(&format!("{}/spec.md", f.feature.dir)).ok())
+            .unwrap_or_default();
+        // A labelled task whose story is missing has the whole spec as its
+        // intent, as in its bundle.
+        let own = speccoder_speckit::stories::scenario_refs(&spec, label.as_deref());
+        if own.is_empty() && label.is_some() {
+            speccoder_speckit::stories::scenario_refs(&spec, None)
+        } else {
+            own
+        }
     }
 
     fn acceptance_testable(&self, bundle: &Bundle) -> bool {

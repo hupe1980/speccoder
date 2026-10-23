@@ -149,7 +149,7 @@ pub(crate) struct TickFacts<'a> {
 
 /// The commit message of a ticked task: subject, title, and the trailers
 /// `report` reads back (`Spec-Task`, `Verdict`, `Red`, `Flaky`,
-/// `Scope-Outside`, `Checklists`, `Run`, `Usage`, `Mutation`).
+/// `Scope-Outside`, `Checklists`, `Held-Out`, `Run`, `Usage`, `Mutation`).
 pub(crate) fn tick_message(f: &TickFacts<'_>) -> String {
     let report = f.report;
     let verdict_word = report
@@ -157,15 +157,24 @@ pub(crate) fn tick_message(f: &TickFacts<'_>) -> String {
         .as_ref()
         .map(super::outcome::verdict_word)
         .unwrap_or_default();
-    // Attempts and the judge-side acceptance call together.
+    // Attempts and the judge-side acceptance calls together.
     let usage = add_usage(
-        report.usage.as_ref(),
-        report.acceptance.as_ref().and_then(|a| a.get("usage")),
+        add_usage(
+            report.usage.as_ref(),
+            report.acceptance.as_ref().and_then(|a| a.get("usage")),
+        )
+        .as_ref(),
+        report
+            .acceptance
+            .as_ref()
+            .and_then(|a| a.get("held_out"))
+            .and_then(|h| h.get("usage")),
     );
     let mut evidence = f
         .red
         .map(|c| format!("Red: {}\n", super::acceptance::class_word(c)))
         .unwrap_or_default();
+    evidence.push_str(&held_out_trailer(report.acceptance.as_ref()));
     evidence.push_str(&flaky_trailer(report.verification.as_ref()));
     evidence.push_str(&scope_trailer(report.scope.as_ref()));
     if f.checklists_overridden {
@@ -185,6 +194,29 @@ pub(crate) fn tick_message(f: &TickFacts<'_>) -> String {
             .and_then(crate::mutation::trailer)
             .unwrap_or_default()
     )
+}
+
+/// `Held-Out: passed=<k>/<k> manifest=sha256:<hex>`, `absent=<reason>` or
+/// `off` (F-059); nothing for a task without acceptance tests.
+fn held_out_trailer(acceptance: Option<&serde_json::Value>) -> String {
+    let Some(h) = acceptance.and_then(|a| a.get("held_out")) else {
+        return String::new();
+    };
+    match h["state"].as_str() {
+        Some("on") => {
+            let kept = h["kept"].as_u64().unwrap_or(0);
+            format!(
+                "Held-Out: passed={kept}/{kept} manifest={}\n",
+                h["manifest"].as_str().unwrap_or_default()
+            )
+        }
+        Some("off") => "Held-Out: off\n".to_owned(),
+        Some("absent") => format!(
+            "Held-Out: absent={}\n",
+            h["reason"].as_str().unwrap_or("none_generated")
+        ),
+        _ => String::new(),
+    }
 }
 
 /// `Flaky: <checks>` for checks that passed only when run again.

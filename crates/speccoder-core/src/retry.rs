@@ -44,6 +44,27 @@ pub struct Digest {
     pub discarded: Vec<String>,
 }
 
+/// The retry reason for failed held-out tests: the scenario IDs and the
+/// spec's own words — which the implementer has already seen — and nothing
+/// from the held-out run itself (no path, test name, literal or output).
+#[must_use]
+pub fn held_out_reason(failed: &[crate::spec::ScenarioRef]) -> String {
+    let mut failed: Vec<&crate::spec::ScenarioRef> = failed.iter().collect();
+    failed.sort_by(|a, b| a.id.cmp(&b.id));
+    failed.dedup_by(|a, b| a.id == b.id);
+    let parts: Vec<String> = failed
+        .iter()
+        .map(|s| {
+            format!(
+                "{} (\"{}\")",
+                s.id,
+                s.text.split_whitespace().collect::<Vec<_>>().join(" ")
+            )
+        })
+        .collect();
+    format!("held-out acceptance failed: {}", parts.join(", "))
+}
+
 /// Why a failed attempt must not be retried, if it must not: a check that
 /// could not run at all is an infrastructure problem, not the model's.
 #[must_use]
@@ -180,6 +201,36 @@ fn normalise(line: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_held_out_failure_names_the_requirement_only() {
+        use crate::spec::ScenarioRef;
+        let failed = [
+            ScenarioRef {
+                id: "US1-2".to_owned(),
+                text: "**Given** a name,\n **When** greeted".to_owned(),
+            },
+            ScenarioRef {
+                id: "US1-1".to_owned(),
+                text: "x".to_owned(),
+            },
+        ];
+        let reason = held_out_reason(&failed);
+        assert_eq!(
+            reason,
+            "held-out acceptance failed: US1-1 (\"x\"), US1-2 (\"**Given** a name, **When** greeted\")"
+        );
+        let report = VerifyReport {
+            root: String::new(),
+            tier: "fast".to_owned(),
+            checks: Vec::new(),
+            passed: true,
+            comparison: None,
+        };
+        let d = digest(2, std::slice::from_ref(&reason), &report, &[]);
+        assert!(d.checks.is_empty(), "no check entry for the held-out run");
+        assert_eq!(fingerprint(&d), normalise(&reason));
+    }
     use crate::verify::{CheckResult, TestOutcome, TestResult};
 
     fn check(name: &str, status: CheckStatus, stderr: &str) -> CheckResult {

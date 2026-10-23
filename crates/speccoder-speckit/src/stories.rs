@@ -3,7 +3,7 @@
 //! acceptance scenarios.
 
 use speccoder_core::snapshot::{Diagnostic, Severity};
-use speccoder_core::spec::{Requirement, Scenario, SourceRange};
+use speccoder_core::spec::{Requirement, Scenario, ScenarioRef, SourceRange};
 
 /// The `### User Story N` section for label `USN`, up to the next heading of
 /// the same or a higher level.
@@ -109,6 +109,41 @@ pub fn requirements(path: &str, text: &str) -> (Vec<Requirement>, Vec<Diagnostic
         i = j;
     }
     (found, diags)
+}
+
+/// The acceptance scenarios a task's tests cite, as `US<n>-<k>` with the
+/// spec's own words: the scenarios of the task's story (`label`), or of
+/// every story for a convergence task (`label` = `None`). A story without
+/// numbered scenarios but with an `**Acceptance**` line has that line as
+/// `US<n>-1`.
+#[must_use]
+pub fn scenario_refs(spec: &str, label: Option<&str>) -> Vec<ScenarioRef> {
+    let (stories, _) = requirements("spec.md", spec);
+    let mut out = Vec::new();
+    for story in stories.iter().filter(|r| label.is_none_or(|l| l == r.key)) {
+        if story.scenarios.is_empty() {
+            if let Some(line) = story
+                .text
+                .lines()
+                .find(|l| l.to_lowercase().contains("**acceptance"))
+            {
+                out.push(ScenarioRef {
+                    id: format!("{}-1", story.key),
+                    text: line.trim().to_owned(),
+                });
+            }
+            continue;
+        }
+        for (k, sc) in story.scenarios.iter().enumerate() {
+            let text = sc.raw.trim_start();
+            let digits = text.bytes().take_while(u8::is_ascii_digit).count();
+            out.push(ScenarioRef {
+                id: format!("{}-{}", story.key, k + 1),
+                text: text[digits..].trim_start_matches('.').trim().to_owned(),
+            });
+        }
+    }
+    out
 }
 
 /// `User Story 3 - Title (Priority: P2)` → (3, "Title").

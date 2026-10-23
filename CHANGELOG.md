@@ -53,6 +53,15 @@ ticks a task only on evidence the model cannot produce or edit.
   feature; retries with a verifier-built digest (`[budget] max_attempts`);
   `best_of` samples; `--parallel N` for `[P]` tasks; mutation evidence
   (`[mutation]`); an optional gaming monitor (`[monitor]`).
+- Held-out acceptance tests (`[acceptance] held_out`, default on): a second
+  author call writes tests for the same scenarios with other inputs, kept out
+  of the worktree and every implementer prompt; after a visibly passing
+  attempt they run over the final tree, and `verified` needs them to pass. A
+  failure fails the verdict and the retry learns only the scenario ID and the
+  spec's words. The commit carries `Held-Out:`; a finished feature's sets are
+  published under `refs/speccoder/held-out/<feature>`; `eval` reports the
+  gap and supports `expect = "reject"` (a tailoring case, `tailor-slugify`,
+  is caught).
 - `speccoder converge`: a finished feature assessed against its spec; gaps
   become new tasks, run with `run --converge`.
 - `[executor] kind = "claude" | "codex" | "command"`: Claude Code, Codex or
