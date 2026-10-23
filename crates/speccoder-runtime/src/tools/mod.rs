@@ -92,9 +92,8 @@ pub struct EditFile {
     pub old_string: String,
     /// Replacement text.
     pub new_string: String,
-    /// Replace every occurrence instead of exactly one.
-    #[serde(default)]
-    pub replace_all: bool,
+    /// Replace every occurrence instead of exactly one (default: one).
+    pub replace_all: Option<bool>,
 }
 
 /// Run a program (no shell) in the workspace with a timeout; stdin is closed.
@@ -146,71 +145,46 @@ pub struct ToolSpec {
     pub parameters: fn() -> Value,
 }
 
+/// The schema of a tool's arguments, made strict-ready by agentplane: only
+/// what serde enforces is declared — an optional argument is an `Option`,
+/// so `null` is both allowed and readable (D-076).
 fn schema<T: JsonSchema>() -> Value {
-    let raw = serde_json::to_value(schemars::schema_for!(T)).unwrap_or(Value::Null);
-    strict(raw)
+    close_objects(agentplane::tools::strict_schema::<T>())
 }
 
-/// Rewrites a schemars schema into the subset strict function calling
-/// accepts (`OpenAI` refuses anything else with a 400): every object lists
-/// its `properties`, all of them `required` — optional ones become nullable,
-/// which serde reads back as `None` — no additional properties, and no
-/// annotation keywords such as `format` or `$schema`.
+/// Closes every object of a schema: `additionalProperties: false`, and an
+/// empty `properties`/`required` where an object has none (an argument-less
+/// tool). It only narrows what may be sent — optional properties stay
+/// optional, so a schema with one is sent non-strict. Used for speccoder's
+/// argument-less tools and for MCP servers' schemas; agentplane's own pass
+/// for both is asked upstream (AP-19).
 #[must_use]
-pub fn strict(mut schema: Value) -> Value {
+pub fn close_objects(mut schema: Value) -> Value {
     fn walk(v: &mut Value) {
         let Some(obj) = v.as_object_mut() else { return };
-        for key in [
-            "$schema", "title", "format", "minimum", "maximum", "default",
-        ] {
-            obj.remove(key);
-        }
-        if obj.get("type").and_then(Value::as_str) == Some("object")
-            || obj
-                .get("type")
-                .and_then(Value::as_array)
-                .is_some_and(|t| t.iter().any(|x| x == "object"))
-        {
-            let required: Vec<String> = obj
-                .get("required")
-                .and_then(Value::as_array)
-                .map(|r| {
-                    r.iter()
-                        .filter_map(|x| x.as_str().map(str::to_owned))
-                        .collect()
-                })
-                .unwrap_or_default();
-            let props = obj
-                .entry("properties")
+        if obj.get("type").and_then(Value::as_str) == Some("object") {
+            obj.entry("properties")
                 .or_insert_with(|| Value::Object(serde_json::Map::new()));
-            let mut names = Vec::new();
-            if let Some(props) = props.as_object_mut() {
-                for (name, prop) in props.iter_mut() {
-                    if !required.contains(name) {
-                        nullable(prop);
-                    }
-                    walk(prop);
-                    names.push(Value::String(name.clone()));
-                }
+            obj.entry("additionalProperties")
+                .or_insert(Value::Bool(false));
+            let none_required = obj
+                .get("properties")
+                .and_then(Value::as_object)
+                .is_some_and(serde_json::Map::is_empty);
+            if none_required {
+                obj.entry("required").or_insert_with(|| json!([]));
             }
-            obj.insert("required".to_owned(), Value::Array(names));
-            obj.insert("additionalProperties".to_owned(), Value::Bool(false));
+        }
+        for key in ["properties", "$defs", "definitions"] {
+            if let Some(children) = obj.get_mut(key).and_then(Value::as_object_mut) {
+                children.values_mut().for_each(walk);
+            }
         }
         if let Some(items) = obj.get_mut("items") {
             walk(items);
         }
-    }
-    fn nullable(prop: &mut Value) {
-        let Some(obj) = prop.as_object_mut() else {
-            return;
-        };
-        match obj.get_mut("type") {
-            Some(Value::String(t)) if t != "null" => {
-                let t = t.clone();
-                obj.insert("type".to_owned(), json!([t, "null"]));
-            }
-            Some(Value::Array(ts)) if !ts.iter().any(|t| t == "null") => ts.push(json!("null")),
-            _ => {}
+        if let Some(branches) = obj.get_mut("anyOf").and_then(Value::as_array_mut) {
+            branches.iter_mut().for_each(walk);
         }
     }
     walk(&mut schema);
@@ -520,7 +494,8 @@ impl WorkspaceTools {
             return failure("`old_string` is empty");
         }
         let count = text.matches(&a.old_string).count();
-        let new = match (count, a.replace_all) {
+        let replace_all = a.replace_all.unwrap_or(false);
+        let new = match (count, replace_all) {
             (0, _) => return failure(format!("`old_string` not found in `{}`", a.path)),
             (1, _) | (_, true) => text.replace(&a.old_string, &a.new_string),
             (n, false) => {
@@ -533,7 +508,7 @@ impl WorkspaceTools {
         if let Err(e) = fs::write(&path, &new) {
             return failure(format!("`{}`: {e}", a.path));
         }
-        json!({ "ok": true, "path": a.path, "replacements": if a.replace_all { count } else { 1 }, "before": sha(text.as_bytes()), "after": sha(new.as_bytes()) })
+        json!({ "ok": true, "path": a.path, "replacements": if replace_all { count } else { 1 }, "before": sha(text.as_bytes()), "after": sha(new.as_bytes()) })
     }
 
     async fn run_command(&self, a: RunCommand) -> Value {
@@ -562,6 +537,9 @@ impl WorkspaceTools {
             timeout: Duration::from_secs(secs),
             output_cap: OUTPUT_CAP,
         };
+        // Tests run model-written code: what a command changes among the
+        // judge's inputs is found now, not at the end of the attempt (D-065).
+        let judged_before = crate::integrity::JudgeSnapshot::take(&self.root, &self.policy);
         let runner = self.runner.clone();
         let network = a.network == Some(true);
         let outcome =
@@ -576,7 +554,12 @@ impl WorkspaceTools {
             let start = b.len().saturating_sub(16 * 1024);
             String::from_utf8_lossy(&b[start..]).into_owned()
         };
-        json!({
+        let drift = judged_before.drift(
+            &crate::integrity::JudgeSnapshot::take(&self.root, &self.policy),
+            &self.policy,
+            &std::collections::BTreeSet::new(),
+        );
+        let mut result = json!({
             "ok": outcome.exit_code == Some(0),
             "exit_code": outcome.exit_code,
             "timed_out": outcome.timed_out,
@@ -584,7 +567,11 @@ impl WorkspaceTools {
             "stdout": tail(&outcome.stdout.kept),
             "stderr": tail(&outcome.stderr.kept),
             "truncated": outcome.stdout.truncated() || outcome.stderr.truncated(),
-        })
+        });
+        if !drift.is_empty() {
+            result["integrity"] = json!(drift);
+        }
+        result
     }
 
     fn git_status(&self) -> Value {

@@ -155,6 +155,14 @@ fn a_killed_attempt_resumes_without_repeating_a_finished_command() {
             .any(|n| n.as_str().unwrap().starts_with("resumed run")),
         "{out}"
     );
+    // The banner says where it was interrupted, from the live record.
+    assert!(
+        report["notices"].as_array().unwrap().iter().any(|n| n
+            .as_str()
+            .unwrap()
+            .starts_with("Resuming — T005 was interrupted during attempt (run_command")),
+        "{out}"
+    );
     assert_eq!(report["attempt_status"], "completed");
     // The command ran once in all; the first model call was not sent again.
     let lines: Vec<String> = fs::read_to_string(&log)

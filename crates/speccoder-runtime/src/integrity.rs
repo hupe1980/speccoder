@@ -4,11 +4,120 @@
 //! fails the verdict with an `integrity:` reason; a person looks.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::path::Path;
 
 use regex::Regex;
 
 use crate::tools::paths::{Class, Protected};
+use crate::tools::policy::Policy;
 use crate::worktree::{Change, ChangeKind};
+
+/// Directories a snapshot never descends into: build output and installed
+/// dependencies, where no judge input lives.
+const SKIPPED_DIRS: &[&str] = &[
+    ".git",
+    "target",
+    "node_modules",
+    ".venv",
+    "venv",
+    "__pycache__",
+    ".tox",
+    ".mypy_cache",
+    ".pytest_cache",
+];
+
+/// The judge, intent and agent context inputs of a worktree by content hash,
+/// git-ignored files included (`.claude/settings.local.json` is ignored by
+/// default, and an agent still loads it).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct JudgeSnapshot(BTreeMap<String, String>);
+
+/// A judge input that changed between two snapshots.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct Drift {
+    /// Workspace-relative path.
+    pub path: String,
+    /// `judge`, `intent` or `context`.
+    pub class: &'static str,
+    /// `added`, `modified` or `deleted`.
+    pub change: &'static str,
+}
+
+impl JudgeSnapshot {
+    /// Hashes every judge, intent and context input under `root` as `policy`
+    /// sees them (a planning skill may write Spec Kit's artifacts).
+    #[must_use]
+    pub fn take(root: &Path, policy: &Policy) -> Self {
+        let mut files = BTreeMap::new();
+        let walk = ignore::WalkBuilder::new(root)
+            .hidden(false)
+            .ignore(false)
+            .git_ignore(false)
+            .git_global(false)
+            .git_exclude(false)
+            .parents(false)
+            .follow_links(false)
+            .filter_entry(|e| {
+                !(e.depth() > 0
+                    && e.file_type().is_some_and(|t| t.is_dir())
+                    && SKIPPED_DIRS.contains(&e.file_name().to_string_lossy().as_ref()))
+            })
+            .build();
+        for entry in walk.flatten() {
+            if !entry.file_type().is_some_and(|t| t.is_file()) {
+                continue;
+            }
+            let Ok(rel) = entry.path().strip_prefix(root) else {
+                continue;
+            };
+            let rel = rel.to_string_lossy().replace('\\', "/");
+            if class_of(policy, &rel).is_none() {
+                continue;
+            }
+            if let Ok(bytes) = std::fs::read(entry.path()) {
+                files.insert(rel, speccoder_speckit::sha256_hex(&bytes));
+            }
+        }
+        Self(files)
+    }
+
+    /// What changed from `self` to `later`, except `approved` paths (a
+    /// person's grant to write them).
+    #[must_use]
+    pub fn drift(&self, later: &Self, policy: &Policy, approved: &BTreeSet<String>) -> Vec<Drift> {
+        let mut out = Vec::new();
+        let paths: BTreeSet<&String> = self.0.keys().chain(later.0.keys()).collect();
+        for path in paths {
+            let change = match (self.0.get(path), later.0.get(path)) {
+                (None, Some(_)) => "added",
+                (Some(_), None) => "deleted",
+                (Some(a), Some(b)) if a != b => "modified",
+                _ => continue,
+            };
+            if approved.contains(path.as_str()) {
+                continue;
+            }
+            if let Some(class) = class_of(policy, path) {
+                out.push(Drift {
+                    path: path.clone(),
+                    class,
+                    change,
+                });
+            }
+        }
+        out
+    }
+}
+
+fn class_of(policy: &Policy, rel: &str) -> Option<&'static str> {
+    match policy.write_protected(rel) {
+        Some(Class::Judge) => Some("judge"),
+        Some(Class::Intent) => Some("intent"),
+        Some(_) => None,
+        None if policy.protected().is_context(rel) => Some("context"),
+        None => None,
+    }
+}
 
 /// Markers that declare a test.
 const TEST_MARKERS: &str = r"#\[(tokio::)?test\b|^\s*def test_|^\s*(async\s+)?fn test_|\b(it|test)\s*\(\s*['\x22`]|@Test\b|^\s*func Test";
@@ -26,13 +135,15 @@ pub fn only_additions(old: &str, new: &str) -> bool {
 /// Findings for an attempt: `changes` and `patch` between its checkpoints,
 /// `frozen` the test files that existed when it started. With
 /// `additions_ok`, a frozen test whose diff only adds lines is no finding
-/// (removed tests and skip markers still are).
+/// (removed tests and skip markers still are). An agent context file
+/// (`AGENTS.md`, …) changed without a person's grant in `approved` is one.
 #[must_use]
 pub fn audit(
     changes: &[Change],
     patch: &str,
     frozen: &BTreeSet<String>,
     additions_ok: bool,
+    approved: &BTreeSet<String>,
 ) -> Vec<String> {
     let protected = Protected::default();
     let mut findings = Vec::new();
@@ -51,6 +162,9 @@ pub fn audit(
         match protected.write_class(&c.path) {
             Some(Class::Judge) => findings.push(format!("verification input changed: {}", c.path)),
             Some(Class::Intent) => findings.push(format!("spec changed: {}", c.path)),
+            None if protected.is_context(&c.path) && !approved.contains(&c.path) => {
+                findings.push(format!("agent context file changed: {}", c.path));
+            }
             _ => {}
         }
     }
@@ -143,6 +257,7 @@ mod tests {
             patch,
             &frozen,
             false,
+            &BTreeSet::new(),
         );
         assert_eq!(
             f,
@@ -155,7 +270,7 @@ mod tests {
 
         let removed = "diff --git a/src/lib.rs b/src/lib.rs\n--- a/src/lib.rs\n+++ b/src/lib.rs\n@@ -5,4 +4,0 @@\n-    #[test]\n-    fn a() {}\n";
         assert_eq!(
-            audit(&[], removed, &BTreeSet::new(), false),
+            audit(&[], removed, &BTreeSet::new(), false, &BTreeSet::new()),
             ["test removed in src/lib.rs (1 removed, 0 added)"]
         );
 
@@ -168,7 +283,8 @@ mod tests {
                 ],
                 clean,
                 &frozen,
-                false
+                false,
+                &BTreeSet::new()
             )
             .is_empty()
         );
@@ -180,18 +296,75 @@ mod tests {
         let added = "diff --git a/tests/api.rs b/tests/api.rs\n--- a/tests/api.rs\n+++ b/tests/api.rs\n@@ -1,2 +1,4 @@\n #[test]\n fn a() {}\n+#[test]\n+fn b() {}\n";
         let changed = "diff --git a/tests/api.rs b/tests/api.rs\n--- a/tests/api.rs\n+++ b/tests/api.rs\n@@ -1,2 +1,2 @@\n #[test]\n-fn a() { assert!(x()) }\n+fn a() {}\n";
         let modified = [change("tests/api.rs", ChangeKind::Modified)];
-        assert!(audit(&modified, added, &frozen, true).is_empty());
+        assert!(audit(&modified, added, &frozen, true, &BTreeSet::new()).is_empty());
         assert_eq!(
-            audit(&modified, added, &frozen, false),
+            audit(&modified, added, &frozen, false, &BTreeSet::new()),
             ["frozen test modified: tests/api.rs"]
         );
         assert_eq!(
-            audit(&modified, changed, &frozen, true),
+            audit(&modified, changed, &frozen, true, &BTreeSet::new()),
             ["frozen test modified: tests/api.rs"]
         );
 
         assert!(only_additions("a\nb\n", "a\nnew\nb\nmore\n"));
         assert!(!only_additions("a\nb\n", "a\nB\n"));
         assert!(!only_additions("a\nb\n", "b\na\n"));
+    }
+
+    #[test]
+    fn a_snapshot_sees_ignored_judge_inputs_and_reports_drift() {
+        use crate::tools::policy::Policy;
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::create_dir_all(root.join(".claude")).unwrap();
+        std::fs::create_dir_all(root.join("target/debug")).unwrap();
+        std::fs::write(root.join(".claude/settings.json"), "{}").unwrap();
+        std::fs::write(root.join("AGENTS.md"), "a").unwrap();
+        std::fs::write(root.join("speccoder.toml"), "x").unwrap();
+        std::fs::write(root.join("src.rs"), "free").unwrap();
+        std::fs::write(root.join("target/debug/speccoder.toml"), "skipped").unwrap();
+        let policy = Policy::new(&[], &[]);
+        let before = JudgeSnapshot::take(root, &policy);
+        assert_eq!(
+            before.0.len(),
+            3,
+            "{:?}",
+            before.0.keys().collect::<Vec<_>>()
+        );
+
+        std::fs::write(root.join(".claude/settings.local.json"), "{}").unwrap();
+        std::fs::write(root.join("AGENTS.md"), "b").unwrap();
+        std::fs::remove_file(root.join("speccoder.toml")).unwrap();
+        std::fs::write(root.join("src.rs"), "changed").unwrap();
+        let after = JudgeSnapshot::take(root, &policy);
+        let drift = before.drift(&after, &policy, &BTreeSet::new());
+        let seen: Vec<(&str, &str, &str)> = drift
+            .iter()
+            .map(|d| (d.path.as_str(), d.class, d.change))
+            .collect();
+        assert_eq!(
+            seen,
+            [
+                (".claude/settings.local.json", "judge", "added"),
+                ("AGENTS.md", "context", "modified"),
+                ("speccoder.toml", "judge", "deleted"),
+            ]
+        );
+        // A person's grant for the context file exempts it.
+        let approved: BTreeSet<String> = ["AGENTS.md".to_owned()].into();
+        assert_eq!(before.drift(&after, &policy, &approved).len(), 2);
+        // Restored content is no drift.
+        std::fs::write(root.join("AGENTS.md"), "a").unwrap();
+        std::fs::write(root.join("speccoder.toml"), "x").unwrap();
+        std::fs::remove_file(root.join(".claude/settings.local.json")).unwrap();
+        assert!(
+            before
+                .drift(
+                    &JudgeSnapshot::take(root, &policy),
+                    &policy,
+                    &BTreeSet::new()
+                )
+                .is_empty()
+        );
     }
 }

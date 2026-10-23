@@ -604,6 +604,17 @@ fn emit(
     turn: u32,
     entry: &Value,
 ) {
+    emit_with_tail(observer, turn, entry, Vec::new());
+}
+
+/// [`emit`] with the last lines of a failed command's output (live only,
+/// never journaled).
+fn emit_with_tail(
+    observer: Option<&(String, std::sync::Arc<dyn crate::progress::Progress>)>,
+    turn: u32,
+    entry: &Value,
+    tail: Vec<String>,
+) {
     if let Some((task, p)) = observer {
         let tool = entry["tool"].as_str().unwrap_or_default();
         p.event(&crate::progress::Event::ToolCall {
@@ -612,6 +623,28 @@ fn emit(
             tool: tool.to_owned(),
             target: crate::progress::target(tool, &entry["arguments"]),
             decision: entry["decision"].as_str().unwrap_or_default().to_owned(),
+            ok: entry["ok"].as_bool(),
+            tail,
+        });
+    }
+}
+
+/// A person is needed for `asked`: the run tells whoever watches.
+fn needs_person(
+    observer: Option<&(String, std::sync::Arc<dyn crate::progress::Progress>)>,
+    tool: &str,
+    arguments: &Value,
+) {
+    if let Some((task, p)) = observer {
+        let target = crate::progress::target(tool, arguments);
+        let what: String = format!("{tool} {target}")
+            .chars()
+            .filter(|c| !c.is_control())
+            .take(60)
+            .collect();
+        p.event(&crate::progress::Event::NeedsPerson {
+            task: task.clone(),
+            what,
         });
     }
 }
@@ -878,6 +911,7 @@ pub(crate) async fn tool_loop(
                         .unwrap_or_default(),
                     risk: crate::approvals::risk(&asked.name, reason).to_owned(),
                 };
+                needs_person(observer.as_ref(), &asked.name, &asked.arguments);
                 let answer = cx
                     .effect(AskPerson {
                         request,
@@ -941,6 +975,7 @@ pub(crate) async fn tool_loop(
                 Decision::Approval(reason) => {
                     let entry = json!({ "tool": asked.name, "arguments": asked.arguments, "decision": "approval", "reason": reason });
                     emit(observer.as_ref(), turn + 1, &entry);
+                    needs_person(observer.as_ref(), &asked.name, &asked.arguments);
                     log.push(entry);
                     return end(
                         "needs_approval",
@@ -990,8 +1025,33 @@ pub(crate) async fn tool_loop(
                     if additions_only {
                         entry["frozen_additions"] = json!(true);
                     }
-                    emit(observer.as_ref(), turn + 1, &entry);
+                    let tail = if asked.name == "run_command" && !ok {
+                        crate::progress::tail(&format!(
+                            "{}\n{}",
+                            output["stdout"].as_str().unwrap_or_default(),
+                            output["stderr"].as_str().unwrap_or_default()
+                        ))
+                    } else {
+                        Vec::new()
+                    };
+                    emit_with_tail(observer.as_ref(), turn + 1, &entry, tail);
                     log.push(entry);
+                    // A command that changed a judge input ends the attempt
+                    // before the model sees another turn (D-065).
+                    if let Some(drift) = output["integrity"].as_array().filter(|d| !d.is_empty()) {
+                        let paths: Vec<&str> =
+                            drift.iter().filter_map(|d| d["path"].as_str()).collect();
+                        return end(
+                            "integrity",
+                            json!({
+                                "reason": format!("a command changed what judges the task: {}", paths.join(", ")),
+                                "integrity": drift,
+                            }),
+                            &log,
+                            usage,
+                            &conversation,
+                        );
+                    }
                     // A tool that refused (`error`) is a failed call; a
                     // command that ran and exited non-zero is a result the
                     // model must read in full — its stdout and stderr are

@@ -249,8 +249,8 @@ fn mcp_tools_are_offered_allowed_or_approved_and_replay_strictly() {
         .unwrap()
         .unwrap();
     // the part itself carries them, as admitted.
-    assert!(!a.fields["/bundle"].is_untrusted());
-    let label = &a.fields["/settings/mcp"];
+    assert!(!a.label_at("/bundle").unwrap().is_untrusted());
+    let label = a.label_at("/settings/mcp").unwrap();
     let sources: Vec<String> = label.provenance.iter().map(ToString::to_string).collect();
     assert!(
         sources.contains(&"tool://notes/list_notes".to_owned()),

@@ -80,6 +80,40 @@ const JUDGE: &[&str] = &[
     "deny.toml",
     "justfile",
     "Makefile",
+    // Agent configuration: hooks, settings, skills, commands and MCP servers
+    // an agent runs or loads. Spec Kit's runtime events render extension
+    // hooks into these files; a change here runs code in a later session,
+    // outside speccoder's sandbox (D-065).
+    ".claude/**",
+    ".agents/**",
+    ".codex/**",
+    ".gemini/**",
+    ".opencode/**",
+    ".cursor/**",
+    ".kiro/**",
+    ".windsurf/**",
+    ".roo/**",
+    ".qwen/**",
+    ".kilocode/**",
+    ".augment/**",
+    ".amazonq/**",
+    ".codebuddy/**",
+    ".qoder/**",
+    ".mcp.json",
+    "**/.mcp.json",
+    "opencode.json",
+    "opencode.jsonc",
+];
+
+/// Agent context files: instructions every agent session reads. Editing them
+/// changes what later attempts are told, so it needs a person (D-065).
+const CONTEXT: &[&str] = &[
+    "AGENTS.md",
+    "**/AGENTS.md",
+    "CLAUDE.md",
+    "**/CLAUDE.md",
+    "GEMINI.md",
+    "**/GEMINI.md",
 ];
 
 /// Dependency manifests: editable only with approval.
@@ -139,7 +173,7 @@ impl Class {
                 "it is Spec Kit intent (.specify/, specs/): the spec is not edited during implementation"
             }
             Self::Judge => {
-                "it decides verification (speccoder.toml, CI and test-runner configuration)"
+                "it decides verification or configures an agent (speccoder.toml, CI and test-runner configuration, agent hooks, settings, skills and MCP servers)"
             }
             Self::Git => "it is git's own data",
             Self::Secret => "it looks like a credential",
@@ -153,6 +187,7 @@ pub struct Protected {
     secrets: GlobSet,
     intent: GlobSet,
     judge: GlobSet,
+    context: GlobSet,
     manifests: GlobSet,
 }
 
@@ -162,6 +197,7 @@ impl Default for Protected {
             secrets: set(SECRETS),
             intent: set(INTENT),
             judge: set(JUDGE),
+            context: set(CONTEXT),
             manifests: set(MANIFESTS),
         }
     }
@@ -188,6 +224,20 @@ impl Protected {
         } else {
             None
         }
+    }
+
+    /// Whether a normalised path is an agent context file (`AGENTS.md`,
+    /// `CLAUDE.md`, `GEMINI.md`): writable only with a person's approval.
+    #[must_use]
+    pub fn is_context(&self, rel: &str) -> bool {
+        self.write_class(rel).is_none() && self.context.is_match(rel)
+    }
+
+    /// Whether a normalised path is a judge or intent input: what a command
+    /// must not change while an attempt runs.
+    #[must_use]
+    pub fn is_judged(&self, rel: &str) -> bool {
+        matches!(self.write_class(rel), Some(Class::Judge | Class::Intent))
     }
 
     /// Whether writing this path changes dependencies (needs approval).
@@ -265,6 +315,24 @@ mod tests {
         ] {
             assert_eq!(p.write_class(path), Some(class), "{path}");
         }
+        for agent in [
+            ".claude/settings.json",
+            ".claude/settings.local.json",
+            ".claude/skills/x/SKILL.md",
+            ".agents/skills/y/SKILL.md",
+            ".codex/config.toml",
+            ".kiro/hooks/a.json",
+            ".mcp.json",
+            "web/.mcp.json",
+            "opencode.json",
+        ] {
+            assert_eq!(p.write_class(agent), Some(Class::Judge), "{agent}");
+        }
+        for context in ["AGENTS.md", "web/AGENTS.md", "CLAUDE.md", "GEMINI.md"] {
+            assert_eq!(p.write_class(context), None, "{context}");
+            assert!(p.is_context(context), "{context}");
+        }
+        assert!(!p.is_context("README.md") && !p.is_context(".specify/memory/constitution.md"));
         for free in ["src/lib.rs", "tests/api.rs", "docs/specs.md", "README.md"] {
             assert_eq!(p.write_class(free), None, "{free}");
         }

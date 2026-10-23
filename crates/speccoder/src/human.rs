@@ -3,7 +3,7 @@
 use std::io::{self, Write};
 use std::path::Path;
 
-use speccoder_core::verify::{CheckStatus, TestOutcome, VerifyReport};
+use speccoder_core::verify::{CheckStatus, VerifyReport};
 use speccoder_core::{
     ApprovalsReport, ConvergeReport, CostReport, EvalReport, ProposeReport, RunReport,
     StatusReport, WorktreeReport,
@@ -214,7 +214,7 @@ pub fn verify(w: &mut impl Write, r: &VerifyReport) -> io::Result<()> {
             .tests
             .iter()
             .flatten()
-            .filter(|t| t.outcome == TestOutcome::Failed)
+            .filter(|t| t.outcome.is_failing())
             .collect();
         for t in failing.iter().take(FAILING_SHOWN) {
             writeln!(w, "      failed: {}", t.id)?;
@@ -427,13 +427,34 @@ pub fn run(w: &mut impl Write, r: &RunReport, message: &str) -> io::Result<()> {
                 .flatten()
                 .filter_map(|f| f.as_str())
                 .collect();
+            let class = a["red_class"].as_str().unwrap_or_default();
+            let kind = match class {
+                "absent" => " (absent: what the task adds did not exist)",
+                _ => "",
+            };
             writeln!(
                 w,
-                "Acceptance {}  red {} green {}  (spec-derived, frozen)",
+                "Acceptance {}  red {}{kind} green {}  (spec-derived, frozen)",
                 files.join(", "),
                 mark(&a["red"]),
                 mark(&a["green"])
             )?;
+            if a["red"] == false && !class.is_empty() && class != "passed" {
+                let first = a["excerpt"]
+                    .as_str()
+                    .and_then(|e| e.lines().next())
+                    .unwrap_or_default();
+                writeln!(
+                    w,
+                    "  acceptance: not demonstrated ({}){}",
+                    class.replace('_', " "),
+                    if first.is_empty() {
+                        String::new()
+                    } else {
+                        format!(" — {first}")
+                    }
+                )?;
+            }
         }
     }
     for f in &r.integrity {
@@ -762,4 +783,24 @@ pub fn eval(w: &mut impl Write, e: &EvalReport, message: &str) -> io::Result<()>
         writeln!(w, "Tokens     {t} per correct case")?;
     }
     writeln!(w, "{message}")
+}
+
+/// The `Next:` block: each command padded to the longest (at most 44), then
+/// why; nothing when there is no step.
+pub fn next(w: &mut dyn Write, steps: &[speccoder_core::next::NextStep]) -> std::io::Result<()> {
+    if steps.is_empty() {
+        return Ok(());
+    }
+    let width = steps
+        .iter()
+        .map(|s| s.command.chars().count())
+        .max()
+        .unwrap_or(0)
+        .min(44);
+    writeln!(w)?;
+    for (i, s) in steps.iter().enumerate() {
+        let label = if i == 0 { "Next:  " } else { "       " };
+        writeln!(w, "{label}{:<width$}  {}", s.command, s.why)?;
+    }
+    Ok(())
 }

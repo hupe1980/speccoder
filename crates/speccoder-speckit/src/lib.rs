@@ -4,6 +4,7 @@
 //! snapshot types of `speccoder-core`. Strictly read-only: it never writes,
 //! never runs project scripts, and never reads outside the project root.
 
+pub mod checklists;
 mod features;
 mod hash;
 mod metadata;

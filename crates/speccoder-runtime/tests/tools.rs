@@ -145,6 +145,100 @@ fn escapes_and_secrets_are_refused_for_reading() {
 
 // ── US2: writing ────────────────────────────────────────────────────────────
 
+/// Every optional argument the schema declares nullable is readable as
+/// `null`: the schema never promises what the tool would refuse (D-076).
+#[test]
+fn every_optional_argument_accepts_null() {
+    let w = worktree();
+    let t = tools(w.path());
+    for spec in speccoder_runtime::tools::catalog() {
+        let schema = (spec.parameters)();
+        let props = schema["properties"]
+            .as_object()
+            .cloned()
+            .unwrap_or_default();
+        let required: Vec<&str> = schema["required"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .collect();
+        for (name, prop) in &props {
+            let nullable = prop["type"]
+                .as_array()
+                .is_some_and(|ts| ts.iter().any(|t| t == "null"))
+                || prop["anyOf"]
+                    .as_array()
+                    .is_some_and(|bs| bs.iter().any(|b| b["type"] == "null"));
+            assert!(
+                required.contains(&name.as_str()),
+                "{}: `{name}` is not required: {schema}",
+                spec.name
+            );
+            if nullable {
+                // A call that sets this argument to null reads as if it were
+                // absent: never a malformed-arguments error.
+                let mut args = json!({});
+                for (other, p) in &props {
+                    if other == name {
+                        args[other] = Value::Null;
+                    } else {
+                        args[other] = match p["type"].as_str() {
+                            Some("string") => json!("src/lib.rs"),
+                            Some("array") => json!(["echo", "x"]),
+                            _ => Value::Null,
+                        };
+                    }
+                }
+                let v = call(&t, spec.name, args.clone());
+                let error = v["error"].as_str().unwrap_or_default();
+                assert!(
+                    !error.contains("invalid") && !error.contains("expected"),
+                    "{} with {args}: {v}",
+                    spec.name
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn edit_file_reads_a_null_replace_all_as_one_occurrence() {
+    let w = worktree();
+    let t = tools(w.path());
+    let v = call(
+        &t,
+        "edit_file",
+        json!({"path": "src/lib.rs", "old_string": "{ 1 }", "new_string": "{ 10 }", "replace_all": null}),
+    );
+    assert_eq!(
+        (v["ok"].clone(), v["replacements"].clone()),
+        (json!(true), json!(1)),
+        "{v}"
+    );
+}
+
+#[test]
+fn closing_a_foreign_schema_only_narrows_it() {
+    use speccoder_runtime::tools::close_objects;
+    let required_only = close_objects(
+        json!({"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}),
+    );
+    assert_eq!(required_only["additionalProperties"], false);
+    assert!(agentplane::model::strict_schema_problem(&required_only).is_none());
+    let empty = close_objects(json!({"type": "object"}));
+    assert_eq!(
+        (empty["properties"].clone(), empty["required"].clone()),
+        (json!({}), json!([]))
+    );
+    assert!(agentplane::model::strict_schema_problem(&empty).is_none());
+    // An optional property is not made nullable: the schema stays non-strict.
+    let optional =
+        close_objects(json!({"type": "object", "properties": {"limit": {"type": "integer"}}}));
+    assert!(optional["properties"]["limit"]["type"] == "integer");
+    assert!(agentplane::model::strict_schema_problem(&optional).is_some());
+}
+
 #[test]
 fn edit_file_replaces_one_unique_occurrence_and_reports_hashes() {
     let w = worktree();

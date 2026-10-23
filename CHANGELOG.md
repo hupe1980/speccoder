@@ -216,6 +216,61 @@ adheres to [Semantic Versioning](https://semver.org/).
   `SECURITY.md` is now the security policy and links the security model.
 - `speccoder.toml` sections speccoder does not know are an error, listing
   the known ones, instead of being ignored.
+- Honest red: acceptance tests count as red only when a collected test fails
+  on an assertion, or when they cannot build only because what the task adds
+  does not exist yet (`absent`). Any other build error, a collection error, a
+  timeout or an empty run is "not demonstrated", with an excerpt; red is
+  confirmed by a second run. Runner summaries of libtest, nextest, pytest,
+  jest, vitest and `go test` are read when there is no JUnit report. The kind
+  of red is a `Red:` trailer.
+- Agent configuration (`.claude/`, `.agents/`, `.codex/`, `.gemini/`,
+  `.opencode/`, `.cursor/`, `.kiro/`, `.mcp.json`, …) is protected like the
+  checks' configuration; agent context files (`AGENTS.md`, `CLAUDE.md`,
+  `GEMINI.md`) need a person's approval. These inputs, git-ignored files
+  included, are re-checked after every command: a command that changes one
+  ends the attempt at once.
+- A failed check is run once more; passing then, it is `flaky` (a `Flaky:`
+  trailer) and never evidence for `verified`.
+- The `full` check tier runs once after a run ticks the feature's last task;
+  a failure is reported (exit 20, ticks kept), recorded under
+  `refs/speccoder/full/<feature>`, and `speccoder pr` refuses the branch
+  unless `--force`.
+- Spec Kit's checklist gate: unchecked items in `checklists/*.md` stop `run`
+  before any model call; `run --ignore-checklists` proceeds and records it
+  (`Checklists: overridden`).
+- Task scope as a finding: changed files the task line does not name are
+  listed in the run report and a `Scope-Outside:` trailer, never a failure.
+
+- Recovery is tested at every crash point of a recorded attempt
+  (agentplane's `testkit::crash_points`), each resume checked against the
+  journal.
+
+- Every stop and finish says what to do next: a `Next:` block in human
+  output, `data.next` in `--json`, the next step in the dashboard's footer.
+- One stage vocabulary everywhere — `baseline red attempt verify audit
+  mutation monitor commit` — in progress lines, `status`, the dashboard and
+  editors.
+- Notifications when a call waits for you, a task fails, the feature ends or
+  nothing happens for a while (OSC 9 / OSC 777 / bell / a command of yours),
+  and a terminal title that follows the run; configured in your own
+  `~/.config/speccoder/config.toml` (`[ui.notify]`), never in the project's
+  `speccoder.toml` (a `[ui]` table there is refused).
+- A run that picks up an interrupted attempt says so first, with the stage
+  and call it was in.
+- `-q`/`--quiet` and `-v`/`--verbose`; at `-v` the last lines of a failed
+  command or check are shown.
+
+### Changed
+- agentplane 0.51.0. Tool schemas are agentplane's `strict_schema`: an
+  optional argument accepts `null` exactly when the tool can read it
+  (`edit_file`'s `replace_all` sent as `null` failed before). MCP tools whose
+  schema is not strict-ready are offered without strict decoding, with a
+  notice, instead of being skipped; their schemas are no longer rewritten
+  beyond closing objects.
+- JUnit `<error>` results are a test outcome of their own (`"error"`),
+  counted as failing for regressions and retries.
+- The runtime's feature loop is split into modules (`commands`, `pipeline`),
+  none over 900 lines.
 
 ### Fixed
 - A spec changed and committed in the checkout after the speccoder worktree

@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use serde::{Deserialize, Serialize};
+use speccoder_core::stage::{Stage, StageState};
 use speccoder_core::{CommandData, CommandResult, CommandStatus};
 
 use crate::substrate::model_config::Prices;
@@ -33,12 +34,36 @@ pub enum Event {
         /// Task title.
         title: String,
     },
-    /// A step of the run: `baseline checks`, `acceptance tests`, `attempt 2`, …
-    Phase {
+    /// A stage of the task's pipeline began, ended or does not apply.
+    Stage {
         /// Task ID.
         task: String,
-        /// What is happening.
-        phase: String,
+        /// Which stage.
+        stage: Stage,
+        /// Where it is.
+        state: StageState,
+        /// `1/2 · sample 2/3` for an attempt, a short commit id, a reason.
+        detail: Option<String>,
+        /// How long it took, once it ended.
+        elapsed_ms: Option<u64>,
+        /// The last lines of a failed check (at most five).
+        tail: Vec<String>,
+    },
+    /// A run picks up an attempt a killed process left behind.
+    Resumed {
+        /// Task ID.
+        task: String,
+        /// The stage it was in, when known.
+        stage: Option<Stage>,
+        /// The last tool call, when known.
+        last_call: Option<String>,
+    },
+    /// A call waits for a person: notify them.
+    NeedsPerson {
+        /// Task ID.
+        task: String,
+        /// What waits, e.g. `cargo add x` (no control characters, ≤ 60 chars).
+        what: String,
     },
     /// A tool call the model asked for, with the policy's decision.
     ToolCall {
@@ -52,6 +77,10 @@ pub enum Event {
         target: String,
         /// `allow`, `deny`, `approval`, `unknown`, `stop`.
         decision: String,
+        /// Whether an allowed call succeeded.
+        ok: Option<bool>,
+        /// The last lines of a failed command (at most five).
+        tail: Vec<String>,
     },
     /// Tokens so far in the current attempt.
     Usage {
@@ -107,8 +136,12 @@ pub struct LiveState {
     pub task: String,
     /// Task title.
     pub title: String,
-    /// The current step.
-    pub phase: String,
+    /// The current stage.
+    #[serde(default)]
+    pub stage: Option<Stage>,
+    /// Its detail (`1/2`, a commit id).
+    #[serde(default)]
+    pub stage_detail: Option<String>,
     /// The last tool call, e.g. `edit_file src/lib.rs (allow)`.
     pub last_call: Option<String>,
     /// The latest tool calls, oldest first (at most [`RECENT`]).
@@ -228,12 +261,20 @@ impl Progress for Live {
                         feature: feature.clone(),
                         task: task.clone(),
                         title: title.clone(),
-                        phase: "starting".to_owned(),
                         started_at: now(),
                         ..LiveState::default()
                     };
                 }
-                Event::Phase { phase, .. } => phase.clone_into(&mut s.phase),
+                Event::Stage {
+                    stage,
+                    state: StageState::Started,
+                    detail,
+                    ..
+                } => {
+                    s.stage = Some(*stage);
+                    s.stage_detail.clone_from(detail);
+                }
+                Event::Stage { .. } | Event::Resumed { .. } | Event::NeedsPerson { .. } => {}
                 Event::ToolCall {
                     turn,
                     tool,
@@ -352,19 +393,30 @@ pub fn status_with(path: &Path, state: &Path) -> CommandResult {
         live.output_tokens,
         live.usd.map(|u| format!(" · ${u:.4}")).unwrap_or_default()
     );
+    use speccoder_core::next::{Outcome, next};
+    let outcome = match (&live.finished, alive(live.pid)) {
+        (None, true) => Some(Outcome::Running),
+        (None, false) => Some(Outcome::Interrupted {
+            task: live.task.clone(),
+        }),
+        (Some(_), _) => None,
+    };
     let message = match (&live.finished, alive(live.pid)) {
         (None, true) => format!(
             "running (pid {}): {} {} — {} for {}s; last: {}; {tokens}",
             live.pid,
             live.feature,
             live.task,
-            live.phase,
+            stage_word(&live),
             now().saturating_sub(live.started_at),
             live.last_call.as_deref().unwrap_or("-"),
         ),
         (None, false) => format!(
             "interrupted: {} {} stopped during {} {ago}s ago (pid {} is gone); the next `speccoder run` sets its leftovers aside",
-            live.feature, live.task, live.phase, live.pid
+            live.feature,
+            live.task,
+            stage_word(&live),
+            live.pid
         ),
         (Some(outcome), _) => format!(
             "last run: {} {} — {outcome} ({ago}s ago); {tokens}",
@@ -372,6 +424,34 @@ pub fn status_with(path: &Path, state: &Path) -> CommandResult {
         ),
     };
     CommandResult::new("status", CommandStatus::Ok, &message)
+        .with_next(outcome.map(|o| next(&o, None)).unwrap_or_default())
+}
+
+/// `verify`, `attempt 1/2`, or `starting`.
+#[must_use]
+pub fn stage_word(live: &LiveState) -> String {
+    match (live.stage, &live.stage_detail) {
+        (Some(st), Some(d)) => format!("{} {d}", st.name()),
+        (Some(st), None) => st.name().to_owned(),
+        (None, _) => "starting".to_owned(),
+    }
+}
+
+/// The last lines of command output worth showing: at most five non-empty
+/// lines, each at most 200 characters, control characters removed.
+#[must_use]
+pub fn tail(text: &str) -> Vec<String> {
+    let lines: Vec<String> = text
+        .lines()
+        .map(|l| {
+            l.chars()
+                .filter(|c| !c.is_control())
+                .take(200)
+                .collect::<String>()
+        })
+        .filter(|l| !l.trim().is_empty())
+        .collect();
+    lines[lines.len().saturating_sub(5)..].to_vec()
 }
 
 /// [`status_with`] in the default state directory.

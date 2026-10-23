@@ -15,7 +15,7 @@ const DEFAULT_TIMEOUT_SECS: u64 = 600;
 pub enum Tier {
     /// Every task.
     Fast,
-    /// Phase ends and explicit full runs.
+    /// Once after a run ticks the feature's last task, and with `speccoder verify`.
     Full,
 }
 
@@ -84,6 +84,16 @@ pub fn parse(text: &str) -> Result<Vec<Check>, String> {
     // A misspelled section would otherwise be silently ignored by every
     // command; the other sections are read (and their keys checked) by the
     // modules that own them.
+    // A person's UI settings are not the project's policy (D-069).
+    if table.contains_key("ui") {
+        return Err(format!(
+            "[ui] is a person's setting, not project policy; move it to {}",
+            crate::user_config::path().map_or_else(
+                || "~/.config/speccoder/config.toml".to_owned(),
+                |p| p.display().to_string()
+            )
+        ));
+    }
     if let Some(unknown) = table.keys().find(|k| !SECTIONS.contains(&k.as_str())) {
         return Err(format!(
             "unknown section `[{unknown}]` (known: {})",

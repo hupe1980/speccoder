@@ -1,6 +1,7 @@
 //! The `speccoder` binary: parse, delegate to the runtime, render.
 
 mod acp;
+mod attention;
 mod cli;
 mod human;
 mod output;
@@ -58,6 +59,7 @@ fn main() {
             converge,
             no_prompt,
             parallel,
+            ignore_checklists,
             path,
             feature,
         } => {
@@ -70,21 +72,26 @@ fn main() {
                     && std::io::stderr().is_terminal())
                 .then(|| std::sync::Arc::new(prompt::Terminal) as _);
             // Live progress on stderr, unless stdout must stay one JSON object.
-            let progress: Option<std::sync::Arc<dyn speccoder_runtime::progress::Progress>> =
-                (!cli.json).then(|| std::sync::Arc::new(progress::Printer::default()) as _);
+            let (progress, attention) = live_progress(&cli);
             let options = speccoder_runtime::RunOptions {
                 max_tasks: *max_tasks,
                 approver,
                 progress,
                 parallel: usize::from(*parallel),
+                ignore_checklists: *ignore_checklists,
                 ..speccoder_runtime::RunOptions::default()
             };
-            match task {
+            let result = match task {
                 Some(task) => speccoder_runtime::run(path, feature.as_deref(), task, &options),
                 None => {
                     speccoder_runtime::run_feature(path, feature.as_deref(), &options, *converge)
                 }
+            };
+            let result = speccoder_runtime::next::attach(result, feature.as_deref());
+            if let Some(a) = &attention {
+                a.finish(&result);
             }
+            result
         }
         Command::Accept {
             task,
@@ -140,11 +147,11 @@ fn main() {
                     && !*no_prompt
                     && std::io::stdin().is_terminal()
                     && std::io::stderr().is_terminal();
+                let (progress, _attention) = live_progress(&cli);
                 let options = speccoder_runtime::RunOptions {
                     max_tasks: None,
                     approver: interactive.then(|| std::sync::Arc::new(prompt::Terminal) as _),
-                    progress: (!cli.json)
-                        .then(|| std::sync::Arc::new(progress::Printer::default()) as _),
+                    progress,
                     ..speccoder_runtime::RunOptions::default()
                 };
                 speccoder_runtime::hosting::run(path, name, &arguments.join(" "), &options)
@@ -189,6 +196,7 @@ fn main() {
             base,
             yes,
             dry_run,
+            force,
         } => {
             let ask = |o: &speccoder_runtime::handoff::PrOptions<'_>| {
                 speccoder_runtime::handoff::pr(path, feature.as_deref(), o)
@@ -198,6 +206,7 @@ fn main() {
                 base: base.as_deref(),
                 gh: "gh",
                 open: *yes,
+                force: *force,
             };
             // Talking to a remote is a person's decision: show the
             // dry run, then ask, unless --yes; never without a terminal.
@@ -291,9 +300,67 @@ fn main() {
             }
         }
     };
+    let result = speccoder_runtime::next::attach(result, feature_flag(&cli.command));
     let code = match output::render(&result, cli.json) {
         Ok(()) => result.exit_code(),
         Err(_) => ExitCode::INTERNAL,
     };
     std::process::exit(i32::from(code.code()));
+}
+
+/// How much progress `cli` asked for.
+fn verbosity(cli: &cli::Cli) -> progress::Verbosity {
+    if cli.quiet {
+        progress::Verbosity::Quiet
+    } else if cli.verbose {
+        progress::Verbosity::Verbose
+    } else {
+        progress::Verbosity::Normal
+    }
+}
+
+/// The `--feature` a command was given.
+fn feature_flag(command: &cli::Command) -> Option<&str> {
+    use cli::Command as C;
+    match command {
+        C::Run { feature, .. }
+        | C::Converge { feature, .. }
+        | C::Report { feature, .. }
+        | C::Approvals { feature, .. }
+        | C::Approve { feature, .. }
+        | C::Reject { feature, .. }
+        | C::Accept { feature, .. }
+        | C::Skip { feature, .. }
+        | C::Nudge { feature, .. } => feature.as_deref(),
+        _ => None,
+    }
+}
+
+/// Live progress for a run: the printer, and around it the attention layer
+/// (notifications, title) — neither under `--json`.
+fn live_progress(
+    cli: &cli::Cli,
+) -> (
+    Option<std::sync::Arc<dyn speccoder_runtime::progress::Progress>>,
+    Option<std::sync::Arc<attention::Attention>>,
+) {
+    use std::io::IsTerminal;
+    if cli.json {
+        return (None, None);
+    }
+    let printer: std::sync::Arc<dyn speccoder_runtime::progress::Progress> =
+        std::sync::Arc::new(progress::Printer::new(verbosity(cli)));
+    let (settings, warnings) = speccoder_runtime::user_config::load();
+    for w in warnings {
+        eprintln!("{w}");
+    }
+    let layer = attention::Attention::new(
+        printer,
+        settings,
+        std::io::stderr().is_terminal(),
+        Box::new(attention::Stderr),
+        &|k| std::env::var(k).ok(),
+    );
+    layer.watch_stalls(std::time::Duration::from_secs(1));
+    (Some(layer.clone() as _), Some(layer))
 }

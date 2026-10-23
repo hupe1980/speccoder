@@ -204,10 +204,16 @@ async fn connect_one(
             ));
             continue;
         };
-        let schema = crate::tools::strict(t.input_schema.clone());
+        // The server's schema, its objects closed (that only narrows what
+        // the model may send); optional properties are not made nullable,
+        // which would change what the server is sent. One that is still
+        // not strict-ready is sent non-strict.
+        let schema = crate::tools::close_objects(t.input_schema.clone());
         if let Some(problem) = agentplane::model::strict_schema_problem(&schema) {
-            notices.push(format!("MCP tool `{}/{tool}` skipped: {problem}", s.name));
-            continue;
+            notices.push(format!(
+                "MCP tool `{}/{tool}` is sent without strict decoding: {problem}",
+                s.name
+            ));
         }
         let decision = if s.deny.contains(&tool) {
             "deny"

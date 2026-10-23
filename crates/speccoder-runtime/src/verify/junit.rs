@@ -29,8 +29,12 @@ pub fn parse(xml: &str) -> Result<Vec<TestResult>, String> {
             Event::Start(e) | Event::Empty(e) => {
                 if let Some(t) = open.as_mut() {
                     match e.name().as_ref() {
-                        "failure" | "error" => t.outcome = TestOutcome::Failed,
-                        "skipped" if t.outcome != TestOutcome::Failed => {
+                        "failure" => t.outcome = TestOutcome::Failed,
+                        // An assertion failure says more than an error beside it.
+                        "error" if t.outcome != TestOutcome::Failed => {
+                            t.outcome = TestOutcome::Error;
+                        }
+                        "skipped" if !t.outcome.is_failing() => {
                             t.outcome = TestOutcome::Skipped;
                         }
                         _ => {}
@@ -101,8 +105,15 @@ mod tests {
         let xml = r#"<testsuites><testsuite name="pytest"><testcase classname="tests.test_api" name="test_login"><error message="boom"/></testcase><testcase name="test_bare"/></testsuite></testsuites>"#;
         let tests = parse(xml).unwrap();
         assert_eq!(tests[0].id, "tests.test_api::test_login");
-        assert_eq!(tests[0].outcome, TestOutcome::Failed);
+        assert_eq!(tests[0].outcome, TestOutcome::Error);
         assert_eq!(tests[1].id, "test_bare");
+    }
+
+    #[test]
+    fn a_failure_beside_an_error_is_a_failure() {
+        let xml = r#"<testsuite><testcase name="a"><error/><failure/></testcase><testcase name="b"><failure/><error/></testcase></testsuite>"#;
+        let tests = parse(xml).unwrap();
+        assert!(tests.iter().all(|t| t.outcome == TestOutcome::Failed));
     }
 
     #[test]

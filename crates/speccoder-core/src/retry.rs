@@ -7,7 +7,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::verify::{CheckStatus, TestOutcome, VerifyReport};
+use crate::verify::{CheckStatus, VerifyReport};
 
 /// Lines of output kept per failing check.
 const EXCERPT_LINES: usize = 40;
@@ -84,7 +84,7 @@ pub fn digest(
                 .tests
                 .iter()
                 .flatten()
-                .filter(|t| t.outcome == TestOutcome::Failed)
+                .filter(|t| t.outcome.is_failing())
                 .map(|t| t.id.clone())
                 .collect(),
             excerpt: excerpt(&output(&c.stderr_tail, &c.stdout_tail)),
@@ -180,7 +180,7 @@ fn normalise(line: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::verify::{CheckResult, TestResult};
+    use crate::verify::{CheckResult, TestOutcome, TestResult};
 
     fn check(name: &str, status: CheckStatus, stderr: &str) -> CheckResult {
         CheckResult {
@@ -195,6 +195,7 @@ mod tests {
             stderr_tail: stderr.to_owned(),
             truncated: false,
             note: None,
+            flaky: false,
         }
     }
 

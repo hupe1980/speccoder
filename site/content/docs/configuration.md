@@ -38,7 +38,7 @@ The commands that decide whether nothing regressed. A check's command up to its 
 | `argv` | required | Program and arguments, run without a shell |
 | `cwd` | `"."` | Working directory, relative to the project root |
 | `when_exists` | — | Run only if this path exists; otherwise the check is skipped, never "passed" |
-| `tier` | `"fast"` | `fast` checks judge every task; `full` checks (slow linters, audits) run only with `speccoder verify` |
+| `tier` | `"fast"` | `fast` checks judge every task; `full` checks (slow linters, audits) run once after a run ticks the feature's last task, and with `speccoder verify` |
 | `timeout_secs` | `600` | Deadline for the whole process group |
 | `junit` | — | A JUnit XML report the check writes, for per-test results and regression detection |
 
@@ -132,6 +132,21 @@ See [external agents](@/docs/integrations.md#external-agents).
 | `deny` | `[]` | Tools never offered |
 
 Server names are lowercase letters, digits and `-` (not `fs`, `proc` or `git`). Their tools appear to the model as `mcp__<server>__<tool>`.
+
+## Your settings
+
+How speccoder gets *your* attention is yours, not the project's: it lives in `$XDG_CONFIG_HOME/speccoder/config.toml` (else `~/.config/speccoder/config.toml`), never in `speccoder.toml` — a `[ui]` table there is refused (exit 13), naming where it belongs.
+
+```toml
+[ui.notify]
+on = ["approval", "task_failed", "feature_done", "stalled"]   # the default: all four
+when = "unfocused"     # or "always"
+method = "auto"        # auto | osc9 | osc777 | bel | command | off
+command = []           # with method = "command": the program and arguments; the message is appended
+stall_after = "15m"    # Ns | Nm | Nh, at least 30s
+```
+
+`auto` uses a desktop notification where the terminal shows one and a bell elsewhere. `command` runs the program without a shell, at most five seconds (for example `["terminal-notifier", "-title", "speccoder", "-message"]`). A value speccoder does not understand is a warning, and the default is used.
 
 ## Environment
 

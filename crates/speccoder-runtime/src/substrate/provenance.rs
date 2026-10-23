@@ -23,7 +23,7 @@ pub const WORKTREE: &str = "speccoder://worktree";
 /// The source of a tool's results and of an MCP tool's description.
 #[must_use]
 pub fn tool(server: &str, name: &str) -> SourceId {
-    SourceId::new(format!("tool://{server}/{name}"))
+    agentplane::tools::ToolId::new(server, name).source()
 }
 
 /// An untrusted label from `source`.

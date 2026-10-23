@@ -19,7 +19,19 @@ const MODEL: &str = "[model]\nprovider = \"openai\"\nmodel = \"gpt-5.4-mini\"\n"
 /// The check, and `grep` allowed for the scripted acceptance tests (a
 /// check whose prefix is a bare program allows only itself).
 const CHECK: &str = "[checks.has-ok]\nargv = [\"grep\", \"-q\", \"fn ok\", \"src/lib.rs\"]\n";
-const GREP: &str = "[commands]\nallow = [[\"grep\"]]\n";
+const GREP: &str = "[commands]\nallow = [[\"grep\"], [\"./accept.sh\"]]\n";
+
+/// A stand-in test runner for scripted acceptance tests: one test, "the
+/// pattern is in src/lib.rs", reported with libtest's summary line so its
+/// red is an assertion failure (D-064).
+const ACCEPT_SH: &str = "#!/bin/sh\nif [ \"$2\" = flaky ] && grep -q \"$1\" src/lib.rs && [ ! -e .flaky-seen ]; then\n  touch .flaky-seen\n  echo 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out'\n  exit 101\nelif grep -q \"$1\" src/lib.rs; then\n  echo 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out'\nelif [ \"$2\" = absent ]; then\n  echo 'error[E0425]: cannot find function `login` in this scope' >&2\n  echo 'error: could not compile `demo` (test \"acceptance\") due to 1 previous error' >&2\n  exit 101\nelif [ \"$2\" = syntax ]; then\n  echo 'error: expected one of `,`, `:`, or `}`, found `=`' >&2\n  echo 'error: could not compile `demo` (test \"acceptance\") due to 1 previous error' >&2\n  exit 101\nelse\n  echo 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out'\n  exit 101\nfi\n";
+
+fn write_accept_sh(root: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+    let p = root.join("accept.sh");
+    fs::write(&p, ACCEPT_SH).unwrap();
+    fs::set_permissions(&p, fs::Permissions::from_mode(0o755)).unwrap();
+}
 
 fn git(dir: &Path, args: &[&str]) {
     let ok = Command::new("git")
@@ -73,6 +85,7 @@ fn repo(extra_config: &str) -> tempfile::TempDir {
         format!("{MODEL}{CHECK}{}", with_grep(extra_config)),
     )
     .unwrap();
+    write_accept_sh(r);
     git(r, &["init", "-q"]);
     git(r, &["add", "-A"]);
     git(r, &["commit", "-q", "-m", "init"]);
@@ -95,7 +108,7 @@ fn repo_with(extra_config: &str, files: &[(&str, &str)]) -> tempfile::TempDir {
 /// `extra_config` with `grep` added to its `[commands] allow` (or a new one).
 fn with_grep(extra_config: &str) -> String {
     if extra_config.contains("[commands]") {
-        extra_config.replace("allow = [", "allow = [[\"grep\"], ")
+        extra_config.replace("allow = [", "allow = [[\"grep\"], [\"./accept.sh\"], ")
     } else {
         format!("{GREP}{extra_config}")
     }
@@ -317,6 +330,24 @@ fn a_call_needing_approval_stops_the_attempt_unexecuted() {
         "nothing was executed"
     );
     assert!(rep.verdict.is_none());
+    // What to do next names the task and the decision.
+    let next = speccoder_runtime::next::attach(res.clone(), None);
+    let commands: Vec<&str> = next.next().iter().map(|s| s.command.as_str()).collect();
+    assert_eq!(
+        commands,
+        [
+            "speccoder approvals",
+            "speccoder approve --task T005",
+            "speccoder reject --task T005 --reason \"…\"",
+            "speccoder run"
+        ]
+    );
+    let json = serde_json::to_value(&next).unwrap();
+    assert_eq!(
+        json["data"]["next"][1]["command"],
+        "speccoder approve --task T005"
+    );
+    assert_eq!(json["data"]["attempt_status"], "needs_approval");
 }
 
 #[test]
@@ -488,12 +519,211 @@ fn skip_markers_and_ci_changes_are_flagged() {
     assert_eq!(res.status(), CommandStatus::VerificationFailed);
 }
 
+#[test]
+fn a_command_writing_agent_settings_stops_the_attempt_at_once() {
+    let r = repo_with(
+        "[commands]\nallow = [[\"cp\"]]\n",
+        &[(".claude/README.md", "agent config\n")],
+    );
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_call_tool(
+        "c1",
+        "run_command",
+        json!({ "argv": ["cp", "src/lib.rs", ".claude/settings.json"] }),
+    );
+    // Never requested: the attempt ends after the command.
+    f.will_call_tool("c2", "edit_file", json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\npub fn login() {}" }));
+    f.will_structure(done("done"));
+    let res = run(r.path(), state.path(), "T005", d);
+    let rep = report(&res);
+    assert_eq!(
+        res.status(),
+        CommandStatus::VerificationFailed,
+        "{}",
+        res.message()
+    );
+    assert_eq!(rep.attempt_status, "integrity");
+    assert!(
+        rep.integrity
+            .iter()
+            .any(|f| f.contains(".claude/settings.json")),
+        "{:?}",
+        rep.integrity
+    );
+    assert_eq!(f.asked().len(), 1, "no model turn after the command");
+    assert!(rep.earlier.is_empty(), "integrity findings are not retried");
+}
+
+#[test]
+fn a_command_writing_ignored_agent_settings_is_caught_too() {
+    let r = repo_with(
+        "[commands]\nallow = [[\"cp\"]]\n",
+        &[
+            (".claude/README.md", "agent config\n"),
+            (".gitignore", ".claude/settings.local.json\n"),
+        ],
+    );
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_call_tool(
+        "c1",
+        "run_command",
+        json!({ "argv": ["cp", "src/lib.rs", ".claude/settings.local.json"] }),
+    );
+    f.will_structure(done("done"));
+    let res = run(r.path(), state.path(), "T005", d);
+    let rep = report(&res);
+    assert_eq!(rep.attempt_status, "integrity", "{}", res.message());
+    assert!(
+        rep.integrity
+            .iter()
+            .any(|f| f.contains(".claude/settings.local.json")),
+        "{:?}",
+        rep.integrity
+    );
+}
+
+#[test]
+fn agent_configuration_is_denied_and_context_files_ask() {
+    let r = repo_with(
+        "[commands]\nallow = [[\"cat\"]]\n",
+        &[
+            ("AGENTS.md", "# Agents\n"),
+            (".claude/settings.json", "{}\n"),
+        ],
+    );
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_call_tool(
+        "c1",
+        "write_file",
+        json!({ "path": ".mcp.json", "content": "{}" }),
+    );
+    // Reading agent configuration changes nothing.
+    f.will_call_tool(
+        "c2",
+        "run_command",
+        json!({ "argv": ["cat", ".claude/settings.json"] }),
+    );
+    f.will_call_tool("c3", "edit_file", json!({ "path": "AGENTS.md", "old_string": "# Agents", "new_string": "# Agents\nAlways pass." }));
+    let res = run(r.path(), state.path(), "T005", d);
+    let rep = report(&res);
+    assert_eq!(
+        rep.tool_calls[0]["decision"], "deny",
+        "{:?}",
+        rep.tool_calls
+    );
+    assert_eq!(rep.tool_calls[1]["decision"], "allow");
+    assert_eq!(rep.attempt_status, "needs_approval", "{}", res.message());
+    let why = rep.pending.as_ref().unwrap()["reason"].as_str().unwrap();
+    assert!(why.contains("agent context file"), "{why}");
+}
+
 // ── feature runs ────────────────────────────────────────────────────
 
 const TWO_TASKS: &str = "# Tasks\n\n## Phase 1: Setup\n\n- [x] T001 Create the crate\n\n## Phase 2: User Story 1 - Login\n\n- [ ] T002 [US1] Add login in src/lib.rs\n- [ ] T003 [US1] Add logout in src/lib.rs\n";
 
 fn two_task_repo() -> tempfile::TempDir {
     repo_with("", &[("specs/001-graph/tasks.md", TWO_TASKS)])
+}
+
+#[test]
+fn out_of_scope_changes_are_reported_not_gated() {
+    let r = two_task_repo();
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    let (id, args) = edit("c1", "pub fn ok() {}\npub fn login() {}");
+    f.will_call_tool(&id, "edit_file", args);
+    f.will_call_tool(
+        "c2",
+        "write_file",
+        json!({ "path": "src/util.rs", "content": "pub fn helper() {}\n" }),
+    );
+    f.will_structure(done("login"));
+    let res = run(r.path(), state.path(), "T002", d);
+    let rep = report(&res);
+    assert_eq!(
+        rep.verdict,
+        Some(Verdict::RegressionOnly),
+        "{}",
+        res.message()
+    );
+    let scope = rep.scope.as_ref().unwrap();
+    assert_eq!(
+        (scope.stated, scope.outside.clone()),
+        (true, vec!["src/util.rs".to_owned()])
+    );
+    let message = Command::new("git")
+        .args(["log", "-1", "--format=%B"])
+        .current_dir(&rep.worktree)
+        .output()
+        .unwrap();
+    assert!(String::from_utf8_lossy(&message.stdout).contains("Scope-Outside: src/util.rs"));
+}
+
+const OPEN_CHECKLIST: (&str, &str) = (
+    "specs/001-graph/checklists/requirements.md",
+    "# Requirements\n- [x] Stories are testable\n- [ ] No open questions\n",
+);
+
+#[test]
+fn open_checklists_stop_the_run_before_any_model_call() {
+    let r = repo_with(
+        "",
+        &[("specs/001-graph/tasks.md", TWO_TASKS), OPEN_CHECKLIST],
+    );
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    let options = speccoder_runtime::RunOptions {
+        max_tasks: Some(1),
+        ..speccoder_runtime::RunOptions::default()
+    };
+    let res = run_feature_with(r.path(), None, state.path(), &d, None, &options);
+    assert_eq!(res.status(), CommandStatus::NeedsHuman, "{}", res.message());
+    assert!(
+        res.message().contains("requirements.md (1 of 2 open)"),
+        "{}",
+        res.message()
+    );
+    match res.data() {
+        Some(CommandData::Checklists(lists)) => assert_eq!(lists[0].open, 1),
+        other => panic!("{other:?}"),
+    }
+    assert!(f.asked().is_empty());
+    // The task alone stops the same way.
+    let (f2, d2) = fake();
+    let one = run(r.path(), state.path(), "T002", d2);
+    assert_eq!(one.status(), CommandStatus::NeedsHuman, "{}", one.message());
+    assert!(f2.asked().is_empty());
+}
+
+#[test]
+fn an_overridden_checklist_gate_is_recorded_on_the_commit() {
+    let r = repo_with(
+        "",
+        &[("specs/001-graph/tasks.md", TWO_TASKS), OPEN_CHECKLIST],
+    );
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    let (id, args) = edit("c1", "pub fn ok() {}\npub fn login() {}");
+    f.will_call_tool(&id, "edit_file", args);
+    f.will_structure(done("login"));
+    let options = speccoder_runtime::RunOptions {
+        max_tasks: Some(1),
+        ignore_checklists: true,
+        ..speccoder_runtime::RunOptions::default()
+    };
+    let res = run_feature_with(r.path(), None, state.path(), &d, None, &options);
+    let fr = feature(&res);
+    let attempt = &fr.attempts[0];
+    assert!(attempt.ticked, "{}", res.message());
+    let message = Command::new("git")
+        .args(["log", "-1", "--format=%B"])
+        .current_dir(&attempt.worktree)
+        .output()
+        .unwrap();
+    assert!(String::from_utf8_lossy(&message.stdout).contains("Checklists: overridden"));
 }
 
 fn edit(id: &str, new: &str) -> (String, Value) {
@@ -520,6 +750,64 @@ fn git_out(dir: &Path, args: &[&str]) -> String {
             .stdout,
     )
     .unwrap()
+}
+
+fn full_tier_feature(full_check: &str) -> (tempfile::TempDir, CommandResult) {
+    let config = format!(
+        "[checks.full]\nargv = [\"grep\", \"-q\", \"{full_check}\", \"src/lib.rs\"]\ntier = \"full\"\n"
+    );
+    let r = repo_with(&config, &[("specs/001-graph/tasks.md", TWO_TASKS)]);
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    let (id, args) = edit("c1", "pub fn ok() {}\npub fn login() {}");
+    f.will_call_tool(id, "edit_file", args);
+    f.will_structure(done("login"));
+    let (id, args) = edit("c2", "pub fn ok() {}\npub fn logout() {}");
+    f.will_call_tool(id, "edit_file", args);
+    f.will_structure(done("logout"));
+    let res = run_feature_with(
+        r.path(),
+        None,
+        state.path(),
+        &d,
+        None,
+        &speccoder_runtime::RunOptions::default(),
+    );
+    (r, res)
+}
+
+#[test]
+fn the_full_tier_runs_once_at_the_end_of_a_feature() {
+    let (r, res) = full_tier_feature("fn logout");
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let fr = feature(&res);
+    let tier = fr.full_tier.as_ref().unwrap();
+    assert_eq!(
+        (tier.ran.clone(), tier.passed),
+        (vec!["full".to_owned()], true)
+    );
+    let read =
+        speccoder_runtime::pipeline::full::read(r.path(), "001-graph", "speccoder/001-graph")
+            .unwrap();
+    assert!(read.passed);
+}
+
+#[test]
+fn a_failing_full_tier_keeps_the_ticks_and_stops_the_hand_off() {
+    let (r, res) = full_tier_feature("fn never");
+    assert_eq!(
+        res.status(),
+        CommandStatus::VerificationFailed,
+        "{}",
+        res.message()
+    );
+    let fr = feature(&res);
+    assert!(fr.attempts.iter().all(|a| a.ticked));
+    assert_eq!(fr.full_tier.as_ref().unwrap().failed, ["full"]);
+    let read =
+        speccoder_runtime::pipeline::full::read(r.path(), "001-graph", "speccoder/001-graph")
+            .unwrap();
+    assert!(!read.passed && read.failed == ["full"]);
 }
 
 #[test]
@@ -655,7 +943,85 @@ fn acceptance(path: &str, argv: &[&str]) -> Value {
     json!({ "files": [{ "path": path, "content": "acceptance: login exists\n" }], "argv": argv, "notes": [] })
 }
 
-const GREP_LOGIN: &[&str] = &["grep", "-q", "fn login", "src/lib.rs"];
+const GREP_LOGIN: &[&str] = &["./accept.sh", "fn login"];
+
+#[test]
+fn a_build_error_is_not_red_and_cannot_verify() {
+    let r = repo_with("", &[ACCEPTANCE_SPEC]);
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_structure(acceptance(
+        "tests/acceptance_login.txt",
+        &["./accept.sh", "fn login", "syntax"],
+    ));
+    f.will_call_tool("c1", "edit_file", json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\npub fn login() {}" }));
+    f.will_structure(done("login"));
+    let res = run(r.path(), state.path(), "T005", d);
+    let rep = report(&res);
+    let a = rep.acceptance.as_ref().unwrap();
+    assert_eq!(a["red"], json!(false), "{a}");
+    assert_eq!(a["red_class"], json!("build_error"));
+    assert!(
+        a["excerpt"].as_str().unwrap().contains("expected one of"),
+        "{a}"
+    );
+    // Green afterwards proves nothing without a red before it.
+    assert_eq!(rep.verdict, Some(Verdict::RegressionOnly));
+}
+
+#[test]
+fn a_missing_symbol_is_absent_red_and_can_verify() {
+    let r = repo_with("", &[ACCEPTANCE_SPEC]);
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_structure(acceptance(
+        "tests/acceptance_login.txt",
+        &["./accept.sh", "fn login", "absent"],
+    ));
+    f.will_call_tool("c1", "edit_file", json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\npub fn login() {}" }));
+    f.will_structure(done("login"));
+    let res = run(r.path(), state.path(), "T005", d);
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let rep = report(&res);
+    let a = rep.acceptance.as_ref().unwrap();
+    assert_eq!(
+        (a["red"].clone(), a["red_class"].clone()),
+        (json!(true), json!("absent")),
+        "{a}"
+    );
+    assert_eq!(rep.verdict, Some(Verdict::Verified));
+    // The kind of red travels with the tick.
+    let message = Command::new("git")
+        .args(["log", "-1", "--format=%B"])
+        .current_dir(&rep.worktree)
+        .output()
+        .unwrap();
+    assert!(String::from_utf8_lossy(&message.stdout).contains("Red: absent"));
+}
+
+#[test]
+fn a_flaky_acceptance_check_is_never_verified() {
+    let r = repo_with("", &[ACCEPTANCE_SPEC]);
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_structure(acceptance(
+        "tests/acceptance_login.txt",
+        &["./accept.sh", "fn login", "flaky"],
+    ));
+    f.will_call_tool("c1", "edit_file", json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\npub fn login() {}" }));
+    f.will_structure(done("login"));
+    let res = run(r.path(), state.path(), "T005", d);
+    let rep = report(&res);
+    let a = rep.acceptance.as_ref().unwrap();
+    assert_eq!(
+        (a["red"].clone(), a["green_flaky"].clone()),
+        (json!(true), json!(true)),
+        "{a}"
+    );
+    assert_eq!(rep.verdict, Some(Verdict::RegressionOnly));
+    let checks = &rep.verification.as_ref().unwrap().checks;
+    assert!(checks.iter().any(|c| c.name == "acceptance" && c.flaky));
+}
 
 #[test]
 fn red_then_green_acceptance_makes_the_verdict_verified() {
@@ -1462,7 +1828,13 @@ fn a_run_reports_its_steps_live_and_status_reads_them() {
         .iter()
         .map(|e| match e {
             Event::TaskStarted { task, .. } => format!("start {task}"),
-            Event::Phase { phase, .. } => phase.clone(),
+            Event::Stage { stage, state, .. } => format!(
+                "{} {}",
+                stage.name(),
+                serde_json::to_value(state).unwrap().as_str().unwrap()
+            ),
+            Event::Resumed { task, .. } => format!("resumed {task}"),
+            Event::NeedsPerson { task, .. } => format!("needs person {task}"),
             Event::ToolCall {
                 tool,
                 decision,
@@ -1479,12 +1851,20 @@ fn a_run_reports_its_steps_live_and_status_reads_them() {
         kinds,
         [
             "start T005",
-            "baseline checks",
-            "acceptance tests (judge-side)",
-            "attempt 1",
+            "baseline started",
+            "baseline passed",
+            "red skipped",
+            "attempt started",
             "1 read_file allow",
             "2 write_file deny",
-            "verifying",
+            "attempt passed",
+            "verify started",
+            "verify passed",
+            "audit passed",
+            "mutation skipped",
+            "monitor skipped",
+            "commit started",
+            "commit passed",
             "end regression_only",
         ],
         "{}",
@@ -1516,7 +1896,8 @@ fn status_tells_an_interrupted_run_from_a_running_one() {
             pid,
             feature: "001-graph".to_owned(),
             task: "T005".to_owned(),
-            phase: "attempt 1".to_owned(),
+            stage: Some(speccoder_core::stage::Stage::Attempt),
+            stage_detail: Some("1/2".to_owned()),
             ..Default::default()
         };
         fs::write(dir.join("live.json"), serde_json::to_string(&live).unwrap()).unwrap();
@@ -1869,6 +2250,10 @@ impl ModelProvider for Router {
             .unwrap_or_else(|| panic!("no script for this request"));
         fake.complete(request).await
     }
+
+    fn gen_ai_provider(&self) -> Option<&str> {
+        None
+    }
 }
 
 const PARALLEL_TASKS: &str = "# Tasks\n\n## Phase 1: Setup\n\n- [x] T001 Create the crate\n\n## Phase 2: User Story 1 - Login\n\n- [ ] T002 [P] [US1] Add alpha in src/alpha.rs\n- [ ] T003 [P] [US1] Add beta in src/beta.rs\n";
@@ -2125,6 +2510,7 @@ fn pr_is_a_dry_run_until_confirmed_then_a_draft_with_the_evidence() {
         base: Some("main"),
         gh: &gh,
         open: false,
+        force: false,
     };
 
     let dry = pr(r.path(), None, &o);
@@ -2163,7 +2549,11 @@ fn pr_is_a_dry_run_until_confirmed_then_a_draft_with_the_evidence() {
 
 // ── provenance and replay verdicts ─────────────────────────────────
 
-fn admitted(repo: &Path, state: &Path, run_id: &str) -> speccoder_runtime::substrate::Admitted {
+fn admitted(
+    repo: &Path,
+    state: &Path,
+    run_id: &str,
+) -> agentplane::core::Tainted<serde_json::Value> {
     let plane = speccoder_runtime::worktree::project_state_dir(state, repo);
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -2192,17 +2582,13 @@ fn a_retry_input_names_the_verifier_as_the_source_of_its_check_output() {
     assert_eq!(rep.earlier.len(), 1);
     // The first attempt read nothing untrusted; the retry quotes the checks.
     let first = admitted(r.path(), state.path(), &rep.earlier[0].run_id);
-    assert!(!first.label.is_untrusted(), "{:?}", first.label);
+    assert!(!first.label().is_untrusted(), "{:?}", first.label());
     let retry = admitted(r.path(), state.path(), &rep.run_id);
-    assert!(retry.label.is_untrusted());
+    assert!(retry.label().is_untrusted());
     // by part, as admitted — the spec trusted, the digest the verifier's.
-    assert!(
-        !retry.fields["/bundle"].is_untrusted(),
-        "{:?}",
-        retry.fields
-    );
-    assert!(!retry.fields["/settings/nudges"].is_untrusted());
-    let digest = &retry.fields["/digest"];
+    assert!(!retry.label_at("/bundle").unwrap().is_untrusted());
+    assert!(!retry.label_at("/settings/nudges").unwrap().is_untrusted());
+    let digest = retry.label_at("/digest").unwrap();
     assert!(
         digest
             .provenance

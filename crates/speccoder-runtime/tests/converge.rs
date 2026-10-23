@@ -19,7 +19,20 @@ const MODEL: &str = "[model]\nprovider = \"openai\"\nmodel = \"gpt-5.4-mini\"\n"
 /// The check, and `grep` allowed for the scripted acceptance tests (a
 /// check whose prefix is a bare program allows only itself).
 const CHECK: &str = "[checks.has-ok]\nargv = [\"grep\", \"-q\", \"fn ok\", \"src/lib.rs\"]\n";
-const GREP: &str = "[commands]\nallow = [[\"grep\"]]\n";
+const GREP: &str = "[commands]\nallow = [[\"grep\"], [\"./accept.sh\"]]\n";
+
+/// A stand-in test runner for scripted acceptance tests: one test, "the
+/// pattern is in src/lib.rs", reported with libtest's summary line so its
+/// red is an assertion failure (D-064).
+const ACCEPT_SH: &str = "#!/bin/sh\nif grep -q \"$1\" src/lib.rs; then\n  echo 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out'\nelse\n  echo 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out'\n  exit 101\nfi\n";
+
+fn write_accept_sh(root: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+    let p = root.join("accept.sh");
+    fs::write(&p, ACCEPT_SH).unwrap();
+    fs::set_permissions(&p, fs::Permissions::from_mode(0o755)).unwrap();
+}
+
 const DONE: &str = "# Tasks\n\n## Phase 1: Setup\n\n- [x] T001 Create the crate\n\n## Phase 2: User Story 1 - Login\n\n- [x] T002 [US1] Add login in src/lib.rs\n";
 
 fn git(dir: &Path, args: &[&str]) {
@@ -69,6 +82,7 @@ fn repo(tasks: &str, extra_config: &str) -> tempfile::TempDir {
         format!("{MODEL}{CHECK}{}", with_grep(extra_config)),
     )
     .unwrap();
+    write_accept_sh(r);
     git(r, &["init", "-q"]);
     git(r, &["add", "-A"]);
     git(r, &["commit", "-q", "-m", "init"]);
@@ -78,7 +92,7 @@ fn repo(tasks: &str, extra_config: &str) -> tempfile::TempDir {
 /// `extra_config` with `grep` added to its `[commands] allow` (or a new one).
 fn with_grep(extra_config: &str) -> String {
     if extra_config.contains("[commands]") {
-        extra_config.replace("allow = [", "allow = [[\"grep\"], ")
+        extra_config.replace("allow = [", "allow = [[\"grep\"], [\"./accept.sh\"], ")
     } else {
         format!("{GREP}{extra_config}")
     }
@@ -153,7 +167,7 @@ fn no_tests() -> Value {
 }
 
 fn reject_empty_test() -> Value {
-    json!({ "files": [{ "path": "tests/acceptance_t003.txt", "content": "x\n" }], "argv": ["grep", "-q", "fn reject_empty", "src/lib.rs"], "notes": [] })
+    json!({ "files": [{ "path": "tests/acceptance_t003.txt", "content": "x\n" }], "argv": ["./accept.sh", "fn reject_empty"], "notes": [] })
 }
 
 #[test]
@@ -419,7 +433,7 @@ fn an_undemonstrated_convergence_gap_changes_no_code() {
     let state = tempfile::tempdir().unwrap();
     let (f, d) = fake();
     // The author's test already passes: the claimed gap is not shown to exist.
-    f.will_structure(json!({ "files": [{ "path": "tests/acceptance_t003.txt", "content": "x\n" }], "argv": ["grep", "-q", "fn login", "src/lib.rs"], "notes": [] }));
+    f.will_structure(json!({ "files": [{ "path": "tests/acceptance_t003.txt", "content": "x\n" }], "argv": ["./accept.sh", "fn login"], "notes": [] }));
     let res = speccoder_runtime::run_with(r.path(), None, "T003", state.path(), d, None);
     assert_eq!(res.status(), CommandStatus::NeedsHuman, "{}", res.message());
     let Some(CommandData::Run(rep)) = res.data() else {
@@ -464,7 +478,7 @@ fn the_report_shows_each_ticks_evidence_from_the_branch() {
     // a round appends T003, which is verified too.
     let state = tempfile::tempdir().unwrap();
     let (f, d) = fake();
-    f.will_structure(json!({ "files": [{ "path": "tests/acceptance_t002.txt", "content": "x\n" }], "argv": ["grep", "-q", "fn greet", "src/lib.rs"], "notes": [] }));
+    f.will_structure(json!({ "files": [{ "path": "tests/acceptance_t002.txt", "content": "x\n" }], "argv": ["./accept.sh", "fn greet"], "notes": [] }));
     f.will_call_tool("g", "edit_file", json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\npub fn greet() {}" }));
     f.will_structure(json!({ "summary": "greet", "status": "done", "files_changed": ["src/lib.rs"], "checks_run": [], "notes": [] }));
     f.will_structure(answer(&[finding(
@@ -531,7 +545,7 @@ fn the_report_shows_an_open_tasks_last_attempt() {
     let state = tempfile::tempdir().unwrap();
     let (f, d) = fake();
     // Not demonstrated: the author's test already passes.
-    f.will_structure(json!({ "files": [{ "path": "tests/acceptance_t003.txt", "content": "x\n" }], "argv": ["grep", "-q", "fn login", "src/lib.rs"], "notes": [] }));
+    f.will_structure(json!({ "files": [{ "path": "tests/acceptance_t003.txt", "content": "x\n" }], "argv": ["./accept.sh", "fn login"], "notes": [] }));
     let res = speccoder_runtime::run_with(r.path(), None, "T003", state.path(), d, None);
     assert_eq!(res.status(), CommandStatus::NeedsHuman, "{}", res.message());
 

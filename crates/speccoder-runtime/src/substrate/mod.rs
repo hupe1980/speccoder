@@ -102,7 +102,7 @@ pub fn manifest_with(
                     description: Some(t.description.to_owned()),
                     max_sensitivity: Some(Sensitivity::Internal),
                     mutates: t.mutates,
-                    ..ToolGrant::new(format!("tool://{}/{}", t.server, t.name))
+                    ..ToolGrant::new(agentplane::tools::ToolId::new(t.server, t.name).reference())
                 };
                 grant.protected_fields = t
                     .model_fields
@@ -116,7 +116,7 @@ pub fn manifest_with(
                     description: Some(t.description.clone()),
                     max_sensitivity: Some(Sensitivity::Internal),
                     mutates: true,
-                    ..ToolGrant::new(format!("tool://{}/{}", t.server, t.tool))
+                    ..ToolGrant::new(agentplane::tools::ToolId::new(&t.server, &t.tool).reference())
                 };
                 grant.protected_fields = if t.fields.is_empty() {
                     // No arguments: the call itself is the act, and the
@@ -199,13 +199,14 @@ fn open_or_replace(dir: &Path) -> Result<(Arc<RedbStore>, Option<std::path::Path
     }
 }
 
-fn build(
+/// The runtime every plane shares: the journal, the agent with speccoder's
+/// skills under its manifest, and the lease. What answers model and tool
+/// calls is registered by the caller — live drivers or replay-only ones.
+fn builder(
     store: Arc<RedbStore>,
     model: &ModelConfig,
-    provider: Arc<dyn ModelProvider>,
-    tools: Option<Arc<crate::tools::WorkspaceTools>>,
     hooks: Hooks,
-) -> Result<Arc<Runtime>, PlaneError> {
+) -> Result<(agentplane::runtime::RuntimeBuilder, Manifest), PlaneError> {
     let manifest = manifest_with(model, &hooks.mcp_tools)?;
     let agent = Agent::new(&manifest)
         .skill(Propose {
@@ -238,12 +239,22 @@ fn build(
     // One process owns the journal (redb locks it): a lease left by an
     // earlier process is a dead owner's, and a short one lets the next run
     // resume its attempt promptly.
-    let mut builder = Runtime::builder_on(store)
-        .provider(model.provider.clone(), provider)
-        .agent(agent)
-        .lease_ttl(LEASE);
+    let builder = Runtime::builder_on(store).agent(agent).lease_ttl(LEASE);
+    Ok((builder, manifest))
+}
+
+fn build(
+    store: Arc<RedbStore>,
+    model: &ModelConfig,
+    provider: Arc<dyn ModelProvider>,
+    tools: Option<Arc<crate::tools::WorkspaceTools>>,
+    hooks: Hooks,
+) -> Result<Arc<Runtime>, PlaneError> {
+    let mcp = hooks.mcp.clone();
+    let (mut builder, _) = builder(store, model, hooks)?;
+    builder = builder.provider(model.provider.clone(), provider);
     // The tool servers answer only when a worktree is bound; without one, a
-    // call to a granted tool is refused by agentplane as unwired.
+    // call to a granted tool is refused.
     let client: Arc<dyn agentplane::tools::ToolClient> = match tools {
         Some(t) => t,
         None => Arc::new(Unbound),
@@ -251,8 +262,8 @@ fn build(
     for server in ["fs", "proc", "git"] {
         builder = builder.tool_server(server, Arc::clone(&client));
     }
-    for (server, mcp) in &hooks.mcp {
-        builder = builder.tool_server(server.as_str(), Arc::clone(mcp));
+    for (server, client) in &mcp {
+        builder = builder.tool_server(server.as_str(), Arc::clone(client));
     }
     builder
         .try_build()
@@ -293,6 +304,33 @@ impl Plane {
             runtime: build(store, model, provider, tools, hooks)?,
             replaced_journal,
         })
+    }
+
+    /// A plane over `store` instead of the journal file: a crash point's
+    /// prefix of a recorded run, resumed in a test.
+    #[doc(hidden)]
+    pub fn on_store(
+        store: Arc<RedbStore>,
+        model: &ModelConfig,
+        provider: Arc<dyn ModelProvider>,
+        tools: Option<Arc<crate::tools::WorkspaceTools>>,
+    ) -> Result<Self, PlaneError> {
+        Ok(Self {
+            runtime: build(store, model, provider, tools, Hooks::default())?,
+            replaced_journal: None,
+        })
+    }
+
+    /// Resumes `run` as a restarted process would, agentplane's own answer
+    /// unchanged (for `testkit::assert_resumed_honestly`).
+    #[doc(hidden)]
+    pub async fn resume(
+        &self,
+        run: agentplane::core::RunId,
+    ) -> Result<RunOutcome, agentplane::RuntimeError> {
+        self.runtime
+            .replay(run, agentplane::runtime::Mode::Resume)
+            .await
     }
 
     /// Runs `speccoder.feature.converge`, correlated to the feature.
@@ -447,21 +485,12 @@ impl Plane {
     }
 }
 
-/// What a run was admitted with: its input, the root label and the field
-/// labels by JSON Pointer — from the journal's `RunAdmitted` record, never
-/// from anything a tool returned.
-#[derive(Debug, Clone)]
-pub struct Admitted {
-    /// The input.
-    pub input: Value,
-    /// The join of everything in it.
-    pub label: agentplane::core::Label,
-    /// Each labelled part's own label.
-    pub fields: std::collections::BTreeMap<String, agentplane::core::Label>,
-}
-
-/// The [`Admitted`] input of `run`, if the journal has it.
-pub async fn admitted(dir: &Path, run: &str) -> Result<Option<Admitted>, PlaneError> {
+/// The input `run` was admitted with, with its root and field labels — from
+/// the journal's `RunAdmitted` record, never from anything a tool returned.
+pub async fn admitted(
+    dir: &Path,
+    run: &str,
+) -> Result<Option<agentplane::core::Tainted<Value>>, PlaneError> {
     let id = agentplane::core::RunId::parse(run)
         .map_err(|_| PlaneError(format!("`{run}` is not a run id")))?;
     let store = open_store(dir)?;
@@ -469,23 +498,9 @@ pub async fn admitted(dir: &Path, run: &str) -> Result<Option<Admitted>, PlaneEr
         .read(id, 1)
         .await
         .map_err(|e| PlaneError(e.to_string()))?;
-    Ok(admitted_in(&history))
-}
-
-fn admitted_in(history: &[agentplane::journal::Record]) -> Option<Admitted> {
-    history.iter().find_map(|r| match r.kind() {
-        agentplane::journal::RecordKind::RunAdmitted {
-            input,
-            input_label,
-            input_field_labels,
-            ..
-        } => Some(Admitted {
-            input: input.clone(),
-            label: input_label.clone(),
-            fields: input_field_labels.clone(),
-        }),
-        _ => None,
-    })
+    Ok(history
+        .iter()
+        .find_map(agentplane::journal::Record::admitted_input))
 }
 
 /// Strictly re-derives a recorded run and says whether this build
@@ -510,31 +525,22 @@ pub async fn replay_strict(
     if history.is_empty() {
         return Ok(None);
     }
-    let provider: Arc<dyn ModelProvider> = Arc::new(
-        agentplane::runtime::replay_only::Provider::from_history(&history),
-    );
-    // The run's MCP tools as its admitted input lists them: their
-    // grants again, servers unbound — replay dispatches nothing.
-    let mcp_tools: Vec<crate::mcp::McpTool> = admitted_in(&history)
-        .and_then(|a| serde_json::from_value(a.input["settings"]["mcp"].clone()).ok())
+    // The run's MCP tools as its admitted input lists them: the same
+    // manifest again. agentplane's replay-only drivers answer for every
+    // provider and tool server it names — replay dispatches nothing.
+    let mcp_tools: Vec<crate::mcp::McpTool> = history
+        .iter()
+        .find_map(agentplane::journal::Record::admitted_input)
+        .and_then(|a| serde_json::from_value(a.peek()["settings"]["mcp"].clone()).ok())
         .unwrap_or_default();
-    let mut servers: Vec<String> = mcp_tools.iter().map(|t| t.server.clone()).collect();
-    servers.sort();
-    servers.dedup();
     let hooks = Hooks {
-        mcp: servers
-            .into_iter()
-            .map(|s| {
-                (
-                    s,
-                    Arc::new(Unbound) as Arc<dyn agentplane::tools::ToolClient>,
-                )
-            })
-            .collect(),
         mcp_tools,
         ..Hooks::default()
     };
-    let runtime = build(store, model, provider, None, hooks)?;
+    let (builder, manifest) = builder(store, model, hooks)?;
+    let runtime = agentplane::runtime::replay_only::wire(builder, &[manifest], &history)
+        .try_build()
+        .map_err(|e| PlaneError(format!("building the replay plane: {e}")))?;
     runtime
         .verify(id)
         .await
@@ -563,12 +569,6 @@ impl agentplane::tools::ToolClient for Unbound {
     fn destination(&self, _tool: &agentplane::tools::ToolId) -> agentplane::tools::Destination {
         agentplane::tools::Destination::Local
     }
-}
-
-/// agentplane's status word for a run.
-#[must_use]
-pub fn status_word(status: &RunStatus) -> String {
-    status.as_str().to_owned()
 }
 
 #[cfg(test)]

@@ -8,7 +8,9 @@ group = "Reference"
 nav = "CLI reference"
 +++
 
-Every command takes `--json` (one JSON object on stdout) and `--help`. Commands that work on a project take an optional `PATH` inside it (default: the current directory) and `--feature <name or number>`.
+Every command takes `--json` (one JSON object on stdout), `-q`/`--quiet` (only stops, finishes, resumes and what needs you), `-v`/`--verbose` (also durations, skipped stages and the last lines of what failed) and `--help`. Commands that work on a project take an optional `PATH` inside it (default: the current directory) and `--feature <name or number>`.
+
+Every stop and finish ends with a `Next:` block — the commands that continue, copy-pasteable, the same in `--json` as `data.next` (`[{"command", "why"}]`).
 
 ## Plan and set up
 
@@ -24,7 +26,7 @@ Every command takes `--json` (one JSON object on stdout) and `--help`. Commands 
 
 | Command | What it does |
 |---|---|
-| `speccoder run [--task T] [--max-tasks N] [--parallel N] [--converge] [--no-prompt]` | Work through the ready tasks, or one task |
+| `speccoder run [--task T] [--max-tasks N] [--parallel N] [--converge] [--no-prompt] [--ignore-checklists]` | Work through the ready tasks, or one task |
 | `speccoder converge` | Assess a finished feature against its spec and append what remains |
 | `speccoder propose --task T` | Ask the model how it would do one task; nothing is executed |
 | `speccoder worktree` | Create or reuse the feature's worktree and print its path |
@@ -54,7 +56,7 @@ Every command takes `--json` (one JSON object on stdout) and `--help`. Commands 
 
 | Command | What it does |
 |---|---|
-| `speccoder pr [--remote R] [--base B] [--yes] [--dry-run]` | Push the branch and open a draft pull request with the evidence |
+| `speccoder pr [--remote R] [--base B] [--yes] [--dry-run] [--force]` | Push the branch and open a draft pull request with the evidence; `--force` hands off although the full-tier checks failed |
 | `speccoder acp` | Serve the Agent Client Protocol on stdio, for editors |
 
 ## Measure
@@ -73,6 +75,8 @@ With `--json` every command prints exactly one object on stdout and no progress 
 ```
 
 `status` is the exit code's name in `snake_case`; `data` depends on the command. `--help` and `--version` always print text.
+
+Fields are only added within a schema version; ignore fields you do not know. Recent additions: a test outcome `"error"` (a JUnit `<error>`), `flaky` on check results, `red_class` and `excerpt` in a run's `acceptance`, `scope` on a run (`stated`, `named`, `outside`), `full_tier` on a feature run, and `data.checklists` when unfinished checklists stop a run.
 
 ## Exit codes
 

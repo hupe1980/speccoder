@@ -33,16 +33,19 @@ Every tool call is classified before it runs.
 
 **Denied — no approval lifts a denial:**
 - writing the spec (`.specify/`, `specs/`) or anything that decides verification: `speccoder.toml`, CI configuration (`.github/`, `.gitlab-ci.yml`), test-runner and build configuration (`.cargo/config*`, `.config/nextest.toml`, `pytest.ini`, `tox.ini`, jest/vitest configs, `justfile`, `Makefile`);
+- writing agent configuration (`.claude/`, `.agents/`, `.codex/`, `.gemini/`, `.opencode/`, `.cursor/`, `.kiro/` and others, `.mcp.json`, `opencode.json`): hooks, settings, skills and MCP servers there run code in a later agent session — including an external executor's — outside speccoder's sandbox;
 - anything under `.git`;
 - reading or writing secret-looking files (`.env*`, `*.pem`, `*.key`, SSH keys, `.netrc`, `.npmrc`, `.pypirc`);
 - paths outside the worktree, symlink escapes included;
 - privilege escalation (`sudo`, `su`, `doas`, `pkexec`), git remotes (`push`, `fetch`, `pull`, `clone`, `remote`, `submodule`) and destructive git (`clean`, `reset --hard`, `filter-branch`).
 
-**Needs a person:** dependency manifests; tests that existed before the attempt; shells, `env`, `xargs`, `eval`; network tools; recursive `rm`; git commands that change state; unlisted commands; MCP tools not in `allow`; any command that asks for the network.
+**Needs a person:** agent context files (`AGENTS.md`, `CLAUDE.md`, `GEMINI.md`); dependency manifests; tests that existed before the attempt; shells, `env`, `xargs`, `eval`; network tools; recursive `rm`; git commands that change state; unlisted commands; MCP tools not in `allow`; any command that asks for the network.
 
 **Allowed:** reading the project, writing ordinary source files, the configured checks and `[commands] allow`. A check that starts with options (`python3 -m pytest …`) allows exactly that command, not its bare program.
 
 Three denied calls in a row end an attempt.
+
+Tests run code the model wrote, which no tool-level check can see. So after every command speccoder runs, it re-checks these protected inputs — files git ignores included — and a command that changed one ends the attempt immediately with an integrity finding.
 
 ## The OS sandbox
 

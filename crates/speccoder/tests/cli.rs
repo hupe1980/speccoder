@@ -371,3 +371,73 @@ fn unknown_subcommand_is_a_usage_error() {
 fn missing_subcommand_is_a_usage_error() {
     speccoder().assert().code(2);
 }
+
+/// `--json` keeps stdout one object and writes no terminal escapes, even
+/// when the person's settings ask for notifications (F-053).
+#[test]
+fn json_output_carries_no_bell_or_escape() {
+    let project = committed_project(false);
+    let state = tempfile::tempdir().unwrap();
+    let config = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(config.path().join("speccoder")).unwrap();
+    std::fs::write(
+        config.path().join("speccoder/config.toml"),
+        "[ui.notify]\nmethod = \"bel\"\nwhen = \"always\"\n",
+    )
+    .unwrap();
+    for args in [
+        &["--json", "status"][..],
+        &["--json", "report"][..],
+        &["--json", "run"][..],
+    ] {
+        let out = speccoder()
+            .args(args)
+            .arg(project.path())
+            .env("SPECCODER_STATE_DIR", state.path())
+            .env("XDG_CONFIG_HOME", config.path())
+            .env_remove("OPENAI_API_KEY")
+            .env_remove("ANTHROPIC_API_KEY")
+            .output()
+            .unwrap();
+        for stream in [&out.stdout, &out.stderr] {
+            assert!(!stream.contains(&0x07), "{args:?}: a BEL byte");
+            assert!(
+                !stream.windows(2).any(|w| w == b"\x1b]"),
+                "{args:?}: an OSC sequence"
+            );
+        }
+    }
+}
+
+/// A person's UI settings are refused in the committed project config,
+/// naming where they belong.
+#[test]
+fn a_ui_table_in_speccoder_toml_is_refused() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("speccoder.toml"),
+        "[checks.ok]\nargv = [\"true\"]\n\n[ui.notify]\nmethod = \"bel\"\n",
+    )
+    .unwrap();
+    let out = speccoder()
+        .arg("verify")
+        .arg(dir.path())
+        .env("XDG_CONFIG_HOME", config.path())
+        .assert()
+        .code(13)
+        .get_output()
+        .clone();
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        err.contains("[ui] is a person's setting")
+            && err.contains(
+                &config
+                    .path()
+                    .join("speccoder/config.toml")
+                    .display()
+                    .to_string()
+            ),
+        "{err}"
+    );
+}

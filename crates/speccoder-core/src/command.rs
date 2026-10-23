@@ -162,6 +162,21 @@ pub enum CommandData {
     Skills(Box<SkillsReport>),
     /// `skill <name>`: a hosted skill's run.
     Skill(Box<SkillRunReport>),
+    /// `run` stopped by unfinished checklists.
+    Checklists(Vec<ChecklistStatus>),
+}
+
+/// One Spec Kit checklist (`specs/<feature>/checklists/*.md`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ChecklistStatus {
+    /// Path relative to the project root.
+    pub file: String,
+    /// Checklist items.
+    pub total: usize,
+    /// Items checked.
+    pub done: usize,
+    /// Items not checked.
+    pub open: usize,
 }
 
 /// Result of `speccoder eval`.
@@ -314,6 +329,9 @@ pub struct RunReport {
     pub mutation: Option<serde_json::Value>,
     /// Best-of-n: every sample's evidence and which one was kept.
     pub samples: Vec<serde_json::Value>,
+    /// Changes outside the paths the task names: reported, never gated.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scope: Option<crate::scope::ScopeFinding>,
 }
 
 /// A failed attempt that was undone and retried.
@@ -348,6 +366,22 @@ pub struct FeatureReport {
     pub hooks: Vec<String>,
     /// What parallel groups did: merged, conflicts, re-verification.
     pub parallel: Vec<String>,
+    /// The `full` check tier, run once after the run ticked the last task.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub full_tier: Option<FullTier>,
+}
+
+/// The `full` check tier at the end of a feature.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct FullTier {
+    /// The checks that ran.
+    pub ran: Vec<String>,
+    /// Every check passed (or none applied).
+    pub passed: bool,
+    /// The checks that failed.
+    pub failed: Vec<String>,
+    /// Why nothing ran, or the record could not be written.
+    pub note: Option<String>,
 }
 
 /// Result of `speccoder skill` without a name.
@@ -735,15 +769,44 @@ pub struct RefusedPath {
 ///
 /// `exit_code` always equals `status.exit_code()`: the constructors set it and
 /// the fields are private, so the two can never disagree.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct CommandResult {
     schema_version: u32,
     command: String,
     status: CommandStatus,
     message: String,
     exit_code: ExitCode,
-    #[serde(skip_serializing_if = "Option::is_none")]
     data: Option<CommandData>,
+    next: Vec<crate::next::NextStep>,
+}
+
+/// `next` rides inside `data` (`data.next`), beside the payload's fields.
+impl Serialize for CommandResult {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::{Error as _, SerializeMap as _};
+        let mut map = serializer.serialize_map(None)?;
+        map.serialize_entry("schema_version", &self.schema_version)?;
+        map.serialize_entry("command", &self.command)?;
+        map.serialize_entry("status", &self.status)?;
+        map.serialize_entry("message", &self.message)?;
+        map.serialize_entry("exit_code", &self.exit_code)?;
+        if self.data.is_some() || !self.next.is_empty() {
+            let mut data = match &self.data {
+                Some(d) => serde_json::to_value(d).map_err(S::Error::custom)?,
+                None => serde_json::Value::Object(serde_json::Map::new()),
+            };
+            if !self.next.is_empty()
+                && let Some(object) = data.as_object_mut()
+            {
+                object.insert(
+                    "next".to_owned(),
+                    serde_json::to_value(&self.next).map_err(S::Error::custom)?,
+                );
+            }
+            map.serialize_entry("data", &data)?;
+        }
+        map.end()
+    }
 }
 
 impl CommandResult {
@@ -757,7 +820,21 @@ impl CommandResult {
             message: message.to_owned(),
             exit_code: status.exit_code(),
             data: None,
+            next: Vec::new(),
         }
+    }
+
+    /// Attaches what to do next (`data.next`, the human `Next:` block).
+    #[must_use]
+    pub fn with_next(mut self, next: Vec<crate::next::NextStep>) -> Self {
+        self.next = next;
+        self
+    }
+
+    /// What to do next.
+    #[must_use]
+    pub fn next(&self) -> &[crate::next::NextStep] {
+        &self.next
     }
 
     /// Attaches the command's payload.
@@ -848,5 +925,9 @@ mod tests {
                 "exit_code": 25
             })
         );
+        let with_next = CommandResult::new("run", CommandStatus::NeedsHuman, "x")
+            .with_next(crate::next::next(&crate::next::Outcome::Decided, None));
+        let json = serde_json::to_value(&with_next).unwrap();
+        assert_eq!(json["data"]["next"][0]["command"], "speccoder run");
     }
 }

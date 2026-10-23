@@ -28,6 +28,9 @@ Progress streams to stderr; the run report — tool calls with their decisions, 
 |---|---|---|---|
 | `verified`, `regression_only` | 0 | Passed: ticked and committed | Review and merge eventually |
 | `failed` | 20 | Checks or acceptance tests failed after the retries | `speccoder report`; inspect the saved attempt; `nudge`, or fix the spec |
+| `failed` (judge input changed) | 20 | A command changed `speccoder.toml`, CI, test-runner or agent configuration; the attempt ended at once, not retried | Read the finding; the task must not need that change |
+| feature done, full tier failed | 20 | Every task is ticked, but a `full` check failed | Fix it, or `speccoder pr --force` |
+| unfinished checklists | 23 | `checklists/*.md` has unchecked items; nothing ran | Finish them, or `speccoder run --ignore-checklists` (recorded on the commits) |
 | `blocked` | 23 | The model says the task cannot be done as written | Read the reason; fix the spec or a wrong test, or `skip` |
 | `needs_approval` | 23 | A call needs a person | `speccoder approvals`, then `approve` or `reject` |
 | `denied` | 23 | Three denied calls in a row | Usually a task that asks for something protected |
@@ -62,11 +65,32 @@ Once every task is ticked, a read-only model call compares the code with `spec.m
 ## Watching a run
 
 ```sh
-speccoder status   # running (pid …): 001-x T002 — attempt 1 for 33s; last: read_file … (allow)
+speccoder status   # running (pid …): 001-x T002 — attempt 1/2 for 33s; last: read_file … (allow)
 speccoder tui      # dashboard: tasks with evidence, the live attempt, the approval queue
 ```
 
-In the dashboard, `tab` switches pane, `↑ ↓` or `j k` select, `a` approves the selected waiting call, `r` rejects it with a reason, `q` quits.
+Every task goes through the same stages, named the same in the progress lines, `status`, the dashboard and editors: `baseline · red · attempt · verify · audit · mutation · monitor · commit`. A stage that does not apply (no acceptance examples, mutation or the monitor not configured) is shown only with `-v`.
+
+```text
+▶ T004 Handle Unicode input  (001-slugify)
+  ✓ baseline
+  ✓ red assertion
+  · attempt 1/2
+    turn 1   read_file    src/lib.rs                                                   allow
+  ✓ attempt 1/2
+  ✓ verify
+  ✓ audit
+  ✓ commit 9c1e2ab
+✓ T004 verified · 40.2k in / 3.4k out · 171s — verdict: verified
+```
+
+In the dashboard, `tab` switches pane, `↑ ↓` or `j k` select, `a` approves the selected waiting call, `r` rejects it with a reason, `q` quits. Its footer shows the next step.
+
+A run that is picked up after a kill starts with `Resuming — T004 was interrupted during attempt (run_command cargo test); finished calls will not repeat.`
+
+### Getting your attention
+
+When a call waits for you, a task fails, the feature ends or nothing happens for 15 minutes, speccoder notifies you — a desktop notification in terminals that show one (iTerm2, WezTerm, Ghostty, Kitty, Warp, foot, Konsole), a bell elsewhere — and the terminal title follows the run (`speccoder ▸ T004`, `speccoder △ approval T004`, `speccoder ✓ done`). Nothing of this happens with `--json` or in an editor. It is your setting, not the project's; see [your settings](@/docs/configuration.md#your-settings).
 
 ## Cost
 

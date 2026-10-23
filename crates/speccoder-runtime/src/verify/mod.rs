@@ -3,6 +3,7 @@
 pub mod config;
 pub mod junit;
 pub mod process;
+pub mod summary;
 
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
@@ -88,7 +89,11 @@ pub fn run_checks(
     let results: Vec<CheckResult> = checks
         .iter()
         .filter(|c| tier.is_none_or(|t| c.tier == t))
-        .map(|c| run_check(&ws, c, &env, runner))
+        .map(|c| {
+            rerun_once(run_check(&ws, c, &env, runner), || {
+                run_check(&ws, c, &env, runner)
+            })
+        })
         .collect();
     if results.iter().all(|r| r.status == CheckStatus::Skipped) {
         return Err(format!(
@@ -143,6 +148,7 @@ fn run_check(
         stderr_tail: String::new(),
         truncated: false,
         note: None,
+        flaky: false,
     };
     if let Some(path) = &check.when_exists
         && ws.resolve(path).is_err()
@@ -302,11 +308,71 @@ fn summary(r: &VerifyReport) -> String {
     s
 }
 
+/// A failed check runs once more: failing again, the second run stands;
+/// passing, it is `flaky` — named, and never task evidence. Timeouts and
+/// errors are not re-run.
+pub fn rerun_once(first: CheckResult, again: impl FnOnce() -> CheckResult) -> CheckResult {
+    if first.status != CheckStatus::Failed {
+        return first;
+    }
+    let mut second = again();
+    if second.status == CheckStatus::Passed {
+        let last = format!("{}\n{}", first.stdout_tail, first.stderr_tail)
+            .lines()
+            .rev()
+            .find(|l| !l.trim().is_empty())
+            .unwrap_or_default()
+            .trim()
+            .to_owned();
+        second.flaky = true;
+        second.note = Some(if last.is_empty() {
+            "failed once, passed when run again".to_owned()
+        } else {
+            format!("failed once ({last}), passed when run again")
+        });
+    }
+    second
+}
+
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     #[test]
     fn strips_terminal_escapes() {
         let colored = "\u{1b}(B\u{1b}[m\u{1b}[32m+    ] {\u{1b}[0m done";
         assert_eq!(super::strip_ansi(colored), "+    ] { done");
+    }
+
+    #[test]
+    fn a_failed_check_runs_once_more() {
+        let result = |status: CheckStatus, out: &str| CheckResult {
+            name: "test".to_owned(),
+            argv: vec!["t".to_owned()],
+            status,
+            exit_code: None,
+            duration_ms: 0,
+            junit: false,
+            tests: None,
+            stdout_tail: out.to_owned(),
+            stderr_tail: String::new(),
+            truncated: false,
+            note: None,
+            flaky: false,
+        };
+        let passed = result(CheckStatus::Passed, "");
+        assert!(!rerun_once(passed.clone(), || unreachable!()).flaky);
+        let timed_out = result(CheckStatus::TimedOut, "");
+        assert_eq!(
+            rerun_once(timed_out, || unreachable!()).status,
+            CheckStatus::TimedOut
+        );
+        let flaky = rerun_once(result(CheckStatus::Failed, "boom\n"), || passed.clone());
+        assert!(flaky.flaky);
+        assert!(flaky.note.as_deref().unwrap().contains("boom"));
+        let twice = rerun_once(result(CheckStatus::Failed, "a"), || {
+            result(CheckStatus::Failed, "b")
+        });
+        assert_eq!((twice.flaky, twice.stdout_tail.as_str()), (false, "b"));
     }
 }

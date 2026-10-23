@@ -12,6 +12,14 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub json: bool,
 
+    /// Print only stops, finishes, resumes and what needs you.
+    #[arg(short, long, global = true, conflicts_with = "verbose")]
+    pub quiet: bool,
+
+    /// Also print durations, skipped stages and the tails of what failed.
+    #[arg(short, long, global = true)]
+    pub verbose: bool,
+
     #[command(subcommand)]
     pub command: Command,
 }
@@ -86,6 +94,9 @@ pub enum Command {
         /// Run up to N ready `[P]` tasks at once, each in its own worktree, then merge and re-verify.
         #[arg(long, value_name = "N", default_value_t = 1, conflicts_with = "task", value_parser = clap::value_parser!(u8).range(1..=8))]
         parallel: u8,
+        /// Run although the feature's checklists have unchecked items (recorded on every commit).
+        #[arg(long)]
+        ignore_checklists: bool,
         /// A path inside the project (default: the current directory).
         #[arg(default_value = ".")]
         path: PathBuf,
@@ -242,6 +253,9 @@ pub enum Command {
         /// Only show the body and the commands; push nothing.
         #[arg(long)]
         dry_run: bool,
+        /// Hand off although the full-tier checks failed on the branch (said in the body).
+        #[arg(long)]
+        force: bool,
     },
     /// Serve the Agent Client Protocol on stdio, for editors (Zed, JetBrains, …).
     Acp,
@@ -345,6 +359,6 @@ pub enum WorkflowAction {
 pub enum TierArg {
     /// Checks run for every task.
     Fast,
-    /// Slower checks (linters, audits), run by `verify` only.
+    /// Slower checks (linters, audits): once after a run ticks the last task, and by `verify`.
     Full,
 }

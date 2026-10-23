@@ -1,0 +1,252 @@
+//! The person's own settings, `~/.config/speccoder/config.toml` (D-069):
+//! how speccoder gets their attention. Never read from the committed
+//! `speccoder.toml`, which is the project's policy.
+
+use std::path::PathBuf;
+use std::time::Duration;
+
+/// What may ask for attention.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Signal {
+    /// A call waits for a person.
+    Approval,
+    /// A task failed or stopped.
+    TaskFailed,
+    /// A feature run ended.
+    FeatureDone,
+    /// Nothing happened for `stall_after`.
+    Stalled,
+}
+
+impl Signal {
+    const ALL: [Self; 4] = [
+        Self::Approval,
+        Self::TaskFailed,
+        Self::FeatureDone,
+        Self::Stalled,
+    ];
+
+    fn key(self) -> &'static str {
+        match self {
+            Self::Approval => "approval",
+            Self::TaskFailed => "task_failed",
+            Self::FeatureDone => "feature_done",
+            Self::Stalled => "stalled",
+        }
+    }
+}
+
+/// How attention is asked for.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Method {
+    /// OSC 9 or OSC 777 where the terminal shows them, else BEL.
+    Auto,
+    /// `ESC ] 9 ; message BEL`.
+    Osc9,
+    /// `ESC ] 777 ; notify ; speccoder ; message BEL`.
+    Osc777,
+    /// BEL.
+    Bel,
+    /// A program; the message is its last argument.
+    Command(Vec<String>),
+    /// Nothing.
+    Off,
+}
+
+/// `[ui.notify]`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Notify {
+    /// The signals that notify.
+    pub on: Vec<Signal>,
+    /// Only when the terminal is not focused (plain mode counts as unfocused).
+    pub unfocused_only: bool,
+    /// How.
+    pub method: Method,
+    /// No event for this long is a stall.
+    pub stall_after: Duration,
+}
+
+impl Default for Notify {
+    fn default() -> Self {
+        Self {
+            on: Signal::ALL.to_vec(),
+            unfocused_only: true,
+            method: Method::Auto,
+            stall_after: Duration::from_secs(15 * 60),
+        }
+    }
+}
+
+impl Notify {
+    /// Whether `signal` notifies.
+    #[must_use]
+    pub fn wants(&self, signal: Signal) -> bool {
+        self.on.contains(&signal)
+    }
+}
+
+/// The settings file: `$XDG_CONFIG_HOME/speccoder/config.toml` when set,
+/// else `$HOME/.config/speccoder/config.toml`.
+#[must_use]
+pub fn path() -> Option<PathBuf> {
+    let xdg = std::env::var_os("XDG_CONFIG_HOME").filter(|v| !v.is_empty());
+    match xdg {
+        Some(dir) => Some(PathBuf::from(dir)),
+        None => std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")),
+    }
+    .map(|base| base.join("speccoder").join("config.toml"))
+}
+
+/// The settings and a warning per value that was not understood (the
+/// default is used for it). A missing file is all defaults.
+#[must_use]
+pub fn load() -> (Notify, Vec<String>) {
+    match path() {
+        Some(p) => match std::fs::read_to_string(&p) {
+            Ok(text) => parse(&text, &p.display().to_string()),
+            Err(_) => (Notify::default(), Vec::new()),
+        },
+        None => (Notify::default(), Vec::new()),
+    }
+}
+
+/// [`load`] from `text`, naming `file` in warnings.
+#[must_use]
+pub fn parse(text: &str, file: &str) -> (Notify, Vec<String>) {
+    let mut n = Notify::default();
+    let mut warnings = Vec::new();
+    let mut warn = |key: &str, why: &str| {
+        warnings.push(format!("warning: {file}: {key}: {why}; using the default"));
+    };
+    let table: toml::Table = match toml::from_str(text) {
+        Ok(t) => t,
+        Err(e) => {
+            warn("file", &e.to_string().replace('\n', " "));
+            return (n, warnings);
+        }
+    };
+    let Some(notify) = table
+        .get("ui")
+        .and_then(|u| u.get("notify"))
+        .and_then(toml::Value::as_table)
+    else {
+        return (n, warnings);
+    };
+    let mut command: Vec<String> = Vec::new();
+    for (key, value) in notify {
+        match key.as_str() {
+            "on" => match value.as_array() {
+                Some(items) => {
+                    n.on = items
+                        .iter()
+                        .filter_map(|i| {
+                            let name = i.as_str().unwrap_or_default();
+                            let found = Signal::ALL.into_iter().find(|s| s.key() == name);
+                            if found.is_none() {
+                                warn("ui.notify.on", &format!("`{name}` is not a signal"));
+                            }
+                            found
+                        })
+                        .collect();
+                }
+                None => warn("ui.notify.on", "expected a list"),
+            },
+            "when" => match value.as_str() {
+                Some("unfocused") => n.unfocused_only = true,
+                Some("always") => n.unfocused_only = false,
+                _ => warn("ui.notify.when", "expected \"unfocused\" or \"always\""),
+            },
+            "method" => match value.as_str() {
+                Some("auto") => n.method = Method::Auto,
+                Some("osc9") => n.method = Method::Osc9,
+                Some("osc777") => n.method = Method::Osc777,
+                Some("bel") => n.method = Method::Bel,
+                Some("off") => n.method = Method::Off,
+                Some("command") => n.method = Method::Command(Vec::new()),
+                _ => warn(
+                    "ui.notify.method",
+                    "expected auto, osc9, osc777, bel, command or off",
+                ),
+            },
+            "command" => match value.as_array() {
+                Some(items) => {
+                    command = items
+                        .iter()
+                        .filter_map(|i| i.as_str().map(str::to_owned))
+                        .collect();
+                }
+                None => warn("ui.notify.command", "expected a list of strings"),
+            },
+            "stall_after" => match value.as_str().and_then(duration) {
+                Some(d) if d >= Duration::from_secs(30) => n.stall_after = d,
+                _ => warn(
+                    "ui.notify.stall_after",
+                    "expected Ns, Nm or Nh, at least 30s",
+                ),
+            },
+            other => warn(&format!("ui.notify.{other}"), "not a setting"),
+        }
+    }
+    if let Method::Command(argv) = &mut n.method {
+        if command.is_empty() {
+            warn(
+                "ui.notify.command",
+                "method is \"command\" but no command is given",
+            );
+            n.method = Method::Off;
+        } else {
+            *argv = command;
+        }
+    }
+    (n, warnings)
+}
+
+fn duration(text: &str) -> Option<Duration> {
+    let (number, unit) = text.split_at(text.len().checked_sub(1)?);
+    let n: u64 = number.parse().ok()?;
+    match unit {
+        "s" => Some(Duration::from_secs(n)),
+        "m" => Some(Duration::from_secs(n * 60)),
+        "h" => Some(Duration::from_secs(n * 3600)),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn defaults_and_values() {
+        let (n, w) = parse("", "c");
+        assert_eq!(n, Notify::default());
+        assert!(w.is_empty());
+        let (n, w) = parse(
+            "[ui.notify]\non = [\"approval\"]\nwhen = \"always\"\nmethod = \"command\"\ncommand = [\"notify-send\"]\nstall_after = \"2m\"\n[ui.theme]\nx = 1\n",
+            "c",
+        );
+        assert!(w.is_empty(), "{w:?}");
+        assert_eq!(n.on, [Signal::Approval]);
+        assert!(!n.unfocused_only);
+        assert_eq!(n.method, Method::Command(vec!["notify-send".to_owned()]));
+        assert_eq!(n.stall_after, Duration::from_secs(120));
+    }
+
+    #[test]
+    fn what_is_not_understood_warns_and_falls_back() {
+        let (n, w) = parse(
+            "[ui.notify]\non = [\"approval\", \"lunch\"]\nmethod = \"command\"\nstall_after = \"5s\"\ncolour = 1\n",
+            "/x/config.toml",
+        );
+        assert_eq!(n.on, [Signal::Approval]);
+        assert_eq!(n.method, Method::Off);
+        assert_eq!(n.stall_after, Duration::from_secs(900));
+        assert_eq!(w.len(), 4, "{w:?}");
+        assert!(
+            w.iter()
+                .all(|l| l.starts_with("warning: /x/config.toml: ui.notify."))
+        );
+        let (_, w) = parse("not toml [", "f");
+        assert_eq!(w.len(), 1);
+    }
+}

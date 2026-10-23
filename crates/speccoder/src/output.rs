@@ -24,12 +24,22 @@ pub fn render_into(
     result: &CommandResult,
     json: bool,
     mut out: &mut dyn Write,
-    mut err: &mut dyn Write,
+    err: &mut dyn Write,
 ) -> std::io::Result<()> {
     if json {
         serde_json::to_writer(&mut *out, result)?;
         return writeln!(out);
     }
+    human_body(result, out, err)?;
+    human::next(&mut out, result.next())
+}
+
+/// The human rendering of `result`, before its `Next:` block.
+fn human_body(
+    result: &CommandResult,
+    mut out: &mut dyn Write,
+    mut err: &mut dyn Write,
+) -> std::io::Result<()> {
     match (result.status(), result.data()) {
         (CommandStatus::Ok | CommandStatus::DiagnosticsError, Some(CommandData::Inspect(s))) => {
             human::inspect(&mut out, s)
@@ -156,5 +166,36 @@ pub fn render_into(
             result.command(),
             result.message()
         ),
+    }
+}
+
+#[cfg(test)]
+mod next_tests {
+    use super::*;
+
+    #[test]
+    fn the_human_next_block_and_data_next_list_the_same_commands() {
+        let result = speccoder_runtime::next::attach(
+            CommandResult::new("approve", CommandStatus::Ok, "approved"),
+            Some("001-x"),
+        );
+        let (mut out, mut err) = (Vec::new(), Vec::new());
+        render_into(&result, false, &mut out, &mut err).unwrap_or_else(|e| panic!("{e}"));
+        let human = String::from_utf8_lossy(&out).into_owned();
+        let mut json_out = Vec::new();
+        render_into(&result, true, &mut json_out, &mut err).unwrap_or_else(|e| panic!("{e}"));
+        let json: serde_json::Value =
+            serde_json::from_slice(&json_out).unwrap_or_else(|e| panic!("{e}"));
+        let commands: Vec<&str> = json["data"]["next"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|s| s["command"].as_str())
+            .collect();
+        assert!(!commands.is_empty());
+        for c in commands {
+            assert!(human.contains(c), "{c} missing from: {human}");
+        }
+        assert!(human.contains("Next:  "), "{human}");
     }
 }

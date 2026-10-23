@@ -43,7 +43,7 @@ pub struct Saved {
     pub commit: String,
 }
 
-const IDENTITY: [&str; 6] = [
+pub(crate) const IDENTITY: [&str; 6] = [
     "-c",
     "user.name=speccoder",
     "-c",

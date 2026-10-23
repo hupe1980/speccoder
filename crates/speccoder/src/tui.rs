@@ -30,6 +30,8 @@ pub struct Snapshot {
     pub approvals: Option<ApprovalsReport>,
     /// Why something could not be loaded.
     pub problem: Option<String>,
+    /// What to do next: a call waiting first, else the report's step.
+    pub next: Option<speccoder_core::next::NextStep>,
 }
 
 /// Which pane the arrow keys move in.
@@ -223,8 +225,14 @@ pub fn draw(f: &mut Frame<'_>, app: &App) {
             .as_ref()
             .map(|r| {
                 let t = &r.totals;
+                let next = app
+                    .snap
+                    .next
+                    .as_ref()
+                    .map(|n| format!(" Next: {} — {}   │", n.command, n.why))
+                    .unwrap_or_default();
                 format!(
-                    " {} verified · {} regression only · {} attested · {} ready · {} blocked · {} skipped",
+                    "{next} {} verified · {} regression only · {} attested · {} ready · {} blocked · {} skipped",
                     t.verified, t.regression_only, t.attested, t.ready, t.blocked, t.skipped
                 )
             })
@@ -299,9 +307,19 @@ fn live(f: &mut Frame<'_>, app: &App, area: Rect) {
         None => lines.push(Line::raw("no run recorded yet")),
         Some((l, running)) => {
             let head = match (&l.finished, running) {
-                (None, true) => format!("running  {} {} — {}", l.feature, l.task, l.phase),
+                (None, true) => format!(
+                    "running  {} {} — {}",
+                    l.feature,
+                    l.task,
+                    speccoder_runtime::progress::stage_word(l)
+                ),
                 (None, false) => {
-                    format!("interrupted  {} {} during {}", l.feature, l.task, l.phase)
+                    format!(
+                        "interrupted  {} {} during {}",
+                        l.feature,
+                        l.task,
+                        speccoder_runtime::progress::stage_word(l)
+                    )
                 }
                 (Some(o), _) => format!("last run  {} {} — {o}", l.feature, l.task),
             };
@@ -370,11 +388,26 @@ pub fn load(path: &Path, feature: Option<&str>, state: &Path) -> Snapshot {
         Some(CommandData::Report(r)) => Some((**r).clone()),
         _ => None,
     };
-    let approvals = match decide_with(path, feature, Verb::List, state).data() {
+    let approvals_result = decide_with(path, feature, Verb::List, state);
+    let approvals = match approvals_result.data() {
         Some(CommandData::Approvals(a)) => Some((**a).clone()),
         _ => None,
     };
+    // A call waiting for a person comes first; otherwise the report's step.
+    let waiting = approvals.as_ref().is_some_and(|a| !a.pending.is_empty());
+    let next = speccoder_runtime::next::attach(
+        if waiting {
+            approvals_result.clone()
+        } else {
+            report_result.clone()
+        },
+        feature,
+    )
+    .next()
+    .first()
+    .cloned();
     Snapshot {
+        next,
         problem: report.is_none().then(|| report_result.message().to_owned()),
         report,
         live: read_live(path, state),
@@ -491,7 +524,8 @@ mod tests {
                 LiveState {
                     feature: "001-x".to_owned(),
                     task: "T002".to_owned(),
-                    phase: "attempt 1".to_owned(),
+                    stage: Some(speccoder_core::stage::Stage::Attempt),
+                    stage_detail: Some("1/2".to_owned()),
                     recent: vec!["turn 1  read_file src/lib.rs (allow)".to_owned()],
                     input_tokens: 1200,
                     ..LiveState::default()
@@ -511,6 +545,10 @@ mod tests {
                 decided: Vec::new(),
             }),
             problem: None,
+            next: Some(speccoder_core::next::NextStep {
+                command: "speccoder approve --task T002".to_owned(),
+                why: "allow it; the attempt resumes on the next run".to_owned(),
+            }),
         }
     }
 
@@ -535,11 +573,12 @@ mod tests {
             "✓ T001",
             "· T002",
             "⧗ T003",
-            "running  001-x T002 — attempt 1",
+            "running  001-x T002 — attempt 1/2",
             "turn 1  read_file src/lib.rs (allow)",
             "Approvals (1 waiting, 0 decided)",
             "? T002 write `package.json` — a dependency manifest",
             "1 verified",
+            "Next: speccoder approve --task T002 — allow it",
         ] {
             assert!(s.contains(needle), "missing {needle:?} in\n{s}");
         }

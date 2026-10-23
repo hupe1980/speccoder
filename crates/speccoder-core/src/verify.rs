@@ -38,10 +38,21 @@ impl CheckStatus {
 pub enum TestOutcome {
     /// Passed.
     Passed,
-    /// Failed or errored.
+    /// Failed (an assertion, a `<failure>` in JUnit).
     Failed,
     /// Skipped or ignored.
     Skipped,
+    /// Errored before or outside an assertion (a `<error>` in JUnit: setup,
+    /// collection, an unexpected exception).
+    Error,
+}
+
+impl TestOutcome {
+    /// Whether the test counts as failing (for regressions and digests).
+    #[must_use]
+    pub const fn is_failing(self) -> bool {
+        matches!(self, Self::Failed | Self::Error)
+    }
 }
 
 /// One test.
@@ -78,6 +89,10 @@ pub struct CheckResult {
     pub truncated: bool,
     /// Why the check was skipped, errored, or has no tests.
     pub note: Option<String>,
+    /// It failed once and passed when run again: named, never trusted as
+    /// task evidence.
+    #[serde(default)]
+    pub flaky: bool,
 }
 
 impl CheckResult {
@@ -88,7 +103,7 @@ impl CheckResult {
             let n = |o| tests.iter().filter(|t| t.outcome == o).count();
             (
                 n(TestOutcome::Passed),
-                n(TestOutcome::Failed),
+                n(TestOutcome::Failed) + n(TestOutcome::Error),
                 n(TestOutcome::Skipped),
             )
         })
@@ -99,7 +114,8 @@ impl CheckResult {
     /// its report has at least one passing test (research R4).
     #[must_use]
     pub fn is_evidence(&self) -> bool {
-        self.status == CheckStatus::Passed
+        !self.flaky
+            && self.status == CheckStatus::Passed
             && (!self.junit
                 || self
                     .tests
@@ -111,7 +127,7 @@ impl CheckResult {
         self.tests
             .iter()
             .flatten()
-            .filter(|t| t.outcome == TestOutcome::Failed)
+            .filter(|t| t.outcome.is_failing())
             .map(|t| t.id.as_str())
             .collect()
     }
@@ -187,6 +203,7 @@ pub fn compare(baseline: &VerifyReport, current: &VerifyReport) -> Comparison {
                 id: id.clone(),
                 now: match now {
                     TestOutcome::Failed => "failed",
+                    TestOutcome::Error => "error",
                     _ => "skipped",
                 }
                 .to_owned(),
@@ -195,7 +212,9 @@ pub fn compare(baseline: &VerifyReport, current: &VerifyReport) -> Comparison {
                 id: id.clone(),
                 now: "missing".to_owned(),
             }),
-            (TestOutcome::Failed, Some(TestOutcome::Failed)) => cmp.pre_existing.push(id.clone()),
+            (was, Some(now)) if was.is_failing() && now.is_failing() => {
+                cmp.pre_existing.push(id.clone());
+            }
             _ => {}
         }
     }
@@ -241,6 +260,105 @@ fn failures<'r>(checks: &'r [CheckResult], cmp: Option<&Comparison>) -> Vec<&'r 
 #[must_use]
 pub fn passes(checks: &[CheckResult], cmp: Option<&Comparison>) -> bool {
     failures(checks, cmp).is_empty() && cmp.is_none_or(|c| c.regressions.is_empty())
+}
+
+/// What a red run of acceptance tests showed (D-064 as amended).
+///
+/// Only [`RedClass::Assertion`] and [`RedClass::Absent`] are red: a test was
+/// collected and failed on an assertion, or the tests could not build only
+/// because symbols the task is to introduce do not exist yet. Everything
+/// else is not demonstrated.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RedClass {
+    /// A collected test failed on an assertion.
+    Assertion,
+    /// The only build or import errors name symbols that do not exist yet.
+    Absent,
+    /// Any other build error.
+    BuildError,
+    /// Tests errored at setup or collection.
+    CollectionError,
+    /// The run hit its deadline.
+    Timeout,
+    /// Nothing was collected.
+    NoTests,
+    /// Red once, not red when confirmed.
+    Flaky,
+    /// The output was not recognised.
+    Unclassified,
+    /// The tests passed.
+    Passed,
+}
+
+impl RedClass {
+    /// Whether this is red: evidence the tests fail without the task's work.
+    #[must_use]
+    pub const fn is_red(self) -> bool {
+        matches!(self, Self::Assertion | Self::Absent)
+    }
+}
+
+/// Counts read from a test runner's own summary output (libtest, pytest,
+/// jest/vitest, go test), when it writes no JUnit report.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RunnerSummary {
+    /// Tests that passed.
+    pub passed: usize,
+    /// Tests that failed on an assertion.
+    pub failed: usize,
+    /// Tests that errored at setup or collection.
+    pub errors: usize,
+    /// The test code did not build or import.
+    pub build_failed: bool,
+    /// Every build or import diagnostic is an unresolved name.
+    pub unresolved_only: bool,
+}
+
+/// Classifies a red run: a JUnit report first, then the runner's summary,
+/// then the check's status. Nothing recognised is [`RedClass::Unclassified`].
+#[must_use]
+pub fn classify_red(result: &CheckResult, summary: Option<&RunnerSummary>) -> RedClass {
+    if result.status == CheckStatus::TimedOut {
+        return RedClass::Timeout;
+    }
+    if let Some(tests) = result.tests.as_ref() {
+        if tests.iter().any(|t| t.outcome == TestOutcome::Failed) {
+            return RedClass::Assertion;
+        }
+        if tests.iter().any(|t| t.outcome == TestOutcome::Error) {
+            return RedClass::CollectionError;
+        }
+        if tests.is_empty() {
+            return RedClass::NoTests;
+        }
+        if result.status == CheckStatus::Passed {
+            return RedClass::Passed;
+        }
+    }
+    if let Some(s) = summary {
+        if s.build_failed {
+            return if s.unresolved_only {
+                RedClass::Absent
+            } else {
+                RedClass::BuildError
+            };
+        }
+        if s.failed > 0 {
+            return RedClass::Assertion;
+        }
+        if s.errors > 0 {
+            return RedClass::CollectionError;
+        }
+        if s.passed == 0 {
+            return RedClass::NoTests;
+        }
+    }
+    match result.status {
+        CheckStatus::Passed => RedClass::Passed,
+        CheckStatus::Error => RedClass::BuildError,
+        _ => RedClass::Unclassified,
+    }
 }
 
 /// How strong the evidence for a task is.
@@ -313,6 +431,7 @@ mod tests {
             stderr_tail: String::new(),
             truncated: false,
             note: None,
+            flaky: false,
         }
     }
 
@@ -424,6 +543,82 @@ mod tests {
         ));
     }
 
+    fn summary(failed: usize, build_failed: bool, unresolved_only: bool) -> RunnerSummary {
+        RunnerSummary {
+            passed: 0,
+            failed,
+            errors: 0,
+            build_failed,
+            unresolved_only,
+        }
+    }
+
+    #[test]
+    fn red_is_an_assertion_or_an_absent_symbol() {
+        use TestOutcome as T;
+        let failed = check("a", CheckStatus::Failed, Some(&[("t", T::Failed)]));
+        assert_eq!(classify_red(&failed, None), RedClass::Assertion);
+        let errored = check("a", CheckStatus::Failed, Some(&[("t", T::Error)]));
+        assert_eq!(classify_red(&errored, None), RedClass::CollectionError);
+        let empty = check("a", CheckStatus::Failed, Some(&[]));
+        assert_eq!(classify_red(&empty, None), RedClass::NoTests);
+        let plain = check("a", CheckStatus::Failed, None);
+        assert_eq!(classify_red(&plain, None), RedClass::Unclassified);
+        assert_eq!(
+            classify_red(&plain, Some(&summary(2, false, false))),
+            RedClass::Assertion
+        );
+        assert_eq!(
+            classify_red(&plain, Some(&summary(0, true, false))),
+            RedClass::BuildError
+        );
+        assert_eq!(
+            classify_red(&plain, Some(&summary(0, true, true))),
+            RedClass::Absent
+        );
+        assert_eq!(
+            classify_red(&plain, Some(&summary(0, false, false))),
+            RedClass::NoTests
+        );
+        let timed_out = check("a", CheckStatus::TimedOut, None);
+        assert_eq!(
+            classify_red(&timed_out, Some(&summary(1, false, false))),
+            RedClass::Timeout
+        );
+        let passed = check("a", CheckStatus::Passed, Some(&[("t", T::Passed)]));
+        assert_eq!(classify_red(&passed, None), RedClass::Passed);
+        assert!(RedClass::Assertion.is_red() && RedClass::Absent.is_red());
+        assert!(!RedClass::BuildError.is_red() && !RedClass::Flaky.is_red());
+    }
+
+    #[test]
+    fn a_flaky_pass_is_not_evidence_and_errors_regress() {
+        use TestOutcome as T;
+        let mut c = check("acceptance", CheckStatus::Passed, None);
+        assert!(c.is_evidence());
+        c.flaky = true;
+        assert!(!c.is_evidence());
+        assert_eq!(
+            verdict(&["acceptance"], &[c], None),
+            Verdict::RegressionOnly
+        );
+
+        let before = report(vec![check(
+            "t",
+            CheckStatus::Passed,
+            Some(&[("x", T::Passed)]),
+        )]);
+        let after = report(vec![check(
+            "t",
+            CheckStatus::Failed,
+            Some(&[("x", T::Error)]),
+        )]);
+        let cmp = compare(&before, &after);
+        assert_eq!(cmp.regressions[0].now, "error");
+        let again = compare(&after, &after);
+        assert_eq!(again.pre_existing, ["t/x"]);
+    }
+
     mod properties {
         use super::*;
         use proptest::prelude::*;
@@ -439,7 +634,12 @@ mod tests {
         }
 
         fn outcomes() -> impl Strategy<Value = TestOutcome> {
-            prop_oneof![Just(T::Passed), Just(T::Failed), Just(T::Skipped)]
+            prop_oneof![
+                Just(T::Passed),
+                Just(T::Failed),
+                Just(T::Skipped),
+                Just(T::Error)
+            ]
         }
 
         fn checks() -> impl Strategy<Value = Vec<CheckResult>> {
@@ -447,13 +647,14 @@ mod tests {
                 (
                     statuses(),
                     prop::option::of(prop::collection::vec(outcomes(), 0..5)),
+                    any::<bool>(),
                 ),
                 1..5,
             )
             .prop_map(|v| {
                 v.into_iter()
                     .enumerate()
-                    .map(|(i, (status, tests))| CheckResult {
+                    .map(|(i, (status, tests, flaky))| CheckResult {
                         name: format!("c{i}"),
                         argv: vec!["x".to_owned()],
                         status,
@@ -473,6 +674,7 @@ mod tests {
                         stderr_tail: String::new(),
                         truncated: false,
                         note: None,
+                        flaky,
                     })
                     .collect()
             })
@@ -495,6 +697,42 @@ mod tests {
                 if v == Verdict::Verified {
                     let c = cs.iter().find(|c| c.name == name);
                     prop_assert!(c.is_some_and(CheckResult::is_evidence));
+                }
+            }
+
+            #[test]
+            fn a_flaky_task_check_is_never_verified(cs in checks(), pick in 0..5usize) {
+                let name = format!("c{pick}");
+                let v = verdict(&[name.as_str()], &cs, None);
+                if cs.iter().find(|c| c.name == name).is_some_and(|c| c.flaky) {
+                    prop_assert_ne!(v, Verdict::Verified);
+                }
+            }
+
+            #[test]
+            fn red_always_has_a_cause(
+                cs in checks(),
+                passed in 0..3usize,
+                failed in 0..3usize,
+                errors in 0..3usize,
+                build_failed in any::<bool>(),
+                unresolved_only in any::<bool>(),
+                with_summary in any::<bool>(),
+            ) {
+                let summary = RunnerSummary { passed, failed, errors, build_failed, unresolved_only };
+                let summary = with_summary.then_some(summary);
+                for c in &cs {
+                    let class = classify_red(c, summary.as_ref());
+                    if class.is_red() {
+                        let assertion_in_report = c
+                            .tests
+                            .iter()
+                            .flatten()
+                            .any(|t| t.outcome == T::Failed);
+                        let by_summary = summary.is_some_and(|s| s.failed > 0 || (s.build_failed && s.unresolved_only));
+                        prop_assert!(assertion_in_report || by_summary);
+                        prop_assert_ne!(c.status, CheckStatus::TimedOut);
+                    }
                 }
             }
 

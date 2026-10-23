@@ -142,11 +142,28 @@ impl Progress for Updates {
                     json!({ "sessionUpdate": "tool_call", "toolCallId": id, "title": format!("{task} {title}"), "kind": "other", "status": "in_progress" }),
                 );
             }
-            Event::Phase { task, phase } => {
-                if let Some(id) = self.tasks.lock().ok().and_then(|t| t.get(task).cloned()) {
+            Event::Stage {
+                task,
+                stage,
+                state,
+                detail,
+                elapsed_ms,
+                ..
+            } => {
+                let line = crate::progress::stage_line(
+                    *stage,
+                    *state,
+                    detail.as_deref(),
+                    *elapsed_ms,
+                    crate::progress::Verbosity::Normal,
+                );
+                if let (Some(id), Some(line)) = (
+                    self.tasks.lock().ok().and_then(|t| t.get(task).cloned()),
+                    line,
+                ) {
                     c.update(
                         &self.session,
-                        json!({ "sessionUpdate": "tool_call_update", "toolCallId": id, "content": text(phase) }),
+                        json!({ "sessionUpdate": "tool_call_update", "toolCallId": id, "content": text(line.trim_start()) }),
                     );
                 }
             }

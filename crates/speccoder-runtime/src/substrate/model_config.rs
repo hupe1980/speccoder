@@ -2,16 +2,9 @@
 
 use serde::Deserialize;
 
-/// Prompt-cache lifetime for breakpoints.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
-pub enum CacheTtl {
-    /// Five minutes (the provider default).
-    #[serde(rename = "5m")]
-    FiveMinutes,
-    /// One hour: survives a run paused for an approval.
-    #[serde(rename = "1h")]
-    OneHour,
-}
+/// Prompt-cache lifetime for breakpoints: agentplane's, read as `5m` or `1h`
+/// (one hour survives a run paused for an approval).
+pub use agentplane::model::CacheTtl;
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]

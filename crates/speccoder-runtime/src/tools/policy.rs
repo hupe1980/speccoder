@@ -362,6 +362,11 @@ impl Policy {
                 "a planning skill writes Spec Kit artifacts (specs/, .specify/feature.json, .specify/memory/); `{p}` is not one"
             ));
         }
+        if self.protected.is_context(&p) {
+            return Decision::Approval(format!(
+                "`{p}` is an agent context file: every later agent session reads it"
+            ));
+        }
         if self.frozen.contains(&p) {
             return Decision::Approval(format!(
                 "`{p}` is a frozen test (it existed when the attempt started)"

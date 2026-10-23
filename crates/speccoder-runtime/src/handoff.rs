@@ -24,6 +24,8 @@ pub struct PrOptions<'a> {
     pub gh: &'a str,
     /// Push and open (`false`: a dry run).
     pub open: bool,
+    /// Hand off although the branch's full-tier checks failed (said in the body).
+    pub force: bool,
 }
 
 /// Commit trailers on the branch: (task, `Mutation:` value, `Usage:` value).
@@ -196,7 +198,25 @@ pub fn pr(path: &Path, feature: Option<&str>, options: &PrOptions<'_>) -> Comman
         t.regression_only,
         t.ready + t.blocked
     );
-    let body = body(report, &trailers(&repo, &base, &branch));
+    // A branch whose full-tier checks failed is not handed off unless forced.
+    let full =
+        crate::pipeline::full::read(&repo_root, &report.feature, &branch).filter(|t| !t.passed);
+    if let Some(t) = full.as_ref().filter(|_| !options.force) {
+        return refuse(
+            CommandStatus::VerificationFailed,
+            &format!(
+                "the full-tier checks failed on {branch}: {}; fix them, or pass --force",
+                t.failed.join(", ")
+            ),
+        );
+    }
+    let mut body = body(report, &trailers(&repo, &base, &branch));
+    if let Some(t) = &full {
+        body.push_str(&format!(
+            "\n> **Full-tier checks failed** on this branch: {}. Handed off with `--force`.\n",
+            t.failed.join(", ")
+        ));
+    }
     let refspec = format!("{branch}:refs/heads/{branch}");
     let commands = vec![
         format!("git push {} {refspec}", options.remote),
