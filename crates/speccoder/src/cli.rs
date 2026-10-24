@@ -25,6 +25,17 @@ impl From<SpecFormat> for speccoder_core::spec::FormatKind {
     }
 }
 
+/// `--color`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum ColorArg {
+    /// A terminal gets colour, unless NO_COLOR says otherwise.
+    Auto,
+    /// Always, even piped.
+    Always,
+    /// Never.
+    Never,
+}
+
 /// Spec-driven coding agent for GitHub Spec Kit and OpenSpec projects.
 #[derive(Debug, Parser)]
 #[command(name = "speccoder", version, about, long_about = None)]
@@ -36,6 +47,18 @@ pub struct Cli {
     /// Stream JSON Lines events on stdout, ending in the result object.
     #[arg(long, global = true, conflicts_with = "json")]
     pub events: bool,
+
+    /// Colour: auto (a terminal, unless NO_COLOR), always or never.
+    #[arg(long, global = true, value_enum, default_value_t = ColorArg::Auto)]
+    pub color: ColorArg,
+
+    /// ASCII marks and borders instead of Unicode symbols.
+    #[arg(long, global = true)]
+    pub ascii: bool,
+
+    /// Labelled plain lines for screen readers: no symbols, no dashboard.
+    #[arg(long, global = true)]
+    pub screen_reader: bool,
 
     /// Print only stops, finishes, resumes and what needs you.
     #[arg(short, long, global = true, conflicts_with = "verbose")]

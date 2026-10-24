@@ -106,6 +106,20 @@ In the dashboard, `tab` switches pane, `↑ ↓` or `j k` select, `a` approves t
 
 A run that is picked up after a kill starts with `Resuming — T004 was interrupted during attempt (run_command cargo test); finished calls will not repeat.`
 
+### Look and accessibility
+
+Each state has its own colour and its own mark — `✓` verified, `~` regression only, `A` attested, `!` no evidence, `–` skipped, `·` ready, `⧗` blocked — and its word, so nothing depends on colour. Tables fit the terminal's width. `--ascii` (or a non-UTF-8 locale) uses `[ok] [~] [A] [!] [-] [ ] [..]` and plain borders; `NO_COLOR` turns colour off; themes for light terminals and colour-blind readers are in [your settings](@/docs/configuration.md#your-settings).
+
+`--screen-reader` (or `SPECCODER_SCREEN_READER=1`, or `[ui] screen_reader = true`) gives labelled plain lines a screen reader reads well, choices as a numbered list, and the report instead of the dashboard:
+
+```text
+task: T004 Handle Unicode input - started
+stage: T004 attempt - started (1/2)
+tool: run_command cargo test - allow, ok
+approval required: T004 - run_command cargo add unicode-normalization
+choice 1: Yes, once (or type y)
+```
+
 ### Getting your attention
 
 When a call waits for you, a task fails, the feature ends or nothing happens for 15 minutes, speccoder notifies you — a desktop notification in terminals that show one (iTerm2, WezTerm, Ghostty, Kitty, Warp, foot, Konsole), a bell elsewhere — and the terminal title follows the run (`speccoder ▸ T004`, `speccoder △ approval T004`, `speccoder ✓ done`). Nothing of this happens with `--json` or in an editor. It is your setting, not the project's; see [your settings](@/docs/configuration.md#your-settings).

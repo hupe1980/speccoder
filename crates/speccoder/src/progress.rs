@@ -217,13 +217,132 @@ impl Progress for Printer {
                 .and_then(|s| s.map(|t| t.elapsed().as_secs())),
             _ => None,
         };
-        let out = lines(event, seconds, self.verbosity);
+        let look = crate::style::err();
+        let out = if look.screen_reader {
+            reader_lines(event, self.verbosity)
+        } else {
+            let token = token_of(event);
+            lines(event, seconds, self.verbosity)
+                .into_iter()
+                .map(|l| look.fit(&l, look.width))
+                .map(|l| match token {
+                    Some(t) => look.paint(t, &l),
+                    None => l,
+                })
+                .collect()
+        };
         if !out.is_empty() {
             let mut err = std::io::stderr().lock();
             for l in out {
+                let l = if look.ascii {
+                    crate::style::asciify(&l)
+                } else {
+                    l
+                };
                 let _ = writeln!(err, "{l}");
             }
         }
+    }
+}
+
+/// How an event's lines are styled (`None`: plain).
+fn token_of(event: &Event) -> Option<crate::style::Token> {
+    use crate::style::{Glyph, Token};
+    Some(match event {
+        Event::TaskStarted { .. } => Token::Accent,
+        Event::Stage { state, .. } => match state {
+            StageState::Passed => Token::Verified,
+            StageState::Failed => Token::Danger,
+            StageState::Started | StageState::Skipped => Token::Muted,
+        },
+        Event::ToolCall { decision, ok, .. } => match (decision.as_str(), ok) {
+            ("deny" | "unknown", _) | (_, Some(false)) => Token::Danger,
+            ("approval" | "stop", _) => Token::Attention,
+            _ => Token::Muted,
+        },
+        Event::Resumed { .. } | Event::ApprovalRequested { .. } => Token::Attention,
+        Event::TaskFinished { outcome, .. } => match outcome.as_str() {
+            "completed" => Token::Verified,
+            "blocked" | "needs_approval" | "denied" | "not_demonstrated" | "incomplete"
+            | "budget_exhausted" | "suspected_gaming" => Token::Attention,
+            o => Glyph::of_state(o).token(),
+        },
+        Event::Notice { .. } => Token::Muted,
+        _ => return None,
+    })
+}
+
+/// The event as labelled plain lines for a screen reader (F-055): a word
+/// first, no symbols.
+#[must_use]
+pub fn reader_lines(event: &Event, verbosity: Verbosity) -> Vec<String> {
+    let quiet = verbosity == Verbosity::Quiet;
+    match event {
+        Event::TaskStarted { task, title, .. } if !quiet => {
+            vec![format!("task: {task} {title} — started")]
+        }
+        Event::Stage {
+            task,
+            stage,
+            state,
+            detail,
+            ..
+        } if !quiet && (*state != StageState::Skipped || verbosity == Verbosity::Verbose) => {
+            let word = match state {
+                StageState::Started => "started",
+                StageState::Passed => "passed",
+                StageState::Failed => "failed",
+                StageState::Skipped => "skipped",
+            };
+            let detail = detail
+                .as_deref()
+                .map(|d| format!(" ({d})"))
+                .unwrap_or_default();
+            vec![format!("stage: {task} {} — {word}{detail}", stage.name())]
+        }
+        Event::ToolCall {
+            tool,
+            target,
+            decision,
+            ok,
+            ..
+        } if !quiet => {
+            let result = match ok {
+                Some(true) => ", ok",
+                Some(false) => ", failed",
+                None => "",
+            };
+            vec![format!("tool: {tool} {target} — {decision}{result}")]
+        }
+        Event::Resumed { task, stage, .. } => vec![format!(
+            "notice: resuming {task}, interrupted during {}; finished calls will not repeat",
+            stage.map_or("a run", Stage::name)
+        )],
+        Event::ApprovalRequested { task, what, .. } => {
+            vec![format!("approval required: {task} — {what}")]
+        }
+        Event::ApprovalDecided {
+            task, decision, by, ..
+        } => {
+            vec![format!("approval: {task} — {decision} by {by}")]
+        }
+        Event::TaskFinished {
+            task,
+            outcome,
+            message,
+            input_tokens,
+            output_tokens,
+            ..
+        } => vec![
+            format!("task: {task} — {}", outcome.replace('_', " ")),
+            format!(
+                "usage: {} input tokens, {} output tokens",
+                input_tokens, output_tokens
+            ),
+            format!("notice: {message}"),
+        ],
+        Event::Notice { text } if !quiet => vec![format!("notice: {text}")],
+        _ => Vec::new(),
     }
 }
 

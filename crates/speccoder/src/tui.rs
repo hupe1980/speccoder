@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 use ratatui::Frame;
 use ratatui::crossterm::event::{self, Event as TermEvent, KeyCode, KeyEventKind};
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap};
 use speccoder_core::{ApprovalsReport, CommandData, CommandResult, CommandStatus, StatusReport};
@@ -166,22 +166,44 @@ impl App {
     }
 }
 
-fn state_style(state: &str) -> (char, Style) {
-    match state {
-        "verified" => ('✓', Style::default().fg(Color::Green)),
-        "regression_only" => ('~', Style::default().fg(Color::Yellow)),
-        "attested" => ('A', Style::default().fg(Color::Cyan)),
-        "ticked_without_evidence" => ('!', Style::default().fg(Color::Magenta)),
-        "evidence_without_tick" => ('?', Style::default().fg(Color::Magenta)),
-        "skipped" => ('–', Style::default().fg(Color::DarkGray)),
-        "ready" => ('·', Style::default()),
-        _ => ('⧗', Style::default().fg(Color::DarkGray)),
-    }
+/// A task state's mark and style, from the person's look (F-055).
+fn state_style(state: &str) -> (String, Style) {
+    let look = crate::style::out();
+    let glyph = crate::style::Glyph::of_state(state);
+    (
+        look.mark(glyph).to_owned(),
+        crate::style::tui_style(&look, glyph.token()),
+    )
 }
 
 fn focused(block: Block<'_>, on: bool) -> Block<'_> {
     if on {
-        block.border_style(Style::default().fg(Color::Cyan))
+        block.border_style(crate::style::tui_style(
+            &crate::style::out(),
+            crate::style::Token::BorderFocus,
+        ))
+    } else {
+        block
+    }
+}
+
+/// A box, with ASCII borders when the look asks for them.
+fn bordered<'a>() -> Block<'a> {
+    let look = crate::style::out();
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(crate::style::tui_style(&look, crate::style::Token::Border));
+    if look.ascii {
+        block.border_set(ratatui::symbols::border::Set {
+            top_left: "+",
+            top_right: "+",
+            bottom_left: "+",
+            bottom_right: "+",
+            vertical_left: "|",
+            vertical_right: "|",
+            horizontal_top: "-",
+            horizontal_bottom: "-",
+        })
     } else {
         block
     }
@@ -210,7 +232,11 @@ pub fn draw(f: &mut Frame<'_>, app: &App) {
                     .unwrap_or_default(),
                 Style::default().add_modifier(Modifier::BOLD),
             ),
-            Span::raw("[tab] pane  [↑↓] select  [a] approve  [r] reject  [q] quit"),
+            Span::raw(if crate::style::out().ascii {
+                "[tab] pane  [up/down] select  [a] approve  [r] reject  [q] quit"
+            } else {
+                "[tab] pane  [↑↓] select  [a] approve  [r] reject  [q] quit"
+            }),
         ])),
         rows[0],
     );
@@ -258,8 +284,7 @@ fn tasks(f: &mut Frame<'_>, app: &App, area: Rect) {
         .split(area);
     let Some(report) = &app.snap.report else {
         f.render_widget(
-            Paragraph::new("no tasks")
-                .block(Block::default().borders(Borders::ALL).title(" Tasks ")),
+            Paragraph::new("no tasks").block(bordered().title(" Tasks ")),
             area,
         );
         return;
@@ -280,7 +305,7 @@ fn tasks(f: &mut Frame<'_>, app: &App, area: Rect) {
     f.render_stateful_widget(
         List::new(items)
             .block(focused(
-                Block::default().borders(Borders::ALL).title(" Tasks "),
+                bordered().title(" Tasks "),
                 app.focus == Focus::Tasks,
             ))
             .highlight_style(Style::default().add_modifier(Modifier::REVERSED)),
@@ -306,7 +331,7 @@ fn tasks(f: &mut Frame<'_>, app: &App, area: Rect) {
     f.render_widget(
         Paragraph::new(detail)
             .wrap(Wrap { trim: true })
-            .block(Block::default().borders(Borders::ALL).title(" Task ")),
+            .block(bordered().title(" Task ")),
         parts[1],
     );
 }
@@ -352,7 +377,7 @@ fn live(f: &mut Frame<'_>, app: &App, area: Rect) {
     f.render_widget(
         Paragraph::new(lines)
             .wrap(Wrap { trim: true })
-            .block(Block::default().borders(Borders::ALL).title(" Live ")),
+            .block(bordered().title(" Live ")),
         area,
     );
 }
@@ -402,7 +427,7 @@ fn approvals(f: &mut Frame<'_>, app: &App, area: Rect) {
     f.render_stateful_widget(
         List::new(items)
             .block(focused(
-                Block::default().borders(Borders::ALL).title(format!(
+                bordered().title(format!(
                     " Approvals ({} waiting, {decided} decided) ",
                     pending.len()
                 )),

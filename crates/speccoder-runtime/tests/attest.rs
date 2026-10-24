@@ -843,3 +843,98 @@ fn a_signed_summary_covers_the_lines_it_names() {
     );
     assert_eq!(check(), VerifyOutcome::Unsigned);
 }
+
+/// Parallel lanes tick at once: every note written concurrently lands
+/// (git lets one writer hold the notes ref at a time).
+#[test]
+fn notes_written_at_once_all_land() {
+    let r = repo(None);
+    let mut commits = Vec::new();
+    for i in 0..8 {
+        git(
+            r.path(),
+            &[
+                "-c",
+                "commit.gpgsign=false",
+                "commit",
+                "-q",
+                "--allow-empty",
+                "-m",
+                &format!("c{i}"),
+            ],
+        );
+        commits.push(git(r.path(), &["rev-parse", "HEAD"]).trim().to_owned());
+    }
+    let path = r.path().to_path_buf();
+    std::thread::scope(|s| {
+        for c in &commits {
+            let path = &path;
+            s.spawn(move || {
+                speccoder_runtime::attest::notes::write(path, c, &format!("{{\"c\":\"{c}\"}}\n"))
+                    .unwrap();
+            });
+        }
+    });
+    let noted = speccoder_runtime::attest::notes::noted(r.path());
+    for c in &commits {
+        assert!(noted.contains(c), "{c} lost its note");
+    }
+}
+
+/// Two processes on one repository: notes written at once by both all land.
+#[test]
+fn notes_written_by_two_processes_all_land() {
+    let r = repo(None);
+    let mut commits = Vec::new();
+    for i in 0..12 {
+        git(
+            r.path(),
+            &[
+                "-c",
+                "commit.gpgsign=false",
+                "commit",
+                "-q",
+                "--allow-empty",
+                "-m",
+                &format!("p{i}"),
+            ],
+        );
+        commits.push(git(r.path(), &["rev-parse", "HEAD"]).trim().to_owned());
+    }
+    // This test binary, re-run as a writer of half the commits each.
+    let me = std::env::current_exe().unwrap();
+    let spawn = |half: &[String]| {
+        Command::new(&me)
+            .args(["--exact", "notes_writer_child", "--nocapture"])
+            .env("SPECCODER_NOTES_REPO", r.path())
+            .env("SPECCODER_NOTES_COMMITS", half.join(","))
+            .spawn()
+            .unwrap()
+    };
+    let (a, b) = commits.split_at(6);
+    let (mut x, mut y) = (spawn(a), spawn(b));
+    assert!(x.wait().unwrap().success() && y.wait().unwrap().success());
+    let noted = speccoder_runtime::attest::notes::noted(r.path());
+    for c in &commits {
+        assert!(noted.contains(c), "{c} lost its note");
+    }
+}
+
+/// The child of [`notes_written_by_two_processes_all_land`]; a no-op otherwise.
+#[test]
+fn notes_writer_child() {
+    let (Ok(repo), Ok(commits)) = (
+        std::env::var("SPECCODER_NOTES_REPO"),
+        std::env::var("SPECCODER_NOTES_COMMITS"),
+    ) else {
+        return;
+    };
+    for c in commits.split(',') {
+        speccoder_runtime::attest::notes::write(
+            Path::new(&repo),
+            c,
+            &format!("{{\"c\":\"{c}\"}}\n"),
+        )
+        .unwrap();
+    }
+}

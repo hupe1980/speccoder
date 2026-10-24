@@ -141,6 +141,21 @@ ticks a task only on evidence the model cannot produce or edit.
   `speccoder replay` re-derives a recorded run offline. Failed attempts are
   kept under `refs/speccoder/attempts/…`.
 
+**Look and accessibility**
+
+- Colour by meaning: each task state, error, stop and warning has its own
+  style, and every state keeps its word and mark — nothing is told by colour
+  alone. `--color`, then `[ui] color`, then `NO_COLOR`, `FORCE_COLOR` /
+  `CLICOLOR_FORCE`, `CLICOLOR=0`, `TERM=dumb`; never in `--json` or
+  `--events`; styling never changes the text.
+- Themes in your own settings: `auto` (your terminal's 16 colours), `dark`,
+  `light`, `high-contrast`, `daltonized`, `mono`; the dashboard follows them.
+- `--ascii` (also a non-UTF-8 locale): ASCII marks and plain borders.
+  Tables fit the terminal's width, measured by display width.
+- `--screen-reader` (`SPECCODER_SCREEN_READER`, `[ui] screen_reader`):
+  labelled plain lines, numbered choices, the report instead of the
+  dashboard. The project's `speccoder.toml` cannot set any of this.
+
 **Machine contract**
 
 - `--events` on every command: JSON Lines as the command works —
@@ -180,6 +195,9 @@ ticks a task only on evidence the model cannot produce or edit.
 - `report` shows each tick's attestation and traces the spec's requirements
   to the tasks citing them; acceptance tests name the scenarios they check.
   `pr` adds an Attestation column and pushes the notes, never forced.
+  Notes written at once — parallel lanes, two runs on one repository —
+  never lose each other (`git notes add` does not guard its ref; speccoder
+  holds a lock).
   `scripts/attest-interop.sh` checks a bundle with `ssh-keygen` and in-toto's
   Go library.
 

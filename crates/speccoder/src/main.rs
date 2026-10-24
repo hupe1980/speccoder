@@ -14,6 +14,7 @@ mod output;
 mod progress;
 mod prompt;
 mod schema;
+mod style;
 mod tui;
 
 use clap::Parser;
@@ -107,6 +108,19 @@ fn main() {
         Ok(cli) => cli,
         Err(e) => usage_error(&args, &e),
     };
+    let (settings, warnings) = speccoder_runtime::user_config::load();
+    let machine = cli.json || cli.events;
+    if !machine {
+        for w in &warnings {
+            eprintln!("{w}");
+        }
+    }
+    let (looks, reader_source) = resolve_looks(&cli, &settings.ui);
+    style::install(looks);
+    if let (Some(source), false) = (reader_source, machine) {
+        eprintln!("screen reader mode: on ({source})");
+    }
+    let notify = settings.notify;
     let events = cli.events.then(|| {
         std::sync::Arc::new(events::Events::start(
             Box::new(std::io::stdout()),
@@ -161,7 +175,7 @@ fn main() {
                     && std::io::stderr().is_terminal())
                 .then(|| std::sync::Arc::new(prompt::Terminal) as _);
             // Live progress on stderr, unless stdout must stay one JSON object.
-            let (progress, attention) = live_progress(&cli, events.as_ref());
+            let (progress, attention) = live_progress(&cli, &notify, events.as_ref());
             let options = speccoder_runtime::RunOptions {
                 max_tasks: *max_tasks,
                 approver,
@@ -269,7 +283,7 @@ fn main() {
                     && !*no_prompt
                     && std::io::stdin().is_terminal()
                     && std::io::stderr().is_terminal();
-                let (progress, _attention) = live_progress(&cli, events.as_ref());
+                let (progress, _attention) = live_progress(&cli, &notify, events.as_ref());
                 let options = speccoder_runtime::RunOptions {
                     max_tasks: None,
                     approver: interactive.then(|| std::sync::Arc::new(prompt::Terminal) as _),
@@ -295,7 +309,7 @@ fn main() {
                     && !*no_prompt
                     && std::io::stdin().is_terminal()
                     && std::io::stderr().is_terminal();
-                let (progress, _attention) = live_progress(&cli, events.as_ref());
+                let (progress, _attention) = live_progress(&cli, &notify, events.as_ref());
                 let options = speccoder_runtime::RunOptions {
                     max_tasks: None,
                     approver: interactive.then(|| std::sync::Arc::new(prompt::Terminal) as _),
@@ -311,6 +325,11 @@ fn main() {
             model,
             force,
         } => speccoder_runtime::init::init(path, provider.as_deref(), model.as_deref(), *force),
+        // A screen reader gets the report, not a redrawn screen (F-055).
+        Command::Tui { path, feature } if style::out().screen_reader => {
+            eprintln!("notice: the dashboard is off in screen-reader mode; here is the report");
+            speccoder_runtime::status::report(path, feature.as_deref())
+        }
         Command::Tui { path, feature } => tui::run(path, feature.as_deref()),
         Command::Status { path } => speccoder_runtime::progress::status(path),
         Command::Bench {
@@ -639,6 +658,7 @@ fn feature_flag(command: &cli::Command) -> Option<&str> {
 /// (notifications, title) — neither under `--json`.
 fn live_progress(
     cli: &cli::Cli,
+    notify: &speccoder_runtime::user_config::Notify,
     events: Option<&std::sync::Arc<events::Events>>,
 ) -> (
     Option<std::sync::Arc<dyn speccoder_runtime::progress::Progress>>,
@@ -654,17 +674,73 @@ fn live_progress(
     }
     let printer: std::sync::Arc<dyn speccoder_runtime::progress::Progress> =
         std::sync::Arc::new(progress::Printer::new(verbosity(cli)));
-    let (settings, warnings) = speccoder_runtime::user_config::load();
-    for w in warnings {
-        eprintln!("{w}");
-    }
     let layer = attention::Attention::new(
         printer,
-        settings,
+        notify.clone(),
         std::io::stderr().is_terminal(),
         Box::new(attention::Stderr),
         &|k| std::env::var(k).ok(),
     );
     layer.watch_stalls(std::time::Duration::from_secs(1));
     (Some(layer.clone() as _), Some(layer))
+}
+
+/// The looks of stdout and stderr (F-055): `--color`, then `[ui] color`,
+/// then the environment and whether each is a terminal; never colour in
+/// machine output. Also what turned screen-reader mode on, if anything.
+fn resolve_looks(
+    cli: &cli::Cli,
+    ui: &speccoder_runtime::user_config::Ui,
+) -> (style::Looks, Option<&'static str>) {
+    use std::io::IsTerminal;
+    let flag = match cli.color {
+        cli::ColorArg::Auto => style::Choice::Auto,
+        cli::ColorArg::Always => style::Choice::Always,
+        cli::ColorArg::Never => style::Choice::Never,
+    };
+    let setting = match ui.color.as_deref() {
+        Some("always") => style::Choice::Always,
+        Some("never") => style::Choice::Never,
+        _ => style::Choice::Auto,
+    };
+    let env = style::Env::current();
+    let var = |k: &str| std::env::var(k).ok();
+    let reader_env = var("SPECCODER_SCREEN_READER").filter(|v| !v.is_empty() && v != "0");
+    let reader_source = if cli.screen_reader {
+        Some("--screen-reader")
+    } else if reader_env.is_some() {
+        Some("SPECCODER_SCREEN_READER")
+    } else if ui.screen_reader == Some(true) {
+        Some("your settings")
+    } else {
+        None
+    };
+    let ascii = cli.ascii
+        || ui.ascii.unwrap_or_else(|| {
+            style::locale_is_ascii(
+                var("LC_ALL").as_deref(),
+                var("LC_CTYPE").as_deref(),
+                var("LANG").as_deref(),
+            )
+        });
+    let theme = ui
+        .theme
+        .as_deref()
+        .and_then(style::Theme::parse)
+        .unwrap_or_default();
+    let machine = cli.json || cli.events;
+    let look = |terminal: bool| style::Look {
+        color: !machine && reader_source.is_none() && style::decide(flag, setting, &env, terminal),
+        theme,
+        ascii: ascii || reader_source.is_some(),
+        width: style::columns(terminal, var("COLUMNS").as_deref()),
+        screen_reader: reader_source.is_some(),
+    };
+    (
+        style::Looks {
+            out: look(std::io::stdout().is_terminal()),
+            err: look(std::io::stderr().is_terminal()),
+        },
+        reader_source,
+    )
 }

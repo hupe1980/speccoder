@@ -496,3 +496,71 @@ fn a_format_is_chosen_by_flag_or_environment() {
         "{v}"
     );
 }
+
+/// Colour follows the flag, then the environment; machine output never has
+/// it (F-055, SC-002).
+#[test]
+fn escape_codes_appear_only_when_colour_is_wanted() {
+    let esc = |args: &[&str], env: &[(&str, &str)]| {
+        let mut cmd = speccoder();
+        cmd.env_remove("NO_COLOR")
+            .env_remove("FORCE_COLOR")
+            .env_remove("CLICOLOR_FORCE");
+        for (k, v) in env {
+            cmd.env(k, v);
+        }
+        let out = cmd.args(args).arg(fixture("valid")).output().unwrap();
+        out.stdout.contains(&0x1b) || out.stderr.contains(&0x1b)
+    };
+    assert!(!esc(&["inspect"], &[]), "piped: no colour");
+    assert!(
+        esc(&["--color", "always", "inspect"], &[]),
+        "forced by the flag"
+    );
+    assert!(
+        esc(&["inspect"], &[("FORCE_COLOR", "1")]),
+        "forced by the environment"
+    );
+    assert!(
+        !esc(&["inspect"], &[("FORCE_COLOR", "1"), ("NO_COLOR", "1")]),
+        "NO_COLOR wins"
+    );
+    assert!(
+        esc(&["--color", "always", "inspect"], &[("NO_COLOR", "1")]),
+        "the flag wins"
+    );
+    assert!(!esc(
+        &["inspect"],
+        &[("FORCE_COLOR", "1"), ("TERM", "dumb"), ("NO_COLOR", "x")]
+    ));
+    assert!(
+        !esc(&["--color", "always", "--json", "inspect"], &[]),
+        "never in --json"
+    );
+    assert!(
+        !esc(&["--color", "always", "--events", "inspect"], &[]),
+        "never in --events"
+    );
+}
+
+#[test]
+fn ascii_and_screen_reader_modes_change_symbols_not_facts() {
+    let run = |args: &[&str]| {
+        let out = speccoder()
+            .args(args)
+            .arg(fixture("valid"))
+            .output()
+            .unwrap();
+        String::from_utf8(out.stdout).unwrap()
+    };
+    let ascii = run(&["--ascii", "inspect"]);
+    assert!(ascii.is_ascii(), "{ascii}");
+    let reader = run(&["--screen-reader", "inspect"]);
+    assert!(
+        reader
+            .lines()
+            .any(|l| l.trim_start().starts_with("task: T001")),
+        "{reader}"
+    );
+    assert!(reader.is_ascii(), "{reader}");
+}
