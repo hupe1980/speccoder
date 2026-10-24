@@ -77,7 +77,7 @@ ticks a task only on evidence the model cannot produce or edit.
   and the sandbox keeps `.git` read-only and ignored secrets unreadable;
   `--parallel` is refused. A killed in-place run resumes from the journal and
   ticks what it had committed; `run --in-place --return` leaves it instead,
-  and `status` and the TUI show the mode. `accept --in-place` and
+  and `report` and the dashboard show the mode. `task accept --in-place` and
   `converge --in-place` work the same way.
 - `speccoder converge`: a finished feature assessed against its spec; gaps
   become new tasks, run with `run --converge`.
@@ -112,23 +112,24 @@ ticks a task only on evidence the model cannot produce or edit.
   refused. A person's answer enters the run labelled as theirs, not as
   speccoder's own. Calls a rule decides name the rule.
 - A call that needs a person **waits** instead of discarding the attempt:
-  `approve`/`reject` (no model needed; `--call`, `--all`, `--scope`) record
-  the decision, and the next `run` continues the same attempt from that call
-  — nothing finished is repeated. Waits end at `[approvals] wait` (default
-  7 days) as an expiry, never as anyone's decision. `status` lists what waits.
+  `task approve`/`task reject` (no model needed; `--call`, `--all`,
+  `--scope`) record the decision, and the next `run` continues the same
+  attempt from that call — nothing finished is repeated. Waits end at
+  `[approvals] wait` (default 7 days) as an expiry, never as anyone's
+  decision. `report --approvals` lists what waits.
 
-- Approvals inline at the terminal, in editors over ACP (`speccoder acp`),
-  in the dashboard (`speccoder tui`), or later (`speccoder report --approvals`,
-  `approve`, `reject`); every decision records who made it.
-- `accept`, `skip`, `nudge`, `cost`, `report`, `status`, `pr` (a draft pull
-  request with every task's evidence, after you confirm).
+- Approvals inline at the terminal, in the dashboard, in editors over ACP
+  (`speccoder acp`), or later (`report --approvals`, `task approve`,
+  `task reject`); every decision records who made it and through what.
+- `task accept`, `task skip`, `task nudge`, `report --cost`, `report`, `pr`
+  (a draft pull request with every task's evidence, after you confirm).
 - Approvals show one question with its full scope: a diff of the file (or
   the whole command, or the MCP arguments), why it stopped, what the sandbox
   allows, the model's claim, and what each answer covers. Answers: once, for
   the task, for this run (never for high-risk calls), reject with a required
   reason, or stop; a note on an approval reaches the model. The same view in
-  editors (diff, reason form, the run's tasks as a plan), in `speccoder
-  approvals` and in the dashboard; `approve --note`.
+  editors (diff, reason form, the run's tasks as a plan), in `report
+  --approvals` and in the dashboard; `task approve --note`.
 - Every stop says what to do next (`Next:`, `data.next`); notifications and
   a terminal title from your own `~/.config/speccoder/config.toml`;
   `-q`/`-v`; `--json` on every command with documented exit codes.
@@ -158,6 +159,26 @@ ticks a task only on evidence the model cannot produce or edit.
   instructions and the look, changing nothing; `--bug-report` prints a
   redacted bundle for an issue.
 - `completion bash|zsh|fish|elvish|powershell`.
+
+**The dashboard**
+
+- `speccoder run` at a terminal runs inside a dashboard: the task list, the
+  running task's pipeline stage by stage with timings, tool calls with the
+  policy's decision, tokens and money. A call that needs you opens over the
+  screen with the prompt's full scope and keys (`y t r n s`, `1`–`5`, `tab`
+  note, `v` view all, `esc` later); decisions are recorded `via dashboard`.
+- Three screens: Run, Evidence — the verdict in words that never blur and
+  the rows that established it, read from the task's attestation (acceptance
+  red → green, held-out, checks, diff audit, monitor, mutation, approvals and
+  who decided, instructions, signature, earlier attempts, the model's claim
+  last and muted) — and Report (verdict bar, totals, what waits, uncited
+  requirements, convergence). `d` shows a task commit's diff (`]`/`[` hunks,
+  `n`/`p` files); `?` lists the keys; `esc` goes back and never quits.
+- `q` while a run works asks: finish this task then stop, stop now (the next
+  `run` resumes it), or keep watching. On leaving, the run's summary is
+  printed and the exit status is the run's.
+- `--plain` keeps line output; bare `speccoder` and `speccoder tui` watch a
+  run in another process with the same screens.
 
 **Repository instructions**
 
@@ -214,7 +235,7 @@ ticks a task only on evidence the model cannot produce or edit.
   `task-verification` with the verdict, hashes, trace and decisions, and a
   SLSA verification summary naming every other line. Signed with your git
   signing key (SSH or OpenPGP), Sigstore keyless as an option, or unsigned
-  and said so; signing never undoes a tick. `accept` and `skip` are attested
+  and said so; signing never undoes a tick. `task accept` and `task skip` are attested
   as decisions, naming who decided.
 - `speccoder attest verify` re-checks every tick against its commit, its
   trailers, task line, spec section and tree, the judge configuration at its

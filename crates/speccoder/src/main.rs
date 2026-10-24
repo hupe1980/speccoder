@@ -89,6 +89,63 @@ fn archive(
     )
 }
 
+/// The dashboard is for a person at a terminal: stdin, stdout and stderr
+/// are terminals, and no machine output, `--plain` or screen reader.
+fn dashboard(cli: &Cli) -> bool {
+    use std::io::IsTerminal;
+    !cli.json
+        && !cli.events
+        && !cli.plain
+        && !style::out().screen_reader
+        && std::io::stdin().is_terminal()
+        && std::io::stdout().is_terminal()
+        && std::io::stderr().is_terminal()
+}
+
+/// What `speccoder run` was asked to do, owned so a hosted run can take it
+/// to its thread.
+struct RunJob {
+    path: std::path::PathBuf,
+    feature: Option<String>,
+    task: Option<String>,
+    max_tasks: Option<usize>,
+    converge: bool,
+    parallel: usize,
+    ignore_checklists: bool,
+    in_place: bool,
+}
+
+impl RunJob {
+    fn run(
+        &self,
+        approver: Option<std::sync::Arc<dyn speccoder_runtime::approvals::Approver>>,
+        progress: Option<std::sync::Arc<dyn speccoder_runtime::progress::Progress>>,
+        cancel: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
+    ) -> speccoder_core::CommandResult {
+        let (path, feature) = (self.path.as_path(), self.feature.as_deref());
+        let options = speccoder_runtime::RunOptions {
+            max_tasks: self.max_tasks,
+            approver,
+            progress,
+            cancel,
+            parallel: self.parallel,
+            ignore_checklists: self.ignore_checklists,
+            in_place: self.in_place,
+            ..speccoder_runtime::RunOptions::default()
+        };
+        let result = match &self.task {
+            Some(task) => speccoder_runtime::run(path, feature, task, &options),
+            None => speccoder_runtime::run_feature(path, feature, &options, self.converge),
+        };
+        let result = speccoder_runtime::next::attach(result, feature);
+        if self.in_place {
+            speccoder_runtime::next::in_place(result)
+        } else {
+            result
+        }
+    }
+}
+
 fn main() {
     // The Linux sandbox helper: confine this process, then exec.
     let args: Vec<String> = std::env::args().collect();
@@ -155,12 +212,7 @@ fn main() {
     };
     let Some(command) = &cli.command else {
         // Bare `speccoder`: the dashboard at a terminal, else the report.
-        use std::io::IsTerminal;
-        let result = if !machine
-            && !style::out().screen_reader
-            && std::io::stdin().is_terminal()
-            && std::io::stdout().is_terminal()
-        {
+        let result = if dashboard(&cli) {
             tui::run(path, feature)
         } else {
             speccoder_runtime::status::report(path, feature)
@@ -202,33 +254,45 @@ fn main() {
             in_place,
             return_: _,
         } => {
-            let approver: Option<std::sync::Arc<dyn speccoder_runtime::approvals::Approver>> =
-                interactive(*no_prompt).then(|| std::sync::Arc::new(prompt::Terminal) as _);
-            // Live progress on stderr, unless stdout must stay one JSON object.
-            let (progress, attention) = live_progress(&cli, &notify, events.as_ref());
-            let options = speccoder_runtime::RunOptions {
+            let job = RunJob {
+                path: path.to_path_buf(),
+                feature: feature.map(str::to_owned),
+                task: task.clone(),
                 max_tasks: *max_tasks,
-                approver,
-                progress,
+                converge: *converge,
                 parallel: usize::from(*parallel),
                 ignore_checklists: *ignore_checklists,
                 in_place: *in_place,
-                ..speccoder_runtime::RunOptions::default()
             };
-            let result = match task {
-                Some(task) => speccoder_runtime::run(path, feature, task, &options),
-                None => speccoder_runtime::run_feature(path, feature, &options, *converge),
-            };
-            let result = speccoder_runtime::next::attach(result, feature);
-            let result = if *in_place {
-                speccoder_runtime::next::in_place(result)
+            if dashboard(&cli) {
+                // The dashboard hosts the run: progress and questions go to it.
+                let ask = interactive(*no_prompt);
+                let notify = notify.clone();
+                tui::host_run(path, feature, move |h| {
+                    let layer = attention::Attention::new(
+                        h.progress,
+                        notify,
+                        true,
+                        Box::new(attention::Stderr),
+                        &|k| std::env::var(k).ok(),
+                    );
+                    layer.watch_stalls(std::time::Duration::from_secs(1));
+                    let approver = ask.then_some(h.approver);
+                    let result = job.run(approver, Some(layer.clone() as _), Some(h.cancel));
+                    layer.finish(&result);
+                    result
+                })
             } else {
+                let approver: Option<std::sync::Arc<dyn speccoder_runtime::approvals::Approver>> =
+                    interactive(*no_prompt).then(|| std::sync::Arc::new(prompt::Terminal) as _);
+                // Live progress on stderr, unless stdout must stay one JSON object.
+                let (progress, attention) = live_progress(&cli, &notify, events.as_ref());
+                let result = job.run(approver, progress, None);
+                if let Some(a) = &attention {
+                    a.finish(&result);
+                }
                 result
-            };
-            if let Some(a) = &attention {
-                a.finish(&result);
             }
-            result
         }
         Command::Task { action } => task_action(action, path, feature),
         Command::Workflow {
@@ -294,8 +358,11 @@ fn main() {
             *yes,
         ),
         // A screen reader gets the report, not a redrawn screen (F-055).
-        Command::Tui if style::out().screen_reader => {
-            eprintln!("notice: the dashboard is off in screen-reader mode; here is the report");
+        // Not at a terminal, `--plain` or a screen reader: the report (F-055).
+        Command::Tui if !dashboard(&cli) => {
+            if !machine {
+                eprintln!("notice: no dashboard here; this is the report");
+            }
             speccoder_runtime::status::report(path, feature)
         }
         Command::Tui => tui::run(path, feature),

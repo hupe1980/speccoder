@@ -64,7 +64,7 @@ By default speccoder works in a worktree, and a worktree holds only what is comm
 - Do not use the checkout while it runs. Before every task speccoder checks that HEAD, the branch and the tree are as it left them, and that the spec, plan, tasks, constitution and the judge's inputs are byte for byte what the run started with; before every tick it checks HEAD and those files again. A change stops the run (`stopped[CHECKOUT-CHANGED]`, `stopped[INTENT-CHANGED]`, `stopped[JUDGE-CHANGED]`, exit 23) and leaves your change where it is.
 - `--parallel` needs worktrees and is refused with `--in-place` (`error[IN-PLACE-PARALLEL]`, exit 2).
 
-`accept --in-place` and `converge --in-place` (and `run --in-place --converge`) work the same way: an attestation is committed before its local tick; a convergence round appends to your `tasks.md` and its commit says so (`Tasks: local`). In place the model sees only what a worktree would hold, and commands cannot write `.git`; see [security](@/docs/security.md#in-place-mode).
+`task accept --in-place` and `converge --in-place` (and `run --in-place --converge`) work the same way: an attestation is committed before its local tick; a convergence round appends to your `tasks.md` and its commit says so (`Tasks: local`). In place the model sees only what a worktree would hold, and commands cannot write `.git`; see [security](@/docs/security.md#in-place-mode).
 
 While a feature has an in-place run (or an interrupted one), a worktree-mode `run`, `task accept` or `converge` of it is refused (`error[IN-PLACE-SESSION]`); see [recovery](@/docs/recovery.md).
 
@@ -86,12 +86,38 @@ speccoder gives its model the repository's own conventions for agents — [`AGEN
 
 They are the repository's text, not your orders: the model is told the task, the spec, the checks and speccoder's rules come first. At most 32 KiB are given — the nearest files whole, farther ones cut, and the report says so. The run summary names the files (`Guided by  AGENTS.md, services/api/AGENTS.md`), and so does the task's attestation, with each file's hash. They are read from the commit the attempt starts from and journaled with it, so a replay needs no file. Changing an `AGENTS.md` during an attempt needs your approval, as before. External agents (Claude Code, Codex) read their own files; speccoder does not add them twice. Other names, such as `CLAUDE.md`, are a [setting](@/docs/configuration.md#context).
 
-## Watching a run
+## The dashboard
+
+At a terminal, `speccoder run` opens the dashboard and runs inside it: the task list fills in as tasks pass, the running task's pipeline moves stage by stage with its timings, tool calls stream in with the policy's decision, and tokens and money tick. When a call needs you, it appears over the screen — the same question, scope and keys as the [inline prompt](@/docs/approvals.md#inline) — and the run goes on once you answer. When you leave, the run's summary is printed as the plain `run` prints it, and the exit status is the run's.
+
+```text
+ speccoder 001-slugify    1 Run   2 Evidence   3 Report     ? keys  q quit
+┌ Tasks (6) ─────────────────────┐┌ Pipeline ──────────────────────────────────────────────┐
+│ ✓ T001 Create the crate        ││ T004 Handle Unicode input                              │
+│ ✓ T002 Slugify ASCII           ││ ✓ baseline  ✓ red  ◐ attempt  · verify  · audit  …     │
+│ ~ T003 Trim separators         ││ baseline 1.2s · red 4.1s · attempt 1/2…                │
+│ ◐ T004 Handle Unicode input    │└────────────────────────────────────────────────────────┘
+│ ⧗ T005 Document the API        │┌ Tool calls ────────────────────────────────────────────┐
+```
+
+| Screen | Shows |
+|---|---|
+| `1` Run | Tasks, the running task's pipeline, tool calls, usage, the approval queue and `Next:` |
+| `2` Evidence (`enter` on a task) | The verdict in words that never blur — `✓ VERIFIED`, `~ REGRESSION ONLY — nothing task-specific was shown`, `A ATTESTED — a person's word, not evidence` — and what established it: acceptance red → green, held-out tests, the checks, the diff audit, the gaming monitor, mutation, every approval and who decided it, the repository instructions, the attestation, earlier attempts, and last, muted, what the model says (a claim) |
+| `3` Report | A verdict bar (`[###~A..]` in ASCII), the totals, what waits for a person, requirements no task cites, convergence rounds, `Next:` |
+
+The evidence rows are read from the task commit's [attestation](@/docs/attestations.md) — never re-derived — so what the screen shows is what `speccoder attest verify` checks. `d` opens the task commit's diff: `]` `[` next and previous hunk, `n` `p` next and previous file.
+
+`?` lists every key. `esc` goes back — out of an overlay, then to the Run screen — and never quits. `q` (or `ctrl-c`) while the run works asks first: **finish this task, then stop**; **stop now** (the attempt is kept, and the next `speccoder run` resumes it without repeating finished calls); or keep watching.
+
+The dashboard needs a terminal of at least 60×15. `--plain` (or not being at a terminal, `--json`, `--events`, screen-reader mode) keeps the line output below. Quitting stops a hosted run; to watch from elsewhere, use another terminal:
 
 ```sh
 speccoder report --live   # running (pid …): 001-x T002 — attempt 1/2 for 33s; last: read_file … (allow)
-speccoder          # at a terminal: the dashboard — tasks with evidence, the live attempt, the approval queue
+speccoder                 # at a terminal: the same dashboard, watching (it does not stop the run when you leave)
 ```
+
+## Watching a run
 
 Every task goes through the same stages, named the same in the progress lines, `report --live`, the dashboard and editors: `baseline · red · attempt · verify · audit · mutation · monitor · commit`. A stage that does not apply (no acceptance examples, mutation or the monitor not configured) is shown only with `-v`.
 
@@ -108,7 +134,7 @@ Every task goes through the same stages, named the same in the progress lines, `
 ✓ T004 verified · 40.2k in / 3.4k out · 171s — verdict: verified
 ```
 
-In the dashboard, `tab` switches pane, `↑ ↓` or `j k` select, `a` approves the selected waiting call, `r` rejects it with a reason, `q` quits. Its footer shows the next step.
+Watching another run's dashboard, `tab` switches to the approval queue, where `a` approves the selected waiting call and `r` rejects it with a reason.
 
 A run that is picked up after a kill starts with `Resuming — T004 was interrupted during attempt (run_command cargo test); finished calls will not repeat.`
 

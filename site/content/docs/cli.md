@@ -8,7 +8,7 @@ group = "Reference"
 nav = "CLI reference"
 +++
 
-`speccoder --help` shows the daily commands, grouped by what they are for; `speccoder help advanced` the rest; `speccoder help <command>` one command. Bare `speccoder` opens the dashboard at a terminal and prints the report otherwise.
+`speccoder --help` shows the daily commands, grouped by what they are for; `speccoder help advanced` the rest; `speccoder help <command>` one command. Bare `speccoder` opens the dashboard at a terminal and prints the report otherwise; `speccoder run` at a terminal runs inside the [dashboard](@/docs/running.md#the-dashboard).
 
 Every command takes:
 
@@ -20,6 +20,7 @@ Every command takes:
 | `--events` | JSON Lines as it works, ending in that object ([events](#events)) |
 | `-q`, `-v` | Only stops, finishes and what needs you; or also durations, skipped stages and the tails of what failed |
 | `--color auto\|always\|never`, `--ascii`, `--screen-reader` | How output looks — [your setting](@/docs/configuration.md#your-settings), never the project's |
+| `--plain` | Lines instead of the [dashboard](@/docs/running.md#the-dashboard): `run` prints its progress, bare `speccoder` the report |
 | `--format speckit\|openspec\|kiro` | The project's spec format (also `SPECCODER_FORMAT`; default: `[spec] format`, else detected) |
 
 Every stop and finish ends with a `Next:` block — the commands that continue, copy-pasteable, the same in `--json` as `next` (`[{"command", "why"}]`). Every failure and stop names a [code](@/docs/codes.md) with what to run: `error[CODE]`, `stopped[CODE]` when the run waits for you, `warning[CODE]` when it worked with less evidence. A former command name (`approve`, `status`, …) is a usage error that names its new form.

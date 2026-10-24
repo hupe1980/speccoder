@@ -79,6 +79,11 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub screen_reader: bool,
 
+    /// Lines instead of the dashboard: `run` prints its progress, bare
+    /// `speccoder` prints the report.
+    #[arg(long, global = true)]
+    pub plain: bool,
+
     /// Print only stops, finishes, resumes and what needs you.
     #[arg(short, long, global = true, conflicts_with = "verbose")]
     pub quiet: bool,
