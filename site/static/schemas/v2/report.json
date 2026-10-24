@@ -1,0 +1,327 @@
+{
+  "$defs": {
+    "ConvergenceRound": {
+      "description": "One convergence round, from its commit.",
+      "properties": {
+        "commit": {
+          "description": "The commit that appended it.",
+          "type": "string"
+        },
+        "round": {
+          "description": "Round number.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "tasks": {
+          "description": "The appended tasks, as `T0NN text`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "round",
+        "commit",
+        "tasks"
+      ],
+      "type": "object"
+    },
+    "LastAttempt": {
+      "description": "An attempt that did not pass, as saved under `refs/speccoder/attempts/`.",
+      "properties": {
+        "outcome": {
+          "description": "`verification_failed`, `blocked`, `needs_approval`, `not_demonstrated`, `interrupted`, …",
+          "type": "string"
+        },
+        "reason": {
+          "description": "Why.",
+          "type": "string"
+        },
+        "reference": {
+          "description": "The ref holding the attempt's tree.",
+          "type": "string"
+        },
+        "run_id": {
+          "description": "The agentplane run, when there was one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "outcome",
+        "reason",
+        "run_id",
+        "reference"
+      ],
+      "type": "object"
+    },
+    "StatusTotals": {
+      "description": "Counts of [`TaskStatus::state`].",
+      "properties": {
+        "attested": {
+          "description": "Ticked by `speccoder accept`: a person's attestation, not evidence.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "blocked": {
+          "description": "Open and blocked.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "evidence_without_tick": {
+          "description": "In place: committed by speccoder, the local tick missing.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "ready": {
+          "description": "Open and ready.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "regression_only": {
+          "description": "Ticked with regression evidence only.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "skipped": {
+          "description": "Open and skipped by a person.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "ticked_without_evidence": {
+          "description": "Ticked without a speccoder commit (by a person, or before speccoder).",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "verified": {
+          "description": "Ticked with task-specific evidence.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "without_attestation": {
+          "description": "Ticks speccoder committed without an attestation.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "verified",
+        "regression_only",
+        "ticked_without_evidence",
+        "evidence_without_tick",
+        "without_attestation",
+        "attested",
+        "skipped",
+        "ready",
+        "blocked"
+      ],
+      "type": "object"
+    },
+    "TaskStatus": {
+      "description": "One task and its evidence.",
+      "properties": {
+        "attestation": {
+          "description": "For a task speccoder committed: its attestation as the note says,\nsignatures unchecked — `signed <kind> <keyid>`, `unsigned` or\n`missing` (F-061; `attest verify` checks them).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "blocked_by": {
+          "description": "Open dependencies of a blocked task.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "commit": {
+          "description": "The speccoder commit that ticked it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "description": "Task ID.",
+          "type": "string"
+        },
+        "intent_changed": {
+          "description": "In place: the spec, plan or constitution changed since this task's\nevidence was committed (its `Intent-Digest` differs from now).",
+          "type": "boolean"
+        },
+        "last_attempt": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LastAttempt"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "For an open task: its latest saved attempt."
+        },
+        "note": {
+          "description": "The reason a person gave for `accept` or `skip`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "phase": {
+          "description": "Enclosing phase heading.",
+          "type": "string"
+        },
+        "run_id": {
+          "description": "The agentplane run of that attempt.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "state": {
+          "description": "`verified`, `regression_only` (ticked by speccoder with that verdict),\n`attested` (ticked by `speccoder accept`), `ticked_without_evidence`\n(ticked, no speccoder commit), `evidence_without_tick` (in place: a\nverdict commit names the task, its local tick is missing),\n`skipped`, `ready` or `blocked`.",
+          "type": "string"
+        },
+        "title": {
+          "description": "Title after markers.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "phase",
+        "state",
+        "intent_changed",
+        "attestation",
+        "blocked_by",
+        "commit",
+        "run_id",
+        "last_attempt",
+        "note"
+      ],
+      "type": "object"
+    },
+    "TraceRow": {
+      "description": "One row of the requirement → scenario → test → verdict matrix.",
+      "properties": {
+        "requirement": {
+          "description": "`FR-001`, `SC-002`.",
+          "type": "string"
+        },
+        "scenario": {
+          "description": "`US1.2`: story 1, acceptance scenario 2.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "task": {
+          "description": "The task that cites it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "test": {
+          "description": "The acceptance test.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "verdict": {
+          "description": "That task's verdict.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "requirement",
+        "scenario",
+        "test",
+        "task",
+        "verdict"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/report.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Result of `speccoder report`: what the branch's history shows.",
+  "properties": {
+    "branch": {
+      "description": "`speccoder/<feature>`, if speccoder has worked on the feature.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "convergence": {
+      "description": "Convergence rounds, oldest first.",
+      "items": {
+        "$ref": "#/$defs/ConvergenceRound"
+      },
+      "type": "array"
+    },
+    "feature": {
+      "description": "Feature directory name.",
+      "type": "string"
+    },
+    "source": {
+      "description": "Where `tasks.md` was read: `branch` or `checkout`.",
+      "type": "string"
+    },
+    "tasks": {
+      "description": "Every task, in document order.",
+      "items": {
+        "$ref": "#/$defs/TaskStatus"
+      },
+      "type": "array"
+    },
+    "totals": {
+      "$ref": "#/$defs/StatusTotals",
+      "description": "Counts by evidence."
+    },
+    "trace": {
+      "description": "Requirement → task → verdict, in the spec's order; a requirement no\ntask cites is a row without a task.",
+      "items": {
+        "$ref": "#/$defs/TraceRow"
+      },
+      "type": "array"
+    },
+    "unmerged_commits": {
+      "description": "Commits on the branch that the checkout's HEAD does not contain.",
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "feature",
+    "branch",
+    "source",
+    "unmerged_commits",
+    "tasks",
+    "convergence",
+    "trace",
+    "totals"
+  ],
+  "title": "report: every task and its evidence",
+  "type": "object"
+}

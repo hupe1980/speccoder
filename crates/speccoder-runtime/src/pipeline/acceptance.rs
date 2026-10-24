@@ -18,6 +18,8 @@ pub(crate) struct AcceptanceSetup<'a> {
     pub(crate) bundle: serde_json::Value,
     /// The task's scenarios, which each test cites.
     pub(crate) scenarios: &'a [speccoder_core::spec::ScenarioRef],
+    /// The repository's instructions (test conventions live there too).
+    pub(crate) instructions: &'a [crate::instructions::Instruction],
     pub(crate) runner: &'a sandbox::Runner,
 }
 
@@ -85,7 +87,13 @@ pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance 
         })
         .map(|t| t.chars().take(8192).collect::<String>())
         .unwrap_or_default();
-    let input = substrate::acceptance::input(a.bundle.clone(), a.scenarios, &files, &manifest);
+    let input = substrate::acceptance::input(
+        a.bundle.clone(),
+        a.scenarios,
+        &files,
+        &manifest,
+        a.instructions,
+    );
     let outcome = a.rt.block_on(a.plane.acceptance(a.feature, a.task, input));
     let outcome = match outcome {
         Ok(o) => o,
@@ -356,6 +364,7 @@ pub(crate) fn prepare_held_out(
         scenarios,
         &visible_files,
         composition,
+        a.instructions,
     );
     let outcome = match a.rt.block_on(a.plane.acceptance(a.feature, a.task, input)) {
         Ok(o) => o,

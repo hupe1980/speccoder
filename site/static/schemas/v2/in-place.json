@@ -1,0 +1,39 @@
+{
+  "$defs": {
+    "RefusedPath": {
+      "description": "A path that blocks worktree mode.",
+      "properties": {
+        "path": {
+          "description": "Repository-relative path.",
+          "type": "string"
+        },
+        "reason": {
+          "description": "`ignored`, `untracked` or `modified`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "reason"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/in-place.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Why an in-place run refused or stopped.",
+  "properties": {
+    "paths": {
+      "description": "The paths involved, with why (the code and the fixes are the\nenvelope's).",
+      "items": {
+        "$ref": "#/$defs/RefusedPath"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "paths"
+  ],
+  "title": "an in-place run's refusal or stop: the paths involved",
+  "type": "object"
+}

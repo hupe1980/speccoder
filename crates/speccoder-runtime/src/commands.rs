@@ -89,7 +89,7 @@ pub fn worktree_with(path: &Path, feature: Option<&str>, state: &Path) -> Comman
     let inspected = inspect(path, feature);
     let snapshot = match inspected.data() {
         Some(CommandData::Inspect(s)) => s.clone(),
-        _ => return CommandResult::new("worktree", inspected.status(), inspected.message()),
+        _ => return CommandResult::carried("worktree", &inspected),
     };
     let Some(f) = &snapshot.feature else {
         return CommandResult::new(
@@ -108,11 +108,15 @@ pub fn worktree_with(path: &Path, feature: Option<&str>, state: &Path) -> Comman
         base: None,
         created: false,
         refused_paths: Vec::new(),
-        hint: None,
     };
-    let refuse = |mut report: WorktreeReport, message: &str, hint: &str| {
-        report.hint = Some(hint.to_owned());
+    let refuse = |report: WorktreeReport, code: &str, message: &str, hint: &str| {
+        let mut fix = vec![format!("→ {hint}")];
+        if let Some(e) = speccoder_core::codes::lookup(code) {
+            fix.extend(speccoder_core::codes::fixes(e, "run", None, Some(&name)));
+        }
         CommandResult::new("worktree", CommandStatus::GitPrecondition, message)
+            .with_code(code)
+            .with_fix(fix)
             .with_data(CommandData::Worktree(report))
     };
 
@@ -122,11 +126,12 @@ pub fn worktree_with(path: &Path, feature: Option<&str>, state: &Path) -> Comman
         Ok(None) => {
             return refuse(
                 report,
+                "NO-REPOSITORY",
                 format.messages().not_in_git,
                 "run `git init` and commit the project",
             );
         }
-        Err(e) => return refuse(report, &e.0, "install git"),
+        Err(e) => return refuse(report, "GIT", &e.0, "install git"),
     };
     // The project root may be a subdirectory of the repository (monorepo).
     let rel = project.strip_prefix(&repo_root).unwrap_or(Path::new(""));
@@ -158,7 +163,7 @@ pub fn worktree_with(path: &Path, feature: Option<&str>, state: &Path) -> Comman
                 .into_iter()
                 .map(|(path, reason)| RefusedPath { path, reason })
                 .collect();
-            refuse(report, &r.message, &r.hint)
+            refuse(report, r.code, &r.message, &r.hint)
         }
     }
 }
@@ -172,7 +177,8 @@ pub fn propose(path: &Path, feature: Option<&str>, task: &str) -> CommandResult 
             "propose",
             CommandStatus::ConfigError,
             "no state directory (set SPECCODER_STATE_DIR or HOME)",
-        );
+        )
+        .with_code("NO-STATE-DIR");
     };
     // Validate everything that needs no key first: a wrong task or a missing
     // [model] is reported before a missing credential.
@@ -342,7 +348,8 @@ pub fn replay(path: &Path, run: &str) -> CommandResult {
             "replay",
             CommandStatus::ConfigError,
             "no state directory (set SPECCODER_STATE_DIR or HOME)",
-        );
+        )
+        .with_code("NO-STATE-DIR");
     };
     replay_with(path, run, &state)
 }

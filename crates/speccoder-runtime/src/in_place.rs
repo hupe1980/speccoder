@@ -76,7 +76,19 @@ impl InPlaceError {
         )
     }
 
-    /// The command's result: `error[CODE]: …` or `stopped[CODE]: …`.
+    /// One line naming the code, for a run report's reason and a saved
+    /// attempt: `stopped[INTENT-CHANGED]: … (specs/x/spec.md: changed)`.
+    #[must_use]
+    pub fn line(&self) -> String {
+        let word = if self.is_stop() { "stopped" } else { "error" };
+        let mut line = format!("{word}[{}]: {}", self.code, self.message);
+        for (p, why) in &self.paths {
+            line.push_str(&format!("; {p} ({why})"));
+        }
+        line
+    }
+
+    /// The command's result, its code and fixes on the envelope.
     #[must_use]
     pub fn result(&self, command: &str) -> CommandResult {
         let status = match self.code {
@@ -84,17 +96,10 @@ impl InPlaceError {
             _ if self.is_stop() => CommandStatus::NeedsHuman,
             _ => CommandStatus::GitPrecondition,
         };
-        let word = if self.is_stop() { "stopped" } else { "error" };
-        let mut message = format!("{word}[{}]: {}", self.code, self.message);
-        for (p, why) in &self.paths {
-            message.push_str(&format!("\n  {p}  ({why})"));
-        }
-        for (i, f) in self.fix.iter().enumerate() {
-            message.push_str(&format!("\n  {}: {f}", if i == 0 { "fix" } else { "or" }));
-        }
-        CommandResult::new(command, status, &message).with_data(CommandData::InPlace(Box::new(
-            InPlaceReport {
-                code: self.code.to_owned(),
+        CommandResult::new(command, status, &self.message)
+            .with_code(self.code)
+            .with_fix(self.fix.clone())
+            .with_data(CommandData::InPlace(Box::new(InPlaceReport {
                 paths: self
                     .paths
                     .iter()
@@ -103,9 +108,7 @@ impl InPlaceError {
                         reason: reason.clone(),
                     })
                     .collect(),
-                fix: self.fix.clone(),
-            },
-        )))
+            })))
     }
 }
 

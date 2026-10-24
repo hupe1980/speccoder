@@ -1,0 +1,88 @@
+{
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/converge.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Result of `speccoder converge`.",
+  "properties": {
+    "appended": {
+      "description": "Tasks speccoder appended, as `T0NN text`.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "commit": {
+      "description": "The commit on `speccoder/<feature>` holding the appended section.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "feature": {
+      "description": "Feature directory name.",
+      "type": "string"
+    },
+    "findings": {
+      "description": "Every finding as the model reported it (its claim, not evidence).",
+      "items": true,
+      "type": "array"
+    },
+    "hooks": {
+      "description": "Extension hooks run, offered or skipped around it.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "outcome": {
+      "description": "`converged`, `tasks_appended`, `needs_review` (only unrequested\nfindings), `no_progress`, `round_limit` or `failed`.",
+      "type": "string"
+    },
+    "repeated": {
+      "description": "Findings that repeat an earlier convergence task: no progress.",
+      "items": true,
+      "type": "array"
+    },
+    "round": {
+      "description": "This round's number (1 = the first Convergence phase).",
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "run_id": {
+      "description": "The agentplane run of the assessment, if one ran.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "tool_calls": {
+      "description": "Every tool call with the policy's decision.",
+      "items": true,
+      "type": "array"
+    },
+    "unrequested": {
+      "description": "`unrequested` findings: for a person, never turned into tasks.",
+      "items": true,
+      "type": "array"
+    },
+    "usage": {
+      "description": "Token usage of the assessment."
+    }
+  },
+  "required": [
+    "feature",
+    "run_id",
+    "round",
+    "outcome",
+    "findings",
+    "appended",
+    "unrequested",
+    "repeated",
+    "commit",
+    "usage",
+    "tool_calls",
+    "hooks"
+  ],
+  "title": "converge: the convergence round",
+  "type": "object"
+}

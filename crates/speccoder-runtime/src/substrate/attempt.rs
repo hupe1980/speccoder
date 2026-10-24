@@ -184,7 +184,12 @@ pub struct Attempt {
 /// output (`speccoder://verifier`); the settings list MCP tool descriptions
 /// (their servers).
 #[must_use]
-pub fn input(bundle: Value, settings: &Settings<'_>, digest: Option<&Value>) -> Tainted<Value> {
+pub fn input(
+    bundle: Value,
+    settings: &Settings<'_>,
+    digest: Option<&Value>,
+    instructions: &[crate::instructions::Instruction],
+) -> Tainted<Value> {
     let digest = match digest.filter(|d| !d.is_null()) {
         Some(d) => Tainted::with_label(d.clone(), provenance::from(provenance::VERIFIER)),
         None => Tainted::trusted(Value::Null),
@@ -223,6 +228,16 @@ pub fn input(bundle: Value, settings: &Settings<'_>, digest: Option<&Value>) -> 
         ("bundle", Tainted::trusted(bundle)),
         ("digest", digest),
         ("settings", settings),
+        // The repository's text, as if the model had read the files itself;
+        // none is no text, and no label.
+        (
+            "instructions",
+            if instructions.is_empty() {
+                Tainted::trusted(json!([]))
+            } else {
+                Tainted::with_label(json!(instructions), provenance::from(provenance::WORKTREE))
+            },
+        ),
     ])
 }
 
@@ -234,8 +249,9 @@ fn refusal(text: String, call: &agentplane::core::Label) -> Tainted<String> {
 }
 
 /// The parts of an attempt's input its messages quote.
-const MESSAGE_PARTS: [&str; 5] = [
+const MESSAGE_PARTS: [&str; 6] = [
     "/bundle",
+    "/instructions",
     "/digest",
     "/settings/nudges",
     "/settings/rejected",
@@ -451,6 +467,17 @@ impl Skill for Attempt {
                     &self::policy(self.format.wording()),
                     self.format,
                 );
+                let given: Vec<crate::instructions::Instruction> =
+                    serde_json::from_value(input["instructions"].clone()).unwrap_or_default();
+                if let Some(text) = crate::instructions::section(&given) {
+                    let (key, kind) = match style {
+                        PromptStyle::OpenAi => ("input", "input_text"),
+                        PromptStyle::Anthropic | PromptStyle::Chat => ("messages", "text"),
+                    };
+                    if let Some(content) = p[key][0]["content"].as_array_mut() {
+                        content.push(json!({ "type": kind, "text": text }));
+                    }
+                }
                 if !input["digest"].is_null() {
                     let (key, kind) = match style {
                         PromptStyle::OpenAi => ("input", "input_text"),
@@ -616,19 +643,44 @@ fn emit_with_tail(
 /// A person is needed for `asked`: the run tells whoever watches.
 fn needs_person(
     observer: Option<&(String, std::sync::Arc<dyn crate::progress::Progress>)>,
-    tool: &str,
-    arguments: &Value,
+    asked: &agentplane::model::ToolCall,
 ) {
     if let Some((task, p)) = observer {
+        let (tool, arguments) = (asked.name.as_str(), &asked.arguments);
         let target = crate::progress::target(tool, arguments);
         let what: String = format!("{tool} {target}")
             .chars()
             .filter(|c| !c.is_control())
             .take(60)
             .collect();
-        p.event(&crate::progress::Event::NeedsPerson {
+        p.event(&crate::progress::Event::ApprovalRequested {
             task: task.clone(),
+            call: asked.id.clone(),
+            tool: tool.to_owned(),
             what,
+            class: crate::tools::policy::Grant::of(tool, arguments)
+                .map(|g| g.describe())
+                .unwrap_or_default(),
+        });
+    }
+}
+
+/// A person decided `asked`: the run tells whoever watches.
+fn person_decided(
+    observer: Option<&(String, std::sync::Arc<dyn crate::progress::Progress>)>,
+    asked: &agentplane::model::ToolCall,
+    decision: &str,
+    scope: Option<&str>,
+    who: Option<&Who>,
+) {
+    if let Some((task, p)) = observer {
+        p.event(&crate::progress::Event::ApprovalDecided {
+            task: task.clone(),
+            call: asked.id.clone(),
+            decision: decision.to_owned(),
+            scope: scope.map(str::to_owned),
+            by: who.map_or_else(|| "nobody (expired)".to_owned(), |w| w.name.clone()),
+            how: who.map_or_else(|| "expired".to_owned(), |w| w.basis.clone()),
         });
     }
 }
@@ -941,7 +993,7 @@ pub(crate) async fn tool_loop(
                     claim: claim.clone(),
                     options: crate::approvals::options(risk, grant.is_some()),
                 };
-                needs_person(observer.as_ref(), &asked.name, &asked.arguments);
+                needs_person(observer.as_ref(), &asked);
                 let decided = wait_for_person(
                     cx,
                     asker,
@@ -954,6 +1006,17 @@ pub(crate) async fn tool_loop(
                 // Who decided, and how that is known, is journaled with it.
                 let approver = serde_json::to_value(&answer.by).unwrap_or(Value::Null);
                 let operator = read.by.as_ref().map(Who::view);
+                person_decided(
+                    observer.as_ref(),
+                    &asked,
+                    if answer.decision == Said::Approve {
+                        "approve"
+                    } else {
+                        "reject"
+                    },
+                    (answer.decision == Said::Approve).then(|| answer.scope.name()),
+                    read.by.as_ref().filter(|_| !read.expired),
+                );
                 match answer.decision {
                     Said::Approve => {
                         person = Some(json!({
@@ -1046,7 +1109,7 @@ pub(crate) async fn tool_loop(
                 Decision::Approval(reason) => {
                     let entry = json!({ "tool": asked.name, "arguments": asked.arguments, "decision": "approval", "reason": reason });
                     emit(observer.as_ref(), turn + 1, &entry);
-                    needs_person(observer.as_ref(), &asked.name, &asked.arguments);
+                    needs_person(observer.as_ref(), &asked);
                     log.push(entry);
                     return end(
                         "needs_approval",

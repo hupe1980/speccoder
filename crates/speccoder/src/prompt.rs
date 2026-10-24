@@ -37,8 +37,17 @@ pub fn describe(p: &Presentation, body: &[String]) -> String {
         " ".repeat(pad),
         risk_bar(&p.request.risk)
     );
+    let look = crate::style::err();
     for line in body {
-        out.push_str(&format!("  {line}\n"));
+        // A diff's added and removed lines, in their colours.
+        let painted = if line.starts_with('+') && !line.starts_with("+++") {
+            look.paint(crate::style::Token::DiffAdd, line)
+        } else if line.starts_with('-') && !line.starts_with("---") {
+            look.paint(crate::style::Token::DiffDel, line)
+        } else {
+            line.clone()
+        };
+        out.push_str(&format!("  {painted}\n"));
     }
     out.push_str(&format!("  Why stopped  {}\n", p.request.reason));
     out.push_str(&format!("  Sandbox      {}\n", p.sandbox));
@@ -49,11 +58,28 @@ pub fn describe(p: &Presentation, body: &[String]) -> String {
 }
 
 fn options(p: &Presentation) -> String {
+    let reader = crate::style::err().screen_reader;
     let mut out = String::new();
     for o in &p.options {
-        out.push_str(&format!("  {}. {:<66} ({})\n", o.number, o.label, o.key));
+        if reader {
+            out.push_str(&format!(
+                "choice {}: {} (or type {})\n",
+                o.number, o.label, o.key
+            ));
+        } else {
+            out.push_str(&format!("  {}. {:<66} ({})\n", o.number, o.label, o.key));
+        }
     }
     out
+}
+
+/// `text` as the stderr look wants it: ASCII symbols when asked.
+fn looked(text: String) -> String {
+    if crate::style::err().ascii {
+        crate::style::asciify(&text)
+    } else {
+        text
+    }
 }
 
 fn footer(p: &Presentation) -> String {
@@ -78,18 +104,27 @@ pub fn render(p: &Presentation) -> String {
     } else {
         String::new()
     };
-    format!(
-        "\n△ Approval needed — {}{title}{turn}\n{}{}",
-        r.task,
-        describe(p, &p.body),
-        options(p)
-    )
+    let look = crate::style::err();
+    if look.screen_reader {
+        return looked(format!(
+            "approval required: {}{title}{turn}\n{}risk: {}\n{}",
+            r.task,
+            describe(p, &p.body).replace("  ", " "),
+            r.risk,
+            options(p)
+        ));
+    }
+    let head = look.paint(
+        crate::style::Token::Attention,
+        &format!("△ Approval needed — {}{title}{turn}", r.task),
+    );
+    looked(format!("\n{head}\n{}{}", describe(p, &p.body), options(p)))
 }
 
 /// The whole body (`v`), then the choices again.
 #[must_use]
 pub fn render_full(p: &Presentation) -> String {
-    format!("\n{}{}", describe(p, &p.full), options(p))
+    looked(format!("\n{}{}", describe(p, &p.full), options(p)))
 }
 
 /// What a typed line means.

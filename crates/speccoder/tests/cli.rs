@@ -3,6 +3,8 @@
 // Test code: panicking on unexpected input is the failure report.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
+mod support;
+
 use assert_cmd::Command;
 
 fn speccoder() -> Command {
@@ -83,8 +85,8 @@ fn json_inspect_prints_one_versioned_object_with_the_snapshot() {
         .clone();
     let stdout = String::from_utf8(out.stdout).unwrap();
     assert_eq!(stdout.lines().count(), 1, "{stdout}");
-    let v: serde_json::Value = serde_json::from_str(&stdout).unwrap();
-    assert_eq!(v["schema_version"], 1);
+    let v: serde_json::Value = support::result(stdout.as_bytes());
+    assert_eq!(v["schema_version"], 2);
     assert_eq!(v["command"], "inspect");
     assert_eq!(v["status"], "ok");
     assert_eq!(v["exit_code"], 0);
@@ -101,7 +103,7 @@ fn error_diagnostics_exit_11() {
         .code(11)
         .get_output()
         .clone();
-    let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    let v: serde_json::Value = support::result(&out.stdout);
     assert_eq!(v["status"], "diagnostics_error");
 }
 
@@ -126,7 +128,7 @@ fn json_schedule_carries_states_and_blockers() {
         .success()
         .get_output()
         .clone();
-    let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    let v: serde_json::Value = support::result(&out.stdout);
     let t10 = &v["data"]["feature"]["schedule"]["tasks"][9];
     assert_eq!(t10["id"], "T010");
     assert_eq!(t10["state"], "blocked");
@@ -201,7 +203,7 @@ fn verify_reports_checks_and_exits_20_on_failure() {
         .code(20)
         .get_output()
         .clone();
-    let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    let v: serde_json::Value = support::result(&out.stdout);
     assert_eq!(v["status"], "verification_failed");
     assert_eq!(v["data"]["checks"][1]["status"], "failed");
 }
@@ -265,7 +267,7 @@ fn worktree_is_created_then_reused() {
             .get_output()
             .clone()
     };
-    let first: serde_json::Value = serde_json::from_slice(&run().stdout).unwrap();
+    let first: serde_json::Value = support::result(&run().stdout);
     assert_eq!(first["data"]["branch"], "speccoder/001-user-auth");
     assert_eq!(first["data"]["created"], true);
     let path = first["data"]["path"].as_str().unwrap().to_owned();
@@ -274,7 +276,7 @@ fn worktree_is_created_then_reused() {
             .join("specs/001-user-auth/tasks.md")
             .exists()
     );
-    let second: serde_json::Value = serde_json::from_slice(&run().stdout).unwrap();
+    let second: serde_json::Value = support::result(&run().stdout);
     assert_eq!(second["data"]["created"], false);
     assert_eq!(second["data"]["path"], path.as_str());
 }
@@ -336,7 +338,7 @@ fn propose_checks_task_and_config_before_the_key() {
     // Replay of a run that does not exist.
     let missing = "01JD0000000000000000000000";
     let out = run(&["--json", "replay", missing]);
-    let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    let v: serde_json::Value = support::result(&out.stdout);
     assert_eq!(v["data"]["result"], "not_found");
 }
 
@@ -350,7 +352,7 @@ fn outside_a_spec_kit_project_exit_10() {
         .code(10)
         .get_output()
         .clone();
-    let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    let v: serde_json::Value = support::result(&out.stdout);
     assert_eq!(v["status"], "not_a_project");
     assert!(v.get("data").is_none());
 }
@@ -459,7 +461,7 @@ fn a_format_is_chosen_by_flag_or_environment() {
             .code(10)
             .get_output()
             .clone();
-        let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+        let v: serde_json::Value = support::result(&out.stdout);
         assert_eq!(v["status"], "not_a_project", "{v}");
         assert!(
             v["message"]
@@ -485,7 +487,7 @@ fn a_format_is_chosen_by_flag_or_environment() {
         .code(10)
         .get_output()
         .clone();
-    let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    let v: serde_json::Value = support::result(&out.stdout);
     assert!(
         v["message"]
             .as_str()
@@ -493,4 +495,72 @@ fn a_format_is_chosen_by_flag_or_environment() {
             .starts_with("no OpenSpec project (openspec/)"),
         "{v}"
     );
+}
+
+/// Colour follows the flag, then the environment; machine output never has
+/// it (F-055, SC-002).
+#[test]
+fn escape_codes_appear_only_when_colour_is_wanted() {
+    let esc = |args: &[&str], env: &[(&str, &str)]| {
+        let mut cmd = speccoder();
+        cmd.env_remove("NO_COLOR")
+            .env_remove("FORCE_COLOR")
+            .env_remove("CLICOLOR_FORCE");
+        for (k, v) in env {
+            cmd.env(k, v);
+        }
+        let out = cmd.args(args).arg(fixture("valid")).output().unwrap();
+        out.stdout.contains(&0x1b) || out.stderr.contains(&0x1b)
+    };
+    assert!(!esc(&["inspect"], &[]), "piped: no colour");
+    assert!(
+        esc(&["--color", "always", "inspect"], &[]),
+        "forced by the flag"
+    );
+    assert!(
+        esc(&["inspect"], &[("FORCE_COLOR", "1")]),
+        "forced by the environment"
+    );
+    assert!(
+        !esc(&["inspect"], &[("FORCE_COLOR", "1"), ("NO_COLOR", "1")]),
+        "NO_COLOR wins"
+    );
+    assert!(
+        esc(&["--color", "always", "inspect"], &[("NO_COLOR", "1")]),
+        "the flag wins"
+    );
+    assert!(!esc(
+        &["inspect"],
+        &[("FORCE_COLOR", "1"), ("TERM", "dumb"), ("NO_COLOR", "x")]
+    ));
+    assert!(
+        !esc(&["--color", "always", "--json", "inspect"], &[]),
+        "never in --json"
+    );
+    assert!(
+        !esc(&["--color", "always", "--events", "inspect"], &[]),
+        "never in --events"
+    );
+}
+
+#[test]
+fn ascii_and_screen_reader_modes_change_symbols_not_facts() {
+    let run = |args: &[&str]| {
+        let out = speccoder()
+            .args(args)
+            .arg(fixture("valid"))
+            .output()
+            .unwrap();
+        String::from_utf8(out.stdout).unwrap()
+    };
+    let ascii = run(&["--ascii", "inspect"]);
+    assert!(ascii.is_ascii(), "{ascii}");
+    let reader = run(&["--screen-reader", "inspect"]);
+    assert!(
+        reader
+            .lines()
+            .any(|l| l.trim_start().starts_with("task: T001")),
+        "{reader}"
+    );
+    assert!(reader.is_ascii(), "{reader}");
 }

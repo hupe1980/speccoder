@@ -5,6 +5,8 @@
 // Test code: panicking on unexpected input is the failure report.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
+mod support;
+
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
@@ -143,8 +145,7 @@ fn a_killed_attempt_resumes_without_repeating_a_finished_command() {
 
     // 2. Run again: the attempt resumes and finishes.
     let second = run().wait_with_output().unwrap();
-    let out: Value = serde_json::from_slice(&second.stdout)
-        .unwrap_or_else(|_| panic!("{}", String::from_utf8_lossy(&second.stdout)));
+    let out: Value = support::result(&second.stdout);
     let report = &out["data"];
     assert_eq!(out["status"], "ok", "{out}");
     assert!(
@@ -282,7 +283,7 @@ fn a_command_killed_mid_run_is_not_guessed_about() {
     };
     drop(first);
     let second = run().wait_with_output().unwrap();
-    let out: Value = serde_json::from_slice(&second.stdout).unwrap();
+    let out: Value = support::result(&second.stdout);
     // A person decides: the command is not run again on a guess.
     assert_eq!(out["status"], "needs_human", "{out}");
     assert_eq!(out["data"]["attempt_status"], "interrupted");
@@ -298,7 +299,7 @@ fn a_command_killed_mid_run_is_not_guessed_about() {
     assert_eq!(String::from_utf8_lossy(&kept.stdout), "started\n");
     // The next run starts a fresh attempt (the mock answers it again).
     let third = run().wait_with_output().unwrap();
-    let out: Value = serde_json::from_slice(&third.stdout).unwrap();
+    let out: Value = support::result(&third.stdout);
     assert!(
         !out["data"]["notices"]
             .as_array()
@@ -389,7 +390,7 @@ fn a_finished_attempt_killed_before_its_tick_is_judged_and_ticked_on_the_next_ru
     std::thread::sleep(Duration::from_millis(500));
     drop(first);
     let second = run().wait_with_output().unwrap();
-    let out: Value = serde_json::from_slice(&second.stdout).unwrap();
+    let out: Value = support::result(&second.stdout);
     assert_eq!(out["status"], "ok", "{out}");
     assert_eq!(out["data"]["ticked"], true, "{out}");
     assert!(
@@ -499,8 +500,7 @@ fn speccoder(r: &Path, state: &Path, args: &[&str]) -> Command {
 }
 
 fn json_of(out: &std::process::Output) -> Value {
-    serde_json::from_slice(&out.stdout)
-        .unwrap_or_else(|_| panic!("{}", String::from_utf8_lossy(&out.stdout)))
+    support::result(&out.stdout)
 }
 
 #[test]
@@ -548,12 +548,7 @@ fn a_killed_in_place_attempt_resumes_and_returns_to_the_original_branch() {
         .output()
         .unwrap();
     assert_eq!(plain.status.code(), Some(14), "{}", json_of(&plain));
-    assert!(
-        json_of(&plain)["message"]
-            .as_str()
-            .unwrap()
-            .contains("IN-PLACE-SESSION")
-    );
+    assert_eq!(json_of(&plain)["code"], "IN-PLACE-SESSION");
 
     // 3. Run again in place: the attempt resumes, the command does not repeat.
     let second = speccoder(r, state.path(), &args).output().unwrap();

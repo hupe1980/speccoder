@@ -6,7 +6,7 @@
 use serde::Serialize;
 
 /// One step a person can take.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct NextStep {
     /// A copy-pasteable command (`"…"` marks text the person writes).
     pub command: String,

@@ -1,0 +1,39 @@
+{
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/propose.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Result of `speccoder propose`.",
+  "properties": {
+    "feature": {
+      "description": "Feature directory name.",
+      "type": "string"
+    },
+    "proposal": {
+      "description": "The structured proposal (`summary`, `steps`, `files`, `checks`, `risks`)."
+    },
+    "run_id": {
+      "description": "The agentplane run that holds the call.",
+      "type": "string"
+    },
+    "run_status": {
+      "description": "agentplane run status, e.g. `succeeded`.",
+      "type": "string"
+    },
+    "task": {
+      "description": "Task ID.",
+      "type": "string"
+    },
+    "usage": {
+      "description": "Token usage as the provider reported it."
+    }
+  },
+  "required": [
+    "run_id",
+    "feature",
+    "task",
+    "run_status",
+    "proposal",
+    "usage"
+  ],
+  "title": "propose: what the model proposes for a task",
+  "type": "object"
+}

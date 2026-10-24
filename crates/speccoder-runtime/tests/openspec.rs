@@ -477,7 +477,7 @@ fn archiving_waits_for_a_yes_and_commits_once() {
     let res = speccoder_runtime::next::attach(res, None);
     let json = serde_json::to_value(&res).unwrap();
     assert_eq!(
-        json["data"]["next"][1]["command"],
+        json["next"][1]["command"],
         format!("speccoder spec archive {CHANGE} --yes")
     );
     // A person says no: nothing changes.

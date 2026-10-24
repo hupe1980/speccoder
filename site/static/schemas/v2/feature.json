@@ -1,0 +1,897 @@
+{
+  "$defs": {
+    "CheckResult": {
+      "description": "One check run.",
+      "properties": {
+        "argv": {
+          "description": "The command, as run.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "duration_ms": {
+          "description": "Wall-clock duration.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "exit_code": {
+          "description": "Process exit code, if it exited.",
+          "format": "int32",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "flaky": {
+          "default": false,
+          "description": "It failed once and passed when run again: named, never trusted as\ntask evidence.",
+          "type": "boolean"
+        },
+        "junit": {
+          "description": "Whether the check declares a JUnit report.",
+          "type": "boolean"
+        },
+        "name": {
+          "description": "Name from `speccoder.toml`.",
+          "type": "string"
+        },
+        "note": {
+          "description": "Why the check was skipped, errored, or has no tests.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "$ref": "#/$defs/CheckStatus",
+          "description": "What happened."
+        },
+        "stderr_tail": {
+          "description": "Last part of stderr (lossy UTF-8).",
+          "type": "string"
+        },
+        "stdout_tail": {
+          "description": "Last part of stdout (lossy UTF-8).",
+          "type": "string"
+        },
+        "tests": {
+          "description": "Tests from the JUnit report, if one was declared and freshly written.",
+          "items": {
+            "$ref": "#/$defs/TestResult"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "truncated": {
+          "description": "Output exceeded the capture cap.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "argv",
+        "status",
+        "exit_code",
+        "duration_ms",
+        "junit",
+        "tests",
+        "stdout_tail",
+        "stderr_tail",
+        "truncated",
+        "note",
+        "flaky"
+      ],
+      "type": "object"
+    },
+    "CheckStatus": {
+      "description": "Outcome of one check.",
+      "oneOf": [
+        {
+          "const": "passed",
+          "description": "Exited 0.",
+          "type": "string"
+        },
+        {
+          "const": "failed",
+          "description": "Exited non-zero.",
+          "type": "string"
+        },
+        {
+          "const": "timed_out",
+          "description": "Killed at its deadline.",
+          "type": "string"
+        },
+        {
+          "const": "skipped",
+          "description": "Not applicable (its `when_exists` path is absent); not evidence of anything.",
+          "type": "string"
+        },
+        {
+          "const": "error",
+          "description": "Could not be run at all (e.g. command not found).",
+          "type": "string"
+        }
+      ]
+    },
+    "Comparison": {
+      "description": "What changed relative to a baseline (pass-to-pass).",
+      "properties": {
+        "count_after": {
+          "description": "Tests collected now.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "count_before": {
+          "description": "Tests collected in the baseline.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "failing_as_before": {
+          "description": "Checks failing now only because of tests that already failed in the baseline.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "new_tests": {
+          "description": "Tests not in the baseline.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "pre_existing": {
+          "description": "Tests failing in both runs.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "regressions": {
+          "description": "Tests that passed in the baseline and now fail or are missing.",
+          "items": {
+            "$ref": "#/$defs/Regression"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "regressions",
+        "pre_existing",
+        "new_tests",
+        "count_before",
+        "count_after",
+        "failing_as_before"
+      ],
+      "type": "object"
+    },
+    "ConvergeReport": {
+      "description": "Result of `speccoder converge`.",
+      "properties": {
+        "appended": {
+          "description": "Tasks speccoder appended, as `T0NN text`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "commit": {
+          "description": "The commit on `speccoder/<feature>` holding the appended section.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "feature": {
+          "description": "Feature directory name.",
+          "type": "string"
+        },
+        "findings": {
+          "description": "Every finding as the model reported it (its claim, not evidence).",
+          "items": true,
+          "type": "array"
+        },
+        "hooks": {
+          "description": "Extension hooks run, offered or skipped around it.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "outcome": {
+          "description": "`converged`, `tasks_appended`, `needs_review` (only unrequested\nfindings), `no_progress`, `round_limit` or `failed`.",
+          "type": "string"
+        },
+        "repeated": {
+          "description": "Findings that repeat an earlier convergence task: no progress.",
+          "items": true,
+          "type": "array"
+        },
+        "round": {
+          "description": "This round's number (1 = the first Convergence phase).",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "run_id": {
+          "description": "The agentplane run of the assessment, if one ran.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tool_calls": {
+          "description": "Every tool call with the policy's decision.",
+          "items": true,
+          "type": "array"
+        },
+        "unrequested": {
+          "description": "`unrequested` findings: for a person, never turned into tasks.",
+          "items": true,
+          "type": "array"
+        },
+        "usage": {
+          "description": "Token usage of the assessment."
+        }
+      },
+      "required": [
+        "feature",
+        "run_id",
+        "round",
+        "outcome",
+        "findings",
+        "appended",
+        "unrequested",
+        "repeated",
+        "commit",
+        "usage",
+        "tool_calls",
+        "hooks"
+      ],
+      "type": "object"
+    },
+    "Digest": {
+      "description": "What the next attempt is told about the previous one.",
+      "properties": {
+        "attempt": {
+          "description": "The attempt this digest describes (1-based).",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "checks": {
+          "description": "Checks that did not pass.",
+          "items": {
+            "$ref": "#/$defs/FailedCheck"
+          },
+          "type": "array"
+        },
+        "discarded": {
+          "description": "Paths the previous attempt changed; its changes were discarded.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "reasons": {
+          "description": "The verdict's reasons.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "attempt",
+        "reasons",
+        "checks",
+        "discarded"
+      ],
+      "type": "object"
+    },
+    "EarlierAttempt": {
+      "description": "A failed attempt that was undone and retried.",
+      "properties": {
+        "attempt_status": {
+          "description": "The attempt's status.",
+          "type": "string"
+        },
+        "digest": {
+          "$ref": "#/$defs/Digest",
+          "description": "What the next attempt was told."
+        },
+        "fingerprint": {
+          "description": "The failure's fingerprint.",
+          "type": "string"
+        },
+        "run_id": {
+          "description": "The agentplane run of the attempt.",
+          "type": "string"
+        },
+        "usage": {
+          "description": "Token usage of the attempt."
+        },
+        "verdict": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Verdict"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The verifier's verdict."
+        }
+      },
+      "required": [
+        "run_id",
+        "attempt_status",
+        "verdict",
+        "fingerprint",
+        "digest",
+        "usage"
+      ],
+      "type": "object"
+    },
+    "FailedCheck": {
+      "description": "One check that did not pass.",
+      "properties": {
+        "argv": {
+          "description": "The command, as run.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "excerpt": {
+          "description": "Output from the first error line on, capped.",
+          "type": "string"
+        },
+        "failing_tests": {
+          "description": "Failing test IDs, when the check reports tests.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "name": {
+          "description": "Name from `speccoder.toml` (or `acceptance`).",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/CheckStatus",
+          "description": "What happened."
+        }
+      },
+      "required": [
+        "name",
+        "argv",
+        "status",
+        "failing_tests",
+        "excerpt"
+      ],
+      "type": "object"
+    },
+    "FullTier": {
+      "description": "The `full` check tier at the end of a feature.",
+      "properties": {
+        "failed": {
+          "description": "The checks that failed.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "note": {
+          "description": "Why nothing ran, or the record could not be written.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "passed": {
+          "description": "Every check passed (or none applied).",
+          "type": "boolean"
+        },
+        "ran": {
+          "description": "The checks that ran.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "ran",
+        "passed",
+        "failed",
+        "note"
+      ],
+      "type": "object"
+    },
+    "InstructionFile": {
+      "description": "A repository instructions file given to an attempt.",
+      "properties": {
+        "bytes": {
+          "description": "Its size.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "cut": {
+          "description": "Cut to fit the instructions budget.",
+          "type": "boolean"
+        },
+        "path": {
+          "description": "Repository-relative path.",
+          "type": "string"
+        },
+        "sha256": {
+          "description": "sha256 of the file.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "sha256",
+        "bytes",
+        "cut"
+      ],
+      "type": "object"
+    },
+    "Regression": {
+      "description": "A test that passed in the baseline and no longer does.",
+      "properties": {
+        "id": {
+          "description": "`check/test`.",
+          "type": "string"
+        },
+        "now": {
+          "description": "`failed`, `skipped`, or `missing`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "now"
+      ],
+      "type": "object"
+    },
+    "RunReport": {
+      "description": "Result of `speccoder run`.",
+      "properties": {
+        "acceptance": {
+          "description": "Spec-derived acceptance tests: files, command, red/green, notes."
+        },
+        "attempt_status": {
+          "description": "`completed`, `blocked`, `needs_approval`, `budget_exhausted` or `failed`.",
+          "type": "string"
+        },
+        "attestation": {
+          "description": "What the tick's attestation came to: `{ state: signed | unsigned |\nmissing, signer, reason }` (F-061)."
+        },
+        "changes": {
+          "description": "Paths changed between the checkpoints: `added` / `modified` / `deleted`.",
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "type": "array"
+          },
+          "type": "array"
+        },
+        "commit": {
+          "description": "The commit on `speccoder/<feature>` holding the attempt and the tick.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "earlier": {
+          "description": "Earlier attempts at this task in this run, discarded and retried.",
+          "items": {
+            "$ref": "#/$defs/EarlierAttempt"
+          },
+          "type": "array"
+        },
+        "feature": {
+          "description": "Feature directory name.",
+          "type": "string"
+        },
+        "instructions": {
+          "description": "The repository's instructions the attempt was given (`AGENTS.md`,\nF-073), root first.",
+          "items": {
+            "$ref": "#/$defs/InstructionFile"
+          },
+          "type": "array"
+        },
+        "integrity": {
+          "description": "Integrity findings of the attempt's diff (each also fails the verdict).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "model_report": {
+          "description": "The model's own closing report — its claim, not the verdict."
+        },
+        "monitor": {
+          "description": "The gaming monitor's view of a passing attempt: `suspected`,\n`findings`, `usage` (or `error`). Never shown to the implementer."
+        },
+        "mutation": {
+          "description": "Mutation testing of the attempt's changes: `tool`, `caught`,\n`missed`, `timeout`, `unviable`, `survivors` (or `error`)."
+        },
+        "notices": {
+          "description": "Things a person should know that are not part of the verdict.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "pending": {
+          "description": "The call awaiting approval, if any."
+        },
+        "reason": {
+          "description": "Why the attempt stopped, when it did not complete.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "retry_stop": {
+          "description": "Why no further attempt was made after a failed one, if it failed.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "run_id": {
+          "description": "The agentplane run of the attempt.",
+          "type": "string"
+        },
+        "samples": {
+          "description": "Best-of-n: every sample's evidence and which one was kept.",
+          "items": true,
+          "type": "array"
+        },
+        "saved_attempt": {
+          "description": "The ref this attempt was saved under when it did not pass; the\nworktree went back to where it started.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "scope": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ScopeFinding"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Changes outside the paths the task names: reported, never gated."
+        },
+        "set_aside": {
+          "description": "The ref uncommitted leftovers were saved under before this run.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "task": {
+          "description": "Task ID.",
+          "type": "string"
+        },
+        "ticked": {
+          "description": "The engine ticked the task in the worktree's `tasks.md`.",
+          "type": "boolean"
+        },
+        "tool_calls": {
+          "description": "Every tool call with the policy's decision.",
+          "items": true,
+          "type": "array"
+        },
+        "usage": {
+          "description": "Token usage summed over the attempt's turns."
+        },
+        "verdict": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Verdict"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The verifier's verdict (only for completed attempts)."
+        },
+        "verification": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VerifyReport"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Checks after the attempt, compared with the baseline."
+        },
+        "worktree": {
+          "description": "The worktree the attempt worked in.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "run_id",
+        "feature",
+        "task",
+        "worktree",
+        "attempt_status",
+        "model_report",
+        "reason",
+        "pending",
+        "tool_calls",
+        "changes",
+        "verification",
+        "verdict",
+        "usage",
+        "integrity",
+        "ticked",
+        "commit",
+        "acceptance",
+        "earlier",
+        "retry_stop",
+        "saved_attempt",
+        "set_aside",
+        "notices",
+        "monitor",
+        "mutation",
+        "samples"
+      ],
+      "type": "object"
+    },
+    "ScopeFinding": {
+      "description": "What an attempt changed beyond the paths its task names.",
+      "properties": {
+        "named": {
+          "description": "The paths the task names.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "outside": {
+          "description": "Changed paths outside them.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "stated": {
+          "description": "The task names at least one path.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "stated",
+        "named",
+        "outside"
+      ],
+      "type": "object"
+    },
+    "TestOutcome": {
+      "description": "Outcome of one test from a JUnit report.",
+      "oneOf": [
+        {
+          "const": "passed",
+          "description": "Passed.",
+          "type": "string"
+        },
+        {
+          "const": "failed",
+          "description": "Failed (an assertion, a `<failure>` in JUnit).",
+          "type": "string"
+        },
+        {
+          "const": "skipped",
+          "description": "Skipped or ignored.",
+          "type": "string"
+        },
+        {
+          "const": "error",
+          "description": "Errored before or outside an assertion (a `<error>` in JUnit: setup,\ncollection, an unexpected exception).",
+          "type": "string"
+        }
+      ]
+    },
+    "TestResult": {
+      "description": "One test.",
+      "properties": {
+        "id": {
+          "description": "`classname::name`, or `name` when there is no class.",
+          "type": "string"
+        },
+        "outcome": {
+          "$ref": "#/$defs/TestOutcome",
+          "description": "What happened."
+        }
+      },
+      "required": [
+        "id",
+        "outcome"
+      ],
+      "type": "object"
+    },
+    "Verdict": {
+      "description": "How strong the evidence for a task is.",
+      "oneOf": [
+        {
+          "description": "A task-specific check produced evidence, nothing failed, nothing regressed.",
+          "properties": {
+            "verdict": {
+              "const": "verified",
+              "type": "string"
+            }
+          },
+          "required": [
+            "verdict"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Nothing failed or regressed, but nothing task-specific was established.",
+          "properties": {
+            "verdict": {
+              "const": "regression_only",
+              "type": "string"
+            }
+          },
+          "required": [
+            "verdict"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Something failed or regressed.",
+          "properties": {
+            "reasons": {
+              "description": "One line per reason.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "verdict": {
+              "const": "failed",
+              "type": "string"
+            }
+          },
+          "required": [
+            "verdict",
+            "reasons"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "VerifyReport": {
+      "description": "Everything one `verify` run established.",
+      "properties": {
+        "checks": {
+          "description": "One result per configured check, in configuration order.",
+          "items": {
+            "$ref": "#/$defs/CheckResult"
+          },
+          "type": "array"
+        },
+        "comparison": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Comparison"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Comparison with a baseline, if one was given."
+        },
+        "passed": {
+          "description": "Whether verification passed (see [`passes`]).",
+          "type": "boolean"
+        },
+        "root": {
+          "description": "Project root the checks ran in.",
+          "type": "string"
+        },
+        "tier": {
+          "description": "`fast` or `full`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "root",
+        "tier",
+        "checks",
+        "comparison",
+        "passed"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/feature.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Result of `speccoder run` without `--task`: a feature worked through.",
+  "properties": {
+    "attempts": {
+      "description": "Every attempt, in order.",
+      "items": {
+        "$ref": "#/$defs/RunReport"
+      },
+      "type": "array"
+    },
+    "converge": {
+      "description": "Convergence rounds between task runs (`run --converge`), in order.",
+      "items": {
+        "$ref": "#/$defs/ConvergeReport"
+      },
+      "type": "array"
+    },
+    "feature": {
+      "description": "Feature directory name.",
+      "type": "string"
+    },
+    "full_tier": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/FullTier"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "The `full` check tier, run once after the run ticked the last task."
+    },
+    "hooks": {
+      "description": "Extension hooks run, offered or skipped around it.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "parallel": {
+      "description": "What parallel groups did: merged, conflicts, re-verification.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "stop": {
+      "description": "Why the run stopped.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "feature",
+    "attempts",
+    "stop",
+    "converge",
+    "hooks",
+    "parallel"
+  ],
+  "title": "run: a feature run's attempts",
+  "type": "object"
+}

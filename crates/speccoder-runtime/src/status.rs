@@ -183,7 +183,7 @@ fn totals(tasks: &[TaskStatus]) -> StatusTotals {
 pub fn report(path: &Path, feature: Option<&str>) -> CommandResult {
     let inspected = crate::inspect(path, feature);
     let Some(CommandData::Inspect(snapshot)) = inspected.data() else {
-        return CommandResult::new("report", inspected.status(), inspected.message());
+        return CommandResult::carried("report", &inspected);
     };
     let format = crate::format::of(snapshot);
     let Some(f) = snapshot.feature.as_ref() else {

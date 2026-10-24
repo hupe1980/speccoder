@@ -97,17 +97,98 @@ pub fn path() -> Option<PathBuf> {
     .map(|base| base.join("speccoder").join("config.toml"))
 }
 
+/// How output looks (`[ui]`, F-055): values as written, checked here;
+/// unset is `None` (the renderer's default).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Ui {
+    /// `auto`, `dark`, `light`, `high-contrast`, `daltonized`, `mono`.
+    pub theme: Option<String>,
+    /// `auto`, `always`, `never`.
+    pub color: Option<String>,
+    /// ASCII glyphs and borders.
+    pub ascii: Option<bool>,
+    /// Screen-reader mode.
+    pub screen_reader: Option<bool>,
+}
+
+/// The person's settings.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Settings {
+    /// `[ui.notify]`.
+    pub notify: Notify,
+    /// `[ui]`.
+    pub ui: Ui,
+}
+
 /// The settings and a warning per value that was not understood (the
 /// default is used for it). A missing file is all defaults.
 #[must_use]
-pub fn load() -> (Notify, Vec<String>) {
-    match path() {
-        Some(p) => match std::fs::read_to_string(&p) {
-            Ok(text) => parse(&text, &p.display().to_string()),
-            Err(_) => (Notify::default(), Vec::new()),
-        },
-        None => (Notify::default(), Vec::new()),
+pub fn load() -> (Settings, Vec<String>) {
+    let Some(p) = path() else {
+        return (Settings::default(), Vec::new());
+    };
+    let Ok(text) = std::fs::read_to_string(&p) else {
+        return (Settings::default(), Vec::new());
+    };
+    let file = p.display().to_string();
+    let (notify, mut warnings) = parse(&text, &file);
+    let (ui, more) = parse_ui(&text, &file);
+    warnings.extend(more);
+    (Settings { notify, ui }, warnings)
+}
+
+const THEMES: [&str; 6] = [
+    "auto",
+    "dark",
+    "light",
+    "high-contrast",
+    "daltonized",
+    "mono",
+];
+
+/// `[ui]`'s look keys from `text` (`[ui.notify]` is [`parse`]'s).
+#[must_use]
+pub fn parse_ui(text: &str, file: &str) -> (Ui, Vec<String>) {
+    let mut ui = Ui::default();
+    let mut warnings = Vec::new();
+    let mut warn = |key: &str, why: &str| {
+        warnings.push(format!("warning: {file}: {key}: {why}; using the default"));
+    };
+    let Ok(table) = toml::from_str::<toml::Table>(text) else {
+        return (ui, warnings); // `parse` already said why
+    };
+    let Some(section) = table.get("ui").and_then(toml::Value::as_table) else {
+        return (ui, warnings);
+    };
+    for (key, value) in section {
+        match key.as_str() {
+            "notify" => {}
+            "theme" => match value.as_str().filter(|t| THEMES.contains(t)) {
+                Some(t) => ui.theme = Some(t.to_owned()),
+                None => warn(
+                    "ui.theme",
+                    &format!("expected one of {}", THEMES.join(", ")),
+                ),
+            },
+            "color" => match value
+                .as_str()
+                .filter(|c| ["auto", "always", "never"].contains(c))
+            {
+                Some(c) => ui.color = Some(c.to_owned()),
+                None => warn("ui.color", "expected auto, always or never"),
+            },
+            "ascii" => match value.as_bool() {
+                Some(b) => ui.ascii = Some(b),
+                None => warn("ui.ascii", "expected true or false"),
+            },
+            "screen_reader" => match value.as_bool() {
+                Some(b) => ui.screen_reader = Some(b),
+                None => warn("ui.screen_reader", "expected true or false"),
+            },
+            other => warn(&format!("ui.{other}"), "not a setting"),
+        }
     }
+    (ui, warnings)
 }
 
 /// [`load`] from `text`, naming `file` in warnings.
@@ -215,6 +296,25 @@ fn duration(text: &str) -> Option<Duration> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_look_is_read_and_bad_values_warn() {
+        let (ui, w) = parse_ui(
+            "[ui]\ntheme = \"daltonized\"\ncolor = \"never\"\nascii = true\nscreen_reader = true\n",
+            "c",
+        );
+        assert!(w.is_empty(), "{w:?}");
+        assert_eq!(ui.theme.as_deref(), Some("daltonized"));
+        assert_eq!(ui.color.as_deref(), Some("never"));
+        assert_eq!((ui.ascii, ui.screen_reader), (Some(true), Some(true)));
+        let (ui, w) = parse_ui(
+            "[ui]\ntheme = \"neon\"\nascii = \"yes\"\nsparkles = 1\n",
+            "c",
+        );
+        assert_eq!(ui, Ui::default());
+        assert_eq!(w.len(), 3, "{w:?}");
+        assert!(w[0].contains("ui.") && w.iter().any(|x| x.contains("ui.sparkles")));
+    }
 
     #[test]
     fn defaults_and_values() {

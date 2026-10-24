@@ -23,15 +23,94 @@ pub fn render(result: &CommandResult, json: bool) -> std::io::Result<()> {
 pub fn render_into(
     result: &CommandResult,
     json: bool,
-    mut out: &mut dyn Write,
+    out: &mut dyn Write,
     err: &mut dyn Write,
 ) -> std::io::Result<()> {
     if json {
         serde_json::to_writer(&mut *out, result)?;
         return writeln!(out);
     }
-    human_body(result, out, err)?;
-    human::next(&mut out, result.next())
+    // Rendered whole, then written: ASCII mode translates every symbol of
+    // every renderer in one place (F-055).
+    let (mut body, mut block) = (Vec::new(), Vec::new());
+    human_body(result, &mut body, &mut block)?;
+    let shown = code_block(result, &mut block)?;
+    let next: Vec<_> = result
+        .next()
+        .iter()
+        .filter(|s| !shown.contains(&s.command))
+        .cloned()
+        .collect();
+    human::next(&mut body, &next)?;
+    let write = |w: &mut dyn Write, bytes: Vec<u8>, ascii: bool| -> std::io::Result<()> {
+        let text = String::from_utf8_lossy(&bytes);
+        if ascii {
+            w.write_all(crate::style::asciify(&text).as_bytes())
+        } else {
+            w.write_all(text.as_bytes())
+        }
+    };
+    write(err, block, crate::style::err().ascii)?;
+    write(out, body, crate::style::out().ascii)
+}
+
+/// `error[CODE]: …` (or `stopped`, `warning`), why, `fix:` lines and
+/// `docs:` — on stderr; the fixes shown, so `Next:` does not repeat them.
+/// With a payload the report already said what happened, so the headline
+/// is the code's title; without one it is the message.
+fn code_block(result: &CommandResult, err: &mut dyn Write) -> std::io::Result<Vec<String>> {
+    let Some(code) = result.code() else {
+        return Ok(Vec::new());
+    };
+    use crate::style::Token;
+    let look = crate::style::err();
+    let fix = result.fix();
+    let prefix = code.kind.prefix();
+    let token = match code.kind {
+        speccoder_core::codes::Kind::Error => Token::Danger,
+        speccoder_core::codes::Kind::Stop => Token::Attention,
+        speccoder_core::codes::Kind::Warning => Token::Regression,
+    };
+    let reported = !matches!(result.data(), None | Some(CommandData::InPlace(_)));
+    let headline = if reported || result.message().is_empty() {
+        code.title
+    } else {
+        result.message()
+    };
+    if look.screen_reader {
+        writeln!(err, "{prefix}: {} — {headline}", code.name)?;
+        if headline != code.title {
+            writeln!(err, "why: {}", code.title)?;
+        }
+    } else {
+        writeln!(
+            err,
+            "{}: {headline}",
+            look.paint(token, &format!("{prefix}[{}]", code.name))
+        )?;
+        if headline != code.title {
+            writeln!(err, "  {}", code.title)?;
+        }
+    }
+    let indent = if look.screen_reader { "" } else { "  " };
+    if let Some(CommandData::InPlace(p)) = result.data() {
+        for r in &p.paths {
+            writeln!(err, "{indent}{}  ({})", r.path, r.reason)?;
+        }
+    }
+    for f in &fix {
+        let shown = match f.strip_prefix("→ ") {
+            Some(action) => action.to_owned(),
+            None => look.paint(Token::Accent, f),
+        };
+        writeln!(err, "{indent}fix: {shown}")?;
+    }
+    writeln!(
+        err,
+        "{indent}docs: {}",
+        look.paint(Token::Muted, &code.docs())
+    )?;
+    Ok(fix)
 }
 
 /// The human rendering of `result`, before its `Next:` block.
@@ -160,6 +239,33 @@ fn human_body(
             }
             writeln!(out, "{}", result.message())
         }
+        (_, Some(CommandData::Explain(e))) => {
+            for (i, c) in e.codes.iter().enumerate() {
+                if e.codes.len() > 1 {
+                    writeln!(out, "  {:<22} {}", c.code, c.title)?;
+                } else {
+                    if i > 0 {
+                        writeln!(out)?;
+                    }
+                    crate::explain::entry(out, c)?;
+                }
+            }
+            Ok(())
+        }
+        (_, Some(CommandData::Schema(k))) => match &k.schema {
+            // The schema is the content: pretty JSON, also in human mode.
+            Some(schema) => writeln!(
+                out,
+                "{}",
+                serde_json::to_string_pretty(schema).unwrap_or_default()
+            ),
+            None => {
+                for n in &k.names {
+                    writeln!(out, "  {:<12} {}", n.name, n.describes)?;
+                }
+                writeln!(out, "Published at {}", crate::schema::BASE)
+            }
+        },
         (_, Some(CommandData::Cost(c))) => human::cost(&mut out, c, result.message()),
         (_, Some(CommandData::Attest(a))) => human::attest(&mut out, a, result.message()),
         (_, Some(CommandData::Approvals(a))) => human::approvals(&mut out, a, result.message()),
@@ -178,19 +284,14 @@ fn human_body(
             )
         }
         (CommandStatus::Ok, Some(CommandData::Worktree(w))) => human::worktree(&mut out, w),
-        (_, Some(CommandData::Worktree(w))) => {
-            human::worktree_refused(&mut err, result.message(), w)
-        }
+        (_, Some(CommandData::Worktree(w))) => human::worktree_refused(&mut err, w),
         (CommandStatus::SelectionNeeded, Some(CommandData::Inspect(s))) => {
             human::selection_needed(&mut err, s)
         }
         (CommandStatus::Ok, None) => writeln!(&mut *out, "{}", result.message()),
-        _ => writeln!(
-            &mut *err,
-            "speccoder {}: {}",
-            result.command(),
-            result.message()
-        ),
+        // The code block says it (`error[CODE]: message`).
+        (_, None | Some(CommandData::InPlace(_))) => Ok(()),
+        _ => writeln!(&mut *err, "{}", result.message()),
     }
 }
 
@@ -211,7 +312,7 @@ mod next_tests {
         render_into(&result, true, &mut json_out, &mut err).unwrap_or_else(|e| panic!("{e}"));
         let json: serde_json::Value =
             serde_json::from_slice(&json_out).unwrap_or_else(|e| panic!("{e}"));
-        let commands: Vec<&str> = json["data"]["next"]
+        let commands: Vec<&str> = json["next"]
             .as_array()
             .into_iter()
             .flatten()
@@ -222,5 +323,243 @@ mod next_tests {
             assert!(human.contains(c), "{c} missing from: {human}");
         }
         assert!(human.contains("Next:  "), "{human}");
+    }
+}
+
+#[cfg(test)]
+mod look_tests {
+    use super::*;
+    use crate::style::{self, Look, Theme};
+    use speccoder_core::{StatusReport, StatusTotals, TaskStatus};
+
+    fn task(id: &str, state: &str, title: &str) -> TaskStatus {
+        TaskStatus {
+            id: id.to_owned(),
+            title: title.to_owned(),
+            phase: "Phase 2: User Story 1 - Login".to_owned(),
+            state: state.to_owned(),
+            intent_changed: false,
+            blocked_by: if state == "blocked" {
+                vec!["T001".to_owned()]
+            } else {
+                Vec::new()
+            },
+            commit: None,
+            run_id: None,
+            last_attempt: None,
+            note: None,
+            attestation: None,
+        }
+    }
+
+    fn report() -> CommandResult {
+        let long = "Handle Unicode input in the slug generator, including combining marks and wide characters such as 日本語";
+        let tasks = [
+            "verified",
+            "regression_only",
+            "attested",
+            "ticked_without_evidence",
+            "evidence_without_tick",
+            "skipped",
+            "ready",
+            "blocked",
+        ]
+        .iter()
+        .enumerate()
+        .map(|(i, s)| {
+            task(
+                &format!("T{:03}", i + 1),
+                s,
+                if i == 0 { long } else { "Add login" },
+            )
+        })
+        .collect();
+        let r = CommandResult::ok("report", "8 tasks").with_data(CommandData::Report(Box::new(
+            StatusReport {
+                feature: "001-x".to_owned(),
+                branch: Some("speccoder/001-x".to_owned()),
+                source: "branch".to_owned(),
+                unmerged_commits: 0,
+                tasks,
+                convergence: Vec::new(),
+                trace: Vec::new(),
+                totals: StatusTotals::default(),
+            },
+        )));
+        speccoder_runtime::next::attach(r, None)
+    }
+
+    fn failure() -> CommandResult {
+        speccoder_runtime::next::attach(
+            CommandResult::new("run", CommandStatus::NotAProject, "no project here"),
+            None,
+        )
+    }
+
+    fn render(look: Look, result: &CommandResult) -> (String, String) {
+        style::with(look, || {
+            let (mut out, mut err) = (Vec::new(), Vec::new());
+            render_into(result, false, &mut out, &mut err).unwrap();
+            (
+                String::from_utf8(out).unwrap(),
+                String::from_utf8(err).unwrap(),
+            )
+        })
+    }
+
+    #[test]
+    fn colour_never_changes_the_text_in_any_theme() {
+        for result in [report(), failure()] {
+            let plain = render(Look::PLAIN, &result);
+            assert!(!plain.0.contains('\u{1b}') && !plain.1.contains('\u{1b}'));
+            for theme in Theme::ALL {
+                let look = Look {
+                    color: true,
+                    theme,
+                    ..Look::PLAIN
+                };
+                let (out, err) = render(look, &result);
+                assert!(
+                    out.contains('\u{1b}') || err.contains('\u{1b}'),
+                    "{theme:?} painted nothing"
+                );
+                assert_eq!(style::strip(&out), plain.0, "{theme:?}");
+                assert_eq!(style::strip(&err), plain.1, "{theme:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn every_line_fits_the_terminal() {
+        for width in [60, 80, 160] {
+            let (out, _) = render(
+                Look {
+                    width,
+                    ..Look::PLAIN
+                },
+                &report(),
+            );
+            for line in out.lines().filter(|l| l.starts_with("  ")) {
+                assert!(
+                    style::width(line) <= width,
+                    "{width}: {line:?} ({})",
+                    style::width(line)
+                );
+            }
+            if width == 160 {
+                assert!(out.contains("wide characters such as 日本語"), "{out}");
+            } else {
+                assert!(out.contains('…'));
+            }
+        }
+    }
+
+    #[test]
+    fn ascii_leaves_no_symbol() {
+        let look = Look {
+            ascii: true,
+            ..Look::PLAIN
+        };
+        for result in [report(), failure()] {
+            let (out, err) = render(look, &result);
+            let symbols = |s: &str| {
+                s.chars()
+                    .filter(|c| "✓~A!?–·⧗◐✗△…→│─┌".contains(*c) && !c.is_ascii())
+                    .count()
+            };
+            assert_eq!(symbols(&out) + symbols(&err), 0, "{out}{err}");
+        }
+        let (out, _) = render(look, &report());
+        assert!(out.contains("[ok]") && out.contains("[..]"), "{out}");
+    }
+
+    #[test]
+    fn a_screen_reader_hears_labelled_lines() {
+        let look = Look {
+            screen_reader: true,
+            ascii: true,
+            ..Look::PLAIN
+        };
+        let (out, _) = render(look, &report());
+        let rows: Vec<&str> = out.lines().filter(|l| l.contains("T00")).collect();
+        assert_eq!(rows.len(), 8, "{out}");
+        assert!(rows.iter().all(|l| l.starts_with("task: ")), "{out}");
+        assert!(out.lines().any(|l| l.starts_with("phase: ")));
+        assert!(out.lines().any(|l| l.starts_with("next: ")), "{out}");
+        let (_, err) = render(look, &failure());
+        let lines: Vec<&str> = err.lines().collect();
+        assert!(lines[0].starts_with("error: NO-PROJECT - "), "{err}");
+        assert!(
+            lines.iter().skip(1).all(|l| ["why: ", "fix: ", "docs: "]
+                .iter()
+                .any(|p| l.starts_with(p))),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn progress_lines_for_a_screen_reader_start_with_a_label() {
+        use speccoder_core::stage::{Stage, StageState};
+        use speccoder_runtime::progress::Event;
+        let events = [
+            Event::TaskStarted {
+                feature: "f".into(),
+                task: "T1".into(),
+                title: "t".into(),
+            },
+            Event::Stage {
+                task: "T1".into(),
+                stage: Stage::Attempt,
+                state: StageState::Started,
+                detail: Some("1/2".into()),
+                elapsed_ms: None,
+                tail: Vec::new(),
+            },
+            Event::ToolCall {
+                task: "T1".into(),
+                turn: 1,
+                tool: "run_command".into(),
+                target: "cargo test".into(),
+                decision: "allow".into(),
+                ok: Some(true),
+                tail: Vec::new(),
+            },
+            Event::ApprovalRequested {
+                task: "T1".into(),
+                call: "c".into(),
+                tool: "run_command".into(),
+                what: "cargo add x".into(),
+                class: String::new(),
+            },
+            Event::TaskFinished {
+                task: "T1".into(),
+                outcome: "verified".into(),
+                message: "m".into(),
+                run: None,
+                input_tokens: 1,
+                output_tokens: 2,
+                cache_read_tokens: 0,
+                cache_write_tokens: 0,
+                usd: None,
+            },
+            Event::Notice { text: "n".into() },
+        ];
+        let labels = [
+            "task: ",
+            "stage: ",
+            "tool: ",
+            "approval required: ",
+            "usage: ",
+            "notice: ",
+        ];
+        for e in &events {
+            let lines = crate::progress::reader_lines(e, crate::progress::Verbosity::Normal);
+            assert!(!lines.is_empty(), "{e:?}");
+            for l in lines {
+                assert!(labels.iter().any(|p| l.starts_with(p)), "{l}");
+                // Screen-reader mode writes ASCII (the printer translates).
+                assert!(style::asciify(&l).is_ascii(), "{l}");
+            }
+        }
     }
 }

@@ -141,6 +141,54 @@ ticks a task only on evidence the model cannot produce or edit.
   `speccoder replay` re-derives a recorded run offline. Failed attempts are
   kept under `refs/speccoder/attempts/…`.
 
+**Repository instructions**
+
+- `AGENTS.md` reaches every attempt and the acceptance test author: one
+  file per directory from the repository root down to the directories the
+  task names, the nearest last (agents.md's "closest file wins"), at most
+  32 KiB (farther files cut, and said), labelled as repository text and
+  ranked below the task, the spec and the checks. The run summary and the
+  attestation name the files with their hashes; they are journaled, so a
+  replay needs none. `[context] instructions` sets the names
+  (`["AGENTS.md", "CLAUDE.md"]`) or turns it off (`[]`).
+
+**Look and accessibility**
+
+- Colour by meaning: each task state, error, stop and warning has its own
+  style, and every state keeps its word and mark — nothing is told by colour
+  alone. `--color`, then `[ui] color`, then `NO_COLOR`, `FORCE_COLOR` /
+  `CLICOLOR_FORCE`, `CLICOLOR=0`, `TERM=dumb`; never in `--json` or
+  `--events`; styling never changes the text.
+- Themes in your own settings: `auto` (your terminal's 16 colours), `dark`,
+  `light`, `high-contrast`, `daltonized`, `mono`; the dashboard follows them.
+- `--ascii` (also a non-UTF-8 locale): ASCII marks and plain borders.
+  Tables fit the terminal's width, measured by display width.
+- `--screen-reader` (`SPECCODER_SCREEN_READER`, `[ui] screen_reader`):
+  labelled plain lines, numbered choices, the report instead of the
+  dashboard. The project's `speccoder.toml` cannot set any of this.
+
+**Machine contract**
+
+- `--events` on every command: JSON Lines as the command works —
+  `session.started` (version and capabilities), tasks, stages, tool calls,
+  approvals requested and decided, usage, notices — ending in a `result`
+  line holding what `--json` prints; `seq` without gaps, RFC 3339 `ts`; a
+  reader that goes away does not break the run.
+- Result envelope v2: `code`, `fix`, `docs` and `next` beside the typed
+  `data`, and `payload` naming its schema. JSON Schemas (2020-12) for the
+  envelope, every payload and the event line are generated from the types
+  that print them, published under `/schemas/v2/` and checked by a test;
+  `speccoder schema [NAME]` prints them.
+- Every failure and stop names a code — `error[CODE]`, `stopped[CODE]`,
+  `warning[CODE]` — with copy-pasteable `fix:` lines and a docs link;
+  `speccoder explain CODE` explains it offline; the codes page is generated
+  from the catalog. Wrong arguments under `--json` or `--events` are a
+  result too, not clap's text.
+- `report --markdown`; in GitHub Actions `run` and `report` write the report
+  to the job summary (under GitHub's 1 MiB limit) and annotate tasks that
+  need a look (within GitHub's ten per kind, the rest counted). The model's
+  words never appear in either.
+
 **Attestations**
 
 - Every tick leaves signed in-toto statements in a git note
@@ -158,6 +206,9 @@ ticks a task only on evidence the model cannot produce or edit.
 - `report` shows each tick's attestation and traces the spec's requirements
   to the tasks citing them; acceptance tests name the scenarios they check.
   `pr` adds an Attestation column and pushes the notes, never forced.
+  Notes written at once — parallel lanes, two runs on one repository —
+  never lose each other (`git notes add` does not guard its ref; speccoder
+  holds a lock).
   `scripts/attest-interop.sh` checks a bundle with `ssh-keygen` and in-toto's
   Go library.
 

@@ -63,10 +63,22 @@ speccoder pr --yes --base main  # without asking
 
 ## CI and scripting
 
-Every command takes `--json` and prints exactly one object on stdout:
+Three contracts, all described by published [JSON Schemas](@/docs/cli.md#json-output):
 
-```json
-{ "schema_version": 1, "command": "run", "status": "ok", "message": "…", "exit_code": 0, "data": { … } }
+- `--json` prints one result object: status, exit code, a [code](@/docs/codes.md) with `fix` and `docs` when something is wrong, `next`, and the typed `data`.
+- `--events` streams the work as JSON Lines — tasks, stages, tool calls, approvals, usage — and ends in the same object; follow a 30-minute run as it happens ([events](@/docs/cli.md#events)).
+- Exit codes are stable ([CLI reference](@/docs/cli.md#exit-codes)); 23 always means "a person is needed".
+
+For unattended runs use `--no-prompt`: calls that need approval stop the task instead of waiting.
+
+### GitHub Actions
+
+Nothing to configure: under `GITHUB_ACTIONS=true`, `run` and `report` append the feature's report as Markdown to the job summary, and annotate tasks — a warning for `regression only` and suspected gaming, an error for failed and blocked tasks. GitHub shows ten annotations of a kind per step; speccoder stays inside that and adds a notice counting the rest, and keeps the summary under GitHub's 1 MiB limit by leaving out the least important sections (and saying so). The model's own words never appear in either.
+
+```yaml
+- run: speccoder run --no-prompt
+  env:
+    ANTHROPIC_API_KEY: …   # from the repository's secrets
 ```
 
-No progress lines are printed in JSON mode. Exit codes are stable and listed in the [CLI reference](@/docs/cli.md#exit-codes); 23 always means "a person is needed". For unattended runs use `--no-prompt`: calls that need approval stop the task instead of waiting.
+`speccoder report --markdown` prints the same Markdown anywhere — for a pull request comment or a chat.

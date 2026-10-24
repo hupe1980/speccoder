@@ -288,7 +288,7 @@ impl Progress for Attention {
         if let Ok(mut s) = self.state.lock() {
             s.last_event = Instant::now();
             s.stalled = false;
-            if !matches!(event, Event::NeedsPerson { .. }) {
+            if !matches!(event, Event::ApprovalRequested { .. }) {
                 s.waiting = false;
             }
         }
@@ -306,7 +306,7 @@ impl Progress for Attention {
                     stage.name().clone_into(&mut s.stage);
                 }
             }
-            Event::NeedsPerson { task, what } => {
+            Event::ApprovalRequested { task, what, .. } => {
                 let feature = self.state.lock().map(|mut s| {
                     s.waiting = true;
                     s.feature.clone()
@@ -462,8 +462,11 @@ mod tests {
     }
 
     fn needs() -> Event {
-        Event::NeedsPerson {
+        Event::ApprovalRequested {
             task: "T004".to_owned(),
+            call: "c1".to_owned(),
+            tool: "run_command".to_owned(),
+            class: String::new(),
             what: "cargo add x".to_owned(),
         }
     }

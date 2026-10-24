@@ -1,0 +1,4022 @@
+{
+  "$defs": {
+    "ApprovalView": {
+      "description": "A pending call as a person sees it: what, why, what it can reach, what\nthe model claimed, and what approving it grants.",
+      "properties": {
+        "body_lines": {
+          "description": "The diff, the file's head, the command or the arguments.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "claim": {
+          "description": "What the model said when it asked (a claim).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "description": "`write`, `edit`, `run`, `network` or `mcp`.",
+          "type": "string"
+        },
+        "risk": {
+          "description": "`low`, `medium` or `high`.",
+          "type": "string"
+        },
+        "sandbox": {
+          "description": "What the call can reach.",
+          "type": "string"
+        },
+        "scope": {
+          "description": "What `approve` grants: `for the rest of T004: this path, any content`.",
+          "type": "string"
+        },
+        "subject": {
+          "description": "The path, the whole command, or the MCP tool.",
+          "type": "string"
+        },
+        "title": {
+          "description": "`Edit this file?`, `Run this command?`, ….",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "title",
+        "subject",
+        "body_lines",
+        "sandbox",
+        "claim",
+        "risk",
+        "scope"
+      ],
+      "type": "object"
+    },
+    "ApprovalsReport": {
+      "description": "Result of `speccoder approvals`, `approve` and `reject`.",
+      "properties": {
+        "decided": {
+          "description": "Decisions recorded for the feature's tasks.",
+          "items": {
+            "$ref": "#/$defs/DecidedCall"
+          },
+          "type": "array"
+        },
+        "feature": {
+          "description": "Feature directory name.",
+          "type": "string"
+        },
+        "pending": {
+          "description": "Calls that stopped an open task and await a decision.",
+          "items": {
+            "$ref": "#/$defs/PendingCall"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "feature",
+        "pending",
+        "decided"
+      ],
+      "type": "object"
+    },
+    "ArchiveReport": {
+      "description": "Result of `speccoder spec archive` (an OpenSpec change).",
+      "properties": {
+        "archived_as": {
+          "description": "Where OpenSpec moved the change.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "change": {
+          "description": "The change.",
+          "type": "string"
+        },
+        "commit": {
+          "description": "The commit `archive <id>`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "confirmed_by": {
+          "description": "Who confirmed.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "diff": {
+          "description": "What archiving changes (`openspec show <id> --diff`), when shown.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "openspec_status": {
+          "description": "OpenSpec's own `{severity, code, message, fix}` from its last answer."
+        },
+        "stage": {
+          "description": "`probe`, `incomplete`, `unverified`, `awaiting_confirmation`,\n`declined`, `archived` or `failed`.",
+          "type": "string"
+        },
+        "totals": {
+          "description": "OpenSpec's counts of added, modified, removed and renamed requirements."
+        },
+        "unverified_tasks": {
+          "description": "Tasks ticked without a speccoder verdict commit.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "change",
+        "stage",
+        "openspec_status",
+        "unverified_tasks",
+        "diff",
+        "archived_as",
+        "totals",
+        "commit",
+        "confirmed_by"
+      ],
+      "type": "object"
+    },
+    "Artifacts": {
+      "description": "Presence of a feature's artifacts.",
+      "properties": {
+        "checklists": {
+          "description": "`checklists/`",
+          "type": "boolean"
+        },
+        "contracts": {
+          "description": "`contracts/`",
+          "type": "boolean"
+        },
+        "data_model": {
+          "description": "`data-model.md`",
+          "type": "boolean"
+        },
+        "plan": {
+          "description": "`plan.md`",
+          "type": "boolean"
+        },
+        "quickstart": {
+          "description": "`quickstart.md`",
+          "type": "boolean"
+        },
+        "research": {
+          "description": "`research.md`",
+          "type": "boolean"
+        },
+        "spec": {
+          "description": "`spec.md`",
+          "type": "boolean"
+        },
+        "tasks": {
+          "description": "`tasks.md`",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "spec",
+        "plan",
+        "tasks",
+        "research",
+        "data_model",
+        "contracts",
+        "quickstart",
+        "checklists"
+      ],
+      "type": "object"
+    },
+    "AttestReport": {
+      "description": "Result of `speccoder attest verify` and `attest sign`.",
+      "properties": {
+        "feature": {
+          "description": "Feature directory name.",
+          "type": "string"
+        },
+        "objects": {
+          "description": "One per object.",
+          "items": {
+            "$ref": "#/$defs/ObjectVerification"
+          },
+          "type": "array"
+        },
+        "totals": {
+          "additionalProperties": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "description": "Count per outcome word.",
+          "type": "object"
+        },
+        "trust": {
+          "description": "Where trust came from: the allowed-signers file, whether GPG's keyring\nwas used, the expected Sigstore identity."
+        }
+      },
+      "required": [
+        "feature",
+        "trust",
+        "objects",
+        "totals"
+      ],
+      "type": "object"
+    },
+    "BenchReport": {
+      "description": "Result of `speccoder bench import`.",
+      "properties": {
+        "imported": {
+          "description": "Instances turned into cases.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "out": {
+          "description": "The suite directory written.",
+          "type": "string"
+        },
+        "skipped": {
+          "description": "Instances not imported, with why.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "out",
+        "imported",
+        "skipped"
+      ],
+      "type": "object"
+    },
+    "CheckResult": {
+      "description": "One check run.",
+      "properties": {
+        "argv": {
+          "description": "The command, as run.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "duration_ms": {
+          "description": "Wall-clock duration.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "exit_code": {
+          "description": "Process exit code, if it exited.",
+          "format": "int32",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "flaky": {
+          "default": false,
+          "description": "It failed once and passed when run again: named, never trusted as\ntask evidence.",
+          "type": "boolean"
+        },
+        "junit": {
+          "description": "Whether the check declares a JUnit report.",
+          "type": "boolean"
+        },
+        "name": {
+          "description": "Name from `speccoder.toml`.",
+          "type": "string"
+        },
+        "note": {
+          "description": "Why the check was skipped, errored, or has no tests.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "$ref": "#/$defs/CheckStatus",
+          "description": "What happened."
+        },
+        "stderr_tail": {
+          "description": "Last part of stderr (lossy UTF-8).",
+          "type": "string"
+        },
+        "stdout_tail": {
+          "description": "Last part of stdout (lossy UTF-8).",
+          "type": "string"
+        },
+        "tests": {
+          "description": "Tests from the JUnit report, if one was declared and freshly written.",
+          "items": {
+            "$ref": "#/$defs/TestResult"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "truncated": {
+          "description": "Output exceeded the capture cap.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "argv",
+        "status",
+        "exit_code",
+        "duration_ms",
+        "junit",
+        "tests",
+        "stdout_tail",
+        "stderr_tail",
+        "truncated",
+        "note",
+        "flaky"
+      ],
+      "type": "object"
+    },
+    "CheckStatus": {
+      "description": "Outcome of one check.",
+      "oneOf": [
+        {
+          "const": "passed",
+          "description": "Exited 0.",
+          "type": "string"
+        },
+        {
+          "const": "failed",
+          "description": "Exited non-zero.",
+          "type": "string"
+        },
+        {
+          "const": "timed_out",
+          "description": "Killed at its deadline.",
+          "type": "string"
+        },
+        {
+          "const": "skipped",
+          "description": "Not applicable (its `when_exists` path is absent); not evidence of anything.",
+          "type": "string"
+        },
+        {
+          "const": "error",
+          "description": "Could not be run at all (e.g. command not found).",
+          "type": "string"
+        }
+      ]
+    },
+    "ChecklistStatus": {
+      "description": "One Spec Kit checklist (`specs/<feature>/checklists/*.md`).",
+      "properties": {
+        "done": {
+          "description": "Items checked.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "file": {
+          "description": "Path relative to the project root.",
+          "type": "string"
+        },
+        "open": {
+          "description": "Items not checked.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "total": {
+          "description": "Checklist items.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "file",
+        "total",
+        "done",
+        "open"
+      ],
+      "type": "object"
+    },
+    "CodeInfo": {
+      "description": "One code, as `explain` shows it.",
+      "properties": {
+        "code": {
+          "description": "`NEEDS-APPROVAL`.",
+          "type": "string"
+        },
+        "docs": {
+          "description": "Its section on the codes page.",
+          "type": "string"
+        },
+        "exit_code": {
+          "description": "Its exit code.",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "explain": {
+          "description": "What it means and why it happens.",
+          "type": "string"
+        },
+        "fix": {
+          "description": "How to resolve it (templates: `<task>`, `<feature>` are blanks).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "kind": {
+          "$ref": "#/$defs/Kind",
+          "description": "Error, stop or warning."
+        },
+        "status": {
+          "$ref": "#/$defs/CommandStatus",
+          "description": "The status results with this code have."
+        },
+        "title": {
+          "description": "One line.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "kind",
+        "status",
+        "exit_code",
+        "title",
+        "explain",
+        "fix",
+        "docs"
+      ],
+      "type": "object"
+    },
+    "CommandData": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ProjectSnapshot",
+          "description": "`inspect`: the project snapshot."
+        },
+        {
+          "$ref": "#/$defs/VerifyReport",
+          "description": "`verify`: the check results."
+        },
+        {
+          "$ref": "#/$defs/WorktreeReport",
+          "description": "`worktree`: where speccoder works, or why it won't."
+        },
+        {
+          "$ref": "#/$defs/ProposeReport",
+          "description": "`propose`: what the model proposes for one task (never executed)."
+        },
+        {
+          "$ref": "#/$defs/ReplayReport",
+          "description": "`replay`: whether a recorded run reproduces."
+        },
+        {
+          "$ref": "#/$defs/RunReport",
+          "description": "`run`: one attempt and its verdict."
+        },
+        {
+          "$ref": "#/$defs/EvalReport",
+          "description": "`eval`: a suite of judged attempts."
+        },
+        {
+          "$ref": "#/$defs/FeatureReport",
+          "description": "`run` without `--task`: a feature worked through."
+        },
+        {
+          "$ref": "#/$defs/ConvergeReport",
+          "description": "`converge`: a feature assessed against its artifacts."
+        },
+        {
+          "$ref": "#/$defs/StatusReport",
+          "description": "`report`: a feature's tasks and their evidence."
+        },
+        {
+          "$ref": "#/$defs/ApprovalsReport",
+          "description": "`approvals` / `approve` / `reject`: calls awaiting a person."
+        },
+        {
+          "$ref": "#/$defs/ControlReport",
+          "description": "`accept` / `skip` / `nudge`: a person's control over one task."
+        },
+        {
+          "$ref": "#/$defs/CostReport",
+          "description": "`cost`: tokens (and money, if priced) per task."
+        },
+        {
+          "$ref": "#/$defs/PrReport",
+          "description": "`speccoder pr`."
+        },
+        {
+          "$ref": "#/$defs/BenchReport",
+          "description": "`speccoder bench import`."
+        },
+        {
+          "$ref": "#/$defs/InitReport",
+          "description": "`init`: the configuration written."
+        },
+        {
+          "$ref": "#/$defs/SkillsReport",
+          "description": "`skill` without a name: the installed skills."
+        },
+        {
+          "$ref": "#/$defs/SkillRunReport",
+          "description": "`skill <name>`: a hosted skill's run."
+        },
+        {
+          "description": "`run` stopped by unfinished checklists.",
+          "items": {
+            "$ref": "#/$defs/ChecklistStatus"
+          },
+          "type": "array"
+        },
+        {
+          "$ref": "#/$defs/ArchiveReport",
+          "description": "`spec archive`: an OpenSpec change merged into the main specs."
+        },
+        {
+          "$ref": "#/$defs/InPlaceReport",
+          "description": "An in-place run refused or stopped (`DIRTY-CHECKOUT`, `INTENT-CHANGED`, …)."
+        },
+        {
+          "$ref": "#/$defs/AttestReport",
+          "description": "`attest verify` / `attest sign`: what each task's attestation says."
+        },
+        {
+          "$ref": "#/$defs/ExplainReport",
+          "description": "`explain`: catalog entries."
+        },
+        {
+          "$ref": "#/$defs/SchemaReport",
+          "description": "`schema`: the published schemas, or one of them."
+        }
+      ],
+      "description": "Command-specific payload of a result."
+    },
+    "CommandStatus": {
+      "description": "Outcome class of a command.",
+      "oneOf": [
+        {
+          "const": "ok",
+          "description": "The command succeeded.",
+          "type": "string"
+        },
+        {
+          "const": "usage_error",
+          "description": "The arguments were invalid.",
+          "type": "string"
+        },
+        {
+          "const": "error",
+          "description": "An unexpected internal failure.",
+          "type": "string"
+        },
+        {
+          "const": "not_a_project",
+          "description": "No Spec Kit project was found.",
+          "type": "string"
+        },
+        {
+          "const": "diagnostics_error",
+          "description": "The result contains error diagnostics.",
+          "type": "string"
+        },
+        {
+          "const": "selection_needed",
+          "description": "No feature could be selected.",
+          "type": "string"
+        },
+        {
+          "const": "config_error",
+          "description": "`speccoder.toml` is missing or invalid, or nothing applies.",
+          "type": "string"
+        },
+        {
+          "const": "verification_failed",
+          "description": "A check failed or a test regressed.",
+          "type": "string"
+        },
+        {
+          "const": "git_precondition",
+          "description": "A git precondition does not hold.",
+          "type": "string"
+        },
+        {
+          "const": "not_found",
+          "description": "No such task or run.",
+          "type": "string"
+        },
+        {
+          "const": "run_failed",
+          "description": "The model call or the run failed.",
+          "type": "string"
+        },
+        {
+          "const": "replay_diverged",
+          "description": "Strict replay did not reproduce the recorded run.",
+          "type": "string"
+        },
+        {
+          "const": "task_not_ready",
+          "description": "The task is done or blocked by open dependencies.",
+          "type": "string"
+        },
+        {
+          "const": "needs_human",
+          "description": "The attempt stopped for a person.",
+          "type": "string"
+        },
+        {
+          "const": "eval_failed",
+          "description": "An evaluation found a false completion or a cheat.",
+          "type": "string"
+        },
+        {
+          "const": "not_replayable",
+          "description": "The recorded run cannot be re-derived by this build.",
+          "type": "string"
+        },
+        {
+          "const": "attestation_failed",
+          "description": "An attestation is missing, unsigned where required, or does not hold.",
+          "type": "string"
+        }
+      ]
+    },
+    "Comparison": {
+      "description": "What changed relative to a baseline (pass-to-pass).",
+      "properties": {
+        "count_after": {
+          "description": "Tests collected now.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "count_before": {
+          "description": "Tests collected in the baseline.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "failing_as_before": {
+          "description": "Checks failing now only because of tests that already failed in the baseline.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "new_tests": {
+          "description": "Tests not in the baseline.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "pre_existing": {
+          "description": "Tests failing in both runs.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "regressions": {
+          "description": "Tests that passed in the baseline and now fail or are missing.",
+          "items": {
+            "$ref": "#/$defs/Regression"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "regressions",
+        "pre_existing",
+        "new_tests",
+        "count_before",
+        "count_after",
+        "failing_as_before"
+      ],
+      "type": "object"
+    },
+    "ConstitutionState": {
+      "description": "State of the project constitution.",
+      "oneOf": [
+        {
+          "const": "present",
+          "description": "Present and filled in.",
+          "type": "string"
+        },
+        {
+          "const": "unfilled",
+          "description": "Present but still the Spec Kit template.",
+          "type": "string"
+        },
+        {
+          "const": "absent",
+          "description": "Not present.",
+          "type": "string"
+        }
+      ]
+    },
+    "ControlReport": {
+      "description": "Result of `accept`, `skip` and `nudge`.",
+      "properties": {
+        "action": {
+          "description": "`accepted`, `skipped`, `unskipped`, `nudged` or `nudges_cleared`.",
+          "type": "string"
+        },
+        "feature": {
+          "description": "Feature directory name.",
+          "type": "string"
+        },
+        "record": {
+          "description": "The commit or ref that records it, when it lives in git.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "task": {
+          "description": "Task ID.",
+          "type": "string"
+        },
+        "text": {
+          "description": "The person's reason or note.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "feature",
+        "task",
+        "action",
+        "text",
+        "record"
+      ],
+      "type": "object"
+    },
+    "ConvergeReport": {
+      "description": "Result of `speccoder converge`.",
+      "properties": {
+        "appended": {
+          "description": "Tasks speccoder appended, as `T0NN text`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "commit": {
+          "description": "The commit on `speccoder/<feature>` holding the appended section.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "feature": {
+          "description": "Feature directory name.",
+          "type": "string"
+        },
+        "findings": {
+          "description": "Every finding as the model reported it (its claim, not evidence).",
+          "items": true,
+          "type": "array"
+        },
+        "hooks": {
+          "description": "Extension hooks run, offered or skipped around it.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "outcome": {
+          "description": "`converged`, `tasks_appended`, `needs_review` (only unrequested\nfindings), `no_progress`, `round_limit` or `failed`.",
+          "type": "string"
+        },
+        "repeated": {
+          "description": "Findings that repeat an earlier convergence task: no progress.",
+          "items": true,
+          "type": "array"
+        },
+        "round": {
+          "description": "This round's number (1 = the first Convergence phase).",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "run_id": {
+          "description": "The agentplane run of the assessment, if one ran.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tool_calls": {
+          "description": "Every tool call with the policy's decision.",
+          "items": true,
+          "type": "array"
+        },
+        "unrequested": {
+          "description": "`unrequested` findings: for a person, never turned into tasks.",
+          "items": true,
+          "type": "array"
+        },
+        "usage": {
+          "description": "Token usage of the assessment."
+        }
+      },
+      "required": [
+        "feature",
+        "run_id",
+        "round",
+        "outcome",
+        "findings",
+        "appended",
+        "unrequested",
+        "repeated",
+        "commit",
+        "usage",
+        "tool_calls",
+        "hooks"
+      ],
+      "type": "object"
+    },
+    "ConvergenceRound": {
+      "description": "One convergence round, from its commit.",
+      "properties": {
+        "commit": {
+          "description": "The commit that appended it.",
+          "type": "string"
+        },
+        "round": {
+          "description": "Round number.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "tasks": {
+          "description": "The appended tasks, as `T0NN text`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "round",
+        "commit",
+        "tasks"
+      ],
+      "type": "object"
+    },
+    "CostReport": {
+      "description": "Result of `speccoder cost`.",
+      "properties": {
+        "convergence": {
+          "$ref": "#/$defs/Usage",
+          "description": "Convergence assessments."
+        },
+        "feature": {
+          "description": "Feature directory name.",
+          "type": "string"
+        },
+        "priced_model": {
+          "description": "The model the prices apply to, when prices are configured.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tasks": {
+          "description": "Per task, every attempt counted (passed and saved).",
+          "items": {
+            "$ref": "#/$defs/TaskCost"
+          },
+          "type": "array"
+        },
+        "total": {
+          "$ref": "#/$defs/Usage",
+          "description": "Everything."
+        }
+      },
+      "required": [
+        "feature",
+        "tasks",
+        "convergence",
+        "total",
+        "priced_model"
+      ],
+      "type": "object"
+    },
+    "DecidedCall": {
+      "description": "A person's decision.",
+      "properties": {
+        "by": {
+          "description": "Who decided, as `name (via)`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "call": {
+          "description": "The waiting call it decided, when it was one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "covers": {
+          "description": "What it covers.",
+          "type": "string"
+        },
+        "decision": {
+          "description": "`approved` or `rejected`.",
+          "type": "string"
+        },
+        "expired": {
+          "description": "Nobody decided: the deadline passed and the call was denied.",
+          "type": "boolean"
+        },
+        "note": {
+          "description": "An approval's note to the model.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "operator": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OperatorView"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Who decided; `None` for an expiry."
+        },
+        "reason": {
+          "description": "The reason, for a rejection.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "scope": {
+          "description": "How far an approval reaches: `once`, `task` or `run`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "task": {
+          "description": "Task ID.",
+          "type": "string"
+        },
+        "via": {
+          "description": "Through what: `terminal`, `cli` or `editor <name>`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "task",
+        "decision",
+        "covers",
+        "reason",
+        "by",
+        "scope",
+        "note",
+        "call",
+        "operator",
+        "via",
+        "expired"
+      ],
+      "type": "object"
+    },
+    "DeltaRequirement": {
+      "description": "One requirement of a change's spec delta.",
+      "properties": {
+        "capability": {
+          "description": "The capability (`openspec/specs/<capability>/spec.md`).",
+          "type": "string"
+        },
+        "line": {
+          "description": "Its heading's line.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "name": {
+          "description": "The requirement's name (the new name for a rename).",
+          "type": "string"
+        },
+        "operation": {
+          "description": "`added`, `modified`, `removed` or `renamed`.",
+          "type": "string"
+        },
+        "path": {
+          "description": "The delta file, relative to the project root.",
+          "type": "string"
+        },
+        "scenarios": {
+          "description": "Its scenarios' names.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "capability",
+        "operation",
+        "name",
+        "scenarios",
+        "path",
+        "line"
+      ],
+      "type": "object"
+    },
+    "Dependency": {
+      "description": "One direct dependency.",
+      "properties": {
+        "id": {
+          "description": "The task depended on.",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/DependencyKind",
+          "description": "Where the edge comes from."
+        },
+        "missing": {
+          "description": "The ID does not exist in the task list.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "missing"
+      ],
+      "type": "object"
+    },
+    "DependencyKind": {
+      "description": "Origin of a dependency.",
+      "oneOf": [
+        {
+          "const": "structural",
+          "description": "From phase, subsection or `[P]` structure.",
+          "type": "string"
+        },
+        {
+          "const": "explicit",
+          "description": "Written in the task text.",
+          "type": "string"
+        }
+      ]
+    },
+    "DependencyMode": {
+      "description": "How dependencies within a phase are determined.",
+      "oneOf": [
+        {
+          "const": "structural",
+          "description": "Default template: subsections, `[P]` runs and document order, plus written references.",
+          "type": "string"
+        },
+        {
+          "const": "declared",
+          "description": "The Format line documents `(depends on …)`: written references are the\ncomplete order within a phase; only phase order is added.",
+          "type": "string"
+        },
+        {
+          "const": "chain",
+          "description": "A chain (OpenSpec): each group waits on every earlier group, each task\non the one before it in its group; written references are added.",
+          "type": "string"
+        }
+      ]
+    },
+    "Diagnostic": {
+      "description": "A problem found while discovering or parsing.",
+      "properties": {
+        "code": {
+          "description": "Stable code, e.g. `tasks.duplicate-id`.",
+          "type": "string"
+        },
+        "hint": {
+          "description": "What to do about it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "line": {
+          "description": "1-based line, if known.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "message": {
+          "description": "What is wrong.",
+          "type": "string"
+        },
+        "path": {
+          "description": "Workspace-relative file, if the problem is in one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "severity": {
+          "$ref": "#/$defs/Severity",
+          "description": "How serious it is."
+        }
+      },
+      "required": [
+        "severity",
+        "code",
+        "path",
+        "line",
+        "message",
+        "hint"
+      ],
+      "type": "object"
+    },
+    "Digest": {
+      "description": "What the next attempt is told about the previous one.",
+      "properties": {
+        "attempt": {
+          "description": "The attempt this digest describes (1-based).",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "checks": {
+          "description": "Checks that did not pass.",
+          "items": {
+            "$ref": "#/$defs/FailedCheck"
+          },
+          "type": "array"
+        },
+        "discarded": {
+          "description": "Paths the previous attempt changed; its changes were discarded.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "reasons": {
+          "description": "The verdict's reasons.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "attempt",
+        "reasons",
+        "checks",
+        "discarded"
+      ],
+      "type": "object"
+    },
+    "EarlierAttempt": {
+      "description": "A failed attempt that was undone and retried.",
+      "properties": {
+        "attempt_status": {
+          "description": "The attempt's status.",
+          "type": "string"
+        },
+        "digest": {
+          "$ref": "#/$defs/Digest",
+          "description": "What the next attempt was told."
+        },
+        "fingerprint": {
+          "description": "The failure's fingerprint.",
+          "type": "string"
+        },
+        "run_id": {
+          "description": "The agentplane run of the attempt.",
+          "type": "string"
+        },
+        "usage": {
+          "description": "Token usage of the attempt."
+        },
+        "verdict": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Verdict"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The verifier's verdict."
+        }
+      },
+      "required": [
+        "run_id",
+        "attempt_status",
+        "verdict",
+        "fingerprint",
+        "digest",
+        "usage"
+      ],
+      "type": "object"
+    },
+    "EvalCase": {
+      "description": "One judged case.",
+      "properties": {
+        "attempt_status": {
+          "description": "The attempt status.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "attempts": {
+          "description": "Attempts made at the task, retries included.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "classification": {
+          "description": "`correct`, `false_completion`, `not_completed`, `honest_stop`, `cheat`, `invalid_case` or `error`.",
+          "type": "string"
+        },
+        "expect": {
+          "description": "`complete` or `stop`.",
+          "type": "string"
+        },
+        "gap": {
+          "description": "An attempt passed the visible checks and failed the held-out tests.",
+          "type": "boolean"
+        },
+        "held_out": {
+          "description": "The held-out tests' part (`acceptance.held_out` of the run report)."
+        },
+        "model_said": {
+          "description": "The model's own closing report, or its reason for stopping.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "monitor_flagged": {
+          "description": "Whether the gaming monitor flagged the attempt, when it ran.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "name": {
+          "description": "Directory name.",
+          "type": "string"
+        },
+        "oracle_passed": {
+          "description": "Whether the held-out oracle passed (when it ran).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "outcome": {
+          "description": "The run's status word and message.",
+          "type": "string"
+        },
+        "replays": {
+          "description": "Whether the recorded attempt replays strictly from its journal\n; `None` when there is no journaled run (external executors).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "round": {
+          "description": "The round of a repeated suite run (1-based).",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "run_id": {
+          "description": "The attempt's run id, when one ran.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tool_calls": {
+          "description": "The attempt's tool calls with the policy's decisions.",
+          "items": true,
+          "type": "array"
+        },
+        "usage": {
+          "description": "Token usage of the attempt."
+        },
+        "verdict": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Verdict"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The verifier's verdict."
+        }
+      },
+      "required": [
+        "name",
+        "expect",
+        "classification",
+        "outcome",
+        "run_id",
+        "attempt_status",
+        "verdict",
+        "oracle_passed",
+        "usage",
+        "tool_calls",
+        "model_said",
+        "attempts",
+        "round",
+        "monitor_flagged",
+        "replays",
+        "held_out",
+        "gap"
+      ],
+      "type": "object"
+    },
+    "EvalReport": {
+      "description": "Result of `speccoder eval`.",
+      "properties": {
+        "cases": {
+          "description": "One entry per case, in name order.",
+          "items": {
+            "$ref": "#/$defs/EvalCase"
+          },
+          "type": "array"
+        },
+        "model": {
+          "description": "The model the suite ran with, `provider/model`.",
+          "type": "string"
+        },
+        "summary": {
+          "$ref": "#/$defs/EvalSummary",
+          "description": "Counts per classification."
+        }
+      },
+      "required": [
+        "model",
+        "cases",
+        "summary"
+      ],
+      "type": "object"
+    },
+    "EvalSummary": {
+      "description": "Suite counts and metrics.",
+      "properties": {
+        "cases": {
+          "description": "Cases run.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "caught": {
+          "description": "`expect = \"reject\"` cases that were not ticked.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "cheats": {
+          "description": "Impossible cases that finished with green checks.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "correct": {
+          "description": "Completed and right.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "false_completions": {
+          "description": "Completed with a passing verdict but wrong.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "held_out_gap": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HeldOutGap"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Attempts that passed visibly, and how many of them the held-out tests\nfailed (F-059); `None` when no held-out test ran."
+        },
+        "held_out_oracle": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HeldOutOracle"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Ticked cases whose held-out tests passed, against the oracle."
+        },
+        "honest_stops": {
+          "description": "Impossible cases that stopped for a person.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "invalid_or_error": {
+          "description": "Cases that could not be judged.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "monitor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MonitorScore"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "How well the gaming monitor did, when it ran on any case."
+        },
+        "not_completed": {
+          "description": "Possible cases that stopped or failed verification.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "precision": {
+          "description": "correct / (correct + false completions), when defined.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "replay_checked": {
+          "description": "Recorded attempts checked by strict replay, and how many replayed.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "replayed": {
+          "description": "Of those, the ones that replayed exactly.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "tokens_per_correct": {
+          "description": "Input + output tokens per correct case, when any.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "cases",
+        "correct",
+        "false_completions",
+        "not_completed",
+        "honest_stops",
+        "cheats",
+        "invalid_or_error",
+        "precision",
+        "tokens_per_correct",
+        "monitor",
+        "replay_checked",
+        "replayed",
+        "caught",
+        "held_out_gap",
+        "held_out_oracle"
+      ],
+      "type": "object"
+    },
+    "ExitCode": {
+      "description": "Process exit status of a command.\n\nReserved ranges: `10..=19` for discovery and diagnostic failures, `20..=29`\nfor run outcomes. Values outside the named constants and those ranges are\nnot used.",
+      "format": "uint8",
+      "maximum": 255,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "ExplainReport": {
+      "description": "Result of `speccoder explain`.",
+      "properties": {
+        "codes": {
+          "description": "The code asked for, or every code with `--list`.",
+          "items": {
+            "$ref": "#/$defs/CodeInfo"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "codes"
+      ],
+      "type": "object"
+    },
+    "FailedCheck": {
+      "description": "One check that did not pass.",
+      "properties": {
+        "argv": {
+          "description": "The command, as run.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "excerpt": {
+          "description": "Output from the first error line on, capped.",
+          "type": "string"
+        },
+        "failing_tests": {
+          "description": "Failing test IDs, when the check reports tests.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "name": {
+          "description": "Name from `speccoder.toml` (or `acceptance`).",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/CheckStatus",
+          "description": "What happened."
+        }
+      },
+      "required": [
+        "name",
+        "argv",
+        "status",
+        "failing_tests",
+        "excerpt"
+      ],
+      "type": "object"
+    },
+    "FeatureRef": {
+      "description": "A feature directory under `specs/`.",
+      "properties": {
+        "dir": {
+          "description": "Workspace-relative directory, e.g. `specs/002-speckit-inspect`.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Directory name, e.g. `002-speckit-inspect`.",
+          "type": "string"
+        },
+        "prefix": {
+          "description": "Numeric prefix as written, e.g. `002` or `20260319-143022`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "dir",
+        "name",
+        "prefix"
+      ],
+      "type": "object"
+    },
+    "FeatureReport": {
+      "description": "Result of `speccoder run` without `--task`: a feature worked through.",
+      "properties": {
+        "attempts": {
+          "description": "Every attempt, in order.",
+          "items": {
+            "$ref": "#/$defs/RunReport"
+          },
+          "type": "array"
+        },
+        "converge": {
+          "description": "Convergence rounds between task runs (`run --converge`), in order.",
+          "items": {
+            "$ref": "#/$defs/ConvergeReport"
+          },
+          "type": "array"
+        },
+        "feature": {
+          "description": "Feature directory name.",
+          "type": "string"
+        },
+        "full_tier": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FullTier"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The `full` check tier, run once after the run ticked the last task."
+        },
+        "hooks": {
+          "description": "Extension hooks run, offered or skipped around it.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "parallel": {
+          "description": "What parallel groups did: merged, conflicts, re-verification.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "stop": {
+          "description": "Why the run stopped.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "feature",
+        "attempts",
+        "stop",
+        "converge",
+        "hooks",
+        "parallel"
+      ],
+      "type": "object"
+    },
+    "FeatureSnapshot": {
+      "description": "The selected feature's artifacts and tasks.",
+      "properties": {
+        "artifacts": {
+          "$ref": "#/$defs/Artifacts",
+          "description": "Which artifacts exist."
+        },
+        "feature": {
+          "$ref": "#/$defs/FeatureRef",
+          "description": "The feature directory."
+        },
+        "schedule": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Schedule"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Dependencies and states of the tasks; present iff `tasks` is."
+        },
+        "tasks": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ParsedTasks"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The parsed task list, if `tasks.md` was readable."
+        }
+      },
+      "required": [
+        "feature",
+        "artifacts",
+        "tasks",
+        "schedule"
+      ],
+      "type": "object"
+    },
+    "FormatKind": {
+      "description": "A spec-driven format.",
+      "oneOf": [
+        {
+          "const": "speckit",
+          "description": "GitHub Spec Kit (`.specify/`, `specs/NNN-name/`).",
+          "type": "string"
+        },
+        {
+          "const": "openspec",
+          "description": "OpenSpec (`openspec/changes/<id>/`).",
+          "type": "string"
+        },
+        {
+          "const": "kiro",
+          "description": "Kiro and cc-sdd (`.kiro/specs/<name>/`).",
+          "type": "string"
+        }
+      ]
+    },
+    "FullTier": {
+      "description": "The `full` check tier at the end of a feature.",
+      "properties": {
+        "failed": {
+          "description": "The checks that failed.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "note": {
+          "description": "Why nothing ran, or the record could not be written.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "passed": {
+          "description": "Every check passed (or none applied).",
+          "type": "boolean"
+        },
+        "ran": {
+          "description": "The checks that ran.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "ran",
+        "passed",
+        "failed",
+        "note"
+      ],
+      "type": "object"
+    },
+    "HeldOutGap": {
+      "description": "Visible passes the held-out tests caught.",
+      "properties": {
+        "held_out_failed": {
+          "description": "Of those, the ones the held-out tests failed.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "rate": {
+          "description": "`held_out_failed / visible_passed`.",
+          "format": "double",
+          "type": "number"
+        },
+        "visible_passed": {
+          "description": "Attempts the held-out tests judged (they had passed visibly).",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "visible_passed",
+        "held_out_failed",
+        "rate"
+      ],
+      "type": "object"
+    },
+    "HeldOutOracle": {
+      "description": "Held-out passes the hidden oracle agreed with, or not.",
+      "properties": {
+        "agree": {
+          "description": "The oracle passed too.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "disagree": {
+          "description": "The oracle failed: the held-out tests missed something.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "agree",
+        "disagree"
+      ],
+      "type": "object"
+    },
+    "InPlaceReport": {
+      "description": "Why an in-place run refused or stopped.",
+      "properties": {
+        "paths": {
+          "description": "The paths involved, with why (the code and the fixes are the\nenvelope's).",
+          "items": {
+            "$ref": "#/$defs/RefusedPath"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "paths"
+      ],
+      "type": "object"
+    },
+    "InitCheck": {
+      "description": "One detected check.",
+      "properties": {
+        "argv": {
+          "description": "The command.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "name": {
+          "description": "`[checks.<name>]`.",
+          "type": "string"
+        },
+        "tier": {
+          "description": "`fast` or `full`.",
+          "type": "string"
+        },
+        "why": {
+          "description": "Why it was proposed.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "argv",
+        "tier",
+        "why"
+      ],
+      "type": "object"
+    },
+    "InitReport": {
+      "description": "Result of `speccoder init`.",
+      "properties": {
+        "checks": {
+          "description": "The checks it declares.",
+          "items": {
+            "$ref": "#/$defs/InitCheck"
+          },
+          "type": "array"
+        },
+        "model": {
+          "description": "`provider/model`.",
+          "type": "string"
+        },
+        "path": {
+          "description": "The configuration file.",
+          "type": "string"
+        },
+        "wrote": {
+          "description": "Files written, relative to the project root.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "path",
+        "checks",
+        "model",
+        "wrote"
+      ],
+      "type": "object"
+    },
+    "InstructionFile": {
+      "description": "A repository instructions file given to an attempt.",
+      "properties": {
+        "bytes": {
+          "description": "Its size.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "cut": {
+          "description": "Cut to fit the instructions budget.",
+          "type": "boolean"
+        },
+        "path": {
+          "description": "Repository-relative path.",
+          "type": "string"
+        },
+        "sha256": {
+          "description": "sha256 of the file.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "sha256",
+        "bytes",
+        "cut"
+      ],
+      "type": "object"
+    },
+    "Kind": {
+      "description": "How a code presents itself.",
+      "oneOf": [
+        {
+          "const": "error",
+          "description": "Something failed: `error[CODE]`.",
+          "type": "string"
+        },
+        {
+          "const": "stop",
+          "description": "The run waits for a person: `stopped[CODE]`.",
+          "type": "string"
+        },
+        {
+          "const": "warning",
+          "description": "It worked, with less than the full evidence: `warning[CODE]`.",
+          "type": "string"
+        }
+      ]
+    },
+    "LastAttempt": {
+      "description": "An attempt that did not pass, as saved under `refs/speccoder/attempts/`.",
+      "properties": {
+        "outcome": {
+          "description": "`verification_failed`, `blocked`, `needs_approval`, `not_demonstrated`, `interrupted`, …",
+          "type": "string"
+        },
+        "reason": {
+          "description": "Why.",
+          "type": "string"
+        },
+        "reference": {
+          "description": "The ref holding the attempt's tree.",
+          "type": "string"
+        },
+        "run_id": {
+          "description": "The agentplane run, when there was one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "outcome",
+        "reason",
+        "run_id",
+        "reference"
+      ],
+      "type": "object"
+    },
+    "MonitorScore": {
+      "description": "The gaming monitor against the oracle's ground truth: a positive is a\ncheat or a false completion (both passed the visible checks).",
+      "properties": {
+        "false_negatives": {
+          "description": "Not flagged but a cheat or false completion.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "false_positives": {
+          "description": "Flagged but correct.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "judged": {
+          "description": "Cases the monitor judged.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "precision": {
+          "description": "true / (true + false positives), when anything was flagged.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "recall": {
+          "description": "true positives / all positives, when there were any.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "true_positives": {
+          "description": "Flagged and really a cheat or false completion.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "judged",
+        "true_positives",
+        "false_positives",
+        "false_negatives",
+        "precision",
+        "recall"
+      ],
+      "type": "object"
+    },
+    "NextStep": {
+      "description": "One step a person can take.",
+      "properties": {
+        "command": {
+          "description": "A copy-pasteable command (`\"…\"` marks text the person writes).",
+          "type": "string"
+        },
+        "why": {
+          "description": "Why, in one short line.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "command",
+        "why"
+      ],
+      "type": "object"
+    },
+    "ObjectVerification": {
+      "description": "One task object's verification.",
+      "properties": {
+        "kind": {
+          "description": "`task` or `skip`.",
+          "type": "string"
+        },
+        "object": {
+          "description": "The commit (or skip record) id.",
+          "type": "string"
+        },
+        "outcome": {
+          "$ref": "#/$defs/VerifyOutcome",
+          "description": "The outcome."
+        },
+        "reasons": {
+          "description": "Every reason found.",
+          "items": {
+            "$ref": "#/$defs/VerifyReason"
+          },
+          "type": "array"
+        },
+        "same_tree_as": {
+          "description": "For a missing attestation: an attested commit with the same tree.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "signer": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SignerView"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Who signed, when signed."
+        },
+        "statements": {
+          "description": "How many statements the bundle holds.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "task": {
+          "description": "Task ID.",
+          "type": "string"
+        },
+        "verdict": {
+          "description": "The verdict the statements claim.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "object",
+        "kind",
+        "task",
+        "verdict",
+        "outcome",
+        "reasons",
+        "signer",
+        "statements",
+        "same_tree_as"
+      ],
+      "type": "object"
+    },
+    "OpenSpecMeta": {
+      "description": "What an OpenSpec project adds to its snapshot.",
+      "properties": {
+        "context": {
+          "description": "`context` of `openspec/config.yaml`, if any.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "requirements": {
+          "description": "The selected change's delta requirements, in file order.",
+          "items": {
+            "$ref": "#/$defs/DeltaRequirement"
+          },
+          "type": "array"
+        },
+        "schema": {
+          "description": "The workflow schema (`spec-driven` is the one speccoder runs).",
+          "type": "string"
+        },
+        "unit_kind": {
+          "description": "What a unit of work is called.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema",
+        "context",
+        "unit_kind",
+        "requirements"
+      ],
+      "type": "object"
+    },
+    "OperatorView": {
+      "description": "Who decided, and how speccoder knows the name.",
+      "properties": {
+        "actor": {
+          "description": "The name.",
+          "type": "string"
+        },
+        "basis": {
+          "description": "`asserted` (typed at a local terminal or the CLI) or `connected`\n(reported by a client over its connection, e.g. an editor).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "actor",
+        "basis"
+      ],
+      "type": "object"
+    },
+    "ParsedTasks": {
+      "description": "A parsed `tasks.md`.",
+      "properties": {
+        "dependency_mode": {
+          "$ref": "#/$defs/DependencyMode",
+          "description": "How dependencies within a phase are determined."
+        },
+        "path": {
+          "description": "Workspace-relative path of the file.",
+          "type": "string"
+        },
+        "phases": {
+          "description": "Level-2 headings, in document order.",
+          "items": {
+            "$ref": "#/$defs/Phase"
+          },
+          "type": "array"
+        },
+        "tasks": {
+          "description": "Tasks, in document order.",
+          "items": {
+            "$ref": "#/$defs/Task"
+          },
+          "type": "array"
+        },
+        "totals": {
+          "$ref": "#/$defs/Totals",
+          "description": "Counts over `tasks`."
+        }
+      },
+      "required": [
+        "path",
+        "phases",
+        "tasks",
+        "totals",
+        "dependency_mode"
+      ],
+      "type": "object"
+    },
+    "PendingCall": {
+      "description": "A call that stopped an attempt for approval, or a question, waiting for\na person.",
+      "properties": {
+        "arguments": {
+          "description": "Its arguments as the model sent them."
+        },
+        "call": {
+          "description": "The waiting call's id (`approve --call`); empty for a stopped attempt.",
+          "type": "string"
+        },
+        "covers": {
+          "description": "What a decision would cover, e.g. ``write `Cargo.toml` ``.",
+          "type": "string"
+        },
+        "deadline": {
+          "description": "Seconds since the epoch it is denied as expired at.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "kind": {
+          "description": "`approval` or `question`.",
+          "type": "string"
+        },
+        "presentation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ApprovalView"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The call as the inline prompt shows it (F-054)."
+        },
+        "question": {
+          "description": "A question's text.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reason": {
+          "description": "Why it needs approval.",
+          "type": "string"
+        },
+        "reference": {
+          "description": "The saved attempt.",
+          "type": "string"
+        },
+        "source": {
+          "description": "`task` (the attempt waits and resumes) or `attempt` (stopped and saved:\na lane, or before F-072).",
+          "type": "string"
+        },
+        "task": {
+          "description": "Task ID.",
+          "type": "string"
+        },
+        "tool": {
+          "description": "The tool.",
+          "type": "string"
+        },
+        "waiting_since": {
+          "description": "Seconds since the epoch the call has waited since.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "task",
+        "covers",
+        "tool",
+        "arguments",
+        "reason",
+        "reference",
+        "presentation",
+        "call",
+        "source",
+        "kind",
+        "question",
+        "waiting_since",
+        "deadline"
+      ],
+      "type": "object"
+    },
+    "Phase": {
+      "description": "A level-2 heading of `tasks.md`.",
+      "properties": {
+        "line": {
+          "description": "1-based line of the heading.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "section_hash": {
+          "description": "SHA-256 (hex) of the section, heading through the byte before the next phase.",
+          "type": "string"
+        },
+        "title": {
+          "description": "Heading text, e.g. `Phase 1: Setup`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "line",
+        "section_hash"
+      ],
+      "type": "object"
+    },
+    "PrReport": {
+      "description": "Result of `speccoder pr`: a draft pull request with the evidence.",
+      "properties": {
+        "base": {
+          "description": "The branch the pull request targets.",
+          "type": "string"
+        },
+        "body": {
+          "description": "Pull request body (Markdown): every task's evidence.",
+          "type": "string"
+        },
+        "branch": {
+          "description": "`speccoder/<feature>`.",
+          "type": "string"
+        },
+        "commands": {
+          "description": "What runs (or would run), in order.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "feature": {
+          "description": "Feature directory name.",
+          "type": "string"
+        },
+        "opened": {
+          "description": "Whether the branch was pushed and the draft opened (`false`: a dry run).",
+          "type": "boolean"
+        },
+        "remote": {
+          "description": "The git remote pushed to.",
+          "type": "string"
+        },
+        "title": {
+          "description": "Pull request title.",
+          "type": "string"
+        },
+        "url": {
+          "description": "The pull request, when opened.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "feature",
+        "branch",
+        "base",
+        "remote",
+        "title",
+        "body",
+        "commands",
+        "opened",
+        "url"
+      ],
+      "type": "object"
+    },
+    "ProjectSnapshot": {
+      "description": "Everything discovered about one Spec Kit project.",
+      "properties": {
+        "constitution": {
+          "$ref": "#/$defs/ConstitutionState",
+          "description": "State of `.specify/memory/constitution.md`."
+        },
+        "diagnostics": {
+          "description": "Problems found while discovering and parsing.",
+          "items": {
+            "$ref": "#/$defs/Diagnostic"
+          },
+          "type": "array"
+        },
+        "feature": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FeatureSnapshot"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The selected feature, if any."
+        },
+        "features": {
+          "description": "Feature directories, ordered by numeric prefix then name.",
+          "items": {
+            "$ref": "#/$defs/FeatureRef"
+          },
+          "type": "array"
+        },
+        "format": {
+          "$ref": "#/$defs/FormatKind",
+          "description": "The spec format (omitted for Spec Kit, the reference format)."
+        },
+        "openspec": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OpenSpecMeta"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What an OpenSpec project adds: its schema, context and the selected\nchange's requirements."
+        },
+        "root": {
+          "description": "Absolute, canonical project root (the directory containing `.specify/`).",
+          "type": "string"
+        },
+        "selection": {
+          "$ref": "#/$defs/Selection",
+          "description": "Which feature was selected, and why."
+        },
+        "speckit": {
+          "$ref": "#/$defs/SpeckitMeta",
+          "description": "Spec Kit metadata recorded in the project."
+        }
+      },
+      "required": [
+        "root",
+        "speckit",
+        "constitution",
+        "features",
+        "selection",
+        "feature",
+        "diagnostics"
+      ],
+      "type": "object"
+    },
+    "ProposeReport": {
+      "description": "Result of `speccoder propose`.",
+      "properties": {
+        "feature": {
+          "description": "Feature directory name.",
+          "type": "string"
+        },
+        "proposal": {
+          "description": "The structured proposal (`summary`, `steps`, `files`, `checks`, `risks`)."
+        },
+        "run_id": {
+          "description": "The agentplane run that holds the call.",
+          "type": "string"
+        },
+        "run_status": {
+          "description": "agentplane run status, e.g. `succeeded`.",
+          "type": "string"
+        },
+        "task": {
+          "description": "Task ID.",
+          "type": "string"
+        },
+        "usage": {
+          "description": "Token usage as the provider reported it."
+        }
+      },
+      "required": [
+        "run_id",
+        "feature",
+        "task",
+        "run_status",
+        "proposal",
+        "usage"
+      ],
+      "type": "object"
+    },
+    "RefusedPath": {
+      "description": "A path that blocks worktree mode.",
+      "properties": {
+        "path": {
+          "description": "Repository-relative path.",
+          "type": "string"
+        },
+        "reason": {
+          "description": "`ignored`, `untracked` or `modified`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "reason"
+      ],
+      "type": "object"
+    },
+    "Regression": {
+      "description": "A test that passed in the baseline and no longer does.",
+      "properties": {
+        "id": {
+          "description": "`check/test`.",
+          "type": "string"
+        },
+        "now": {
+          "description": "`failed`, `skipped`, or `missing`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "now"
+      ],
+      "type": "object"
+    },
+    "ReplayReport": {
+      "description": "Result of `speccoder replay`.",
+      "properties": {
+        "detail": {
+          "description": "What the replay said.",
+          "type": "string"
+        },
+        "result": {
+          "description": "`reproduced`, `diverged` or `not_found`.",
+          "type": "string"
+        },
+        "run_id": {
+          "description": "The replayed run.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "run_id",
+        "result",
+        "detail"
+      ],
+      "type": "object"
+    },
+    "RunReport": {
+      "description": "Result of `speccoder run`.",
+      "properties": {
+        "acceptance": {
+          "description": "Spec-derived acceptance tests: files, command, red/green, notes."
+        },
+        "attempt_status": {
+          "description": "`completed`, `blocked`, `needs_approval`, `budget_exhausted` or `failed`.",
+          "type": "string"
+        },
+        "attestation": {
+          "description": "What the tick's attestation came to: `{ state: signed | unsigned |\nmissing, signer, reason }` (F-061)."
+        },
+        "changes": {
+          "description": "Paths changed between the checkpoints: `added` / `modified` / `deleted`.",
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "type": "array"
+          },
+          "type": "array"
+        },
+        "commit": {
+          "description": "The commit on `speccoder/<feature>` holding the attempt and the tick.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "earlier": {
+          "description": "Earlier attempts at this task in this run, discarded and retried.",
+          "items": {
+            "$ref": "#/$defs/EarlierAttempt"
+          },
+          "type": "array"
+        },
+        "feature": {
+          "description": "Feature directory name.",
+          "type": "string"
+        },
+        "instructions": {
+          "description": "The repository's instructions the attempt was given (`AGENTS.md`,\nF-073), root first.",
+          "items": {
+            "$ref": "#/$defs/InstructionFile"
+          },
+          "type": "array"
+        },
+        "integrity": {
+          "description": "Integrity findings of the attempt's diff (each also fails the verdict).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "model_report": {
+          "description": "The model's own closing report — its claim, not the verdict."
+        },
+        "monitor": {
+          "description": "The gaming monitor's view of a passing attempt: `suspected`,\n`findings`, `usage` (or `error`). Never shown to the implementer."
+        },
+        "mutation": {
+          "description": "Mutation testing of the attempt's changes: `tool`, `caught`,\n`missed`, `timeout`, `unviable`, `survivors` (or `error`)."
+        },
+        "notices": {
+          "description": "Things a person should know that are not part of the verdict.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "pending": {
+          "description": "The call awaiting approval, if any."
+        },
+        "reason": {
+          "description": "Why the attempt stopped, when it did not complete.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "retry_stop": {
+          "description": "Why no further attempt was made after a failed one, if it failed.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "run_id": {
+          "description": "The agentplane run of the attempt.",
+          "type": "string"
+        },
+        "samples": {
+          "description": "Best-of-n: every sample's evidence and which one was kept.",
+          "items": true,
+          "type": "array"
+        },
+        "saved_attempt": {
+          "description": "The ref this attempt was saved under when it did not pass; the\nworktree went back to where it started.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "scope": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ScopeFinding"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Changes outside the paths the task names: reported, never gated."
+        },
+        "set_aside": {
+          "description": "The ref uncommitted leftovers were saved under before this run.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "task": {
+          "description": "Task ID.",
+          "type": "string"
+        },
+        "ticked": {
+          "description": "The engine ticked the task in the worktree's `tasks.md`.",
+          "type": "boolean"
+        },
+        "tool_calls": {
+          "description": "Every tool call with the policy's decision.",
+          "items": true,
+          "type": "array"
+        },
+        "usage": {
+          "description": "Token usage summed over the attempt's turns."
+        },
+        "verdict": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Verdict"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The verifier's verdict (only for completed attempts)."
+        },
+        "verification": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VerifyReport"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Checks after the attempt, compared with the baseline."
+        },
+        "worktree": {
+          "description": "The worktree the attempt worked in.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "run_id",
+        "feature",
+        "task",
+        "worktree",
+        "attempt_status",
+        "model_report",
+        "reason",
+        "pending",
+        "tool_calls",
+        "changes",
+        "verification",
+        "verdict",
+        "usage",
+        "integrity",
+        "ticked",
+        "commit",
+        "acceptance",
+        "earlier",
+        "retry_stop",
+        "saved_attempt",
+        "set_aside",
+        "notices",
+        "monitor",
+        "mutation",
+        "samples"
+      ],
+      "type": "object"
+    },
+    "Schedule": {
+      "description": "Which tasks can start now, and what blocks the rest.",
+      "properties": {
+        "tasks": {
+          "description": "One entry per task, in document order.",
+          "items": {
+            "$ref": "#/$defs/ScheduledTask"
+          },
+          "type": "array"
+        },
+        "totals": {
+          "$ref": "#/$defs/ScheduleTotals",
+          "description": "Counts over `tasks`."
+        }
+      },
+      "required": [
+        "tasks",
+        "totals"
+      ],
+      "type": "object"
+    },
+    "ScheduleTotals": {
+      "description": "Schedule counts.",
+      "properties": {
+        "blocked": {
+          "description": "Tasks waiting on something.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "done": {
+          "description": "Ticked tasks.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "ready": {
+          "description": "Tasks that can start now.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "done",
+        "ready",
+        "blocked"
+      ],
+      "type": "object"
+    },
+    "ScheduledTask": {
+      "description": "A task's dependencies and state.",
+      "properties": {
+        "blocked_by": {
+          "description": "Open, missing or cyclic dependencies, in document order.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "depends_on": {
+          "description": "Direct dependencies.",
+          "items": {
+            "$ref": "#/$defs/Dependency"
+          },
+          "type": "array"
+        },
+        "id": {
+          "description": "Task ID.",
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/$defs/TaskState",
+          "description": "Done, ready or blocked."
+        }
+      },
+      "required": [
+        "id",
+        "state",
+        "depends_on",
+        "blocked_by"
+      ],
+      "type": "object"
+    },
+    "SchemaName": {
+      "description": "One published schema.",
+      "properties": {
+        "describes": {
+          "description": "What it describes.",
+          "type": "string"
+        },
+        "name": {
+          "description": "`result`, `event`, `run`, …",
+          "type": "string"
+        },
+        "url": {
+          "description": "Where it is published.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "describes",
+        "url"
+      ],
+      "type": "object"
+    },
+    "SchemaReport": {
+      "description": "Result of `speccoder schema`.",
+      "properties": {
+        "names": {
+          "description": "Every schema speccoder publishes.",
+          "items": {
+            "$ref": "#/$defs/SchemaName"
+          },
+          "type": "array"
+        },
+        "schema": {
+          "description": "The schema asked for."
+        }
+      },
+      "required": [
+        "names",
+        "schema"
+      ],
+      "type": "object"
+    },
+    "ScopeFinding": {
+      "description": "What an attempt changed beyond the paths its task names.",
+      "properties": {
+        "named": {
+          "description": "The paths the task names.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "outside": {
+          "description": "Changed paths outside them.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "stated": {
+          "description": "The task names at least one path.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "stated",
+        "named",
+        "outside"
+      ],
+      "type": "object"
+    },
+    "Selection": {
+      "description": "How the feature was selected.",
+      "properties": {
+        "feature": {
+          "description": "Name of the selected feature.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reason": {
+          "$ref": "#/$defs/SelectionReason",
+          "description": "Why this feature (or none) was selected."
+        }
+      },
+      "required": [
+        "reason",
+        "feature"
+      ],
+      "type": "object"
+    },
+    "SelectionReason": {
+      "description": "Why a feature was selected.",
+      "oneOf": [
+        {
+          "const": "argument",
+          "description": "Named on the command line.",
+          "type": "string"
+        },
+        {
+          "const": "environment",
+          "description": "From the `SPECIFY_FEATURE_DIRECTORY` environment variable.",
+          "type": "string"
+        },
+        {
+          "const": "recorded",
+          "description": "Recorded in `.specify/feature.json`.",
+          "type": "string"
+        },
+        {
+          "const": "only_feature",
+          "description": "The project has exactly one feature.",
+          "type": "string"
+        },
+        {
+          "const": "none",
+          "description": "Nothing was selected.",
+          "type": "string"
+        }
+      ]
+    },
+    "Severity": {
+      "description": "Diagnostic severity.",
+      "oneOf": [
+        {
+          "const": "error",
+          "description": "Unsafe to act on.",
+          "type": "string"
+        },
+        {
+          "const": "warning",
+          "description": "Suspicious but usable.",
+          "type": "string"
+        },
+        {
+          "const": "info",
+          "description": "For information.",
+          "type": "string"
+        }
+      ]
+    },
+    "SignerView": {
+      "description": "Who signed.",
+      "properties": {
+        "keyid": {
+          "description": "The key's fingerprint (`SHA256:…`, an OpenPGP fingerprint).",
+          "type": "string"
+        },
+        "kind": {
+          "description": "`ssh`, `openpgp` or `sigstore`.",
+          "type": "string"
+        },
+        "principal": {
+          "description": "The principal the verifier's trust input names for it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "keyid"
+      ],
+      "type": "object"
+    },
+    "SkillEntry": {
+      "description": "One installed Agent Skill.",
+      "properties": {
+        "description": {
+          "description": "What it does.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Its name.",
+          "type": "string"
+        },
+        "path": {
+          "description": "The `SKILL.md`.",
+          "type": "string"
+        },
+        "refused": {
+          "description": "Why speccoder does not host it, if it does not.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "description",
+        "path",
+        "refused"
+      ],
+      "type": "object"
+    },
+    "SkillRunReport": {
+      "description": "Result of `speccoder skill <name>`.",
+      "properties": {
+        "changes": {
+          "description": "Paths changed in the checkout: `added` / `modified` / `deleted`.",
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "type": "array"
+          },
+          "type": "array"
+        },
+        "hooks": {
+          "description": "Extension hooks run, offered or skipped around it.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "pending": {
+          "description": "The call awaiting approval, if any."
+        },
+        "questions": {
+          "description": "Questions it could not get answered.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "reason": {
+          "description": "Why it stopped, when it did not complete.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "run_id": {
+          "description": "The agentplane run.",
+          "type": "string"
+        },
+        "skill": {
+          "description": "The skill.",
+          "type": "string"
+        },
+        "status": {
+          "description": "`completed`, `incomplete`, `needs_approval`, `blocked`, `denied`, `budget_exhausted` or `failed`.",
+          "type": "string"
+        },
+        "summary": {
+          "description": "The model's summary.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tool_calls": {
+          "description": "Every tool call with the policy's decision.",
+          "items": true,
+          "type": "array"
+        },
+        "usage": {
+          "description": "Token usage."
+        }
+      },
+      "required": [
+        "skill",
+        "run_id",
+        "status",
+        "summary",
+        "questions",
+        "changes",
+        "tool_calls",
+        "pending",
+        "reason",
+        "usage",
+        "hooks"
+      ],
+      "type": "object"
+    },
+    "SkillsReport": {
+      "description": "Result of `speccoder skill` without a name.",
+      "properties": {
+        "skills": {
+          "description": "Installed skills by name.",
+          "items": {
+            "$ref": "#/$defs/SkillEntry"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "skills"
+      ],
+      "type": "object"
+    },
+    "SpeckitMeta": {
+      "description": "Spec Kit metadata from `.specify/*.json`; each field is `None` when absent.",
+      "properties": {
+        "current_feature": {
+          "description": "`feature_directory` from `feature.json`, as recorded.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "feature_numbering": {
+          "description": "`sequential` or `timestamp`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "integration": {
+          "description": "The coding-agent integration, e.g. `claude`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "script": {
+          "description": "Script flavour, e.g. `sh`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "version": {
+          "description": "`speckit_version` from `init-options.json`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "version",
+        "integration",
+        "script",
+        "feature_numbering",
+        "current_feature"
+      ],
+      "type": "object"
+    },
+    "StatusReport": {
+      "description": "Result of `speccoder report`: what the branch's history shows.",
+      "properties": {
+        "branch": {
+          "description": "`speccoder/<feature>`, if speccoder has worked on the feature.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "convergence": {
+          "description": "Convergence rounds, oldest first.",
+          "items": {
+            "$ref": "#/$defs/ConvergenceRound"
+          },
+          "type": "array"
+        },
+        "feature": {
+          "description": "Feature directory name.",
+          "type": "string"
+        },
+        "source": {
+          "description": "Where `tasks.md` was read: `branch` or `checkout`.",
+          "type": "string"
+        },
+        "tasks": {
+          "description": "Every task, in document order.",
+          "items": {
+            "$ref": "#/$defs/TaskStatus"
+          },
+          "type": "array"
+        },
+        "totals": {
+          "$ref": "#/$defs/StatusTotals",
+          "description": "Counts by evidence."
+        },
+        "trace": {
+          "description": "Requirement → task → verdict, in the spec's order; a requirement no\ntask cites is a row without a task.",
+          "items": {
+            "$ref": "#/$defs/TraceRow"
+          },
+          "type": "array"
+        },
+        "unmerged_commits": {
+          "description": "Commits on the branch that the checkout's HEAD does not contain.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "feature",
+        "branch",
+        "source",
+        "unmerged_commits",
+        "tasks",
+        "convergence",
+        "trace",
+        "totals"
+      ],
+      "type": "object"
+    },
+    "StatusTotals": {
+      "description": "Counts of [`TaskStatus::state`].",
+      "properties": {
+        "attested": {
+          "description": "Ticked by `speccoder accept`: a person's attestation, not evidence.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "blocked": {
+          "description": "Open and blocked.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "evidence_without_tick": {
+          "description": "In place: committed by speccoder, the local tick missing.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "ready": {
+          "description": "Open and ready.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "regression_only": {
+          "description": "Ticked with regression evidence only.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "skipped": {
+          "description": "Open and skipped by a person.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "ticked_without_evidence": {
+          "description": "Ticked without a speccoder commit (by a person, or before speccoder).",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "verified": {
+          "description": "Ticked with task-specific evidence.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "without_attestation": {
+          "description": "Ticks speccoder committed without an attestation.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "verified",
+        "regression_only",
+        "ticked_without_evidence",
+        "evidence_without_tick",
+        "without_attestation",
+        "attested",
+        "skipped",
+        "ready",
+        "blocked"
+      ],
+      "type": "object"
+    },
+    "Task": {
+      "description": "One task line of `tasks.md`, as written.",
+      "properties": {
+        "byte_range": {
+          "description": "Byte range `[start, end)` of the list item in the file.",
+          "items": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        },
+        "depends_on": {
+          "description": "Task IDs named after `depends on` / `after` in the text, in order.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "done": {
+          "description": "`[x]` or `[X]`.",
+          "type": "boolean"
+        },
+        "id": {
+          "description": "Task ID, e.g. `T014`.",
+          "type": "string"
+        },
+        "line": {
+          "description": "1-based line.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "line_hash": {
+          "description": "SHA-256 (hex) of the task's line, without its line ending.",
+          "type": "string"
+        },
+        "parallel": {
+          "description": "Carries the `[P]` marker.",
+          "type": "boolean"
+        },
+        "phase": {
+          "description": "Enclosing level-2 heading.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "story": {
+          "description": "Story label without brackets, e.g. `US1`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "subsection": {
+          "description": "Enclosing level-3 heading within the phase.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "description": "Text after the ID and markers.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "done",
+        "parallel",
+        "story",
+        "title",
+        "depends_on",
+        "phase",
+        "subsection",
+        "line",
+        "byte_range",
+        "line_hash"
+      ],
+      "type": "object"
+    },
+    "TaskCost": {
+      "description": "One task's cost.",
+      "properties": {
+        "attempts": {
+          "description": "Attempts recorded in git (the passing commit and saved attempts).",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "task": {
+          "description": "Task ID.",
+          "type": "string"
+        },
+        "usage": {
+          "$ref": "#/$defs/Usage",
+          "description": "Tokens and money."
+        }
+      },
+      "required": [
+        "task",
+        "attempts",
+        "usage"
+      ],
+      "type": "object"
+    },
+    "TaskState": {
+      "description": "Whether a task can start.",
+      "oneOf": [
+        {
+          "const": "done",
+          "description": "Ticked in `tasks.md`.",
+          "type": "string"
+        },
+        {
+          "const": "ready",
+          "description": "Open, and every dependency is done.",
+          "type": "string"
+        },
+        {
+          "const": "blocked",
+          "description": "Open, and some dependency is open, missing or part of a cycle.",
+          "type": "string"
+        }
+      ]
+    },
+    "TaskStatus": {
+      "description": "One task and its evidence.",
+      "properties": {
+        "attestation": {
+          "description": "For a task speccoder committed: its attestation as the note says,\nsignatures unchecked — `signed <kind> <keyid>`, `unsigned` or\n`missing` (F-061; `attest verify` checks them).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "blocked_by": {
+          "description": "Open dependencies of a blocked task.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "commit": {
+          "description": "The speccoder commit that ticked it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "description": "Task ID.",
+          "type": "string"
+        },
+        "intent_changed": {
+          "description": "In place: the spec, plan or constitution changed since this task's\nevidence was committed (its `Intent-Digest` differs from now).",
+          "type": "boolean"
+        },
+        "last_attempt": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LastAttempt"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "For an open task: its latest saved attempt."
+        },
+        "note": {
+          "description": "The reason a person gave for `accept` or `skip`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "phase": {
+          "description": "Enclosing phase heading.",
+          "type": "string"
+        },
+        "run_id": {
+          "description": "The agentplane run of that attempt.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "state": {
+          "description": "`verified`, `regression_only` (ticked by speccoder with that verdict),\n`attested` (ticked by `speccoder accept`), `ticked_without_evidence`\n(ticked, no speccoder commit), `evidence_without_tick` (in place: a\nverdict commit names the task, its local tick is missing),\n`skipped`, `ready` or `blocked`.",
+          "type": "string"
+        },
+        "title": {
+          "description": "Title after markers.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "phase",
+        "state",
+        "intent_changed",
+        "attestation",
+        "blocked_by",
+        "commit",
+        "run_id",
+        "last_attempt",
+        "note"
+      ],
+      "type": "object"
+    },
+    "TestOutcome": {
+      "description": "Outcome of one test from a JUnit report.",
+      "oneOf": [
+        {
+          "const": "passed",
+          "description": "Passed.",
+          "type": "string"
+        },
+        {
+          "const": "failed",
+          "description": "Failed (an assertion, a `<failure>` in JUnit).",
+          "type": "string"
+        },
+        {
+          "const": "skipped",
+          "description": "Skipped or ignored.",
+          "type": "string"
+        },
+        {
+          "const": "error",
+          "description": "Errored before or outside an assertion (a `<error>` in JUnit: setup,\ncollection, an unexpected exception).",
+          "type": "string"
+        }
+      ]
+    },
+    "TestResult": {
+      "description": "One test.",
+      "properties": {
+        "id": {
+          "description": "`classname::name`, or `name` when there is no class.",
+          "type": "string"
+        },
+        "outcome": {
+          "$ref": "#/$defs/TestOutcome",
+          "description": "What happened."
+        }
+      },
+      "required": [
+        "id",
+        "outcome"
+      ],
+      "type": "object"
+    },
+    "Totals": {
+      "description": "Task counts.",
+      "properties": {
+        "done": {
+          "description": "Ticked tasks.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "open": {
+          "description": "Unticked tasks.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "total": {
+          "description": "All tasks.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "total",
+        "done",
+        "open"
+      ],
+      "type": "object"
+    },
+    "TraceRow": {
+      "description": "One row of the requirement → scenario → test → verdict matrix.",
+      "properties": {
+        "requirement": {
+          "description": "`FR-001`, `SC-002`.",
+          "type": "string"
+        },
+        "scenario": {
+          "description": "`US1.2`: story 1, acceptance scenario 2.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "task": {
+          "description": "The task that cites it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "test": {
+          "description": "The acceptance test.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "verdict": {
+          "description": "That task's verdict.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "requirement",
+        "scenario",
+        "test",
+        "task",
+        "verdict"
+      ],
+      "type": "object"
+    },
+    "Usage": {
+      "description": "Token counts, and USD when prices are configured.",
+      "properties": {
+        "cache_read_tokens": {
+          "description": "Input tokens read from the cache.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "cache_write_tokens": {
+          "description": "Tokens written to the cache.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "input_tokens": {
+          "description": "Input tokens (including those read from the cache).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "output_tokens": {
+          "description": "Output tokens.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "usd": {
+          "description": "USD, when `[model]` has prices.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "input_tokens",
+        "output_tokens",
+        "cache_read_tokens",
+        "cache_write_tokens",
+        "usd"
+      ],
+      "type": "object"
+    },
+    "Verdict": {
+      "description": "How strong the evidence for a task is.",
+      "oneOf": [
+        {
+          "description": "A task-specific check produced evidence, nothing failed, nothing regressed.",
+          "properties": {
+            "verdict": {
+              "const": "verified",
+              "type": "string"
+            }
+          },
+          "required": [
+            "verdict"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Nothing failed or regressed, but nothing task-specific was established.",
+          "properties": {
+            "verdict": {
+              "const": "regression_only",
+              "type": "string"
+            }
+          },
+          "required": [
+            "verdict"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Something failed or regressed.",
+          "properties": {
+            "reasons": {
+              "description": "One line per reason.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "verdict": {
+              "const": "failed",
+              "type": "string"
+            }
+          },
+          "required": [
+            "verdict",
+            "reasons"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "VerifyOutcome": {
+      "description": "What `attest verify` found for one task object (F-061).",
+      "oneOf": [
+        {
+          "const": "ok",
+          "description": "Every line parses, every signature verifies against the trust input,\nand every statement agrees with the commit.",
+          "type": "string"
+        },
+        {
+          "const": "unsigned",
+          "description": "The statements hold but are not signed.",
+          "type": "string"
+        },
+        {
+          "const": "missing",
+          "description": "No speccoder attestation on the object.",
+          "type": "string"
+        },
+        {
+          "const": "bad_signature",
+          "description": "A signature does not verify.",
+          "type": "string"
+        },
+        {
+          "const": "untrusted_signer",
+          "description": "A signature verifies, but its key is not trusted by the verifier.",
+          "type": "string"
+        },
+        {
+          "const": "mismatch",
+          "description": "A statement disagrees with the commit, its trailers, the spec or the bundle.",
+          "type": "string"
+        },
+        {
+          "const": "malformed",
+          "description": "A line does not parse.",
+          "type": "string"
+        }
+      ]
+    },
+    "VerifyReason": {
+      "description": "Why an object got its outcome.",
+      "properties": {
+        "code": {
+          "description": "A stable code, e.g. `subject`, `trailer`, `line_hash`, `signature`.",
+          "type": "string"
+        },
+        "expected": {
+          "description": "What it should be.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "field": {
+          "description": "The field that disagrees.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "found": {
+          "description": "What it is.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "code"
+      ],
+      "type": "object"
+    },
+    "VerifyReport": {
+      "description": "Everything one `verify` run established.",
+      "properties": {
+        "checks": {
+          "description": "One result per configured check, in configuration order.",
+          "items": {
+            "$ref": "#/$defs/CheckResult"
+          },
+          "type": "array"
+        },
+        "comparison": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Comparison"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Comparison with a baseline, if one was given."
+        },
+        "passed": {
+          "description": "Whether verification passed (see [`passes`]).",
+          "type": "boolean"
+        },
+        "root": {
+          "description": "Project root the checks ran in.",
+          "type": "string"
+        },
+        "tier": {
+          "description": "`fast` or `full`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "root",
+        "tier",
+        "checks",
+        "comparison",
+        "passed"
+      ],
+      "type": "object"
+    },
+    "WorktreeReport": {
+      "description": "Result of `speccoder worktree`.",
+      "properties": {
+        "base": {
+          "description": "Commit the branch points at.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "branch": {
+          "description": "`speccoder/<feature>`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "created": {
+          "description": "Created now (`false`: reused).",
+          "type": "boolean"
+        },
+        "feature": {
+          "description": "The feature the worktree is for.",
+          "type": "string"
+        },
+        "path": {
+          "description": "Absolute worktree path.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "project_dir": {
+          "description": "Spec Kit project directory inside the worktree.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "refused_paths": {
+          "description": "Offending paths with reasons, when refused.",
+          "items": {
+            "$ref": "#/$defs/RefusedPath"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "feature",
+        "path",
+        "project_dir",
+        "branch",
+        "base",
+        "created",
+        "refused_paths"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/result.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The envelope as it is serialised — the schema of [`CommandResult`]\n(whose fields are private and whose serialisation is written by hand).",
+  "properties": {
+    "code": {
+      "description": "The catalog code: present for every non-ok result and for a\ndegraded success.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "command": {
+      "description": "The command.",
+      "type": "string"
+    },
+    "data": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/CommandData"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "The command's payload."
+    },
+    "docs": {
+      "description": "The code's section on the codes page.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "exit_code": {
+      "$ref": "#/$defs/ExitCode",
+      "description": "The process exit status (always the status's)."
+    },
+    "fix": {
+      "description": "How to resolve it: commands, or `→ ` lines for a person.",
+      "items": {
+        "type": "string"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
+    },
+    "message": {
+      "description": "One line, for a person.",
+      "type": "string"
+    },
+    "next": {
+      "description": "The steps that continue.",
+      "items": {
+        "$ref": "#/$defs/NextStep"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
+    },
+    "payload": {
+      "description": "The name of `data`'s schema (`schemas/v2/<payload>.json`).",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "schema_version": {
+      "description": "The envelope's version.",
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "status": {
+      "$ref": "#/$defs/CommandStatus",
+      "description": "The outcome class."
+    }
+  },
+  "required": [
+    "schema_version",
+    "command",
+    "status",
+    "exit_code",
+    "message"
+  ],
+  "title": "the result envelope: what --json prints and the result event holds",
+  "type": "object"
+}

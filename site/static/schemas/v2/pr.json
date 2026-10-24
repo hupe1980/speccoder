@@ -1,0 +1,62 @@
+{
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/pr.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Result of `speccoder pr`: a draft pull request with the evidence.",
+  "properties": {
+    "base": {
+      "description": "The branch the pull request targets.",
+      "type": "string"
+    },
+    "body": {
+      "description": "Pull request body (Markdown): every task's evidence.",
+      "type": "string"
+    },
+    "branch": {
+      "description": "`speccoder/<feature>`.",
+      "type": "string"
+    },
+    "commands": {
+      "description": "What runs (or would run), in order.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "feature": {
+      "description": "Feature directory name.",
+      "type": "string"
+    },
+    "opened": {
+      "description": "Whether the branch was pushed and the draft opened (`false`: a dry run).",
+      "type": "boolean"
+    },
+    "remote": {
+      "description": "The git remote pushed to.",
+      "type": "string"
+    },
+    "title": {
+      "description": "Pull request title.",
+      "type": "string"
+    },
+    "url": {
+      "description": "The pull request, when opened.",
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "feature",
+    "branch",
+    "base",
+    "remote",
+    "title",
+    "body",
+    "commands",
+    "opened",
+    "url"
+  ],
+  "title": "pr: the draft pull request",
+  "type": "object"
+}

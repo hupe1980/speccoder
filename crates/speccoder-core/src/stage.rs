@@ -4,7 +4,7 @@
 use serde::{Deserialize, Serialize};
 
 /// A stage of a task, in pipeline order.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Stage {
     /// The checks on the untouched worktree.
@@ -55,7 +55,7 @@ impl Stage {
 }
 
 /// Where a stage is.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum StageState {
     /// Begun.

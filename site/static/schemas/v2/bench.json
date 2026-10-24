@@ -1,0 +1,32 @@
+{
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/bench.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Result of `speccoder bench import`.",
+  "properties": {
+    "imported": {
+      "description": "Instances turned into cases.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "out": {
+      "description": "The suite directory written.",
+      "type": "string"
+    },
+    "skipped": {
+      "description": "Instances not imported, with why.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "out",
+    "imported",
+    "skipped"
+  ],
+  "title": "bench import: the imported cases",
+  "type": "object"
+}

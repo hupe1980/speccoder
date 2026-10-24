@@ -169,18 +169,40 @@ fn task_line(t: &Task, st: &ScheduledTask) -> String {
     let check = if t.done { "[x]" } else { "[ ]" };
     let p = if t.parallel { "[P]" } else { "" };
     let story = t.story.as_deref().unwrap_or("");
-    let line = format!(
-        "{check} {:<5} {p:<3} {story:<4} {:<width$}",
-        t.id,
-        shorten(&t.title, TITLE_WIDTH),
-        width = TITLE_WIDTH
-    );
+    let look = crate::style::out();
     let state = match st.state {
         TaskState::Done => String::new(),
         TaskState::Ready => "ready".to_owned(),
         TaskState::Blocked => blocked_by(&st.blocked_by),
     };
-    format!("{line}  {state}").trim_end().to_owned()
+    if look.screen_reader {
+        let state = if state.is_empty() {
+            "done"
+        } else {
+            state.as_str()
+        };
+        return format!("task: {} {} — {state}", t.id, t.title);
+    }
+    // The title takes what the line leaves beside the fixed columns and a
+    // state column of the same width on every row (so states line up), at
+    // most TITLE_WIDTH.
+    let width = look
+        .width
+        .saturating_sub(4 + 6 + 4 + 5 + 2 + 32)
+        .clamp(16, TITLE_WIDTH);
+    let line = format!(
+        "{check} {:<5} {p:<3} {story:<4} {}",
+        t.id,
+        pad(&shorten(&t.title, width), width),
+    );
+    let token = match st.state {
+        TaskState::Done => crate::style::Token::Verified,
+        TaskState::Ready => crate::style::Token::Ready,
+        TaskState::Blocked => crate::style::Token::Blocked,
+    };
+    format!("{line}  {}", look.paint(token, &state))
+        .trim_end()
+        .to_owned()
 }
 
 /// `blocked by T003, T004, T005 (+2)`
@@ -203,13 +225,15 @@ fn blocked_by(ids: &[String]) -> String {
 /// Task titles are cut to one terminal line; `--json` carries them in full.
 const TITLE_WIDTH: usize = 72;
 
+/// `s` cut to `max` display columns (never mid-character), with `…`.
 fn shorten(s: &str, max: usize) -> String {
-    if s.chars().count() <= max {
-        s.to_owned()
-    } else {
-        let cut: String = s.chars().take(max - 1).collect();
-        format!("{}…", cut.trim_end())
-    }
+    crate::style::out().fit(s, max)
+}
+
+/// `s` padded with spaces to `cols` display columns.
+fn pad(s: &str, cols: usize) -> String {
+    let w = crate::style::width(s);
+    format!("{s}{}", " ".repeat(cols.saturating_sub(w)))
 }
 
 fn diagnostic(d: &Diagnostic) -> String {
@@ -329,13 +353,9 @@ pub fn worktree(w: &mut impl Write, r: &WorktreeReport) -> io::Result<()> {
 }
 
 /// Why speccoder will not use a worktree here.
-pub fn worktree_refused(w: &mut impl Write, message: &str, r: &WorktreeReport) -> io::Result<()> {
-    writeln!(w, "speccoder worktree: {message}")?;
+pub fn worktree_refused(w: &mut impl Write, r: &WorktreeReport) -> io::Result<()> {
     for p in &r.refused_paths {
         writeln!(w, "  {:<10} {}", p.reason, p.path)?;
-    }
-    if let Some(h) = &r.hint {
-        writeln!(w, "{h}")?;
     }
     Ok(())
 }
@@ -434,6 +454,20 @@ pub fn run(w: &mut impl Write, r: &RunReport, message: &str) -> io::Result<()> {
     }
     if let Some(reason) = &r.reason {
         writeln!(w, "Reason     {reason}")?;
+    }
+    if !r.instructions.is_empty() {
+        let files: Vec<String> = r
+            .instructions
+            .iter()
+            .map(|i| {
+                if i.cut {
+                    format!("{} (cut)", i.path)
+                } else {
+                    i.path.clone()
+                }
+            })
+            .collect();
+        writeln!(w, "Guided by  {}", files.join(", "))?;
     }
     if let Some(a) = &r.attestation {
         let detail = match (
@@ -726,26 +760,65 @@ pub fn status(w: &mut impl Write, r: &StatusReport, message: &str) -> io::Result
         r.feature,
         r.branch.as_deref().unwrap_or("the checkout")
     )?;
+    let look = crate::style::out();
+    let id_width = r
+        .tasks
+        .iter()
+        .map(|t| t.id.chars().count())
+        .max()
+        .unwrap_or(4);
+    let mark_width = if look.ascii { 4 } else { 1 };
+    // Mark, id and the spaces between the columns.
+    let fixed = 2 + mark_width + 1 + id_width + 1 + 1;
+    // The title takes what the terminal leaves beside the state (up to 30
+    // columns of it), never less than 16; the state is cut last.
+    let longest = r
+        .tasks
+        .iter()
+        .map(|t| crate::style::width(&t.title))
+        .max()
+        .unwrap_or(16);
+    let title_width = look
+        .width
+        .saturating_sub(fixed + 30)
+        .max(16)
+        .min(longest.max(16));
     let mut phase = "";
     for t in &r.tasks {
         if t.phase != phase {
             phase = &t.phase;
-            writeln!(w, "{phase}")?;
+            if look.screen_reader {
+                writeln!(w, "phase: {phase}")?;
+            } else {
+                writeln!(w, "{}", look.paint(crate::style::Token::Accent, phase))?;
+            }
         }
-        let (mark, note) = match t.state.as_str() {
-            "verified" => ("✓", "verified".to_owned()),
-            "regression_only" => ("~", "regression only".to_owned()),
-            "ticked_without_evidence" => ("!", "ticked, no speccoder evidence".to_owned()),
-            "evidence_without_tick" => (
-                "?",
-                "committed, local tick missing — `run --in-place` ticks it".to_owned(),
-            ),
-            "attested" => ("A", "attested by a person (not verified)".to_owned()),
-            "skipped" => ("–", "skipped".to_owned()),
-            "ready" => ("·", "ready".to_owned()),
-            _ => ("⧗", format!("blocked by {}", t.blocked_by.join(", "))),
+        let note = match t.state.as_str() {
+            "verified" => "verified".to_owned(),
+            "regression_only" => "regression only".to_owned(),
+            "ticked_without_evidence" => "ticked, no speccoder evidence".to_owned(),
+            "evidence_without_tick" => {
+                "committed, local tick missing — `run --in-place` ticks it".to_owned()
+            }
+            "attested" => "attested by a person (not verified)".to_owned(),
+            "skipped" => "skipped".to_owned(),
+            "ready" => "ready".to_owned(),
+            _ => format!("blocked by {}", t.blocked_by.join(", ")),
         };
-        writeln!(w, "  {mark} {} {:<52} {note}", t.id, shorten(&t.title, 52))?;
+        let glyph = crate::style::Glyph::of_state(&t.state);
+        if look.screen_reader {
+            writeln!(w, "task: {} {} — {note}", t.id, t.title)?;
+        } else {
+            let note = shorten(&note, look.width.saturating_sub(fixed + title_width).max(8));
+            writeln!(
+                w,
+                "  {} {} {} {}",
+                look.cell(glyph),
+                pad(&t.id, id_width),
+                pad(&shorten(&t.title, title_width), title_width),
+                look.paint(glyph.token(), &note)
+            )?;
+        }
         if let Some(n) = &t.note {
             writeln!(w, "      reason: {}", shorten(n, 90))?;
         }
@@ -1026,6 +1099,13 @@ pub fn next(w: &mut dyn Write, steps: &[speccoder_core::next::NextStep]) -> std:
     if steps.is_empty() {
         return Ok(());
     }
+    let look = crate::style::out();
+    if look.screen_reader {
+        for s in steps {
+            writeln!(w, "next: {} — {}", s.command, s.why)?;
+        }
+        return Ok(());
+    }
     let width = steps
         .iter()
         .map(|s| s.command.chars().count())
@@ -1035,7 +1115,13 @@ pub fn next(w: &mut dyn Write, steps: &[speccoder_core::next::NextStep]) -> std:
     writeln!(w)?;
     for (i, s) in steps.iter().enumerate() {
         let label = if i == 0 { "Next:  " } else { "       " };
-        writeln!(w, "{label}{:<width$}  {}", s.command, s.why)?;
+        writeln!(
+            w,
+            "{}{}  {}",
+            look.paint(crate::style::Token::Accent, label),
+            look.paint(crate::style::Token::Accent, &pad(&s.command, width)),
+            s.why
+        )?;
     }
     Ok(())
 }

@@ -7,21 +7,25 @@ weight = 140
 group = "Reference"
 +++
 
+Every failure names a [code](@/docs/codes.md) and the command that fixes it — `speccoder explain CODE` says more, offline.
+
 | Symptom | Cause and fix |
 |---|---|
-| `the worktree has no speccoder.toml (is it committed?)` (13) | speccoder reads committed files. Commit `speccoder.toml`. |
-| `… are not committed` (14) | Commit the feature's Spec Kit files and `.specify/`. |
-| `OPENAI_API_KEY is not set` (13) | Export the key in this shell, e.g. `set -a; . ./.env; set +a`. |
+| No colour | Output is not a terminal, or `NO_COLOR` or `TERM=dumb` is set. `--color always` forces it. |
+| Odd symbols or boxes | The font lacks them: `--ascii`, or `[ui] ascii = true` in your settings. |
+| `error[CONFIG-MISSING]` — the worktree has no speccoder.toml (13) | speccoder reads committed files. Commit `speccoder.toml`. |
+| `error[UNCOMMITTED-INTENT]` — … are not committed (14) | Commit the feature's Spec Kit files and `.specify/`. |
+| `error[KEY-MISSING]` — OPENAI_API_KEY is not set (13) | Export the key in this shell, e.g. `set -a; . ./.env; set +a`. |
 | `unknown section [budgett]` (13) | A typo in `speccoder.toml`; the message lists the known sections. |
 | Every attempt stops for `cargo test` (or similar) | Add the prefix to `[commands] allow`; `init` does this for toolchains it knows. |
 | The baseline fails on a project without tests | For nextest add `--no-tests=warn`, as `init` does. |
 | A build cannot download dependencies | The sandbox has no network. Fetch first (`cargo fetch`, `npm ci`, `uv sync`) or add the fetch command to `[sandbox] network_allow`. |
 | A tool writes outside the project and fails | Add its cache to `[sandbox] writable`, e.g. `["~/.m2"]` or `["~/.gradle"]`. |
 | `commands run unsandboxed: …` | The OS offers no sandbox (Linux without Landlock, another OS). Use `[sandbox] mode = "required"` to refuse instead. |
-| `no task is ready` / `no task can run` (16) | `speccoder inspect` shows what blocks what; a skipped task blocks its dependents. |
-| `budget_exhausted` | Raise `[budget] max_turns` or split the task in `tasks.md`. |
+| `error[TASK-NOT-READY]`, `TASK-BLOCKED` — no task can run (16) | `speccoder inspect` shows what blocks what; a skipped task blocks its dependents. |
+| `stopped[BUDGET-EXHAUSTED]` | Raise `[budget] max_turns` or split the task in `tasks.md`. |
 | `acceptance skipped: … is not an allowed command` | The acceptance tests' command must be allowed: add its prefix to `[commands] allow`. |
-| `refused the request: insufficient_quota …` / `credit_balance_exhausted` | The provider account has no credit; nothing is retried. Top it up and run again. |
+| `stopped[ACCEPTANCE-UNWRITTEN]` or `PROVIDER-REFUSED` — refused the request: insufficient_quota … / credit_balance_exhausted | The provider account has no credit; nothing is retried. Top it up and run again. |
 | `another speccoder is working on this project` | A second process found the journal in use. Wait for the first, or check `speccoder status`. |
 | `MCP tool … changed since it was allowed` | The server changed a tool you allowed. Read it again; approving one call records it as it is now. |
 | A run seems stuck | `speccoder status` from another terminal shows the step and the last tool call. |

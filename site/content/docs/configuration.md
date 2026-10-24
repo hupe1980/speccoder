@@ -94,6 +94,12 @@ Keep the list narrow: an allowed command runs whatever the model passes after th
 |---|---|---|
 | `[spec] format` | detected | The spec format: `speckit`, `openspec` or `kiro`. `--format` and `SPECCODER_FORMAT` override it. This version runs Spec Kit; OpenSpec and Kiro are recognised and refused as not yet supported |
 
+## `[context]`
+
+| Key | Default | Meaning |
+|---|---|---|
+| `instructions` | `["AGENTS.md"]` | The file names read as the [repository's instructions](@/docs/running.md#repository-instructions), per directory the first that exists, e.g. `["AGENTS.md", "CLAUDE.md"]`; `[]` reads none |
+
 ## `[acceptance]`, `[converge]`, `[monitor]`, `[git]`, `[format]`
 
 | Key | Default | Meaning |
@@ -162,7 +168,7 @@ Server names are lowercase letters, digits and `-` (not `fs`, `proc` or `git`). 
 
 ## Your settings
 
-How speccoder gets *your* attention is yours, not the project's: it lives in `$XDG_CONFIG_HOME/speccoder/config.toml` (else `~/.config/speccoder/config.toml`), never in `speccoder.toml` — a `[ui]` table there is refused (exit 13), naming where it belongs.
+How speccoder looks and how it gets *your* attention is yours, not the project's: it lives in `$XDG_CONFIG_HOME/speccoder/config.toml` (else `~/.config/speccoder/config.toml`), never in `speccoder.toml` — a `[ui]` table there is refused (exit 13), naming where it belongs.
 
 ```toml
 [ui.notify]
@@ -173,7 +179,17 @@ command = []           # with method = "command": the program and arguments; the
 stall_after = "15m"    # Ns | Nm | Nh, at least 30s
 ```
 
-`auto` uses a desktop notification where the terminal shows one and a bell elsewhere. `command` runs the program without a shell, at most five seconds (for example `["terminal-notifier", "-title", "speccoder", "-message"]`). A value speccoder does not understand is a warning, and the default is used.
+```toml
+[ui]
+theme = "auto"         # auto | dark | light | high-contrast | daltonized | mono
+color = "auto"         # auto | always | never — under --color, over NO_COLOR
+ascii = false          # [ok] [~] [A] … instead of ✓ ~ A …, plain box borders
+screen_reader = false  # labelled plain lines, numbered choices, no dashboard
+```
+
+`auto` uses your terminal's 16 colours, so it follows your terminal's palette, dark or light; `dark` and `light` are fixed 24-bit palettes, `daltonized` tells states apart by blue and orange instead of green and red, `mono` uses only bold, dim, underline and reverse. Every state keeps its word or mark, so nothing is told by colour alone.
+
+In `[ui.notify]`, `auto` uses a desktop notification where the terminal shows one and a bell elsewhere. `command` runs the program without a shell, at most five seconds (for example `["terminal-notifier", "-title", "speccoder", "-message"]`). A value speccoder does not understand is a warning, and the default is used.
 
 ## Environment
 
@@ -183,4 +199,8 @@ stall_after = "15m"    # Ns | Nm | Nh, at least 30s
 | `SPECCODER_STATE_DIR` | Where speccoder keeps worktrees, journals and decisions (default `$XDG_STATE_HOME/speccoder`, else `~/.local/state/speccoder`) |
 | `SPECIFY_FEATURE_DIRECTORY` | Spec Kit's feature selection, honoured by every command |
 | `SPECCODER_FORMAT` | The spec format, like `--format` |
+| `NO_COLOR`, `FORCE_COLOR`, `CLICOLOR_FORCE`, `CLICOLOR`, `TERM` | Colour: `--color` decides first, then `[ui] color`, then `NO_COLOR` (any non-empty value: off), `FORCE_COLOR`/`CLICOLOR_FORCE` (on, also when piped), `CLICOLOR=0` and `TERM=dumb` (off); otherwise a terminal gets colour |
+| `COLUMNS` | The width when the output is not a terminal (default 100) |
+| `LC_ALL`, `LC_CTYPE`, `LANG` | A locale that is set and not UTF-8 means ASCII marks |
+| `SPECCODER_SCREEN_READER` | Screen-reader mode, like `--screen-reader` |
 | `SPECCODER_CALL_ID` | Set *for* commands the model runs: the call's id, stable across a resume |

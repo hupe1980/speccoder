@@ -1,0 +1,52 @@
+{
+  "$defs": {
+    "SkillEntry": {
+      "description": "One installed Agent Skill.",
+      "properties": {
+        "description": {
+          "description": "What it does.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Its name.",
+          "type": "string"
+        },
+        "path": {
+          "description": "The `SKILL.md`.",
+          "type": "string"
+        },
+        "refused": {
+          "description": "Why speccoder does not host it, if it does not.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "description",
+        "path",
+        "refused"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/skills.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Result of `speccoder skill` without a name.",
+  "properties": {
+    "skills": {
+      "description": "Installed skills by name.",
+      "items": {
+        "$ref": "#/$defs/SkillEntry"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "skills"
+  ],
+  "title": "spec: the format's planning skills",
+  "type": "object"
+}

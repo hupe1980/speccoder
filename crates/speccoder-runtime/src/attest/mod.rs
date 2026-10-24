@@ -448,6 +448,7 @@ pub fn record_tick(t: &Tick<'_>, report: &RunReport) -> Value {
         "model": t.model,
         "run": report.run_id,
         "decisions": decisions(report),
+        "instructions": report.instructions,
         "policy_sha256": policy,
         "time": time,
     });
@@ -606,7 +607,7 @@ pub fn sign_at(
     use speccoder_core::{CommandResult, CommandStatus};
     let inspected = crate::inspect(path, feature);
     let Some(speccoder_core::CommandData::Inspect(snap)) = inspected.data() else {
-        return CommandResult::new("attest", inspected.status(), inspected.message());
+        return CommandResult::carried("attest", &inspected);
     };
     let Some(f) = snap.feature.as_ref() else {
         return CommandResult::new(

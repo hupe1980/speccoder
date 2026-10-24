@@ -125,7 +125,8 @@ pub fn archive(path: &Path, opts: &Options<'_>) -> CommandResult {
         return refuse(
             CommandStatus::GitPrecondition,
             "openspec/ has uncommitted changes; commit them first, so the archive commit holds only the archive",
-        );
+        )
+            .with_code("UNCOMMITTED-INTENT");
     }
 
     // Ticks without evidence are the person's to own, task by task (D-074).

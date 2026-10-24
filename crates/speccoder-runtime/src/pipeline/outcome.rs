@@ -141,6 +141,7 @@ pub(crate) fn finished_event(
             attempt_status.to_owned()
         },
         message,
+        run: (!report.run_id.is_empty()).then(|| report.run_id.clone()),
         input_tokens: tokens("input_tokens"),
         output_tokens: tokens("output_tokens"),
         cache_read_tokens: tokens("cache_read_tokens"),
@@ -184,6 +185,7 @@ pub(crate) fn bare_report(
         samples: Vec::new(),
         scope: None,
         attestation: None,
+        instructions: Vec::new(),
     }
 }
 

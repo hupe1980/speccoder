@@ -924,6 +924,7 @@ mod tests {
             task: "T002".to_owned(),
             outcome: "regression_only".to_owned(),
             message: "m".to_owned(),
+            run: None,
             input_tokens: 0,
             output_tokens: 0,
             cache_read_tokens: 0,

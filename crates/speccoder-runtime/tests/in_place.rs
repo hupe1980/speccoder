@@ -234,16 +234,15 @@ fn a_dirty_checkout_is_refused_and_nothing_switches() {
         res.message()
     );
     assert!(
-        res.message().contains("error[DIRTY-CHECKOUT]"),
+        res.code().map(|c| c.name) == Some("DIRTY-CHECKOUT"),
         "{}",
         res.message()
     );
-    assert!(res.message().contains("src/lib.rs"));
-    assert!(
-        res.message().contains("fix: git stash -u"),
-        "{}",
-        res.message()
-    );
+    let Some(CommandData::InPlace(p)) = res.data() else {
+        panic!("{}", res.message())
+    };
+    assert!(p.paths.iter().any(|r| r.path == "src/lib.rs"), "{p:?}");
+    assert_eq!(res.fix().first().map(String::as_str), Some("git stash -u"));
     assert_eq!(git(r.path(), &["symbolic-ref", "--short", "HEAD"]), "main");
     assert_eq!(git(r.path(), &["branch", "--list", "speccoder/*"]), "");
     assert!(
@@ -290,7 +289,7 @@ fn parallel_lanes_are_refused_in_place() {
     let res = speccoder_runtime::run_feature_with(r.path(), None, state.path(), &d, None, &options);
     assert_eq!(res.status(), CommandStatus::UsageError, "{}", res.message());
     assert!(
-        res.message().contains("IN-PLACE-PARALLEL"),
+        res.code().map(|c| c.name) == Some("IN-PLACE-PARALLEL"),
         "{}",
         res.message()
     );
@@ -344,11 +343,15 @@ fn an_interrupted_session_blocks_worktree_runs_until_return() {
     let (_f, d) = fake();
     let res = run(r.path(), state.path(), d, &RunOptions::default());
     assert!(
-        res.message().contains("IN-PLACE-SESSION"),
+        res.code().map(|c| c.name) == Some("IN-PLACE-SESSION"),
         "{}",
         res.message()
     );
-    assert!(res.message().contains("--return"), "{}", res.message());
+    assert!(
+        res.fix().iter().any(|f| f.contains("--return")),
+        "{:?}",
+        res.fix()
+    );
 
     let back = speccoder_runtime::in_place::return_in_place(r.path(), state.path());
     assert_eq!(back.status(), CommandStatus::Ok, "{}", back.message());
@@ -741,7 +744,7 @@ fn a_refused_run_keeps_the_waiting_attempt_resumable() {
     let (_f, d) = fake();
     let stopped = run(r.path(), state.path(), d, &in_place());
     assert!(
-        stopped.message().contains("GIT-CHANGED"),
+        stopped.code().map(|c| c.name) == Some("GIT-CHANGED"),
         "{}",
         stopped.message()
     );

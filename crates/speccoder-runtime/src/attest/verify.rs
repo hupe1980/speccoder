@@ -811,7 +811,7 @@ pub fn verify_at(
 ) -> CommandResult {
     let inspected = crate::inspect(path, feature);
     let Some(CommandData::Inspect(snap)) = inspected.data() else {
-        return CommandResult::new("attest", inspected.status(), inspected.message());
+        return CommandResult::carried("attest", &inspected);
     };
     let Some(f) = snap.feature.as_ref() else {
         return CommandResult::new(

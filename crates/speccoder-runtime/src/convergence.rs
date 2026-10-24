@@ -101,7 +101,7 @@ pub fn converge_with_options(
         options,
     ) {
         Ok(lines) => lines,
-        Err(stop) => return CommandResult::new("converge", stop.status(), stop.message()),
+        Err(stop) => return CommandResult::carried("converge", &stop),
     };
     let result = assess(path, feature, state, Arc::clone(&provider), secret, options);
     let Some(CommandData::Converge(report)) = result.data() else {
@@ -122,7 +122,7 @@ pub fn converge_with_options(
         ) {
             Ok(lines) => report.hooks.extend(lines),
             Err(stop) => {
-                return CommandResult::new("converge", stop.status(), stop.message())
+                return CommandResult::carried("converge", &stop)
                     .with_data(CommandData::Converge(Box::new(report)));
             }
         }
@@ -158,11 +158,10 @@ fn assess(
     // The worktree, where the feature's progress lives.
     let wt = crate::pipeline::workspace(path, Some(&feature_name), state, options);
     let Some(CommandData::Worktree(w)) = wt.data() else {
-        return CommandResult::new("converge", wt.status(), wt.message());
+        return CommandResult::carried("converge", &wt);
     };
     if wt.status() != CommandStatus::Ok {
-        return CommandResult::new("converge", wt.status(), wt.message())
-            .with_data(CommandData::Worktree(w.clone()));
+        return CommandResult::carried("converge", &wt).with_data(CommandData::Worktree(w.clone()));
     }
     let (Some(wt_path), Some(project_dir)) = (w.path.clone(), w.project_dir.clone()) else {
         return refuse(CommandStatus::Error, "worktree without a path".to_owned());
@@ -182,7 +181,8 @@ fn assess(
                     .collect::<Vec<_>>()
                     .join(", ")
             ),
-        );
+        )
+        .with_code("WORKTREE-DIRTY");
     }
 
     let format = crate::format::at(&project);
@@ -229,13 +229,17 @@ fn assess(
         return refuse(
             CommandStatus::ConfigError,
             "the worktree has no speccoder.toml (is it committed?)".to_owned(),
-        );
+        )
+        .with_code("CONFIG-MISSING");
     };
     let config_text =
         std::fs::read_to_string(config_root.join(verify::config::FILE)).unwrap_or_default();
     let run_config = match substrate::run_config::parse(&config_text) {
         Ok(c) => c,
-        Err(e) => return refuse(CommandStatus::ConfigError, format!("speccoder.toml: {e}")),
+        Err(e) => {
+            return refuse(CommandStatus::ConfigError, format!("speccoder.toml: {e}"))
+                .with_code("CONFIG-INVALID");
+        }
     };
 
     let is_convergence = |phase: &str| format.is_convergence(phase);

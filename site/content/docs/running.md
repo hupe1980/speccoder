@@ -80,6 +80,12 @@ speccoder converge
 
 Once every task is ticked, a read-only model call compares the code with `spec.md`, `plan.md`, `tasks.md` and the constitution and lists gaps: `missing`, `partial`, `contradicts`, `unrequested`. Actionable gaps are appended as a new `## Phase N: Convergence` in `tasks.md`, gravest first, and committed; `run --converge` then works through them and assesses again. It stops for you when only unrequested findings remain, when findings repeat earlier convergence tasks, or after `[converge] max_rounds`.
 
+## Repository instructions
+
+speccoder gives its model the repository's own conventions for agents — [`AGENTS.md`](https://agents.md) — with every task: from the repository root down to the directories the task names, one file per directory, root first and the nearest last, so a nearer file has the last word (in a monorepo, `services/api/AGENTS.md` refines the root's). The acceptance test author gets them too; the gaming monitor does not.
+
+They are the repository's text, not your orders: the model is told the task, the spec, the checks and speccoder's rules come first. At most 32 KiB are given — the nearest files whole, farther ones cut, and the report says so. The run summary names the files (`Guided by  AGENTS.md, services/api/AGENTS.md`), and so does the task's attestation, with each file's hash. They are read from the commit the attempt starts from and journaled with it, so a replay needs no file. Changing an `AGENTS.md` during an attempt needs your approval, as before. External agents (Claude Code, Codex) read their own files; speccoder does not add them twice. Other names, such as `CLAUDE.md`, are a [setting](@/docs/configuration.md#context).
+
 ## Watching a run
 
 ```sh
@@ -105,6 +111,20 @@ Every task goes through the same stages, named the same in the progress lines, `
 In the dashboard, `tab` switches pane, `↑ ↓` or `j k` select, `a` approves the selected waiting call, `r` rejects it with a reason, `q` quits. Its footer shows the next step.
 
 A run that is picked up after a kill starts with `Resuming — T004 was interrupted during attempt (run_command cargo test); finished calls will not repeat.`
+
+### Look and accessibility
+
+Each state has its own colour and its own mark — `✓` verified, `~` regression only, `A` attested, `!` no evidence, `–` skipped, `·` ready, `⧗` blocked — and its word, so nothing depends on colour. Tables fit the terminal's width. `--ascii` (or a non-UTF-8 locale) uses `[ok] [~] [A] [!] [-] [ ] [..]` and plain borders; `NO_COLOR` turns colour off; themes for light terminals and colour-blind readers are in [your settings](@/docs/configuration.md#your-settings).
+
+`--screen-reader` (or `SPECCODER_SCREEN_READER=1`, or `[ui] screen_reader = true`) gives labelled plain lines a screen reader reads well, choices as a numbered list, and the report instead of the dashboard:
+
+```text
+task: T004 Handle Unicode input - started
+stage: T004 attempt - started (1/2)
+tool: run_command cargo test - allow, ok
+approval required: T004 - run_command cargo add unicode-normalization
+choice 1: Yes, once (or type y)
+```
 
 ### Getting your attention
 
