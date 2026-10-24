@@ -26,7 +26,8 @@ states them — do not invent behaviour the spec does not state, and do not weak
 example. Put them in NEW files under the project's test directory — paths that are not \
 in the project's file list; name them after the task ID (for Rust: \
 tests/acceptance_<task id>.rs, using the crate name from Cargo.toml) — and give the \
-command that runs only these tests (for Rust: cargo test --test <name>). The tests must \
+command that runs only these tests (for Rust: cargo test --test <name>). Each file cites \
+the IDs of the scenarios it tests, from the list given (none when there is no list). The tests must \
 fail now (the task is not implemented) and pass once it is. Another model will implement \
 the task; it cannot change your tests. If the spec has no testable acceptance example \
 for this task, return no files. An example whose outcome depends on outside state — the \
@@ -145,8 +146,9 @@ pub fn schema() -> Value {
                     "properties": {
                         "path": { "type": "string" },
                         "content": { "type": "string" },
+                        "scenarios": { "type": "array", "items": { "type": "string" } },
                     },
-                    "required": ["path", "content"],
+                    "required": ["path", "content", "scenarios"],
                     "additionalProperties": false,
                 },
             },
@@ -158,12 +160,19 @@ pub fn schema() -> Value {
     })
 }
 
-/// The run input: `{ bundle, project: { files, manifest } }`.
+/// The run input: `{ bundle, scenarios, project: { files, manifest } }`.
 #[must_use]
-pub fn input(bundle: Value, files: &[String], manifest: &str) -> Tainted<Value> {
-    // The bundle is the person's; the file list and manifest are the worktree's.
+pub fn input(
+    bundle: Value,
+    scenarios: &[speccoder_core::spec::ScenarioRef],
+    files: &[String],
+    manifest: &str,
+) -> Tainted<Value> {
+    // The bundle and its scenarios are the person's; the file list and
+    // manifest are the worktree's.
     Tainted::object([
         ("bundle", Tainted::trusted(bundle)),
+        ("scenarios", Tainted::trusted(json!(scenarios))),
         (
             "project",
             Tainted::with_label(
@@ -223,15 +232,18 @@ impl Skill for Acceptance {
                     "# Project files\n\n{files}\n\n# Manifest\n\n{}",
                     input["project"]["manifest"].as_str().unwrap_or("(none)")
                 );
-                if held_out {
+                let scenarios = input["scenarios"].as_array().into_iter().flatten();
+                if scenarios.clone().next().is_some() {
                     text.push_str("\n\n# Scenarios (cite these IDs)\n");
-                    for s in input["scenarios"].as_array().into_iter().flatten() {
+                    for s in scenarios {
                         text.push_str(&format!(
                             "\n- {}: {}",
                             s["id"].as_str().unwrap_or_default(),
                             s["text"].as_str().unwrap_or_default()
                         ));
                     }
+                }
+                if held_out {
                     text.push_str("\n\n# Visible acceptance tests (the implementer sees these)\n");
                     for f in input["visible"].as_array().into_iter().flatten() {
                         text.push_str(&format!(

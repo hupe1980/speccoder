@@ -18,6 +18,7 @@ speccoder lets a language model change code and run commands, so it assumes the 
 - **Secrets.** API keys come from the environment only; commands get an environment without secret-looking variables.
 - **Provenance.** Everything the model reads is labelled by its real source, and the runtime refuses mutating calls shaped by sources outside a closed set.
 - **Verification.** The verdict comes from your checks, spec-derived tests and a diff audit — never from the model.
+- **Attestations.** Every tick leaves in-toto statements signed with your git signing key in `refs/notes/speccoder`; `speccoder attest verify` re-checks them against the commit and your own trust. The key stays out of the sandbox (`~/.ssh`, `~/.gnupg` hidden, no `SSH_AUTH_SOCK`); with the sandbox off, a command could reach it.
 
 None of this replaces review: `verified` means the spec's examples pass and nothing regressed, not that the change is correct or safe.
 

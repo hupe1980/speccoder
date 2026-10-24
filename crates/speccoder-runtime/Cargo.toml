@@ -28,11 +28,13 @@ quick-xml.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
+base64.workspace = true
 tempfile.workspace = true
 toml.workspace = true
 serde-saphyr.workspace = true
 
 [dev-dependencies]
+base64.workspace = true
 agentplane = { workspace = true, features = ["fake-model", "testkit"] }
 tempfile.workspace = true
 

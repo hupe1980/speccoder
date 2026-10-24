@@ -161,6 +161,7 @@ fn human_body(
             writeln!(out, "{}", result.message())
         }
         (_, Some(CommandData::Cost(c))) => human::cost(&mut out, c, result.message()),
+        (_, Some(CommandData::Attest(a))) => human::attest(&mut out, a, result.message()),
         (_, Some(CommandData::Approvals(a))) => human::approvals(&mut out, a, result.message()),
         (_, Some(CommandData::Report(r))) => human::status(&mut out, r, result.message()),
         (_, Some(CommandData::Converge(c))) => human::converge(&mut out, c, result.message()),

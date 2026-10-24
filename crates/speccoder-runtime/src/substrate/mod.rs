@@ -29,6 +29,10 @@ use serde_json::Value;
 use self::model_config::ModelConfig;
 use self::propose::{CAPABILITY, Propose};
 
+/// The agentplane release speccoder is built against (the exact pin in the
+/// workspace `Cargo.toml`), named in every verification summary.
+pub const AGENTPLANE_VERSION: &str = "0.52.0";
+
 /// The journal file inside a project's state directory.
 pub const JOURNAL: &str = "journal.redb";
 
@@ -802,6 +806,17 @@ impl agentplane::tools::ToolClient for Unbound {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_agentplane_version_named_in_summaries_is_the_pinned_one() {
+        let workspace = include_str!("../../../../Cargo.toml");
+        assert!(
+            workspace.contains(&format!(
+                "agentplane = {{ version = \"={AGENTPLANE_VERSION}\""
+            )),
+            "AGENTPLANE_VERSION is not the workspace's pin"
+        );
+    }
 
     #[test]
     fn a_provider_refusal_is_read_from_the_run_failure() {

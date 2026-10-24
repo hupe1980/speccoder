@@ -47,6 +47,8 @@ impl ExitCode {
     pub const EVAL_FAILED: Self = Self(24);
     /// The recorded run cannot be re-derived by this build (not a divergence).
     pub const NOT_REPLAYABLE: Self = Self(25);
+    /// `attest verify` found an attestation that does not hold.
+    pub const ATTESTATION_FAILED: Self = Self(26);
     /// The model call or the run failed.
     pub const RUN_FAILED: Self = Self(21);
     /// Strict replay did not reproduce the recorded run.
@@ -95,6 +97,8 @@ pub enum CommandStatus {
     EvalFailed,
     /// The recorded run cannot be re-derived by this build.
     NotReplayable,
+    /// An attestation is missing, unsigned where required, or does not hold.
+    AttestationFailed,
 }
 
 impl CommandStatus {
@@ -118,6 +122,7 @@ impl CommandStatus {
             Self::NeedsHuman => ExitCode::NEEDS_HUMAN,
             Self::EvalFailed => ExitCode::EVAL_FAILED,
             Self::NotReplayable => ExitCode::NOT_REPLAYABLE,
+            Self::AttestationFailed => ExitCode::ATTESTATION_FAILED,
         }
     }
 }
@@ -168,6 +173,8 @@ pub enum CommandData {
     Archive(Box<ArchiveReport>),
     /// An in-place run refused or stopped (`DIRTY-CHECKOUT`, `INTENT-CHANGED`, …).
     InPlace(Box<InPlaceReport>),
+    /// `attest verify` / `attest sign`: what each task's attestation says.
+    Attest(Box<AttestReport>),
 }
 
 /// Why an in-place run refused or stopped.
@@ -405,6 +412,10 @@ pub struct RunReport {
     /// Changes outside the paths the task names: reported, never gated.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scope: Option<crate::scope::ScopeFinding>,
+    /// What the tick's attestation came to: `{ state: signed | unsigned |
+    /// missing, signer, reason }` (F-061).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attestation: Option<serde_json::Value>,
 }
 
 /// A failed attempt that was undone and retried.
@@ -689,6 +700,139 @@ pub struct DecidedCall {
     pub expired: bool,
 }
 
+/// What `attest verify` found for one task object (F-061).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum VerifyOutcome {
+    /// Every line parses, every signature verifies against the trust input,
+    /// and every statement agrees with the commit.
+    Ok,
+    /// The statements hold but are not signed.
+    Unsigned,
+    /// No speccoder attestation on the object.
+    Missing,
+    /// A signature does not verify.
+    BadSignature,
+    /// A signature verifies, but its key is not trusted by the verifier.
+    UntrustedSigner,
+    /// A statement disagrees with the commit, its trailers, the spec or the bundle.
+    Mismatch,
+    /// A line does not parse.
+    Malformed,
+}
+
+impl VerifyOutcome {
+    /// How grave: when several apply, the gravest is the outcome
+    /// (`malformed` > `bad_signature` > `mismatch` > `untrusted_signer` >
+    /// `unsigned` > `ok`; `missing` stands alone).
+    #[must_use]
+    pub const fn rank(self) -> u8 {
+        match self {
+            Self::Ok => 0,
+            Self::Unsigned => 1,
+            Self::UntrustedSigner => 2,
+            Self::Mismatch => 3,
+            Self::BadSignature => 4,
+            Self::Malformed => 5,
+            Self::Missing => 6,
+        }
+    }
+
+    /// The word reports use.
+    #[must_use]
+    pub const fn word(self) -> &'static str {
+        match self {
+            Self::Ok => "ok",
+            Self::Unsigned => "unsigned",
+            Self::Missing => "missing",
+            Self::BadSignature => "bad_signature",
+            Self::UntrustedSigner => "untrusted_signer",
+            Self::Mismatch => "mismatch",
+            Self::Malformed => "malformed",
+        }
+    }
+}
+
+/// Why an object got its outcome.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct VerifyReason {
+    /// A stable code, e.g. `subject`, `trailer`, `line_hash`, `signature`.
+    pub code: String,
+    /// The field that disagrees.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub field: Option<String>,
+    /// What it should be.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expected: Option<String>,
+    /// What it is.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub found: Option<String>,
+}
+
+/// Who signed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SignerView {
+    /// `ssh`, `openpgp` or `sigstore`.
+    pub kind: String,
+    /// The key's fingerprint (`SHA256:…`, an OpenPGP fingerprint).
+    pub keyid: String,
+    /// The principal the verifier's trust input names for it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub principal: Option<String>,
+}
+
+/// One task object's verification.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ObjectVerification {
+    /// The commit (or skip record) id.
+    pub object: String,
+    /// `task` or `skip`.
+    pub kind: String,
+    /// Task ID.
+    pub task: String,
+    /// The verdict the statements claim.
+    pub verdict: Option<String>,
+    /// The outcome.
+    pub outcome: VerifyOutcome,
+    /// Every reason found.
+    pub reasons: Vec<VerifyReason>,
+    /// Who signed, when signed.
+    pub signer: Option<SignerView>,
+    /// How many statements the bundle holds.
+    pub statements: usize,
+    /// For a missing attestation: an attested commit with the same tree.
+    pub same_tree_as: Option<String>,
+}
+
+/// Result of `speccoder attest verify` and `attest sign`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct AttestReport {
+    /// Feature directory name.
+    pub feature: String,
+    /// Where trust came from: the allowed-signers file, whether GPG's keyring
+    /// was used, the expected Sigstore identity.
+    pub trust: serde_json::Value,
+    /// One per object.
+    pub objects: Vec<ObjectVerification>,
+    /// Count per outcome word.
+    pub totals: std::collections::BTreeMap<String, usize>,
+}
+
+/// One row of the requirement → scenario → test → verdict matrix.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct TraceRow {
+    /// `FR-001`, `SC-002`.
+    pub requirement: String,
+    /// `US1.2`: story 1, acceptance scenario 2.
+    pub scenario: Option<String>,
+    /// The acceptance test.
+    pub test: Option<String>,
+    /// The task that cites it.
+    pub task: Option<String>,
+    /// That task's verdict.
+    pub verdict: Option<String>,
+}
+
 /// Result of `speccoder report`: what the branch's history shows.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct StatusReport {
@@ -704,6 +848,9 @@ pub struct StatusReport {
     pub tasks: Vec<TaskStatus>,
     /// Convergence rounds, oldest first.
     pub convergence: Vec<ConvergenceRound>,
+    /// Requirement → task → verdict, in the spec's order; a requirement no
+    /// task cites is a row without a task.
+    pub trace: Vec<TraceRow>,
     /// Counts by evidence.
     pub totals: StatusTotals,
 }
@@ -726,6 +873,10 @@ pub struct TaskStatus {
     /// In place: the spec, plan or constitution changed since this task's
     /// evidence was committed (its `Intent-Digest` differs from now).
     pub intent_changed: bool,
+    /// For a task speccoder committed: its attestation as the note says,
+    /// signatures unchecked — `signed <kind> <keyid>`, `unsigned` or
+    /// `missing` (F-061; `attest verify` checks them).
+    pub attestation: Option<String>,
     /// Open dependencies of a blocked task.
     pub blocked_by: Vec<String>,
     /// The speccoder commit that ticked it.
@@ -773,6 +924,8 @@ pub struct StatusTotals {
     pub ticked_without_evidence: usize,
     /// In place: committed by speccoder, the local tick missing.
     pub evidence_without_tick: usize,
+    /// Ticks speccoder committed without an attestation.
+    pub without_attestation: usize,
     /// Ticked by `speccoder accept`: a person's attestation, not evidence.
     pub attested: usize,
     /// Open and skipped by a person.
@@ -1042,6 +1195,8 @@ mod tests {
         assert_eq!(CommandStatus::TaskNotReady.exit_code().code(), 16);
         assert_eq!(CommandStatus::NeedsHuman.exit_code().code(), 23);
         assert_eq!(CommandStatus::EvalFailed.exit_code().code(), 24);
+        assert_eq!(CommandStatus::NotReplayable.exit_code().code(), 25);
+        assert_eq!(CommandStatus::AttestationFailed.exit_code().code(), 26);
     }
 
     #[test]

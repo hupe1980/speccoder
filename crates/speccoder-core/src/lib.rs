@@ -16,11 +16,12 @@ pub mod stage;
 pub mod verify;
 
 pub use command::{
-    ApprovalView, ApprovalsReport, ArchiveReport, BenchReport, ChecklistStatus, CommandData,
-    CommandResult, CommandStatus, ControlReport, ConvergeReport, ConvergenceRound, CostReport,
-    DecidedCall, EarlierAttempt, EvalCase, EvalReport, EvalSummary, ExitCode, FeatureReport,
-    FullTier, HeldOutGap, HeldOutOracle, InPlaceReport, InitCheck, InitReport, LastAttempt,
-    MonitorScore, OperatorView, PendingCall, PrReport, ProposeReport, RefusedPath, ReplayReport,
-    RunReport, SCHEMA_VERSION, SkillEntry, SkillRunReport, SkillsReport, StatusReport,
-    StatusTotals, TaskCost, TaskStatus, Usage, WorktreeReport,
+    ApprovalView, ApprovalsReport, ArchiveReport, AttestReport, BenchReport, ChecklistStatus,
+    CommandData, CommandResult, CommandStatus, ControlReport, ConvergeReport, ConvergenceRound,
+    CostReport, DecidedCall, EarlierAttempt, EvalCase, EvalReport, EvalSummary, ExitCode,
+    FeatureReport, FullTier, HeldOutGap, HeldOutOracle, InPlaceReport, InitCheck, InitReport,
+    LastAttempt, MonitorScore, ObjectVerification, OperatorView, PendingCall, PrReport,
+    ProposeReport, RefusedPath, ReplayReport, RunReport, SCHEMA_VERSION, SignerView, SkillEntry,
+    SkillRunReport, SkillsReport, StatusReport, StatusTotals, TaskCost, TaskStatus, TraceRow,
+    Usage, VerifyOutcome, VerifyReason, WorktreeReport,
 };

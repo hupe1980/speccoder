@@ -101,6 +101,10 @@ Tool results reach the model through the runtime's conversation record, so every
 
 With `[executor] kind = "claude"`, `"codex"` or `"command"`, another agent makes the attempt with its own tools. speccoder's policy cannot refuse its individual calls, and it runs outside speccoder's sandbox with your full environment, because it needs its own credentials; its own permission system is its boundary. The worktree, the diff audit, the checks and the verdict still apply afterwards.
 
+## Signing keys
+
+speccoder signs each tick's [attestations](@/docs/attestations.md) with your git signing key. What the model runs cannot reach it: the sandbox hides `~/.ssh` and `~/.gnupg`, commands get no `SSH_AUTH_SOCK`, and the policy denies `git notes` writes and `update-ref` on `refs/notes`, so only speccoder writes attestations. With the sandbox off, a command could read a key file or use an agent you can; `[attest] sign_at = "later"` or a key that needs a touch keeps signing in your hands.
+
 ## What it does not protect against
 
 - **Code that runs during checks, beyond the sandbox:** it can read files outside the hidden paths, use CPU and memory, and write to package caches.

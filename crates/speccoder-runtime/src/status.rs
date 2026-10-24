@@ -9,7 +9,7 @@ use std::path::Path;
 use speccoder_core::snapshot::{ParsedTasks, TaskState};
 use speccoder_core::{
     CommandData, CommandResult, CommandStatus, ConvergenceRound, StatusReport, StatusTotals,
-    TaskStatus,
+    TaskStatus, TraceRow,
 };
 
 use crate::git::Git;
@@ -133,6 +133,7 @@ fn statuses(
                 commit: found
                     .filter(|_| t.done || untick.is_some())
                     .map(|e| e.commit.clone()),
+                attestation: None,
                 intent_changed: found.is_some_and(|e| {
                     !e.intent.is_empty() && intent_now.is_some_and(|now| now != e.intent)
                 }),
@@ -166,6 +167,10 @@ fn totals(tasks: &[TaskStatus]) -> StatusTotals {
         regression_only: n("regression_only"),
         ticked_without_evidence: n("ticked_without_evidence"),
         evidence_without_tick: n("evidence_without_tick"),
+        without_attestation: tasks
+            .iter()
+            .filter(|t| t.attestation.as_deref() == Some("missing"))
+            .count(),
         attested: n("attested"),
         skipped: n("skipped"),
         ready: n("ready"),
@@ -287,7 +292,7 @@ pub fn report(path: &Path, feature: Option<&str>) -> CommandResult {
     let (evidence, convergence) = read_log(&log, &name);
     let saved = crate::attempts::list(root, &name);
     let skipped = crate::controls::skipped(root, &name);
-    let tasks = statuses(
+    let mut tasks = statuses(
         &parsed,
         &evidence,
         &lines,
@@ -295,6 +300,13 @@ pub fn report(path: &Path, feature: Option<&str>) -> CommandResult {
         &saved,
         &skipped,
     );
+    // What each committed tick's note says (signatures are `attest verify`'s).
+    for t in tasks.iter_mut() {
+        if let Some(commit) = t.commit.as_deref() {
+            t.attestation = Some(crate::attest::note_state(root, commit));
+        }
+    }
+    let trace = trace(&format.requirement_ids(root, &f.feature.dir), &tasks);
     let totals = totals(&tasks);
     let done =
         totals.verified + totals.regression_only + totals.attested + totals.ticked_without_evidence;
@@ -311,6 +323,16 @@ pub fn report(path: &Path, feature: Option<&str>) -> CommandResult {
     );
     if !convergence.is_empty() {
         message.push_str(&format!("; {} convergence round(s)", convergence.len()));
+    }
+    let uncited = trace.iter().filter(|r| r.task.is_none()).count();
+    if uncited > 0 {
+        message.push_str(&format!("; {uncited} requirement(s) no task cites"));
+    }
+    if totals.without_attestation > 0 {
+        message.push_str(&format!(
+            "; {} tick(s) without an attestation",
+            totals.without_attestation
+        ));
     }
     if totals.evidence_without_tick > 0 {
         message.push_str(&format!(
@@ -345,9 +367,42 @@ pub fn report(path: &Path, feature: Option<&str>) -> CommandResult {
             unmerged_commits: unmerged,
             tasks,
             convergence,
+            trace,
             totals,
         }),
     ))
+}
+
+/// One row per requirement and task citing it (by its identifier as a word
+/// in the title); a requirement no task cites is a row of its own.
+fn trace(requirements: &[(String, String)], tasks: &[TaskStatus]) -> Vec<TraceRow> {
+    requirements
+        .iter()
+        .flat_map(|(id, _)| {
+            let rows: Vec<TraceRow> = tasks
+                .iter()
+                .filter(|t| crate::attest::cites(&t.title, id))
+                .map(|t| TraceRow {
+                    requirement: id.clone(),
+                    scenario: None,
+                    test: None,
+                    task: Some(t.id.clone()),
+                    verdict: Some(t.state.clone()),
+                })
+                .collect();
+            if rows.is_empty() {
+                vec![TraceRow {
+                    requirement: id.clone(),
+                    scenario: None,
+                    test: None,
+                    task: None,
+                    verdict: None,
+                }]
+            } else {
+                rows
+            }
+        })
+        .collect()
 }
 
 /// Each task's line with its box read as open, hashed: what an in-place
@@ -369,6 +424,53 @@ fn open_lines(file: &Path, parsed: &ParsedTasks) -> BTreeMap<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_requirement_no_task_cites_is_a_row_of_its_own() {
+        let task = |id: &str, title: &str, state: &str| TaskStatus {
+            id: id.to_owned(),
+            title: title.to_owned(),
+            phase: "Phase 3".to_owned(),
+            state: state.to_owned(),
+            intent_changed: false,
+            blocked_by: Vec::new(),
+            commit: None,
+            run_id: None,
+            last_attempt: None,
+            note: None,
+            attestation: None,
+        };
+        let ids = |v: &[&str]| {
+            v.iter()
+                .map(|i| ((*i).to_owned(), String::new()))
+                .collect::<Vec<_>>()
+        };
+        let tasks = [
+            task("T001", "Parse the config (FR-001, FR-002)", "verified"),
+            task("T002", "Render it per FR-002", "ready"),
+            task("T003", "Unrelated FR-0010 work", "ready"),
+        ];
+        let rows = trace(&ids(&["FR-001", "FR-002", "FR-003"]), &tasks);
+        let shown: Vec<_> = rows
+            .iter()
+            .map(|r| {
+                (
+                    r.requirement.as_str(),
+                    r.task.as_deref(),
+                    r.verdict.as_deref(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            shown,
+            [
+                ("FR-001", Some("T001"), Some("verified")),
+                ("FR-002", Some("T001"), Some("verified")),
+                ("FR-002", Some("T002"), Some("ready")),
+                ("FR-003", None, None),
+            ]
+        );
+    }
 
     #[test]
     fn trailers_and_rounds_are_read_newest_first() {

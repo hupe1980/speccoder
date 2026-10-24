@@ -1,0 +1,24 @@
+name: Attestation interop
+
+# speccoder's attestations checked with other people's tools: ssh-keygen
+# over the DSSE PAE rebuilt by hand, and in-toto's Go library on every
+# statement (scripts/attest-interop.sh). Weekly and on demand; not a gate.
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  interop:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup toolchain install # from rust-toolchain.toml
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - run: scripts/attest-interop.sh

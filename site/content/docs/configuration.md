@@ -116,6 +116,19 @@ Keep the list narrow: an allowed command runs whatever the model passes after th
 
 See [security and the sandbox](@/docs/security.md#the-os-sandbox) for what the sandbox allows.
 
+## `[attest]`
+
+Signed [attestations](@/docs/attestations.md) of every tick.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `enabled` | `true` | Write the statements as a git note on each tick commit |
+| `signer` | `"git"` | `git` signs with your git signing key (SSH or OpenPGP), `sigstore` keyless with `cosign`, `none` leaves them unsigned |
+| `sign_at` | `"tick"` | `tick` signs as each task is ticked; `later` leaves that to `speccoder attest sign` (keys that need a touch or a passphrase) |
+| `[attest.sigstore] identity`, `issuer` | — | The identity and OIDC issuer you sign with: `speccoder pr` prints them in its verify command. A suggestion for the reviewer, never trust: `attest verify` trusts only its own flags |
+
+The signer is part of the judge configuration the statements' policy hash covers.
+
 ## `[mutation]`
 
 | Key | Default | Meaning |

@@ -501,6 +501,18 @@ impl Policy {
                     "`git {sub}` talks to a remote; speccoder never does"
                 ));
             }
+            // Attestations are git notes only speccoder writes (F-061).
+            let notes_action = argv[2..]
+                .iter()
+                .find(|a| !a.starts_with('-'))
+                .map_or("list", String::as_str);
+            if (sub == "notes" && !matches!(notes_action, "show" | "list"))
+                || (sub == "update-ref" && argv.iter().any(|a| a.starts_with("refs/notes")))
+            {
+                return Decision::Deny(
+                    "git notes are speccoder's attestations; only speccoder writes them".to_owned(),
+                );
+            }
             // Read-only queries (skills and models ask where they are).
             let listing_branches = sub == "branch"
                 && argv[2..].iter().all(|a| {
@@ -703,6 +715,42 @@ mod tests {
             p.classify("write_file", &json!({"path": "speccoder.toml"})),
             Decision::Deny(_)
         ));
+        // Attestations are speccoder's: the model reads notes, never writes them.
+        let p = Policy::new(&[], &[]);
+        for argv in [
+            vec![
+                "git",
+                "notes",
+                "--ref=speccoder",
+                "add",
+                "-f",
+                "-m",
+                "x",
+                "HEAD",
+            ],
+            vec!["git", "notes", "remove", "HEAD"],
+            vec!["git", "update-ref", "refs/notes/speccoder", "HEAD"],
+        ] {
+            assert!(
+                matches!(
+                    p.classify("run_command", &json!({ "argv": argv })),
+                    Decision::Deny(_)
+                ),
+                "{argv:?}"
+            );
+        }
+        for argv in [
+            vec!["git", "notes", "--ref=speccoder", "show", "HEAD"],
+            vec!["git", "notes", "list"],
+        ] {
+            assert!(
+                !matches!(
+                    p.classify("run_command", &json!({ "argv": argv })),
+                    Decision::Deny(_)
+                ),
+                "{argv:?}"
+            );
+        }
         // In place, what moves the checkout is denied; queries still run.
         let in_place = Policy::new(&[], &[]).in_place();
         for argv in [

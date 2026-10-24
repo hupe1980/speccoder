@@ -44,6 +44,8 @@ Every stop and finish ends with a `Next:` block — the commands that continue, 
 | `speccoder report` | Every task and the evidence behind its tick |
 | `speccoder cost` | Tokens, and money with prices configured, per task |
 | `speccoder replay <RUN>` | Re-derive a recorded run from the journal, without a model |
+| `speccoder attest verify [REV\|RANGE] [--allowed-signers FILE] [--certificate-identity I --certificate-oidc-issuer O] [--require-signed]` | Re-check every tick's [attestation](@/docs/attestations.md) against its commit, and its signatures against your trust |
+| `speccoder attest sign [REV\|RANGE]` | Sign the statements ticks left unsigned (`[attest] sign_at = "later"`, or no key yet) |
 
 ## Decide
 
@@ -60,7 +62,7 @@ Every stop and finish ends with a `Next:` block — the commands that continue, 
 
 | Command | What it does |
 |---|---|
-| `speccoder pr [--remote R] [--base B] [--yes] [--dry-run] [--force]` | Push the branch and open a draft pull request with the evidence; `--force` hands off although the full-tier checks failed |
+| `speccoder pr [--remote R] [--base B] [--yes] [--dry-run] [--force]` | Push the branch and its attestation notes and open a draft pull request with the evidence; `--force` hands off although the full-tier checks failed |
 | `speccoder acp` | Serve the Agent Client Protocol on stdio, for editors |
 
 ## Measure
@@ -80,7 +82,7 @@ With `--json` every command prints exactly one object on stdout and no progress 
 
 `status` is the exit code's name in `snake_case`; `data` depends on the command. `--help` and `--version` always print text.
 
-Fields are only added within a schema version; ignore fields you do not know. Recent additions: a test outcome `"error"` (a JUnit `<error>`), `flaky` on check results, `red_class` and `excerpt` in a run's `acceptance`, `scope` on a run (`stated`, `named`, `outside`), `full_tier` on a feature run, `data.checklists` when unfinished checklists stop a run, and for in-place runs `data.code`, `data.paths` and `data.fix` on a refusal or stop, a task state `evidence_without_tick` with `totals.evidence_without_tick`, and `intent_changed` on a task.
+Fields are only added within a schema version; ignore fields you do not know. Recent additions: a test outcome `"error"` (a JUnit `<error>`), `flaky` on check results, `red_class` and `excerpt` in a run's `acceptance`, `scope` on a run (`stated`, `named`, `outside`), `full_tier` on a feature run, `data.checklists` when unfinished checklists stop a run, and for in-place runs `data.code`, `data.paths` and `data.fix` on a refusal or stop, a task state `evidence_without_tick` with `totals.evidence_without_tick`, and `intent_changed` on a task; `attestation` on a run and on a task, `totals.without_attestation` and `trace` in `report`, `tests` (each acceptance test and the scenarios it cites) in a run's `acceptance`, and `data` of `attest`.
 
 ## Exit codes
 
@@ -102,3 +104,4 @@ Fields are only added within a schema version; ignore fields you do not know. Re
 | 23 | `needs_human` | Stopped for a person: blocked, approval, denials, budget, incomplete, not demonstrated, suspected gaming, interrupted, or an in-place run stopped (`INTENT-CHANGED`, `JUDGE-CHANGED`, `CHECKOUT-CHANGED`, `GIT-CHANGED`, `RETURN-BLOCKED`) |
 | 24 | `eval_failed` | The evaluation found a false completion or a cheat |
 | 25 | `not_replayable` | This build cannot re-derive the recorded run |
+| 26 | `attestation_failed` | `attest verify`: an attestation is missing, malformed, mismatched, or not signed by someone you trust (unsigned only with `--require-signed`) |

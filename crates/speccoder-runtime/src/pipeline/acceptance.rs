@@ -16,6 +16,8 @@ pub(crate) struct AcceptanceSetup<'a> {
     pub(crate) feature: &'a str,
     pub(crate) task: &'a str,
     pub(crate) bundle: serde_json::Value,
+    /// The task's scenarios, which each test cites.
+    pub(crate) scenarios: &'a [speccoder_core::spec::ScenarioRef],
     pub(crate) runner: &'a sandbox::Runner,
 }
 
@@ -83,7 +85,7 @@ pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance 
         })
         .map(|t| t.chars().take(8192).collect::<String>())
         .unwrap_or_default();
-    let input = substrate::acceptance::input(a.bundle.clone(), &files, &manifest);
+    let input = substrate::acceptance::input(a.bundle.clone(), a.scenarios, &files, &manifest);
     let outcome = a.rt.block_on(a.plane.acceptance(a.feature, a.task, input));
     let outcome = match outcome {
         Ok(o) => o,
@@ -109,6 +111,8 @@ pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance 
     let protected = a.policy.protected();
     let mut written = Vec::new();
     let mut planned = Vec::new();
+    // Each test and the scenarios it cites, of those the spec has.
+    let mut tests = Vec::new();
     for f in answer["files"].as_array().into_iter().flatten() {
         let (Some(path), Some(content)) = (f["path"].as_str(), f["content"].as_str()) else {
             continue;
@@ -123,6 +127,14 @@ pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance 
         if a.project.join(&rel).exists() {
             return skipped(format!("`{rel}` already exists"), base);
         }
+        let cited: Vec<&str> = f["scenarios"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|v| v.as_str())
+            .filter(|id| a.scenarios.iter().any(|s| s.id == *id))
+            .collect();
+        tests.push(json!({ "path": rel, "scenarios": cited }));
         planned.push((rel, content.to_owned()));
     }
     if planned.is_empty() {
@@ -166,6 +178,7 @@ pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance 
     let red = class.is_red();
     let mut report = base;
     report["files"] = json!(written);
+    report["tests"] = json!(tests);
     report["argv"] = json!(argv);
     report["red"] = json!(red);
     report["red_class"] = json!(class);

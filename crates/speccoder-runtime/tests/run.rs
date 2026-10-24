@@ -940,7 +940,7 @@ const ACCEPTANCE_SPEC: (&str, &str) = (
 );
 
 fn acceptance(path: &str, argv: &[&str]) -> Value {
-    json!({ "files": [{ "path": path, "content": "acceptance: login exists\n" }], "argv": argv, "notes": [] })
+    json!({ "files": [{ "path": path, "content": "acceptance: login exists\n", "scenarios": [] }], "argv": argv, "notes": [] })
 }
 
 const GREP_LOGIN: &[&str] = &["./accept.sh", "fn login"];
@@ -2323,6 +2323,23 @@ fn parallel_tasks_run_in_lanes_and_merge_with_both_ticks() {
         2,
         "{log}"
     );
+    // Each attestation moved with its work onto the feature branch, and
+    // checks out there; the lanes' commits keep none.
+    let ticks = git_out(&feature_wt, &["log", "--format=%H", "--grep=^Spec-Task:"]);
+    let noted = git_out(&feature_wt, &["notes", "--ref=speccoder", "list"]);
+    for commit in ticks.lines() {
+        assert!(noted.contains(commit), "{commit} has no note: {noted}");
+        assert!(
+            fr.attempts
+                .iter()
+                .any(|a| a.commit.as_deref() == Some(commit))
+        );
+    }
+    assert_eq!(noted.lines().count(), 2, "{noted}");
+    let trust = speccoder_runtime::attest::verify::Trust::default();
+    let checked =
+        speccoder_runtime::attest::verify::verify_at(&feature_wt, None, None, &trust, false);
+    assert_eq!(checked.status(), CommandStatus::Ok, "{}", checked.message());
 }
 
 #[test]
@@ -2525,6 +2542,21 @@ fn pr_is_a_dry_run_until_confirmed_then_a_draft_with_the_evidence() {
         p.body
     );
     assert!(p.body.contains("speccoder never merges"));
+    // Each tick's attestation, and how to check it (F-061).
+    assert!(p.body.contains("| Attestation |"), "{}", p.body);
+    assert!(
+        p.body
+            .contains("speccoder attest verify --feature 001-graph"),
+        "{}",
+        p.body
+    );
+    assert!(
+        p.commands
+            .iter()
+            .any(|c| c == "git push origin refs/notes/speccoder"),
+        "{:?}",
+        p.commands
+    );
     assert!(
         git_out(remote.path(), &["branch", "--list"])
             .trim()
@@ -2540,6 +2572,12 @@ fn pr_is_a_dry_run_until_confirmed_then_a_draft_with_the_evidence() {
     };
     assert_eq!(p.url.as_deref(), Some("https://example.invalid/pr/1"));
     assert!(git_out(remote.path(), &["branch", "--list"]).contains("speccoder/001-graph"));
+    assert!(
+        !git_out(remote.path(), &["notes", "--ref=speccoder", "list"])
+            .trim()
+            .is_empty(),
+        "the attestation notes were not pushed"
+    );
     let args = fs::read_to_string(bin.path().join("args")).unwrap();
     assert!(
         args.starts_with("pr create --draft --base main --head speccoder/001-graph"),

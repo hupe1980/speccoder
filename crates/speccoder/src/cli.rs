@@ -374,6 +374,11 @@ pub enum Command {
         #[arg(long, value_name = "KIND", value_parser = ["native", "claude", "codex"])]
         executor: Option<String>,
     },
+    /// Signed evidence per ticked task: verify it, or sign what is unsigned.
+    Attest {
+        #[command(subcommand)]
+        action: AttestAction,
+    },
     /// Public benchmarks as evaluation cases.
     Bench {
         #[command(subcommand)]
@@ -413,6 +418,47 @@ pub enum Command {
 }
 
 /// `speccoder bench` actions.
+#[derive(Debug, Subcommand)]
+pub enum AttestAction {
+    /// Re-check every task's attestation against its commit, signatures
+    /// against your trust (exit 26 when one does not hold).
+    Verify {
+        /// A commit or a range (`main..speccoder/001-x`); default: the
+        /// feature's task commits.
+        rev: Option<String>,
+        /// A path inside the project.
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+        /// Feature: directory name or numeric prefix.
+        #[arg(long, visible_alias = "change")]
+        feature: Option<String>,
+        /// SSH allowed-signers file (default: git's gpg.ssh.allowedSignersFile).
+        #[arg(long, value_name = "FILE")]
+        allowed_signers: Option<PathBuf>,
+        /// The Sigstore certificate identity to expect.
+        #[arg(long)]
+        certificate_identity: Option<String>,
+        /// The Sigstore OIDC issuer to expect.
+        #[arg(long)]
+        certificate_oidc_issuer: Option<String>,
+        /// Fail on unsigned statements too.
+        #[arg(long)]
+        require_signed: bool,
+    },
+    /// Sign the unsigned statements of the feature's task commits (for
+    /// `[attest] sign_at = "later"`, or a key that was not set up).
+    Sign {
+        /// A commit or a range; default: the feature's task commits.
+        rev: Option<String>,
+        /// A path inside the project.
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+        /// Feature: directory name or numeric prefix.
+        #[arg(long, visible_alias = "change")]
+        feature: Option<String>,
+    },
+}
+
 #[derive(Debug, Subcommand)]
 pub enum BenchAction {
     /// Turn SWE-bench-format instances (JSON Lines) into cases for `speccoder eval`.
