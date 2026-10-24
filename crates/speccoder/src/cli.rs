@@ -38,8 +38,27 @@ pub enum ColorArg {
 
 /// Spec-driven coding agent for GitHub Spec Kit and OpenSpec projects.
 #[derive(Debug, Parser)]
-#[command(name = "speccoder", version, about, long_about = None)]
+#[command(
+    name = "speccoder",
+    version,
+    about = "Spec-driven coding, decided by evidence",
+    disable_help_subcommand = true
+)]
 pub struct Cli {
+    /// The project: a path inside it (default: the current directory).
+    #[arg(
+        short = 'C',
+        long = "project",
+        global = true,
+        default_value = ".",
+        value_name = "PATH"
+    )]
+    pub project: PathBuf,
+
+    /// The feature: directory name or numeric prefix (an OpenSpec change: its id).
+    #[arg(long, visible_alias = "change", global = true, value_name = "NAME")]
+    pub feature: Option<String>,
+
     /// Print each command result as one JSON object on stdout.
     #[arg(long, global = true)]
     pub json: bool,
@@ -49,7 +68,7 @@ pub struct Cli {
     pub events: bool,
 
     /// Colour: auto (a terminal, unless NO_COLOR), always or never.
-    #[arg(long, global = true, value_enum, default_value_t = ColorArg::Auto)]
+    #[arg(long, global = true, value_enum, default_value_t = ColorArg::Auto, value_name = "WHEN")]
     pub color: ColorArg,
 
     /// ASCII marks and borders instead of Unicode symbols.
@@ -68,22 +87,27 @@ pub struct Cli {
     #[arg(short, long, global = true)]
     pub verbose: bool,
 
-    /// The project's spec format, instead of `[spec] format` or detection.
-    #[arg(long, global = true, value_enum, env = "SPECCODER_FORMAT")]
+    /// The spec format (speckit, openspec, kiro), instead of `[spec] format` or detection.
+    #[arg(
+        long,
+        global = true,
+        value_enum,
+        env = "SPECCODER_FORMAT",
+        value_name = "FORMAT"
+    )]
     pub format: Option<SpecFormat>,
 
+    /// Without a command: the dashboard at a terminal, else the report.
     #[command(subcommand)]
-    pub command: Command,
+    pub command: Option<Command>,
 }
 
-/// The subcommands.
+/// The subcommands. The daily ones are grouped in the top-level help;
+/// the advanced ones are hidden there and listed by `help advanced`.
 #[derive(Debug, Subcommand)]
 pub enum Command {
-    /// Detect the project's checks and write `speccoder.toml` (review, then commit it).
+    /// Set up speccoder here: detect the checks, run them, offer to commit the config.
     Init {
-        /// A path inside the project (default: the current directory).
-        #[arg(default_value = ".")]
-        path: PathBuf,
         /// `anthropic` or `openai` (default: the one whose API key variable is set).
         #[arg(long)]
         provider: Option<String>,
@@ -93,33 +117,26 @@ pub enum Command {
         /// Replace an existing `speccoder.toml`.
         #[arg(long)]
         force: bool,
-    },
-    /// Run an installed Agent Skill (e.g. speckit-specify, -plan, -tasks), or list them.
-    Skill {
-        /// The skill (`speckit-plan`, or just `plan`); without it, list the installed skills.
-        name: Option<String>,
-        /// What the skill is asked ($ARGUMENTS), e.g. a feature description.
-        #[arg(trailing_var_arg = true)]
-        arguments: Vec<String>,
-        /// A path inside the project (default: the current directory).
-        #[arg(long, default_value = ".")]
-        path: PathBuf,
-        /// Never ask inline: questions are left as [NEEDS CLARIFICATION]; approvals stop the run.
+        /// Do not run the checks on the untouched code.
         #[arg(long)]
-        no_prompt: bool,
+        no_verify: bool,
+        /// Ask nothing (and so commit nothing: the fix line says what to commit).
+        #[arg(long)]
+        yes: bool,
     },
-    /// Planning in the project's spec format: run one of its skills (Spec
-    /// Kit: specify, clarify, plan, tasks, …; OpenSpec: propose, explore,
-    /// update-change), list them, or archive an OpenSpec change.
+    /// Check git, the sandbox, the model key, the spec tools and the config; changes nothing.
+    Doctor {
+        /// A redacted Markdown bundle to paste into an issue.
+        #[arg(long)]
+        bug_report: bool,
+    },
+    /// The format's planning skills: `spec specify "…"`, `spec plan`, … (OpenSpec: propose, explore, archive).
     Spec {
         /// The skill, or `archive`; without it, list the installed skills.
         name: Option<String>,
         /// What the skill is asked ($ARGUMENTS); for `archive`, the change.
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         arguments: Vec<String>,
-        /// A path inside the project (default: the current directory).
-        #[arg(long, default_value = ".")]
-        path: PathBuf,
         /// Never ask inline: questions are left as [NEEDS CLARIFICATION]; approvals stop the run.
         #[arg(long)]
         no_prompt: bool,
@@ -130,31 +147,9 @@ pub enum Command {
         #[arg(long, value_name = "TASK")]
         allow_unverified: Vec<String>,
     },
-    /// Report the project's artifacts and tasks (read-only).
-    Inspect {
-        /// A path inside the project (default: the current directory).
-        #[arg(default_value = ".")]
-        path: PathBuf,
-        /// Feature to inspect: directory name or numeric prefix (an OpenSpec
-        /// change: its id, also as --change).
-        #[arg(long, visible_alias = "change")]
-        feature: Option<String>,
-    },
-    /// Run the checks declared in speccoder.toml and report the evidence.
-    Verify {
-        /// A path inside the project (default: the current directory).
-        #[arg(default_value = ".")]
-        path: PathBuf,
-        /// Only checks of this tier.
-        #[arg(long, value_enum)]
-        tier: Option<TierArg>,
-        /// Compare with a result saved from `speccoder --json verify`.
-        #[arg(long, value_name = "FILE")]
-        against: Option<PathBuf>,
-    },
-    /// Run one attempt at a task (`--task`), or work through the feature's ready tasks.
+    /// Work through the feature's ready tasks, or one (`--task T005`); resumes where it stopped.
     Run {
-        /// Task ID, e.g. T005; without it, ready tasks run in order until the feature is done.
+        /// One task, e.g. T005; without it, ready tasks run in order until the feature is done.
         #[arg(long)]
         task: Option<String>,
         /// At most this many tasks in a feature run.
@@ -163,7 +158,7 @@ pub enum Command {
         /// After the last task, converge and work through what it appends, until converged.
         #[arg(long, conflicts_with = "task")]
         converge: bool,
-        /// Never ask inline: a call that needs approval stops the attempt (see `approvals`).
+        /// Never ask inline: a call that needs approval stops the attempt (`task approve`).
         #[arg(long)]
         no_prompt: bool,
         /// Run up to N ready `[P]` tasks at once, each in its own worktree, then merge and re-verify.
@@ -180,189 +175,30 @@ pub enum Command {
         /// under an attempt ref and switch back to the original branch.
         #[arg(long = "return", requires = "in_place", conflicts_with_all = ["task", "converge", "max_tasks"])]
         return_: bool,
-        /// A path inside the project (default: the current directory).
-        #[arg(default_value = ".")]
-        path: PathBuf,
-        /// Feature: directory name or numeric prefix (an OpenSpec change: its
-        /// id, also as --change).
-        #[arg(long, visible_alias = "change")]
-        feature: Option<String>,
     },
-    /// Assess a finished feature against its spec, plan and tasks (read-only) and append what remains.
-    Converge {
-        /// In this checkout on `speccoder/<feature>`, as `run --in-place`.
-        #[arg(long)]
-        in_place: bool,
-        /// A path inside the project (default: the current directory).
-        #[arg(default_value = ".")]
-        path: PathBuf,
-        /// Feature: directory name or numeric prefix (an OpenSpec change: its
-        /// id, also as --change).
-        #[arg(long, visible_alias = "change")]
-        feature: Option<String>,
+    /// Act on one task: approve, reject, accept, skip, nudge or show it.
+    Task {
+        #[command(subcommand)]
+        action: TaskAction,
     },
-    /// Show a feature's tasks and the evidence behind each tick (read-only, no model).
+    /// Every task and the evidence behind its tick (--live, --cost, --approvals, --markdown).
+    #[command(group(clap::ArgGroup::new("view").args(["live", "cost", "approvals", "markdown"]).multiple(false)))]
     Report {
-        /// A path inside the project (default: the current directory).
-        #[arg(default_value = ".")]
-        path: PathBuf,
-        /// Feature: directory name or numeric prefix (an OpenSpec change: its
-        /// id, also as --change).
-        #[arg(long, visible_alias = "change")]
-        feature: Option<String>,
-        /// The report as GitHub-flavoured Markdown (pull requests, CI summaries).
+        /// What the current (or last) run is doing, from another terminal.
+        #[arg(long)]
+        live: bool,
+        /// Tokens (and money, if `[model]` has prices) per task.
+        #[arg(long)]
+        cost: bool,
+        /// Calls waiting for a person, and the decisions made.
+        #[arg(long)]
+        approvals: bool,
+        /// GitHub-flavoured Markdown (pull requests, CI summaries).
         #[arg(long)]
         markdown: bool,
     },
-    /// What the project's current (or last) run is doing, from another terminal.
-    Status {
-        /// A path inside the project (default: the current directory).
-        #[arg(default_value = ".")]
-        path: PathBuf,
-    },
-    /// A live dashboard: tasks and their evidence, the running attempt, the approval queue.
-    Tui {
-        /// A path inside the project (default: the current directory).
-        #[arg(default_value = ".")]
-        path: PathBuf,
-        /// Feature: directory name or numeric prefix (an OpenSpec change: its
-        /// id, also as --change).
-        #[arg(long, visible_alias = "change")]
-        feature: Option<String>,
-    },
-    /// List calls that stopped a task for approval, and the decisions made.
-    Approvals {
-        /// A path inside the project (default: the current directory).
-        #[arg(default_value = ".")]
-        path: PathBuf,
-        /// Feature: directory name or numeric prefix (an OpenSpec change: its
-        /// id, also as --change).
-        #[arg(long, visible_alias = "change")]
-        feature: Option<String>,
-    },
-    /// Approve the call a task stopped for (its path, or its exact command) for that task.
-    Approve {
-        /// Task ID, e.g. T005.
-        #[arg(long, required_unless_present = "all")]
-        task: Option<String>,
-        /// One waiting call, by its id or a prefix of it (`speccoder approvals`).
-        #[arg(long)]
-        call: Option<String>,
-        /// Every waiting call (of `--task`, or of the feature), each recorded on its own.
-        #[arg(long)]
-        all: bool,
-        /// How far the approval reaches: this call, the task, or the run.
-        #[arg(long, value_enum, default_value_t = ScopeArg::Task)]
-        scope: ScopeArg,
-        /// A note the attempt is told with the approval.
-        #[arg(long)]
-        note: Option<String>,
-        /// A path inside the project (default: the current directory).
-        #[arg(default_value = ".")]
-        path: PathBuf,
-        /// Feature: directory name or numeric prefix (an OpenSpec change: its
-        /// id, also as --change).
-        #[arg(long, visible_alias = "change")]
-        feature: Option<String>,
-    },
-    /// Reject the call a task stopped for; the model is told the reason.
-    Reject {
-        /// Task ID, e.g. T005.
-        #[arg(long, required_unless_present = "all")]
-        task: Option<String>,
-        /// One waiting call, by its id or a prefix of it (`speccoder approvals`).
-        #[arg(long)]
-        call: Option<String>,
-        /// Every waiting call (of `--task`, or of the feature), each recorded on its own.
-        #[arg(long)]
-        all: bool,
-        /// Why — the model reads this.
-        #[arg(long)]
-        reason: String,
-        /// A path inside the project (default: the current directory).
-        #[arg(default_value = ".")]
-        path: PathBuf,
-        /// Feature: directory name or numeric prefix (an OpenSpec change: its
-        /// id, also as --change).
-        #[arg(long, visible_alias = "change")]
-        feature: Option<String>,
-    },
-    /// Tick a task as done on a person's word (`attested`, never shown as verified).
-    Accept {
-        /// Task ID, e.g. T005.
-        #[arg(long)]
-        task: String,
-        /// Why it is done.
-        #[arg(long)]
-        reason: String,
-        /// In this checkout on `speccoder/<feature>`, as `run --in-place`.
-        #[arg(long)]
-        in_place: bool,
-        /// A path inside the project (default: the current directory).
-        #[arg(default_value = ".")]
-        path: PathBuf,
-        /// Feature: directory name or numeric prefix (an OpenSpec change: its
-        /// id, also as --change).
-        #[arg(long, visible_alias = "change")]
-        feature: Option<String>,
-    },
-    /// Skip a task: runs pass it by, and what depends on it stays blocked.
-    Skip {
-        /// Task ID, e.g. T005.
-        #[arg(long)]
-        task: String,
-        /// Why it is skipped.
-        #[arg(long, required_unless_present = "undo")]
-        reason: Option<String>,
-        /// Take a skip back.
-        #[arg(long, conflicts_with = "reason")]
-        undo: bool,
-        /// A path inside the project (default: the current directory).
-        #[arg(default_value = ".")]
-        path: PathBuf,
-        /// Feature: directory name or numeric prefix (an OpenSpec change: its
-        /// id, also as --change).
-        #[arg(long, visible_alias = "change")]
-        feature: Option<String>,
-    },
-    /// Leave a note for a task's next attempts (the model reads it).
-    Nudge {
-        /// Task ID, e.g. T005.
-        #[arg(long)]
-        task: String,
-        /// The note.
-        #[arg(long, required_unless_present = "clear")]
-        note: Option<String>,
-        /// Remove the task's notes.
-        #[arg(long, conflicts_with = "note")]
-        clear: bool,
-        /// A path inside the project (default: the current directory).
-        #[arg(default_value = ".")]
-        path: PathBuf,
-        /// Feature: directory name or numeric prefix (an OpenSpec change: its
-        /// id, also as --change).
-        #[arg(long, visible_alias = "change")]
-        feature: Option<String>,
-    },
-    /// Tokens (and money, if `[model]` has prices) per task, from the speccoder branch.
-    Cost {
-        /// A path inside the project (default: the current directory).
-        #[arg(default_value = ".")]
-        path: PathBuf,
-        /// Feature: directory name or numeric prefix (an OpenSpec change: its
-        /// id, also as --change).
-        #[arg(long, visible_alias = "change")]
-        feature: Option<String>,
-    },
     /// Push `speccoder/<feature>` and open a draft pull request with every task's evidence (asks first).
     Pr {
-        /// A path inside the project (default: the current directory).
-        #[arg(default_value = ".")]
-        path: PathBuf,
-        /// Feature: directory name or numeric prefix (an OpenSpec change: its
-        /// id, also as --change).
-        #[arg(long, visible_alias = "change")]
-        feature: Option<String>,
         /// The git remote to push to.
         #[arg(long, default_value = "origin")]
         remote: String,
@@ -379,14 +215,57 @@ pub enum Command {
         #[arg(long)]
         force: bool,
     },
+    /// Verify the signed evidence of the feature's ticks, or sign what is unsigned.
+    Attest {
+        #[command(subcommand)]
+        action: AttestAction,
+    },
+    /// Help: `help advanced` for the rest, `help <command>` for one.
+    Help {
+        /// `advanced`, or a command.
+        topic: Vec<String>,
+    },
+    // ── advanced (hidden from the top-level help) ─────────────────────
+    /// Run the checks declared in speccoder.toml and report the evidence.
+    #[command(hide = true)]
+    Verify {
+        /// Only checks of this tier.
+        #[arg(long, value_enum)]
+        tier: Option<TierArg>,
+        /// Compare with a result saved from `speccoder --json verify`.
+        #[arg(long, value_name = "FILE")]
+        against: Option<PathBuf>,
+    },
+    /// Assess a finished feature against its spec, plan and tasks and append what remains.
+    #[command(hide = true)]
+    Converge {
+        /// In this checkout on `speccoder/<feature>`, as `run --in-place`.
+        #[arg(long)]
+        in_place: bool,
+    },
+    /// The project's artifacts and tasks as speccoder reads them (read-only).
+    #[command(hide = true)]
+    Inspect,
+    /// Strictly replay a recorded run from the journal (calls no model).
+    #[command(hide = true)]
+    Replay {
+        /// A run id, as shown in run reports and commit trailers.
+        run: String,
+    },
+    /// Create or reuse the git worktree speccoder works in for a feature.
+    #[command(hide = true)]
+    Worktree,
     /// Serve the Agent Client Protocol on stdio, for editors (Zed, JetBrains, …).
+    #[command(hide = true)]
     Acp,
     /// Install speccoder as a Spec Kit workflow step type, with a workflow that uses it.
+    #[command(hide = true)]
     Workflow {
         #[command(subcommand)]
         action: WorkflowAction,
     },
     /// Run the evaluation suite and judge each case with its hidden oracle.
+    #[command(hide = true)]
     Eval {
         /// Suite directory (default: ./evals).
         #[arg(default_value = "evals")]
@@ -404,48 +283,20 @@ pub enum Command {
         #[arg(long, value_name = "KIND", value_parser = ["native", "claude", "codex"])]
         executor: Option<String>,
     },
-    /// Signed evidence per ticked task: verify it, or sign what is unsigned.
-    Attest {
-        #[command(subcommand)]
-        action: AttestAction,
-    },
     /// Public benchmarks as evaluation cases.
+    #[command(hide = true)]
     Bench {
         #[command(subcommand)]
         action: BenchAction,
     },
-    /// Strictly replay a recorded run from the journal (calls no model).
-    Replay {
-        /// A run id, as shown in run reports and commit trailers.
-        run: String,
-        /// A path inside the project (default: the current directory).
-        #[arg(default_value = ".")]
-        path: PathBuf,
-    },
     /// Ask the configured model how it would implement one task (nothing is executed).
+    #[command(hide = true)]
     Propose {
         /// Task ID, e.g. T005.
-        #[arg(long)]
         task: String,
-        /// A path inside the project (default: the current directory).
-        #[arg(default_value = ".")]
-        path: PathBuf,
-        /// Feature: directory name or numeric prefix (an OpenSpec change: its
-        /// id, also as --change).
-        #[arg(long, visible_alias = "change")]
-        feature: Option<String>,
-    },
-    /// Create or reuse the git worktree speccoder works in for a feature.
-    Worktree {
-        /// A path inside the project (default: the current directory).
-        #[arg(default_value = ".")]
-        path: PathBuf,
-        /// Feature: directory name or numeric prefix (an OpenSpec change: its
-        /// id, also as --change).
-        #[arg(long, visible_alias = "change")]
-        feature: Option<String>,
     },
     /// Explain a code speccoder prints (`error[CODE]`, `stopped[CODE]`), offline.
+    #[command(hide = true)]
     Explain {
         /// The code, e.g. NEEDS-APPROVAL.
         code: Option<String>,
@@ -453,15 +304,100 @@ pub enum Command {
         #[arg(long)]
         list: bool,
     },
-    /// Print the JSON Schema of speccoder's output: `result`, `event`, or a
-    /// command's payload; without a name, list them.
+    /// The JSON Schema of an output: `result`, `event`, or a payload; without a name, the list.
+    #[command(hide = true)]
     Schema {
         /// The schema's name.
         name: Option<String>,
     },
+    /// Print a shell completion script.
+    #[command(hide = true)]
+    Completion {
+        /// The shell.
+        shell: clap_complete::Shell,
+    },
+    /// The dashboard: tasks with evidence, the live attempt, the approval queue.
+    #[command(hide = true)]
+    Tui,
 }
 
-/// `speccoder bench` actions.
+/// `speccoder task` verbs; the task comes first after the verb.
+#[derive(Debug, Subcommand)]
+pub enum TaskAction {
+    /// Approve the call the task stopped for (its class for the task, by default).
+    Approve {
+        /// The task, e.g. T005.
+        #[arg(required_unless_present = "all")]
+        task: Option<String>,
+        /// One waiting call, by its id or a prefix of it (`report --approvals`).
+        #[arg(long)]
+        call: Option<String>,
+        /// Every waiting call (of the task, or of the feature), each recorded on its own.
+        #[arg(long)]
+        all: bool,
+        /// How far the approval reaches: this call, the task, or the run.
+        #[arg(long, value_enum, default_value_t = ScopeArg::Task)]
+        scope: ScopeArg,
+        /// A note the attempt is told with the approval.
+        #[arg(long)]
+        note: Option<String>,
+    },
+    /// Reject the call the task stopped for; the model is told the reason.
+    Reject {
+        /// The task, e.g. T005.
+        #[arg(required_unless_present = "all")]
+        task: Option<String>,
+        /// One waiting call, by its id or a prefix of it.
+        #[arg(long)]
+        call: Option<String>,
+        /// Every waiting call (of the task, or of the feature), each recorded on its own.
+        #[arg(long)]
+        all: bool,
+        /// Why — the model reads this.
+        #[arg(long)]
+        reason: String,
+    },
+    /// Tick the task on your word (`attested`, never shown as verified).
+    Accept {
+        /// The task, e.g. T005.
+        task: String,
+        /// Why it is done.
+        #[arg(long)]
+        reason: String,
+        /// In this checkout on `speccoder/<feature>`, as `run --in-place`.
+        #[arg(long)]
+        in_place: bool,
+    },
+    /// Skip the task: runs pass it by, and what depends on it stays blocked.
+    Skip {
+        /// The task, e.g. T005.
+        task: String,
+        /// Why it is skipped.
+        #[arg(long, required_unless_present = "undo")]
+        reason: Option<String>,
+        /// Take a skip back.
+        #[arg(long, conflicts_with = "reason")]
+        undo: bool,
+    },
+    /// Leave a note for the task's next attempts (the model reads it).
+    Nudge {
+        /// The task, e.g. T005.
+        task: String,
+        /// The note.
+        #[arg(long, required_unless_present = "clear")]
+        note: Option<String>,
+        /// Remove the task's notes.
+        #[arg(long, conflicts_with = "note")]
+        clear: bool,
+    },
+    /// The task's state and the evidence behind it.
+    Show {
+        /// The task, e.g. T005.
+        task: String,
+    },
+}
+
+/// `speccoder attest` actions.
 #[derive(Debug, Subcommand)]
 pub enum AttestAction {
     /// Re-check every task's attestation against its commit, signatures
@@ -470,12 +406,6 @@ pub enum AttestAction {
         /// A commit or a range (`main..speccoder/001-x`); default: the
         /// feature's task commits.
         rev: Option<String>,
-        /// A path inside the project.
-        #[arg(long, default_value = ".")]
-        path: PathBuf,
-        /// Feature: directory name or numeric prefix.
-        #[arg(long, visible_alias = "change")]
-        feature: Option<String>,
         /// SSH allowed-signers file (default: git's gpg.ssh.allowedSignersFile).
         #[arg(long, value_name = "FILE")]
         allowed_signers: Option<PathBuf>,
@@ -494,12 +424,6 @@ pub enum AttestAction {
     Sign {
         /// A commit or a range; default: the feature's task commits.
         rev: Option<String>,
-        /// A path inside the project.
-        #[arg(long, default_value = ".")]
-        path: PathBuf,
-        /// Feature: directory name or numeric prefix.
-        #[arg(long, visible_alias = "change")]
-        feature: Option<String>,
     },
 }
 
@@ -529,9 +453,6 @@ pub enum BenchAction {
 pub enum WorkflowAction {
     /// Write `.specify/workflows/steps/speccoder/` and `.specify/workflows/speccoder/workflow.yml`.
     Install {
-        /// A path inside the project (default: the current directory).
-        #[arg(default_value = ".")]
-        path: PathBuf,
         /// Replace existing files.
         #[arg(long)]
         force: bool,

@@ -55,7 +55,7 @@
       "type": "object"
     },
     "ApprovalsReport": {
-      "description": "Result of `speccoder approvals`, `approve` and `reject`.",
+      "description": "Result of `speccoder report --approvals`, `approve` and `reject`.",
       "properties": {
         "decided": {
           "description": "Decisions recorded for the feature's tasks.",
@@ -566,6 +566,10 @@
         {
           "$ref": "#/$defs/SchemaReport",
           "description": "`schema`: the published schemas, or one of them."
+        },
+        {
+          "$ref": "#/$defs/DoctorReport",
+          "description": "`doctor`: every check of the machine and the project."
         }
       ],
       "description": "Command-specific payload of a result."
@@ -887,7 +891,7 @@
       "type": "object"
     },
     "CostReport": {
-      "description": "Result of `speccoder cost`.",
+      "description": "Result of `speccoder report --cost`.",
       "properties": {
         "convergence": {
           "$ref": "#/$defs/Usage",
@@ -1199,6 +1203,91 @@
         "reasons",
         "checks",
         "discarded"
+      ],
+      "type": "object"
+    },
+    "DoctorCheck": {
+      "description": "One doctor check.",
+      "properties": {
+        "check": {
+          "description": "`git`, `repository`, `project`, `config`, `key`, `sandbox`, …",
+          "type": "string"
+        },
+        "code": {
+          "description": "The catalog code of a failure or warning.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "detail": {
+          "description": "What was found.",
+          "type": "string"
+        },
+        "fix": {
+          "description": "How to resolve it.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "level": {
+          "$ref": "#/$defs/DoctorLevel",
+          "description": "Pass, warn or fail."
+        }
+      },
+      "required": [
+        "check",
+        "level",
+        "detail",
+        "code",
+        "fix"
+      ],
+      "type": "object"
+    },
+    "DoctorLevel": {
+      "description": "How a doctor check came out.",
+      "oneOf": [
+        {
+          "const": "pass",
+          "description": "Fine.",
+          "type": "string"
+        },
+        {
+          "const": "warn",
+          "description": "Works, with less than it could (no signing key, no spec tool).",
+          "type": "string"
+        },
+        {
+          "const": "fail",
+          "description": "A run would fail or judge wrongly.",
+          "type": "string"
+        }
+      ]
+    },
+    "DoctorReport": {
+      "description": "Result of `speccoder doctor`.",
+      "properties": {
+        "checks": {
+          "description": "Every check, in order.",
+          "items": {
+            "$ref": "#/$defs/DoctorCheck"
+          },
+          "type": "array"
+        },
+        "os": {
+          "description": "`macos aarch64`.",
+          "type": "string"
+        },
+        "speccoder": {
+          "description": "speccoder's version.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "speccoder",
+        "os",
+        "checks"
       ],
       "type": "object"
     },
@@ -1868,6 +1957,24 @@
       ],
       "type": "object"
     },
+    "InitKey": {
+      "description": "The model key `init` looked for.",
+      "properties": {
+        "set": {
+          "description": "Set in this environment.",
+          "type": "boolean"
+        },
+        "variable": {
+          "description": "`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "variable",
+        "set"
+      ],
+      "type": "object"
+    },
     "InitReport": {
       "description": "Result of `speccoder init`.",
       "properties": {
@@ -1878,6 +1985,24 @@
           },
           "type": "array"
         },
+        "committed": {
+          "description": "The commit holding `speccoder.toml`, when one was made.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "instructions": {
+          "description": "The repository instructions found (`AGENTS.md`, `CLAUDE.md`).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "key": {
+          "$ref": "#/$defs/InitKey",
+          "description": "The model key: the variable and whether it is set."
+        },
         "model": {
           "description": "`provider/model`.",
           "type": "string"
@@ -1885,6 +2010,13 @@
         "path": {
           "description": "The configuration file.",
           "type": "string"
+        },
+        "ran": {
+          "description": "The checks run on the untouched code (empty: not run).",
+          "items": {
+            "$ref": "#/$defs/InitRun"
+          },
+          "type": "array"
         },
         "wrote": {
           "description": "Files written, relative to the project root.",
@@ -1898,7 +2030,41 @@
         "path",
         "checks",
         "model",
-        "wrote"
+        "wrote",
+        "ran",
+        "instructions",
+        "key",
+        "committed"
+      ],
+      "type": "object"
+    },
+    "InitRun": {
+      "description": "One check `init` ran on the untouched code.",
+      "properties": {
+        "duration_ms": {
+          "description": "How long it took.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "name": {
+          "description": "`[checks.<name>]`.",
+          "type": "string"
+        },
+        "passed": {
+          "description": "Passed on the untouched code.",
+          "type": "boolean"
+        },
+        "status": {
+          "description": "`passed`, `failed`, `timed_out`, `skipped`, `error`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "passed",
+        "status",
+        "duration_ms"
       ],
       "type": "object"
     },
@@ -3044,7 +3210,7 @@
       "type": "object"
     },
     "SkillRunReport": {
-      "description": "Result of `speccoder skill <name>`.",
+      "description": "Result of `speccoder spec <name>`.",
       "properties": {
         "changes": {
           "description": "Paths changed in the checkout: `added` / `modified` / `deleted`.",
@@ -3131,7 +3297,7 @@
       "type": "object"
     },
     "SkillsReport": {
-      "description": "Result of `speccoder skill` without a name.",
+      "description": "Result of `speccoder spec` without a name.",
       "properties": {
         "skills": {
           "description": "Installed skills by name.",
@@ -3260,7 +3426,7 @@
       "description": "Counts of [`TaskStatus::state`].",
       "properties": {
         "attested": {
-          "description": "Ticked by `speccoder accept`: a person's attestation, not evidence.",
+          "description": "Ticked by `speccoder task accept`: a person's attestation, not evidence.",
           "format": "uint",
           "minimum": 0,
           "type": "integer"
@@ -3518,7 +3684,7 @@
           ]
         },
         "state": {
-          "description": "`verified`, `regression_only` (ticked by speccoder with that verdict),\n`attested` (ticked by `speccoder accept`), `ticked_without_evidence`\n(ticked, no speccoder commit), `evidence_without_tick` (in place: a\nverdict commit names the task, its local tick is missing),\n`skipped`, `ready` or `blocked`.",
+          "description": "`verified`, `regression_only` (ticked by speccoder with that verdict),\n`attested` (ticked by `speccoder task accept`), `ticked_without_evidence`\n(ticked, no speccoder commit), `evidence_without_tick` (in place: a\nverdict commit names the task, its local tick is missing),\n`skipped`, `ready` or `blocked`.",
           "type": "string"
         },
         "title": {

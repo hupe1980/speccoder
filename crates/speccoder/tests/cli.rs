@@ -30,7 +30,7 @@ fn version_prints_name_and_workspace_version() {
 }
 
 #[test]
-fn help_lists_inspect_and_json() {
+fn help_groups_the_daily_commands_and_points_to_the_rest() {
     let out = speccoder()
         .arg("--help")
         .assert()
@@ -38,8 +38,31 @@ fn help_lists_inspect_and_json() {
         .get_output()
         .clone();
     let stdout = String::from_utf8(out.stdout).unwrap();
-    assert!(stdout.contains("inspect"), "{stdout}");
-    assert!(stdout.contains("--json"), "{stdout}");
+    for word in [
+        "Start",
+        "Work",
+        "Review",
+        "  task",
+        "--json",
+        "help advanced",
+    ] {
+        assert!(stdout.contains(word), "{word}: {stdout}");
+    }
+    assert!(
+        !stdout.contains("  inspect "),
+        "inspect is advanced: {stdout}"
+    );
+    let advanced = speccoder()
+        .args(["help", "advanced"])
+        .assert()
+        .success()
+        .get_output()
+        .clone();
+    assert!(
+        String::from_utf8(advanced.stdout)
+            .unwrap()
+            .contains("inspect")
+    );
 }
 
 fn fixture(name: &str) -> String {
@@ -52,7 +75,7 @@ fn fixture(name: &str) -> String {
 #[test]
 fn inspect_reports_the_project_and_modifies_nothing() {
     let out = speccoder()
-        .args(["inspect", &fixture("valid")])
+        .args(["inspect", "-C", &fixture("valid")])
         .assert()
         .success()
         .get_output()
@@ -78,7 +101,7 @@ fn inspect_reports_the_project_and_modifies_nothing() {
 #[test]
 fn json_inspect_prints_one_versioned_object_with_the_snapshot() {
     let out = speccoder()
-        .args(["--json", "inspect", &fixture("valid")])
+        .args(["--json", "inspect", "-C", &fixture("valid")])
         .assert()
         .success()
         .get_output()
@@ -98,7 +121,7 @@ fn json_inspect_prints_one_versioned_object_with_the_snapshot() {
 #[test]
 fn error_diagnostics_exit_11() {
     let out = speccoder()
-        .args(["--json", "inspect", &fixture("malformed")])
+        .args(["--json", "inspect", "-C", &fixture("malformed")])
         .assert()
         .code(11)
         .get_output()
@@ -110,7 +133,7 @@ fn error_diagnostics_exit_11() {
 #[test]
 fn graph_errors_exit_11() {
     let out = speccoder()
-        .args(["inspect", &fixture("graph-errors")])
+        .args(["inspect", "-C", &fixture("graph-errors")])
         .assert()
         .code(11)
         .get_output()
@@ -123,7 +146,7 @@ fn graph_errors_exit_11() {
 #[test]
 fn json_schedule_carries_states_and_blockers() {
     let out = speccoder()
-        .args(["--json", "inspect", &fixture("graph")])
+        .args(["--json", "inspect", "-C", &fixture("graph")])
         .assert()
         .success()
         .get_output()
@@ -139,7 +162,7 @@ fn json_schedule_carries_states_and_blockers() {
 #[test]
 fn several_features_without_selection_exit_12_and_list_them() {
     let out = speccoder()
-        .args(["inspect", &fixture("multi")])
+        .args(["inspect", "-C", &fixture("multi")])
         .assert()
         .code(12)
         .get_output()
@@ -151,7 +174,7 @@ fn several_features_without_selection_exit_12_and_list_them() {
         .collect();
     assert!(order.windows(2).all(|w| w[0] < w[1]), "{stderr}");
     speccoder()
-        .args(["inspect", &fixture("multi"), "--feature", "2"])
+        .args(["inspect", "-C", &fixture("multi"), "--feature", "2"])
         .assert()
         .success();
 }
@@ -159,7 +182,7 @@ fn several_features_without_selection_exit_12_and_list_them() {
 #[test]
 fn specify_feature_directory_selects_the_feature() {
     let out = speccoder()
-        .args(["inspect", &fixture("real/speckit-1.2.2")])
+        .args(["inspect", "-C", &fixture("real/speckit-1.2.2")])
         .env("SPECIFY_FEATURE_DIRECTORY", "specs/002-reports")
         .assert()
         .success()
@@ -183,6 +206,7 @@ fn verify_reports_checks_and_exits_20_on_failure() {
     .unwrap();
     let out = speccoder()
         .arg("verify")
+        .arg("-C")
         .arg(dir.path())
         .assert()
         .code(20)
@@ -198,6 +222,7 @@ fn verify_reports_checks_and_exits_20_on_failure() {
 
     let out = speccoder()
         .args(["--json", "verify", "--tier", "fast"])
+        .arg("-C")
         .arg(dir.path())
         .assert()
         .code(20)
@@ -211,7 +236,12 @@ fn verify_reports_checks_and_exits_20_on_failure() {
 #[test]
 fn verify_without_config_exits_13() {
     let dir = tempfile::tempdir().unwrap();
-    speccoder().arg("verify").arg(dir.path()).assert().code(13);
+    speccoder()
+        .arg("verify")
+        .arg("-C")
+        .arg(dir.path())
+        .assert()
+        .code(13);
 }
 
 fn git(dir: &std::path::Path, args: &[&str]) {
@@ -260,6 +290,7 @@ fn worktree_is_created_then_reused() {
     let run = || {
         speccoder()
             .args(["--json", "worktree"])
+            .arg("-C")
             .arg(project.path())
             .env("SPECCODER_STATE_DIR", state.path())
             .assert()
@@ -287,6 +318,7 @@ fn worktree_refuses_ignored_specs_with_exit_14() {
     let state = tempfile::tempdir().unwrap();
     let out = speccoder()
         .arg("worktree")
+        .arg("-C")
         .arg(project.path())
         .env("SPECCODER_STATE_DIR", state.path())
         .assert()
@@ -315,6 +347,7 @@ fn propose_checks_task_and_config_before_the_key() {
     let run = |args: &[&str]| {
         speccoder()
             .args(args)
+            .arg("-C")
             .arg(dir.path())
             .env_remove("ANTHROPIC_API_KEY")
             .env("SPECCODER_STATE_DIR", state.path())
@@ -323,16 +356,16 @@ fn propose_checks_task_and_config_before_the_key() {
             .clone()
     };
     // No speccoder.toml at all: configuration error.
-    assert_eq!(run(&["propose", "--task", "T006"]).status.code(), Some(13));
+    assert_eq!(run(&["propose", "T006"]).status.code(), Some(13));
     std::fs::write(
         dir.path().join("speccoder.toml"),
         "[model]\nprovider = \"anthropic\"\nmodel = \"claude-sonnet-5-5\"\n",
     )
     .unwrap();
     // Unknown task: not found, before any key is needed.
-    assert_eq!(run(&["propose", "--task", "T999"]).status.code(), Some(15));
+    assert_eq!(run(&["propose", "T999"]).status.code(), Some(15));
     // Valid task, no key: configuration error naming the variable, nothing sent.
-    let out = run(&["propose", "--task", "T006"]);
+    let out = run(&["propose", "T006"]);
     assert_eq!(out.status.code(), Some(13));
     assert!(String::from_utf8_lossy(&out.stderr).contains("ANTHROPIC_API_KEY"));
     // Replay of a run that does not exist.
@@ -347,6 +380,7 @@ fn outside_a_spec_kit_project_exit_10() {
     let dir = tempfile::tempdir().unwrap();
     let out = speccoder()
         .args(["--json", "inspect"])
+        .arg("-C")
         .arg(dir.path())
         .assert()
         .code(10)
@@ -360,7 +394,7 @@ fn outside_a_spec_kit_project_exit_10() {
 #[test]
 fn json_flag_is_global() {
     speccoder()
-        .args(["inspect", &fixture("valid"), "--json"])
+        .args(["inspect", "-C", &fixture("valid"), "--json"])
         .assert()
         .success();
 }
@@ -371,8 +405,27 @@ fn unknown_subcommand_is_a_usage_error() {
 }
 
 #[test]
-fn missing_subcommand_is_a_usage_error() {
-    speccoder().assert().code(2);
+fn without_a_command_and_a_terminal_it_is_the_report() {
+    let out = speccoder()
+        .args(["-C", &fixture("valid"), "--json"])
+        .output()
+        .unwrap();
+    let v = support::result(&out.stdout);
+    assert_eq!(v["command"], "report", "{v}");
+}
+
+#[test]
+fn a_former_command_names_its_new_form() {
+    let out = speccoder()
+        .args(["--json", "approve", "--task", "T004"])
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(2));
+    let v = support::result(&out.stdout);
+    assert_eq!(v["fix"][0], "speccoder task approve <TASK>", "{v}");
+    let out = speccoder().args(["run", "T004"]).output().unwrap();
+    let err = String::from_utf8(out.stderr).unwrap();
+    assert!(err.contains("--task T004"), "{err}");
 }
 
 /// `--json` keeps stdout one object and writes no terminal escapes, even
@@ -395,6 +448,7 @@ fn json_output_carries_no_bell_or_escape() {
     ] {
         let out = speccoder()
             .args(args)
+            .arg("-C")
             .arg(project.path())
             .env("SPECCODER_STATE_DIR", state.path())
             .env("XDG_CONFIG_HOME", config.path())
@@ -425,6 +479,7 @@ fn a_ui_table_in_speccoder_toml_is_refused() {
     .unwrap();
     let out = speccoder()
         .arg("verify")
+        .arg("-C")
         .arg(dir.path())
         .env("XDG_CONFIG_HOME", config.path())
         .assert()
@@ -456,7 +511,7 @@ fn a_format_is_chosen_by_flag_or_environment() {
             cmd.env("SPECCODER_FORMAT", e);
         }
         let out = cmd
-            .args(["--json", "inspect", &fixture("valid")])
+            .args(["--json", "inspect", "-C", &fixture("valid")])
             .assert()
             .code(10)
             .get_output()
@@ -472,7 +527,7 @@ fn a_format_is_chosen_by_flag_or_environment() {
         );
     }
     speccoder()
-        .args(["--format", "speckit", "inspect", &fixture("valid")])
+        .args(["--format", "speckit", "inspect", "-C", &fixture("valid")])
         .assert()
         .success();
     let out = speccoder()
@@ -481,6 +536,7 @@ fn a_format_is_chosen_by_flag_or_environment() {
             "--format",
             "openspec",
             "inspect",
+            "-C",
             &fixture("valid"),
         ])
         .assert()
@@ -509,7 +565,12 @@ fn escape_codes_appear_only_when_colour_is_wanted() {
         for (k, v) in env {
             cmd.env(k, v);
         }
-        let out = cmd.args(args).arg(fixture("valid")).output().unwrap();
+        let out = cmd
+            .args(args)
+            .arg("-C")
+            .arg(fixture("valid"))
+            .output()
+            .unwrap();
         out.stdout.contains(&0x1b) || out.stderr.contains(&0x1b)
     };
     assert!(!esc(&["inspect"], &[]), "piped: no colour");
@@ -548,6 +609,7 @@ fn ascii_and_screen_reader_modes_change_symbols_not_facts() {
     let run = |args: &[&str]| {
         let out = speccoder()
             .args(args)
+            .arg("-C")
             .arg(fixture("valid"))
             .output()
             .unwrap();
@@ -563,4 +625,176 @@ fn ascii_and_screen_reader_modes_change_symbols_not_facts() {
         "{reader}"
     );
     assert!(reader.is_ascii(), "{reader}");
+}
+
+/// A committed Spec Kit project with a `make test` that passes.
+fn make_project() -> tempfile::TempDir {
+    let dir = tempfile::tempdir().unwrap();
+    let ok = std::process::Command::new("cp")
+        .arg("-R")
+        .arg(std::path::PathBuf::from(fixture("graph")).join("."))
+        .arg(dir.path())
+        .status()
+        .unwrap()
+        .success();
+    assert!(ok);
+    std::fs::write(dir.path().join("Makefile"), "test:\n\ttrue\n").unwrap();
+    let git = |args: &[&str]| {
+        assert!(
+            std::process::Command::new("git")
+                .args([
+                    "-c",
+                    "user.name=t",
+                    "-c",
+                    "user.email=t@e",
+                    "-c",
+                    "commit.gpgsign=false"
+                ])
+                .args(args)
+                .current_dir(dir.path())
+                .status()
+                .unwrap()
+                .success()
+        );
+    };
+    git(&["init", "-q"]);
+    git(&["add", "-A"]);
+    git(&["commit", "-qm", "init"]);
+    dir
+}
+
+#[test]
+fn init_runs_the_checks_and_names_the_commit_without_making_it() {
+    let dir = make_project();
+    let out = speccoder()
+        .args(["--json", "init", "-C"])
+        .arg(dir.path())
+        .env_remove("ANTHROPIC_API_KEY")
+        .env_remove("OPENAI_API_KEY")
+        .output()
+        .unwrap();
+    let v = support::result(&out.stdout);
+    assert_eq!(v["status"], "ok", "{v}");
+    assert_eq!(v["data"]["ran"][0]["name"], "test");
+    assert_eq!(v["data"]["ran"][0]["passed"], true, "{v}");
+    assert_eq!(v["data"]["key"]["set"], false);
+    assert!(
+        v["data"]["committed"].is_null(),
+        "no terminal: nothing committed"
+    );
+    let next: Vec<&str> = v["next"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|s| s["command"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        next[0], "git add speccoder.toml && git commit -m \"speccoder: config\"",
+        "{next:?}"
+    );
+    assert!(
+        next.iter()
+            .any(|c| c.starts_with("export ANTHROPIC_API_KEY")),
+        "{next:?}"
+    );
+    let log = std::process::Command::new("git")
+        .args(["log", "--format=%s"])
+        .current_dir(dir.path())
+        .output()
+        .unwrap();
+    assert_eq!(String::from_utf8_lossy(&log.stdout).trim(), "init");
+}
+
+#[test]
+fn doctor_names_each_problem_with_its_fix() {
+    let dir = make_project();
+    // Healthy enough to have a project, but no config and no key.
+    let out = speccoder()
+        .args(["--json", "doctor", "-C"])
+        .arg(dir.path())
+        .env_remove("ANTHROPIC_API_KEY")
+        .output()
+        .unwrap();
+    let v = support::result(&out.stdout);
+    assert_eq!(out.status.code(), Some(13), "{v}");
+    let checks = v["data"]["checks"].as_array().unwrap();
+    let level = |name: &str| {
+        checks
+            .iter()
+            .find(|c| c["check"] == name)
+            .map(|c| c["level"].as_str().unwrap().to_owned())
+            .unwrap_or_default()
+    };
+    assert_eq!(level("project"), "pass");
+    assert_eq!(level("config"), "fail");
+    assert_eq!(v["code"], "CONFIG-MISSING");
+    // The bug report redacts the home directory.
+    let report = speccoder()
+        .args(["doctor", "--bug-report", "-C"])
+        .arg(dir.path())
+        .output()
+        .unwrap();
+    let text = String::from_utf8(report.stdout).unwrap();
+    assert!(text.starts_with("### speccoder doctor"), "{text}");
+    if let Ok(home) = std::env::var("HOME") {
+        assert!(!text.contains(&home), "{text}");
+    }
+}
+
+#[test]
+fn completion_and_help_advanced_work_without_a_project() {
+    let out = speccoder().args(["completion", "zsh"]).output().unwrap();
+    assert!(out.status.success());
+    assert!(String::from_utf8_lossy(&out.stdout).contains("#compdef speccoder"));
+    let out = speccoder().args(["help", "task"]).output().unwrap();
+    assert!(String::from_utf8_lossy(&out.stdout).contains("approve"));
+}
+
+/// At a terminal, `init` asks before committing, and commits only the
+/// configuration. Driven through `script`'s pseudo-terminal.
+#[test]
+fn init_at_a_terminal_commits_only_the_config_on_yes() {
+    let dir = make_project();
+    let bin = assert_cmd::cargo::cargo_bin("speccoder");
+    let line = format!("{} init", bin.display());
+    let mut cmd = std::process::Command::new("script");
+    if cfg!(target_os = "macos") {
+        cmd.args(["-q", "/dev/null"]).arg(&bin).arg("init");
+    } else {
+        cmd.args(["-qec", &line, "/dev/null"]);
+    }
+    let child = cmd
+        .current_dir(dir.path())
+        .env_remove("ANTHROPIC_API_KEY")
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .spawn();
+    let Ok(mut child) = child else {
+        eprintln!("skipped: no script(1)");
+        return;
+    };
+    use std::io::Write as _;
+    child.stdin.take().unwrap().write_all(b"y\n").unwrap();
+    let out = child.wait_with_output().unwrap();
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(text.contains("Commit speccoder.toml?"), "{text}");
+    let log = std::process::Command::new("git")
+        .args(["log", "--format=%s"])
+        .current_dir(dir.path())
+        .output()
+        .unwrap();
+    assert_eq!(
+        String::from_utf8_lossy(&log.stdout).lines().next(),
+        Some("speccoder: config"),
+        "{text}"
+    );
+    let files = std::process::Command::new("git")
+        .args(["show", "--name-only", "--format=", "HEAD"])
+        .current_dir(dir.path())
+        .output()
+        .unwrap();
+    assert_eq!(
+        String::from_utf8_lossy(&files.stdout).trim(),
+        "speccoder.toml"
+    );
 }

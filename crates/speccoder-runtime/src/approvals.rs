@@ -1,9 +1,9 @@
 //! A person's approvals and rejections.
 //!
 //! When an attempt stops for approval, its pending call is saved with the
-//! attempt. `speccoder approve` turns that call's class — the path
+//! attempt. `speccoder task approve` turns that call's class — the path
 //! of a write, the exact argv of a command — into an approval for the task;
-//! `speccoder reject` into a denial with a reason the model is told. The
+//! `speccoder task reject` into a denial with a reason the model is told. The
 //! next attempt carries the task's decisions in its journaled input, so
 //! strict replay needs nothing else. Standing approvals for commands are
 //! `[commands] allow` in `speccoder.toml`.
@@ -30,7 +30,7 @@ pub struct TaskDecisions {
     /// Rejected classes with reasons.
     #[serde(default)]
     pub rejected: Vec<Rejection>,
-    /// A person's notes for the task's next attempts (`speccoder nudge`).
+    /// A person's notes for the task's next attempts (`speccoder task nudge`).
     #[serde(default)]
     pub nudges: Vec<String>,
     /// Every decision, in order, with who made it.
@@ -326,7 +326,7 @@ pub enum Decision {
     Approve,
     /// Refuse it; the model is told why.
     Reject,
-    /// End the task here; the call waits for `speccoder approve`.
+    /// End the task here; the call waits for `speccoder task approve`.
     Stop,
 }
 
@@ -471,7 +471,7 @@ pub fn risk(tool: &str, reason: &str) -> &'static str {
     }
 }
 
-// ── `speccoder approvals` / `approve` / `reject` ────────────────────────────
+// ── `speccoder report --approvals` / `approve` / `reject` ────────────────────────────
 
 /// The feature, its repository root and its state directory.
 fn locate(
@@ -808,7 +808,7 @@ pub enum Verb<'a> {
     ApproveNoted(&'a str, &'a str),
     /// Reject the task's pending call, with a reason.
     Reject(&'a str, &'a str),
-    /// Decide waiting calls as `speccoder approve|reject` options say.
+    /// Decide waiting calls as `speccoder task approve|reject` options say.
     Decide(Choice<'a>),
 }
 
@@ -996,7 +996,7 @@ pub fn decide_with(
             return CommandResult::new(
                 command,
                 CommandStatus::NotFound,
-                "no call matching that awaits a decision (see `speccoder approvals`)",
+                "no call matching that awaits a decision (see `speccoder report --approvals`)",
             );
         }
     }
@@ -1027,7 +1027,9 @@ pub fn decide_with(
                 return CommandResult::new(
                     command,
                     CommandStatus::NotFound,
-                    &format!("{task} has no call awaiting a decision (see `speccoder approvals`)"),
+                    &format!(
+                        "{task} has no call awaiting a decision (see `speccoder report --approvals`)"
+                    ),
                 );
             };
             let what = match verb {

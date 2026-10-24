@@ -57,7 +57,7 @@ pub(crate) fn status_and_message(
         _ if suspected => (
             CommandStatus::NeedsHuman,
             format!(
-                "the checks passed, but the gaming monitor suspects: {}; the attempt is saved, not ticked — review it, then `speccoder accept` or run again",
+                "the checks passed, but the gaming monitor suspects: {}; the attempt is saved, not ticked — review it, then `speccoder task accept` or run again",
                 monitor_summary(report.monitor.as_ref())
             ),
         ),

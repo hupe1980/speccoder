@@ -8,76 +8,82 @@ group = "Reference"
 nav = "CLI reference"
 +++
 
-Every command takes `--json` (one JSON object on stdout), `--events` (JSON Lines as it works, ending in that object), `-q`/`--quiet` (only stops, finishes, resumes and what needs you), `-v`/`--verbose` (also durations, skipped stages and the last lines of what failed), `--format <speckit|openspec|kiro>` (the project's spec format, also `SPECCODER_FORMAT`; default: `[spec] format`, else detected), `--color auto|always|never`, `--ascii` (ASCII marks and borders), `--screen-reader` (labelled plain lines, no dashboard) and `--help`. How output looks is [your setting](@/docs/configuration.md#your-settings), never the project's. Commands that work on a project take an optional `PATH` inside it (default: the current directory) and `--feature <name or number>` (for an [OpenSpec](@/docs/openspec.md) change also `--change <id>`).
+`speccoder --help` shows the daily commands, grouped by what they are for; `speccoder help advanced` the rest; `speccoder help <command>` one command. Bare `speccoder` opens the dashboard at a terminal and prints the report otherwise.
 
-Every stop and finish ends with a `Next:` block — the commands that continue, copy-pasteable, the same in `--json` as `next` (`[{"command", "why"}]`). Every failure and stop names a [code](@/docs/codes.md) with what to run: `error[CODE]`, `stopped[CODE]` when the run waits for you, `warning[CODE]` when it worked with less evidence.
+Every command takes:
 
-## Plan and set up
+| Option | Meaning |
+|---|---|
+| `-C PATH`, `--project PATH` | The project: a path inside it (default: the current directory) |
+| `--feature NAME` (`--change`) | The feature: directory name or numeric prefix; an [OpenSpec](@/docs/openspec.md) change's id |
+| `--json` | One JSON object on stdout ([JSON output](#json-output)) |
+| `--events` | JSON Lines as it works, ending in that object ([events](#events)) |
+| `-q`, `-v` | Only stops, finishes and what needs you; or also durations, skipped stages and the tails of what failed |
+| `--color auto\|always\|never`, `--ascii`, `--screen-reader` | How output looks — [your setting](@/docs/configuration.md#your-settings), never the project's |
+| `--format speckit\|openspec\|kiro` | The project's spec format (also `SPECCODER_FORMAT`; default: `[spec] format`, else detected) |
+
+Every stop and finish ends with a `Next:` block — the commands that continue, copy-pasteable, the same in `--json` as `next` (`[{"command", "why"}]`). Every failure and stop names a [code](@/docs/codes.md) with what to run: `error[CODE]`, `stopped[CODE]` when the run waits for you, `warning[CODE]` when it worked with less evidence. A former command name (`approve`, `status`, …) is a usage error that names its new form.
+
+## Start
 
 | Command | What it does |
 |---|---|
-| `speccoder init [--provider P] [--model M] [--force]` | Detect the project's checks and write `speccoder.toml` |
-| `speccoder spec [SKILL] [ARGS…] [--no-prompt]` | List the format's installed planning skills, or run one (Spec Kit: `specify`, `clarify`, `plan`, `tasks`, …; OpenSpec: `propose`, `explore`, `update-change`). `speccoder skill` is the same |
+| `speccoder init [--provider P] [--model M] [--force] [--no-verify] [--yes]` | Detect the checks, write `speccoder.toml`, run the checks on the untouched code, and at a terminal offer to commit the file (yes by default only when the checks pass). Notes the model key and an `AGENTS.md` or `CLAUDE.md` |
+| `speccoder doctor [--bug-report]` | Check git, the repository, the project and its tool, the configuration, the model key, the sandbox, the state directory, the signing key, the repository instructions and the look — changing nothing. `--bug-report` prints a redacted Markdown bundle for an issue |
+
+## Plan
+
+| Command | What it does |
+|---|---|
+| `speccoder spec [SKILL] [ARGS…] [--no-prompt]` | List the format's planning skills, or run one (Spec Kit: `specify`, `clarify`, `plan`, `tasks`, …; OpenSpec: `propose`, `explore`, `update-change`) |
 | `speccoder spec archive [CHANGE] [--yes] [--allow-unverified TASK]…` | Archive an OpenSpec change: OpenSpec's checks first, then the diff, then your yes, then one commit |
-| `speccoder inspect` | Show the features, artifacts and tasks speccoder sees, with what blocks what |
-| `speccoder verify [--tier fast\|full] [--against FILE]` | Run the configured checks; compare with a saved result |
-| `speccoder workflow install [--force]` | Add a speccoder step type and an example Spec Kit workflow |
 
-## Run
+## Work
 
 | Command | What it does |
 |---|---|
-| `speccoder run [--task T] [--max-tasks N] [--parallel N] [--converge] [--no-prompt] [--ignore-checklists]` | Work through the ready tasks, or one task |
-| `speccoder run --in-place [--task T] …` | The same in your checkout on `speccoder/<feature>`, for git-ignored specs; switches back at the end |
-| `speccoder run --in-place --return` | Leave an interrupted in-place run: save its work, switch back, run nothing |
-| `speccoder accept --in-place …`, `speccoder converge --in-place` | The same commands in your checkout, for git-ignored specs |
-| `speccoder converge` | Assess a finished feature against its spec and append what remains |
-| `speccoder propose --task T` | Ask the model how it would do one task; nothing is executed |
-| `speccoder worktree` | Create or reuse the feature's worktree and print its path |
+| `speccoder run [--task T] [--max-tasks N] [--parallel N] [--converge] [--no-prompt] [--ignore-checklists]` | Work through the ready tasks, or one task; resumes where it stopped |
+| `speccoder run --in-place …` | The same in your checkout on `speccoder/<feature>`, for git-ignored specs; switches back at the end. `--return` leaves an interrupted in-place run |
+| `speccoder task approve T [--call ID] [--all] [--scope once\|task\|run] [--note "…"]` | Approve a waiting call (its class for the task by default); no model needed; the next `run` continues the attempt from that call. `--all` without `T`: every waiting call of the feature |
+| `speccoder task reject T [--call ID] [--all] --reason R` | Reject it; the attempt continues and the model is told why |
+| `speccoder task accept T --reason R [--in-place]` | Tick a task on your word (`attested`) |
+| `speccoder task skip T [--reason R] [--undo]` | Skip a task; its dependents stay blocked |
+| `speccoder task nudge T [--note N] [--clear]` | Leave a note the next attempts read |
+| `speccoder task show T` | One task's state and evidence |
 
-## Watch and review
+## Review
 
 | Command | What it does |
 |---|---|
-| `speccoder status` | What the current or last run is doing |
-| `speccoder tui` | Live dashboard with the approval queue |
-| `speccoder report [--markdown]` | Every task and the evidence behind its tick; `--markdown` for pull requests and CI summaries |
-| `speccoder cost` | Tokens, and money with prices configured, per task |
-| `speccoder replay <RUN>` | Re-derive a recorded run from the journal, without a model |
+| `speccoder report` | Every task and the evidence behind its tick, the requirement trace, and what is open |
+| `speccoder report --live` | What the current or last run is doing, from another terminal |
+| `speccoder report --approvals` | Calls waiting for a decision, and the decisions made, with who made them |
+| `speccoder report --cost` | Tokens, and money with prices configured, per task |
+| `speccoder report --markdown` | The report as Markdown, for pull requests and CI summaries |
+| `speccoder pr [--remote R] [--base B] [--yes] [--dry-run] [--force]` | Push the branch and its attestation notes and open a draft pull request with the evidence; `--force` hands off although the full-tier checks failed |
 | `speccoder attest verify [REV\|RANGE] [--allowed-signers FILE] [--certificate-identity I --certificate-oidc-issuer O] [--require-signed]` | Re-check every tick's [attestation](@/docs/attestations.md) against its commit, and its signatures against your trust |
 | `speccoder attest sign [REV\|RANGE]` | Sign the statements ticks left unsigned (`[attest] sign_at = "later"`, or no key yet) |
 
-## Decide
+## Advanced
+
+Listed by `speccoder help advanced`.
 
 | Command | What it does |
 |---|---|
-| `speccoder approvals` | Calls waiting for a decision, and the decisions made, with who made them |
-| `speccoder approve --task T [--call ID] [--all] [--scope once\|task\|run] [--note "…"]` | Approve a waiting call (its class for the task by default); no model needed; the next `run` continues the attempt from that call |
-| `speccoder reject --task T [--call ID] [--all] --reason R` | Reject it; the attempt continues and the model is told why |
-| `speccoder accept --task T --reason R` | Tick a task on your word (`attested`) |
-| `speccoder skip --task T [--reason R] [--undo]` | Skip a task; its dependents stay blocked |
-| `speccoder nudge --task T [--note N] [--clear]` | Leave a note the next attempts read |
-
-## Share and integrate
-
-| Command | What it does |
-|---|---|
-| `speccoder pr [--remote R] [--base B] [--yes] [--dry-run] [--force]` | Push the branch and its attestation notes and open a draft pull request with the evidence; `--force` hands off although the full-tier checks failed |
+| `speccoder verify [--tier fast\|full] [--against FILE]` | Run the configured checks; compare with a saved result |
+| `speccoder converge [--in-place]` | Assess a finished feature against its spec and append what remains |
+| `speccoder inspect` | The features, artifacts and tasks speccoder sees, with what blocks what |
+| `speccoder replay RUN` | Re-derive a recorded run from the journal, without a model |
+| `speccoder worktree` | Create or reuse the feature's worktree and print its path |
 | `speccoder acp` | Serve the Agent Client Protocol on stdio, for editors |
-
-## Measure
-
-| Command | What it does |
-|---|---|
+| `speccoder workflow install [--force]` | Add a speccoder step type and an example Spec Kit workflow |
 | `speccoder eval [DIR] [--case C] [--repeat N] [--keep DIR] [--executor KIND]` | Run the evaluation suite against hidden oracles |
 | `speccoder bench import FILE --repos DIR --out DIR [--limit N] [--test-cmd CMD]` | Turn SWE-bench-format instances into evaluation cases |
-
-## Explain and schemas
-
-| Command | What it does |
-|---|---|
+| `speccoder propose T` | Ask the model how it would do one task; nothing is executed |
 | `speccoder explain [CODE] [--list]` | What a code means, why it happens and how to fix it, offline |
-| `speccoder schema [NAME]` | The JSON Schema of an output: `result`, `event`, or a payload (`run`, `report`, `attest`, …); without a name, the list |
+| `speccoder schema [NAME]` | The JSON Schema of an output: `result`, `event`, or a payload (`run`, `report`, `doctor`, …); without a name, the list |
+| `speccoder completion bash\|zsh\|fish\|elvish\|powershell` | A shell completion script, e.g. `speccoder completion zsh > ~/.zfunc/_speccoder` |
+| `speccoder tui` | The dashboard (what bare `speccoder` opens at a terminal) |
 
 ## JSON output
 
@@ -87,9 +93,9 @@ With `--json` every command prints exactly one object on stdout and no progress 
 { "schema_version": 2, "command": "run", "status": "needs_human", "exit_code": 23,
   "message": "T004 needs approval: cargo add unicode-normalization",
   "code": "NEEDS-APPROVAL",
-  "fix": ["speccoder approvals", "speccoder approve --task T004", "speccoder reject --task T004 --reason \"…\""],
+  "fix": ["speccoder report --approvals", "speccoder task approve T004", "speccoder task reject T004 --reason \"…\""],
   "docs": "https://hupe1980.github.io/speccoder/docs/codes/#needs-approval",
-  "next": [{ "command": "speccoder approvals", "why": "see what waits" }],
+  "next": [{ "command": "speccoder report --approvals", "why": "see what waits" }],
   "payload": "run", "data": { … } }
 ```
 

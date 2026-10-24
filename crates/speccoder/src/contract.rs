@@ -231,3 +231,113 @@ fn every_event_type_validates() {
         serde_json::json!({ "v": 2, "seq": 1, "ts": "x", "type": "task.finished", "task": 3 });
     assert!(!errors("event", &bad).is_empty());
 }
+
+/// A command line as a shell would split it (double quotes only).
+fn words(line: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut cur = String::new();
+    let mut quoted = false;
+    for c in line.chars() {
+        match c {
+            '"' => quoted = !quoted,
+            ' ' if !quoted => {
+                if !cur.is_empty() {
+                    out.push(std::mem::take(&mut cur));
+                }
+            }
+            c => cur.push(c),
+        }
+    }
+    if !cur.is_empty() {
+        out.push(cur);
+    }
+    out
+}
+
+/// Every speccoder command a person is told to run parses (F-057, SC-002).
+fn parses(line: &str) {
+    // `<task>`-style blanks a person fills in.
+    let filled = line
+        .replace("<task>", "T004")
+        .replace("<dependency>", "T003")
+        .replace("<feature>", "001-x")
+        .replace("<name>", "001-x")
+        .replace("<run>", "run_1")
+        .replace("<dir>", "keep")
+        .replace("<SKILL>", "plan")
+        .replace("<TASK>", "T004")
+        .replace("<command>", "run");
+    for part in filled.split("&&") {
+        let w = words(part.trim());
+        if w.first().map(String::as_str) != Some("speccoder") {
+            continue;
+        }
+        let parsed = crate::help::command()
+            .try_get_matches_from(&w)
+            .and_then(|m| <crate::cli::Cli as clap::FromArgMatches>::from_arg_matches(&m));
+        let help = parsed
+            .as_ref()
+            .err()
+            .is_some_and(|e| e.kind() == clap::error::ErrorKind::DisplayHelp);
+        assert!(
+            parsed.is_ok() || help,
+            "`{line}` does not parse: {}",
+            parsed.err().map(|e| e.to_string()).unwrap_or_default()
+        );
+    }
+}
+
+#[test]
+fn every_next_step_and_fix_is_a_command_that_parses() {
+    use speccoder_core::next::{Outcome, next};
+    let t = || "T004".to_owned();
+    let outcomes = [
+        Outcome::TaskPassed {
+            task: t(),
+            ready: 1,
+        },
+        Outcome::TaskPassed {
+            task: t(),
+            ready: 0,
+        },
+        Outcome::FeatureDone,
+        Outcome::NeedsApproval { task: t() },
+        Outcome::Blocked { task: t() },
+        Outcome::BudgetExhausted { task: t() },
+        Outcome::VerificationFailed { task: t() },
+        Outcome::SuspectedGaming { task: t() },
+        Outcome::NotDemonstrated { task: t() },
+        Outcome::RunFailed { task: Some(t()) },
+        Outcome::RunFailed { task: None },
+        Outcome::Interrupted { task: t() },
+        Outcome::Running,
+        Outcome::NothingReady,
+        Outcome::ReportShown {
+            ready: 1,
+            open_approvals: 1,
+        },
+        Outcome::ApprovalsListed { first: Some(t()) },
+        Outcome::Decided,
+        Outcome::ChecklistsOpen,
+        Outcome::ConfigError,
+        Outcome::GitPrecondition,
+        Outcome::ArchiveAwaiting {
+            change: "add-x".to_owned(),
+        },
+    ];
+    for o in &outcomes {
+        for feature in [None, Some("001-x")] {
+            for step in next(o, feature) {
+                parses(&step.command);
+            }
+        }
+    }
+    for e in CATALOG {
+        for f in speccoder_core::codes::fixes(e, "run", Some("T004"), Some("001-x")) {
+            parses(&f);
+        }
+    }
+    for (_, new) in crate::help::FORMER {
+        parses(new);
+    }
+}

@@ -1,4 +1,4 @@
-//! `speccoder skill`: list the installed Agent Skills, or run one.
+//! `speccoder spec`: list the installed Agent Skills, or run one.
 //!
 //! A hosted planning skill works in your checkout, because what it writes —
 //! the feature's spec, plan and tasks — belongs there; the planning policy
@@ -28,7 +28,7 @@ fn root_of(path: &Path) -> Result<PathBuf, Box<CommandResult>> {
     }
 }
 
-/// `speccoder skill`: the installed skills.
+/// `speccoder spec`: the installed skills.
 #[must_use]
 pub fn list(path: &Path) -> CommandResult {
     let root = match root_of(path) {
@@ -41,7 +41,7 @@ pub fn list(path: &Path) -> CommandResult {
         format.messages().no_skills.to_owned()
     } else {
         format!(
-            "{} skill(s); run one with `speccoder skill <name> [arguments]`",
+            "{} skill(s); run one with `speccoder spec <name> [arguments]`",
             found.len()
         )
     };
@@ -60,7 +60,7 @@ pub fn list(path: &Path) -> CommandResult {
     ))
 }
 
-/// `speccoder skill <name> [arguments]` against `state` with `provider`.
+/// `speccoder spec <name> [arguments]` against `state` with `provider`.
 pub fn run_with(
     path: &Path,
     name: &str,
@@ -84,7 +84,7 @@ pub fn run_with(
     else {
         return refuse(
             CommandStatus::NotFound,
-            format!("no skill `{name}` (see `speccoder skill`)"),
+            format!("no skill `{name}` (see `speccoder spec`)"),
         );
     };
     if let Some(why) = &skill.refused {
@@ -340,7 +340,7 @@ pub fn run_with(
         .with_data(CommandData::Skill(Box::new(report)))
 }
 
-/// `speccoder skill <name>` with the configured model.
+/// `speccoder spec <name>` with the configured model.
 #[must_use]
 pub fn run(path: &Path, name: &str, arguments: &str, options: &RunOptions) -> CommandResult {
     crate::with_driver("skill", path, None, |state, provider, key| {

@@ -255,7 +255,7 @@
   },
   "$id": "https://hupe1980.github.io/speccoder/schemas/v2/approvals.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Result of `speccoder approvals`, `approve` and `reject`.",
+  "description": "Result of `speccoder report --approvals`, `approve` and `reject`.",
   "properties": {
     "decided": {
       "description": "Decisions recorded for the feature's tasks.",

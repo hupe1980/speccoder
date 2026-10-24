@@ -159,7 +159,7 @@ pub fn body(status: &StatusReport, trailers: &[(String, String, String)]) -> Str
     if input + output > 0 {
         let _ = writeln!(
             out,
-            "\nTokens: {input} in, {output} out (`speccoder cost` has the breakdown)."
+            "\nTokens: {input} in, {output} out (`speccoder report --cost` has the breakdown)."
         );
     }
     if !status.convergence.is_empty() {

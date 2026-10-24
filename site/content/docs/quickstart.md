@@ -14,28 +14,35 @@ This walks through a first run on an existing Spec Kit project. It takes about t
 speccoder needs a Spec Kit feature with `spec.md`, `plan.md` and `tasks.md` under `specs/NNN-name/`. If you have only an idea, let Spec Kit's planning skills write them with speccoder's model:
 
 ```sh
-speccoder skill specify "A function slugify(text) that turns titles into URL slugs"
-speccoder skill plan
-speccoder skill tasks
+speccoder spec specify "A function slugify(text) that turns titles into URL slugs"
+speccoder spec plan
+speccoder spec tasks
 git add -A && git commit -m "spec: slugify"
 ```
 
 Review what they wrote before you commit — the spec is what the result will be judged against. More in [planning with Spec Kit](@/docs/planning.md).
 
-## 2. Configure the checks
+## 2. Set up
 
 ```sh
 speccoder init
 ```
 
-`init` looks at your project (Cargo, npm/pnpm/yarn/bun, pytest, Go, Make), proposes **checks** — the commands that decide whether nothing regressed — and writes `speccoder.toml`. Open it and read it: it also lists which commands the model may run without asking.
-
-```sh
-speccoder verify          # the checks pass on the current code
-git add -A && git commit -m "speccoder config"
+```text
+Checks speccoder runs to decide "nothing regressed":
+  test       fast  cargo nextest run --workspace --profile speccoder   Cargo.toml, cargo-nextest installed
+  clippy     full  cargo clippy --all-targets -- -D warnings          Cargo.toml
+  check  test       cargo nextest run --workspace --profile speccoder
+  test  passes on the untouched code
+Commit speccoder.toml? speccoder reads committed files only. [Y/n] y
+Model      anthropic/claude-sonnet-5-5  (ANTHROPIC_API_KEY found)
+Guidance   AGENTS.md (given to every attempt)
+Committed  4f2a1c9 "speccoder: config"
 ```
 
-speccoder reads committed files only. Anything you change in `speccoder.toml` takes effect once committed.
+`init` looks at your project (Cargo, npm/pnpm/yarn/bun, pytest, Go, Make), proposes **checks** — the commands that decide whether nothing regressed — writes `speccoder.toml`, runs the checks on the untouched code, and offers to commit the file, because speccoder reads committed files only. A check that fails before any change is said, and the commit is then not the default: every task would be judged against a red baseline. Read the file afterwards — it also lists which commands the model may run without asking.
+
+`speccoder doctor` checks the whole setup — git, the sandbox, the key, the spec tool, the signing key — without changing anything.
 
 ## 3. Run
 
@@ -89,5 +96,5 @@ Or hand it to your team as a draft pull request with the evidence in its descrip
 ## Next steps
 
 - Let speccoder close the gaps between spec and code: `speccoder run --converge`.
-- Watch a run from a second terminal: `speccoder status` or `speccoder tui`.
+- Watch a run from a second terminal: `speccoder report --live`, or just `speccoder` for the dashboard.
 - Tighten or relax what the model may do: [configuration](@/docs/configuration.md).

@@ -101,7 +101,7 @@ pub fn ask_person() -> ToolDeclaration {
 
 /// How an attempt waits for a person when a call needs one (F-072): on an
 /// agentplane human task the person decides — inline, from an editor, or
-/// later with `speccoder approve` — while the run is suspended.
+/// later with `speccoder task approve` — while the run is suspended.
 #[derive(Debug, Clone)]
 pub struct Asker {
     /// `feature/task`, shown to the person.

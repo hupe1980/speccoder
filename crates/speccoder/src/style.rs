@@ -400,6 +400,16 @@ impl Glyph {
         }
     }
 
+    /// `ok`, `warning` or `failed`, for a doctor check.
+    #[must_use]
+    pub const fn word_for_doctor(self) -> &'static str {
+        match self {
+            Self::Verified => "ok",
+            Self::Regression => "warning",
+            _ => "failed",
+        }
+    }
+
     /// The word a screen reader hears.
     #[cfg(test)]
     #[must_use]

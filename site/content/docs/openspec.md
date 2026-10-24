@@ -83,7 +83,7 @@ speccoder spec archive add-x
 ```
 
 1. It needs `openspec` on your PATH and no uncommitted changes under `openspec/`.
-2. A task ticked without a speccoder verdict commit stops it, named. Run it, accept it with `speccoder accept`, or name it with `--allow-unverified 1.1` (recorded as `Archived-Unverified:` on the commit).
+2. A task ticked without a speccoder verdict commit stops it, named. Run it, accept it with `speccoder task accept`, or name it with `--allow-unverified 1.1` (recorded as `Archived-Unverified:` on the commit).
 3. It asks OpenSpec first **without** `--yes` — OpenSpec's `--yes` also skips its check for open tasks — and stops if tasks are open.
 4. It shows `openspec show <id> --diff` and asks. `--yes` answers in advance; without a terminal and without `--yes` it stops with the command to run.
 5. On yes: `openspec archive <id> --yes`, then one commit `archive <id>` with `Archived-By:` and `Speccoder-Archive:` trailers.

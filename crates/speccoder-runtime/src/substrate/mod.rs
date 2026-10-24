@@ -351,7 +351,7 @@ impl Plane {
     }
 
     /// The journal with no skills and no model: enough to record a person's
-    /// decision on a waiting call (`speccoder approve`), which the attempt's
+    /// decision on a waiting call (`speccoder task approve`), which the attempt's
     /// own run picks up when it resumes (agentplane's `Delivery::Buffered`).
     pub fn open_for_decisions(dir: &Path) -> Result<Self, PlaneError> {
         let (store, replaced_journal) = open_or_replace(dir)?;

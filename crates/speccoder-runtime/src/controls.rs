@@ -126,7 +126,7 @@ fn open_tasks(root: &Path, feature: &str) -> Vec<String> {
 
 // ── accept ─────────────────────────────────────────────────────────────────
 
-/// `speccoder accept --task T --reason R`: a person attests the task is
+/// `speccoder task accept T --reason R`: a person attests the task is
 /// done. speccoder ticks it and commits `Verdict: attested`.
 pub fn accept_with(
     path: &Path,
@@ -314,7 +314,7 @@ pub fn skipped(root: &Path, feature: &str) -> BTreeMap<String, String> {
         .collect()
 }
 
-/// `speccoder skip --task T --reason R` (or `--undo`): the task is neither
+/// `speccoder task skip T --reason R` (or `--undo`): the task is neither
 /// done nor attempted; the feature loop passes it by, and what depends on it
 /// stays blocked.
 pub fn skip(path: &Path, feature: Option<&str>, task: &str, reason: Option<&str>) -> CommandResult {
@@ -401,7 +401,7 @@ pub fn skip(path: &Path, feature: Option<&str>, task: &str, reason: Option<&str>
 
 // ── nudge ──────────────────────────────────────────────────────────────────
 
-/// `speccoder nudge --task T "note"` (or `--clear`): a person's note for the
+/// `speccoder task nudge T "note"` (or `--clear`): a person's note for the
 /// task's next attempts, journaled with them.
 pub fn nudge_with(
     path: &Path,
@@ -478,7 +478,7 @@ fn price(u: &mut Usage, prices: Option<crate::substrate::model_config::Prices>) 
     }
 }
 
-/// `speccoder cost`: tokens per task — every attempt recorded in git, the
+/// `speccoder report --cost`: tokens per task — every attempt recorded in git, the
 /// passing one and the saved ones — plus convergence, priced when `[model]`
 /// states prices.
 pub fn cost(path: &Path, feature: Option<&str>) -> CommandResult {

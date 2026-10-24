@@ -138,7 +138,7 @@ pub(crate) fn run_task(
         Some(lane) => s.plane_dir.join("lanes").join(lane),
         None => s.plane_dir.clone(),
     };
-    // Live progress: live.json for `speccoder status`, and the printer.
+    // Live progress: live.json for `speccoder report --live`, and the printer.
     let live: Arc<dyn progress::Progress> = Arc::new(progress::Live::new(
         &plane_dir,
         s.model.prices,
@@ -177,7 +177,7 @@ pub(crate) fn run_task(
         return refuse(
             CommandStatus::NeedsHuman,
             format!(
-                "{other} waits for a person ({covers}) and its attempt holds the worktree: decide it (`speccoder approve --task {other}` or `reject`), then `speccoder run --task {other}`"
+                "{other} waits for a person ({covers}) and its attempt holds the worktree: decide it (`speccoder task approve {other}` or `reject`), then `speccoder run --task {other}`"
             ),
         );
     }
@@ -946,7 +946,7 @@ pub(crate) fn run_task(
                         "waiting": true,
                     }));
                     report.reason = Some(format!(
-                        "waiting for a person: {} — `speccoder approve --task {task}` or `speccoder reject --task {task} --reason …`, then `speccoder run`",
+                        "waiting for a person: {} — `speccoder task approve {task}` or `speccoder task reject {task} --reason …`, then `speccoder run`",
                         task_row.justification.summary.peek()
                     ));
                     let (status, message) = status_and_message(&report, "needs_approval", false);

@@ -140,7 +140,7 @@ pub struct RunOptions {
     /// At most this many tasks in a feature run.
     pub max_tasks: Option<usize>,
     /// Who to ask inline when a call needs approval; without one,
-    /// the attempt stops and `speccoder approve` decides.
+    /// the attempt stops and `speccoder task approve` decides.
     pub approver: Option<Arc<dyn approvals::Approver>>,
     /// Where live progress goes: the CLI's printer.
     pub progress: Option<Arc<dyn progress::Progress>>,
@@ -280,7 +280,7 @@ pub(crate) fn in_session(
             .map(|s| s.notes.iter().map(|n| format!("\n{n}")).collect())
             .unwrap_or_default();
         let message = format!(
-            "{}{notes}\nthe checkout stays on {} while {task} waits: decide it (`speccoder approve --task {task}` or `reject`), then `speccoder run --in-place` continues it — or `speccoder run --in-place --return` gives the checkout back",
+            "{}{notes}\nthe checkout stays on {} while {task} waits: decide it (`speccoder task approve {task}` or `reject`), then `speccoder run --in-place` continues it — or `speccoder run --in-place --return` gives the checkout back",
             res.message(),
             session
                 .as_ref()

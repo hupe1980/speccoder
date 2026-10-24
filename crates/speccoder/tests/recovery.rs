@@ -124,6 +124,7 @@ fn a_killed_attempt_resumes_without_repeating_a_finished_command() {
     let run = || {
         Command::new(env!("CARGO_BIN_EXE_speccoder"))
             .args(["--json", "run", "--task", "T005", "--no-prompt"])
+            .arg("-C")
             .arg(r)
             .env("SPECCODER_STATE_DIR", state.path())
             .stdout(Stdio::piped())
@@ -262,6 +263,7 @@ fn a_command_killed_mid_run_is_not_guessed_about() {
     let run = || {
         Command::new(env!("CARGO_BIN_EXE_speccoder"))
             .args(["--json", "run", "--task", "T005", "--no-prompt"])
+            .arg("-C")
             .arg(r)
             .env("SPECCODER_STATE_DIR", state.path())
             .stdout(Stdio::piped())
@@ -364,6 +366,7 @@ fn a_finished_attempt_killed_before_its_tick_is_judged_and_ticked_on_the_next_ru
     let run = || {
         Command::new(env!("CARGO_BIN_EXE_speccoder"))
             .args(["--json", "run", "--task", "T005", "--no-prompt"])
+            .arg("-C")
             .arg(r)
             .env("SPECCODER_STATE_DIR", state.path())
             .stdout(Stdio::piped())
@@ -492,6 +495,7 @@ fn speccoder(r: &Path, state: &Path, args: &[&str]) -> Command {
     let mut c = Command::new(env!("CARGO_BIN_EXE_speccoder"));
     c.arg("--json")
         .args(args)
+        .arg("-C")
         .arg(r)
         .env("SPECCODER_STATE_DIR", state)
         .stdout(Stdio::piped())
@@ -536,7 +540,11 @@ fn a_killed_in_place_attempt_resumes_and_returns_to_the_original_branch() {
     );
 
     // 2. `status` names the way out; a worktree-mode run is refused.
-    let status = json_of(&speccoder(r, state.path(), &["status"]).output().unwrap());
+    let status = json_of(
+        &speccoder(r, state.path(), &["report", "--live"])
+            .output()
+            .unwrap(),
+    );
     assert!(
         status["message"]
             .as_str()
@@ -705,7 +713,7 @@ fn an_approved_call_is_never_run_or_asked_again_after_a_kill() {
         &speccoder(
             r,
             state.path(),
-            &["approve", "--task", "T005", "--scope", "once"],
+            &["task", "approve", "T005", "--scope", "once"],
         )
         .output()
         .unwrap(),
@@ -736,7 +744,11 @@ fn an_approved_call_is_never_run_or_asked_again_after_a_kill() {
         1,
         "the command ran twice"
     );
-    let waiting = json_of(&speccoder(r, state.path(), &["approvals"]).output().unwrap());
+    let waiting = json_of(
+        &speccoder(r, state.path(), &["report", "--approvals"])
+            .output()
+            .unwrap(),
+    );
     assert_eq!(
         waiting["data"]["pending"].as_array().map(Vec::len),
         Some(0),

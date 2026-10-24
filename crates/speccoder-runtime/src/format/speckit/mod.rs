@@ -43,6 +43,13 @@ impl Detect for SpecKit {
 }
 
 impl Adapter for SpecKit {
+    fn tool(&self) -> Option<(&'static str, &'static str)> {
+        Some((
+            "specify",
+            "uv tool install specify-cli --from git+https://github.com/github/spec-kit.git",
+        ))
+    }
+
     fn kind(&self) -> FormatKind {
         FormatKind::Speckit
     }

@@ -25,7 +25,7 @@ speccoder lets a language model change code and run commands to check it. Read t
 
 ## Isolation
 
-All work happens on the branch `speccoder/<feature>`, checked out in a worktree under speccoder's state directory. Work reaches your branch only when you merge it. speccoder never fetches and never pushes on its own; the one command that talks to a remote is `speccoder pr`, and only after you confirm. The one thing that writes in your checkout is a hosted planning skill (`speccoder skill …`), which writes Spec Kit's artifacts, uncommitted, and asks before anything else.
+All work happens on the branch `speccoder/<feature>`, checked out in a worktree under speccoder's state directory. Work reaches your branch only when you merge it. speccoder never fetches and never pushes on its own; the one command that talks to a remote is `speccoder pr`, and only after you confirm. The one thing that writes in your checkout is a hosted planning skill (`speccoder spec …`), which writes Spec Kit's artifacts, uncommitted, and asks before anything else.
 
 ### In-place mode
 

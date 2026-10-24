@@ -15,12 +15,12 @@ speccoder implements; Spec Kit specifies. speccoder does not replace Spec Kit's 
 `specify init` installs Spec Kit's commands as Agent Skills (`.claude/skills/speckit-*/SKILL.md`). speccoder runs them with its own model, so you can plan without a separate editor agent:
 
 ```sh
-speccoder skill                                         # the installed skills
-speccoder skill specify "A function greet(name) that …" # spec.md
-speccoder skill clarify                                 # asks you about what is unclear
-speccoder skill plan                                    # plan.md, research.md, data-model.md, quickstart.md
-speccoder skill tasks                                   # tasks.md
-speccoder skill analyze                                 # a read-only consistency report
+speccoder spec                                         # the installed skills
+speccoder spec specify "A function greet(name) that …" # spec.md
+speccoder spec clarify                                 # asks you about what is unclear
+speccoder spec plan                                    # plan.md, research.md, data-model.md, quickstart.md
+speccoder spec tasks                                   # tasks.md
+speccoder spec analyze                                 # a read-only consistency report
 ```
 
 A planning skill works **in your checkout**, because the spec belongs on your branch. It may write `specs/…`, `.specify/feature.json` and `.specify/memory/…` and run Spec Kit's scripts; it may not touch Spec Kit's templates or scripts, your check configuration or secrets. Writing anything else — source code included — needs your approval.
@@ -49,7 +49,7 @@ Spec Kit's workflow engine chains steps with review gates. `speccoder workflow i
 speccoder workflow install
 specify workflow run .specify/workflows/speccoder/workflow.yml \
   --input spec="A Rust function clamp(x, lo, hi) that …"
-# paused? decide with speccoder approvals / approve / accept / nudge, then:
+# paused? decide with speccoder report --approvals / approve / accept / nudge, then:
 specify workflow resume <run-id>
 ```
 

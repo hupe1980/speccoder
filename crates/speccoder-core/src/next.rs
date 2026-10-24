@@ -105,41 +105,41 @@ pub fn next(outcome: &Outcome, feature: Option<&str>) -> Vec<NextStep> {
     let steps: Vec<(String, &str)> = match outcome {
         O::NeedsApproval { task } => vec![
             (
-                "speccoder approvals".to_owned(),
+                "speccoder report --approvals".to_owned(),
                 "see the call waiting and why it stopped",
             ),
             (
-                format!("speccoder approve --task {task}"),
+                format!("speccoder task approve {task}"),
                 "allow it; the attempt resumes on the next run",
             ),
             (
-                format!("speccoder reject --task {task} --reason \"…\""),
+                format!("speccoder task reject {task} --reason \"…\""),
                 "refuse it; the model is told your reason",
             ),
             ("speccoder run".to_owned(), "continue the feature"),
         ],
         O::Blocked { task } => vec![
             (
-                format!("speccoder nudge --task {task} --note \"…\""),
+                format!("speccoder task nudge {task} --note \"…\""),
                 "tell the next attempt what it is missing",
             ),
             (
-                format!("speccoder accept --task {task} --reason \"…\""),
+                format!("speccoder task accept {task} --reason \"…\""),
                 "tick it on your word (attested)",
             ),
             (
-                format!("speccoder skip --task {task} --reason \"…\""),
+                format!("speccoder task skip {task} --reason \"…\""),
                 "pass it by; its dependents stay blocked",
             ),
         ],
         O::BudgetExhausted { task } => vec![
             (
-                format!("speccoder nudge --task {task} --note \"…\""),
+                format!("speccoder task nudge {task} --note \"…\""),
                 "narrow the next attempt",
             ),
             (format!("speccoder run --task {task}"), "try the task again"),
             (
-                format!("speccoder skip --task {task} --reason \"…\""),
+                format!("speccoder task skip {task} --reason \"…\""),
                 "pass it by; its dependents stay blocked",
             ),
         ],
@@ -149,7 +149,7 @@ pub fn next(outcome: &Outcome, feature: Option<&str>) -> Vec<NextStep> {
                 "see what failed and the saved attempt",
             ),
             (
-                format!("speccoder nudge --task {task} --note \"…\""),
+                format!("speccoder task nudge {task} --note \"…\""),
                 "tell the next attempt what to fix",
             ),
             (format!("speccoder run --task {task}"), "try the task again"),
@@ -161,7 +161,7 @@ pub fn next(outcome: &Outcome, feature: Option<&str>) -> Vec<NextStep> {
             ),
             (format!("speccoder run --task {task}"), "try the task again"),
             (
-                format!("speccoder skip --task {task} --reason \"…\""),
+                format!("speccoder task skip {task} --reason \"…\""),
                 "pass it by; its dependents stay blocked",
             ),
         ],
@@ -171,16 +171,19 @@ pub fn next(outcome: &Outcome, feature: Option<&str>) -> Vec<NextStep> {
                 "see why nothing was demonstrated",
             ),
             (
-                format!("speccoder nudge --task {task} --note \"…\""),
+                format!("speccoder task nudge {task} --note \"…\""),
                 "tell the next attempt what is meant",
             ),
             (
-                format!("speccoder accept --task {task} --reason \"…\""),
+                format!("speccoder task accept {task} --reason \"…\""),
                 "tick it on your word (attested)",
             ),
         ],
         O::RunFailed { task } => {
-            let mut v = vec![("speccoder status".to_owned(), "see where the run stopped")];
+            let mut v = vec![(
+                "speccoder report --live".to_owned(),
+                "see where the run stopped",
+            )];
             v.push(match task {
                 Some(t) => (format!("speccoder run --task {t}"), "try the task again"),
                 None => ("speccoder run".to_owned(), "try again"),
@@ -193,7 +196,7 @@ pub fn next(outcome: &Outcome, feature: Option<&str>) -> Vec<NextStep> {
         )],
         O::Running => vec![
             ("speccoder tui".to_owned(), "watch the run"),
-            ("speccoder status".to_owned(), "where it is now"),
+            ("speccoder report --live".to_owned(), "where it is now"),
         ],
         O::TaskPassed { ready, .. } if *ready > 0 => vec![
             ("speccoder run".to_owned(), "continue with the ready tasks"),
@@ -212,13 +215,13 @@ pub fn next(outcome: &Outcome, feature: Option<&str>) -> Vec<NextStep> {
                 "see what blocks the open tasks",
             ),
             (
-                "speccoder approvals".to_owned(),
+                "speccoder report --approvals".to_owned(),
                 "calls waiting for a person",
             ),
         ],
         O::ReportShown { open_approvals, .. } if *open_approvals > 0 => vec![
             (
-                "speccoder approvals".to_owned(),
+                "speccoder report --approvals".to_owned(),
                 "calls waiting for a person",
             ),
             ("speccoder run".to_owned(), "continue the feature"),
@@ -232,11 +235,11 @@ pub fn next(outcome: &Outcome, feature: Option<&str>) -> Vec<NextStep> {
         )],
         O::ApprovalsListed { first: Some(task) } => vec![
             (
-                format!("speccoder approve --task {task}"),
+                format!("speccoder task approve {task}"),
                 "allow it; the attempt resumes on the next run",
             ),
             (
-                format!("speccoder reject --task {task} --reason \"…\""),
+                format!("speccoder task reject {task} --reason \"…\""),
                 "refuse it; the model is told your reason",
             ),
         ],
@@ -299,33 +302,33 @@ mod tests {
             (
                 Outcome::NeedsApproval { task: t() },
                 vec![
-                    "speccoder approvals",
-                    "speccoder approve --task T004",
-                    "speccoder reject --task T004 --reason \"…\"",
+                    "speccoder report --approvals",
+                    "speccoder task approve T004",
+                    "speccoder task reject T004 --reason \"…\"",
                     "speccoder run",
                 ],
             ),
             (
                 Outcome::Blocked { task: t() },
                 vec![
-                    "speccoder nudge --task T004 --note \"…\"",
-                    "speccoder accept --task T004 --reason \"…\"",
-                    "speccoder skip --task T004 --reason \"…\"",
+                    "speccoder task nudge T004 --note \"…\"",
+                    "speccoder task accept T004 --reason \"…\"",
+                    "speccoder task skip T004 --reason \"…\"",
                 ],
             ),
             (
                 Outcome::BudgetExhausted { task: t() },
                 vec![
-                    "speccoder nudge --task T004 --note \"…\"",
+                    "speccoder task nudge T004 --note \"…\"",
                     "speccoder run --task T004",
-                    "speccoder skip --task T004 --reason \"…\"",
+                    "speccoder task skip T004 --reason \"…\"",
                 ],
             ),
             (
                 Outcome::VerificationFailed { task: t() },
                 vec![
                     "speccoder report",
-                    "speccoder nudge --task T004 --note \"…\"",
+                    "speccoder task nudge T004 --note \"…\"",
                     "speccoder run --task T004",
                 ],
             ),
@@ -334,27 +337,30 @@ mod tests {
                 vec![
                     "speccoder report",
                     "speccoder run --task T004",
-                    "speccoder skip --task T004 --reason \"…\"",
+                    "speccoder task skip T004 --reason \"…\"",
                 ],
             ),
             (
                 Outcome::NotDemonstrated { task: t() },
                 vec![
                     "speccoder report",
-                    "speccoder nudge --task T004 --note \"…\"",
-                    "speccoder accept --task T004 --reason \"…\"",
+                    "speccoder task nudge T004 --note \"…\"",
+                    "speccoder task accept T004 --reason \"…\"",
                 ],
             ),
             (
                 Outcome::RunFailed { task: Some(t()) },
-                vec!["speccoder status", "speccoder run --task T004"],
+                vec!["speccoder report --live", "speccoder run --task T004"],
             ),
             (
                 Outcome::RunFailed { task: None },
-                vec!["speccoder status", "speccoder run"],
+                vec!["speccoder report --live", "speccoder run"],
             ),
             (Outcome::Interrupted { task: t() }, vec!["speccoder run"]),
-            (Outcome::Running, vec!["speccoder tui", "speccoder status"]),
+            (
+                Outcome::Running,
+                vec!["speccoder tui", "speccoder report --live"],
+            ),
             (
                 Outcome::TaskPassed {
                     task: t(),
@@ -375,14 +381,14 @@ mod tests {
             ),
             (
                 Outcome::NothingReady,
-                vec!["speccoder report", "speccoder approvals"],
+                vec!["speccoder report", "speccoder report --approvals"],
             ),
             (
                 Outcome::ReportShown {
                     ready: 1,
                     open_approvals: 1,
                 },
-                vec!["speccoder approvals", "speccoder run"],
+                vec!["speccoder report --approvals", "speccoder run"],
             ),
             (
                 Outcome::ReportShown {
@@ -401,8 +407,8 @@ mod tests {
             (
                 Outcome::ApprovalsListed { first: Some(t()) },
                 vec![
-                    "speccoder approve --task T004",
-                    "speccoder reject --task T004 --reason \"…\"",
+                    "speccoder task approve T004",
+                    "speccoder task reject T004 --reason \"…\"",
                 ],
             ),
             (

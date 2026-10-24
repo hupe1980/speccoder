@@ -73,7 +73,7 @@
   },
   "$id": "https://hupe1980.github.io/speccoder/schemas/v2/cost.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Result of `speccoder cost`.",
+  "description": "Result of `speccoder report --cost`.",
   "properties": {
     "convergence": {
       "$ref": "#/$defs/Usage",

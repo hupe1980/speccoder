@@ -1,4 +1,4 @@
-//! `speccoder status` starts fast: the median of 20 runs of the release
+//! `speccoder report --live` starts fast: the median of 20 runs of the release
 //! binary is under 100 ms (D-068, F-049), with no run recorded and with a
 //! finished run's live state. Ignored in the debug suite; `just cold-start`
 //! runs it on a release build (`cargo test --release … -- --ignored`).
@@ -32,12 +32,12 @@ fn git(dir: &Path, args: &[&str]) {
     assert!(ok, "git {args:?}");
 }
 
-/// Median and maximum of `RUNS` timed runs of `speccoder status` in `project`.
+/// Median and maximum of `RUNS` timed runs of `speccoder report --live` in `project`.
 fn time(project: &Path, state: &Path) -> (Duration, Duration) {
     let run = || {
         let started = Instant::now();
         let out = Command::new(env!("CARGO_BIN_EXE_speccoder"))
-            .args(["status", "."])
+            .args(["report", "--live"])
             .current_dir(project)
             .env("SPECCODER_STATE_DIR", state)
             .output()

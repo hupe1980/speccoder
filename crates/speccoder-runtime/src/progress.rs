@@ -2,7 +2,7 @@
 //!
 //! Events are a side channel — not journaled, not evidence — so replay and
 //! verdicts are untouched. [`Live`] keeps `live.json` in the project's state
-//! directory up to date (read by `speccoder status` from another terminal),
+//! directory up to date (read by `speccoder report --live` from another terminal),
 //! prices token counts when `[model]` has prices, and forwards each event to
 //! the CLI's printer.
 
@@ -396,7 +396,7 @@ pub fn target(tool: &str, args: &serde_json::Value) -> String {
     }
 }
 
-// ── `speccoder status` ──────────────────────────────────────────────────────
+// ── `speccoder report --live` ──────────────────────────────────────────────────────
 
 /// The project's `live.json` and whether its process is still alive.
 #[must_use]
@@ -418,14 +418,17 @@ pub fn alive(pid: u32) -> bool {
         .is_ok_and(|p| nix::sys::signal::kill(nix::unistd::Pid::from_raw(p), None).is_ok())
 }
 
-/// `speccoder status [PATH]`: the project's current (or last) run, from
+/// `speccoder report --live`: the project's current (or last) run, from
 /// `live.json`, in the state directory `state`.
 pub fn status_with(path: &Path, state: &Path) -> CommandResult {
-    let res = status_inner(path, state);
-    let Some(CommandData::Inspect(snap)) = crate::inspect(path, None).data().cloned() else {
-        return res;
+    // One inspection for both: what runs, and what waits.
+    let inspected = crate::inspect(path, None);
+    let root = match inspected.data() {
+        Some(CommandData::Inspect(s)) => PathBuf::from(&s.root),
+        _ => return CommandResult::carried("report", &inspected),
     };
-    let plane_dir = crate::worktree::project_state_dir(state, &PathBuf::from(&snap.root));
+    let plane_dir = crate::worktree::project_state_dir(state, &root);
+    let res = status_inner(&plane_dir);
     let lines = waiting_lines(&plane_dir);
     if lines.is_empty() {
         return res;
@@ -434,20 +437,21 @@ pub fn status_with(path: &Path, state: &Path) -> CommandResult {
     next.insert(
         0,
         speccoder_core::next::NextStep {
-            command: "speccoder approvals".to_owned(),
+            command: "speccoder report --approvals".to_owned(),
             why: "see the waiting calls, then approve or reject them".to_owned(),
         },
     );
     let message = format!("{}\n{}", res.message(), lines.join("\n"));
-    let out = CommandResult::new("status", res.status(), &message).with_next(next);
-    match res.data() {
-        Some(d) => out.with_data(d.clone()),
-        None => out,
-    }
+    let status = res.status();
+    res.reworded(status, &message).with_next(next)
 }
 
 /// One line per call waiting for a person: what, since when, until when.
 fn waiting_lines(plane_dir: &Path) -> Vec<String> {
+    // No journal, nothing waits — and a read never creates one.
+    if !plane_dir.join(crate::substrate::JOURNAL).exists() {
+        return Vec::new();
+    }
     let Ok(rt) = crate::tokio_runtime() else {
         return Vec::new();
     };
@@ -478,13 +482,8 @@ fn waiting_lines(plane_dir: &Path) -> Vec<String> {
         .collect()
 }
 
-fn status_inner(path: &Path, state: &Path) -> CommandResult {
-    let inspected = crate::inspect(path, None);
-    let root = match inspected.data() {
-        Some(CommandData::Inspect(s)) => PathBuf::from(&s.root),
-        _ => return CommandResult::carried("status", &inspected),
-    };
-    let plane_dir = crate::worktree::project_state_dir(state, &root);
+fn status_inner(plane_dir: &Path) -> CommandResult {
+    let plane_dir = plane_dir.to_path_buf();
     // An in-place session: the mode, and for an interrupted one both ways out.
     if let Some(s) = crate::in_place::Session::load(&plane_dir) {
         let mode = s.mode_line();
@@ -511,7 +510,8 @@ fn status_inner(path: &Path, state: &Path) -> CommandResult {
         }
         let res = status_live(&plane_dir);
         let message = format!("{}\n{mode}", res.message());
-        return CommandResult::new("status", res.status(), &message).with_next(res.next().to_vec());
+        let status = res.status();
+        return res.reworded(status, &message);
     }
     status_live(&plane_dir)
 }
