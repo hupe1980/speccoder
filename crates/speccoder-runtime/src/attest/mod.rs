@@ -263,9 +263,8 @@ pub fn phases(report: &RunReport) -> Vec<PhaseResult> {
 }
 
 /// The decisions people made on the attempt's calls (D-057).
-fn decisions(report: &RunReport) -> Vec<Value> {
-    report
-        .tool_calls
+fn decisions(tool_calls: &[Value]) -> Vec<Value> {
+    tool_calls
         .iter()
         .filter(|c| c["by"] == "person" || c["by"] == "expiry")
         .map(|c| {
@@ -276,7 +275,8 @@ fn decisions(report: &RunReport) -> Vec<Value> {
                 "reason": c["rejection"],
                 "by": c["operator"]["actor"],
                 "basis": c["operator"]["basis"],
-                "via": c["via"],
+                // Through what: the decision's own record (`approver`).
+                "via": if c["via"].is_null() { &c["approver"]["via"] } else { &c["via"] },
             })
         })
         .collect()
@@ -447,7 +447,7 @@ pub fn record_tick(t: &Tick<'_>, report: &RunReport) -> Value {
         "executor": t.executor,
         "model": t.model,
         "run": report.run_id,
-        "decisions": decisions(report),
+        "decisions": decisions(&report.tool_calls),
         "instructions": report.instructions,
         "policy_sha256": policy,
         "time": time,
@@ -689,5 +689,22 @@ mod tests {
         assert_eq!(t.len(), 20, "{t}");
         assert!(t.ends_with('Z') && t.as_bytes()[10] == b'T', "{t}");
         assert!(t.starts_with("20"), "{t}");
+    }
+
+    #[test]
+    fn a_decision_names_who_and_through_what() {
+        let calls = vec![json!({
+            "tool": "write_file",
+            "arguments": { "path": "package.json", "content": "{}" },
+            "by": "person",
+            "approved_by": "person",
+            "scope": "once",
+            "approver": { "name": "Dana", "via": "dashboard", "basis": "asserted" },
+            "operator": { "actor": "Dana", "basis": "asserted" },
+        })];
+        let d = &decisions(&calls)[0];
+        assert_eq!(d["verb"], "approve");
+        assert_eq!(d["by"], "Dana");
+        assert_eq!(d["via"], "dashboard");
     }
 }

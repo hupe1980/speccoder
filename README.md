@@ -35,7 +35,7 @@ speccoder report                     # every task and the evidence behind its ti
 git merge speccoder/001-my-feature   # after reviewing the branch
 ```
 
-`speccoder` alone opens the dashboard; `speccoder report --live` in another terminal shows a run as it happens, and `speccoder doctor` checks the setup. For CI and tools, every command takes `--json` (one result object) or `--events` (JSON Lines as it works), both with [published JSON Schemas](https://hupe1980.github.io/speccoder/docs/cli/#json-output), and every failure names a [code](https://hupe1980.github.io/speccoder/docs/codes/) with the command that fixes it; in GitHub Actions the report lands in the job summary. No spec yet? `speccoder spec specify "…"`, then `plan` and `tasks`, runs Spec Kit's own planning skills.
+At a terminal, `run` works inside a dashboard — the pipeline stage by stage, tool calls, approvals answered with one key, and per task the evidence behind its verdict and its diff; `--plain` keeps lines. `speccoder` alone opens the dashboard on a run elsewhere, `speccoder report --live` shows one as it happens, and `speccoder doctor` checks the setup. For CI and tools, every command takes `--json` (one result object) or `--events` (JSON Lines as it works), both with [published JSON Schemas](https://hupe1980.github.io/speccoder/docs/cli/#json-output), and every failure names a [code](https://hupe1980.github.io/speccoder/docs/codes/) with the command that fixes it; in GitHub Actions the report lands in the job summary. No spec yet? `speccoder spec specify "…"`, then `plan` and `tasks`, runs Spec Kit's own planning skills.
 
 ## How a task is decided
 

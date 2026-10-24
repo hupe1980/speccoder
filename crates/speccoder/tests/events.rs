@@ -1,7 +1,8 @@
-//! `--events` end to end (F-056): a scripted run streams JSON Lines that a
+//! A scripted run end to end: `--events` (F-056) streams JSON Lines that a
 //! consumer reads with nothing but the published schemas — `seq` without
 //! gaps, the lifecycle in order, the result last — and a reader that goes
-//! away does not break the run.
+//! away does not break the run; at a terminal the dashboard hosts it
+//! (F-058), driven through a pseudo-terminal.
 
 // Test code: panicking on unexpected input is the failure report.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
@@ -222,4 +223,84 @@ fn a_reader_that_goes_away_does_not_break_the_run() {
         "{}",
         String::from_utf8_lossy(&log.stdout)
     );
+}
+
+/// `run` at a terminal hosts the run in the dashboard (F-058): the call that
+/// needs the person is answered in the overlay with one key, the run ends,
+/// and leaving prints the run's result as the plain `run` prints it.
+#[test]
+fn a_run_at_a_terminal_is_answered_in_the_dashboard() {
+    if !has_python() {
+        eprintln!("skipped: no python3");
+        return;
+    }
+    let done = json!({ "summary": "wrote it", "status": "done", "files_changed": ["package.json"], "checks_run": [], "notes": [] });
+    let (_mock, repo, state) = project(&json!([
+        { "tool": "write_file", "args": { "path": "package.json", "content": "{}\n" } },
+        { "content": done.to_string() },
+    ]));
+    let driver = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/pty_drive.py");
+    let out = Command::new("python3")
+        .arg("-I")
+        .arg(&driver)
+        .args(["140", "40"])
+        .args([
+            "wait:Approval needed",
+            "wait:package.json",
+            "send:y",
+            "wait:run ended",
+            // The Evidence screen of the task just ticked: rows read from
+            // its commit's attestation note.
+            "send:2",
+            "wait:REGRESSION",
+            "wait:Instructions",
+            "wait:Attestation",
+            "send:q",
+            "--",
+        ])
+        .arg(env!("CARGO_BIN_EXE_speccoder"))
+        .args(["run", "--task", "T005", "-C"])
+        .arg(repo.path())
+        .env("SPECCODER_STATE_DIR", state.path())
+        .output()
+        .unwrap();
+    let v: Value = serde_json::from_slice(&out.stdout)
+        .unwrap_or_else(|e| panic!("{e}: {}", String::from_utf8_lossy(&out.stderr)));
+    let text = v["text"].as_str().unwrap();
+    assert_eq!(
+        v["met"],
+        json!([true, true, true, true, true, true]),
+        "{text}"
+    );
+    assert_eq!(v["exit"], 0, "{text}");
+    // The decision names who made it and through what.
+    assert!(text.contains("(dashboard)"), "{text}");
+    // On leaving, the run's result, as plain `run` prints it.
+    assert!(text.contains("verdict: regression_only"), "{text}");
+    assert!(text.contains("Next:"), "{text}");
+}
+
+/// `--plain` keeps lines: no dashboard, even at a terminal.
+#[test]
+fn plain_keeps_lines_at_a_terminal() {
+    if !has_python() {
+        eprintln!("skipped: no python3");
+        return;
+    }
+    let (_mock, repo, state) = project(&script());
+    let driver = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/pty_drive.py");
+    let out = Command::new("python3")
+        .arg("-I")
+        .arg(&driver)
+        .args(["120", "30", "--"])
+        .arg(env!("CARGO_BIN_EXE_speccoder"))
+        .args(["--plain", "run", "--task", "T005", "-C"])
+        .arg(repo.path())
+        .env("SPECCODER_STATE_DIR", state.path())
+        .output()
+        .unwrap();
+    let v: Value = serde_json::from_slice(&out.stdout).unwrap();
+    let text = v["text"].as_str().unwrap();
+    assert!(!text.contains("1 Run"), "{text}");
+    assert!(text.contains("T005"), "{text}");
 }
