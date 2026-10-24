@@ -256,7 +256,7 @@ fn save_reviewed(state: &Path, map: &std::collections::BTreeMap<String, String>)
 /// allowed tool is seen its digest is recorded; when a server later changes
 /// it — description, schema or annotations — the tool needs approval again
 /// and a notice says so. `approved` are the tools a person approved for
-/// this task since (`speccoder approve`), which re-reviews them.
+/// this task since (`speccoder task approve`), which re-reviews them.
 pub fn pin_reviewed(state: &Path, tools: &mut [McpTool], approved: &[String]) -> Vec<String> {
     let mut map = load_reviewed(state);
     let mut notices = Vec::new();

@@ -142,7 +142,7 @@ pub struct ModelConfig {
     pub max_run_tokens: u64,
     /// Lifetime of prompt-cache breakpoints.
     pub cache_ttl: CacheTtl,
-    /// USD per million tokens, if configured (`speccoder cost`).
+    /// USD per million tokens, if configured (`speccoder report --cost`).
     pub prices: Option<Prices>,
     /// `openai-compatible`: the server, e.g. `http://localhost:11434/v1`.
     pub base_url: Option<String>,

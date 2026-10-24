@@ -12,7 +12,7 @@ speccoder records every model call and tool call in a local journal before it ac
 
 ## When a run is interrupted
 
-**Killed during an attempt** (Ctrl-C, a crash, a closed laptop) — `speccoder status` says `interrupted`. The next `speccoder run` **resumes the attempt** from the journal: model calls and tool calls that had finished are read back, not repeated, and the worktree is kept as the attempt left it. A command that appends to a log is not run a second time.
+**Killed during an attempt** (Ctrl-C, a crash, a closed laptop) — `speccoder report --live` says `interrupted`. The next `speccoder run` **resumes the attempt** from the journal: model calls and tool calls that had finished are read back, not repeated, and the worktree is kept as the attempt left it. A command that appends to a log is not run a second time.
 
 **Killed while a tool call was running** — nobody can know whether that call finished, so speccoder does not guess and does not run it again. The attempt is saved under its ref and undone, and the run stops (`interrupted`) for you to look. The next run starts a fresh attempt.
 
@@ -24,7 +24,7 @@ speccoder records every model call and tool call in a local journal before it ac
 
 ## Interrupted in-place runs
 
-A [`--in-place`](@/docs/running.md#in-place-runs) run records where it came from before it switches your checkout. If it dies, `speccoder status` says the checkout is still on `speccoder/<feature>`, which branch it returns to, and names both ways out:
+A [`--in-place`](@/docs/running.md#in-place-runs) run records where it came from before it switches your checkout. If it dies, `speccoder report --live` says the checkout is still on `speccoder/<feature>`, which branch it returns to, and names both ways out:
 
 - **`speccoder run --in-place`** — takes the interrupted run over and **resumes it as in a worktree**: an attempt killed mid-way continues from the journal (finished model and tool calls are read back, a command that ran is not run again), and a task whose verdict was committed but not yet ticked is ticked from that commit — only when its line in `tasks.md` is still exactly the one the commit names (`Task-Line`). At the end the checkout returns to the branch recorded when the run first started, not to `speccoder/<feature>`. If the spec, plan, tasks or the judge's inputs changed since the run died, nothing is resumed against them: what the run left is saved under an attempt ref and the task starts fresh.
 - **`speccoder run --in-place --return`** — saves whatever the run left under `refs/speccoder/attempts/<feature>/in-place/<run>`, restores the checkout to the branch tip, switches back to the recorded branch and runs nothing.
@@ -35,7 +35,7 @@ If you changed the checkout yourself after a stop, speccoder does not switch ove
 
 ## Waiting for a person
 
-An attempt that waits for an approval is not an interrupted one: it was stopped on purpose, its working tree and journal are kept, and `speccoder approvals` lists the call. Decide it with `approve` or `reject` — from any terminal, no model needed — and the next `run` continues the attempt from that call. A process killed while a prompt is open loses nothing: the call is asked again on the next run, and a call decided before the kill is never asked again or performed twice. In place, the checkout stays on `speccoder/<feature>` while the call waits; `run --in-place --return` gives it back and withdraws the call.
+An attempt that waits for an approval is not an interrupted one: it was stopped on purpose, its working tree and journal are kept, and `speccoder report --approvals` lists the call. Decide it with `task approve` or `task reject` — from any terminal, no model needed — and the next `run` continues the attempt from that call. A process killed while a prompt is open loses nothing: the call is asked again on the next run, and a call decided before the kill is never asked again or performed twice. In place, the checkout stays on `speccoder/<feature>` while the call waits; `run --in-place --return` gives it back and withdraws the call.
 
 ## Failed attempts
 

@@ -91,6 +91,12 @@ pub trait Adapter: Send + Sync + std::fmt::Debug {
     /// The unit's unfinished-checklist state.
     fn checklists(&self, root: &Path, unit_dir: &str) -> Vec<ChecklistStatus>;
 
+    /// The format's own command-line tool and how to install it, for
+    /// `doctor` (`None`: the format has none).
+    fn tool(&self) -> Option<(&'static str, &'static str)> {
+        None
+    }
+
     /// The unit's requirement identifiers, each with the hash of the line
     /// that defines it (`FR-001`, `SC-002` in Spec Kit): the rows of the
     /// trace matrix. None when the format has no such identifiers.

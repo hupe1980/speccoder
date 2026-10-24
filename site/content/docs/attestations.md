@@ -19,7 +19,7 @@ Each ticked task commit gets a git note under `refs/notes/speccoder`. The note i
 | `task-verification` | `https://speccoder.dev/task-verification/v0` | The verdict, the task line's and the spec section's hashes, the tree, the requirements and scenarios it traces to, the diff audit, mutation and monitor results, sandbox, executor and model, the decisions people made during the attempt |
 | The summary | [SLSA VSA v1](https://slsa.dev/spec/v1.1/verification_summary) | `verifiedLevels: ["SPECCODER_VERIFIED"]` or `["SPECCODER_REGRESSION_ONLY"]`, the judge-configuration hash as `policy`, and every other line's sha256 as `inputAttestations` |
 
-A task a person ticked with `speccoder accept`, or passed by with `speccoder skip`, gets one `task-verification` with verdict `attested` or `skipped` and who decided — no summary, because a decision is not a verification.
+A task a person ticked with `speccoder task accept`, or passed by with `speccoder task skip`, gets one `task-verification` with verdict `attested` or `skipped` and who decided — no summary, because a decision is not a verification.
 
 The statements never hold an absolute local path, a remote URL's credentials or anything shaped like a key; a statement that would is not written, and the run says so.
 

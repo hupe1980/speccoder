@@ -1,6 +1,6 @@
 //! The terminal approver: asks the person at the keyboard while an
 //! attempt waits. Used only when stdin and stderr are terminals and `--json`
-//! is off; otherwise the attempt stops and `speccoder approve` decides.
+//! is off; otherwise the attempt stops and `speccoder task approve` decides.
 //!
 //! One question, its full scope (F-054): what the call does (a diff, the
 //! whole command), why it stopped, what it can reach, what the model
@@ -226,7 +226,7 @@ pub fn ask_with(input: &mut dyn BufRead, out: &mut dyn Write, p: &Presentation) 
             Parsed::Later => {
                 let _ = writeln!(
                     out,
-                    "  still waiting — answer when ready (s stops the task and keeps the call for `speccoder approve`)"
+                    "  still waiting — answer when ready (s stops the task and keeps the call for `speccoder task approve`)"
                 );
             }
             Parsed::View => {

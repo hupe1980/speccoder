@@ -149,7 +149,7 @@ pub fn archive(path: &Path, opts: &Options<'_>) -> CommandResult {
         return result(
             CommandStatus::NeedsHuman,
             &format!(
-                "{} ticked without a speccoder verdict: {}; run them, accept them (`speccoder accept`), or name each with --allow-unverified",
+                "{} ticked without a speccoder verdict: {}; run them, accept them (`speccoder task accept`), or name each with --allow-unverified",
                 id,
                 unaccepted.join(", ")
             ),

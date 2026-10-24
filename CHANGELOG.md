@@ -31,7 +31,7 @@ ticks a task only on evidence the model cannot produce or edit.
 
 **Planning and inspecting**
 
-- `speccoder spec [SKILL]` (also `speccoder skill`): the format's own planning
+- `speccoder spec [SKILL]` (also `speccoder spec`): the format's own planning
   skills run with speccoder's model under a planning policy, answering
   clarifying questions inline.
 - `speccoder inspect`: features or changes, artifacts, tasks and what blocks
@@ -85,7 +85,7 @@ ticks a task only on evidence the model cannot produce or edit.
   your own agent makes the attempts under the same judge.
 - Providers: Anthropic, OpenAI, and any OpenAI-compatible server (Ollama,
   vLLM, llama.cpp, LM Studio, …); keys from the environment only.
-- Cost (`speccoder cost`, live progress) is priced by agentplane's
+- Cost (`speccoder report --cost`, live progress) is priced by agentplane's
   `Pricing`: tokens written to the cache at their own rate
   (`price_cache_write_per_mtok`, `price_cache_write_1h_per_mtok`; by default
   Anthropic's 1.25× and 2× input), no longer as plain input.
@@ -118,7 +118,7 @@ ticks a task only on evidence the model cannot produce or edit.
   7 days) as an expiry, never as anyone's decision. `status` lists what waits.
 
 - Approvals inline at the terminal, in editors over ACP (`speccoder acp`),
-  in the dashboard (`speccoder tui`), or later (`speccoder approvals`,
+  in the dashboard (`speccoder tui`), or later (`speccoder report --approvals`,
   `approve`, `reject`); every decision records who made it.
 - `accept`, `skip`, `nudge`, `cost`, `report`, `status`, `pr` (a draft pull
   request with every task's evidence, after you confirm).
@@ -140,6 +140,24 @@ ticks a task only on evidence the model cannot produce or edit.
   recorded attempt at each of its crash points;
   `speccoder replay` re-derives a recorded run offline. Failed attempts are
   kept under `refs/speccoder/attempts/…`.
+
+**Commands and onboarding**
+
+- A small daily surface, grouped in `--help`: Start (`init`, `doctor`),
+  Plan (`spec`), Work (`run`, `task`), Review (`report`, `pr`, `attest`);
+  `help advanced` for the rest. One-task decisions read like a sentence:
+  `task approve T004`, `task reject T004 --reason …`, `task accept`,
+  `task skip`, `task nudge`, `task show`. `report --live`, `--cost`,
+  `--approvals`, `--markdown`. `-C PATH` and `--feature` on every command.
+  Bare `speccoder` opens the dashboard at a terminal.
+- `init` runs the checks on the untouched code and, at a terminal, offers
+  to commit `speccoder.toml` (yes by default only when they pass); it notes
+  the model key and `AGENTS.md`/`CLAUDE.md`.
+- `doctor`: git, the project and its tool, the configuration, the key, the
+  sandbox, the state directory, the signing key, the repository
+  instructions and the look, changing nothing; `--bug-report` prints a
+  redacted bundle for an issue.
+- `completion bash|zsh|fish|elvish|powershell`.
 
 **Repository instructions**
 

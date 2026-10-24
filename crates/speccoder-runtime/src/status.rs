@@ -178,7 +178,7 @@ fn totals(tasks: &[TaskStatus]) -> StatusTotals {
     }
 }
 
-/// `speccoder report [PATH] [--feature]`.
+/// `speccoder report [--feature]`.
 #[must_use]
 pub fn report(path: &Path, feature: Option<&str>) -> CommandResult {
     let inspected = crate::inspect(path, feature);
@@ -371,6 +371,31 @@ pub fn report(path: &Path, feature: Option<&str>) -> CommandResult {
             totals,
         }),
     ))
+}
+
+/// `speccoder task show TASK`: the report narrowed to one task.
+#[must_use]
+pub fn show(path: &Path, feature: Option<&str>, task: &str) -> CommandResult {
+    let full = report(path, feature);
+    let Some(CommandData::Report(r)) = full.data() else {
+        return CommandResult::carried("task show", &full);
+    };
+    let Some(t) = r.tasks.iter().find(|t| t.id == task) else {
+        return CommandResult::new(
+            "task show",
+            CommandStatus::NotFound,
+            &format!("{} has no task {task}", r.feature),
+        )
+        .with_code("NOT-FOUND")
+        .with_fix(vec![format!("speccoder report --feature {}", r.feature)]);
+    };
+    let mut one = (**r).clone();
+    one.tasks = vec![t.clone()];
+    one.trace.retain(|row| row.task.as_deref() == Some(task));
+    one.convergence.clear();
+    one.totals = totals(&one.tasks);
+    let message = format!("{task}: {}", t.state.replace('_', " "));
+    CommandResult::ok("task show", &message).with_data(CommandData::Report(Box::new(one)))
 }
 
 /// One row per requirement and task citing it (by its identifier as a word

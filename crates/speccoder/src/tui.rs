@@ -413,7 +413,7 @@ fn approvals(f: &mut Frame<'_>, app: &App, area: Rect) {
         }
         if v.body_lines.len() > 6 {
             items.push(ListItem::new(format!(
-                "    … {} more lines (speccoder approvals)",
+                "    … {} more lines (speccoder report --approvals)",
                 v.body_lines.len() - 6
             )));
         }
@@ -481,7 +481,7 @@ pub fn load(path: &Path, feature: Option<&str>, state: &Path) -> Snapshot {
     }
 }
 
-/// `speccoder tui [PATH] [--feature]`.
+/// `speccoder tui [--feature]`.
 pub fn run(path: &Path, feature: Option<&str>) -> CommandResult {
     let Some(state) = speccoder_runtime::worktree::state_dir() else {
         return CommandResult::new(
@@ -627,7 +627,7 @@ mod tests {
             }),
             problem: None,
             next: Some(speccoder_core::next::NextStep {
-                command: "speccoder approve --task T002".to_owned(),
+                command: "speccoder task approve T002".to_owned(),
                 why: "allow it; the attempt resumes on the next run".to_owned(),
             }),
             in_place: Some("in-place · speccoder/001-x (returns to main)".to_owned()),
@@ -663,7 +663,7 @@ mod tests {
             "1 │ {}",
             "a → for the rest of T002: this path, any content",
             "1 verified",
-            "Next: speccoder approve --task T002 — allow it",
+            "Next: speccoder task approve T002 — allow it",
             "001-x   in-place · speccoder/001-x (returns to main)   [tab] pane",
         ] {
             assert!(s.contains(needle), "missing {needle:?} in\n{s}");

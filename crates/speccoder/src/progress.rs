@@ -189,7 +189,7 @@ pub fn lines(event: &Event, seconds: Option<u64>, verbosity: Verbosity) -> Vec<S
             )]
         }
         Event::Notice { text } if !quiet => vec![format!("» {text}")],
-        // Running totals go to `speccoder status`; a line per turn is noise.
+        // Running totals go to `speccoder report --live`; a line per turn is noise.
         _ => Vec::new(),
     }
 }

@@ -179,6 +179,46 @@ pub enum CommandData {
     Explain(Box<ExplainReport>),
     /// `schema`: the published schemas, or one of them.
     Schema(Box<SchemaReport>),
+    /// `doctor`: every check of the machine and the project.
+    Doctor(Box<DoctorReport>),
+}
+
+/// How a doctor check came out.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum DoctorLevel {
+    /// Fine.
+    Pass,
+    /// Works, with less than it could (no signing key, no spec tool).
+    Warn,
+    /// A run would fail or judge wrongly.
+    Fail,
+}
+
+/// One doctor check.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct DoctorCheck {
+    /// `git`, `repository`, `project`, `config`, `key`, `sandbox`, …
+    pub check: String,
+    /// Pass, warn or fail.
+    pub level: DoctorLevel,
+    /// What was found.
+    pub detail: String,
+    /// The catalog code of a failure or warning.
+    pub code: Option<String>,
+    /// How to resolve it.
+    pub fix: Vec<String>,
+}
+
+/// Result of `speccoder doctor`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct DoctorReport {
+    /// speccoder's version.
+    pub speccoder: String,
+    /// `macos aarch64`.
+    pub os: String,
+    /// Every check, in order.
+    pub checks: Vec<DoctorCheck>,
 }
 
 impl CommandData {
@@ -211,6 +251,7 @@ impl CommandData {
             Self::Attest(_) => "attest",
             Self::Explain(_) => "explain",
             Self::Schema(_) => "schema",
+            Self::Doctor(_) => "doctor",
         }
     }
 }
@@ -241,6 +282,7 @@ pub const PAYLOADS: &[&str] = &[
     "attest",
     "explain",
     "schema",
+    "doctor",
 ];
 
 /// A repository instructions file given to an attempt.
@@ -610,7 +652,7 @@ pub struct FullTier {
     pub note: Option<String>,
 }
 
-/// Result of `speccoder skill` without a name.
+/// Result of `speccoder spec` without a name.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct SkillsReport {
     /// Installed skills by name.
@@ -630,7 +672,7 @@ pub struct SkillEntry {
     pub refused: Option<String>,
 }
 
-/// Result of `speccoder skill <name>`.
+/// Result of `speccoder spec <name>`.
 #[derive(Debug, Clone, PartialEq, Serialize, schemars::JsonSchema)]
 pub struct SkillRunReport {
     /// The skill.
@@ -668,6 +710,36 @@ pub struct InitReport {
     pub model: String,
     /// Files written, relative to the project root.
     pub wrote: Vec<String>,
+    /// The checks run on the untouched code (empty: not run).
+    pub ran: Vec<InitRun>,
+    /// The repository instructions found (`AGENTS.md`, `CLAUDE.md`).
+    pub instructions: Vec<String>,
+    /// The model key: the variable and whether it is set.
+    pub key: InitKey,
+    /// The commit holding `speccoder.toml`, when one was made.
+    pub committed: Option<String>,
+}
+
+/// One check `init` ran on the untouched code.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct InitRun {
+    /// `[checks.<name>]`.
+    pub name: String,
+    /// Passed on the untouched code.
+    pub passed: bool,
+    /// `passed`, `failed`, `timed_out`, `skipped`, `error`.
+    pub status: String,
+    /// How long it took.
+    pub duration_ms: u64,
+}
+
+/// The model key `init` looked for.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, schemars::JsonSchema)]
+pub struct InitKey {
+    /// `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`.
+    pub variable: String,
+    /// Set in this environment.
+    pub set: bool,
 }
 
 /// One detected check.
@@ -698,7 +770,7 @@ pub struct ControlReport {
     pub record: Option<String>,
 }
 
-/// Result of `speccoder cost`.
+/// Result of `speccoder report --cost`.
 #[derive(Debug, Clone, PartialEq, Serialize, schemars::JsonSchema)]
 pub struct CostReport {
     /// Feature directory name.
@@ -739,7 +811,7 @@ pub struct Usage {
     pub usd: Option<f64>,
 }
 
-/// Result of `speccoder approvals`, `approve` and `reject`.
+/// Result of `speccoder report --approvals`, `approve` and `reject`.
 #[derive(Debug, Clone, PartialEq, Serialize, schemars::JsonSchema)]
 pub struct ApprovalsReport {
     /// Feature directory name.
@@ -1007,7 +1079,7 @@ pub struct TaskStatus {
     /// Enclosing phase heading.
     pub phase: String,
     /// `verified`, `regression_only` (ticked by speccoder with that verdict),
-    /// `attested` (ticked by `speccoder accept`), `ticked_without_evidence`
+    /// `attested` (ticked by `speccoder task accept`), `ticked_without_evidence`
     /// (ticked, no speccoder commit), `evidence_without_tick` (in place: a
     /// verdict commit names the task, its local tick is missing),
     /// `skipped`, `ready` or `blocked`.
@@ -1068,7 +1140,7 @@ pub struct StatusTotals {
     pub evidence_without_tick: usize,
     /// Ticks speccoder committed without an attestation.
     pub without_attestation: usize,
-    /// Ticked by `speccoder accept`: a person's attestation, not evidence.
+    /// Ticked by `speccoder task accept`: a person's attestation, not evidence.
     pub attested: usize,
     /// Open and skipped by a person.
     pub skipped: usize,

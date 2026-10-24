@@ -22,6 +22,7 @@ Every result that is not plainly `ok` names a code — `error[CODE]`, `stopped[C
 | [`FEATURE-SELECTION`](#feature-selection) | error | 12 | more than one feature could be meant |
 | [`CONFIG`](#config) | error | 13 | the configuration or the environment is not usable |
 | [`NO-STATE-DIR`](#no-state-dir) | error | 13 | speccoder has nowhere to keep its state |
+| [`SANDBOX-UNAVAILABLE`](#sandbox-unavailable) | error | 13 | the OS sandbox is not available and the project requires it |
 | [`CONFIG-MISSING`](#config-missing) | error | 13 | the project has no speccoder.toml |
 | [`CONFIG-INVALID`](#config-invalid) | error | 13 | speccoder.toml has an error |
 | [`KEY-MISSING`](#key-missing) | error | 13 | the model provider's API key is not in the environment |
@@ -143,6 +144,15 @@ Speccoder has nowhere to keep its state.
 Journals, worktrees and live progress live in a state directory: `$SPECCODER_STATE_DIR`, else `$XDG_STATE_HOME/speccoder`, else `~/.local/state/speccoder`. None of these variables is set.
 
 - `export SPECCODER_STATE_DIR="$PWD/.speccoder-state"`
+
+### SANDBOX-UNAVAILABLE
+
+The OS sandbox is not available and the project requires it.
+
+`[sandbox] mode = "required"` refuses to run commands unsandboxed, and this OS offers no sandbox (Linux without Landlock, a container without user namespaces, another OS).
+
+- Run on macOS or a Linux with Landlock (5.13+)
+- Or set [sandbox] mode = "auto" to run unsandboxed and be told
 
 ### CONFIG-MISSING
 
@@ -381,7 +391,7 @@ The task waits for tasks it depends on.
 Dependencies come from the task list's phases, `[P]` markers and explicit references; the message names the open ones.
 
 - `speccoder run`
-- `speccoder skip --task <dependency> --reason "…"`
+- `speccoder task skip <dependency> --reason "…"`
 
 ### VERIFICATION-FAILED
 
@@ -390,7 +400,7 @@ The checks or the acceptance tests did not pass.
 After the retries, a check regressed or the spec-derived acceptance tests did not go from red to green. The attempt is saved under its ref.
 
 - `speccoder report`
-- `speccoder nudge --task <task> --note "…"`
+- `speccoder task nudge <task> --note "…"`
 
 ### REGRESSION-ONLY
 
@@ -423,9 +433,9 @@ A call waits for a person's decision; nothing ran.
 
 The model asked for something the policy does not allow on its own — a dependency change, the network, a protected file. The attempt waits; deciding continues it from that call.
 
-- `speccoder approvals`
-- `speccoder approve --task <task>`
-- `speccoder reject --task <task> --reason "…"`
+- `speccoder report --approvals`
+- `speccoder task approve <task>`
+- `speccoder task reject <task> --reason "…"`
 
 ### BLOCKED
 
@@ -433,8 +443,8 @@ The model says the task cannot be done as written.
 
 The model used its honest exit: something in the spec or the code stops it. Its reason is a claim, shown as "Model says".
 
-- `speccoder nudge --task <task> --note "…"`
-- `speccoder skip --task <task> --reason "…"`
+- `speccoder task nudge <task> --note "…"`
+- `speccoder task skip <task> --reason "…"`
 
 ### BUDGET-EXHAUSTED
 
@@ -442,7 +452,7 @@ The attempt ran out of turns, calls or tokens.
 
 The attempt reached a limit of `[budget]` before finishing. The work so far is saved under the attempt's ref.
 
-- `speccoder nudge --task <task> --note "…"`
+- `speccoder task nudge <task> --note "…"`
 - Raise the limit in speccoder.toml [budget]
 
 ### NOT-DEMONSTRATED
@@ -452,7 +462,7 @@ The evidence the task needs could not be produced.
 The acceptance tests could not be made red before the attempt (they already pass, or fail for another reason), or a convergence gap shows in no failing test. Ticking would claim more than was shown.
 
 - `speccoder report`
-- `speccoder accept --task <task> --reason "…"`
+- `speccoder task accept <task> --reason "…"`
 
 ### ACCEPTANCE-UNWRITTEN
 
@@ -470,8 +480,8 @@ The gaming monitor suspects a shortcut.
 A separate review of the passing attempt found something like a hard-coded result or a weakened test. The task stays unticked until a person decides.
 
 - `speccoder report`
-- `speccoder accept --task <task> --reason "…"`
-- `speccoder nudge --task <task> --note "…"`
+- `speccoder task accept <task> --reason "…"`
+- `speccoder task nudge <task> --note "…"`
 
 ### INTERRUPTED
 

@@ -64,6 +64,10 @@ fn deltas_text(c: &speccoder_openspec::Change) -> String {
 }
 
 impl Adapter for OpenSpec {
+    fn tool(&self) -> Option<(&'static str, &'static str)> {
+        Some(("openspec", "npm install -g @fission-ai/openspec"))
+    }
+
     fn kind(&self) -> FormatKind {
         FormatKind::Openspec
     }

@@ -149,6 +149,17 @@ pub const CATALOG: &[Entry] = &[
         ["export SPECCODER_STATE_DIR=\"$PWD/.speccoder-state\""]
     ),
     entry!(
+        "SANDBOX-UNAVAILABLE",
+        E,
+        S::ConfigError,
+        "the OS sandbox is not available and the project requires it",
+        "`[sandbox] mode = \"required\"` refuses to run commands unsandboxed, and this OS offers no sandbox (Linux without Landlock, a container without user namespaces, another OS).",
+        [
+            "→ run on macOS or a Linux with Landlock (5.13+)",
+            "→ or set [sandbox] mode = \"auto\" to run unsandboxed and be told"
+        ]
+    ),
+    entry!(
         "CONFIG-MISSING",
         E,
         S::ConfigError,
@@ -384,7 +395,7 @@ pub const CATALOG: &[Entry] = &[
         "Dependencies come from the task list's phases, `[P]` markers and explicit references; the message names the open ones.",
         [
             "speccoder run --feature {feature}",
-            "speccoder skip --task <dependency> --reason \"…\""
+            "speccoder task skip <dependency> --reason \"…\""
         ]
     ),
     // ── verdicts ──────────────────────────────────────────────────────
@@ -396,7 +407,7 @@ pub const CATALOG: &[Entry] = &[
         "After the retries, a check regressed or the spec-derived acceptance tests did not go from red to green. The attempt is saved under its ref.",
         [
             "speccoder report",
-            "speccoder nudge --task {task} --note \"…\""
+            "speccoder task nudge {task} --note \"…\""
         ]
     ),
     entry!(
@@ -434,9 +445,9 @@ pub const CATALOG: &[Entry] = &[
         "a call waits for a person's decision; nothing ran",
         "The model asked for something the policy does not allow on its own — a dependency change, the network, a protected file. The attempt waits; deciding continues it from that call.",
         [
-            "speccoder approvals",
-            "speccoder approve --task {task}",
-            "speccoder reject --task {task} --reason \"…\""
+            "speccoder report --approvals",
+            "speccoder task approve {task}",
+            "speccoder task reject {task} --reason \"…\""
         ]
     ),
     entry!(
@@ -446,8 +457,8 @@ pub const CATALOG: &[Entry] = &[
         "the model says the task cannot be done as written",
         "The model used its honest exit: something in the spec or the code stops it. Its reason is a claim, shown as \"Model says\".",
         [
-            "speccoder nudge --task {task} --note \"…\"",
-            "speccoder skip --task {task} --reason \"…\""
+            "speccoder task nudge {task} --note \"…\"",
+            "speccoder task skip {task} --reason \"…\""
         ]
     ),
     entry!(
@@ -457,7 +468,7 @@ pub const CATALOG: &[Entry] = &[
         "the attempt ran out of turns, calls or tokens",
         "The attempt reached a limit of `[budget]` before finishing. The work so far is saved under the attempt's ref.",
         [
-            "speccoder nudge --task {task} --note \"…\"",
+            "speccoder task nudge {task} --note \"…\"",
             "→ raise the limit in speccoder.toml [budget]"
         ]
     ),
@@ -469,7 +480,7 @@ pub const CATALOG: &[Entry] = &[
         "The acceptance tests could not be made red before the attempt (they already pass, or fail for another reason), or a convergence gap shows in no failing test. Ticking would claim more than was shown.",
         [
             "speccoder report",
-            "speccoder accept --task {task} --reason \"…\""
+            "speccoder task accept {task} --reason \"…\""
         ]
     ),
     entry!(
@@ -491,8 +502,8 @@ pub const CATALOG: &[Entry] = &[
         "A separate review of the passing attempt found something like a hard-coded result or a weakened test. The task stays unticked until a person decides.",
         [
             "speccoder report",
-            "speccoder accept --task {task} --reason \"…\"",
-            "speccoder nudge --task {task} --note \"…\""
+            "speccoder task accept {task} --reason \"…\"",
+            "speccoder task nudge {task} --note \"…\""
         ]
     ),
     entry!(
@@ -733,7 +744,7 @@ mod tests {
         let e = lookup("NEEDS-APPROVAL").unwrap();
         assert_eq!(
             fixes(e, "run", Some("T004"), None)[1],
-            "speccoder approve --task T004"
+            "speccoder task approve T004"
         );
         let r = lookup("INTERRUPTED").unwrap();
         assert_eq!(fixes(r, "run", None, None), ["speccoder run"]);

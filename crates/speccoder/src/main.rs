@@ -5,9 +5,11 @@ mod attention;
 mod cli;
 #[cfg(test)]
 mod contract;
+mod doctor;
 mod events;
 mod explain;
 mod github;
+mod help;
 mod human;
 mod markdown;
 mod output;
@@ -17,7 +19,6 @@ mod schema;
 mod style;
 mod tui;
 
-use clap::Parser;
 use speccoder_core::ExitCode;
 
 use speccoder_runtime::verify::config::Tier;
@@ -104,7 +105,22 @@ fn main() {
         acp::serve(std::io::stdin().lock(), Box::new(std::io::stdout()));
         return;
     }
-    let cli = match Cli::try_parse_from(&args) {
+    // The grouped help is built only when help is asked for: building it
+    // costs a second pass over the CLI on every start (cold-start budget).
+    let wants_help = args.len() == 1
+        || args
+            .iter()
+            .skip(1)
+            .any(|a| matches!(a.as_str(), "-h" | "--help" | "help"));
+    let cmd = if wants_help {
+        help::command()
+    } else {
+        <Cli as clap::CommandFactory>::command()
+    };
+    let parsed = cmd
+        .try_get_matches_from(&args)
+        .and_then(|m| <Cli as clap::FromArgMatches>::from_arg_matches(&m));
+    let cli = match parsed {
         Ok(cli) => cli,
         Err(e) => usage_error(&args, &e),
     };
@@ -124,35 +140,57 @@ fn main() {
     let events = cli.events.then(|| {
         std::sync::Arc::new(events::Events::start(
             Box::new(std::io::stdout()),
-            command_name(&cli.command),
+            command_name(cli.command.as_ref()),
         ))
     });
     if let Some(f) = cli.format {
         speccoder_runtime::format::request(f.into());
     }
-    let result = match &cli.command {
-        Command::Inspect { path, feature } => speccoder_runtime::inspect(path, feature.as_deref()),
-        Command::Worktree { path, feature } => {
-            speccoder_runtime::worktree(path, feature.as_deref())
+    let path = cli.project.as_path();
+    let feature = cli.feature.as_deref();
+    // Ask inline only when someone is at a terminal.
+    let interactive = |no_prompt: bool| {
+        use std::io::IsTerminal;
+        !cli.json && !no_prompt && std::io::stdin().is_terminal() && std::io::stderr().is_terminal()
+    };
+    let Some(command) = &cli.command else {
+        // Bare `speccoder`: the dashboard at a terminal, else the report.
+        use std::io::IsTerminal;
+        let result = if !machine
+            && !style::out().screen_reader
+            && std::io::stdin().is_terminal()
+            && std::io::stdout().is_terminal()
+        {
+            tui::run(path, feature)
+        } else {
+            speccoder_runtime::status::report(path, feature)
+        };
+        finish(&cli, result, events.as_ref());
+    };
+    let result = match command {
+        Command::Help { topic } => {
+            help::print(topic);
+            return;
         }
-        Command::Propose {
-            task,
-            path,
-            feature,
-        } => speccoder_runtime::propose(path, feature.as_deref(), task),
+        Command::Completion { shell } => {
+            help::completion(*shell);
+            return;
+        }
+        Command::Inspect => speccoder_runtime::inspect(path, feature),
+        Command::Worktree => speccoder_runtime::worktree(path, feature),
+        Command::Propose { task } => speccoder_runtime::propose(path, feature, task),
+        Command::Doctor { bug_report } => {
+            let report = speccoder_runtime::doctor::run(path, feature, Some(&look_line()));
+            if *bug_report && !machine {
+                print!("{}", doctor::bug_report(&report));
+                return;
+            }
+            report
+        }
         // `--return` (clap requires `--in-place`): no task runs.
-        Command::Run {
-            return_: true,
-            path,
-            ..
-        } => match speccoder_runtime::worktree::state_dir() {
+        Command::Run { return_: true, .. } => match speccoder_runtime::worktree::state_dir() {
             Some(state) => speccoder_runtime::in_place::return_in_place(path, &state),
-            None => speccoder_core::CommandResult::new(
-                "run",
-                speccoder_core::CommandStatus::ConfigError,
-                "no state directory (set SPECCODER_STATE_DIR or HOME)",
-            )
-            .with_code("NO-STATE-DIR"),
+            None => no_state("run"),
         },
         Command::Run {
             task,
@@ -163,17 +201,9 @@ fn main() {
             ignore_checklists,
             in_place,
             return_: _,
-            path,
-            feature,
         } => {
-            // Ask inline only when someone is at a terminal.
-            use std::io::IsTerminal;
             let approver: Option<std::sync::Arc<dyn speccoder_runtime::approvals::Approver>> =
-                (!cli.json
-                    && !*no_prompt
-                    && std::io::stdin().is_terminal()
-                    && std::io::stderr().is_terminal())
-                .then(|| std::sync::Arc::new(prompt::Terminal) as _);
+                interactive(*no_prompt).then(|| std::sync::Arc::new(prompt::Terminal) as _);
             // Live progress on stderr, unless stdout must stay one JSON object.
             let (progress, attention) = live_progress(&cli, &notify, events.as_ref());
             let options = speccoder_runtime::RunOptions {
@@ -186,12 +216,10 @@ fn main() {
                 ..speccoder_runtime::RunOptions::default()
             };
             let result = match task {
-                Some(task) => speccoder_runtime::run(path, feature.as_deref(), task, &options),
-                None => {
-                    speccoder_runtime::run_feature(path, feature.as_deref(), &options, *converge)
-                }
+                Some(task) => speccoder_runtime::run(path, feature, task, &options),
+                None => speccoder_runtime::run_feature(path, feature, &options, *converge),
             };
-            let result = speccoder_runtime::next::attach(result, feature.as_deref());
+            let result = speccoder_runtime::next::attach(result, feature);
             let result = if *in_place {
                 speccoder_runtime::next::in_place(result)
             } else {
@@ -202,55 +230,14 @@ fn main() {
             }
             result
         }
-        Command::Accept {
-            task,
-            reason,
-            in_place,
-            path,
-            feature,
-        } => match speccoder_runtime::worktree::state_dir() {
-            Some(state) => speccoder_runtime::controls::accept_in(
-                path,
-                feature.as_deref(),
-                task,
-                reason,
-                &state,
-                *in_place,
-            ),
-            None => no_state("accept"),
-        },
-        Command::Skip {
-            task,
-            reason,
-            path,
-            feature,
-            ..
-        } => speccoder_runtime::controls::skip(path, feature.as_deref(), task, reason.as_deref()),
-        Command::Nudge {
-            task,
-            note,
-            path,
-            feature,
-            ..
-        } => match speccoder_runtime::worktree::state_dir() {
-            Some(state) => speccoder_runtime::controls::nudge_with(
-                path,
-                feature.as_deref(),
-                task,
-                note.as_deref(),
-                &state,
-            ),
-            None => no_state("nudge"),
-        },
+        Command::Task { action } => task_action(action, path, feature),
         Command::Workflow {
-            action: cli::WorkflowAction::Install { path, force },
+            action: cli::WorkflowAction::Install { force },
         } => speccoder_runtime::workflow::install(path, *force),
         Command::Attest {
             action:
                 cli::AttestAction::Verify {
                     rev,
-                    path,
-                    feature,
                     allowed_signers,
                     certificate_identity,
                     certificate_oidc_issuer,
@@ -258,7 +245,7 @@ fn main() {
                 },
         } => speccoder_runtime::attest::verify::verify_at(
             path,
-            feature.as_deref(),
+            feature,
             rev.as_deref(),
             &speccoder_runtime::attest::verify::Trust {
                 allowed_signers: allowed_signers.clone(),
@@ -268,35 +255,11 @@ fn main() {
             *require_signed,
         ),
         Command::Attest {
-            action: cli::AttestAction::Sign { rev, path, feature },
-        } => speccoder_runtime::attest::sign_at(path, feature.as_deref(), rev.as_deref()),
-        Command::Skill {
-            name,
-            arguments,
-            path,
-            no_prompt,
-        } => match name {
-            None => speccoder_runtime::hosting::list(path),
-            Some(name) => {
-                use std::io::IsTerminal;
-                let interactive = !cli.json
-                    && !*no_prompt
-                    && std::io::stdin().is_terminal()
-                    && std::io::stderr().is_terminal();
-                let (progress, _attention) = live_progress(&cli, &notify, events.as_ref());
-                let options = speccoder_runtime::RunOptions {
-                    max_tasks: None,
-                    approver: interactive.then(|| std::sync::Arc::new(prompt::Terminal) as _),
-                    progress,
-                    ..speccoder_runtime::RunOptions::default()
-                };
-                speccoder_runtime::hosting::run(path, name, &arguments.join(" "), &options)
-            }
-        },
+            action: cli::AttestAction::Sign { rev },
+        } => speccoder_runtime::attest::sign_at(path, feature, rev.as_deref()),
         Command::Spec {
             name,
             arguments,
-            path,
             no_prompt,
             yes,
             allow_unverified,
@@ -304,15 +267,11 @@ fn main() {
             Some("archive") => archive(&cli, path, arguments, *yes, allow_unverified),
             None => speccoder_runtime::hosting::list(path),
             Some(name) => {
-                use std::io::IsTerminal;
-                let interactive = !cli.json
-                    && !*no_prompt
-                    && std::io::stdin().is_terminal()
-                    && std::io::stderr().is_terminal();
                 let (progress, _attention) = live_progress(&cli, &notify, events.as_ref());
                 let options = speccoder_runtime::RunOptions {
                     max_tasks: None,
-                    approver: interactive.then(|| std::sync::Arc::new(prompt::Terminal) as _),
+                    approver: interactive(*no_prompt)
+                        .then(|| std::sync::Arc::new(prompt::Terminal) as _),
                     progress,
                     ..speccoder_runtime::RunOptions::default()
                 };
@@ -320,18 +279,26 @@ fn main() {
             }
         },
         Command::Init {
-            path,
             provider,
             model,
             force,
-        } => speccoder_runtime::init::init(path, provider.as_deref(), model.as_deref(), *force),
+            no_verify,
+            yes,
+        } => init(
+            &cli,
+            path,
+            provider.as_deref(),
+            model.as_deref(),
+            *force,
+            *no_verify,
+            *yes,
+        ),
         // A screen reader gets the report, not a redrawn screen (F-055).
-        Command::Tui { path, feature } if style::out().screen_reader => {
+        Command::Tui if style::out().screen_reader => {
             eprintln!("notice: the dashboard is off in screen-reader mode; here is the report");
-            speccoder_runtime::status::report(path, feature.as_deref())
+            speccoder_runtime::status::report(path, feature)
         }
-        Command::Tui { path, feature } => tui::run(path, feature.as_deref()),
-        Command::Status { path } => speccoder_runtime::progress::status(path),
+        Command::Tui => tui::run(path, feature),
         Command::Bench {
             action:
                 cli::BenchAction::Import {
@@ -357,8 +324,6 @@ fn main() {
             return;
         }
         Command::Pr {
-            path,
-            feature,
             remote,
             base,
             yes,
@@ -366,7 +331,7 @@ fn main() {
             force,
         } => {
             let ask = |o: &speccoder_runtime::handoff::PrOptions<'_>| {
-                speccoder_runtime::handoff::pr(path, feature.as_deref(), o)
+                speccoder_runtime::handoff::pr(path, feature, o)
             };
             let mut options = speccoder_runtime::handoff::PrOptions {
                 remote,
@@ -378,7 +343,7 @@ fn main() {
             // Talking to a remote is a person's decision: show the
             // dry run, then ask, unless --yes; never without a terminal.
             use std::io::IsTerminal;
-            if !*yes && !*dry_run && !cli.json && std::io::stdin().is_terminal() {
+            if !*yes && !*dry_run && !machine && std::io::stdin().is_terminal() {
                 let preview = ask(&options);
                 if let Some(speccoder_core::CommandData::Pr(p)) = preview.data() {
                     eprintln!("{}\n\n{}\n", p.title, p.body);
@@ -400,65 +365,19 @@ fn main() {
                 ask(&options)
             }
         }
-        Command::Cost { path, feature } => {
-            speccoder_runtime::controls::cost(path, feature.as_deref())
-        }
-        Command::Approvals { path, feature } => speccoder_runtime::approvals::decide(
+        Command::Report { live: true, .. } => speccoder_runtime::progress::status(path),
+        Command::Report { cost: true, .. } => speccoder_runtime::controls::cost(path, feature),
+        Command::Report {
+            approvals: true, ..
+        } => speccoder_runtime::approvals::decide(
             path,
-            feature.as_deref(),
+            feature,
             speccoder_runtime::approvals::Verb::List,
         ),
-        Command::Approve {
-            task,
-            call,
-            all,
-            scope,
-            note,
-            path,
-            feature,
-        } => speccoder_runtime::approvals::decide(
-            path,
-            feature.as_deref(),
-            speccoder_runtime::approvals::Verb::Decide(speccoder_runtime::approvals::Choice {
-                task: task.as_deref(),
-                call: call.as_deref(),
-                all: *all,
-                approve: true,
-                scope: (*scope).into(),
-                note: note.as_deref(),
-                reason: None,
-            }),
-        ),
-        Command::Reject {
-            task,
-            call,
-            all,
-            reason,
-            path,
-            feature,
-        } => speccoder_runtime::approvals::decide(
-            path,
-            feature.as_deref(),
-            speccoder_runtime::approvals::Verb::Decide(speccoder_runtime::approvals::Choice {
-                task: task.as_deref(),
-                call: call.as_deref(),
-                all: *all,
-                approve: false,
-                scope: speccoder_runtime::approvals::Scope::Task,
-                note: None,
-                reason: Some(reason),
-            }),
-        ),
-        Command::Report { path, feature, .. } => {
-            speccoder_runtime::status::report(path, feature.as_deref())
-        }
+        Command::Report { .. } => speccoder_runtime::status::report(path, feature),
         Command::Explain { code, list } => explain::command(code.as_deref(), *list),
         Command::Schema { name } => schema::command(name.as_deref()),
-        Command::Converge {
-            in_place,
-            path,
-            feature,
-        } => speccoder_runtime::converge_in(path, feature.as_deref(), *in_place),
+        Command::Converge { in_place } => speccoder_runtime::converge_in(path, feature, *in_place),
         Command::Eval {
             dir,
             case,
@@ -472,12 +391,8 @@ fn main() {
             usize::from(*repeat),
             executor.as_deref(),
         ),
-        Command::Replay { run, path } => speccoder_runtime::replay(path, run),
-        Command::Verify {
-            path,
-            tier,
-            against,
-        } => {
+        Command::Replay { run } => speccoder_runtime::replay(path, run),
+        Command::Verify { tier, against } => {
             let tier = tier.map(|t| match t {
                 TierArg::Fast => Tier::Fast,
                 TierArg::Full => Tier::Full,
@@ -493,21 +408,34 @@ fn main() {
             }
         }
     };
-    let result = speccoder_runtime::next::attach(result, feature_flag(&cli.command));
+    finish(&cli, result, events.as_ref());
+}
+
+/// Next steps and codes, the in-place adjustment, rendering (human, JSON,
+/// events, Markdown), GitHub Actions, and the exit status.
+fn finish(
+    cli: &Cli,
+    result: speccoder_core::CommandResult,
+    events: Option<&std::sync::Arc<events::Events>>,
+) -> ! {
+    let path = cli.project.as_path();
+    let feature = cli.feature.as_deref();
+    let result = speccoder_runtime::next::attach(result, feature);
     // While an in-place session holds the project, the way on is in place.
-    let result = match (
-        decision_path(&cli.command),
-        speccoder_runtime::worktree::state_dir(),
-    ) {
-        (Some(path), Some(state))
-            if speccoder_runtime::in_place::session_at(path, &state).is_some() =>
+    let decision = matches!(
+        cli.command,
+        Some(Command::Task { .. } | Command::Report { .. }) | None
+    );
+    let result = match speccoder_runtime::worktree::state_dir() {
+        Some(state)
+            if decision && speccoder_runtime::in_place::session_at(path, &state).is_some() =>
         {
             speccoder_runtime::next::in_place(result)
         }
         _ => result,
     };
-    let markdown = matches!(cli.command, Command::Report { markdown: true, .. });
-    let rendered = match &events {
+    let markdown = matches!(cli.command, Some(Command::Report { markdown: true, .. }));
+    let rendered = match events {
         Some(stream) => {
             stream.result(&result);
             Ok(())
@@ -517,10 +445,8 @@ fn main() {
     };
     // In GitHub Actions, a run's summary is the feature's report after it.
     let after = match &cli.command {
-        Command::Run { path, feature, .. }
-            if std::env::var("GITHUB_ACTIONS").is_ok_and(|v| v == "true") =>
-        {
-            Some(speccoder_runtime::status::report(path, feature.as_deref()))
+        Some(Command::Run { .. }) if std::env::var("GITHUB_ACTIONS").is_ok_and(|v| v == "true") => {
+            Some(speccoder_runtime::status::report(path, feature))
         }
         _ => None,
     };
@@ -546,14 +472,19 @@ fn usage_error(args: &[String], e: &clap::Error) -> ! {
             | ErrorKind::DisplayVersion
             | ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand
     );
-    if text_only || !(json || stream) {
+    if text_only {
         e.exit();
     }
-    let command = args
+    // The command the line names: a known subcommand, or a former one.
+    let known: Vec<String> = help::command()
+        .get_subcommands()
+        .map(|c| c.get_name().to_owned())
+        .collect();
+    let named = args
         .iter()
         .skip(1)
-        .find(|a| !a.starts_with('-'))
-        .map_or("speccoder", String::as_str);
+        .find(|a| known.iter().any(|k| k == *a) || help::FORMER.iter().any(|(old, _)| old == a));
+    let command = named.map_or("speccoder", String::as_str);
     let conflict = e.kind() == ErrorKind::ArgumentConflict && json && stream;
     let message = e
         .to_string()
@@ -562,52 +493,314 @@ fn usage_error(args: &[String], e: &clap::Error) -> ! {
         .unwrap_or_default()
         .trim_start_matches("error: ")
         .to_owned();
+    let former = help::FORMER
+        .iter()
+        .find(|(old, _)| Some(*old) == named.map(String::as_str));
+    // A path or a task id where none is taken: say where it goes.
+    let stray = (e.kind() == ErrorKind::UnknownArgument)
+        .then(|| {
+            args.iter()
+                .skip(1)
+                .find(|a| message.contains(&format!("'{a}'")))
+                .cloned()
+        })
+        .flatten();
+    let (message, fix): (String, Vec<String>) = match (former, &stray) {
+        (Some((old, new)), _) => (
+            format!("`speccoder {old}` is now `{new}`"),
+            vec![(*new).to_owned()],
+        ),
+        (None, Some(a)) if std::path::Path::new(a).is_dir() => (
+            format!("{message}; a project path is given with -C"),
+            vec![format!("speccoder -C {a} {command}")],
+        ),
+        (None, Some(a)) if a.starts_with('T') && a[1..].chars().all(|c| c.is_ascii_digit()) => (
+            format!("{message}; a task is given with --task, or as `task <verb> {a}`"),
+            vec![
+                format!("speccoder {command} --task {a}"),
+                format!("speccoder task show {a}"),
+            ],
+        ),
+        _ => (message, vec![format!("speccoder {command} --help")]),
+    };
     let result = speccoder_core::CommandResult::new(
         command,
         speccoder_core::CommandStatus::UsageError,
         &message,
     )
-    .with_code(if conflict { "USAGE-CONFLICT" } else { "USAGE" });
+    .with_code(if conflict { "USAGE-CONFLICT" } else { "USAGE" })
+    .with_fix(if command == "speccoder" && former.is_none() {
+        vec!["speccoder help".to_owned()]
+    } else {
+        fix
+    });
     let result = speccoder_runtime::next::attach(result, None);
+    if !(json || stream) && former.is_none() && stray.is_none() {
+        // clap's own message, with its usage line and suggestions.
+        e.exit();
+    }
     if stream {
         events::Events::start(Box::new(std::io::stdout()), command).result(&result);
     } else {
-        let _ = output::render(&result, true);
+        let _ = output::render(&result, json);
     }
     std::process::exit(i32::from(result.exit_code().code()));
 }
 
+/// The look, in one line, for `doctor`.
+fn look_line() -> String {
+    let l = style::out();
+    format!(
+        "colour {}, theme {:?}, {} marks, {} columns{}",
+        if l.color { "on" } else { "off" },
+        l.theme,
+        if l.ascii { "ASCII" } else { "Unicode" },
+        l.width,
+        if l.screen_reader {
+            ", screen reader"
+        } else {
+            ""
+        }
+    )
+    .to_lowercase()
+}
+
+/// `speccoder init`: write the configuration, run its checks on the
+/// untouched code, and at a terminal offer to commit it (F-057). Without a
+/// terminal, with `--json` or `--yes`, nothing is committed; the fix line
+/// says what to commit.
+fn init(
+    cli: &Cli,
+    path: &std::path::Path,
+    provider: Option<&str>,
+    model: Option<&str>,
+    force: bool,
+    no_verify: bool,
+    yes: bool,
+) -> speccoder_core::CommandResult {
+    use speccoder_core::{CommandData, CommandStatus};
+    use std::io::IsTerminal;
+    let written = speccoder_runtime::init::init(path, provider, model, force);
+    let Some(CommandData::Init(report)) = written.data() else {
+        return written;
+    };
+    let mut report = (**report).clone();
+    let file = std::path::PathBuf::from(&report.path);
+    let root = file
+        .parent()
+        .map(std::path::Path::to_path_buf)
+        .unwrap_or_default();
+    if !no_verify && !report.checks.is_empty() {
+        if !cli.json && !cli.events {
+            eprintln!("Running the checks on the untouched code…");
+        }
+        report.ran = speccoder_runtime::init::verify_written(&root);
+    }
+    let all_passed = report.ran.iter().all(|r| r.passed);
+    let failed: Vec<&str> = report
+        .ran
+        .iter()
+        .filter(|r| !r.passed)
+        .map(|r| r.name.as_str())
+        .collect();
+    let commit_line = "git add speccoder.toml && git commit -m \"speccoder: config\"".to_owned();
+    let interactive = !yes
+        && !cli.json
+        && !cli.events
+        && std::io::stdin().is_terminal()
+        && std::io::stderr().is_terminal();
+    if interactive {
+        let default_yes = all_passed;
+        // What the answer rests on, before the question.
+        for c in &report.checks {
+            eprintln!("  check  {:<10} {}", c.name, c.argv.join(" "));
+        }
+        for r in &report.ran {
+            eprintln!(
+                "  {}  {} on the untouched code",
+                r.name,
+                if r.passed { "passes" } else { "FAILS" }
+            );
+        }
+        eprint!(
+            "Commit speccoder.toml? speccoder reads committed files only. [{}] ",
+            if default_yes { "Y/n" } else { "y/N" }
+        );
+        let mut line = String::new();
+        let _ = std::io::stdin().read_line(&mut line);
+        let answer = line.trim().to_lowercase();
+        let commit = if answer.is_empty() {
+            default_yes
+        } else {
+            answer.starts_with('y')
+        };
+        if commit {
+            let g = speccoder_runtime::git::Git::at(&root);
+            let ok = g
+                .run(&["add", "--", speccoder_runtime::verify::config::FILE])
+                .and_then(|_| {
+                    g.run(&[
+                        "commit",
+                        "-q",
+                        "-m",
+                        "speccoder: config",
+                        "--",
+                        speccoder_runtime::verify::config::FILE,
+                    ])
+                })
+                .and_then(|_| g.line(&["rev-parse", "--short", "HEAD"]));
+            match ok {
+                Ok(id) => report.committed = Some(id),
+                Err(e) => eprintln!("the commit failed: {}", e.0),
+            }
+        }
+    }
+    let mut message = match &report.committed {
+        Some(id) => written.message().replace(
+            "; review it, then commit it",
+            &format!(" and committed it ({id})"),
+        ),
+        None => written.message().to_owned(),
+    };
+    if !failed.is_empty() {
+        message = format!(
+            "{message}; the check(s) {} fail on the untouched code: every task would be judged against a red baseline",
+            failed.join(", ")
+        );
+    }
+    let step = |command: String, why: &str| speccoder_core::next::NextStep {
+        command,
+        why: why.to_owned(),
+    };
+    let mut next = Vec::new();
+    if report.committed.is_none() {
+        next.push(step(commit_line, "speccoder reads committed files only"));
+    }
+    if !report.key.set {
+        next.push(step(
+            format!("export {}=…", report.key.variable),
+            "the model key, from the environment only",
+        ));
+    }
+    next.push(step(
+        "speccoder run".to_owned(),
+        "work through the ready tasks",
+    ));
+    speccoder_core::CommandResult::new("init", CommandStatus::Ok, &message)
+        .with_data(CommandData::Init(Box::new(report)))
+        .with_next(next)
+}
+
 /// The subcommand's name, as the envelope's `command` names it.
-fn command_name(command: &Command) -> &'static str {
+fn command_name(command: Option<&Command>) -> &'static str {
     use Command as C;
     match command {
-        C::Init { .. } => "init",
-        C::Skill { .. } | C::Spec { .. } => "spec",
-        C::Inspect { .. } => "inspect",
-        C::Verify { .. } => "verify",
-        C::Run { .. } => "run",
-        C::Converge { .. } => "converge",
-        C::Report { .. } => "report",
-        C::Status { .. } => "status",
-        C::Tui { .. } => "tui",
-        C::Approvals { .. } => "approvals",
-        C::Approve { .. } => "approve",
-        C::Reject { .. } => "reject",
-        C::Accept { .. } => "accept",
-        C::Skip { .. } => "skip",
-        C::Nudge { .. } => "nudge",
-        C::Cost { .. } => "cost",
-        C::Pr { .. } => "pr",
-        C::Acp => "acp",
-        C::Workflow { .. } => "workflow",
-        C::Eval { .. } => "eval",
-        C::Attest { .. } => "attest",
-        C::Bench { .. } => "bench",
-        C::Replay { .. } => "replay",
-        C::Propose { .. } => "propose",
-        C::Worktree { .. } => "worktree",
-        C::Explain { .. } => "explain",
-        C::Schema { .. } => "schema",
+        None => "report",
+        Some(c) => match c {
+            C::Init { .. } => "init",
+            C::Doctor { .. } => "doctor",
+            C::Spec { .. } => "spec",
+            C::Run { .. } => "run",
+            C::Task { action } => match action {
+                cli::TaskAction::Approve { .. } => "task approve",
+                cli::TaskAction::Reject { .. } => "task reject",
+                cli::TaskAction::Accept { .. } => "task accept",
+                cli::TaskAction::Skip { .. } => "task skip",
+                cli::TaskAction::Nudge { .. } => "task nudge",
+                cli::TaskAction::Show { .. } => "task show",
+            },
+            C::Report { .. } => "report",
+            C::Pr { .. } => "pr",
+            C::Attest { .. } => "attest",
+            C::Help { .. } => "help",
+            C::Verify { .. } => "verify",
+            C::Converge { .. } => "converge",
+            C::Inspect => "inspect",
+            C::Replay { .. } => "replay",
+            C::Worktree => "worktree",
+            C::Acp => "acp",
+            C::Workflow { .. } => "workflow",
+            C::Eval { .. } => "eval",
+            C::Bench { .. } => "bench",
+            C::Propose { .. } => "propose",
+            C::Explain { .. } => "explain",
+            C::Schema { .. } => "schema",
+            C::Completion { .. } => "completion",
+            C::Tui => "tui",
+        },
+    }
+}
+
+/// `speccoder task <verb> TASK`.
+fn task_action(
+    action: &cli::TaskAction,
+    path: &std::path::Path,
+    feature: Option<&str>,
+) -> speccoder_core::CommandResult {
+    use cli::TaskAction as T;
+    use speccoder_runtime::approvals::{Choice, Scope, Verb, decide};
+    match action {
+        T::Approve {
+            task,
+            call,
+            all,
+            scope,
+            note,
+        } => decide(
+            path,
+            feature,
+            Verb::Decide(Choice {
+                task: task.as_deref(),
+                call: call.as_deref(),
+                all: *all,
+                approve: true,
+                scope: (*scope).into(),
+                note: note.as_deref(),
+                reason: None,
+            }),
+        ),
+        T::Reject {
+            task,
+            call,
+            all,
+            reason,
+        } => decide(
+            path,
+            feature,
+            Verb::Decide(Choice {
+                task: task.as_deref(),
+                call: call.as_deref(),
+                all: *all,
+                approve: false,
+                scope: Scope::Task,
+                note: None,
+                reason: Some(reason),
+            }),
+        ),
+        T::Accept {
+            task,
+            reason,
+            in_place,
+        } => match speccoder_runtime::worktree::state_dir() {
+            Some(state) => speccoder_runtime::controls::accept_in(
+                path, feature, task, reason, &state, *in_place,
+            ),
+            None => no_state("task accept"),
+        },
+        T::Skip { task, reason, .. } => {
+            speccoder_runtime::controls::skip(path, feature, task, reason.as_deref())
+        }
+        T::Nudge { task, note, .. } => match speccoder_runtime::worktree::state_dir() {
+            Some(state) => speccoder_runtime::controls::nudge_with(
+                path,
+                feature,
+                task,
+                note.as_deref(),
+                &state,
+            ),
+            None => no_state("task nudge"),
+        },
+        T::Show { task } => speccoder_runtime::status::show(path, feature, task),
     }
 }
 
@@ -619,38 +812,6 @@ fn verbosity(cli: &cli::Cli) -> progress::Verbosity {
         progress::Verbosity::Verbose
     } else {
         progress::Verbosity::Normal
-    }
-}
-
-/// The `--feature` a command was given.
-/// The project of a command whose next step is a run: decisions and
-/// controls taken while an in-place session may hold the checkout.
-fn decision_path(command: &cli::Command) -> Option<&std::path::Path> {
-    use cli::Command as C;
-    match command {
-        C::Approvals { path, .. }
-        | C::Approve { path, .. }
-        | C::Reject { path, .. }
-        | C::Skip { path, .. }
-        | C::Nudge { path, .. }
-        | C::Status { path } => Some(path.as_path()),
-        _ => None,
-    }
-}
-
-fn feature_flag(command: &cli::Command) -> Option<&str> {
-    use cli::Command as C;
-    match command {
-        C::Run { feature, .. }
-        | C::Converge { feature, .. }
-        | C::Report { feature, .. }
-        | C::Approvals { feature, .. }
-        | C::Approve { feature, .. }
-        | C::Reject { feature, .. }
-        | C::Accept { feature, .. }
-        | C::Skip { feature, .. }
-        | C::Nudge { feature, .. } => feature.as_deref(),
-        _ => None,
     }
 }
 

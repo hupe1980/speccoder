@@ -199,6 +199,12 @@ fn human_body(
             writeln!(out, "{}", result.message())
         }
         (_, Some(CommandData::Init(i))) => {
+            use crate::style::{Glyph, Token};
+            let look = crate::style::out();
+            writeln!(
+                out,
+                "Checks speccoder runs to decide \"nothing regressed\":"
+            )?;
             for c in &i.checks {
                 writeln!(
                     out,
@@ -206,10 +212,79 @@ fn human_body(
                     c.name,
                     c.tier,
                     c.argv.join(" "),
-                    c.why
+                    look.paint(Token::Muted, &c.why)
                 )?;
             }
-            writeln!(out, "Model      {}", i.model)?;
+            if !i.ran.is_empty() {
+                let shown: Vec<String> = i
+                    .ran
+                    .iter()
+                    .map(|r| {
+                        let g = if r.passed {
+                            Glyph::Verified
+                        } else {
+                            Glyph::Failed
+                        };
+                        format!(
+                            "{} {} {:.1}s",
+                            r.name,
+                            look.paint(g.token(), look.mark(g)),
+                            r.duration_ms as f64 / 1000.0
+                        )
+                    })
+                    .collect();
+                writeln!(out, "On the untouched code  {}", shown.join(" · "))?;
+            }
+            let key = if i.key.set {
+                format!("{} found", i.key.variable)
+            } else {
+                look.paint(Token::Attention, &format!("{} is not set", i.key.variable))
+            };
+            writeln!(out, "Model      {}  ({key})", i.model)?;
+            if !i.instructions.is_empty() {
+                writeln!(
+                    out,
+                    "Guidance   {} (given to every attempt)",
+                    i.instructions.join(", ")
+                )?;
+            }
+            if let Some(c) = &i.committed {
+                writeln!(out, "Committed  {c} \"speccoder: config\"")?;
+            }
+            writeln!(out, "{}", result.message())
+        }
+        (_, Some(CommandData::Doctor(d))) => {
+            use crate::style::{Glyph, Token};
+            use speccoder_core::DoctorLevel;
+            let look = crate::style::out();
+            for c in &d.checks {
+                let g = match c.level {
+                    DoctorLevel::Pass => Glyph::Verified,
+                    DoctorLevel::Warn => Glyph::Regression,
+                    DoctorLevel::Fail => Glyph::Failed,
+                };
+                if look.screen_reader {
+                    writeln!(
+                        out,
+                        "check: {} — {} — {}",
+                        c.check,
+                        g.word_for_doctor(),
+                        c.detail
+                    )?;
+                } else {
+                    writeln!(out, "  {} {:<13} {}", look.cell(g), c.check, c.detail)?;
+                }
+                if c.level == DoctorLevel::Warn {
+                    for f in &c.fix {
+                        let f = f.strip_prefix("→ ").unwrap_or(f);
+                        writeln!(
+                            out,
+                            "      {}",
+                            look.paint(Token::Accent, &format!("fix: {f}"))
+                        )?;
+                    }
+                }
+            }
             writeln!(out, "{}", result.message())
         }
         (_, Some(CommandData::Control(_))) => {

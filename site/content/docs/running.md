@@ -27,16 +27,16 @@ Progress streams to stderr; the run report — tool calls with their decisions, 
 | Outcome | Exit | Meaning | What to do |
 |---|---|---|---|
 | `verified`, `regression_only` | 0 | Passed: ticked and committed | Review and merge eventually |
-| `failed` | 20 | Checks or acceptance tests failed after the retries | `speccoder report`; inspect the saved attempt; `nudge`, or fix the spec |
+| `failed` | 20 | Checks or acceptance tests failed after the retries | `speccoder report`; inspect the saved attempt; `task nudge`, or fix the spec |
 | `failed` (judge input changed) | 20 | A command changed `speccoder.toml`, CI, test-runner or agent configuration; the attempt ended at once, not retried | Read the finding; the task must not need that change |
 | feature done, full tier failed | 20 | Every task is ticked, but a `full` check failed | Fix it, or `speccoder pr --force` |
 | unfinished checklists | 23 | `checklists/*.md` has unchecked items; nothing ran | Finish them, or `speccoder run --ignore-checklists` (recorded on the commits) |
-| `blocked` | 23 | The model says the task cannot be done as written | Read the reason; fix the spec or a wrong test, or `skip` |
-| `needs_approval` | 23 | A call needs a person | `speccoder approvals`, then `approve` or `reject` |
+| `blocked` | 23 | The model says the task cannot be done as written | Read the reason; fix the spec or a wrong test, or `task skip` |
+| `needs_approval` | 23 | A call needs a person | `speccoder report --approvals`, then `task approve` or `task reject` |
 | `denied` | 23 | Three denied calls in a row | Usually a task that asks for something protected |
-| `not_demonstrated` | 23 | A convergence gap no failing test shows | Decide whether it is real; `skip` or fix it |
-| `suspected_gaming` | 23 | The monitor suspects a shortcut | Review the saved attempt; `accept` if it is fine |
-| `budget_exhausted`, `incomplete` | 23 | Out of turns or calls, or the model did not finish | Raise `[budget]`, split the task, or `nudge` |
+| `not_demonstrated` | 23 | A convergence gap no failing test shows | Decide whether it is real; `task skip` or fix it |
+| `suspected_gaming` | 23 | The monitor suspects a shortcut | Review the saved attempt; `task accept` if it is fine |
+| `budget_exhausted`, `incomplete` | 23 | Out of turns or calls, or the model did not finish | Raise `[budget]`, split the task, or `task nudge` |
 | `interrupted` | 23 | Killed while a tool call was running | Run again; see [recovery](@/docs/recovery.md) |
 
 ## Retries
@@ -66,7 +66,7 @@ By default speccoder works in a worktree, and a worktree holds only what is comm
 
 `accept --in-place` and `converge --in-place` (and `run --in-place --converge`) work the same way: an attestation is committed before its local tick; a convergence round appends to your `tasks.md` and its commit says so (`Tasks: local`). In place the model sees only what a worktree would hold, and commands cannot write `.git`; see [security](@/docs/security.md#in-place-mode).
 
-While a feature has an in-place run (or an interrupted one), a worktree-mode `run`, `accept` or `converge` of it is refused (`error[IN-PLACE-SESSION]`); see [recovery](@/docs/recovery.md).
+While a feature has an in-place run (or an interrupted one), a worktree-mode `run`, `task accept` or `converge` of it is refused (`error[IN-PLACE-SESSION]`); see [recovery](@/docs/recovery.md).
 
 ## Best of n
 
@@ -89,11 +89,11 @@ They are the repository's text, not your orders: the model is told the task, the
 ## Watching a run
 
 ```sh
-speccoder status   # running (pid …): 001-x T002 — attempt 1/2 for 33s; last: read_file … (allow)
-speccoder tui      # dashboard: tasks with evidence, the live attempt, the approval queue
+speccoder report --live   # running (pid …): 001-x T002 — attempt 1/2 for 33s; last: read_file … (allow)
+speccoder          # at a terminal: the dashboard — tasks with evidence, the live attempt, the approval queue
 ```
 
-Every task goes through the same stages, named the same in the progress lines, `status`, the dashboard and editors: `baseline · red · attempt · verify · audit · mutation · monitor · commit`. A stage that does not apply (no acceptance examples, mutation or the monitor not configured) is shown only with `-v`.
+Every task goes through the same stages, named the same in the progress lines, `report --live`, the dashboard and editors: `baseline · red · attempt · verify · audit · mutation · monitor · commit`. A stage that does not apply (no acceptance examples, mutation or the monitor not configured) is shown only with `-v`.
 
 ```text
 ▶ T004 Handle Unicode input  (001-slugify)
@@ -133,7 +133,7 @@ When a call waits for you, a task fails, the feature ends or nothing happens for
 ## Cost
 
 ```sh
-speccoder cost     # tokens per task — every attempt — convergence, and the total
+speccoder report --cost     # tokens per task — every attempt — convergence, and the total
 ```
 
-`cost` reads the usage speccoder records on its commits and saved attempts. For money, add your prices in USD per million tokens to `[model]` (`price_input_per_mtok`, `price_output_per_mtok`, `price_cache_read_per_mtok`, and optionally the cache-write rates); they then also appear in the progress lines. Tokens written to the cache are priced at their own rate — by default Anthropic's 1.25× input for the five-minute cache and 2× for the hour, the input rate elsewhere. speccoder ships no price list — prices change and depend on your contract. With Claude Code as the agent, its own reported cost is used.
+`report --cost` reads the usage speccoder records on its commits and saved attempts. For money, add your prices in USD per million tokens to `[model]` (`price_input_per_mtok`, `price_output_per_mtok`, `price_cache_read_per_mtok`, and optionally the cache-write rates); they then also appear in the progress lines. Tokens written to the cache are priced at their own rate — by default Anthropic's 1.25× input for the five-minute cache and 2× for the hour, the input rate elsewhere. speccoder ships no price list — prices change and depend on your contract. With Claude Code as the agent, its own reported cost is used.

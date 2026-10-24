@@ -26,9 +26,9 @@ Every failure names a [code](@/docs/codes.md) and the command that fixes it — 
 | `stopped[BUDGET-EXHAUSTED]` | Raise `[budget] max_turns` or split the task in `tasks.md`. |
 | `acceptance skipped: … is not an allowed command` | The acceptance tests' command must be allowed: add its prefix to `[commands] allow`. |
 | `stopped[ACCEPTANCE-UNWRITTEN]` or `PROVIDER-REFUSED` — refused the request: insufficient_quota … / credit_balance_exhausted | The provider account has no credit; nothing is retried. Top it up and run again. |
-| `another speccoder is working on this project` | A second process found the journal in use. Wait for the first, or check `speccoder status`. |
+| `another speccoder is working on this project` | A second process found the journal in use. Wait for the first, or check `speccoder report --live`. |
 | `MCP tool … changed since it was allowed` | The server changed a tool you allowed. Read it again; approving one call records it as it is now. |
-| A run seems stuck | `speccoder status` from another terminal shows the step and the last tool call. |
+| A run seems stuck | `speccoder report --live` from another terminal shows the step and the last tool call. |
 
 ## Getting help
 

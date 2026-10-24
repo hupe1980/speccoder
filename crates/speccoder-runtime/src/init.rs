@@ -380,7 +380,7 @@ pub fn render(
     out.push_str(&format!(
         "\n# The model. The API key comes only from the environment ({}).\n\
          [model]\nprovider = {}\nmodel = {}\n\
-         # price_input_per_mtok = 0.0       # USD per million tokens, for `speccoder cost`\n\
+         # price_input_per_mtok = 0.0       # USD per million tokens, for `speccoder report --cost`\n\
          # price_output_per_mtok = 0.0\n\
          # price_cache_read_per_mtok = 0.0\n\
          \n# Limits per attempt, and attempts per task (a failed verdict is retried once).\n\
@@ -426,7 +426,7 @@ pub fn render(
 /// The nextest profile speccoder's JUnit report path expects.
 pub const NEXTEST_PROFILE: &str = "\n# Written by `speccoder init`: speccoder reads this JUnit report.\n[profile.speccoder]\nfail-fast = false\n\n[profile.speccoder.junit]\npath = \"junit.xml\"\n";
 
-/// `speccoder init [PATH] [--provider] [--model] [--force]` with an
+/// `speccoder init [--provider] [--model] [--force]` with an
 /// explicit view of the environment and of what is installed.
 pub fn init_with(
     path: &Path,
@@ -458,13 +458,35 @@ pub fn init_with(
     let found = found.unwrap_or_else(|| detect(&root));
     let checks = propose(&found);
     let (provider, model) = model_choice(provider, model, env);
-    let text = render(
+    let mut text = render(
         &checks,
         &allow(&found),
         formatter(&found).as_deref(),
         &provider,
         &model,
     );
+    // The repository's instructions for agents (F-073): AGENTS.md is read by
+    // default; a repository that only has CLAUDE.md gets it named too.
+    let instructions: Vec<String> = ["AGENTS.md", "CLAUDE.md"]
+        .iter()
+        .filter(|n| root.join(n).is_file())
+        .map(|n| (*n).to_owned())
+        .collect();
+    if instructions == ["CLAUDE.md"] {
+        text.push_str(
+            "\n# The repository's instructions for agents, given to every attempt: CLAUDE.md\n# here, AGENTS.md wherever a directory has one.\n[context]\ninstructions = [\"AGENTS.md\", \"CLAUDE.md\"]\n",
+        );
+    }
+    let variable = if provider == "openai" {
+        "OPENAI_API_KEY"
+    } else {
+        "ANTHROPIC_API_KEY"
+    }
+    .to_owned();
+    let key = speccoder_core::InitKey {
+        set: env(&variable),
+        variable,
+    };
     // Never write what speccoder itself would refuse.
     if let Err(e) = crate::verify::config::parse(&text)
         .and_then(|_| crate::substrate::model_config::parse(&text).map(|_| ()))
@@ -495,7 +517,7 @@ pub fn init_with(
         format!("wrote {FILE} without checks — add one before `speccoder run`")
     } else {
         format!(
-            "wrote {} with {} check(s) and {provider}/{model}; review, run `speccoder verify`, then commit",
+            "wrote {} with {} check(s) and {provider}/{model}; review it, then commit it",
             wrote.join(" and "),
             checks.len()
         )
@@ -514,8 +536,40 @@ pub fn init_with(
                 .collect(),
             model: format!("{provider}/{model}"),
             wrote,
+            ran: Vec::new(),
+            instructions,
+            key,
+            committed: None,
         },
     )))
+}
+
+/// Runs the fast-tier checks of the configuration `init` just wrote on the
+/// untouched code, confined like in a run (F-057).
+#[must_use]
+pub fn verify_written(root: &Path) -> Vec<speccoder_core::InitRun> {
+    use speccoder_core::verify::CheckStatus;
+    let Ok((runner, _)) = crate::sandbox::runner_at(root) else {
+        return Vec::new();
+    };
+    let Ok(report) =
+        crate::verify::run_checks(root, Some(crate::verify::config::Tier::Fast), &runner)
+    else {
+        return Vec::new();
+    };
+    report
+        .checks
+        .iter()
+        .map(|c| speccoder_core::InitRun {
+            name: c.name.clone(),
+            passed: matches!(c.status, CheckStatus::Passed | CheckStatus::Skipped),
+            status: serde_json::to_value(c.status)
+                .ok()
+                .and_then(|v| v.as_str().map(str::to_owned))
+                .unwrap_or_default(),
+            duration_ms: c.duration_ms,
+        })
+        .collect()
 }
 
 /// [`init_with`] for this machine.

@@ -722,7 +722,7 @@ pub fn approvals(w: &mut impl Write, a: &ApprovalsReport, message: &str) -> io::
         }
         writeln!(
             w,
-            "      speccoder approve --task {0} [--note \"…\"]   |   speccoder reject --task {0} --reason \"…\"",
+            "      speccoder task approve {0} [--note \"…\"]   |   speccoder task reject {0} --reason \"…\"",
             p.task
         )?;
     }

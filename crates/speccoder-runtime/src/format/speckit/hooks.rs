@@ -132,7 +132,7 @@ pub fn plan_from(text: &str, event: &str) -> Result<Plan, String> {
 #[must_use]
 pub fn offer_line(event: &str, h: &Hook) -> String {
     format!(
-        "optional {event} hook ({}): {} — run it with `speccoder skill {}`",
+        "optional {event} hook ({}): {} — run it with `speccoder spec {}`",
         h.extension,
         h.prompt
             .clone()

@@ -336,14 +336,14 @@ fn a_call_needing_approval_stops_the_attempt_unexecuted() {
     assert_eq!(
         commands,
         [
-            "speccoder approvals",
-            "speccoder approve --task T005",
-            "speccoder reject --task T005 --reason \"…\"",
+            "speccoder report --approvals",
+            "speccoder task approve T005",
+            "speccoder task reject T005 --reason \"…\"",
             "speccoder run"
         ]
     );
     let json = serde_json::to_value(&next).unwrap();
-    assert_eq!(json["next"][1]["command"], "speccoder approve --task T005");
+    assert_eq!(json["next"][1]["command"], "speccoder task approve T005");
     assert_eq!(json["data"]["attempt_status"], "needs_approval");
 }
 
@@ -1594,7 +1594,7 @@ fn an_inline_approval_continues_the_same_attempt_and_replays_without_asking() {
 fn for_this_task_is_recorded_and_a_rejection_reaches_the_model() {
     let r = repo("");
     let state = tempfile::tempdir().unwrap();
-    // "For this task": recorded like `speccoder approve`.
+    // "For this task": recorded like `speccoder task approve`.
     let (f, d) = fake();
     write_manifest(&f, "c1", "{}\n");
     f.will_call_tool(

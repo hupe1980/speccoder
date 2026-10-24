@@ -27,7 +27,7 @@ Phase 3: Convergence
 |---|---|---|
 | `✓` | `verified` | Spec-derived acceptance tests went red → green; nothing regressed |
 | `~` | `regression_only` | Checks pass; nothing task-specific was shown |
-| `A` | `attested` | Ticked by `speccoder accept` — a person's word, not evidence |
+| `A` | `attested` | Ticked by `speccoder task accept` — a person's word, not evidence |
 | `!` | `ticked_without_evidence` | Ticked, but not by speccoder |
 | `–` | `skipped` | Passed by on purpose; tasks that depend on it stay blocked |
 | `·` | `ready` | Can run now |

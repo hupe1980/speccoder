@@ -12,12 +12,13 @@ use speccoder_core::{CommandData, CommandResult, CommandStatus, RunReport};
 #[must_use]
 pub fn attach(result: CommandResult, feature: Option<&str>) -> CommandResult {
     let outcome = classify(&result);
+    // Steps already attached (an in-place run's) are kept.
     let mut result = match &outcome {
-        Some(o) => {
+        Some(o) if result.next().is_empty() => {
             let steps = next(o, feature);
             result.with_next(steps)
         }
-        None => result,
+        _ => result,
     };
     if !result.has_explicit_code() {
         let task = outcome.as_ref().and_then(outcome_task);

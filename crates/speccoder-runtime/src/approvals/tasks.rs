@@ -2,7 +2,7 @@
 //!
 //! Where a call needs a person, the attempt waits on a task whose
 //! justification is the call exactly as the prompt shows it. Whoever answers
-//! — at the terminal, in an editor, or later with `speccoder approve` —
+//! — at the terminal, in an editor, or later with `speccoder task approve` —
 //! decides that task with an operator; the decision is journal history,
 //! bound to the digest of what was shown.
 

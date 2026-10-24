@@ -63,7 +63,7 @@
       "description": "Counts of [`TaskStatus::state`].",
       "properties": {
         "attested": {
-          "description": "Ticked by `speccoder accept`: a person's attestation, not evidence.",
+          "description": "Ticked by `speccoder task accept`: a person's attestation, not evidence.",
           "format": "uint",
           "minimum": 0,
           "type": "integer"
@@ -192,7 +192,7 @@
           ]
         },
         "state": {
-          "description": "`verified`, `regression_only` (ticked by speccoder with that verdict),\n`attested` (ticked by `speccoder accept`), `ticked_without_evidence`\n(ticked, no speccoder commit), `evidence_without_tick` (in place: a\nverdict commit names the task, its local tick is missing),\n`skipped`, `ready` or `blocked`.",
+          "description": "`verified`, `regression_only` (ticked by speccoder with that verdict),\n`attested` (ticked by `speccoder task accept`), `ticked_without_evidence`\n(ticked, no speccoder commit), `evidence_without_tick` (in place: a\nverdict commit names the task, its local tick is missing),\n`skipped`, `ready` or `blocked`.",
           "type": "string"
         },
         "title": {

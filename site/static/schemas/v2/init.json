@@ -30,6 +30,54 @@
         "why"
       ],
       "type": "object"
+    },
+    "InitKey": {
+      "description": "The model key `init` looked for.",
+      "properties": {
+        "set": {
+          "description": "Set in this environment.",
+          "type": "boolean"
+        },
+        "variable": {
+          "description": "`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "variable",
+        "set"
+      ],
+      "type": "object"
+    },
+    "InitRun": {
+      "description": "One check `init` ran on the untouched code.",
+      "properties": {
+        "duration_ms": {
+          "description": "How long it took.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "name": {
+          "description": "`[checks.<name>]`.",
+          "type": "string"
+        },
+        "passed": {
+          "description": "Passed on the untouched code.",
+          "type": "boolean"
+        },
+        "status": {
+          "description": "`passed`, `failed`, `timed_out`, `skipped`, `error`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "passed",
+        "status",
+        "duration_ms"
+      ],
+      "type": "object"
     }
   },
   "$id": "https://hupe1980.github.io/speccoder/schemas/v2/init.json",
@@ -43,6 +91,24 @@
       },
       "type": "array"
     },
+    "committed": {
+      "description": "The commit holding `speccoder.toml`, when one was made.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "instructions": {
+      "description": "The repository instructions found (`AGENTS.md`, `CLAUDE.md`).",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "key": {
+      "$ref": "#/$defs/InitKey",
+      "description": "The model key: the variable and whether it is set."
+    },
     "model": {
       "description": "`provider/model`.",
       "type": "string"
@@ -50,6 +116,13 @@
     "path": {
       "description": "The configuration file.",
       "type": "string"
+    },
+    "ran": {
+      "description": "The checks run on the untouched code (empty: not run).",
+      "items": {
+        "$ref": "#/$defs/InitRun"
+      },
+      "type": "array"
     },
     "wrote": {
       "description": "Files written, relative to the project root.",
@@ -63,7 +136,11 @@
     "path",
     "checks",
     "model",
-    "wrote"
+    "wrote",
+    "ran",
+    "instructions",
+    "key",
+    "committed"
   ],
   "title": "init: the configuration written",
   "type": "object"

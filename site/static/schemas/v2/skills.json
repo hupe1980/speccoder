@@ -34,7 +34,7 @@
   },
   "$id": "https://hupe1980.github.io/speccoder/schemas/v2/skills.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Result of `speccoder skill` without a name.",
+  "description": "Result of `speccoder spec` without a name.",
   "properties": {
     "skills": {
       "description": "Installed skills by name.",

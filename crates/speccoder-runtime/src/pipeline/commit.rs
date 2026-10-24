@@ -30,7 +30,7 @@ pub(crate) fn monitor_summary(monitor: Option<&serde_json::Value>) -> String {
 }
 
 /// Inline "for this task" approvals become task decisions, as if made with
-/// `speccoder approve`, so a retry or a later attempt is not asked again.
+/// `speccoder task approve`, so a retry or a later attempt is not asked again.
 pub(crate) fn record_inline_approvals(
     dir: &Path,
     feature: &str,

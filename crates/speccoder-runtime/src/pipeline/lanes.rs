@@ -12,7 +12,7 @@ pub(crate) static LANE_SETUP: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 /// Runs each task of `group` in its own lane, at once. Lanes never ask
 /// inline (prompts would interleave): a call that needs approval stops the
-/// lane, and the person decides with `speccoder approvals`.
+/// lane, and the person decides with `speccoder report --approvals`.
 pub(crate) fn run_lanes(
     path: &Path,
     feature: &str,

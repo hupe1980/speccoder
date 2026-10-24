@@ -197,7 +197,7 @@ fn an_approval_of_something_other_than_what_was_shown_is_refused() {
         "{}",
         status.message()
     );
-    assert_eq!(status.next()[0].command, "speccoder approvals");
+    assert_eq!(status.next()[0].command, "speccoder report --approvals");
     let id = agentplane::core::TaskId::parse(&waiting[0].call).unwrap();
 
     // A decision naming a different version of the call.

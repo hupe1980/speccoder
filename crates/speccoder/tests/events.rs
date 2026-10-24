@@ -117,6 +117,7 @@ fn a_run_streams_its_lifecycle_and_ends_in_the_result() {
     let (_mock, repo, state) = project(&script());
     let out = Command::new(env!("CARGO_BIN_EXE_speccoder"))
         .args(["--events", "run", "--task", "T005", "--no-prompt"])
+        .arg("-C")
         .arg(repo.path())
         .env("SPECCODER_STATE_DIR", state.path())
         .output()
@@ -193,6 +194,7 @@ fn a_reader_that_goes_away_does_not_break_the_run() {
     let (_mock, repo, state) = project(&script());
     let mut child = Command::new(env!("CARGO_BIN_EXE_speccoder"))
         .args(["--events", "run", "--task", "T005", "--no-prompt"])
+        .arg("-C")
         .arg(repo.path())
         .env("SPECCODER_STATE_DIR", state.path())
         .stdout(Stdio::piped())

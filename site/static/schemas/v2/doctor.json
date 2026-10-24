@@ -1,0 +1,90 @@
+{
+  "$defs": {
+    "DoctorCheck": {
+      "description": "One doctor check.",
+      "properties": {
+        "check": {
+          "description": "`git`, `repository`, `project`, `config`, `key`, `sandbox`, …",
+          "type": "string"
+        },
+        "code": {
+          "description": "The catalog code of a failure or warning.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "detail": {
+          "description": "What was found.",
+          "type": "string"
+        },
+        "fix": {
+          "description": "How to resolve it.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "level": {
+          "$ref": "#/$defs/DoctorLevel",
+          "description": "Pass, warn or fail."
+        }
+      },
+      "required": [
+        "check",
+        "level",
+        "detail",
+        "code",
+        "fix"
+      ],
+      "type": "object"
+    },
+    "DoctorLevel": {
+      "description": "How a doctor check came out.",
+      "oneOf": [
+        {
+          "const": "pass",
+          "description": "Fine.",
+          "type": "string"
+        },
+        {
+          "const": "warn",
+          "description": "Works, with less than it could (no signing key, no spec tool).",
+          "type": "string"
+        },
+        {
+          "const": "fail",
+          "description": "A run would fail or judge wrongly.",
+          "type": "string"
+        }
+      ]
+    }
+  },
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/doctor.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Result of `speccoder doctor`.",
+  "properties": {
+    "checks": {
+      "description": "Every check, in order.",
+      "items": {
+        "$ref": "#/$defs/DoctorCheck"
+      },
+      "type": "array"
+    },
+    "os": {
+      "description": "`macos aarch64`.",
+      "type": "string"
+    },
+    "speccoder": {
+      "description": "speccoder's version.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "speccoder",
+    "os",
+    "checks"
+  ],
+  "title": "doctor: every check of the machine and the project",
+  "type": "object"
+}

@@ -54,7 +54,7 @@ The commands that decide whether nothing regressed. A check's command up to its 
 | `base_url` | — | Required for `openai-compatible` (e.g. `http://localhost:11434/v1`); for `openai`, a gateway in front of the Responses API |
 | `api_key_env` | — | `openai-compatible` only: the variable holding the server's key, if it wants one |
 | `structured` | `"native"` | `openai-compatible` only: `native` structured output, or `tool` (a forced tool call; for steps without tools) |
-| `price_input_per_mtok`, `price_output_per_mtok`, `price_cache_read_per_mtok` | — | USD per million tokens, for `speccoder cost` and live cost |
+| `price_input_per_mtok`, `price_output_per_mtok`, `price_cache_read_per_mtok` | — | USD per million tokens, for `speccoder report --cost` and live cost |
 | `price_cache_write_per_mtok`, `price_cache_write_1h_per_mtok` | Anthropic: 1.25× and 2× input; others: input | USD per million tokens written to the five-minute and the one-hour cache (`cache_ttl` decides which) |
 
 The key comes from `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` — never from this file. A local model must support tool calls and structured output; whether it is good enough is a question for the [evaluation suite](@/docs/evaluation.md).

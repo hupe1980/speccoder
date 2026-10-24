@@ -28,17 +28,14 @@ brew install hupe1980/speccoder/speccoder
 # or: cargo install speccoder --locked
 
 cd my-project
-speccoder init                       # detects your checks, writes speccoder.toml — review it
-speccoder verify                     # the checks pass before any change
-git add -A && git commit -m "speccoder config"   # speccoder reads committed files only
-
-export OPENAI_API_KEY=…              # or ANTHROPIC_API_KEY — read from the environment only
+export ANTHROPIC_API_KEY=…           # or OPENAI_API_KEY — read from the environment only
+speccoder init                       # detects your checks, runs them, offers to commit speccoder.toml
 speccoder run                        # works through the feature's tasks
 speccoder report                     # every task and the evidence behind its tick
 git merge speccoder/001-my-feature   # after reviewing the branch
 ```
 
-`speccoder status` or `speccoder tui` in another terminal shows a run as it happens. For CI and tools, every command takes `--json` (one result object) or `--events` (JSON Lines as it works), both with [published JSON Schemas](https://hupe1980.github.io/speccoder/docs/cli/#json-output), and every failure names a [code](https://hupe1980.github.io/speccoder/docs/codes/) with the command that fixes it; in GitHub Actions the report lands in the job summary. No spec yet? `speccoder skill specify "…"`, then `plan` and `tasks`, runs Spec Kit's own planning skills.
+`speccoder` alone opens the dashboard; `speccoder report --live` in another terminal shows a run as it happens, and `speccoder doctor` checks the setup. For CI and tools, every command takes `--json` (one result object) or `--events` (JSON Lines as it works), both with [published JSON Schemas](https://hupe1980.github.io/speccoder/docs/cli/#json-output), and every failure names a [code](https://hupe1980.github.io/speccoder/docs/codes/) with the command that fixes it; in GitHub Actions the report lands in the job summary. No spec yet? `speccoder spec specify "…"`, then `plan` and `tasks`, runs Spec Kit's own planning skills.
 
 ## How a task is decided
 
