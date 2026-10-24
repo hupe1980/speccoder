@@ -95,6 +95,8 @@ pub(crate) fn merge_lanes(
     let tier = Some(verify::config::Tier::Fast);
     let baseline = verify::run_checks(project, tier, &runner).ok();
     let mut merged: Vec<String> = Vec::new();
+    // (task, the lane's commit, the commit on the feature branch).
+    let mut landed: Vec<(String, String, String)> = Vec::new();
     for (task, res) in lanes {
         let report = match res.data() {
             Some(CommandData::Run(r)) => Some((**r).clone()),
@@ -103,7 +105,10 @@ pub(crate) fn merge_lanes(
         match (res.status(), report.as_ref().and_then(|r| r.commit.clone())) {
             (CommandStatus::Ok, Some(commit)) => {
                 match merge_lane(feature_wt, project, feature, &task, &commit) {
-                    Ok(()) => merged.push(task.clone()),
+                    Ok(head) => {
+                        merged.push(task.clone());
+                        landed.push((task.clone(), commit, head));
+                    }
                     Err(e) => {
                         out.lines.push(format!(
                             "{task}: not merged ({e}); it runs again on its own"
@@ -137,6 +142,21 @@ pub(crate) fn merge_lanes(
         _ => false,
     };
     if together {
+        // The attestation follows the work onto the feature branch (F-061).
+        let attest = crate::verify::find_config(project)
+            .and_then(|d| std::fs::read_to_string(d.join(verify::config::FILE)).ok())
+            .and_then(|c| crate::substrate::run_config::parse(&c).ok())
+            .map(|c| c.attest)
+            .filter(|a| a.enabled);
+        if let Some(attest) = &attest {
+            for (task, lane_commit, head) in &landed {
+                let a = crate::attest::carry(feature_wt, lane_commit, head, attest);
+                if let Some(r) = out.reports.iter_mut().find(|r| r.task == *task) {
+                    r.commit = Some(head.clone());
+                    r.attestation = Some(a);
+                }
+            }
+        }
         out.lines.push(format!(
             "{} ran in parallel, merged and passed the checks together",
             merged.join(", ")
@@ -164,7 +184,7 @@ pub(crate) fn merge_lane(
     feature: &str,
     task: &str,
     commit: &str,
-) -> Result<(), String> {
+) -> Result<String, String> {
     let g = git::Git::at(feature_wt);
     let ident = [
         "-c",
@@ -253,7 +273,7 @@ pub(crate) fn merge_lane(
     let mut c = ident.to_vec();
     c.extend(["commit", "-q", "--no-verify", "-C", commit]);
     g.run(&c).map_err(|e| e.0)?;
-    Ok(())
+    g.line(&["rev-parse", "HEAD"]).map_err(|e| e.0)
 }
 
 /// The worktree of `lane` for `feature`, started where the feature branch

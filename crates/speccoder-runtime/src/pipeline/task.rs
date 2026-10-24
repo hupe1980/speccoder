@@ -531,6 +531,7 @@ pub(crate) fn run_task(
     let began = std::time::Instant::now();
     // 4b. Acceptance tests derived from the spec, written before the
     //     attempt so they are frozen, and required to be red now.
+    let scenarios = format.scenarios(&snap, task);
     let mut acceptance = if let Some(prepared) = interrupted
         .as_ref()
         .and_then(|m| m.acceptance.clone())
@@ -550,6 +551,7 @@ pub(crate) fn run_task(
             feature: &feature_name,
             task,
             bundle: bundle_value.clone(),
+            scenarios: &scenarios,
             runner: &runner,
         }))
     } else {
@@ -557,7 +559,6 @@ pub(crate) fn run_task(
     };
     // 4c. The held-out set (F-059): written after a red visible set, kept in
     //     the state directory, never shown to the implementer.
-    let scenarios = format.scenarios(&snap, task);
     let held_out_store = crate::held_out::dir(&s.plane_dir, &feature_name, task);
     if let Some(a) = acceptance
         .as_mut()
@@ -585,6 +586,7 @@ pub(crate) fn run_task(
                     feature: &feature_name,
                     task,
                     bundle: bundle_value.clone(),
+                    scenarios: &scenarios,
                     runner: &runner,
                 },
                 a,
@@ -1469,6 +1471,55 @@ pub(crate) fn run_task(
                     report.integrity.extend(done.problems);
                 }
             }
+        }
+        // Signed, portable evidence of the tick (F-061): never undoes it.
+        if let Some(commit) = report
+            .commit
+            .clone()
+            .filter(|_| report.ticked && run_config.attest.enabled)
+        {
+            let verdict = report
+                .verdict
+                .as_ref()
+                .map(super::outcome::verdict_word)
+                .unwrap_or_default();
+            let sandboxed = sandbox_config.mode != sandbox::Mode::Off && sandbox::backend().is_ok();
+            let feature_dir = snap
+                .feature
+                .as_ref()
+                .map(|f| f.feature.dir.clone())
+                .unwrap_or_default();
+            let requirements = format.requirement_ids(Path::new(&snap.root), &feature_dir);
+            let tick = crate::attest::Tick {
+                repo: &wt_root,
+                config: &config_text,
+                attest: &run_config.attest,
+                format: &format!("{:?}", format.kind()).to_lowercase(),
+                feature: &feature_name,
+                feature_dir: &feature_dir,
+                task,
+                title: &t.title,
+                line_hash: &t.line_hash,
+                section: t.story.as_deref(),
+                section_text: bundle_value["story"].as_str().unwrap_or_default(),
+                requirements: &requirements,
+                commit: &commit,
+                verdict: &verdict,
+                sandbox: serde_json::json!({
+                    "mode": format!("{:?}", sandbox_config.mode).to_lowercase(),
+                    "backend": sandboxed.then_some(if cfg!(target_os = "macos") { "seatbelt" } else { "landlock" }),
+                    "network": format!("{:?}", sandbox_config.network).to_lowercase(),
+                }),
+                executor: serde_json::json!({
+                    "kind": executor.as_ref().map_or_else(|| "native".to_owned(), |e| match &e.kind {
+                        external::Kind::Claude => "claude".to_owned(),
+                        external::Kind::Codex => "codex".to_owned(),
+                        external::Kind::Command(_) => "command".to_owned(),
+                    }),
+                }),
+                model: serde_json::json!({ "provider": s.model.provider, "model": s.model.model }),
+            };
+            report.attestation = Some(crate::attest::record_tick(&tick, &report));
         }
         let committed = report.ticked && (report.commit.is_some() || !run_config.commit_per_task);
         stage(

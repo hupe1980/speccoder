@@ -44,6 +44,73 @@ struct RawConverge {
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
+struct RawAttest {
+    enabled: Option<bool>,
+    signer: Option<String>,
+    sign_at: Option<String>,
+    sigstore: Option<RawSigstore>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawSigstore {
+    identity: Option<String>,
+    issuer: Option<String>,
+}
+
+/// Who signs a task's attestation (`[attest] signer`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Signer {
+    /// The person's git signing key (SSH or OpenPGP), as git would use it.
+    Git,
+    /// Sigstore keyless, through `cosign`.
+    Sigstore,
+    /// Nobody: statements are stored unsigned.
+    None,
+}
+
+impl Signer {
+    /// The configured word.
+    #[must_use]
+    pub const fn word(self) -> &'static str {
+        match self {
+            Self::Git => "git",
+            Self::Sigstore => "sigstore",
+            Self::None => "none",
+        }
+    }
+}
+
+/// `[attest]`: signed evidence per ticked task (F-061).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AttestConfig {
+    /// Write attestations on ticks.
+    pub enabled: bool,
+    /// Who signs.
+    pub signer: Signer,
+    /// Sign at the tick, or later with `speccoder attest sign` (touch keys).
+    pub sign_later: bool,
+    /// The Sigstore certificate identity the project says signs: shown to
+    /// reviewers (`pr`) to confirm, never trusted by `attest verify`.
+    pub sigstore_identity: Option<String>,
+    /// That identity's OIDC issuer, likewise.
+    pub sigstore_issuer: Option<String>,
+}
+
+impl Default for AttestConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            signer: Signer::Git,
+            sign_later: false,
+            sigstore_identity: None,
+            sigstore_issuer: None,
+        }
+    }
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct RawApprovals {
     wait: Option<String>,
 }
@@ -94,6 +161,8 @@ pub struct RunConfig {
     /// How long a call waits for a person before it is denied as expired
     /// (`[approvals] wait`, default 7 days).
     pub approval_wait: std::time::Duration,
+    /// `[attest]`.
+    pub attest: AttestConfig,
 }
 
 impl Default for RunConfig {
@@ -112,6 +181,7 @@ impl Default for RunConfig {
             frozen_additions: false,
             format: None,
             approval_wait: std::time::Duration::from_secs(7 * 24 * 3600),
+            attest: AttestConfig::default(),
         }
     }
 }
@@ -206,6 +276,35 @@ pub fn parse(text: &str) -> Result<RunConfig, String> {
             .map_err(|e| format!("[approvals]: {e}"))?,
         None => RawApprovals::default(),
     };
+    let raw_attest: RawAttest = match table.get("attest") {
+        Some(v) => v.clone().try_into().map_err(|e| format!("[attest]: {e}"))?,
+        None => RawAttest::default(),
+    };
+    let attest = AttestConfig {
+        enabled: raw_attest.enabled.unwrap_or(true),
+        signer: match raw_attest.signer.as_deref() {
+            None | Some("git") => Signer::Git,
+            Some("sigstore") => Signer::Sigstore,
+            Some("none") => Signer::None,
+            Some(other) => {
+                return Err(format!(
+                    "[attest]: signer = \"{other}\" (git, sigstore or none)"
+                ));
+            }
+        },
+        sign_later: match raw_attest.sign_at.as_deref() {
+            None | Some("tick") => false,
+            Some("later") => true,
+            Some(other) => {
+                return Err(format!("[attest]: sign_at = \"{other}\" (tick or later)"));
+            }
+        },
+        sigstore_identity: raw_attest
+            .sigstore
+            .as_ref()
+            .and_then(|s| s.identity.clone()),
+        sigstore_issuer: raw_attest.sigstore.and_then(|s| s.issuer),
+    };
     let d = RunConfig::default();
     let approval_wait = match approvals.wait.as_deref() {
         Some(w) => wait(w)?,
@@ -229,12 +328,27 @@ pub fn parse(text: &str) -> Result<RunConfig, String> {
         frozen_additions,
         format: format.map(|f| f.argv),
         approval_wait,
+        attest,
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn attestations_are_on_and_signed_by_git_unless_configured() {
+        let d = parse("").unwrap_or_default().attest;
+        assert!(d.enabled && d.signer == Signer::Git && !d.sign_later);
+        let c = parse("[attest]\nsigner = \"sigstore\"\nsign_at = \"later\"\n[attest.sigstore]\nidentity = \"ada@example.com\"\nissuer = \"https://accounts.example\"\n")
+            .unwrap_or_default()
+            .attest;
+        assert_eq!((c.signer, c.sign_later), (Signer::Sigstore, true));
+        assert_eq!(c.sigstore_identity.as_deref(), Some("ada@example.com"));
+        assert!(parse("[attest]\nsigner = \"x509\"\n").is_err());
+        assert!(parse("[attest]\nsign_at = \"never\"\n").is_err());
+        assert!(parse("[attest]\nkey = \"x\"\n").is_err());
+    }
 
     #[test]
     fn an_approval_waits_seven_days_unless_configured() {

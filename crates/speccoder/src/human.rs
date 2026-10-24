@@ -435,6 +435,19 @@ pub fn run(w: &mut impl Write, r: &RunReport, message: &str) -> io::Result<()> {
     if let Some(reason) = &r.reason {
         writeln!(w, "Reason     {reason}")?;
     }
+    if let Some(a) = &r.attestation {
+        let detail = match (
+            a["state"].as_str(),
+            a["signer"].as_str(),
+            a["reason"].as_str(),
+        ) {
+            (Some("signed"), Some(signer), _) => format!("signed ({signer})"),
+            (Some(state), _, Some(why)) => format!("{state} — {why}"),
+            (Some(state), ..) => state.to_owned(),
+            _ => String::new(),
+        };
+        writeln!(w, "Attested   {detail}")?;
+    }
     if let Some(p) = &r.pending {
         writeln!(
             w,
@@ -739,6 +752,9 @@ pub fn status(w: &mut impl Write, r: &StatusReport, message: &str) -> io::Result
         if t.intent_changed {
             writeln!(w, "      judged against an earlier spec: it changed since")?;
         }
+        if let Some(a) = &t.attestation {
+            writeln!(w, "      attestation: {a}")?;
+        }
         if let Some(a) = &t.last_attempt {
             writeln!(
                 w,
@@ -747,6 +763,26 @@ pub fn status(w: &mut impl Write, r: &StatusReport, message: &str) -> io::Result
                 shorten(&a.reason, 90)
             )?;
         }
+    }
+    if !r.trace.is_empty() {
+        // The rows are `--json`'s; here, how many are cited and which not.
+        let mut requirements: Vec<&str> = r.trace.iter().map(|t| t.requirement.as_str()).collect();
+        requirements.dedup();
+        let uncited: Vec<&str> = r
+            .trace
+            .iter()
+            .filter(|t| t.task.is_none())
+            .map(|t| t.requirement.as_str())
+            .collect();
+        let mut line = format!(
+            "Trace      {}/{} requirement(s) cited by a task",
+            requirements.len() - uncited.len(),
+            requirements.len()
+        );
+        if !uncited.is_empty() {
+            line.push_str(&format!("; not cited: {}", uncited.join(", ")));
+        }
+        writeln!(w, "{line}")?;
     }
     for c in &r.convergence {
         writeln!(
@@ -761,6 +797,51 @@ pub fn status(w: &mut impl Write, r: &StatusReport, message: &str) -> io::Result
 }
 
 /// A convergence round.
+/// `attest verify`: one line per task object, then the totals.
+pub fn attest(
+    w: &mut impl Write,
+    a: &speccoder_core::AttestReport,
+    message: &str,
+) -> io::Result<()> {
+    writeln!(w, "Feature    {}", a.feature)?;
+    for o in &a.objects {
+        let signer = o
+            .signer
+            .as_ref()
+            .map(|s| {
+                format!(
+                    "{} {}{}",
+                    s.kind,
+                    s.keyid,
+                    s.principal
+                        .as_ref()
+                        .map(|p| format!(" ({p})"))
+                        .unwrap_or_default()
+                )
+            })
+            .unwrap_or_default();
+        writeln!(
+            w,
+            "  {:<6} {}  {:<16} {signer}",
+            o.task,
+            &o.object[..o.object.len().min(10)],
+            o.outcome.word()
+        )?;
+        for r in &o.reasons {
+            let detail = match (&r.field, &r.expected, &r.found) {
+                (Some(f), Some(e), Some(x)) => format!("{f}: expected {e}, found {x}"),
+                (_, _, Some(x)) => x.clone(),
+                _ => String::new(),
+            };
+            writeln!(w, "      {} {detail}", r.code)?;
+        }
+        if let Some(same) = &o.same_tree_as {
+            writeln!(w, "      same content as attested commit {same}")?;
+        }
+    }
+    writeln!(w, "{message}")
+}
+
 pub fn converge(w: &mut impl Write, c: &ConvergeReport, message: &str) -> io::Result<()> {
     writeln!(
         w,

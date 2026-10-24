@@ -539,6 +539,7 @@ mod tests {
             run_id: None,
             last_attempt: None,
             note: None,
+            attestation: None,
         }
     }
 
@@ -555,6 +556,7 @@ mod tests {
                     task("T003", "blocked"),
                 ],
                 convergence: Vec::new(),
+                trace: Vec::new(),
                 totals: StatusTotals {
                     verified: 1,
                     ready: 1,

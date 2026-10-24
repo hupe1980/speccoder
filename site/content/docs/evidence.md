@@ -33,7 +33,7 @@ Phase 3: Convergence
 | `·` | `ready` | Can run now |
 | `⧗` | `blocked` | Waits for the tasks listed |
 
-`report` reads only git, so it works on any machine with the repository.
+`report` reads only git, so it works on any machine with the repository. Below the tasks it traces the spec's requirements (`FR-001`, `SC-002`) to the tasks that cite them — `Trace 9/11 requirement(s) cited by a task; not cited: FR-007, SC-003` — and it counts ticks whose commit carries no [attestation](@/docs/attestations.md).
 
 ## What counts as red
 
@@ -85,6 +85,8 @@ Mutation: caught=26 missed=13 timeout=0 unviable=6
 ```
 
 Other trailers appear when they apply: `Held-Out:` (the [held-out tests](#held-out-tests)), `Flaky:` (checks that passed only when run again), `Scope-Outside:` (changed files the task line did not name — reported, never a failure), `Checklists: overridden` (the run was started with `--ignore-checklists`).
+
+Each tick commit also carries signed in-toto statements of the same evidence in a git note, which anyone can re-check with `speccoder attest verify` — see [attestations](@/docs/attestations.md).
 
 After a run ticks the feature's last task, the `full` checks run once; the result is recorded under `refs/speccoder/full/<feature>`, and `speccoder pr` refuses a branch whose full checks failed unless `--force`.
 

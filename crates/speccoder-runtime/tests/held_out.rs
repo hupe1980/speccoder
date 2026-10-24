@@ -80,7 +80,7 @@ fn fake() -> (Arc<FakeProvider>, Arc<dyn ModelProvider>) {
 }
 
 fn visible() -> Value {
-    json!({ "files": [{ "path": "tests/acceptance_login.txt", "content": "login exists\n" }], "argv": ["./accept.sh", "fn login"], "notes": [] })
+    json!({ "files": [{ "path": "tests/acceptance_login.txt", "content": "login exists\n", "scenarios": [] }], "argv": ["./accept.sh", "fn login"], "notes": [] })
 }
 
 fn held_out(pattern: &str, scenarios: &[&str]) -> Value {
@@ -272,6 +272,61 @@ fn a_held_out_literal_in_the_attempt_stops_for_a_person() {
         res.message().contains("only the held-out tests hold"),
         "{}",
         res.message()
+    );
+}
+
+#[test]
+fn each_visible_test_is_traced_to_the_scenario_it_cites() {
+    let r = repo("\n[acceptance]\nheld_out = false\n");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_structure(json!({ "files": [
+        { "path": "tests/acceptance_login.txt", "content": "login exists\n", "scenarios": ["US1-1", "US9-9"] },
+        { "path": "tests/acceptance_more.txt", "content": "more\n", "scenarios": [] },
+    ], "argv": ["./accept.sh", "fn login"], "notes": [] }));
+    write_lib(&f, "c1", TAILORED);
+    let res = run(r.path(), state.path(), d);
+    let rep = report(&res);
+    assert_eq!(rep.verdict, Some(Verdict::Verified), "{}", res.message());
+    // The author saw the scenarios to cite; an ID the spec lacks is dropped.
+    let author = serde_json::to_string(&f.asked()[0].prompt).unwrap();
+    assert!(author.contains("US1-1"), "{author}");
+    let tests = &rep.acceptance.as_ref().unwrap()["tests"];
+    assert_eq!(
+        tests,
+        &json!([
+            { "path": "tests/acceptance_login.txt", "scenarios": ["US1-1"] },
+            { "path": "tests/acceptance_more.txt", "scenarios": [] },
+        ])
+    );
+    // The signed trace: scenario → test → verdict; untagged ⇒ unknown.
+    let commit = rep.commit.clone().unwrap();
+    let note = git(r.path(), &["notes", "--ref=speccoder", "show", &commit]);
+    let trace = note
+        .lines()
+        .map(|l| {
+            use base64::Engine as _;
+            let e: Value = serde_json::from_str(l).unwrap();
+            let bytes = base64::engine::general_purpose::STANDARD
+                .decode(e["payload"].as_str().unwrap())
+                .unwrap();
+            serde_json::from_slice::<Value>(&bytes).unwrap()
+        })
+        .find(|s| s["predicateType"] == "https://speccoder.dev/task-verification/v0")
+        .unwrap()["predicate"]["trace"]
+        .clone();
+    let rows: Vec<(Value, Value)> = trace
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| (r["scenario"].clone(), r["test"].clone()))
+        .collect();
+    assert_eq!(
+        rows,
+        [
+            (json!("US1-1"), json!("tests/acceptance_login.txt")),
+            (Value::Null, json!("tests/acceptance_more.txt")),
+        ]
     );
 }
 

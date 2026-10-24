@@ -141,6 +141,26 @@ ticks a task only on evidence the model cannot produce or edit.
   `speccoder replay` re-derives a recorded run offline. Failed attempts are
   kept under `refs/speccoder/attempts/…`.
 
+**Attestations**
+
+- Every tick leaves signed in-toto statements in a git note
+  (`refs/notes/speccoder`): a `test-result` per phase, a
+  `task-verification` with the verdict, hashes, trace and decisions, and a
+  SLSA verification summary naming every other line. Signed with your git
+  signing key (SSH or OpenPGP), Sigstore keyless as an option, or unsigned
+  and said so; signing never undoes a tick. `accept` and `skip` are attested
+  as decisions, naming who decided.
+- `speccoder attest verify` re-checks every tick against its commit, its
+  trailers, task line, spec section and tree, the judge configuration at its
+  parent, and the signatures against your own trust; exit 26
+  (`attestation_failed`). Fifty signed ticks verify in about a second.
+  `speccoder attest sign` signs what ticks left unsigned.
+- `report` shows each tick's attestation and traces the spec's requirements
+  to the tasks citing them; acceptance tests name the scenarios they check.
+  `pr` adds an Attestation column and pushes the notes, never forced.
+  `scripts/attest-interop.sh` checks a bundle with `ssh-keygen` and in-toto's
+  Go library.
+
 **Evaluation**
 
 - `speccoder eval` judges attempts with hidden oracles (precision, cheats,

@@ -90,6 +90,7 @@ fn bundles_and_acceptance_input_are_unchanged() {
     );
     let input = speccoder_runtime::substrate::acceptance::input(
         value.clone(),
+        &[],
         &["src/lib.rs".to_owned()],
         "Cargo.toml:\n[package]",
     );

@@ -91,6 +91,13 @@ pub trait Adapter: Send + Sync + std::fmt::Debug {
     /// The unit's unfinished-checklist state.
     fn checklists(&self, root: &Path, unit_dir: &str) -> Vec<ChecklistStatus>;
 
+    /// The unit's requirement identifiers, each with the hash of the line
+    /// that defines it (`FR-001`, `SC-002` in Spec Kit): the rows of the
+    /// trace matrix. None when the format has no such identifiers.
+    fn requirement_ids(&self, _root: &Path, _unit_dir: &str) -> Vec<(String, String)> {
+        Vec::new()
+    }
+
     /// Ticks `task` (one byte, under the line-hash guard).
     fn tick(&self, tasks_file: &Path, task: &str, line_hash: &str) -> Result<(), String>;
 

@@ -4,7 +4,8 @@
 //! The one place speccoder talks to a git remote, and only when a person
 //! runs it and confirms (or passes `--yes`); without that it is a dry run
 //! that prints the body and the commands. It never merges, never marks the
-//! pull request ready, and pushes only `speccoder/<feature>`.
+//! pull request ready, and pushes only `speccoder/<feature>` and the
+//! attestation notes (`refs/notes/speccoder`, never forced).
 
 use std::fmt::Write as _;
 use std::path::Path;
@@ -51,6 +52,44 @@ fn trailers(repo: &Git, base: &str, branch: &str) -> Vec<(String, String, String
         .collect()
 }
 
+/// A note's state for the table: `ssh SHA256:…` (signer and key; who the
+/// key belongs to is `attest verify`'s answer), `unsigned` or `missing`.
+fn attestation(state: &str) -> String {
+    match state.strip_prefix("signed ") {
+        Some(signer) => format!("`{signer}`"),
+        None => state.to_owned(),
+    }
+}
+
+/// How a reviewer checks the attestations themselves, when there are any.
+/// `sigstore` is the identity and issuer the project says sign: printed
+/// for the reviewer to confirm, never trusted on the project's word.
+#[must_use]
+pub fn verify_section(
+    status: &StatusReport,
+    remote: &str,
+    sigstore: Option<(&str, &str)>,
+) -> Option<String> {
+    let attested = status
+        .tasks
+        .iter()
+        .filter(|t| t.attestation.as_deref().is_some_and(|a| a != "missing"))
+        .count();
+    let trust = sigstore.map_or_else(
+        || "--allowed-signers <file>".to_owned(),
+        |(identity, issuer)| {
+            format!("--certificate-identity {identity} --certificate-oidc-issuer {issuer}")
+        },
+    );
+    (attested > 0).then(|| {
+        format!(
+            "\n**Attestations.** {attested} tick(s) carry in-toto statements (DSSE, SLSA VSA) in the git note `{REF}` on their commit. To check them yourself:\n\n```sh\ngit fetch {remote} {REF}:{REF}\nspeccoder attest verify --feature {} {trust}\n```\n",
+            status.feature,
+            REF = crate::attest::notes::REF,
+        )
+    })
+}
+
 /// The pull request body: totals, a table of every task's evidence, what
 /// is open, mutation results and tokens, and what `verified` does not mean.
 #[must_use]
@@ -72,7 +111,7 @@ pub fn body(status: &StatusReport, trailers: &[(String, String, String)]) -> Str
     );
     let _ = writeln!(
         out,
-        "| Task | Evidence | Mutation | Commit |\n|---|---|---|---|"
+        "| Task | Evidence | Mutation | Attestation | Commit |\n|---|---|---|---|---|"
     );
     for task in &status.tasks {
         let mutation = trailers
@@ -95,11 +134,15 @@ pub fn body(status: &StatusReport, trailers: &[(String, String, String)]) -> Str
         let title: String = task.title.chars().take(70).collect();
         let _ = writeln!(
             out,
-            "| {} {} | {} | {} | {} |",
+            "| {} {} | {} | {} | {} | {} |",
             task.id,
             title.replace('|', "\\|"),
             evidence.replace('|', "\\|"),
             mutation,
+            task.attestation
+                .as_deref()
+                .map(attestation)
+                .unwrap_or_default(),
             task.commit
                 .as_deref()
                 .map(|c| &c[..c.len().min(9)])
@@ -217,14 +260,34 @@ pub fn pr(path: &Path, feature: Option<&str>, options: &PrOptions<'_>) -> Comman
             t.failed.join(", ")
         ));
     }
+    let attest = crate::verify::find_config(path)
+        .and_then(|d| std::fs::read_to_string(d.join(crate::verify::config::FILE)).ok())
+        .and_then(|c| crate::substrate::run_config::parse(&c).ok())
+        .map(|c| c.attest);
+    let sigstore = attest
+        .as_ref()
+        .filter(|a| a.signer == crate::substrate::run_config::Signer::Sigstore)
+        .and_then(|a| {
+            a.sigstore_identity
+                .as_deref()
+                .zip(a.sigstore_issuer.as_deref())
+        });
+    if let Some(section) = verify_section(report, options.remote, sigstore) {
+        body.push_str(&section);
+    }
     let refspec = format!("{branch}:refs/heads/{branch}");
-    let commands = vec![
-        format!("git push {} {refspec}", options.remote),
-        format!(
-            "{} pr create --draft --base {base} --head {branch} --title {title:?} --body-file <body>",
-            options.gh
-        ),
-    ];
+    let notes = crate::attest::notes::REF;
+    let push_notes = repo
+        .succeeds(&["rev-parse", "--verify", "-q", notes])
+        .unwrap_or(false);
+    let mut commands = vec![format!("git push {} {refspec}", options.remote)];
+    if push_notes {
+        commands.push(format!("git push {} {notes}", options.remote));
+    }
+    commands.extend([format!(
+        "{} pr create --draft --base {base} --head {branch} --title {title:?} --body-file <body>",
+        options.gh
+    )]);
     let mut out = PrReport {
         feature: report.feature.clone(),
         branch: branch.clone(),
@@ -252,6 +315,19 @@ pub fn pr(path: &Path, feature: Option<&str>, options: &PrOptions<'_>) -> Comman
         )
         .with_data(CommandData::Pr(Box::new(out)));
     }
+    // The notes are pushed as they are: a remote that has diverged is told
+    // how to merge, never overwritten; the pull request opens regardless.
+    let notes_warning = push_notes
+        .then(|| repo.run(&["push", "--quiet", options.remote, &format!("{notes}:{notes}")]).err())
+        .flatten()
+        .map(|e| {
+            format!(
+                "; the attestation notes were not pushed ({}): `git fetch {r} {notes}:refs/notes/speccoder-remote && git notes --ref=speccoder merge refs/notes/speccoder-remote`, then `git push {r} {notes}`",
+                e.0.lines().last().unwrap_or_default().trim(),
+                r = options.remote,
+            )
+        })
+        .unwrap_or_default();
     let body_file = std::env::temp_dir().join(format!("speccoder-pr-{}.md", std::process::id()));
     if let Err(e) = std::fs::write(&body_file, &body) {
         return refuse(CommandStatus::Error, &e.to_string());
@@ -283,7 +359,7 @@ pub fn pr(path: &Path, feature: Option<&str>, options: &PrOptions<'_>) -> Comman
                 .find(|l| l.starts_with("http"))
                 .map(str::to_owned);
             let msg = format!(
-                "draft pull request opened{}",
+                "draft pull request opened{}{notes_warning}",
                 out.url
                     .as_deref()
                     .map(|u| format!(": {u}"))

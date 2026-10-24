@@ -197,6 +197,27 @@ impl Adapter for SpecKit {
         speccoder_speckit::checklists::status(root, unit_dir)
     }
 
+    fn requirement_ids(&self, root: &Path, unit_dir: &str) -> Vec<(String, String)> {
+        // `- **FR-001**: …` and `- **SC-001**: …` define the identifiers.
+        let text = std::fs::read_to_string(root.join(unit_dir).join("spec.md")).unwrap_or_default();
+        text.lines()
+            .filter_map(|line| {
+                let rest = line.trim_start().strip_prefix("- **")?;
+                let id = rest.split("**").next()?;
+                let (kind, number) = id.split_once('-')?;
+                (matches!(kind, "FR" | "SC")
+                    && !number.is_empty()
+                    && number.chars().all(|c| c.is_ascii_digit()))
+                .then(|| {
+                    (
+                        id.to_owned(),
+                        crate::integrity::sha256_hex(line.trim_end().as_bytes()),
+                    )
+                })
+            })
+            .collect()
+    }
+
     fn tick(&self, tasks_file: &Path, task: &str, line_hash: &str) -> Result<(), String> {
         speccoder_speckit::mark_task_complete(tasks_file, task, line_hash)
     }
@@ -248,4 +269,29 @@ fn runtime(p: &str) -> bool {
     p.contains("/workflows/runs/")
         || p.starts_with(".specify/workflows/runs/")
         || p.split('/').any(|c| c == "__pycache__")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn requirement_ids_are_the_bold_fr_and_sc_items() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("specs/001-x")).unwrap();
+        std::fs::write(
+            dir.path().join("specs/001-x/spec.md"),
+            "## Requirements\n\n- **FR-001**: System MUST parse.\n- **FR-002**: System MUST render.\n  - **FR-X**: not one\n- **Key**: not one\n\n## Success\n\n- **SC-001**: Under a second.\n",
+        )
+        .unwrap();
+        let ids: Vec<String> = SpecKit
+            .requirement_ids(dir.path(), "specs/001-x")
+            .into_iter()
+            .map(|(id, hash)| {
+                assert_eq!(hash.len(), 64);
+                id
+            })
+            .collect();
+        assert_eq!(ids, ["FR-001", "FR-002", "SC-001"]);
+    }
 }

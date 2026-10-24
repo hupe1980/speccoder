@@ -183,6 +183,7 @@ pub(crate) fn bare_report(
         mutation: None,
         samples: Vec::new(),
         scope: None,
+        attestation: None,
     }
 }
 

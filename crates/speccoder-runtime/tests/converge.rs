@@ -167,7 +167,7 @@ fn no_tests() -> Value {
 }
 
 fn reject_empty_test() -> Value {
-    json!({ "files": [{ "path": "tests/acceptance_t003.txt", "content": "x\n" }], "argv": ["./accept.sh", "fn reject_empty"], "notes": [] })
+    json!({ "files": [{ "path": "tests/acceptance_t003.txt", "content": "x\n", "scenarios": [] }], "argv": ["./accept.sh", "fn reject_empty"], "notes": [] })
 }
 
 #[test]
@@ -436,7 +436,7 @@ fn an_undemonstrated_convergence_gap_changes_no_code() {
     let state = tempfile::tempdir().unwrap();
     let (f, d) = fake();
     // The author's test already passes: the claimed gap is not shown to exist.
-    f.will_structure(json!({ "files": [{ "path": "tests/acceptance_t003.txt", "content": "x\n" }], "argv": ["./accept.sh", "fn login"], "notes": [] }));
+    f.will_structure(json!({ "files": [{ "path": "tests/acceptance_t003.txt", "content": "x\n", "scenarios": [] }], "argv": ["./accept.sh", "fn login"], "notes": [] }));
     let res = speccoder_runtime::run_with(r.path(), None, "T003", state.path(), d, None);
     assert_eq!(res.status(), CommandStatus::NeedsHuman, "{}", res.message());
     let Some(CommandData::Run(rep)) = res.data() else {
@@ -484,7 +484,7 @@ fn the_report_shows_each_ticks_evidence_from_the_branch() {
     // a round appends T003, which is verified too.
     let state = tempfile::tempdir().unwrap();
     let (f, d) = fake();
-    f.will_structure(json!({ "files": [{ "path": "tests/acceptance_t002.txt", "content": "x\n" }], "argv": ["./accept.sh", "fn greet"], "notes": [] }));
+    f.will_structure(json!({ "files": [{ "path": "tests/acceptance_t002.txt", "content": "x\n", "scenarios": [] }], "argv": ["./accept.sh", "fn greet"], "notes": [] }));
     f.will_call_tool("g", "edit_file", json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\npub fn greet() {}" }));
     f.will_structure(json!({ "summary": "greet", "status": "done", "files_changed": ["src/lib.rs"], "checks_run": [], "notes": [] }));
     f.will_structure(answer(&[finding(
@@ -551,7 +551,7 @@ fn the_report_shows_an_open_tasks_last_attempt() {
     let state = tempfile::tempdir().unwrap();
     let (f, d) = fake();
     // Not demonstrated: the author's test already passes.
-    f.will_structure(json!({ "files": [{ "path": "tests/acceptance_t003.txt", "content": "x\n" }], "argv": ["./accept.sh", "fn login"], "notes": [] }));
+    f.will_structure(json!({ "files": [{ "path": "tests/acceptance_t003.txt", "content": "x\n", "scenarios": [] }], "argv": ["./accept.sh", "fn login"], "notes": [] }));
     let res = speccoder_runtime::run_with(r.path(), None, "T003", state.path(), d, None);
     assert_eq!(res.status(), CommandStatus::NeedsHuman, "{}", res.message());
 

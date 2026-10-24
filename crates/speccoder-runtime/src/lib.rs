@@ -7,6 +7,7 @@
 
 pub mod approvals;
 pub mod attempts;
+pub mod attest;
 pub mod bench;
 pub mod commands;
 pub mod context;

@@ -175,7 +175,7 @@ fn acceptance_tests_come_from_the_scenarios() {
     let r = repo("sample", "\n[acceptance]\nheld_out = false\n");
     let state = tempfile::tempdir().unwrap();
     let (f, d) = fake();
-    f.will_structure(json!({ "files": [{ "path": "tests/acceptance_1_2.txt", "content": "greeting / Default greeting / Configured default\n" }], "argv": ["./accept.sh", "fn empty_default"], "notes": [] }));
+    f.will_structure(json!({ "files": [{ "path": "tests/acceptance_1_2.txt", "content": "greeting / Default greeting / Configured default\n", "scenarios": [] }], "argv": ["./accept.sh", "fn empty_default"], "notes": [] }));
     add(&f, "c1", "empty_default");
     let res = run_with(r.path(), Some(CHANGE), "1.2", state.path(), d, None);
     assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());

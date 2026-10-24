@@ -32,6 +32,60 @@ fn person(root: &Path) -> String {
     format!("{} (asserted)", crate::approvals::who_in(root))
 }
 
+/// A person's decision on a task as an attestation (F-061): one
+/// `task-verification`, verdict `attested` or `skipped`, no summary. A
+/// line for the message; empty when `[attest]` is off.
+fn attest_decision(
+    repo: &Path,
+    project: &Path,
+    task: &speccoder_core::snapshot::Task,
+    unit: (&str, &str),
+    record: (&str, &str),
+    decider: (&str, &str),
+) -> String {
+    let config = crate::verify::find_config(project)
+        .and_then(|d| std::fs::read_to_string(d.join(crate::verify::config::FILE)).ok())
+        .unwrap_or_default();
+    let Ok(run_config) = crate::substrate::run_config::parse(&config) else {
+        return String::new();
+    };
+    if !run_config.attest.enabled {
+        return String::new();
+    }
+    let adapter = crate::format::at(project);
+    let format = format!("{:?}", adapter.kind()).to_lowercase();
+    let requirements = adapter.requirement_ids(project, unit.1);
+    let tick = crate::attest::Tick {
+        repo,
+        config: &config,
+        attest: &run_config.attest,
+        format: &format,
+        feature: unit.0,
+        feature_dir: unit.1,
+        task: &task.id,
+        title: &task.title,
+        line_hash: &task.line_hash,
+        section: task.story.as_deref(),
+        section_text: "",
+        requirements: &requirements,
+        commit: record.0,
+        verdict: record.1,
+        sandbox: serde_json::Value::Null,
+        executor: serde_json::Value::Null,
+        model: serde_json::Value::Null,
+    };
+    let a = crate::attest::record_decision(&tick, decider.0, decider.1);
+    match (a["state"].as_str(), a["reason"].as_str()) {
+        (Some("signed"), _) => format!(
+            "; attested: signed ({})",
+            a["signer"].as_str().unwrap_or("?")
+        ),
+        (Some(state), Some(why)) => format!("; attestation {state}: {why}"),
+        (Some(state), None) => format!("; attestation {state}"),
+        _ => String::new(),
+    }
+}
+
 fn done(command: &str, report: ControlReport, message: &str) -> CommandResult {
     CommandResult::new(command, CommandStatus::Ok, message)
         .with_data(CommandData::Control(Box::new(report)))
@@ -201,17 +255,36 @@ fn accept_task(
         }
     };
     match committed {
-        Ok(commit) => done(
-            "accept",
-            ControlReport {
-                feature: w.feature.clone(),
-                task: task.to_owned(),
-                action: "accepted".to_owned(),
-                text: Some(reason),
-                record: Some(commit),
-            },
-            &format!("{task} ticked as attested by {by} (not verified); `report` shows it as such"),
-        ),
+        Ok(commit) => {
+            let attested = attest_decision(
+                &wt_root,
+                &project,
+                t,
+                (
+                    &w.feature,
+                    &snap
+                        .feature
+                        .as_ref()
+                        .map(|f| f.feature.dir.clone())
+                        .unwrap_or_default(),
+                ),
+                (&commit, "attested"),
+                (&by, &reason),
+            );
+            done(
+                "accept",
+                ControlReport {
+                    feature: w.feature.clone(),
+                    task: task.to_owned(),
+                    action: "accepted".to_owned(),
+                    text: Some(reason),
+                    record: Some(commit),
+                },
+                &format!(
+                    "{task} ticked as attested by {by} (not verified); `report` shows it as such{attested}"
+                ),
+            )
+        }
         Err(e) => refuse(CommandStatus::Error, e),
     }
 }
@@ -293,15 +366,37 @@ pub fn skip(path: &Path, feature: Option<&str>, task: &str, reason: Option<&str>
                 &format!("speccoder: skip {task}\n\n{reason}\n\nSpec-Task: {feature}/{task}\nSkipped-By: {by}\nReason: {reason}\n"),
             ])
         })
-        .and_then(|commit| git.run(&["update-ref", &reference, &commit]));
+        .and_then(|commit| git.run(&["update-ref", &reference, &commit]).map(|_| commit));
     match made {
-        Ok(_) => done(
-            "skip",
-            report("skipped", Some(reason)),
-            &format!(
-                "{task} skipped: runs pass it by, and tasks depending on it stay blocked (`skip --task {task} --undo` to take it back)"
-            ),
-        ),
+        Ok(commit) => {
+            let snap = crate::format::at(&root).inspect(&root, Some(&feature));
+            let unit = snap.as_ref().and_then(|s| s.feature.as_ref());
+            let attested = unit
+                .and_then(|u| {
+                    u.tasks
+                        .as_ref()
+                        .and_then(|t| t.tasks.iter().find(|x| x.id == task))
+                        .map(|t| (u, t))
+                })
+                .map(|(u, t)| {
+                    attest_decision(
+                        &root,
+                        &root,
+                        t,
+                        (&feature, &u.feature.dir),
+                        (&commit, "skipped"),
+                        (&by, &reason),
+                    )
+                })
+                .unwrap_or_default();
+            done(
+                "skip",
+                report("skipped", Some(reason)),
+                &format!(
+                    "{task} skipped: runs pass it by, and tasks depending on it stay blocked (`skip --task {task} --undo` to take it back){attested}"
+                ),
+            )
+        }
         Err(e) => CommandResult::new("skip", CommandStatus::GitPrecondition, &e.0),
     }
 }

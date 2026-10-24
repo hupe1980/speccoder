@@ -214,6 +214,31 @@ fn main() {
         Command::Workflow {
             action: cli::WorkflowAction::Install { path, force },
         } => speccoder_runtime::workflow::install(path, *force),
+        Command::Attest {
+            action:
+                cli::AttestAction::Verify {
+                    rev,
+                    path,
+                    feature,
+                    allowed_signers,
+                    certificate_identity,
+                    certificate_oidc_issuer,
+                    require_signed,
+                },
+        } => speccoder_runtime::attest::verify::verify_at(
+            path,
+            feature.as_deref(),
+            rev.as_deref(),
+            &speccoder_runtime::attest::verify::Trust {
+                allowed_signers: allowed_signers.clone(),
+                identity: certificate_identity.clone(),
+                issuer: certificate_oidc_issuer.clone(),
+            },
+            *require_signed,
+        ),
+        Command::Attest {
+            action: cli::AttestAction::Sign { rev, path, feature },
+        } => speccoder_runtime::attest::sign_at(path, feature.as_deref(), rev.as_deref()),
         Command::Skill {
             name,
             arguments,
