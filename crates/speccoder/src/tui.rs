@@ -32,6 +32,8 @@ pub struct Snapshot {
     pub problem: Option<String>,
     /// What to do next: a call waiting first, else the report's step.
     pub next: Option<speccoder_core::next::NextStep>,
+    /// An in-place session: `in-place · <branch> (returns to <original>)`.
+    pub in_place: Option<String>,
 }
 
 /// Which pane the arrow keys move in.
@@ -170,6 +172,7 @@ fn state_style(state: &str) -> (char, Style) {
         "regression_only" => ('~', Style::default().fg(Color::Yellow)),
         "attested" => ('A', Style::default().fg(Color::Cyan)),
         "ticked_without_evidence" => ('!', Style::default().fg(Color::Magenta)),
+        "evidence_without_tick" => ('?', Style::default().fg(Color::Magenta)),
         "skipped" => ('–', Style::default().fg(Color::DarkGray)),
         "ready" => ('·', Style::default()),
         _ => ('⧗', Style::default().fg(Color::DarkGray)),
@@ -198,9 +201,16 @@ pub fn draw(f: &mut Frame<'_>, app: &App) {
     f.render_widget(
         Paragraph::new(Line::from(vec![
             Span::styled(" speccoder ", Style::default().add_modifier(Modifier::BOLD)),
-            Span::raw(format!(
-                "{feature}   [tab] pane  [↑↓] select  [a] approve  [r] reject  [q] quit"
-            )),
+            Span::raw(format!("{feature}   ")),
+            Span::styled(
+                app.snap
+                    .in_place
+                    .as_deref()
+                    .map(|m| format!("{m}   "))
+                    .unwrap_or_default(),
+                Style::default().add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("[tab] pane  [↑↓] select  [a] approve  [r] reject  [q] quit"),
         ])),
         rows[0],
     );
@@ -436,6 +446,13 @@ pub fn load(path: &Path, feature: Option<&str>, state: &Path) -> Snapshot {
         report,
         live: read_live(path, state),
         approvals,
+        in_place: speccoder_runtime::in_place::session_at(path, state).map(|s| {
+            format!(
+                "in-place · {} (returns to {})",
+                s.branch,
+                s.original.describe()
+            )
+        }),
     }
 }
 
@@ -516,6 +533,7 @@ mod tests {
             title: format!("title of {id}"),
             phase: "Phase 2".to_owned(),
             state: state.to_owned(),
+            intent_changed: false,
             blocked_by: Vec::new(),
             commit: None,
             run_id: None,
@@ -575,6 +593,7 @@ mod tests {
                         risk: "medium".to_owned(),
                         scope: "for the rest of T002: this path, any content".to_owned(),
                     }),
+                    ..PendingCall::default()
                 }],
                 decided: Vec::new(),
             }),
@@ -583,6 +602,7 @@ mod tests {
                 command: "speccoder approve --task T002".to_owned(),
                 why: "allow it; the attempt resumes on the next run".to_owned(),
             }),
+            in_place: Some("in-place · speccoder/001-x (returns to main)".to_owned()),
         }
     }
 
@@ -616,6 +636,7 @@ mod tests {
             "a → for the rest of T002: this path, any content",
             "1 verified",
             "Next: speccoder approve --task T002 — allow it",
+            "001-x   in-place · speccoder/001-x (returns to main)   [tab] pane",
         ] {
             assert!(s.contains(needle), "missing {needle:?} in\n{s}");
         }

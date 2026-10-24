@@ -50,6 +50,24 @@ A failed verdict is retried (`[budget] max_attempts`, default 2). The retry star
 - a lane that conflicts with another runs again on its own, on top of the others;
 - tasks that pass alone but fail together are undone, and the remaining tasks run one at a time.
 
+## In-place runs
+
+```sh
+speccoder run --in-place
+```
+
+By default speccoder works in a worktree, and a worktree holds only what is committed. If you keep your specs out of git — `specs/` and `.specify/` in `.gitignore` — a worktree cannot see them. `--in-place` works in your checkout instead:
+
+- It needs a clean checkout: no modified, staged or untracked files git does not ignore (`error[DIRTY-CHECKOUT]`, exit 14, with the paths and the fix), at least one commit, and `speccoder.toml` committed.
+- It switches the checkout to `speccoder/<feature>` (created from your current commit, or reused), works through the tasks with the same judge as in worktree mode, and **switches back** to the branch you were on when the run ends — finished, stopped or failed. Your branch is never committed to.
+- Each passed task is committed with its evidence first and ticked second. When `tasks.md` is ignored, the tick lives only in your checkout: the commit says so (`Tick: local specs/<feature>/tasks.md`) and names the task line it judged (`Task-Line:`) and the intent it judged against (`Intent-Digest:`). `speccoder report` reads the local ticks against those commits: a tick without such a commit, or a ticked line reworded since, counts as without evidence; a commit whose local tick is missing shows as `evidence_without_tick`; and evidence committed before the spec, plan or constitution changed is marked as judged against an earlier spec.
+- Do not use the checkout while it runs. Before every task speccoder checks that HEAD, the branch and the tree are as it left them, and that the spec, plan, tasks, constitution and the judge's inputs are byte for byte what the run started with; before every tick it checks HEAD and those files again. A change stops the run (`stopped[CHECKOUT-CHANGED]`, `stopped[INTENT-CHANGED]`, `stopped[JUDGE-CHANGED]`, exit 23) and leaves your change where it is.
+- `--parallel` needs worktrees and is refused with `--in-place` (`error[IN-PLACE-PARALLEL]`, exit 2).
+
+`accept --in-place` and `converge --in-place` (and `run --in-place --converge`) work the same way: an attestation is committed before its local tick; a convergence round appends to your `tasks.md` and its commit says so (`Tasks: local`). In place the model sees only what a worktree would hold, and commands cannot write `.git`; see [security](@/docs/security.md#in-place-mode).
+
+While a feature has an in-place run (or an interrupted one), a worktree-mode `run`, `accept` or `converge` of it is refused (`error[IN-PLACE-SESSION]`); see [recovery](@/docs/recovery.md).
+
 ## Best of n
 
 With `[budget] best_of = 3`, each task gets three independent attempts from the same starting point, and speccoder keeps the best by evidence: a passing verdict first (`verified` over `regression_only`), then fewer surviving mutants, the smaller diff, fewer tokens. It costs n times as much; it pays off on tasks a model gets right only sometimes.
@@ -98,4 +116,4 @@ When a call waits for you, a task fails, the feature ends or nothing happens for
 speccoder cost     # tokens per task — every attempt — convergence, and the total
 ```
 
-`cost` reads the usage speccoder records on its commits and saved attempts. For money, add your prices in USD per million tokens to `[model]` (`price_input_per_mtok`, `price_output_per_mtok`, `price_cache_read_per_mtok`); they then also appear in the progress lines. speccoder ships no price list — prices change and depend on your contract. With Claude Code as the agent, its own reported cost is used.
+`cost` reads the usage speccoder records on its commits and saved attempts. For money, add your prices in USD per million tokens to `[model]` (`price_input_per_mtok`, `price_output_per_mtok`, `price_cache_read_per_mtok`, and optionally the cache-write rates); they then also appear in the progress lines. Tokens written to the cache are priced at their own rate — by default Anthropic's 1.25× input for the five-minute cache and 2× for the hour, the input rate elsewhere. speccoder ships no price list — prices change and depend on your contract. With Claude Code as the agent, its own reported cost is used.

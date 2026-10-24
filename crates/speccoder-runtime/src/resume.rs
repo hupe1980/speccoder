@@ -81,6 +81,14 @@ pub fn new_key(feature: &str, task: &str) -> String {
 #[derive(Debug)]
 pub struct Guard(pub PathBuf);
 
+impl Guard {
+    /// Leaves the marker in place: the attempt waits for a person and the
+    /// next run resumes it.
+    pub fn keep(self) {
+        std::mem::forget(self);
+    }
+}
+
 impl Drop for Guard {
     fn drop(&mut self) {
         let _ = std::fs::remove_file(&self.0);

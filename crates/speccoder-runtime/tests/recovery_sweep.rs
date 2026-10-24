@@ -99,8 +99,11 @@ fn every_crash_point_of_an_attempt_resumes_honestly() {
         mcp: &[],
         root: &root,
         frozen_additions: false,
-        ask: false,
+        asks: "stop",
+        wait_secs: 0,
         network_allow: &[],
+        in_place: false,
+        hidden: &[],
     };
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()

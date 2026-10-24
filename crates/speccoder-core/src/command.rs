@@ -166,6 +166,22 @@ pub enum CommandData {
     Checklists(Vec<ChecklistStatus>),
     /// `spec archive`: an OpenSpec change merged into the main specs.
     Archive(Box<ArchiveReport>),
+    /// An in-place run refused or stopped (`DIRTY-CHECKOUT`, `INTENT-CHANGED`, …).
+    InPlace(Box<InPlaceReport>),
+}
+
+/// Why an in-place run refused or stopped.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct InPlaceReport {
+    /// `DIRTY-CHECKOUT`, `UNBORN-HEAD`, `CONFIG-NOT-TRACKED`,
+    /// `BRANCH-IN-WORKTREE`, `IN-PLACE-ACTIVE`, `IN-PLACE-PARALLEL`,
+    /// `MERGE-CONFLICT`, `IN-PLACE-SESSION`, `INTENT-CHANGED`,
+    /// `JUDGE-CHANGED`, `CHECKOUT-CHANGED` or `RETURN-BLOCKED`.
+    pub code: String,
+    /// The paths involved, with why.
+    pub paths: Vec<RefusedPath>,
+    /// What to run: the first fixes it, the others are alternatives.
+    pub fix: Vec<String>,
 }
 
 /// Result of `speccoder spec archive` (an OpenSpec change).
@@ -581,8 +597,9 @@ pub struct ApprovalsReport {
     pub decided: Vec<DecidedCall>,
 }
 
-/// A call that stopped an attempt for approval.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+/// A call that stopped an attempt for approval, or a question, waiting for
+/// a person.
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct PendingCall {
     /// Task ID.
     pub task: String,
@@ -598,6 +615,29 @@ pub struct PendingCall {
     pub reference: String,
     /// The call as the inline prompt shows it (F-054).
     pub presentation: Option<ApprovalView>,
+    /// The waiting call's id (`approve --call`); empty for a stopped attempt.
+    pub call: String,
+    /// `task` (the attempt waits and resumes) or `attempt` (stopped and saved:
+    /// a lane, or before F-072).
+    pub source: String,
+    /// `approval` or `question`.
+    pub kind: String,
+    /// A question's text.
+    pub question: Option<String>,
+    /// Seconds since the epoch the call has waited since.
+    pub waiting_since: Option<u64>,
+    /// Seconds since the epoch it is denied as expired at.
+    pub deadline: Option<u64>,
+}
+
+/// Who decided, and how speccoder knows the name.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct OperatorView {
+    /// The name.
+    pub actor: String,
+    /// `asserted` (typed at a local terminal or the CLI) or `connected`
+    /// (reported by a client over its connection, e.g. an editor).
+    pub basis: String,
 }
 
 /// A pending call as a person sees it: what, why, what it can reach, what
@@ -623,7 +663,7 @@ pub struct ApprovalView {
 }
 
 /// A person's decision.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct DecidedCall {
     /// Task ID.
     pub task: String,
@@ -639,6 +679,14 @@ pub struct DecidedCall {
     pub scope: Option<String>,
     /// An approval's note to the model.
     pub note: Option<String>,
+    /// The waiting call it decided, when it was one.
+    pub call: Option<String>,
+    /// Who decided; `None` for an expiry.
+    pub operator: Option<OperatorView>,
+    /// Through what: `terminal`, `cli` or `editor <name>`.
+    pub via: Option<String>,
+    /// Nobody decided: the deadline passed and the call was denied.
+    pub expired: bool,
 }
 
 /// Result of `speccoder report`: what the branch's history shows.
@@ -671,8 +719,13 @@ pub struct TaskStatus {
     pub phase: String,
     /// `verified`, `regression_only` (ticked by speccoder with that verdict),
     /// `attested` (ticked by `speccoder accept`), `ticked_without_evidence`
-    /// (ticked, no speccoder commit), `skipped`, `ready` or `blocked`.
+    /// (ticked, no speccoder commit), `evidence_without_tick` (in place: a
+    /// verdict commit names the task, its local tick is missing),
+    /// `skipped`, `ready` or `blocked`.
     pub state: String,
+    /// In place: the spec, plan or constitution changed since this task's
+    /// evidence was committed (its `Intent-Digest` differs from now).
+    pub intent_changed: bool,
     /// Open dependencies of a blocked task.
     pub blocked_by: Vec<String>,
     /// The speccoder commit that ticked it.
@@ -718,6 +771,8 @@ pub struct StatusTotals {
     pub regression_only: usize,
     /// Ticked without a speccoder commit (by a person, or before speccoder).
     pub ticked_without_evidence: usize,
+    /// In place: committed by speccoder, the local tick missing.
+    pub evidence_without_tick: usize,
     /// Ticked by `speccoder accept`: a person's attestation, not evidence.
     pub attested: usize,
     /// Open and skipped by a person.

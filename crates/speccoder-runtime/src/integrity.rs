@@ -82,6 +82,23 @@ impl JudgeSnapshot {
         Self(files)
     }
 
+    /// Path → content hash.
+    #[must_use]
+    pub fn entries(&self) -> &BTreeMap<String, String> {
+        &self.0
+    }
+
+    /// A snapshot from recorded entries.
+    #[must_use]
+    pub fn from_entries(entries: BTreeMap<String, String>) -> Self {
+        Self(entries)
+    }
+
+    /// Records `path`'s new content hash (the engine's own sanctioned write).
+    pub fn set(&mut self, path: &str, hash: String) {
+        self.0.insert(path.to_owned(), hash);
+    }
+
     /// What changed from `self` to `later`, except `approved` paths (a
     /// person's grant to write them).
     #[must_use]

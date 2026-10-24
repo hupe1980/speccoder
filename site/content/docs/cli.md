@@ -28,6 +28,9 @@ Every stop and finish ends with a `Next:` block — the commands that continue, 
 | Command | What it does |
 |---|---|
 | `speccoder run [--task T] [--max-tasks N] [--parallel N] [--converge] [--no-prompt] [--ignore-checklists]` | Work through the ready tasks, or one task |
+| `speccoder run --in-place [--task T] …` | The same in your checkout on `speccoder/<feature>`, for git-ignored specs; switches back at the end |
+| `speccoder run --in-place --return` | Leave an interrupted in-place run: save its work, switch back, run nothing |
+| `speccoder accept --in-place …`, `speccoder converge --in-place` | The same commands in your checkout, for git-ignored specs |
 | `speccoder converge` | Assess a finished feature against its spec and append what remains |
 | `speccoder propose --task T` | Ask the model how it would do one task; nothing is executed |
 | `speccoder worktree` | Create or reuse the feature's worktree and print its path |
@@ -47,8 +50,8 @@ Every stop and finish ends with a `Next:` block — the commands that continue, 
 | Command | What it does |
 |---|---|
 | `speccoder approvals` | Calls waiting for a decision, and the decisions made, with who made them |
-| `speccoder approve --task T [--note "…"]` | Approve the waiting call's class for the task; the note is told to the next attempt |
-| `speccoder reject --task T --reason R` | Reject it; the model is told why |
+| `speccoder approve --task T [--call ID] [--all] [--scope once\|task\|run] [--note "…"]` | Approve a waiting call (its class for the task by default); no model needed; the next `run` continues the attempt from that call |
+| `speccoder reject --task T [--call ID] [--all] --reason R` | Reject it; the attempt continues and the model is told why |
 | `speccoder accept --task T --reason R` | Tick a task on your word (`attested`) |
 | `speccoder skip --task T [--reason R] [--undo]` | Skip a task; its dependents stay blocked |
 | `speccoder nudge --task T [--note N] [--clear]` | Leave a note the next attempts read |
@@ -77,7 +80,7 @@ With `--json` every command prints exactly one object on stdout and no progress 
 
 `status` is the exit code's name in `snake_case`; `data` depends on the command. `--help` and `--version` always print text.
 
-Fields are only added within a schema version; ignore fields you do not know. Recent additions: a test outcome `"error"` (a JUnit `<error>`), `flaky` on check results, `red_class` and `excerpt` in a run's `acceptance`, `scope` on a run (`stated`, `named`, `outside`), `full_tier` on a feature run, and `data.checklists` when unfinished checklists stop a run.
+Fields are only added within a schema version; ignore fields you do not know. Recent additions: a test outcome `"error"` (a JUnit `<error>`), `flaky` on check results, `red_class` and `excerpt` in a run's `acceptance`, `scope` on a run (`stated`, `named`, `outside`), `full_tier` on a feature run, `data.checklists` when unfinished checklists stop a run, and for in-place runs `data.code`, `data.paths` and `data.fix` on a refusal or stop, a task state `evidence_without_tick` with `totals.evidence_without_tick`, and `intent_changed` on a task.
 
 ## Exit codes
 
@@ -90,12 +93,12 @@ Fields are only added within a schema version; ignore fields you do not know. Re
 | 11 | `diagnostics_error` | The Spec Kit artifacts have errors |
 | 12 | `selection_needed` | Feature selection needed or failed |
 | 13 | `config_error` | `speccoder.toml` missing or invalid, a missing key, or no applicable check |
-| 14 | `git_precondition` | No repository or commits, uncommitted Spec Kit files, or a dirty worktree |
+| 14 | `git_precondition` | No repository or commits, uncommitted Spec Kit files, a dirty worktree, or an in-place run that cannot start (`DIRTY-CHECKOUT`, `UNBORN-HEAD`, `CONFIG-NOT-TRACKED`, `BRANCH-IN-WORKTREE`, `IN-PLACE-ACTIVE`, `IN-PLACE-SESSION`, `MERGE-CONFLICT`) |
 | 15 | `not_found` | No such task, run or pending call |
 | 16 | `task_not_ready` | The task is done, or blocked by open dependencies |
 | 20 | `verification_failed` | A check or acceptance test failed |
 | 21 | `run_failed` | The model call or the run failed |
 | 22 | `replay_diverged` | Replay differed from the recorded run |
-| 23 | `needs_human` | Stopped for a person: blocked, approval, denials, budget, incomplete, not demonstrated, suspected gaming, interrupted |
+| 23 | `needs_human` | Stopped for a person: blocked, approval, denials, budget, incomplete, not demonstrated, suspected gaming, interrupted, or an in-place run stopped (`INTENT-CHANGED`, `JUDGE-CHANGED`, `CHECKOUT-CHANGED`, `GIT-CHANGED`, `RETURN-BLOCKED`) |
 | 24 | `eval_failed` | The evaluation found a false completion or a cheat |
 | 25 | `not_replayable` | This build cannot re-derive the recorded run |

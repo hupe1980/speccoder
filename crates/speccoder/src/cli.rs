@@ -145,6 +145,14 @@ pub enum Command {
         /// Run although the feature's checklists have unchecked items (recorded on every commit).
         #[arg(long)]
         ignore_checklists: bool,
+        /// Work in this checkout on branch `speccoder/<feature>` instead of a
+        /// worktree (intent may be git-ignored); switches back at the end.
+        #[arg(long)]
+        in_place: bool,
+        /// With --in-place: leave an interrupted in-place run — save its work
+        /// under an attempt ref and switch back to the original branch.
+        #[arg(long = "return", requires = "in_place", conflicts_with_all = ["task", "converge", "max_tasks"])]
+        return_: bool,
         /// A path inside the project (default: the current directory).
         #[arg(default_value = ".")]
         path: PathBuf,
@@ -155,6 +163,9 @@ pub enum Command {
     },
     /// Assess a finished feature against its spec, plan and tasks (read-only) and append what remains.
     Converge {
+        /// In this checkout on `speccoder/<feature>`, as `run --in-place`.
+        #[arg(long)]
+        in_place: bool,
         /// A path inside the project (default: the current directory).
         #[arg(default_value = ".")]
         path: PathBuf,
@@ -202,9 +213,18 @@ pub enum Command {
     /// Approve the call a task stopped for (its path, or its exact command) for that task.
     Approve {
         /// Task ID, e.g. T005.
+        #[arg(long, required_unless_present = "all")]
+        task: Option<String>,
+        /// One waiting call, by its id or a prefix of it (`speccoder approvals`).
         #[arg(long)]
-        task: String,
-        /// A note the next attempt is told with the approval.
+        call: Option<String>,
+        /// Every waiting call (of `--task`, or of the feature), each recorded on its own.
+        #[arg(long)]
+        all: bool,
+        /// How far the approval reaches: this call, the task, or the run.
+        #[arg(long, value_enum, default_value_t = ScopeArg::Task)]
+        scope: ScopeArg,
+        /// A note the attempt is told with the approval.
         #[arg(long)]
         note: Option<String>,
         /// A path inside the project (default: the current directory).
@@ -218,8 +238,14 @@ pub enum Command {
     /// Reject the call a task stopped for; the model is told the reason.
     Reject {
         /// Task ID, e.g. T005.
+        #[arg(long, required_unless_present = "all")]
+        task: Option<String>,
+        /// One waiting call, by its id or a prefix of it (`speccoder approvals`).
         #[arg(long)]
-        task: String,
+        call: Option<String>,
+        /// Every waiting call (of `--task`, or of the feature), each recorded on its own.
+        #[arg(long)]
+        all: bool,
         /// Why — the model reads this.
         #[arg(long)]
         reason: String,
@@ -239,6 +265,9 @@ pub enum Command {
         /// Why it is done.
         #[arg(long)]
         reason: String,
+        /// In this checkout on `speccoder/<feature>`, as `run --in-place`.
+        #[arg(long)]
+        in_place: bool,
         /// A path inside the project (default: the current directory).
         #[arg(default_value = ".")]
         path: PathBuf,
@@ -426,4 +455,25 @@ pub enum TierArg {
     Fast,
     /// Slower checks (linters, audits): once after a run ticks the last task, and by `verify`.
     Full,
+}
+
+/// How far an approval reaches.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum ScopeArg {
+    /// This call only.
+    Once,
+    /// This call's class for the rest of the task.
+    Task,
+    /// This call's class for every task of the run.
+    Run,
+}
+
+impl From<ScopeArg> for speccoder_runtime::approvals::Scope {
+    fn from(s: ScopeArg) -> Self {
+        match s {
+            ScopeArg::Once => Self::Once,
+            ScopeArg::Task => Self::Task,
+            ScopeArg::Run => Self::Run,
+        }
+    }
 }

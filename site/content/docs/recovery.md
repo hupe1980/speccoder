@@ -22,6 +22,21 @@ speccoder records every model call and tool call in a local journal before it ac
 
 **`SPECCODER_CALL_ID`** is set for every command the model runs. A call that is resumed has the same id, so a script with side effects can tell a repeat from a new call.
 
+## Interrupted in-place runs
+
+A [`--in-place`](@/docs/running.md#in-place-runs) run records where it came from before it switches your checkout. If it dies, `speccoder status` says the checkout is still on `speccoder/<feature>`, which branch it returns to, and names both ways out:
+
+- **`speccoder run --in-place`** — takes the interrupted run over and **resumes it as in a worktree**: an attempt killed mid-way continues from the journal (finished model and tool calls are read back, a command that ran is not run again), and a task whose verdict was committed but not yet ticked is ticked from that commit — only when its line in `tasks.md` is still exactly the one the commit names (`Task-Line`). At the end the checkout returns to the branch recorded when the run first started, not to `speccoder/<feature>`. If the spec, plan, tasks or the judge's inputs changed since the run died, nothing is resumed against them: what the run left is saved under an attempt ref and the task starts fresh.
+- **`speccoder run --in-place --return`** — saves whatever the run left under `refs/speccoder/attempts/<feature>/in-place/<run>`, restores the checkout to the branch tip, switches back to the recorded branch and runs nothing.
+
+Edits of your own on `speccoder/<feature>` after a crash, with no attempt to resume, are not set aside for you as in a worktree: the run refuses (`error[DIRTY-CHECKOUT]`) and leaves them to you.
+
+If you changed the checkout yourself after a stop, speccoder does not switch over your change (`stopped[RETURN-BLOCKED]`): `git stash -u && git switch <branch>`, or `--return`.
+
+## Waiting for a person
+
+An attempt that waits for an approval is not an interrupted one: it was stopped on purpose, its working tree and journal are kept, and `speccoder approvals` lists the call. Decide it with `approve` or `reject` — from any terminal, no model needed — and the next `run` continues the attempt from that call. A process killed while a prompt is open loses nothing: the call is asked again on the next run, and a call decided before the kill is never asked again or performed twice. In place, the checkout stays on `speccoder/<feature>` while the call waits; `run --in-place --return` gives it back and withdraws the call.
+
 ## Failed attempts
 
 A failed or stopped attempt is saved under `refs/speccoder/attempts/<feature>/<task>/<run>` and undone in the worktree. The next attempt never builds on it, and never treats test files it wrote as existing tests. Inspect it with `git log` and `git diff` like any commit.

@@ -1394,10 +1394,11 @@ fn write_manifest(f: &FakeProvider, id: &str, content: &str) {
 }
 
 #[test]
-fn an_approved_call_lets_the_next_attempt_through() {
+fn a_deferred_approval_resumes_the_attempt_without_asking_the_model_again() {
     let r = repo("");
     let state = tempfile::tempdir().unwrap();
-    // 1. The attempt stops for approval: package.json is a dependency manifest.
+    // 1. Nobody to ask: the attempt waits on the call (package.json is a
+    //    dependency manifest), its tree kept.
     let (f, d) = fake();
     write_manifest(&f, "c1", "{}\n");
     let first = run(r.path(), state.path(), "T005", d);
@@ -1408,32 +1409,41 @@ fn an_approved_call_lets_the_next_attempt_through() {
         first.message()
     );
     assert_eq!(report(&first).attempt_status, "needs_approval");
+    assert_eq!(report(&first).pending.as_ref().unwrap()["waiting"], true);
 
-    // 2. It is listed with what a decision would cover.
+    // 2. It is listed as a waiting call with what a decision would cover.
     let listed = decide_with(r.path(), None, Verb::List, state.path());
     let a = approvals(&listed);
     assert_eq!(a.pending.len(), 1, "{}", listed.message());
     assert_eq!(
-        (a.pending[0].task.as_str(), a.pending[0].covers.as_str()),
-        ("T005", "write `package.json`")
+        (
+            a.pending[0].task.as_str(),
+            a.pending[0].covers.as_str(),
+            a.pending[0].source.as_str()
+        ),
+        ("T005", "write `package.json`", "task")
     );
+    assert!(!a.pending[0].call.is_empty() && a.pending[0].deadline.is_some());
 
-    // 3. Approve: the path, any content.
+    // 3. Approve — no model needed — recorded with who decided.
     let ok = decide_with(r.path(), None, Verb::Approve("T005"), state.path());
     assert_eq!(ok.status(), CommandStatus::Ok, "{}", ok.message());
+    assert!(ok.message().contains("(asserted)"), "{}", ok.message());
     assert!(approvals(&ok).pending.is_empty());
-    assert_eq!(approvals(&ok).decided[0].decision, "approved");
 
-    // 4. The next attempt (fresh context) writes it with other content: allowed.
+    // 4. The next run continues the same attempt: the write is the one shown,
+    //    and the model is asked only for what comes after it.
     let (f2, d2) = fake();
-    write_manifest(&f2, "c2", "{ \"name\": \"x\" }\n");
     f2.will_structure(done("manifest"));
     let second = run(r.path(), state.path(), "T005", d2);
     assert_eq!(second.status(), CommandStatus::Ok, "{}", second.message());
     let rep = report(&second);
     assert_eq!(rep.tool_calls[0]["decision"], "allow");
+    assert_eq!(rep.tool_calls[0]["approved_by"], "person");
+    assert_eq!(rep.tool_calls[0]["operator"]["basis"], "asserted");
+    assert_eq!(f2.asked().len(), 1, "a finished model call was repeated");
     assert!(rep.ticked);
-    // Strict replay holds: the decision is in the journaled input.
+    // Strict replay holds: the decision is journal history.
     let replayed = speccoder_runtime::replay_with(r.path(), &rep.run_id, state.path());
     assert_eq!(
         replayed.status(),
@@ -1458,8 +1468,8 @@ fn a_rejected_call_is_denied_with_the_persons_reason() {
     );
     assert_eq!(no.status(), CommandStatus::Ok, "{}", no.message());
 
+    // The waiting attempt continues with the call refused.
     let (f2, d2) = fake();
-    write_manifest(&f2, "c2", "{}\n");
     f2.will_structure(done("gave up on the manifest"));
     let res = run(r.path(), state.path(), "T005", d2);
     let rep = report(&res);
@@ -1468,16 +1478,12 @@ fn a_rejected_call_is_denied_with_the_persons_reason() {
         rep.tool_calls[0]["reason"],
         "a person rejected this: no new dependencies"
     );
-    // The model was told before it asked.
-    let prompt = serde_json::to_string(&f2.asked()[0].prompt).unwrap();
-    assert!(
-        prompt.contains("Rejected by a person") && prompt.contains("no new dependencies"),
-        "{prompt}"
-    );
-    // Nothing awaits a decision any more.
+    assert_eq!(rep.tool_calls[0]["operator"]["basis"], "asserted");
+    // The attempt continued: one model turn after the refusal, nothing redone.
+    assert_eq!(f2.asked().len(), 1);
+    // Nothing awaits a decision any more; approving now is refused.
     let listed = decide_with(r.path(), None, Verb::List, state.path());
     assert!(approvals(&listed).pending.is_empty());
-    // Approving a task with nothing pending is refused.
     let again = decide_with(r.path(), None, Verb::Approve("T005"), state.path());
     assert_eq!(again.status(), CommandStatus::NotFound);
 }
@@ -2732,7 +2738,7 @@ fn a_note_rides_with_the_approved_call_to_the_model() {
 }
 
 #[test]
-fn stop_keeps_the_call_for_speccoder_approve() {
+fn later_keeps_the_call_waiting_for_speccoder_approve() {
     let r = repo("");
     let state = tempfile::tempdir().unwrap();
     let (f, d) = fake();
@@ -2743,11 +2749,18 @@ fn stop_keeps_the_call_for_speccoder_approve() {
     assert_eq!(res.status(), CommandStatus::NeedsHuman, "{}", res.message());
     let rep = report(&res);
     assert_eq!(rep.attempt_status, "needs_approval");
-    assert_eq!(rep.tool_calls[0]["stopped_by"], "person");
+    assert_eq!(rep.pending.as_ref().unwrap()["waiting"], true);
+    assert!(
+        rep.saved_attempt.is_none(),
+        "a waiting attempt is kept, not saved and undone"
+    );
     let listed = decide_with(r.path(), None, Verb::List, state.path());
     let pending = &approvals(&listed).pending;
     assert_eq!(pending.len(), 1, "{pending:?}");
-    assert_eq!(pending[0].task, "T005");
+    assert_eq!(
+        (pending[0].task.as_str(), pending[0].source.as_str()),
+        ("T005", "task")
+    );
 }
 
 #[test]
@@ -2840,7 +2853,7 @@ fn run_scope_covers_later_tasks_and_replays_strictly() {
 }
 
 #[test]
-fn a_stopped_call_is_listed_as_it_was_asked_and_a_note_reaches_the_next_attempt() {
+fn a_waiting_call_is_listed_as_it_was_asked_and_a_note_reaches_the_attempt() {
     let r = repo("");
     let state = tempfile::tempdir().unwrap();
     let (f, d) = fake();
@@ -2868,18 +2881,14 @@ fn a_stopped_call_is_listed_as_it_was_asked_and_a_note_reaches_the_next_attempt(
         state.path(),
     );
     assert_eq!(ok.status(), CommandStatus::Ok, "{}", ok.message());
-    let decided = &approvals(&ok).decided[0];
-    assert_eq!(decided.note.as_deref(), Some("an empty object is enough"));
-    assert_eq!(decided.scope.as_deref(), Some("task"));
-    // The next attempt is told.
+    // The attempt continues and the model reads the note with the call's result.
     let (f, d) = fake();
-    write_manifest(&f, "c1", "{}\n");
     f.will_structure(done("manifest"));
     let res = run(r.path(), state.path(), "T005", d);
     assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
-    let prompt = serde_json::to_string(&f.asked()[0].prompt).unwrap();
-    assert!(
-        prompt.contains("A person approved write `package.json`: an empty object is enough"),
-        "{prompt}"
+    assert_eq!(f.asked().len(), 1);
+    assert_eq!(
+        report(&res).tool_calls[0]["note"],
+        "an empty object is enough"
     );
 }

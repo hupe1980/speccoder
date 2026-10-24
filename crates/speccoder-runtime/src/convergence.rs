@@ -66,7 +66,31 @@ pub fn converge_with(
     provider: Arc<dyn ModelProvider>,
     secret: Option<&str>,
 ) -> CommandResult {
-    let options = crate::RunOptions::default();
+    converge_with_options(
+        path,
+        feature,
+        state,
+        provider,
+        secret,
+        &crate::RunOptions::default(),
+    )
+}
+
+/// [`converge_with`] with explicit options: `in_place` assesses in the
+/// person's checkout on `speccoder/<feature>` (`converge --in-place`).
+pub fn converge_with_options(
+    path: &Path,
+    feature: Option<&str>,
+    state: &Path,
+    provider: Arc<dyn ModelProvider>,
+    secret: Option<&str>,
+    options: &crate::RunOptions,
+) -> CommandResult {
+    if options.in_place && options.session.is_none() {
+        return crate::pipeline::in_session("converge", path, feature, state, options, |o| {
+            converge_with_options(path, feature, state, Arc::clone(&provider), secret, o)
+        });
+    }
     let before = match crate::hosting::run_hooks(
         "before_converge",
         "",
@@ -74,12 +98,12 @@ pub fn converge_with(
         state,
         &provider,
         secret,
-        &options,
+        options,
     ) {
         Ok(lines) => lines,
         Err(stop) => return CommandResult::new("converge", stop.status(), stop.message()),
     };
-    let result = assess(path, feature, state, Arc::clone(&provider), secret);
+    let result = assess(path, feature, state, Arc::clone(&provider), secret, options);
     let Some(CommandData::Converge(report)) = result.data() else {
         return result;
     };
@@ -94,7 +118,7 @@ pub fn converge_with(
             state,
             &provider,
             secret,
-            &options,
+            options,
         ) {
             Ok(lines) => report.hooks.extend(lines),
             Err(stop) => {
@@ -114,6 +138,7 @@ fn assess(
     state: &Path,
     provider: Arc<dyn ModelProvider>,
     secret: Option<&str>,
+    options: &crate::RunOptions,
 ) -> CommandResult {
     let refuse = |status: CommandStatus, m: String| {
         CommandResult::new("converge", status, &redact(&m, secret))
@@ -131,7 +156,7 @@ fn assess(
     let feature_name = f.feature.name.clone();
 
     // The worktree, where the feature's progress lives.
-    let wt = crate::worktree_with(path, Some(&feature_name), state);
+    let wt = crate::pipeline::workspace(path, Some(&feature_name), state, options);
     let Some(CommandData::Worktree(w)) = wt.data() else {
         return CommandResult::new("converge", wt.status(), wt.message());
     };
@@ -144,7 +169,9 @@ fn assess(
     };
     let wt_root = PathBuf::from(&wt_path);
     let project = PathBuf::from(&project_dir);
-    if let Err(r) = worktree::require_clean(&wt_root) {
+    if options.session.is_none()
+        && let Err(r) = worktree::require_clean(&wt_root)
+    {
         return refuse(
             CommandStatus::GitPrecondition,
             format!(
@@ -274,10 +301,20 @@ fn assess(
         Ok((r, _)) => r,
         Err(e) => return refuse(CommandStatus::ConfigError, e),
     };
-    let server = match tools::WorkspaceTools::new(
-        &wt_root,
-        tools::policy::Policy::new(&[], &[]).rules(format.rules()),
-    ) {
+    let policy = tools::policy::Policy::new(&[], &[]).rules(format.rules());
+    // In place: the checkout as the session found it, and the model's view
+    // of it confined as for an attempt.
+    let (policy, runner) = match options.session.as_ref().and_then(|s| s.lock().ok()) {
+        Some(s) => {
+            if let Err(e) = s.check(&policy) {
+                return e.result("converge");
+            }
+            let (policy, runner, _) = s.confine(policy, runner);
+            (policy, runner)
+        }
+        None => (policy, runner),
+    };
+    let server = match tools::WorkspaceTools::new(&wt_root, policy) {
         Ok(t) => Arc::new(t.with_runner(runner)),
         Err(e) => return refuse(CommandStatus::Error, e.to_string()),
     };
@@ -395,6 +432,7 @@ fn assess(
     }
 
     let items: Vec<String> = actionable.iter().map(task_line).collect();
+    let tasks_before = std::fs::read(&tasks_path).unwrap_or_default();
     let ids = match format.append(&tasks_path, &tasks_hash, &items) {
         Ok(ids) => ids,
         Err(e) => {
@@ -415,7 +453,22 @@ fn assess(
         report.run_id.clone().unwrap_or_default(),
         crate::attempts::usage_trailer(report.usage.as_ref())
     );
-    match crate::commit_attempt(&wt_root, &message) {
+    let committed = match options.session.as_ref().and_then(|s| s.lock().ok()) {
+        None => crate::commit_attempt(&wt_root, &message),
+        Some(mut s) => {
+            let policy = tools::policy::Policy::new(&[], &[]).rules(format.rules());
+            let digest =
+                crate::in_place::intent_digest(&project, &policy, format.messages().tasks_file);
+            s.commit_round(
+                &plane_dir_of(state, &project),
+                &tasks_path,
+                &tasks_before,
+                &message,
+                &digest,
+            )
+        }
+    };
+    match committed {
         Ok(id) => report.commit = Some(id),
         Err(e) => {
             report.outcome = "failed".to_owned();
@@ -435,6 +488,11 @@ fn assess(
             "appended {range} as Phase: Convergence (round {round}); run the feature again{for_person}"
         ),
     )
+}
+
+/// The state directory of the project at `project`.
+fn plane_dir_of(state: &Path, project: &Path) -> PathBuf {
+    worktree::project_state_dir(state, project)
 }
 
 #[cfg(test)]

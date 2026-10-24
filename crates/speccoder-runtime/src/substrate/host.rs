@@ -10,7 +10,6 @@ use agentplane::prelude::*;
 use serde_json::{Value, json};
 
 use super::attempt::{Asker, LoopSpec, ask_person, tool_loop};
-use crate::approvals::Approver;
 use crate::tools::policy::Policy;
 
 /// The capability the skill provides.
@@ -56,7 +55,9 @@ pub fn input(skill: &str, instruction: &str, root: &str, limits: (u32, u32), ask
     json!({
         "skill": skill,
         "instruction": instruction,
-        "settings": { "max_turns": limits.0, "max_tool_calls": limits.1, "ask": ask, "root": root },
+        // With a person there, a question waits on a task they answer
+        // inline; without one the skill writes [NEEDS CLARIFICATION].
+        "settings": { "max_turns": limits.0, "max_tool_calls": limits.1, "asks": if ask { "tasks" } else { "stop" }, "root": root },
     })
 }
 
@@ -65,8 +66,6 @@ pub fn input(skill: &str, instruction: &str, root: &str, limits: (u32, u32), ask
 pub struct Host {
     /// Prompt dialect.
     pub style: super::model_config::PromptStyle,
-    /// Who answers questions and approvals inline, if anyone.
-    pub approver: Option<std::sync::Arc<dyn Approver>>,
     /// Where live progress goes.
     pub progress: Option<std::sync::Arc<dyn crate::progress::Progress>>,
     /// The project's spec format.
@@ -124,12 +123,12 @@ impl Skill for Host {
         );
         let mut tools = crate::tools::declarations();
         tools.push(ask_person());
-        let ask = (settings["ask"] == true).then(|| Asker {
-            task: format!("skill/{skill}"),
-            task_title: skill.clone(),
-            approver: self.approver.clone(),
-            context: self.present.clone(),
-        });
+        let ask = Asker::from_settings(
+            &settings,
+            format!("skill/{skill}"),
+            skill.clone(),
+            self.present.clone(),
+        );
         tool_loop(
             cx,
             &prompt,

@@ -23,7 +23,7 @@ use agentplane::core::{ProtectedField, SourceId};
 use agentplane::manifest::{Budgets, Manifest, ModelRef, Models, ToolGrant};
 use agentplane::model::ModelProvider;
 use agentplane::prelude::*;
-use agentplane::runtime::{Agent, RunOutcome};
+use agentplane::runtime::{Agent, RunOutcome, RunTerms};
 use serde_json::Value;
 
 use self::model_config::ModelConfig;
@@ -31,9 +31,6 @@ use self::propose::{CAPABILITY, Propose};
 
 /// The journal file inside a project's state directory.
 pub const JOURNAL: &str = "journal.redb";
-
-/// How long a run's lease lasts without renewal.
-const LEASE: std::time::Duration = std::time::Duration::from_secs(4);
 
 /// A failure to open or use the plane.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -94,6 +91,8 @@ pub fn manifest_with(
                 author,
                 SourceId::new(provenance::VERIFIER),
                 SourceId::new(provenance::WORKTREE),
+                // What a person answered may shape what the model writes.
+                SourceId::new(provenance::PERSON),
             ];
             sources.extend(catalog.iter().map(|t| provenance::tool(t.server, t.name)));
             sources.extend(mcp.iter().map(|t| provenance::tool(&t.server, &t.tool)));
@@ -140,8 +139,6 @@ pub fn manifest_with(
 /// replay gets neither.
 #[derive(Debug, Clone, Default)]
 pub struct Hooks {
-    /// Asks a person inline.
-    pub approver: Option<Arc<dyn crate::approvals::Approver>>,
     /// Receives live progress.
     pub progress: Option<Arc<dyn crate::progress::Progress>>,
     /// Running MCP servers by name.
@@ -255,14 +252,12 @@ fn builder(
         .skill(attempt::Attempt {
             style: model.prompt_style(),
             cache_ttl: model.cache_ttl,
-            approver: hooks.approver.clone(),
             progress: hooks.progress.clone(),
             format,
             present: hooks.present.clone(),
         })
         .skill(host::Host {
             style: model.prompt_style(),
-            approver: hooks.approver,
             progress: hooks.progress,
             format,
             present: hooks.present,
@@ -282,10 +277,9 @@ fn builder(
             cache_ttl: model.cache_ttl,
             format,
         });
-    // One process owns the journal (redb locks it): a lease left by an
-    // earlier process is a dead owner's, and a short one lets the next run
-    // resume its attempt promptly.
-    let builder = Runtime::builder_on(store).agent(agent).lease_ttl(LEASE);
+    // One process owns the journal (redb locks it): opening it frees the
+    // leases a dead process left, so the next run resumes at once.
+    let builder = Runtime::builder_on(store).agent(agent);
     Ok((builder, manifest))
 }
 
@@ -352,6 +346,162 @@ impl Plane {
         })
     }
 
+    /// The journal with no skills and no model: enough to record a person's
+    /// decision on a waiting call (`speccoder approve`), which the attempt's
+    /// own run picks up when it resumes (agentplane's `Delivery::Buffered`).
+    pub fn open_for_decisions(dir: &Path) -> Result<Self, PlaneError> {
+        let (store, replaced_journal) = open_or_replace(dir)?;
+        let runtime = Runtime::builder_on(store)
+            .try_build()
+            .map_err(|e| PlaneError(format!("building the plane: {e}")))?;
+        Ok(Self {
+            runtime,
+            replaced_journal,
+        })
+    }
+
+    /// Settles every waiting call whose deadline has passed at `now`: the
+    /// call is denied as expired, nobody's decision. Only on a plane without
+    /// skills ([`Plane::open_for_decisions`]) — the attempt resumes in its own
+    /// run, with its own worktree, the next time it runs.
+    pub async fn expire_due(&self, now: agentplane::core::Timestamp) -> Result<(), PlaneError> {
+        self.runtime
+            .sweep(now, std::time::Duration::from_secs(7 * 86_400))
+            .await
+            .map(|_| ())
+            .map_err(|e| PlaneError(e.to_string()))
+    }
+
+    /// Withdraws a waiting call whose attempt was set aside: its run is
+    /// cancelled on the record (who, why) and the call leaves the queue.
+    pub async fn withdraw(
+        &self,
+        task: &agentplane::core::Task,
+        by: &agentplane::core::Operator,
+        reason: &str,
+    ) -> Result<(), PlaneError> {
+        let err = |e: String| PlaneError(e);
+        let _ = self
+            .runtime
+            .request_cancel(task.run, by, reason)
+            .await
+            .map_err(|e| err(e.to_string()))?;
+        if let Some(tasks) = self.runtime.tasks() {
+            tasks
+                .withdraw_run(task.run, &[task.id])
+                .await
+                .map_err(|e| err(e.to_string()))?;
+        }
+        Ok(())
+    }
+
+    /// The person's task a suspended run waits on, if it waits on one.
+    pub async fn waiting_on(
+        &self,
+        outcome: &RunOutcome,
+    ) -> Result<Option<agentplane::core::Task>, PlaneError> {
+        let RunStatus::Suspended(agentplane::core::SuspendReason::AwaitingEvent {
+            correlation,
+            ..
+        }) = &outcome.status
+        else {
+            return Ok(None);
+        };
+        let Some(id) = correlation
+            .iter()
+            .find(|k| k.namespace == "task")
+            .and_then(|k| agentplane::core::TaskId::parse(&k.value).ok())
+        else {
+            return Ok(None);
+        };
+        self.task(id).await
+    }
+
+    /// One task row.
+    pub async fn task(
+        &self,
+        id: agentplane::core::TaskId,
+    ) -> Result<Option<agentplane::core::Task>, PlaneError> {
+        let Some(tasks) = self.runtime.tasks() else {
+            return Ok(None);
+        };
+        tasks.task(id).await.map_err(|e| PlaneError(e.to_string()))
+    }
+
+    /// Every task waiting for a person, oldest first.
+    pub async fn open_tasks(&self) -> Result<Vec<agentplane::core::Task>, PlaneError> {
+        let Some(tasks) = self.runtime.tasks() else {
+            return Ok(Vec::new());
+        };
+        let mut open = tasks
+            .queue(&[], 1000)
+            .await
+            .map_err(|e| PlaneError(e.to_string()))?;
+        open.sort_by_key(|t| t.created_at);
+        Ok(open)
+    }
+
+    /// Records a person's decision on `task`: the run continues at once
+    /// when this plane holds its skill, else when it next resumes.
+    pub async fn decide(
+        &self,
+        task: agentplane::core::TaskId,
+        decision: &agentplane::core::Decision,
+    ) -> Result<agentplane::core::Delivery, PlaneError> {
+        self.runtime
+            .decide_task(task, decision, &[])
+            .await
+            .map_err(|e| PlaneError(e.to_string()))
+    }
+
+    /// Asks `approver` about each call the run waits on, records the
+    /// decision and lets the run continue, until it no longer waits on a
+    /// person. Returns the run as it rests and the call still waiting, if
+    /// the person answered "later" or nobody is there.
+    pub async fn decide_inline(
+        &self,
+        mut outcome: RunOutcome,
+        approver: Option<&dyn crate::approvals::Approver>,
+        context: &crate::approvals::PresentContext,
+    ) -> Result<(RunOutcome, Option<agentplane::core::Task>), PlaneError> {
+        while let Some(task) = self.waiting_on(&outcome).await? {
+            let Some(decision) =
+                approver.and_then(|a| crate::approvals::tasks::ask(a, &task, context))
+            else {
+                return Ok((outcome, Some(task)));
+            };
+            self.decide(task.id, &decision).await?;
+            match self.outcome(outcome.run_id).await? {
+                Some(o) => outcome = o,
+                None => break,
+            }
+        }
+        Ok((outcome, None))
+    }
+
+    /// The run as it rests now, its output included: the journal records
+    /// what happened, not a step's value, so the value is re-derived by
+    /// strict replay, which performs nothing.
+    pub async fn outcome(
+        &self,
+        run: agentplane::core::RunId,
+    ) -> Result<Option<RunOutcome>, PlaneError> {
+        if self
+            .runtime
+            .recorded_outcome(run)
+            .await
+            .map_err(|e| PlaneError(e.to_string()))?
+            .is_none()
+        {
+            return Ok(None);
+        }
+        self.runtime
+            .replay(run, agentplane::runtime::Mode::Strict)
+            .await
+            .map(Some)
+            .map_err(|e| PlaneError(e.to_string()))
+    }
+
     /// A plane over `store` instead of the journal file: a crash point's
     /// prefix of a recorded run, resumed in a test.
     #[doc(hidden)]
@@ -386,12 +536,12 @@ impl Plane {
         input: Tainted<Value>,
     ) -> Result<RunOutcome, PlaneError> {
         self.runtime
-            .run_correlated(
-                converge::CAPABILITY,
-                input,
+            .start(converge::CAPABILITY, input)
+            .terms(RunTerms::default().correlated(
                 "feature",
                 &[CorrelationKey::new("feature", feature.to_owned())],
-            )
+            ))
+            .run()
             .await
             .map_err(|e| PlaneError(e.to_string()))
     }
@@ -399,12 +549,12 @@ impl Plane {
     /// Runs `speccoder.skill.run` for an installed skill.
     pub async fn skill(&self, name: &str, input: Tainted<Value>) -> Result<RunOutcome, PlaneError> {
         self.runtime
-            .run_correlated(
-                host::CAPABILITY,
-                input,
-                "skill",
-                &[CorrelationKey::new("skill", name.to_owned())],
+            .start(host::CAPABILITY, input)
+            .terms(
+                RunTerms::default()
+                    .correlated("skill", &[CorrelationKey::new("skill", name.to_owned())]),
             )
+            .run()
             .await
             .map_err(|e| PlaneError(e.to_string()))
     }
@@ -417,12 +567,12 @@ impl Plane {
         input: Tainted<Value>,
     ) -> Result<RunOutcome, PlaneError> {
         self.runtime
-            .run_correlated(
-                monitor::CAPABILITY,
-                input,
+            .start(monitor::CAPABILITY, input)
+            .terms(RunTerms::default().correlated(
                 "task",
                 &[CorrelationKey::new("task", format!("{feature}/{task}"))],
-            )
+            ))
+            .run()
             .await
             .map_err(|e| PlaneError(e.to_string()))
     }
@@ -435,12 +585,12 @@ impl Plane {
         input: Tainted<Value>,
     ) -> Result<RunOutcome, PlaneError> {
         self.runtime
-            .run_correlated(
-                acceptance::CAPABILITY,
-                input,
+            .start(acceptance::CAPABILITY, input)
+            .terms(RunTerms::default().correlated(
                 "task",
                 &[CorrelationKey::new("task", format!("{feature}/{task}"))],
-            )
+            ))
+            .run()
             .await
             .map_err(|e| PlaneError(e.to_string()))
     }
@@ -453,21 +603,23 @@ impl Plane {
         input: Tainted<Value>,
     ) -> Result<RunOutcome, PlaneError> {
         self.runtime
-            .run_correlated(
-                attempt::CAPABILITY,
-                input,
+            .start(attempt::CAPABILITY, input)
+            .terms(RunTerms::default().correlated(
                 "task",
                 &[CorrelationKey::new("task", format!("{feature}/{task}"))],
-            )
+            ))
+            .run()
             .await
             .map_err(|e| PlaneError(e.to_string()))
     }
 
-    /// [`attempt`](Self::attempt) admitted under `key`: the first
-    /// time it runs; after a crash the same key finds the interrupted run and
-    /// resumes it from its journal — finished model and tool calls are read
-    /// back, not repeated — and a run that had finished is read back whole.
-    /// The `bool` says whether this was a resume.
+    /// [`attempt`](Self::attempt) admitted under `key`: the first time it
+    /// runs; after a crash the same key finds the interrupted run — a run
+    /// that had rested is re-derived by strict replay, which performs
+    /// nothing, and one still in flight is resumed from its journal (a dead
+    /// process's lease is freed when the store opens), so finished model and
+    /// tool calls are read back, not repeated. The `bool` says whether this
+    /// was such a resume: what the run's notice may claim.
     pub async fn attempt_keyed(
         &self,
         feature: &str,
@@ -476,39 +628,42 @@ impl Plane {
         key: &str,
     ) -> Result<(RunOutcome, bool), PlaneError> {
         use agentplane::runtime::{Admission, Mode};
+        let err = |e: agentplane::RuntimeError| PlaneError(e.to_string());
         let admitted = self
             .runtime
-            .run_correlated_once(
-                attempt::CAPABILITY,
-                input,
+            .start(attempt::CAPABILITY, input)
+            .terms(RunTerms::default().correlated(
                 "task",
                 &[CorrelationKey::new("task", format!("{feature}/{task}"))],
-                key,
-            )
+            ))
+            .once(key)
+            .run()
             .await
-            .map_err(|e| PlaneError(e.to_string()))?;
+            .map_err(err)?;
         match admitted {
             Admission::Fresh(o) => Ok((o, false)),
+            // A run waiting for a person resumes: a decision recorded since
+            // is delivered and the attempt continues; one still undecided
+            // waits again. Any other rested run is re-derived, performing
+            // nothing.
+            Admission::Replayed(o) if matches!(o.status, RunStatus::Suspended(_)) => self
+                .runtime
+                .replay(o.run_id, Mode::Resume)
+                .await
+                .map(|o| (o, true))
+                .map_err(err),
             Admission::Replayed(o) => self
                 .runtime
                 .replay(o.run_id, Mode::Strict)
                 .await
                 .map(|o| (o, true))
-                .map_err(|e| PlaneError(e.to_string())),
-            Admission::InFlight(run) => {
-                // The dead owner's lease lapses within `LEASE`.
-                let mut waited = std::time::Duration::ZERO;
-                loop {
-                    match self.runtime.replay(run, Mode::Resume).await {
-                        Ok(o) => return Ok((o, true)),
-                        Err(agentplane::RuntimeError::LeaseHeld { .. }) if waited < LEASE * 3 => {
-                            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-                            waited += std::time::Duration::from_millis(500);
-                        }
-                        Err(e) => return Err(PlaneError(e.to_string())),
-                    }
-                }
-            }
+                .map_err(err),
+            Admission::InFlight(run) => self
+                .runtime
+                .replay(run, Mode::Resume)
+                .await
+                .map(|o| (o, true))
+                .map_err(err),
         }
     }
 
@@ -520,12 +675,12 @@ impl Plane {
         input: Tainted<Value>,
     ) -> Result<RunOutcome, PlaneError> {
         self.runtime
-            .run_correlated(
-                CAPABILITY,
-                input,
+            .start(CAPABILITY, input)
+            .terms(RunTerms::default().correlated(
                 "task",
                 &[CorrelationKey::new("task", format!("{feature}/{task}"))],
-            )
+            ))
+            .run()
             .await
             .map_err(|e| PlaneError(e.to_string()))
     }
@@ -594,6 +749,31 @@ pub async fn replay_strict(
         .await
         .map(Some)
         .map_err(|e| PlaneError(e.to_string()))
+}
+
+/// The effects speccoder recorded a person's answer with before F-072.
+pub const EARLIER_ASKS: [&str; 2] = ["speccoder.approval.ask", "speccoder.person.answer"];
+
+/// The earlier ask effect `run` recorded, if any: such a run asked a person
+/// through a mechanism this build no longer has, so it cannot be
+/// re-derived and replay says so rather than reporting a divergence.
+pub async fn earlier_ask(dir: &Path, run: &str) -> Result<Option<String>, PlaneError> {
+    let Ok(id) = agentplane::core::RunId::parse(run) else {
+        return Ok(None);
+    };
+    let store = open_store(dir)?;
+    let history = store
+        .read(id, 1)
+        .await
+        .map_err(|e| PlaneError(e.to_string()))?;
+    Ok(history.iter().find_map(|r| match &r.body.kind {
+        agentplane::journal::RecordKind::EffectStarted { descriptor, .. }
+            if EARLIER_ASKS.contains(&descriptor.kind.as_str()) =>
+        {
+            Some(descriptor.kind.clone())
+        }
+        _ => None,
+    }))
 }
 
 /// The tool servers when no worktree is bound: every call is refused.

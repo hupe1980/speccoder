@@ -308,7 +308,7 @@ mod tests {
   2. Yes, for the rest of T004: this path, any content                  (t)
   3. Yes, for this run: this path, any content, in any task             (r)
   4. No, and tell the model why …                                       (n)
-  5. Stop this task here (save the attempt, decide later)               (s)
+  5. Stop this task here (it waits; decide later)                       (s)
 "
         );
     }

@@ -17,6 +17,8 @@ struct Raw {
     price_input_per_mtok: Option<f64>,
     price_output_per_mtok: Option<f64>,
     price_cache_read_per_mtok: Option<f64>,
+    price_cache_write_per_mtok: Option<f64>,
+    price_cache_write_1h_per_mtok: Option<f64>,
     base_url: Option<String>,
     api_key_env: Option<String>,
     structured: Option<String>,
@@ -156,12 +158,51 @@ pub struct ModelConfig {
 /// USD per million tokens.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Prices {
-    /// Input tokens not read from the cache.
+    /// Input tokens neither written to nor read from the cache.
     pub input: f64,
     /// Output tokens.
     pub output: f64,
     /// Input tokens read from the cache.
     pub cache_read: f64,
+    /// Input tokens written to the five-minute cache.
+    pub cache_write: f64,
+    /// Input tokens written to the one-hour cache.
+    pub cache_write_1h: f64,
+    /// Whether this model's cache writes go to the one-hour tier
+    /// (`cache_ttl = "1h"`).
+    pub one_hour: bool,
+}
+
+impl Prices {
+    /// USD for these token counts (`input` counts every input token, cached
+    /// ones included), priced by agentplane's [`Pricing`]: rounded up to a
+    /// micro-dollar, cache writes at their own rate.
+    ///
+    /// [`Pricing`]: agentplane::model::Pricing
+    #[must_use]
+    pub fn usd(&self, input: u64, output: u64, cache_read: u64, cache_write: u64) -> f64 {
+        // Rates in micro-dollars per million tokens: integers, as agentplane prices.
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let micro = |usd: f64| (usd * 1_000_000.0).round().max(0.0) as u64;
+        let pricing = agentplane::model::Pricing {
+            input: micro(self.input),
+            output: micro(self.output),
+            cache_read: micro(self.cache_read),
+            cache_write: micro(self.cache_write),
+            cache_write_1h: micro(self.cache_write_1h),
+        };
+        let usage = agentplane::model::Usage {
+            input_tokens: input,
+            output_tokens: output,
+            cache_read_tokens: cache_read,
+            cache_write_tokens: cache_write,
+            cache_write_1h_tokens: if self.one_hour { cache_write } else { 0 },
+            ..agentplane::model::Usage::default()
+        };
+        #[allow(clippy::cast_precision_loss)] // micro-dollars far below 2^52
+        let usd = pricing.price(&usage) as f64 / 1_000_000.0;
+        usd
+    }
 }
 
 /// Reads `[model]` from the configuration text; `None` when absent.
@@ -203,6 +244,7 @@ pub fn parse(text: &str) -> Result<Option<ModelConfig>, String> {
     if raw.model.trim().is_empty() {
         return Err("[model]: `model` is empty".to_owned());
     }
+    let anthropic = raw.provider == "anthropic";
     Ok(Some(ModelConfig {
         provider: raw.provider,
         model: raw.model,
@@ -211,11 +253,25 @@ pub fn parse(text: &str) -> Result<Option<ModelConfig>, String> {
         cache_ttl: raw.cache_ttl.unwrap_or(CacheTtl::FiveMinutes),
         // Prices are the user's to state (they change, and differ by
         // contract); without input and output prices, cost is tokens only.
+        // Unstated cache-write rates follow the provider's published rule:
+        // Anthropic bills 1.25× input for the five-minute cache and 2× for
+        // the hour; OpenAI and compatible servers bill writes as input.
         prices: match (raw.price_input_per_mtok, raw.price_output_per_mtok) {
             (Some(input), Some(output)) => Some(Prices {
                 input,
                 output,
                 cache_read: raw.price_cache_read_per_mtok.unwrap_or(input),
+                cache_write: raw.price_cache_write_per_mtok.unwrap_or(if anthropic {
+                    input * 1.25
+                } else {
+                    input
+                }),
+                cache_write_1h: raw.price_cache_write_1h_per_mtok.unwrap_or(if anthropic {
+                    input * 2.0
+                } else {
+                    input
+                }),
+                one_hour: raw.cache_ttl == Some(CacheTtl::OneHour),
             }),
             _ => None,
         },
@@ -228,6 +284,27 @@ pub fn parse(text: &str) -> Result<Option<ModelConfig>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cache_writes_are_priced_at_their_own_rate() {
+        let m = |extra: &str| {
+            parse(&format!("[model]\nprovider = \"anthropic\"\nmodel = \"m\"\nprice_input_per_mtok = 3.0\nprice_output_per_mtok = 15.0\nprice_cache_read_per_mtok = 0.3\n{extra}"))
+                .unwrap()
+                .unwrap()
+                .prices
+                .unwrap()
+        };
+        // 1M written to the five-minute cache: 1.25 × $3 (input × 1.25 unless stated).
+        assert!((m("").usd(1_000_000, 0, 0, 1_000_000) - 3.75).abs() < 1e-9);
+        // The one-hour tier: 2 × $3.
+        assert!((m("cache_ttl = \"1h\"\n").usd(1_000_000, 0, 0, 1_000_000) - 6.0).abs() < 1e-9);
+        // Stated rates win; reads and fresh input as before.
+        let p = m("price_cache_write_per_mtok = 4.0\n");
+        assert!(
+            (p.usd(2_000_000, 1_000_000, 500_000, 500_000) - (3.0 + 15.0 + 0.15 + 2.0)).abs()
+                < 1e-9
+        );
+    }
 
     #[test]
     fn parses_model_with_defaults() {

@@ -80,7 +80,7 @@ pub(crate) fn status_and_message(
         (
             None,
             "blocked" | "needs_approval" | "budget_exhausted" | "denied" | "interrupted"
-            | "held_out",
+            | "held_out" | "intent_changed" | "judge_changed" | "checkout_changed" | "git_changed",
         ) => (
             CommandStatus::NeedsHuman,
             format!(
@@ -144,6 +144,7 @@ pub(crate) fn finished_event(
         input_tokens: tokens("input_tokens"),
         output_tokens: tokens("output_tokens"),
         cache_read_tokens: tokens("cache_read_tokens"),
+        cache_write_tokens: tokens("cache_write_tokens"),
         usd: None,
     }
 }

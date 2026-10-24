@@ -18,9 +18,35 @@ pub fn attach(result: CommandResult, feature: Option<&str>) -> CommandResult {
     }
 }
 
+/// The steps of a result from an in-place run, in place: `speccoder run`,
+/// `accept` and `converge` gain `--in-place` (a worktree-mode run would not
+/// see git-ignored specs, and is refused while the session holds them).
+#[must_use]
+pub fn in_place(result: CommandResult) -> CommandResult {
+    let steps = result
+        .next()
+        .iter()
+        .cloned()
+        .map(|mut s| {
+            for verb in ["run", "accept", "converge"] {
+                let head = format!("speccoder {verb}");
+                if (s.command == head || s.command.starts_with(&format!("{head} ")))
+                    && !s.command.contains("--in-place")
+                {
+                    s.command = format!("{head} --in-place{}", &s.command[head.len()..]);
+                }
+            }
+            s
+        })
+        .collect();
+    result.with_next(steps)
+}
+
 fn classify(result: &CommandResult) -> Option<Outcome> {
     let status = result.status();
     match (result.command(), status, result.data()) {
+        // An in-place refusal or stop names its own fix.
+        (_, _, Some(CommandData::InPlace(_))) => None,
         (_, _, Some(CommandData::Checklists(_))) => Some(Outcome::ChecklistsOpen),
         ("spec", CommandStatus::NeedsHuman, Some(CommandData::Archive(a)))
             if a.stage == "awaiting_confirmation" =>
@@ -113,5 +139,28 @@ mod tests {
                 .next()
                 .is_empty()
         );
+    }
+
+    #[test]
+    fn steps_after_an_in_place_run_stay_in_place() {
+        let decided = in_place(attach(
+            CommandResult::ok("approve", "approved"),
+            Some("001-x"),
+        ));
+        assert_eq!(
+            decided.next()[0].command,
+            "speccoder run --in-place --feature 001-x"
+        );
+        let refused = attach(
+            CommandResult::new("run", CommandStatus::GitPrecondition, "x").with_data(
+                CommandData::InPlace(Box::new(speccoder_core::InPlaceReport {
+                    code: "DIRTY-CHECKOUT".to_owned(),
+                    paths: Vec::new(),
+                    fix: vec!["git stash -u".to_owned()],
+                })),
+            ),
+            None,
+        );
+        assert!(refused.next().is_empty(), "the fix lines say what to do");
     }
 }

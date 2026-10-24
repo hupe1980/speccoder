@@ -111,6 +111,8 @@ pub enum Event {
         output_tokens: u64,
         /// Input tokens read from the cache.
         cache_read_tokens: u64,
+        /// Input tokens written to the cache.
+        cache_write_tokens: u64,
         /// USD, when priced.
         usd: Option<f64>,
     },
@@ -128,6 +130,8 @@ pub enum Event {
         output_tokens: u64,
         /// Input tokens read from the cache.
         cache_read_tokens: u64,
+        /// Input tokens written to the cache.
+        cache_write_tokens: u64,
         /// USD, when priced.
         usd: Option<f64>,
     },
@@ -186,16 +190,16 @@ fn now() -> u64 {
         .map_or(0, |d| d.as_secs())
 }
 
-/// USD for token counts (input includes cache reads).
+/// USD for token counts (input includes cache reads and writes).
 #[must_use]
-pub fn usd(prices: Option<Prices>, input: u64, cache_read: u64, output: u64) -> Option<f64> {
-    #[allow(clippy::cast_precision_loss)] // token counts far below 2^52
-    prices.map(|p| {
-        (input.saturating_sub(cache_read) as f64 * p.input
-            + cache_read as f64 * p.cache_read
-            + output as f64 * p.output)
-            / 1_000_000.0
-    })
+pub fn usd(
+    prices: Option<Prices>,
+    input: u64,
+    output: u64,
+    cache_read: u64,
+    cache_write: u64,
+) -> Option<f64> {
+    prices.map(|p| p.usd(input, output, cache_read, cache_write))
 }
 
 /// Keeps `live.json`, prices usage, forwards to a printer.
@@ -242,28 +246,32 @@ impl Progress for Live {
                 input_tokens,
                 output_tokens,
                 cache_read_tokens,
+                cache_write_tokens,
                 usd: price,
                 ..
             } => {
                 *price = usd(
                     self.prices,
                     *input_tokens,
-                    *cache_read_tokens,
                     *output_tokens,
+                    *cache_read_tokens,
+                    *cache_write_tokens,
                 )
             }
             Event::TaskFinished {
                 input_tokens,
                 output_tokens,
                 cache_read_tokens,
+                cache_write_tokens,
                 usd: price,
                 ..
             } => {
                 *price = usd(
                     self.prices,
                     *input_tokens,
-                    *cache_read_tokens,
                     *output_tokens,
+                    *cache_read_tokens,
+                    *cache_write_tokens,
                 )
             }
             _ => {}
@@ -386,12 +394,104 @@ pub fn alive(pid: u32) -> bool {
 /// `speccoder status [PATH]`: the project's current (or last) run, from
 /// `live.json`, in the state directory `state`.
 pub fn status_with(path: &Path, state: &Path) -> CommandResult {
+    let res = status_inner(path, state);
+    let Some(CommandData::Inspect(snap)) = crate::inspect(path, None).data().cloned() else {
+        return res;
+    };
+    let plane_dir = crate::worktree::project_state_dir(state, &PathBuf::from(&snap.root));
+    let lines = waiting_lines(&plane_dir);
+    if lines.is_empty() {
+        return res;
+    }
+    let mut next = res.next().to_vec();
+    next.insert(
+        0,
+        speccoder_core::next::NextStep {
+            command: "speccoder approvals".to_owned(),
+            why: "see the waiting calls, then approve or reject them".to_owned(),
+        },
+    );
+    let message = format!("{}\n{}", res.message(), lines.join("\n"));
+    let out = CommandResult::new("status", res.status(), &message).with_next(next);
+    match res.data() {
+        Some(d) => out.with_data(d.clone()),
+        None => out,
+    }
+}
+
+/// One line per call waiting for a person: what, since when, until when.
+fn waiting_lines(plane_dir: &Path) -> Vec<String> {
+    let Ok(rt) = crate::tokio_runtime() else {
+        return Vec::new();
+    };
+    let Ok(plane) = crate::substrate::Plane::open_for_decisions(plane_dir) else {
+        return Vec::new();
+    };
+    let now = agentplane::core::Timestamp::now_utc();
+    rt.block_on(plane.open_tasks())
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|t| {
+            let request = crate::approvals::tasks::request_of(&t.justification.proposed_action)?;
+            let since = (now - t.created_at).whole_minutes().max(0);
+            let until = t
+                .due_at
+                .map(|d| {
+                    format!(
+                        ", denied as expired in {} h",
+                        (d - now).whole_hours().max(0)
+                    )
+                })
+                .unwrap_or_default();
+            Some(format!(
+                "waiting for a person: {} — {} (for {since} min{until})",
+                request.task, request.covers
+            ))
+        })
+        .collect()
+}
+
+fn status_inner(path: &Path, state: &Path) -> CommandResult {
     let inspected = crate::inspect(path, None);
     let root = match inspected.data() {
         Some(CommandData::Inspect(s)) => PathBuf::from(&s.root),
         _ => return CommandResult::new("status", inspected.status(), inspected.message()),
     };
-    let file = crate::worktree::project_state_dir(state, &root).join(FILE);
+    let plane_dir = crate::worktree::project_state_dir(state, &root);
+    // An in-place session: the mode, and for an interrupted one both ways out.
+    if let Some(s) = crate::in_place::Session::load(&plane_dir) {
+        let mode = s.mode_line();
+        if !alive(s.pid) {
+            let step = |command: &str, why: &str| speccoder_core::next::NextStep {
+                command: command.to_owned(),
+                why: why.to_owned(),
+            };
+            return CommandResult::new(
+                "status",
+                CommandStatus::Ok,
+                &format!(
+                    "interrupted in-place run of {} (pid {} is gone): the checkout is still on {}\n{mode}",
+                    s.feature, s.pid, s.branch
+                ),
+            )
+            .with_next(vec![
+                step("speccoder run --in-place", "resume where it stopped"),
+                step(
+                    "speccoder run --in-place --return",
+                    "save what it left and switch back without running",
+                ),
+            ]);
+        }
+        let res = status_live(&plane_dir);
+        let message = format!("{}\n{mode}", res.message());
+        return CommandResult::new("status", res.status(), &message).with_next(res.next().to_vec());
+    }
+    status_live(&plane_dir)
+}
+
+/// `status` from `live.json`.
+fn status_live(plane_dir: &Path) -> CommandResult {
+    let file = plane_dir.join(FILE);
     let live: LiveState = match std::fs::read_to_string(&file)
         .ok()
         .and_then(|t| serde_json::from_str(&t).ok())

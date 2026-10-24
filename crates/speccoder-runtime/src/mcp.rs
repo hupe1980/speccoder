@@ -14,7 +14,6 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use agentplane::tools::rmcp;
-use agentplane::tools::rmcp::service::{ClientLifecycleMode, ClientServiceExt as _};
 use agentplane::tools::{Destination, McpClient, ToolClient};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -171,22 +170,14 @@ async fn connect_one(
     }
     let transport = rmcp::transport::TokioChildProcess::new(command)
         .map_err(|e| format!("cannot start `{}`: {e}", s.command.join(" ")))?;
-    let service = tokio::time::timeout(
+    // agentplane runs the lifecycle (discover first, legacy fallback).
+    let client = tokio::time::timeout(
         STARTUP,
-        McpClient::host_info().serve_with_lifecycle(
-            transport,
-            ClientLifecycleMode::Auto {
-                preferred_versions: vec![agentplane::tools::MCP_REVISION],
-                legacy_version: Some(McpClient::LEGACY_REVISION),
-            },
-        ),
+        McpClient::connect(s.name.clone(), transport, Destination::Local),
     )
     .await
     .map_err(|_| "it did not initialise within 30 s".to_owned())?
     .map_err(|e| format!("it did not initialise: {e}"))?;
-    let service = Arc::new(service);
-    let client = McpClient::new(s.name.clone(), Arc::clone(&service), Destination::Local)
-        .map_err(|e| e.to_string())?;
     // Each tool's description, schema and a digest over all of it.
     let listed = tokio::time::timeout(STARTUP, client.discover())
         .await
@@ -204,11 +195,11 @@ async fn connect_one(
             ));
             continue;
         };
-        // The server's schema, its objects closed (that only narrows what
-        // the model may send); optional properties are not made nullable,
-        // which would change what the server is sent. One that is still
-        // not strict-ready is sent non-strict.
-        let schema = crate::tools::close_objects(t.input_schema.clone());
+        // The server's schema narrowed by agentplane: objects closed, nulls
+        // and bounds untouched, composed schemas left as written (closing
+        // those can admit more). One still not strict-ready is sent
+        // non-strict.
+        let schema = agentplane::tools::closed_schema(&t.input_schema);
         if let Some(problem) = agentplane::model::strict_schema_problem(&schema) {
             notices.push(format!(
                 "MCP tool `{}/{tool}` is sent without strict decoding: {problem}",

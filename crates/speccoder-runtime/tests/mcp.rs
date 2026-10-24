@@ -171,6 +171,7 @@ impl Approver for Yes {
             Some(speccoder_runtime::approvals::Who {
                 name: "dana".to_owned(),
                 via: "terminal".to_owned(),
+                basis: "asserted".to_owned(),
             }),
         )
     }
@@ -211,8 +212,10 @@ fn mcp_tools_are_offered_allowed_or_approved_and_replay_strictly() {
     assert_eq!(rep.tool_calls[0]["decision"], "allow");
     assert_eq!(rep.tool_calls[1]["decision"], "allow");
     assert_eq!(rep.tool_calls[1]["approved_by"], "person");
-    // who decided, in the report and in the approvals record.
-    assert_eq!(rep.tool_calls[1]["approver"]["name"], "dana");
+    // Who decided, in the report and in the approvals record: named as the
+    // project's git names them (the approver reports only its channel).
+    let name = speccoder_runtime::approvals::who_in(r.path());
+    assert_eq!(rep.tool_calls[1]["approver"]["name"], name.as_str());
     let plane = speccoder_runtime::worktree::project_state_dir(state.path(), r.path());
     let decisions = speccoder_runtime::approvals::Decisions::load(&plane).unwrap();
     let decided = &decisions.tasks["001-graph/T005"].decided;
@@ -223,7 +226,7 @@ fn mcp_tools_are_offered_allowed_or_approved_and_replay_strictly() {
             decided[0].by.name.as_str(),
             decided[0].scope.as_str()
         ),
-        ("approve", "dana", "once")
+        ("approve", name.as_str(), "once")
     );
     // The write the server made in the worktree is in the diff and the commit.
     assert!(

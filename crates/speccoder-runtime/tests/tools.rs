@@ -220,13 +220,19 @@ fn edit_file_reads_a_null_replace_all_as_one_occurrence() {
 
 #[test]
 fn closing_a_foreign_schema_only_narrows_it() {
-    use speccoder_runtime::tools::close_objects;
+    // What MCP servers' schemas go through (agentplane's pass, AP-19).
+    let close_objects = |v: serde_json::Value| agentplane::tools::closed_schema(&v);
     let required_only = close_objects(
         json!({"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}),
     );
     assert_eq!(required_only["additionalProperties"], false);
     assert!(agentplane::model::strict_schema_problem(&required_only).is_none());
-    let empty = close_objects(json!({"type": "object"}));
+    // No `properties`: free-form, so it stays open (closing it would refuse
+    // every argument the server takes).
+    let free = json!({"type": "object"});
+    assert_eq!(close_objects(free.clone()), free);
+    // Closed and argument-less: strict-ready.
+    let empty = close_objects(json!({"type": "object", "additionalProperties": false}));
     assert_eq!(
         (empty["properties"].clone(), empty["required"].clone()),
         (json!({}), json!([]))
@@ -237,6 +243,9 @@ fn closing_a_foreign_schema_only_narrows_it() {
         close_objects(json!({"type": "object", "properties": {"limit": {"type": "integer"}}}));
     assert!(optional["properties"]["limit"]["type"] == "integer");
     assert!(agentplane::model::strict_schema_problem(&optional).is_some());
+    // Composed: closing the root would refuse what a branch adds — left as is.
+    let composed = json!({"type": "object", "allOf": [{"properties": {"a": {"type": "string"}}}]});
+    assert_eq!(close_objects(composed.clone()), composed);
 }
 
 #[test]

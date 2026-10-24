@@ -190,3 +190,39 @@ fn applications_cannot_be_opened() {
     let (ok, _) = sh(&s, w.root.path(), "/usr/bin/open -g -j -a Calculator");
     assert!(!ok, "opened an application outside the sandbox");
 }
+
+#[test]
+fn in_place_git_is_read_only_and_ignored_secrets_unreadable() {
+    let w = world();
+    let Some(mut s) = sandboxed(w.root.path(), w.home.path(), Network::Loopback) else {
+        return;
+    };
+    let root = w.root.path();
+    fs::create_dir_all(root.join(".git")).unwrap();
+    fs::write(root.join(".git/config"), "[core]\n").unwrap();
+    fs::create_dir_all(root.join("src")).unwrap();
+    fs::write(root.join(".env"), "API_KEY=secret").unwrap();
+    s.profile = s.profile.carve(&[root.join(".git")], &[root.join(".env")]);
+
+    let (ok, out) = sh(&s, root, "echo '[evil]' >> .git/config");
+    assert!(!ok, "wrote .git/config: {out}");
+    let (ok, _) = sh(&s, root, "echo x > .git/hooks-pre-commit");
+    assert!(
+        !ok && !root.join(".git/hooks-pre-commit").exists(),
+        "created a file in .git"
+    );
+    assert_eq!(
+        fs::read_to_string(root.join(".git/config")).unwrap(),
+        "[core]\n"
+    );
+    let (ok, out) = sh(&s, root, "cat .git/config");
+    assert!(
+        ok && out.contains("[core]"),
+        "git still reads its repository: {out}"
+    );
+    // Refused (macOS) or read as empty (Linux masks it with /dev/null).
+    let (_, out) = sh(&s, root, "cat .env");
+    assert!(!out.contains("secret"), "read the ignored secret: {out}");
+    let (ok, out) = sh(&s, root, "echo 'pub fn x() {}' > src/x.rs && cat src/x.rs");
+    assert!(ok, "the code stays writable: {out}");
+}

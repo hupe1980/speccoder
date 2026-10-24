@@ -66,12 +66,29 @@ ticks a task only on evidence the model cannot produce or edit.
   run broke) stops the task for a person instead of letting it be ticked on
   the regression checks alone; `eval` stops the suite at the first refusal
   that concerns the account (no credits, quota, a rejected key).
+- `speccoder run --in-place`: for specs you keep out of git. Works in your
+  clean checkout on `speccoder/<feature>` and switches back to your branch
+  when the run ends. Evidence is committed before the tick; an ignored
+  `tasks.md` is ticked locally and the commit says so (`Tick: local`,
+  `Task-Line:`, `Intent-Digest:`, `Mode: in-place`), and `report` checks the
+  local ticks against those commits. A change to the spec, the judge's inputs
+  or the checkout during the run stops it; git commands that would move the
+  checkout are denied, files git ignores are invisible to the model's tools,
+  and the sandbox keeps `.git` read-only and ignored secrets unreadable;
+  `--parallel` is refused. A killed in-place run resumes from the journal and
+  ticks what it had committed; `run --in-place --return` leaves it instead,
+  and `status` and the TUI show the mode. `accept --in-place` and
+  `converge --in-place` work the same way.
 - `speccoder converge`: a finished feature assessed against its spec; gaps
   become new tasks, run with `run --converge`.
 - `[executor] kind = "claude" | "codex" | "command"`: Claude Code, Codex or
   your own agent makes the attempts under the same judge.
 - Providers: Anthropic, OpenAI, and any OpenAI-compatible server (Ollama,
   vLLM, llama.cpp, LM Studio, …); keys from the environment only.
+- Cost (`speccoder cost`, live progress) is priced by agentplane's
+  `Pricing`: tokens written to the cache at their own rate
+  (`price_cache_write_per_mtok`, `price_cache_write_1h_per_mtok`; by default
+  Anthropic's 1.25× and 2× input), no longer as plain input.
 
 **Safety**
 
@@ -82,9 +99,23 @@ ticks a task only on evidence the model cannot produce or edit.
   seccomp on Linux — writes only to the worktree, no credentials, no network
   beyond loopback unless a person allows it.
 - MCP servers (`[mcp.<name>]`) run per task, their tools governed like
-  speccoder's own.
+  speccoder's own; agentplane connects them (discover first, legacy
+  fallback) and narrows their schemas without widening what a server is
+  sent — a schema composed with `oneOf`/`allOf`/`not` is offered as written.
 
 **People in the loop**
+
+- Every decision is a record in the run's journal (agentplane human tasks):
+  who made it — git's `user.name`, the same name `Accepted-By` uses — how
+  that is known (`asserted` at a terminal or the CLI, `connected` from an
+  editor), when, and bound to the call shown; an approval of anything else is
+  refused. A person's answer enters the run labelled as theirs, not as
+  speccoder's own. Calls a rule decides name the rule.
+- A call that needs a person **waits** instead of discarding the attempt:
+  `approve`/`reject` (no model needed; `--call`, `--all`, `--scope`) record
+  the decision, and the next `run` continues the same attempt from that call
+  — nothing finished is repeated. Waits end at `[approvals] wait` (default
+  7 days) as an expiry, never as anyone's decision. `status` lists what waits.
 
 - Approvals inline at the terminal, in editors over ACP (`speccoder acp`),
   in the dashboard (`speccoder tui`), or later (`speccoder approvals`,
@@ -104,9 +135,9 @@ ticks a task only on evidence the model cannot produce or edit.
 
 **Durable and replayable**
 
-- Every model and tool call is journaled (agentplane 0.51): a killed run
-  resumes without repeating finished calls, tested by killing a recorded
-  attempt at each of its crash points;
+- Every model and tool call is journaled (agentplane 0.52): a killed run
+  resumes at once and without repeating finished calls, tested by killing a
+  recorded attempt at each of its crash points;
   `speccoder replay` re-derives a recorded run offline. Failed attempts are
   kept under `refs/speccoder/attempts/…`.
 

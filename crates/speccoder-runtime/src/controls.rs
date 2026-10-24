@@ -27,13 +27,9 @@ fn one_line(text: &str) -> String {
     text.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-/// The person, as git knows them.
+/// The person, named as every approval names them: `<name> (asserted)`.
 fn person(root: &Path) -> String {
-    Git::at(root)
-        .line(&["config", "user.name"])
-        .ok()
-        .filter(|n| !n.is_empty())
-        .unwrap_or_else(|| "a person".to_owned())
+    format!("{} (asserted)", crate::approvals::who_in(root))
 }
 
 fn done(command: &str, report: ControlReport, message: &str) -> CommandResult {
@@ -89,8 +85,38 @@ pub fn accept_with(
     reason: &str,
     state: &Path,
 ) -> CommandResult {
+    accept_in(path, feature, task, reason, state, false)
+}
+
+/// [`accept_with`], in the person's checkout when `in_place` (`accept
+/// --in-place`): committed with the in-place trailers, then ticked.
+pub fn accept_in(
+    path: &Path,
+    feature: Option<&str>,
+    task: &str,
+    reason: &str,
+    state: &Path,
+    in_place: bool,
+) -> CommandResult {
+    let options = crate::RunOptions {
+        in_place,
+        ..crate::RunOptions::default()
+    };
+    crate::pipeline::in_session("accept", path, feature, state, &options, |o| {
+        accept_task(path, feature, task, reason, state, o)
+    })
+}
+
+fn accept_task(
+    path: &Path,
+    feature: Option<&str>,
+    task: &str,
+    reason: &str,
+    state: &Path,
+    options: &crate::RunOptions,
+) -> CommandResult {
     let refuse = |status, m: String| CommandResult::new("accept", status, &m);
-    let wt = crate::worktree_with(path, feature, state);
+    let wt = crate::pipeline::workspace(path, feature, state, options);
     let Some(CommandData::Worktree(w)) = wt.data() else {
         return CommandResult::new("accept", wt.status(), wt.message());
     };
@@ -101,7 +127,7 @@ pub fn accept_with(
         return refuse(CommandStatus::Error, "worktree without a path".to_owned());
     };
     let wt_root = PathBuf::from(&wt_path);
-    if crate::worktree::require_clean(&wt_root).is_err() {
+    if options.session.is_none() && crate::worktree::require_clean(&wt_root).is_err() {
         return refuse(
             CommandStatus::GitPrecondition,
             format!(
@@ -135,16 +161,46 @@ pub fn accept_with(
             format!("{task} is already done"),
         );
     }
-    if let Err(e) = format.tick(&project.join(&tasks.path), task, &t.line_hash) {
-        return refuse(CommandStatus::Error, e);
-    }
     let reason = one_line(reason);
     let by = person(&project);
     let message = format!(
         "speccoder: {task} accepted by {by}\n\n{}\n\n{reason}\n\nSpec-Task: {}/{task}\nVerdict: attested\nAccepted-By: {by}\nReason: {reason}\n",
         t.title, w.feature
     );
-    match crate::commit_attempt(&wt_root, &message) {
+    let file = project.join(&tasks.path);
+    let committed = match &options.session {
+        None => format.tick(&file, task, &t.line_hash).and_then(|()| {
+            crate::commit_attempt(&wt_root, &message).map_err(|e| format!("commit failed: {e}"))
+        }),
+        // In place: the checkout and the intent as the session found them.
+        Some(session) => {
+            let policy = crate::tools::policy::Policy::new(&[], &[]).rules(format.rules());
+            let Ok(mut s) = session.lock() else {
+                return refuse(
+                    CommandStatus::Error,
+                    "the in-place session is unavailable".to_owned(),
+                );
+            };
+            if let Err(e) = s.check(&policy) {
+                return e.result("accept");
+            }
+            let digest =
+                crate::in_place::intent_digest(&project, &policy, format.messages().tasks_file);
+            let done = s.commit_and_tick(
+                &plane_dir_of(state, &project),
+                &file,
+                &t.line_hash,
+                &message,
+                &digest,
+                || format.tick(&file, task, &t.line_hash),
+            );
+            match (done.commit, done.ticked) {
+                (Some(c), true) => Ok(c),
+                _ => Err(done.problems.join("; ")),
+            }
+        }
+    };
+    match committed {
         Ok(commit) => done(
             "accept",
             ControlReport {
@@ -156,8 +212,13 @@ pub fn accept_with(
             },
             &format!("{task} ticked as attested by {by} (not verified); `report` shows it as such"),
         ),
-        Err(e) => refuse(CommandStatus::Error, format!("commit failed: {e}")),
+        Err(e) => refuse(CommandStatus::Error, e),
     }
+}
+
+/// The state directory of the project at `project`.
+fn plane_dir_of(state: &Path, project: &Path) -> PathBuf {
+    crate::worktree::project_state_dir(state, project)
 }
 
 // ── skip ───────────────────────────────────────────────────────────────────
@@ -314,15 +375,13 @@ fn add(total: &mut Usage, u: &serde_json::Value) {
 /// Prices `u` from `[model]`, unless its cost was reported (an external
 /// agent's own figure, which the configured prices do not describe).
 fn price(u: &mut Usage, prices: Option<crate::substrate::model_config::Prices>) {
-    #[allow(clippy::cast_precision_loss)] // token counts far below 2^52
     if let Some(p) = prices.filter(|_| u.usd.is_none()) {
-        let fresh = u.input_tokens.saturating_sub(u.cache_read_tokens) as f64;
-        u.usd = Some(
-            (fresh * p.input
-                + u.cache_read_tokens as f64 * p.cache_read
-                + u.output_tokens as f64 * p.output)
-                / 1_000_000.0,
-        );
+        u.usd = Some(p.usd(
+            u.input_tokens,
+            u.output_tokens,
+            u.cache_read_tokens,
+            u.cache_write_tokens,
+        ));
     }
 }
 
@@ -439,6 +498,9 @@ mod tests {
                 input: 1.0,
                 output: 4.0,
                 cache_read: 0.1,
+                cache_write: 1.25,
+                cache_write_1h: 2.0,
+                one_hour: false,
             }),
         );
         // 0.4M fresh × $1 + 0.6M cached × $0.1 + 0.1M out × $4

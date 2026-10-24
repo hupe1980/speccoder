@@ -236,6 +236,7 @@ mod tests {
             input_tokens: 12_345,
             output_tokens: 678,
             cache_read_tokens: 0,
+            cache_write_tokens: 0,
             usd: Some(0.0123),
         };
         assert_eq!(
@@ -249,6 +250,7 @@ mod tests {
                     input_tokens: 1,
                     output_tokens: 1,
                     cache_read_tokens: 0,
+                    cache_write_tokens: 0,
                     usd: None
                 },
                 None

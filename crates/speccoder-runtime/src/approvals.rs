@@ -38,22 +38,45 @@ pub struct TaskDecisions {
     pub decided: Vec<Decided>,
 }
 
-/// Who decided, and through what.
+/// Who decided, through what, and how speccoder knows the name.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Who {
-    /// The person: the operating-system user, or `unknown`.
+    /// The person (see [`who`]).
     pub name: String,
     /// `terminal`, `editor <name>` or `cli`.
     pub via: String,
+    /// `asserted` (typed at a local terminal or the CLI) or `connected`
+    /// (reported by a client over its connection). speccoder authenticates
+    /// nobody, so never `authenticated`.
+    #[serde(default = "asserted")]
+    pub basis: String,
+}
+
+fn asserted() -> String {
+    "asserted".to_owned()
 }
 
 impl Who {
-    /// The local person, deciding through `via`.
+    /// The local person, deciding through `via`: over an editor's
+    /// connection the name is the connection's (`connected`), otherwise
+    /// the person's own (`asserted`).
     #[must_use]
     pub fn local(via: &str) -> Self {
+        Self::local_in(Path::new("."), via)
+    }
+
+    /// [`Who::local`], named as git names the person in `dir` (the project).
+    #[must_use]
+    pub fn local_in(dir: &Path, via: &str) -> Self {
         Self {
-            name: who(),
+            name: who_in(dir),
             via: via.to_owned(),
+            basis: if via.starts_with("editor") {
+                "connected"
+            } else {
+                "asserted"
+            }
+            .to_owned(),
         }
     }
 
@@ -62,15 +85,43 @@ impl Who {
     pub fn describe(&self) -> String {
         format!("{} ({})", self.name, self.via)
     }
+
+    /// agentplane's operator: the name and its basis.
+    #[must_use]
+    pub fn operator(&self) -> Option<agentplane::core::Operator> {
+        agentplane::core::Operator::from_parts(&self.name, &self.basis).ok()
+    }
+
+    /// The operator as reports show it.
+    #[must_use]
+    pub fn view(&self) -> speccoder_core::OperatorView {
+        speccoder_core::OperatorView {
+            actor: self.name.clone(),
+            basis: self.basis.clone(),
+        }
+    }
 }
 
-/// The local person's name — the operating-system user; `unknown` when
-/// there is none, never a guess.
+/// The local person's name, the same for every decision and attestation:
+/// git's `user.name` (what their commits say), else the operating-system
+/// user, else `unknown` — never a guess.
 #[must_use]
 pub fn who() -> String {
-    ["USER", "USERNAME", "LOGNAME"]
-        .iter()
-        .find_map(|k| std::env::var(k).ok().filter(|v| !v.trim().is_empty()))
+    who_in(Path::new("."))
+}
+
+/// [`who`], reading git's configuration as it applies in `dir`.
+#[must_use]
+pub fn who_in(dir: &Path) -> String {
+    crate::git::Git::at(dir)
+        .line(&["config", "user.name"])
+        .ok()
+        .filter(|n| !n.trim().is_empty())
+        .or_else(|| {
+            ["USER", "USERNAME", "LOGNAME"]
+                .iter()
+                .find_map(|k| std::env::var(k).ok().filter(|v| !v.trim().is_empty()))
+        })
         .unwrap_or_else(|| "unknown".to_owned())
 }
 
@@ -203,6 +254,7 @@ impl Decisions {
 // ── Inline approvals ────────────────────────────────────────────────
 
 pub mod present;
+pub mod tasks;
 
 pub use present::{PresentContext, Presentation, present};
 
@@ -347,6 +399,11 @@ pub trait Approver: Send + Sync + std::fmt::Debug {
         let _ = question;
         None
     }
+
+    /// Through what the person answers: `terminal`, or `editor <name>`.
+    fn via(&self) -> String {
+        "terminal".to_owned()
+    }
 }
 
 /// The kind of call, from the call alone (it is part of the journaled
@@ -479,6 +536,9 @@ fn pending(
                 reason: p["reason"].as_str().unwrap_or_default().to_owned(),
                 reference: saved.reference.clone(),
                 presentation: Some(presentation),
+                source: "attempt".to_owned(),
+                kind: "approval".to_owned(),
+                ..PendingCall::default()
             },
             grant,
         ));
@@ -525,12 +585,23 @@ fn view(
                 .map(|b| String::from_utf8_lossy(&b).into_owned())
         })
         .flatten();
+    presented(root, &request, task, file_text)
+}
+
+/// `request` as the inline prompt shows it, with the project's sandbox
+/// and `file_text` (the file as the call would find it) for a write.
+fn presented(
+    root: &Path,
+    request: &Request,
+    task: &str,
+    file_text: Option<String>,
+) -> speccoder_core::ApprovalView {
     let config = crate::verify::find_config(root)
         .and_then(|d| std::fs::read_to_string(d.join(crate::verify::config::FILE)).ok())
         .unwrap_or_default();
     let sandbox = crate::sandbox::parse(&config).ok();
     let p = present(
-        &request,
+        request,
         &PresentContext {
             root: None,
             sandbox: sandbox
@@ -580,6 +651,9 @@ fn decided(feature: &str, decisions: &Decisions) -> Vec<DecidedCall> {
             by: last(g).map(|x| x.by.describe()),
             scope: Some("task".to_owned()),
             note: last(g).and_then(|x| x.note.clone()),
+            operator: last(g).map(|x| x.by.view()),
+            via: last(g).map(|x| x.by.via.clone()),
+            ..DecidedCall::default()
         }));
         out.extend(d.rejected.iter().map(|r| DecidedCall {
             task: task.to_owned(),
@@ -589,6 +663,9 @@ fn decided(feature: &str, decisions: &Decisions) -> Vec<DecidedCall> {
             by: last(&r.grant).map(|x| x.by.describe()),
             scope: Some("task".to_owned()),
             note: None,
+            operator: last(&r.grant).map(|x| x.by.view()),
+            via: last(&r.grant).map(|x| x.by.via.clone()),
+            ..DecidedCall::default()
         }));
         // "For this run" decisions live in the history only.
         out.extend(
@@ -603,10 +680,125 @@ fn decided(feature: &str, decisions: &Decisions) -> Vec<DecidedCall> {
                     by: Some(x.by.describe()),
                     scope: Some("run".to_owned()),
                     note: x.note.clone(),
+                    operator: Some(x.by.view()),
+                    via: Some(x.by.via.clone()),
+                    ..DecidedCall::default()
                 }),
         );
     }
     out
+}
+
+/// Calls of `feature` waiting for a person on a human task (F-072), oldest
+/// first: the attempt is suspended and resumes once they are decided.
+fn waiting_tasks(
+    root: &Path,
+    dir: &Path,
+    feature: &str,
+) -> Vec<(PendingCall, agentplane::core::Task)> {
+    let Ok(rt) = crate::tokio_runtime() else {
+        return Vec::new();
+    };
+    let Ok(plane) = crate::substrate::Plane::open_for_decisions(dir) else {
+        return Vec::new();
+    };
+    // A call past its deadline is denied as expired before it is listed.
+    let _ = rt.block_on(plane.expire_due(agentplane::core::Timestamp::now_utc()));
+    let open = rt.block_on(plane.open_tasks()).unwrap_or_default();
+    let prefix = format!("{feature}/");
+    open.into_iter()
+        .filter(|t| t.kind == tasks::APPROVAL)
+        .filter_map(|t| {
+            let request = tasks::request_of(&t.justification.proposed_action)?;
+            let task = request.task.strip_prefix(&prefix)?.to_owned();
+            let view = presented(root, &request, &task, None);
+            Some((
+                PendingCall {
+                    task,
+                    covers: request.covers.clone(),
+                    tool: request.tool.clone(),
+                    arguments: request.arguments.clone(),
+                    reason: request.reason.clone(),
+                    reference: String::new(),
+                    presentation: Some(view),
+                    call: t.id.to_hex(),
+                    source: "task".to_owned(),
+                    kind: tasks::APPROVAL.to_owned(),
+                    question: None,
+                    waiting_since: Some(t.created_at.unix_timestamp().max(0).unsigned_abs()),
+                    deadline: t.due_at.map(|d| d.unix_timestamp().max(0).unsigned_abs()),
+                },
+                t,
+            ))
+        })
+        .collect()
+}
+
+/// Denies, as expired, every call in the journal at `dir` whose deadline
+/// passed at `now` (nobody's decision); their attempts read the refusal
+/// when they next resume.
+pub fn expire_due(dir: &Path, now: agentplane::core::Timestamp) -> Result<(), String> {
+    let rt = crate::tokio_runtime()?;
+    let plane = crate::substrate::Plane::open_for_decisions(dir).map_err(|e| e.0)?;
+    rt.block_on(plane.expire_due(now)).map_err(|e| e.0)
+}
+
+/// Another task of `feature` whose attempt waits for a person, with what
+/// it waits on: its attempt holds the feature's worktree until it is
+/// decided and resumed.
+#[must_use]
+pub fn waiting_elsewhere(
+    root: &Path,
+    dir: &Path,
+    feature: &str,
+    task: &str,
+) -> Option<(String, String)> {
+    waiting_tasks(root, dir, feature)
+        .into_iter()
+        .map(|(c, _)| c)
+        .find(|c| c.task != task && c.source == "task")
+        .map(|c| (c.task, c.covers))
+}
+
+/// Withdraws every call of `feature` waiting on a person: their attempts
+/// were set aside (`--return`, changed intent), so nothing resumes them.
+pub fn withdraw_waiting(
+    root: &Path,
+    dir: &Path,
+    feature: &str,
+    reason: &str,
+) -> Result<usize, String> {
+    let rows = waiting_tasks(root, dir, feature);
+    if rows.is_empty() {
+        return Ok(0);
+    }
+    let rt = crate::tokio_runtime()?;
+    let plane = crate::substrate::Plane::open_for_decisions(dir).map_err(|e| e.0)?;
+    let by = Who::local_in(root, "cli")
+        .operator()
+        .ok_or_else(|| "no name to record the withdrawal under".to_owned())?;
+    for (_, task) in &rows {
+        rt.block_on(plane.withdraw(task, &by, reason))
+            .map_err(|e| e.0)?;
+    }
+    Ok(rows.len())
+}
+
+/// Records `answer` on the waiting call `task` through a plane without the
+/// attempt's skill: the run continues when it next resumes.
+fn decide_waiting(
+    dir: &Path,
+    task: &agentplane::core::Task,
+    answer: &Answer,
+    by: &Who,
+) -> Result<(), String> {
+    let rt = crate::tokio_runtime()?;
+    let plane = crate::substrate::Plane::open_for_decisions(dir).map_err(|e| e.0)?;
+    let decision = tasks::decision_for(answer, by, None)
+        .ok_or_else(|| format!("`{}` is not a name a decision can carry", by.name))?;
+    rt.block_on(plane.decide(task.id, &decision))
+        .map(|_| ())
+        .map_err(|e| e.0)
 }
 
 /// What to do with a pending call.
@@ -620,6 +812,57 @@ pub enum Verb<'a> {
     ApproveNoted(&'a str, &'a str),
     /// Reject the task's pending call, with a reason.
     Reject(&'a str, &'a str),
+    /// Decide waiting calls as `speccoder approve|reject` options say.
+    Decide(Choice<'a>),
+}
+
+/// Which waiting calls to decide, and how (`approve`/`reject` options).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Choice<'a> {
+    /// The task's calls (`--task`); all of the feature's with `--all` alone.
+    pub task: Option<&'a str>,
+    /// One call by its id or a prefix of it (`--call`).
+    pub call: Option<&'a str>,
+    /// Every matching call (`--all`), each decided and recorded on its own.
+    pub all: bool,
+    /// Approve, or reject.
+    pub approve: bool,
+    /// How far an approval reaches (`--scope`, default `task`).
+    pub scope: Scope,
+    /// An approval's note to the model.
+    pub note: Option<&'a str>,
+    /// A rejection's reason, which the model is told.
+    pub reason: Option<&'a str>,
+}
+
+impl<'a> Choice<'a> {
+    /// Approve the task's waiting call (for the task), with an optional note.
+    #[must_use]
+    pub fn approve(task: &'a str, note: Option<&'a str>) -> Self {
+        Self {
+            task: Some(task),
+            call: None,
+            all: false,
+            approve: true,
+            scope: Scope::Task,
+            note,
+            reason: None,
+        }
+    }
+
+    /// Reject the task's waiting call; the model is told `reason`.
+    #[must_use]
+    pub fn reject(task: &'a str, reason: &'a str) -> Self {
+        Self {
+            task: Some(task),
+            call: None,
+            all: false,
+            approve: false,
+            scope: Scope::Task,
+            note: None,
+            reason: Some(reason),
+        }
+    }
 }
 
 /// `approvals`, `approve --task` and `reject --task --reason` against `state`.
@@ -633,6 +876,8 @@ pub fn decide_with(
         Verb::List => "approvals",
         Verb::Approve(_) | Verb::ApproveNoted(..) => "approve",
         Verb::Reject(..) => "reject",
+        Verb::Decide(c) if c.approve => "approve",
+        Verb::Decide(_) => "reject",
     };
     let (feature, dir, root) = match locate(command, path, feature, state) {
         Ok(x) => x,
@@ -653,14 +898,132 @@ pub fn decide_with(
             .collect(),
         _ => Vec::new(),
     };
+    let tasks_waiting = waiting_tasks(&root, &dir, &feature);
     let waiting = pending(&root, &feature, &open, &decisions);
 
+    // A call waiting on a task is decided there: who, how known, bound to
+    // what was shown. Its attempt continues on the next run.
+    let choice = match verb {
+        Verb::List => None,
+        Verb::Approve(t) => Some(Choice::approve(t, None)),
+        Verb::ApproveNoted(t, n) => Some(Choice::approve(t, Some(n))),
+        Verb::Reject(t, r) => Some(Choice::reject(t, r)),
+        Verb::Decide(c) => Some(c),
+    };
+    if let Some(c) = choice {
+        let matching: Vec<&(PendingCall, agentplane::core::Task)> = tasks_waiting
+            .iter()
+            .filter(|(p, _)| c.task.is_none_or(|t| p.task == t))
+            .filter(|(p, _)| {
+                c.call
+                    .is_none_or(|id| !id.is_empty() && p.call.starts_with(id))
+            })
+            .collect();
+        if matching.len() > 1 && !c.all {
+            let list: Vec<String> = matching
+                .iter()
+                .map(|(p, _)| {
+                    format!(
+                        "{} ({}, {})",
+                        &p.call[..12.min(p.call.len())],
+                        p.task,
+                        p.covers
+                    )
+                })
+                .collect();
+            return CommandResult::new(
+                command,
+                CommandStatus::UsageError,
+                &format!(
+                    "{} calls are waiting; name one with --call, or decide them all with --all: {}",
+                    matching.len(),
+                    list.join(", ")
+                ),
+            );
+        }
+        if !matching.is_empty() {
+            let by = Who::local_in(&root, "cli");
+            let mut lines = Vec::new();
+            for (call, row) in &matching {
+                let answer = if c.approve {
+                    Answer::approve(c.scope, c.note.map(str::to_owned), Some(by.clone()))
+                } else {
+                    Answer::reject(c.reason.unwrap_or("no reason given"), Some(by.clone()))
+                };
+                if let Err(e) = decide_waiting(&dir, row, &answer, &by) {
+                    return CommandResult::new(command, CommandStatus::Error, &e);
+                }
+                lines.push(if c.approve {
+                    format!(
+                        "approved: {} for {} ({}) — by {} ({})",
+                        call.covers,
+                        call.task,
+                        c.scope.name(),
+                        by.name,
+                        by.basis
+                    )
+                } else {
+                    format!(
+                        "rejected: {} for {} — by {} ({}); the model will be told: {}",
+                        call.covers,
+                        call.task,
+                        by.name,
+                        by.basis,
+                        c.reason.unwrap_or("no reason given")
+                    )
+                });
+            }
+            let report = ApprovalsReport {
+                decided: decided(&feature, &decisions),
+                pending: waiting_tasks(&root, &dir, &feature)
+                    .into_iter()
+                    .map(|(c, _)| c)
+                    .chain(
+                        pending(&root, &feature, &open, &decisions)
+                            .into_iter()
+                            .map(|(c, _)| c),
+                    )
+                    .collect(),
+                feature,
+            };
+            return CommandResult::new(
+                command,
+                CommandStatus::Ok,
+                &format!(
+                    "{}; `speccoder run` continues each attempt where it stopped",
+                    lines.join("\n")
+                ),
+            )
+            .with_data(CommandData::Approvals(Box::new(report)));
+        }
+        if c.all || c.call.is_some() || c.task.is_none() {
+            return CommandResult::new(
+                command,
+                CommandStatus::NotFound,
+                "no call matching that awaits a decision (see `speccoder approvals`)",
+            );
+        }
+    }
+    // Before F-072, and in lanes, a stopped attempt was saved with its call:
+    // deciding it records a grant the task's next attempt starts with.
+    let verb = match verb {
+        Verb::Decide(c) => match (c.task, c.approve, c.note) {
+            (Some(t), true, Some(n)) => Verb::ApproveNoted(t, n),
+            (Some(t), true, None) => Verb::Approve(t),
+            (Some(t), false, _) => Verb::Reject(t, c.reason.unwrap_or("no reason given")),
+            (None, ..) => Verb::List,
+        },
+        v => v,
+    };
+
     let message = match verb {
-        Verb::List => {
-            if waiting.is_empty() {
+        // Mapped onto the verbs above before this point.
+        Verb::List | Verb::Decide(_) => {
+            let n = waiting.len() + tasks_waiting.len();
+            if n == 0 {
                 "nothing awaits a decision".to_owned()
             } else {
-                format!("{} call(s) await a decision", waiting.len())
+                format!("{n} call(s) await a decision")
             }
         }
         Verb::Approve(task) | Verb::ApproveNoted(task, _) | Verb::Reject(task, _) => {
@@ -673,14 +1036,20 @@ pub fn decide_with(
             };
             let what = match verb {
                 Verb::Reject(_, reason) => {
-                    decisions.reject(&feature, task, grant.clone(), reason, &Who::local("cli"));
+                    decisions.reject(
+                        &feature,
+                        task,
+                        grant.clone(),
+                        reason,
+                        &Who::local_in(&root, "cli"),
+                    );
                     format!(
                         "rejected: {} for {task} — the model will be told: {reason}",
                         call.covers
                     )
                 }
                 _ => {
-                    decisions.approve(&feature, task, grant.clone(), &Who::local("cli"));
+                    decisions.approve(&feature, task, grant.clone(), &Who::local_in(&root, "cli"));
                     if let Verb::ApproveNoted(_, note) = verb
                         && !note.trim().is_empty()
                     {
@@ -709,9 +1078,14 @@ pub fn decide_with(
     };
     let report = ApprovalsReport {
         decided: decided(&feature, &decisions),
-        pending: pending(&root, &feature, &open, &decisions)
+        pending: tasks_waiting
             .into_iter()
             .map(|(c, _)| c)
+            .chain(
+                pending(&root, &feature, &open, &decisions)
+                    .into_iter()
+                    .map(|(c, _)| c),
+            )
             .collect(),
         feature,
     };

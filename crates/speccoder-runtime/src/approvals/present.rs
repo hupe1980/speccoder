@@ -316,7 +316,7 @@ pub fn present(request: &Request, context: &PresentContext) -> Presentation {
                 "stop" => (
                     's',
                     5,
-                    "Stop this task here (save the attempt, decide later)".to_owned(),
+                    "Stop this task here (it waits; decide later)".to_owned(),
                 ),
                 _ => return None,
             };

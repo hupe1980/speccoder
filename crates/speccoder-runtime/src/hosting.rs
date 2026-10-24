@@ -184,16 +184,25 @@ pub fn run_with(
             Arc::clone(&provider),
             Some(server),
             substrate::Hooks {
-                approver: options.approver.clone(),
                 progress: Some(Arc::clone(&live)),
                 format: Some(s.format),
                 ..substrate::Hooks::default()
             },
         )?;
         // The installed skill and the person's arguments: trusted.
-        plane
+        let outcome = plane
             .skill(&skill.name, agentplane::core::Tainted::trusted(input))
+            .await?;
+        // Questions and calls are decided inline, recorded with who
+        // answered; "later" ends the skill (a hosted run is not resumed).
+        let context = crate::approvals::PresentContext {
+            root: Some(canonical.clone()),
+            ..crate::approvals::PresentContext::default()
+        };
+        plane
+            .decide_inline(outcome, options.approver.as_deref(), &context)
             .await
+            .map(|(o, _)| o)
     });
     let outcome = match outcome {
         Ok(o) => o,
@@ -298,6 +307,7 @@ pub fn run_with(
         input_tokens: tokens("input_tokens"),
         output_tokens: tokens("output_tokens"),
         cache_read_tokens: tokens("cache_read_tokens"),
+        cache_write_tokens: tokens("cache_write_tokens"),
         usd: None,
     });
     let mut report = report;

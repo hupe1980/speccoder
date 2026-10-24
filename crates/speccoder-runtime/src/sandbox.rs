@@ -161,6 +161,9 @@ pub struct Profile {
     pub writable: Vec<PathBuf>,
     /// Unreadable trees.
     pub hidden: Vec<PathBuf>,
+    /// Trees inside the writable ones that stay read-only (in place: the
+    /// checkout's `.git`).
+    pub read_only: Vec<PathBuf>,
     /// The network.
     pub network: Network,
     /// The private temporary directory (`TMPDIR`), writable.
@@ -214,9 +217,20 @@ impl Profile {
         Self {
             writable,
             hidden,
+            read_only: Vec::new(),
             network: config.network,
             tmp,
         }
+    }
+
+    /// The same profile with `read_only` trees carved out of the writable
+    /// ones, and `hidden` added to the unreadable ones.
+    #[must_use]
+    pub fn carve(mut self, read_only: &[PathBuf], hidden: &[PathBuf]) -> Self {
+        self.read_only
+            .extend(read_only.iter().map(|p| canonical(p)));
+        self.hidden.extend(hidden.iter().map(|p| canonical(p)));
+        self
     }
 
     /// The same profile with another network.
@@ -302,6 +316,13 @@ pub fn seatbelt(p: &Profile) -> String {
     out.push_str(
         " (literal \"/dev/null\") (literal \"/dev/zero\") (literal \"/dev/tty\") (literal \"/dev/dtracehelper\") (regex #\"^/dev/fd/\") (regex #\"^/dev/ttys\"))\n",
     );
+    if !p.read_only.is_empty() {
+        out.push_str("(deny file-write*");
+        for r in &p.read_only {
+            out.push_str(&format!(" (subpath {})", quote(r)));
+        }
+        out.push_str(")\n");
+    }
     if !p.hidden.is_empty() {
         out.push_str("(deny file-read* file-write*");
         for h in &p.hidden {
@@ -484,6 +505,32 @@ pub fn runner_at(root: &Path) -> Result<(Runner, Option<String>), String> {
     runner(root, &config)
 }
 
+impl Runner {
+    /// In place: `read_only` and `hidden` carved out of the profile, and
+    /// what the person must know when this machine cannot. A plain runner
+    /// confines nothing, so there is nothing to carve.
+    #[must_use]
+    pub fn carve(self, read_only: &[PathBuf], hidden: &[PathBuf]) -> (Self, Option<String>) {
+        match self {
+            Self::Sandboxed(mut s) => {
+                // Linux carves with mounts in a user namespace, which some
+                // hosts do not allow (container seccomp, AppArmor).
+                if let Backend::Landlock(helper) = &s.backend
+                    && !mounts_supported(helper)
+                {
+                    return (
+                        Self::Sandboxed(s),
+                        Some("this machine does not allow user namespaces, so commands can write `.git` and read ignored secrets in place; the run stops if `.git` changes".to_owned()),
+                    );
+                }
+                s.profile = s.profile.carve(read_only, hidden);
+                (Self::Sandboxed(s), None)
+            }
+            Self::Plain => (Self::Plain, None),
+        }
+    }
+}
+
 /// A sandboxed or a plain runner.
 #[derive(Debug, Clone)]
 pub enum Runner {
@@ -544,6 +591,12 @@ impl CommandRunner for Runner {
 /// The helper's entry (`speccoder __sandbox <profile> -- argv…`): confines
 /// this process and executes the command; returns only on failure.
 pub fn helper_main(args: &[String]) -> String {
+    if args.first().map(String::as_str) == Some(PROBE_MOUNTS) {
+        return match probe_mounts() {
+            Ok(()) => std::process::exit(0),
+            Err(e) => e,
+        };
+    }
     let (Some(profile), Some("--")) = (args.first(), args.get(1).map(String::as_str)) else {
         return format!("usage: speccoder {HELPER_ARG} <profile> -- <argv…>");
     };
@@ -561,6 +614,33 @@ pub fn helper_main(args: &[String]) -> String {
 #[cfg(target_os = "linux")]
 fn enter(profile: &Profile, argv: &[String]) -> String {
     linux::enter(profile, argv)
+}
+
+/// The helper's argument that only checks the mount carve-outs work.
+const PROBE_MOUNTS: &str = "--probe-mounts";
+
+/// Whether the Linux helper can carve with mounts here (checked once, in a
+/// child: the namespace never touches this process).
+fn mounts_supported(helper: &Path) -> bool {
+    static CACHED: OnceLock<bool> = OnceLock::new();
+    *CACHED.get_or_init(|| {
+        std::process::Command::new(helper)
+            .args([HELPER_ARG, PROBE_MOUNTS])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .is_ok_and(|s| s.success())
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn probe_mounts() -> Result<(), String> {
+    linux::probe_mounts()
+}
+
+#[cfg(not(target_os = "linux"))]
+fn probe_mounts() -> Result<(), String> {
+    Err("mount carve-outs are for Linux".to_owned())
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -597,6 +677,118 @@ mod linux {
             .map_err(|e| format!("Landlock is not available: {e}"))
     }
 
+    /// Landlock cannot take back what a rule grants beneath it, so the
+    /// carve-outs inside a writable tree are mounts in a namespace of this
+    /// process alone: `read_only` trees bound read-only, `hidden` ones
+    /// inside a writable tree covered (a file by `/dev/null`, a directory
+    /// by an empty read-only tmpfs).
+    fn mount_carve(profile: &Profile) -> Result<(), String> {
+        use nix::mount::{MsFlags, mount};
+        let inside = |p: &PathBuf| profile.writable.iter().any(|w| p.starts_with(w));
+        let hidden: Vec<&PathBuf> = profile
+            .hidden
+            .iter()
+            .filter(|h| inside(h) && h.exists())
+            .collect();
+        if profile.read_only.is_empty() && hidden.is_empty() {
+            return Ok(());
+        }
+        private_namespace()?;
+        let none: Option<&str> = None;
+        for p in profile.read_only.iter().filter(|p| p.exists()) {
+            mount(Some(p), p, none, MsFlags::MS_BIND | MsFlags::MS_REC, none)
+                .map_err(|e| format!("bind {}: {e}", p.display()))?;
+            mount(
+                none,
+                p,
+                none,
+                MsFlags::MS_BIND | MsFlags::MS_REMOUNT | MsFlags::MS_RDONLY | locked(p),
+                none,
+            )
+            .map_err(|e| format!("read-only {}: {e}", p.display()))?;
+        }
+        for h in hidden {
+            if h.is_dir() {
+                mount(
+                    Some("tmpfs"),
+                    h,
+                    Some("tmpfs"),
+                    MsFlags::MS_RDONLY | MsFlags::MS_NOSUID | MsFlags::MS_NODEV,
+                    Some("size=4k"),
+                )
+            } else {
+                mount(Some("/dev/null"), h, none, MsFlags::MS_BIND, none)
+            }
+            .map_err(|e| format!("hide {}: {e}", h.display()))?;
+        }
+        Ok(())
+    }
+
+    /// A user and mount namespace for this process, mapped to its own ids,
+    /// with no mount propagating out.
+    fn private_namespace() -> Result<(), String> {
+        use nix::mount::{MsFlags, mount};
+        use nix::sched::{CloneFlags, unshare};
+        let (uid, gid) = (nix::unistd::getuid(), nix::unistd::getgid());
+        unshare(CloneFlags::CLONE_NEWUSER | CloneFlags::CLONE_NEWNS)
+            .map_err(|e| format!("user namespace: {e}"))?;
+        let write = |file: &str, text: String| {
+            std::fs::write(file, text).map_err(|e| format!("{file}: {e}"))
+        };
+        write("/proc/self/setgroups", "deny".to_owned())?;
+        write("/proc/self/uid_map", format!("{uid} {uid} 1"))?;
+        write("/proc/self/gid_map", format!("{gid} {gid} 1"))?;
+        let none: Option<&str> = None;
+        mount(none, "/", none, MsFlags::MS_REC | MsFlags::MS_PRIVATE, none)
+            .map_err(|e| format!("private mounts: {e}"))
+    }
+
+    /// The flags a bind mount inherits and may not drop in a user namespace.
+    fn locked(p: &Path) -> nix::mount::MsFlags {
+        use nix::mount::MsFlags;
+        use nix::sys::statvfs::{FsFlags, statvfs};
+        let Ok(st) = statvfs(p) else {
+            return MsFlags::empty();
+        };
+        let f = st.flags();
+        let mut out = MsFlags::empty();
+        for (fs, ms) in [
+            (FsFlags::ST_NOSUID, MsFlags::MS_NOSUID),
+            (FsFlags::ST_NODEV, MsFlags::MS_NODEV),
+            (FsFlags::ST_NOEXEC, MsFlags::MS_NOEXEC),
+            (FsFlags::ST_NOATIME, MsFlags::MS_NOATIME),
+            (FsFlags::ST_NODIRATIME, MsFlags::MS_NODIRATIME),
+            (FsFlags::ST_RELATIME, MsFlags::MS_RELATIME),
+        ] {
+            if f.contains(fs) {
+                out |= ms;
+            }
+        }
+        out
+    }
+
+    /// Whether [`mount_carve`] works here: a read-only bind of a temporary
+    /// directory in a namespace of this (probe) process.
+    pub(super) fn probe_mounts() -> Result<(), String> {
+        let dir = std::env::temp_dir().join(format!("speccoder-probe-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        let profile = Profile {
+            writable: Vec::new(),
+            hidden: Vec::new(),
+            read_only: vec![dir.clone()],
+            network: Network::On,
+            tmp: dir.clone(),
+        };
+        let carved = mount_carve(&profile);
+        let refused = carved.is_ok() && std::fs::write(dir.join("x"), "x").is_err();
+        let _ = std::fs::remove_dir_all(&dir);
+        carved.and_then(|()| {
+            refused
+                .then_some(())
+                .ok_or_else(|| "the read-only bind did not hold".to_owned())
+        })
+    }
+
     /// Readable everywhere except the hidden trees: rules for every path
     /// that contains no hidden tree, descending into those that do.
     fn readable(dir: &Path, hidden: &[PathBuf], out: &mut Vec<PathBuf>) {
@@ -615,7 +807,7 @@ mod linux {
     }
 
     pub(super) fn enter(profile: &Profile, argv: &[String]) -> String {
-        match confine(profile) {
+        match mount_carve(profile).and_then(|()| confine(profile)) {
             Ok(()) => {
                 use std::os::unix::process::CommandExt as _;
                 let e = std::process::Command::new(&argv[0]).args(&argv[1..]).exec();

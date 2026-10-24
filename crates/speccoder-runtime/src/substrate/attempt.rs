@@ -17,7 +17,7 @@ use serde_json::{Value, json};
 use super::model_config::{CacheTtl, PromptStyle};
 use super::propose::layout;
 use super::provenance;
-use crate::approvals::{Answer, Approver, Decision as Said, PresentContext, Request, Scope};
+use crate::approvals::{Answer, Decision as Said, PresentContext, Request, Scope, Who};
 use crate::tools::policy::{Decision, Policy};
 
 /// The capability the skill provides.
@@ -81,69 +81,6 @@ fn report_blocked() -> ToolDeclaration {
     )
 }
 
-/// Asking a person about one call, as a journaled effect: live, the
-/// approver asks (a terminal prompt); in replay, the recorded answer comes
-/// back and nobody is asked. The answer is the operator's: trusted.
-#[derive(Debug, Clone)]
-pub struct AskPerson {
-    /// The question; also the effect's identity.
-    pub request: Request,
-    /// Who asks; `None` in replay, where the answer comes from history.
-    pub approver: Option<std::sync::Arc<dyn Approver>>,
-    /// What only the live run knows (the file as it is, the sandbox): read
-    /// when asking, never part of the identity.
-    pub context: PresentContext,
-}
-
-#[async_trait]
-impl agentplane::core::Effect for AskPerson {
-    type Output = Answer;
-
-    fn trust(&self) -> agentplane::core::Trust {
-        agentplane::core::Trust::Trusted
-    }
-
-    fn descriptor(&self) -> agentplane::core::EffectDescriptor {
-        agentplane::core::EffectDescriptor::new(
-            "speccoder.approval.ask",
-            serde_json::to_value(&self.request).unwrap_or(Value::Null),
-        )
-    }
-
-    fn mutates(&self) -> bool {
-        false
-    }
-
-    fn recovery(&self) -> agentplane::core::Recovery {
-        // Asking again after a crash is harmless.
-        agentplane::core::Recovery::Retry
-    }
-
-    fn max_sensitivity(&self) -> Sensitivity {
-        Sensitivity::Internal
-    }
-
-    async fn perform(&self) -> Result<Answer, agentplane::core::EffectError> {
-        // A person may take minutes: wait off the runtime's thread, so the
-        // run keeps renewing its lease meanwhile (`perform` must not
-        // block).
-        match &self.approver {
-            Some(a) => {
-                let a = std::sync::Arc::clone(a);
-                let shown = crate::approvals::present(&self.request, &self.context);
-                tokio::task::spawn_blocking(move || a.ask(&shown))
-                    .await
-                    .map_err(|e| {
-                        agentplane::core::EffectError::Rejected(format!("the prompt failed: {e}"))
-                    })
-            }
-            None => Err(agentplane::core::EffectError::Rejected(
-                "no one to ask: approvals need a terminal".to_owned(),
-            )),
-        }
-    }
-}
-
 /// The question tool a hosted skill may use.
 pub const ASK_PERSON: &str = "ask_person";
 
@@ -162,71 +99,60 @@ pub fn ask_person() -> ToolDeclaration {
     )
 }
 
-/// A question to a person, as a journaled effect: live the approver asks;
-/// in replay the recorded answer returns. The answer is the operator's.
-#[derive(Debug, Clone)]
-pub struct AskQuestion {
-    /// What is asked.
-    pub question: String,
-    /// The approver; `None` in replay.
-    pub approver: Option<std::sync::Arc<dyn Approver>>,
-}
-
-#[async_trait]
-impl agentplane::core::Effect for AskQuestion {
-    type Output = Option<String>;
-
-    fn trust(&self) -> agentplane::core::Trust {
-        agentplane::core::Trust::Trusted
-    }
-
-    fn descriptor(&self) -> agentplane::core::EffectDescriptor {
-        agentplane::core::EffectDescriptor::new(
-            "speccoder.person.answer",
-            json!({ "question": self.question }),
-        )
-    }
-
-    fn mutates(&self) -> bool {
-        false
-    }
-
-    fn recovery(&self) -> agentplane::core::Recovery {
-        agentplane::core::Recovery::Retry
-    }
-
-    fn max_sensitivity(&self) -> Sensitivity {
-        Sensitivity::Internal
-    }
-
-    async fn perform(&self) -> Result<Option<String>, agentplane::core::EffectError> {
-        match &self.approver {
-            Some(a) => {
-                let (a, question) = (std::sync::Arc::clone(a), self.question.clone());
-                tokio::task::spawn_blocking(move || a.answer(&question))
-                    .await
-                    .map_err(|e| {
-                        agentplane::core::EffectError::Rejected(format!("the prompt failed: {e}"))
-                    })
-            }
-            None => Err(agentplane::core::EffectError::Rejected(
-                "no one to ask: questions need a terminal".to_owned(),
-            )),
-        }
-    }
-}
-
-/// Who an attempt asks when a call needs approval.
+/// How an attempt waits for a person when a call needs one (F-072): on an
+/// agentplane human task the person decides — inline, from an editor, or
+/// later with `speccoder approve` — while the run is suspended.
 #[derive(Debug, Clone)]
 pub struct Asker {
     /// `feature/task`, shown to the person.
     pub task: String,
     /// The task's title.
     pub task_title: String,
-    /// The approver; `None` in replay.
-    pub approver: Option<std::sync::Arc<dyn Approver>>,
     /// What the live run knows for the presentation.
     pub context: PresentContext,
+    /// How long a call waits before it is denied as expired.
+    pub wait_secs: u64,
+}
+
+impl Asker {
+    /// The asker the journaled settings describe: `asks = "tasks"` waits on
+    /// a task; anything else (`"stop"`, a lane) stops the attempt instead.
+    #[must_use]
+    pub fn from_settings(
+        settings: &Value,
+        task: String,
+        task_title: String,
+        context: PresentContext,
+    ) -> Option<Self> {
+        (settings["asks"] == "tasks").then(|| Self {
+            task,
+            task_title,
+            context,
+            wait_secs: settings["wait_secs"].as_u64().unwrap_or(7 * 86_400),
+        })
+    }
+}
+
+/// Waits for a person's decision on `spec`, registering the `approval`
+/// obligation the first time: the run suspends until someone decides or the
+/// deadline passes. Journaled — replay reads the decision back.
+async fn wait_for_person(
+    cx: &mut StepCtx<'_>,
+    asker: &Asker,
+    obligation: &mut bool,
+    spec: &agentplane::core::TaskSpec,
+) -> Result<agentplane::core::Decision, SkillError> {
+    if !*obligation {
+        let minutes = u32::try_from(asker.wait_secs.div_ceil(60).max(1)).unwrap_or(u32::MAX);
+        cx.deadline(
+            crate::approvals::tasks::DEADLINE,
+            &agentplane::core::DeadlineSpec::minutes(minutes),
+            None,
+        )
+        .await?;
+        *obligation = true;
+    }
+    Ok(cx.task(spec).await?)
 }
 
 /// The coded skill.
@@ -241,8 +167,6 @@ pub struct Attempt {
     pub style: PromptStyle,
     /// Cache breakpoint lifetime.
     pub cache_ttl: CacheTtl,
-    /// Who to ask inline, when the run's input says to ask.
-    pub approver: Option<std::sync::Arc<dyn Approver>>,
     /// Where live progress goes; not journaled, `None` in replay.
     pub progress: Option<std::sync::Arc<dyn crate::progress::Progress>>,
     /// The project's spec format.
@@ -290,7 +214,10 @@ pub fn input(bundle: Value, settings: &Settings<'_>, digest: Option<&Value>) -> 
             trusted(json!(settings.frozen_additions)),
         ),
         ("network_allow", trusted(json!(settings.network_allow))),
-        ("ask", trusted(json!(settings.ask))),
+        ("asks", trusted(json!(settings.asks))),
+        ("wait_secs", trusted(json!(settings.wait_secs))),
+        ("in_place", trusted(json!(settings.in_place))),
+        ("hidden", trusted(json!(settings.hidden))),
     ]);
     Tainted::object([
         ("bundle", Tainted::trusted(bundle)),
@@ -352,10 +279,17 @@ pub struct Settings<'a> {
     pub root: &'a str,
     /// Frozen tests may gain lines without approval (`[tests] frozen`).
     pub frozen_additions: bool,
-    /// Ask a person inline when a call needs approval.
-    pub ask: bool,
+    /// How a call needing a person is handled: `"tasks"` (the attempt waits
+    /// on a human task) or `"stop"` (it ends `needs_approval`; lanes).
+    pub asks: &'a str,
+    /// How long a call waits for a person before it is denied as expired.
+    pub wait_secs: u64,
     /// Command prefixes that get the network (`[sandbox] network_allow`).
     pub network_allow: &'a [Vec<String>],
+    /// An in-place attempt: git that moves the checkout is denied.
+    pub in_place: bool,
+    /// In place: what git ignored at the run's start, hidden from the tools.
+    pub hidden: &'a [String],
 }
 
 /// The calls consecutive denials of which end an attempt.
@@ -486,7 +420,16 @@ impl Skill for Attempt {
             .with_frozen(frozen)
             .with_decisions(approved, rejected)
             .with_mcp(mcp.iter().map(|t| (t.name.clone(), t.decision.clone())))
-            .with_network(argvs(&settings["network_allow"]));
+            .with_network(argvs(&settings["network_allow"]))
+            .with_hidden(
+                serde_json::from_value::<Vec<String>>(settings["hidden"].clone())
+                    .unwrap_or_default(),
+            );
+        let policy = if settings["in_place"] == true {
+            policy.in_place()
+        } else {
+            policy
+        };
         let max_turns = settings["max_turns"]
             .as_u64()
             .map_or(30, |n| u32::try_from(n).unwrap_or(u32::MAX))
@@ -571,18 +514,18 @@ impl Skill for Attempt {
             ToolDeclaration::new(t.name.clone(), t.description.clone(), t.schema.clone())
         }));
         // Journaled: whether this attempt asks inline decides its effects.
-        let ask = (settings["ask"] == true).then(|| Asker {
-            task: task_name.clone(),
-            task_title: input.peek()["bundle"]["task"]["title"]
+        let ask = Asker::from_settings(
+            &settings,
+            task_name.clone(),
+            input.peek()["bundle"]["task"]["title"]
                 .as_str()
                 .unwrap_or_default()
                 .to_owned(),
-            approver: self.approver.clone(),
-            context: PresentContext {
+            PresentContext {
                 root: settings["root"].as_str().map(std::path::PathBuf::from),
                 ..self.present.clone()
             },
-        });
+        );
         let remembered: Vec<crate::tools::policy::Grant> =
             serde_json::from_value(settings["run_approved"].clone()).unwrap_or_default();
         tool_loop(
@@ -753,6 +696,8 @@ pub(crate) async fn tool_loop(
     let mut conversation: Label = prompt.label().clone();
     let mut calls = 0u32;
     let mut denied_in_a_row = 0u32;
+    // Whether this attempt registered the `approval` obligation yet.
+    let mut obligation = false;
     let mut usage = [0u64; 4];
     let mut log: Vec<Value> = Vec::new();
 
@@ -801,6 +746,7 @@ pub(crate) async fn tool_loop(
                 input_tokens: usage[0],
                 output_tokens: usage[1],
                 cache_read_tokens: usage[2],
+                cache_write_tokens: usage[3],
                 usd: None,
             });
         }
@@ -844,25 +790,45 @@ pub(crate) async fn tool_loop(
                     .as_str()
                     .unwrap_or_default()
                     .to_owned();
-                // The person's answer is theirs: trusted.
-                let answer = match &ask {
-                    Some(asker) => cx
-                        .effect(AskQuestion {
-                            question,
-                            approver: asker.approver.clone(),
-                        })
-                        .await?
-                        .peek()
-                        .clone(),
+                // A person's answer is their input, recorded with who gave it
+                // — never speccoder's own trusted text.
+                let decided = match &ask {
+                    Some(asker) => Some(
+                        wait_for_person(
+                            cx,
+                            asker,
+                            &mut obligation,
+                            &crate::approvals::tasks::question_task(&asker.task, &question),
+                        )
+                        .await?,
+                    ),
                     None => None,
                 };
-                let entry = json!({ "tool": ASK_PERSON, "arguments": asked.arguments, "decision": "allow", "answered": answer.is_some() });
+                let read = decided.as_ref().map(crate::approvals::tasks::read);
+                let by = read.as_ref().and_then(|r| r.by.clone());
+                let entry = json!({
+                    "tool": ASK_PERSON,
+                    "arguments": asked.arguments,
+                    "decision": "allow",
+                    "answered": read.as_ref().is_some_and(|r| r.text.is_some()),
+                    "operator": by.as_ref().map(Who::view),
+                    "via": by.as_ref().map(|w| w.via.clone()),
+                });
                 emit(observer.as_ref(), turn + 1, &entry);
                 log.push(entry);
-                let text = answer.unwrap_or_else(|| {
-                    "Nobody can answer now. Record the question in the artifact as [NEEDS CLARIFICATION: <question>] and continue.".to_owned()
-                });
-                transcript.answered(asked, &Tainted::trusted(json!({ "answer": text })));
+                let text = match (&read, &by) {
+                    (Some(r), _) if r.text.is_some() => r.text.clone().unwrap_or_default(),
+                    (Some(_), Some(w)) => format!("{} declined to answer.", w.name),
+                    _ => "Nobody can answer now. Record the question in the artifact as [NEEDS CLARIFICATION: <question>] and continue.".to_owned(),
+                };
+                let label = match &by {
+                    Some(_) => provenance::from(provenance::PERSON),
+                    None => Label::trusted(),
+                };
+                transcript.answered(
+                    asked,
+                    &Tainted::with_label(json!({ "answer": text }), label),
+                );
                 continue;
             }
             if asked.name == REPORT_BLOCKED && tools.iter().any(|t| t.name == REPORT_BLOCKED) {
@@ -976,16 +942,18 @@ pub(crate) async fn tool_loop(
                     options: crate::approvals::options(risk, grant.is_some()),
                 };
                 needs_person(observer.as_ref(), &asked.name, &asked.arguments);
-                let answer = cx
-                    .effect(AskPerson {
-                        request,
-                        approver: asker.approver.clone(),
-                        context: asker.context.clone(),
-                    })
-                    .await?;
-                let answer: Answer = answer.peek().clone();
-                // Who answered is journaled with the answer.
+                let decided = wait_for_person(
+                    cx,
+                    asker,
+                    &mut obligation,
+                    &crate::approvals::tasks::approval_task(&request, grant.as_ref(), &log),
+                )
+                .await?;
+                let read = crate::approvals::tasks::read(&decided);
+                let answer: Answer = read.answer.clone();
+                // Who decided, and how that is known, is journaled with it.
                 let approver = serde_json::to_value(&answer.by).unwrap_or(Value::Null);
+                let operator = read.by.as_ref().map(Who::view);
                 match answer.decision {
                     Said::Approve => {
                         person = Some(json!({
@@ -993,6 +961,7 @@ pub(crate) async fn tool_loop(
                             "scope": answer.scope.name(),
                             "note": answer.note,
                             "approver": approver,
+                            "operator": operator,
                         }));
                         if let (Some(g), Scope::Task | Scope::Run) = (&grant, answer.scope) {
                             let remembered_as = if answer.scope == Scope::Run {
@@ -1005,37 +974,45 @@ pub(crate) async fn tool_loop(
                         note = answer.note;
                         decision = Decision::Allow;
                     }
-                    Said::Reject => {
+                    // "Later" is a task left undecided: the run stays
+                    // suspended and never reaches here.
+                    Said::Reject | Said::Stop => {
                         let why = answer
                             .reason
                             .unwrap_or_else(|| "no reason given".to_owned());
-                        person = Some(
-                            json!({ "rejected_by": "person", "approver": approver, "rejection": why }),
-                        );
+                        person = Some(if read.expired {
+                            json!({ "expired": true, "rejection": why })
+                        } else {
+                            json!({ "rejected_by": "person", "approver": approver, "operator": operator, "rejection": why })
+                        });
                         decision = Decision::Deny(format!("a person rejected this: {why}"));
-                    }
-                    Said::Stop => {
-                        // Exactly the unattended stop: the call waits for
-                        // `speccoder approve`.
-                        let entry = json!({ "tool": asked.name, "arguments": asked.arguments, "decision": "approval", "reason": reason, "stopped_by": "person", "approver": approver });
-                        emit(observer.as_ref(), turn + 1, &entry);
-                        log.push(entry);
-                        return end(
-                            "needs_approval",
-                            json!({ "pending": { "tool": asked.name, "arguments": asked.arguments, "reason": reason, "claim": claim, "turn": turn + 1 } }),
-                            &log,
-                            usage,
-                            &conversation,
-                        );
                     }
                 }
             }
+            // Who decided: a person (now, or by a grant they gave), or a rule
+            // — named, so a rule's decision is never read as a person's.
+            let rule = person
+                .is_none()
+                .then(|| policy.rule(&asked.name, &asked.arguments));
             let with_person = |mut entry: Value| {
-                if let (Some(o), Some(p)) = (
-                    entry.as_object_mut(),
-                    person.as_ref().and_then(Value::as_object),
-                ) {
-                    o.extend(p.clone());
+                if let Some(o) = entry.as_object_mut() {
+                    match (person.as_ref().and_then(Value::as_object), &rule) {
+                        (Some(p), _) => {
+                            // An expiry is nobody's decision.
+                            let by = if p.contains_key("expired") {
+                                "expiry"
+                            } else {
+                                "person"
+                            };
+                            o.insert("by".to_owned(), json!(by));
+                            o.extend(p.clone());
+                        }
+                        (None, Some(r)) => {
+                            o.insert("by".to_owned(), json!("rule"));
+                            o.insert("rule".to_owned(), json!(r));
+                        }
+                        (None, None) => {}
+                    }
                 }
                 entry
             };

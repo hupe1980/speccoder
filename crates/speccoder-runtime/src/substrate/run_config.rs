@@ -44,6 +44,12 @@ struct RawConverge {
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
+struct RawApprovals {
+    wait: Option<String>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct RawGit {
     commit: Option<String>,
 }
@@ -85,6 +91,9 @@ pub struct RunConfig {
     /// The formatter speccoder runs after each attempt, before verifying
     /// (`[format] argv`): formatting is not the model's job to remember.
     pub format: Option<Vec<String>>,
+    /// How long a call waits for a person before it is denied as expired
+    /// (`[approvals] wait`, default 7 days).
+    pub approval_wait: std::time::Duration,
 }
 
 impl Default for RunConfig {
@@ -102,7 +111,26 @@ impl Default for RunConfig {
             monitor: false,
             frozen_additions: false,
             format: None,
+            approval_wait: std::time::Duration::from_secs(7 * 24 * 3600),
         }
+    }
+}
+
+/// `30m`, `12h` or `7d`; never zero.
+fn wait(text: &str) -> Result<std::time::Duration, String> {
+    let text = text.trim();
+    let (n, unit) = text.split_at(text.len().saturating_sub(1));
+    let secs = match unit {
+        "m" => 60,
+        "h" => 3600,
+        "d" => 86_400,
+        _ => 0,
+    };
+    match n.parse::<u64>() {
+        Ok(n) if n > 0 && secs > 0 => Ok(std::time::Duration::from_secs(n.saturating_mul(secs))),
+        _ => Err(format!(
+            "[approvals]: wait = \"{text}\" (a positive number of m, h or d, e.g. \"7d\")"
+        )),
     }
 }
 
@@ -171,7 +199,18 @@ pub fn parse(text: &str) -> Result<RunConfig, String> {
     {
         return Err("[format]: `argv` must name a program".to_owned());
     }
+    let approvals: RawApprovals = match table.get("approvals") {
+        Some(v) => v
+            .clone()
+            .try_into()
+            .map_err(|e| format!("[approvals]: {e}"))?,
+        None => RawApprovals::default(),
+    };
     let d = RunConfig::default();
+    let approval_wait = match approvals.wait.as_deref() {
+        Some(w) => wait(w)?,
+        None => d.approval_wait,
+    };
     Ok(RunConfig {
         max_turns: budget.max_turns.unwrap_or(d.max_turns).max(1),
         max_tool_calls: budget.max_tool_calls.unwrap_or(d.max_tool_calls),
@@ -189,12 +228,29 @@ pub fn parse(text: &str) -> Result<RunConfig, String> {
         monitor: monitor.enabled.unwrap_or(false),
         frozen_additions,
         format: format.map(|f| f.argv),
+        approval_wait,
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_approval_waits_seven_days_unless_configured() {
+        assert_eq!(
+            parse("").unwrap_or_default().approval_wait.as_secs(),
+            7 * 86_400
+        );
+        let w = |t: &str| {
+            parse(&format!("[approvals]\nwait = \"{t}\"\n")).map(|c| c.approval_wait.as_secs())
+        };
+        assert_eq!(w("30m"), Ok(1800));
+        assert_eq!(w("12h"), Ok(43_200));
+        for bad in ["0d", "7", "7w", "-1d", ""] {
+            assert!(w(bad).is_err(), "{bad}");
+        }
+    }
 
     #[test]
     fn held_out_is_on_by_default_and_can_be_switched_off() {

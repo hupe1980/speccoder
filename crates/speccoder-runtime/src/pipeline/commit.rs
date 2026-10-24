@@ -51,6 +51,7 @@ pub(crate) fn record_inline_approvals(
                 .unwrap_or_else(|_| approvals::Who {
                     name: "unknown".to_owned(),
                     via: "inline".to_owned(),
+                    basis: "asserted".to_owned(),
                 });
             let approved = c["approved_by"] == "person";
             Some(approvals::Decided {
@@ -126,6 +127,16 @@ pub(crate) fn add_usage(
 /// Commits everything in the worktree on its branch with speccoder's
 /// identity, without hooks; returns the commit id. Never pushes.
 pub(crate) fn commit_attempt(worktree: &Path, message: &str) -> Result<String, String> {
+    commit_attempt_as(worktree, message, false)
+}
+
+/// [`commit_attempt`]; `allow_empty` records a verdict whose work touched no
+/// tracked file (in place, the tick lives in a git-ignored `tasks.md`).
+pub(crate) fn commit_attempt_as(
+    worktree: &Path,
+    message: &str,
+    allow_empty: bool,
+) -> Result<String, String> {
     let g = git::Git::at(worktree);
     let base = [
         "-c",
@@ -140,6 +151,9 @@ pub(crate) fn commit_attempt(worktree: &Path, message: &str) -> Result<String, S
     g.run(&add).map_err(|e| e.0)?;
     let mut commit = base.to_vec();
     commit.extend(["commit", "-q", "--no-verify", "-m", message]);
+    if allow_empty {
+        commit.push("--allow-empty");
+    }
     g.run(&commit).map_err(|e| e.0)?;
     g.line(&["rev-parse", "HEAD"]).map_err(|e| e.0)
 }

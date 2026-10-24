@@ -35,6 +35,8 @@ pub(crate) fn run_lanes(
                     cancel: None,
                     ignore_checklists: options.ignore_checklists,
                     run_grants: std::sync::Arc::clone(&options.run_grants),
+                    in_place: false,
+                    session: None,
                 };
                 let provider = std::sync::Arc::clone(provider);
                 scope.spawn(move || {

@@ -27,6 +27,23 @@ speccoder lets a language model change code and run commands to check it. Read t
 
 All work happens on the branch `speccoder/<feature>`, checked out in a worktree under speccoder's state directory. Work reaches your branch only when you merge it. speccoder never fetches and never pushes on its own; the one command that talks to a remote is `speccoder pr`, and only after you confirm. The one thing that writes in your checkout is a hosted planning skill (`speccoder skill …`), which writes Spec Kit's artifacts, uncommitted, and asks before anything else.
 
+### In-place mode
+
+[`--in-place`](@/docs/running.md#in-place-runs) gives up the worktree's isolation: the attempt runs in your checkout. What takes its place:
+
+- **A clean start and a checked checkout.** The run refuses a dirty checkout, and before every task checks that HEAD, the branch and the tree are as speccoder left them; work happens on `speccoder/<feature>`, never on your branch.
+- **The intent and the judge's inputs as the run found them.** Every spec, plan, task list, constitution, check and agent-configuration file — git-ignored ones included — is hashed when the run starts and compared before every task and every tick. The engine's own tick is the only change accepted.
+- **No git that moves the checkout.** In place, the model's `git checkout`, `switch`, `reset`, `commit`, `merge`, `rebase`, `cherry-pick`, `revert`, `stash`, `branch`, `tag`, `update-ref`, `worktree`, `am`, `apply --index` and `restore --staged` are denied, not asked about.
+- **Only what a worktree would hold.** Files git ignored when the run started are invisible to the model's file tools — `read_file`, `write_file`, `edit_file`, `list_files` and `search_code` refuse them — except the spec, plan, tasks and other protected files, which stay readable and never writable. The list is part of each attempt's journaled input, so a resumed or replayed attempt decides the same way.
+- **`.git` is read-only and ignored secrets are unreadable to commands.** The OS sandbox carves the checkout's `.git` out of the writable root — a test cannot rewrite `.git/config`, plant a hook or move your branch — and makes git-ignored files that look like credentials (`.env`, keys) unreadable. On macOS these are Seatbelt rules. On Linux, Landlock cannot take a subtree back from a grant, so each command starts in a user and mount namespace of its own, with `.git` bound read-only and the secrets covered (they read as empty); the rest of the checkout stays writable.
+- **A guard where the sandbox cannot.** Some hosts forbid user namespaces (a container's default seccomp profile, Ubuntu's AppArmor restriction); the run says so when it starts. Whatever the sandbox, speccoder hashes `.git`'s `config`, `hooks/`, `info/` and every branch and tag but its own when the run starts, and stops the run before the next tick when they change (`stopped[GIT-CHANGED]`). speccoder's own git calls never run hooks or an fsmonitor.
+
+Not confined: a child process can still read git-ignored files that do not look like credentials (the file tools cannot); without user namespaces, a command can write `.git` and read ignored secrets — the guard catches the first, not the second; and edits you make during an attempt are judged as the agent's. A fresh clone holds the code and the evidence commits, but not an ignored `tasks.md` or its ticks.
+
+### Who approved what
+
+A person's decision is a record in the journal with their name and how speccoder knows it (`asserted` at a terminal or the CLI, `connected` from an editor over ACP), bound to the digest of the call they were shown: an approval of anything else is refused. Their answers enter the run labelled as a person's input, not as speccoder's own. Calls a rule decides name the rule; an expired call names no one. See [approvals](@/docs/approvals.md#who-decided).
+
 ## The policy
 
 Every tool call is classified before it runs.

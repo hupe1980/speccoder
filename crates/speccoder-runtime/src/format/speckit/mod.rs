@@ -236,7 +236,7 @@ pub fn precondition(specify_dir: &str, feature_dir: &str) -> CommitPrecondition 
             format!("{feature_dir}/spec.md"),
         ],
         message: "the feature's Spec Kit artifacts are not committed, so a worktree would not contain them",
-        hint: "commit them (git add .specify specs/<feature> && git commit), or wait for in-place mode",
+        hint: "commit them (git add .specify specs/<feature> && git commit), or run in place: speccoder run --in-place",
         no_commits_hint: "commit the Spec Kit artifacts first (git add .specify specs && git commit)",
     }
 }

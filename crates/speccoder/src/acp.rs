@@ -315,8 +315,7 @@ fn approval_content(p: &Presentation) -> Value {
 }
 
 impl Approver for Permissions {
-    fn ask(&self, p: &Presentation) -> Answer {
-        // Who answers in the editor: the local person, through it.
+    fn via(&self) -> String {
         let editor = self
             .conn
             .0
@@ -324,12 +323,21 @@ impl Approver for Permissions {
             .lock()
             .map(|c| c.clone())
             .unwrap_or_default();
-        let editor = if editor.is_empty() {
-            "unknown".to_owned()
-        } else {
-            editor
-        };
-        let by = || Some(Who::local(&format!("editor {editor}")));
+        format!(
+            "editor {}",
+            if editor.is_empty() {
+                "unknown"
+            } else {
+                &editor
+            }
+        )
+    }
+
+    fn ask(&self, p: &Presentation) -> Answer {
+        // Who answers in the editor: the local person, through it.
+        let via = self.via();
+        let editor = via.trim_start_matches("editor ").to_owned();
+        let by = || Some(Who::local(&via));
         if self.cancel.load(Ordering::SeqCst) {
             return Answer::stop(by());
         }
@@ -763,8 +771,15 @@ mod tests {
             (a.decision, a.scope),
             (speccoder_runtime::approvals::Decision::Approve, Scope::Run)
         );
-        // the local person, through the editor that asked.
-        assert_eq!(a.by.map(|b| b.via), Some("editor Zed".to_owned()));
+        // the local person, through the editor that asked — a name the
+        // connection reports, recorded as such on the decision.
+        let by = a.by.clone().unwrap_or_else(|| panic!("no one answered"));
+        assert_eq!((by.via.as_str(), by.basis.as_str()), ("editor Zed", "connected"));
+        let d = speccoder_runtime::approvals::tasks::decision_for(&a, &by, None)
+            .unwrap_or_else(|| panic!("no decision"));
+        let op = d.decided.operator().unwrap_or_else(|| panic!("no operator"));
+        assert_eq!(op.basis().to_string(), "connected");
+        assert_eq!(d.amendment["via"], "editor Zed");
     }
 
     #[test]
@@ -906,6 +921,7 @@ mod tests {
             input_tokens: 0,
             output_tokens: 0,
             cache_read_tokens: 0,
+            cache_write_tokens: 0,
             usd: None,
         });
         let plan = next(&rx);

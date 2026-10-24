@@ -55,18 +55,26 @@ impl Git {
         stdin: Option<&[u8]>,
     ) -> Result<Output, GitError> {
         let mut cmd = Command::new("git");
-        cmd.args(args)
-            .current_dir(&self.dir)
-            .env("GIT_TERMINAL_PROMPT", "0")
-            .env("GIT_OPTIONAL_LOCKS", "0")
-            .env("LC_ALL", "C")
-            .stdin(if stdin.is_some() {
-                Stdio::piped()
-            } else {
-                Stdio::null()
-            })
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
+        // A repository's own configuration never runs code through
+        // speccoder's git: no fsmonitor, no hooks.
+        cmd.args([
+            "-c",
+            "core.fsmonitor=false",
+            "-c",
+            "core.hooksPath=/dev/null",
+        ])
+        .args(args)
+        .current_dir(&self.dir)
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .env("GIT_OPTIONAL_LOCKS", "0")
+        .env("LC_ALL", "C")
+        .stdin(if stdin.is_some() {
+            Stdio::piped()
+        } else {
+            Stdio::null()
+        })
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
         for (k, v) in env {
             cmd.env(k, v);
         }

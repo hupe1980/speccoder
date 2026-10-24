@@ -4,9 +4,9 @@ version = 4
 
 [[package]]
 name = "agentplane"
-version = "0.51.0"
+version = "0.52.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7497b1a9c70702e1f0670b6839732eb6115e43d93592e4abd7b96dae6a851451"
+checksum = "c76e56a6ca294328eae554353c316a0ce52e4f6b1c55037b312bd156e00fd13b"
 dependencies = [
  "async-trait",
  "base64",

@@ -723,6 +723,10 @@ pub fn status(w: &mut impl Write, r: &StatusReport, message: &str) -> io::Result
             "verified" => ("✓", "verified".to_owned()),
             "regression_only" => ("~", "regression only".to_owned()),
             "ticked_without_evidence" => ("!", "ticked, no speccoder evidence".to_owned()),
+            "evidence_without_tick" => (
+                "?",
+                "committed, local tick missing — `run --in-place` ticks it".to_owned(),
+            ),
             "attested" => ("A", "attested by a person (not verified)".to_owned()),
             "skipped" => ("–", "skipped".to_owned()),
             "ready" => ("·", "ready".to_owned()),
@@ -731,6 +735,9 @@ pub fn status(w: &mut impl Write, r: &StatusReport, message: &str) -> io::Result
         writeln!(w, "  {mark} {} {:<52} {note}", t.id, shorten(&t.title, 52))?;
         if let Some(n) = &t.note {
             writeln!(w, "      reason: {}", shorten(n, 90))?;
+        }
+        if t.intent_changed {
+            writeln!(w, "      judged against an earlier spec: it changed since")?;
         }
         if let Some(a) = &t.last_attempt {
             writeln!(

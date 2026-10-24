@@ -110,6 +110,19 @@ fn main() {
             path,
             feature,
         } => speccoder_runtime::propose(path, feature.as_deref(), task),
+        // `--return` (clap requires `--in-place`): no task runs.
+        Command::Run {
+            return_: true,
+            path,
+            ..
+        } => match speccoder_runtime::worktree::state_dir() {
+            Some(state) => speccoder_runtime::in_place::return_in_place(path, &state),
+            None => speccoder_core::CommandResult::new(
+                "run",
+                speccoder_core::CommandStatus::ConfigError,
+                "no state directory (set SPECCODER_STATE_DIR or HOME)",
+            ),
+        },
         Command::Run {
             task,
             max_tasks,
@@ -117,6 +130,8 @@ fn main() {
             no_prompt,
             parallel,
             ignore_checklists,
+            in_place,
+            return_: _,
             path,
             feature,
         } => {
@@ -136,6 +151,7 @@ fn main() {
                 progress,
                 parallel: usize::from(*parallel),
                 ignore_checklists: *ignore_checklists,
+                in_place: *in_place,
                 ..speccoder_runtime::RunOptions::default()
             };
             let result = match task {
@@ -145,6 +161,11 @@ fn main() {
                 }
             };
             let result = speccoder_runtime::next::attach(result, feature.as_deref());
+            let result = if *in_place {
+                speccoder_runtime::next::in_place(result)
+            } else {
+                result
+            };
             if let Some(a) = &attention {
                 a.finish(&result);
             }
@@ -153,15 +174,17 @@ fn main() {
         Command::Accept {
             task,
             reason,
+            in_place,
             path,
             feature,
         } => match speccoder_runtime::worktree::state_dir() {
-            Some(state) => speccoder_runtime::controls::accept_with(
+            Some(state) => speccoder_runtime::controls::accept_in(
                 path,
                 feature.as_deref(),
                 task,
                 reason,
                 &state,
+                *in_place,
             ),
             None => no_state("accept"),
         },
@@ -326,33 +349,53 @@ fn main() {
         ),
         Command::Approve {
             task,
+            call,
+            all,
+            scope,
             note,
             path,
             feature,
         } => speccoder_runtime::approvals::decide(
             path,
             feature.as_deref(),
-            match note {
-                Some(n) => speccoder_runtime::approvals::Verb::ApproveNoted(task, n),
-                None => speccoder_runtime::approvals::Verb::Approve(task),
-            },
+            speccoder_runtime::approvals::Verb::Decide(speccoder_runtime::approvals::Choice {
+                task: task.as_deref(),
+                call: call.as_deref(),
+                all: *all,
+                approve: true,
+                scope: (*scope).into(),
+                note: note.as_deref(),
+                reason: None,
+            }),
         ),
         Command::Reject {
             task,
+            call,
+            all,
             reason,
             path,
             feature,
         } => speccoder_runtime::approvals::decide(
             path,
             feature.as_deref(),
-            speccoder_runtime::approvals::Verb::Reject(task, reason),
+            speccoder_runtime::approvals::Verb::Decide(speccoder_runtime::approvals::Choice {
+                task: task.as_deref(),
+                call: call.as_deref(),
+                all: *all,
+                approve: false,
+                scope: speccoder_runtime::approvals::Scope::Task,
+                note: None,
+                reason: Some(reason),
+            }),
         ),
         Command::Report { path, feature } => {
             speccoder_runtime::status::report(path, feature.as_deref())
         }
-        Command::Converge { path, feature } => {
-            speccoder_runtime::converge(path, feature.as_deref())
-        }
+        Command::Converge {
+            in_place,
+            path,
+            feature,
+        } => speccoder_runtime::converge_in(path, feature.as_deref(), *in_place),
         Command::Eval {
             dir,
             case,

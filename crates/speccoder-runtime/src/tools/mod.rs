@@ -149,46 +149,7 @@ pub struct ToolSpec {
 /// what serde enforces is declared — an optional argument is an `Option`,
 /// so `null` is both allowed and readable (D-076).
 fn schema<T: JsonSchema>() -> Value {
-    close_objects(agentplane::tools::strict_schema::<T>())
-}
-
-/// Closes every object of a schema: `additionalProperties: false`, and an
-/// empty `properties`/`required` where an object has none (an argument-less
-/// tool). It only narrows what may be sent — optional properties stay
-/// optional, so a schema with one is sent non-strict. Used for speccoder's
-/// argument-less tools and for MCP servers' schemas; agentplane's own pass
-/// for both is asked upstream (AP-19).
-#[must_use]
-pub fn close_objects(mut schema: Value) -> Value {
-    fn walk(v: &mut Value) {
-        let Some(obj) = v.as_object_mut() else { return };
-        if obj.get("type").and_then(Value::as_str) == Some("object") {
-            obj.entry("properties")
-                .or_insert_with(|| Value::Object(serde_json::Map::new()));
-            obj.entry("additionalProperties")
-                .or_insert(Value::Bool(false));
-            let none_required = obj
-                .get("properties")
-                .and_then(Value::as_object)
-                .is_some_and(serde_json::Map::is_empty);
-            if none_required {
-                obj.entry("required").or_insert_with(|| json!([]));
-            }
-        }
-        for key in ["properties", "$defs", "definitions"] {
-            if let Some(children) = obj.get_mut(key).and_then(Value::as_object_mut) {
-                children.values_mut().for_each(walk);
-            }
-        }
-        if let Some(items) = obj.get_mut("items") {
-            walk(items);
-        }
-        if let Some(branches) = obj.get_mut("anyOf").and_then(Value::as_array_mut) {
-            branches.iter_mut().for_each(walk);
-        }
-    }
-    walk(&mut schema);
-    schema
+    agentplane::tools::strict_schema::<T>()
 }
 
 /// Every tool, in a stable order (the order is part of the cached prompt prefix).

@@ -31,8 +31,25 @@ pub fn run_feature(
 ///. The provider comes from `[model]` and its key variable.
 #[must_use]
 pub fn converge(path: &Path, feature: Option<&str>) -> CommandResult {
+    converge_in(path, feature, false)
+}
+
+/// [`converge`], in the person's checkout when `in_place`.
+#[must_use]
+pub fn converge_in(path: &Path, feature: Option<&str>, in_place: bool) -> CommandResult {
+    let options = RunOptions {
+        in_place,
+        ..RunOptions::default()
+    };
     with_driver("converge", path, feature, |state, provider, key| {
-        convergence::converge_with(path, feature, state, Arc::clone(provider), Some(key))
+        convergence::converge_with_options(
+            path,
+            feature,
+            state,
+            Arc::clone(provider),
+            Some(key),
+            &options,
+        )
     })
 }
 
@@ -76,6 +93,12 @@ pub fn run_converged_with(
     secret: Option<&str>,
     options: &RunOptions,
 ) -> CommandResult {
+    // In place: one session over every round.
+    if options.in_place && options.session.is_none() {
+        return in_session("run", path, feature, state, options, |o| {
+            run_converged_with(path, feature, state, provider, secret, o)
+        });
+    }
     let mut attempts = Vec::new();
     let mut rounds = Vec::new();
     loop {
@@ -97,7 +120,14 @@ pub fn run_converged_with(
                 text: format!("converge: assessing {} against its spec", fr.feature),
             });
         }
-        let c = convergence::converge_with(path, feature, state, Arc::clone(provider), secret);
+        let c = convergence::converge_with_options(
+            path,
+            feature,
+            state,
+            Arc::clone(provider),
+            secret,
+            options,
+        );
         if let Some(p) = &options.progress {
             p.event(&progress::Event::Notice {
                 text: format!("converge: {}", c.message()),
@@ -130,6 +160,12 @@ pub fn run_feature_with(
     secret: Option<&str>,
     options: &RunOptions,
 ) -> CommandResult {
+    // In place: one session around the whole feature.
+    if options.in_place && options.session.is_none() {
+        return in_session("run", path, feature, state, options, |o| {
+            run_feature_with(path, feature, state, provider, secret, o)
+        });
+    }
     let max_tasks = options.max_tasks;
     use speccoder_core::FeatureReport;
     use speccoder_core::snapshot::TaskState;
@@ -196,7 +232,7 @@ pub fn run_feature_with(
             );
         }
         // The next ready task, read from the worktree.
-        let wt = worktree_with(path, feature_name.as_deref(), state);
+        let wt = workspace(path, feature_name.as_deref(), state, options);
         let Some(CommandData::Worktree(w)) = wt.data() else {
             return CommandResult::new("run", wt.status(), wt.message());
         };

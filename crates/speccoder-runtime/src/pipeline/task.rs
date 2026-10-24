@@ -57,6 +57,20 @@ pub fn run_with(
     )
 }
 
+/// [`run_with`] with explicit [`RunOptions`].
+#[must_use]
+pub fn run_with_options(
+    path: &Path,
+    feature: Option<&str>,
+    task: &str,
+    state: &Path,
+    provider: Arc<dyn agentplane::model::ModelProvider>,
+    secret: Option<&str>,
+    options: &RunOptions,
+) -> CommandResult {
+    run_task(path, feature, task, state, provider, secret, options)
+}
+
 /// [`run_with`] asking `approver` inline when a call needs approval.
 #[must_use]
 pub fn run_with_approver(
@@ -86,6 +100,12 @@ pub(crate) fn run_task(
     options: &RunOptions,
 ) -> CommandResult {
     use speccoder_core::RunReport;
+    // In place: the person's checkout, switched and switched back around the task.
+    if options.in_place && options.session.is_none() {
+        return in_session("run", path, feature, state, options, |o| {
+            run_task(path, feature, task, state, Arc::clone(&provider), secret, o)
+        });
+    }
     let approver = options.approver.clone();
     use speccoder_core::snapshot::TaskState;
 
@@ -118,7 +138,7 @@ pub(crate) fn run_task(
     ));
 
     // 2. The worktree.
-    let wt = worktree_with(path, Some(&feature_name), state);
+    let wt = workspace(path, Some(&feature_name), state, options);
     let Some(CommandData::Worktree(w)) = wt.data() else {
         return CommandResult::new("run", wt.status(), wt.message());
     };
@@ -141,6 +161,19 @@ pub(crate) fn run_task(
     let wt_root = std::path::PathBuf::from(&wt_path);
     let tmp = plane_dir.join("tmp");
 
+    // 2a. A task waiting for a person holds the worktree with its attempt:
+    //     another task starts once it is decided and has resumed.
+    if options.lane.is_none()
+        && let Some((other, covers)) =
+            crate::approvals::waiting_elsewhere(&project, &plane_dir, &feature_name, task)
+    {
+        return refuse(
+            CommandStatus::NeedsHuman,
+            format!(
+                "{other} waits for a person ({covers}) and its attempt holds the worktree: decide it (`speccoder approve --task {other}` or `reject`), then `speccoder run --task {other}`"
+            ),
+        );
+    }
     // 2b. Leftovers of an interrupted run (or edits by hand) are saved under
     //     an attempt ref and set aside: a run starts from the branch tip
     //    . Without per-task commits, uncommitted work is expected.
@@ -156,7 +189,7 @@ pub(crate) fn run_task(
         .unwrap_or_default();
     let interrupted = resume::load(&marker_path)
         .filter(|m| m.head == head_now && options.lane.is_none() && !head_now.is_empty());
-    let _marker = resume::Guard(marker_path.clone());
+    let marker_guard = resume::Guard(marker_path.clone());
     // Where the interrupted attempt was, from the live record it left
     // (read before this run overwrites it).
     let resumed_from = interrupted.as_ref().map(|_| {
@@ -167,7 +200,12 @@ pub(crate) fn run_task(
             .map_or((None, None), |l| (l.stage, l.last_call))
     });
     let mut set_aside = None;
-    if interrupted.is_none() && commits_per_task && worktree::require_clean(&wt_root).is_err() {
+    // In place, a dirty checkout is the person's: the session guard refuses it.
+    if interrupted.is_none()
+        && commits_per_task
+        && options.session.is_none()
+        && worktree::require_clean(&wt_root).is_err()
+    {
         match set_aside_leftovers(&wt_root, &tmp, &feature_name, task) {
             Ok(reference) => set_aside = Some(reference),
             Err(e) => return refuse(CommandStatus::GitPrecondition, e),
@@ -268,6 +306,28 @@ pub(crate) fn run_task(
     };
     let check_argvs = verify::check_argvs(&config_root);
     let policy = tools::policy::Policy::new(&check_argvs, &run_config.allow).rules(format.rules());
+    // In place: the model's view of the checkout confined (git that moves
+    // it denied, ignored files hidden, `.git` read-only to commands).
+    let (policy, runner, carve_notice) = match options.session.as_ref().and_then(|s| s.lock().ok())
+    {
+        Some(s) => s.confine(policy, runner),
+        None => (policy, runner, None),
+    };
+    let sandbox_notice = sandbox_notice.or(carve_notice);
+    // In place: the checkout as speccoder left it, the intent as the run
+    // started with it — before the task, and again before the tick.
+    if let Some(e) = options.session.as_ref().and_then(|s| {
+        s.lock().ok().and_then(|s| {
+            // A resumed attempt's writes are in the checkout already.
+            if interrupted.is_some() {
+                s.check_before_tick(&policy).err()
+            } else {
+                s.check(&policy).err()
+            }
+        })
+    }) {
+        return e.result("run");
+    }
 
     let wt_root_canonical = std::fs::canonicalize(&wt_root)
         .unwrap_or_else(|_| wt_root.clone())
@@ -304,6 +364,7 @@ pub(crate) fn run_task(
             input_tokens: 0,
             output_tokens: 0,
             cache_read_tokens: 0,
+            cache_write_tokens: 0,
             usd: None,
         });
         refuse(status, m)
@@ -387,6 +448,26 @@ pub(crate) fn run_task(
         Ok(t) => std::sync::Arc::new(t.with_runner(runner.clone())),
         Err(e) => return fail(CommandStatus::Error, e.to_string()),
     };
+    // Calls past their deadline are denied as expired before anything resumes.
+    let _ = crate::approvals::expire_due(&plane_dir, agentplane::core::Timestamp::now_utc());
+    // What a person is shown about the sandbox, for every call they decide.
+    let present = crate::approvals::PresentContext {
+        root: None,
+        sandbox: runner.is_sandboxed().then(|| {
+            if cfg!(target_os = "macos") {
+                "Seatbelt".to_owned()
+            } else {
+                "Landlock+seccomp".to_owned()
+            }
+        }),
+        network: match sandbox_config.network {
+            sandbox::Network::Off => "none",
+            sandbox::Network::Loopback => "loopback",
+            sandbox::Network::On => "unrestricted",
+        }
+        .to_owned(),
+        file_text: None,
+    };
     let plane = match rt.block_on(async {
         substrate::Plane::open_with(
             &plane_dir,
@@ -394,28 +475,11 @@ pub(crate) fn run_task(
             provider,
             Some(tools_server),
             substrate::Hooks {
-                approver: approver.clone(),
                 progress: Some(Arc::clone(&live)),
                 mcp: connected.clients.clone(),
                 mcp_tools: connected.tools.clone(),
                 format: Some(format),
-                present: crate::approvals::PresentContext {
-                    root: None,
-                    sandbox: runner.is_sandboxed().then(|| {
-                        if cfg!(target_os = "macos") {
-                            "Seatbelt".to_owned()
-                        } else {
-                            "Landlock+seccomp".to_owned()
-                        }
-                    }),
-                    network: match sandbox_config.network {
-                        sandbox::Network::Off => "none",
-                        sandbox::Network::Loopback => "loopback",
-                        sandbox::Network::On => "unrestricted",
-                    }
-                    .to_owned(),
-                    file_text: None,
-                },
+                present: present.clone(),
             },
         )
     }) {
@@ -661,6 +725,12 @@ pub(crate) fn run_task(
         let mut digest: Option<serde_json::Value> = None;
         let mut attempt_no = 1u32;
         let (mut report, attempt_status) = loop {
+            // In place: what git ignored at the session's start.
+            let hidden: Vec<String> = options
+                .session
+                .as_ref()
+                .and_then(|s| s.lock().ok().map(|s| s.hidden.clone()))
+                .unwrap_or_default();
             // This run's grants as they stand now: journaled with the input.
             let run_approved: Vec<crate::tools::policy::Grant> = options
                 .run_grants
@@ -683,8 +753,17 @@ pub(crate) fn run_task(
                     mcp: &connected.tools,
                     root: &wt_root_canonical,
                     frozen_additions: run_config.frozen_additions,
-                    ask: approver.is_some(),
+                    // Lanes stop (their worktree is merged or dropped with
+                    // the group); every other attempt waits for a person.
+                    asks: if options.lane.is_some() {
+                        "stop"
+                    } else {
+                        "tasks"
+                    },
+                    wait_secs: run_config.approval_wait.as_secs(),
                     network_allow: &sandbox_config.network_allow,
+                    in_place: options.session.is_some(),
+                    hidden: &hidden,
                 },
                 digest.as_ref(),
             );
@@ -768,6 +847,62 @@ pub(crate) fn run_task(
                     }
                     Err(e) => return fail(CommandStatus::RunFailed, e.0),
                 };
+                // A call waits for a person (F-072). With one here they
+                // decide now, recorded with who they are, and the attempt
+                // continues; "later" or nobody leaves it waiting.
+                let context = crate::approvals::PresentContext {
+                    root: Some(wt_root.clone()),
+                    ..present.clone()
+                };
+                let (outcome, waiting) = match rt.block_on(plane.decide_inline(
+                    outcome,
+                    approver.as_deref(),
+                    &context,
+                )) {
+                    Ok(x) => x,
+                    Err(e) => return fail(CommandStatus::RunFailed, e.0),
+                };
+                if let Some(task_row) = waiting {
+                    // The attempt waits as it is: its tree and its resume
+                    // marker stay, so the next run continues it.
+                    marker_guard.keep();
+                    let action = &task_row.justification.proposed_action;
+                    let mut report = bare_report(&feature_name, task, &wt_path, "needs_approval");
+                    report.run_id = outcome.run_id.to_string();
+                    report.notices = notices;
+                    report.tool_calls = action["log"].as_array().cloned().unwrap_or_default();
+                    // The waiting call itself, as the stop recorded it before.
+                    report.tool_calls.push(serde_json::json!({
+                        "tool": action["tool"],
+                        "arguments": action["arguments"],
+                        "decision": "approval",
+                        "reason": action["request"]["reason"],
+                        "waiting": true,
+                        "call": task_row.id.to_hex(),
+                    }));
+                    report.pending = Some(serde_json::json!({
+                        "tool": action["tool"],
+                        "arguments": action["arguments"],
+                        "reason": action["request"]["reason"],
+                        "call": task_row.id.to_hex(),
+                        "deadline": task_row.due_at.map(|t| t.unix_timestamp()),
+                        "waiting": true,
+                    }));
+                    report.reason = Some(format!(
+                        "waiting for a person: {} — `speccoder approve --task {task}` or `speccoder reject --task {task} --reason …`, then `speccoder run`",
+                        task_row.justification.summary.peek()
+                    ));
+                    let (status, message) = status_and_message(&report, "needs_approval", false);
+                    live.event(&finished_event(
+                        task,
+                        &report,
+                        "needs_approval",
+                        false,
+                        redact(&message, secret),
+                    ));
+                    return CommandResult::new("run", status, &redact(&message, secret))
+                        .with_data(CommandData::Run(Box::new(report)));
+                }
                 let succeeded = matches!(outcome.status, agentplane::prelude::RunStatus::Succeeded);
                 let mut output = outcome
                     .output
@@ -1257,29 +1392,71 @@ pub(crate) fn run_task(
         );
     }
 
-    // 8. A passed task is ticked by the engine and committed.
-    let passed = verdict_passed && !suspected;
+    // 8. A passed task is ticked by the engine and committed. In place, the
+    //    spec and the checkout must still be as the run found them.
+    let in_place_stop = options
+        .session
+        .as_ref()
+        .filter(|_| verdict_passed && !suspected)
+        .and_then(|s| {
+            s.lock()
+                .ok()
+                .and_then(|s| s.check_before_tick(&policy).err())
+        });
+    let mut attempt_status = attempt_status;
+    if let Some(e) = &in_place_stop {
+        report.reason = Some(e.result("run").message().to_owned());
+        report.verdict = None;
+        // The saved attempt names the cause: `intent_changed`, `judge_changed`, …
+        attempt_status = e.code.to_lowercase().replace('-', "_");
+        report.attempt_status.clone_from(&attempt_status);
+    }
+    let passed = verdict_passed && !suspected && in_place_stop.is_none();
     if passed && let (Some(t), Some(file)) = (&parsed_task, &tasks_file) {
         let began = std::time::Instant::now();
         stage(&*live, task, Stage::Commit, StageState::Started, None, None);
-        match format.tick(file, task, &t.line_hash) {
-            Ok(()) => report.ticked = true,
-            Err(e) => report.integrity.push(format!("tick refused: {e}")),
-        }
-        if report.ticked && run_config.commit_per_task {
-            let message = tick_message(&TickFacts {
-                feature: &feature_name,
-                task,
-                title: &t.title,
-                report: &report,
-                red: acceptance
-                    .as_ref()
-                    .and_then(|a| a.red_class.filter(|c| a.red && c.is_red())),
-                checklists_overridden,
-            });
-            match commit_attempt(&wt_root, &message) {
-                Ok(id) => report.commit = Some(id),
-                Err(e) => report.integrity.push(format!("commit failed: {e}")),
+        let message = tick_message(&TickFacts {
+            feature: &feature_name,
+            task,
+            title: &t.title,
+            report: &report,
+            red: acceptance
+                .as_ref()
+                .and_then(|a| a.red_class.filter(|c| a.red && c.is_red())),
+            checklists_overridden,
+        });
+        match &options.session {
+            // Worktree: tick, then commit the tick with the evidence.
+            None => {
+                match format.tick(file, task, &t.line_hash) {
+                    Ok(()) => report.ticked = true,
+                    Err(e) => report.integrity.push(format!("tick refused: {e}")),
+                }
+                if report.ticked && run_config.commit_per_task {
+                    match commit_attempt(&wt_root, &message) {
+                        Ok(id) => report.commit = Some(id),
+                        Err(e) => report.integrity.push(format!("commit failed: {e}")),
+                    }
+                }
+            }
+            // In place: evidence first, then the tick; a git-ignored
+            // tasks.md is never in the commit, so its tick is local.
+            Some(session) => {
+                let digest =
+                    crate::in_place::intent_digest(&project, &policy, format.messages().tasks_file);
+                if let Ok(mut s) = session.lock() {
+                    let done = s.commit_and_tick(
+                        &plane_dir,
+                        file,
+                        &t.line_hash,
+                        &message,
+                        &digest,
+                        || format.tick(file, task, &t.line_hash),
+                    );
+                    report.ticked = done.ticked;
+                    report.commit = done.commit;
+                    report.integrity.extend(done.problems);
+                }
             }
         }
         let committed = report.ticked && (report.commit.is_some() || !run_config.commit_per_task);

@@ -112,6 +112,12 @@ pub struct Policy {
     /// Commands run without the network; these prefixes get it,
     /// asking for it otherwise needs approval.
     network: Vec<Vec<String>>,
+    /// An in-place attempt: git commands that move the person's checkout
+    /// are denied.
+    in_place: bool,
+    /// In place: what git ignored at the run's start (directories end in
+    /// `/`), invisible to the file tools unless protected.
+    hidden: Vec<String>,
 }
 
 const SHELLS: &[&str] = &[
@@ -129,6 +135,23 @@ const GIT_REMOTE: &[&str] = &[
     "remote",
     "ls-remote",
     "submodule",
+];
+/// What would move the checkout of an in-place run under speccoder.
+const GIT_IN_PLACE: &[&str] = &[
+    "checkout",
+    "switch",
+    "reset",
+    "commit",
+    "merge",
+    "rebase",
+    "cherry-pick",
+    "revert",
+    "stash",
+    "branch",
+    "tag",
+    "update-ref",
+    "worktree",
+    "am",
 ];
 
 impl Policy {
@@ -167,7 +190,36 @@ impl Policy {
             mcp: std::collections::BTreeMap::new(),
             authoring: false,
             network: Vec::new(),
+            in_place: false,
+            hidden: Vec::new(),
         }
+    }
+
+    /// Paths git ignored when an in-place run started: the file tools
+    /// refuse them, except the protected files (the intent stays readable).
+    #[must_use]
+    pub fn with_hidden(mut self, hidden: impl IntoIterator<Item = String>) -> Self {
+        self.hidden = hidden.into_iter().collect();
+        self
+    }
+
+    /// Whether `rel` is ignored by git in an in-place checkout and not one
+    /// of the files speccoder protects.
+    fn is_hidden(&self, rel: &str) -> bool {
+        self.protected.write_class(rel).is_none()
+            && !self.protected.is_context(rel)
+            && self.hidden.iter().any(|h| match h.strip_suffix('/') {
+                Some(dir) => rel == dir || rel.starts_with(h.as_str()),
+                None => rel == h,
+            })
+    }
+
+    /// An in-place attempt (`run --in-place`): the checkout is the
+    /// person's, so git commands that move it are denied.
+    #[must_use]
+    pub fn in_place(mut self) -> Self {
+        self.in_place = true;
+        self
     }
 
     /// The planning profile: the format's artifacts and scripts are the
@@ -263,6 +315,51 @@ impl Policy {
         decision
     }
 
+    /// The rule that decides `tool` with `args` when no person does: what a
+    /// call's record names, so a rule's decision is never read as a
+    /// person's (F-072).
+    #[must_use]
+    pub fn rule(&self, tool: &str, args: &Value) -> String {
+        if let Some(grant) = Grant::of(tool, args)
+            && matches!(self.base(tool, args), Decision::Approval(_))
+        {
+            if self.rejected.iter().any(|r| r.grant == grant) {
+                return format!("rejection of {} for the task", grant.describe());
+            }
+            if self.approved.contains(&grant) {
+                return format!("grant {} for the task", grant.describe());
+            }
+        }
+        if tool.starts_with(crate::mcp::PREFIX) {
+            let entry = self.mcp.get(tool).map_or("unlisted", String::as_str);
+            return format!("[mcp] {entry}");
+        }
+        match tool {
+            "read_file" | "list_files" | "search_code" => "workspace read".to_owned(),
+            "write_file" | "edit_file" => "workspace write".to_owned(),
+            "git_status" | "git_diff" => "read-only git".to_owned(),
+            "run_command" => {
+                let argv: Vec<String> = args["argv"]
+                    .as_array()
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|v| v.as_str().map(str::to_owned))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                match self
+                    .allowed
+                    .iter()
+                    .find(|p| argv.len() >= p.len() && argv[..p.len()] == p[..])
+                {
+                    Some(prefix) => format!("allowed command `{}`", prefix.join(" ")),
+                    None => "command policy".to_owned(),
+                }
+            }
+            _ => "tool policy".to_owned(),
+        }
+    }
+
     fn base(&self, tool: &str, args: &Value) -> Decision {
         if tool.starts_with(crate::mcp::PREFIX) {
             return match self.mcp.get(tool).map(String::as_str) {
@@ -322,6 +419,9 @@ impl Policy {
             Ok(p) if self.protected.is_secret(&p) => {
                 Decision::Deny(format!("`{p}` looks like a credential"))
             }
+            Ok(p) if self.is_hidden(&p) => Decision::Deny(format!(
+                "`{p}` is ignored by git in this checkout; an in-place run works only with what a worktree would hold"
+            )),
             Ok(_) => Decision::Allow,
         }
     }
@@ -339,6 +439,11 @@ impl Policy {
             && !self.protected.is_secret(&p)
         {
             return Decision::Allow;
+        }
+        if self.is_hidden(&p) {
+            return Decision::Deny(format!(
+                "`{p}` is ignored by git in this checkout; an in-place run does not write it"
+            ));
         }
         if let Some(class) = self.protected.write_class(&p) {
             return Decision::Deny(format!(
@@ -410,6 +515,16 @@ impl Policy {
             ) || listing_branches
             {
                 return Decision::Allow;
+            }
+            if self.in_place
+                && !listing_branches
+                && (GIT_IN_PLACE.contains(&sub)
+                    || (sub == "apply" && has("--index"))
+                    || (sub == "restore" && has("--staged")))
+            {
+                return Decision::Deny(format!(
+                    "`git {sub}` would move the checkout of an in-place run; speccoder commits and switches it"
+                ));
             }
             if sub == "clean" || (sub == "reset" && has("--hard")) || sub == "filter-branch" {
                 return Decision::Deny(format!("`git {sub}` destroys work"));
@@ -587,6 +702,69 @@ mod tests {
         assert!(matches!(
             p.classify("write_file", &json!({"path": "speccoder.toml"})),
             Decision::Deny(_)
+        ));
+        // In place, what moves the checkout is denied; queries still run.
+        let in_place = Policy::new(&[], &[]).in_place();
+        for argv in [
+            vec!["git", "switch", "main"],
+            vec!["git", "commit", "-m", "x"],
+            vec!["git", "reset", "HEAD~1"],
+            vec!["git", "stash"],
+            vec!["git", "branch", "x"],
+            vec!["git", "apply", "--index", "p.diff"],
+            vec!["git", "restore", "--staged", "a"],
+            vec!["git", "update-ref", "HEAD", "x"],
+        ] {
+            assert!(
+                matches!(
+                    in_place.classify("run_command", &json!({ "argv": argv })),
+                    Decision::Deny(_)
+                ),
+                "{argv:?}"
+            );
+        }
+        for argv in [
+            vec!["git", "status"],
+            vec!["git", "branch", "--show-current"],
+        ] {
+            assert_eq!(
+                in_place.classify("run_command", &json!({ "argv": argv })),
+                Decision::Allow,
+                "{argv:?}"
+            );
+        }
+        // Ignored files are out of sight; the protected intent is not.
+        let hidden = Policy::new(&[], &[]).in_place().with_hidden([
+            "target/".to_owned(),
+            "notes.txt".to_owned(),
+            "specs/".to_owned(),
+        ]);
+        for (tool, path) in [
+            ("read_file", "target/debug/x"),
+            ("read_file", "notes.txt"),
+            ("list_files", "target"),
+            ("write_file", "notes.txt"),
+        ] {
+            assert!(
+                matches!(
+                    hidden.classify(tool, &json!({ "path": path })),
+                    Decision::Deny(_)
+                ),
+                "{tool} {path}"
+            );
+        }
+        assert_eq!(
+            hidden.classify("read_file", &json!({ "path": "specs/001-x/spec.md" })),
+            Decision::Allow
+        );
+        assert_eq!(
+            hidden.classify("read_file", &json!({ "path": "src/lib.rs" })),
+            Decision::Allow
+        );
+        assert!(matches!(
+            Policy::new(&[], &[])
+                .classify("run_command", &json!({ "argv": ["git", "switch", "main"] })),
+            Decision::Approval(_)
         ));
     }
 

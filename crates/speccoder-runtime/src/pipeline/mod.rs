@@ -161,6 +161,179 @@ pub struct RunOptions {
     /// Classes a person approved "for this run": shared by every task (and
     /// lane) of one `speccoder run`, gone with it.
     pub run_grants: Arc<std::sync::Mutex<Vec<crate::tools::policy::Grant>>>,
+    /// Run in the person's checkout on `speccoder/<feature>` instead of a
+    /// worktree (`run --in-place`, F-048).
+    pub in_place: bool,
+    /// The in-place session the runtime opened for this run.
+    pub session: Option<Arc<std::sync::Mutex<crate::in_place::Session>>>,
+}
+
+/// Where a task runs, as `worktree` reports it: speccoder's worktree, or in
+/// place the person's checkout on `speccoder/<feature>`.
+pub(crate) fn workspace(
+    path: &Path,
+    feature: Option<&str>,
+    state: &Path,
+    options: &RunOptions,
+) -> CommandResult {
+    let Some(session) = options
+        .session
+        .as_ref()
+        .and_then(|s| s.lock().ok().map(|s| s.clone()))
+    else {
+        if let Some(e) = crate::in_place::session_elsewhere(path, feature, state) {
+            return e.result("run");
+        }
+        return worktree_with(path, feature, state);
+    };
+    CommandResult::new("worktree", CommandStatus::Ok, "in place").with_data(CommandData::Worktree(
+        speccoder_core::WorktreeReport {
+            feature: session.feature.clone(),
+            path: Some(session.checkout.display().to_string()),
+            project_dir: Some(session.project.display().to_string()),
+            branch: Some(session.branch.clone()),
+            base: Some(session.tip.clone()),
+            created: false,
+            refused_paths: Vec::new(),
+            hint: None,
+        },
+    ))
+}
+
+/// Runs `f` inside an in-place session when one is asked for and none is
+/// open yet: checks and switches the checkout first, switches it back after
+/// — on every way out.
+pub(crate) fn in_session(
+    command: &str,
+    path: &Path,
+    feature: Option<&str>,
+    state: &Path,
+    options: &RunOptions,
+    f: impl FnOnce(&RunOptions) -> CommandResult,
+) -> CommandResult {
+    if !options.in_place || options.session.is_some() {
+        return f(options);
+    }
+    if options.parallel > 1 {
+        return crate::in_place::InPlaceError {
+            code: "IN-PLACE-PARALLEL",
+            message: "an in-place run has one checkout; it cannot run tasks in parallel".to_owned(),
+            paths: Vec::new(),
+            fix: vec!["speccoder run --in-place   (without --parallel)".to_owned()],
+        }
+        .result(command);
+    }
+    let opened = match crate::format::open(path, feature) {
+        Ok(o) => o,
+        Err(r) => return CommandResult::new(command, r.status, &r.message),
+    };
+    let Some(f_name) = opened
+        .snapshot
+        .feature
+        .as_ref()
+        .map(|f| f.feature.name.clone())
+    else {
+        return CommandResult::new(
+            command,
+            CommandStatus::SelectionNeeded,
+            "no feature selected; pass --feature",
+        );
+    };
+    let root = std::path::PathBuf::from(&opened.snapshot.root);
+    let plane_dir = worktree::project_state_dir(state, &root);
+    let policy = crate::tools::policy::Policy::new(&[], &[]).rules(opened.adapter.rules());
+    let mut session = match crate::in_place::Session::begin(&root, &plane_dir, &f_name, &policy) {
+        Ok(s) => s,
+        Err(e) => return e.result(command),
+    };
+    // Ticks a killed run committed but did not write, read on the branch.
+    let format = crate::format::at(&root);
+    if let Some(tasks) = format
+        .inspect(&root, Some(&f_name))
+        .and_then(|snap| snap.feature.and_then(|f| f.tasks))
+    {
+        let file = session.project.join(&tasks.path);
+        session.reconcile(&plane_dir, &file, &tasks, |file, task, hash| {
+            format.tick(file, task, hash)
+        });
+    }
+    let original = session.original.describe();
+    if let Some(p) = &options.progress {
+        p.event(&progress::Event::Notice {
+            text: format!(
+                "in place: on {} in {}; returns to {original} at the end — do not use this checkout until then",
+                session.branch,
+                session.checkout.display()
+            ),
+        });
+        for note in &session.notes {
+            p.event(&progress::Event::Notice { text: note.clone() });
+        }
+    }
+    let shared = Arc::new(std::sync::Mutex::new(session));
+    let inner = RunOptions {
+        session: Some(Arc::clone(&shared)),
+        ..options.clone()
+    };
+    let res = f(&inner);
+    let session = shared.lock().map(|s| s.clone());
+    // An attempt waiting for a person keeps the checkout as it left it: the
+    // session stays, and the next `run --in-place` takes it over and resumes.
+    if let Some(task) = waiting_task(&res) {
+        let notes: String = session
+            .as_ref()
+            .map(|s| s.notes.iter().map(|n| format!("\n{n}")).collect())
+            .unwrap_or_default();
+        let message = format!(
+            "{}{notes}\nthe checkout stays on {} while {task} waits: decide it (`speccoder approve --task {task}` or `reject`), then `speccoder run --in-place` continues it — or `speccoder run --in-place --return` gives the checkout back",
+            res.message(),
+            session
+                .as_ref()
+                .map(|s| s.branch.as_str())
+                .unwrap_or("the speccoder branch"),
+        );
+        let out = CommandResult::new(res.command(), res.status(), &message)
+            .with_next(res.next().to_vec());
+        return match res.data() {
+            Some(d) => out.with_data(d.clone()),
+            None => out,
+        };
+    }
+    let (back, notes) = match session {
+        Ok(s) => (s.finish(&plane_dir), s.notes),
+        Err(_) => (Ok(()), Vec::new()),
+    };
+    let told: String = notes.iter().map(|n| format!("\n{n}")).collect();
+    let (status, message) = match back {
+        Ok(()) => (
+            res.status(),
+            format!("{} — back on {original}{told}", res.message()),
+        ),
+        Err(e) => (
+            CommandStatus::NeedsHuman,
+            format!("{}{told}\n{}", res.message(), e.result(command).message()),
+        ),
+    };
+    let out = CommandResult::new(res.command(), status, &message).with_next(res.next().to_vec());
+    match res.data() {
+        Some(d) => out.with_data(d.clone()),
+        None => out,
+    }
+}
+
+/// The task whose attempt the result left waiting for a person, if any.
+fn waiting_task(res: &CommandResult) -> Option<String> {
+    let waits = |r: &speccoder_core::RunReport| {
+        r.pending
+            .as_ref()
+            .is_some_and(|p| p["waiting"] == true)
+            .then(|| r.task.clone())
+    };
+    match res.data() {
+        Some(CommandData::Run(r)) => waits(r),
+        Some(CommandData::Feature(f)) => f.attempts.last().and_then(waits),
+        _ => None,
+    }
 }
 
 /// The format's checklist gate: an unchecked item in the feature's

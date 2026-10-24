@@ -265,7 +265,7 @@ impl Adapter for OpenSpec {
             runtime: |_| false,
             essentials: vec![format!("{}/tasks.md", join(unit_dir))],
             message: "the change's OpenSpec files are not committed, so a worktree would not contain them",
-            hint: "commit them (git add openspec && git commit), or wait for in-place mode",
+            hint: "commit them (git add openspec && git commit), or run in place: speccoder run --in-place",
             no_commits_hint: "commit the OpenSpec files first (git add openspec && git commit)",
         }
     }
