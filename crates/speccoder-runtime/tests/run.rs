@@ -2928,3 +2928,76 @@ fn a_waiting_call_is_listed_as_it_was_asked_and_a_note_reaches_the_attempt() {
         "an empty object is enough"
     );
 }
+
+// ── repository instructions (AGENTS.md, F-073) ────────────────────
+
+const AGENTS_MD: (&str, &str) = ("AGENTS.md", "Errors use thiserror. MARKER-AGENTS-7731\n");
+
+#[test]
+fn the_repository_instructions_reach_the_attempt_and_the_test_author() {
+    let r = repo_with(
+        "[acceptance]\nheld_out = false\n",
+        &[
+            ACCEPTANCE_SPEC,
+            AGENTS_MD,
+            ("src/AGENTS.md", "src rules MARKER-SRC-55\n"),
+            ("web/AGENTS.md", "MARKER-WEB-99\n"),
+        ],
+    );
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_structure(acceptance("tests/acceptance_login.txt", GREP_LOGIN));
+    f.will_call_tool("c1", "edit_file", json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\npub fn login() {}" }));
+    f.will_structure(done("login"));
+    let res = run(r.path(), state.path(), "T005", d);
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let rep = report(&res);
+    let prompts: Vec<String> = f
+        .asked()
+        .iter()
+        .map(|a| serde_json::to_string(&a.prompt).unwrap())
+        .collect();
+    // The author (no tools) and the attempt (tools) both saw the root file.
+    assert!(
+        prompts[0].contains("MARKER-AGENTS-7731"),
+        "author: {}",
+        prompts[0]
+    );
+    assert!(
+        prompts[1].contains("MARKER-AGENTS-7731") && prompts[1].contains("Repository instructions")
+    );
+    // A directory the task names nothing in is not read.
+    assert!(!prompts.iter().any(|p| p.contains("MARKER-WEB-99")));
+    let names: Vec<&str> = rep.instructions.iter().map(|i| i.path.as_str()).collect();
+    assert!(names.first() == Some(&"AGENTS.md"), "{names:?}");
+    assert_eq!(rep.instructions[0].sha256.len(), 64);
+    // The journal holds them: strict replay needs no file.
+    fs::remove_file(r.path().join("AGENTS.md")).unwrap();
+    let wt = Path::new(&rep.worktree);
+    let _ = fs::remove_file(wt.join("AGENTS.md"));
+    let replayed = speccoder_runtime::replay_with(r.path(), &rep.run_id, state.path());
+    assert!(
+        replayed.message().starts_with("reproduced"),
+        "{}",
+        replayed.message()
+    );
+}
+
+#[test]
+fn no_instructions_when_turned_off() {
+    let r = repo_with(
+        "[acceptance]\ngenerate = false\n\n[context]\ninstructions = []\n",
+        &[AGENTS_MD],
+    );
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_structure(done("nothing to do"));
+    let res = run(r.path(), state.path(), "T005", d);
+    let rep = report(&res);
+    assert!(rep.instructions.is_empty());
+    assert!(!f.asked().iter().any(|a| {
+        serde_json::to_string(&a.prompt)
+            .unwrap()
+            .contains("MARKER-AGENTS")
+    }));
+}

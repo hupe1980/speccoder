@@ -22,6 +22,7 @@ pub mod held_out;
 pub mod hosting;
 pub mod in_place;
 pub mod init;
+pub mod instructions;
 pub mod integrity;
 pub mod mcp;
 pub mod mutation;

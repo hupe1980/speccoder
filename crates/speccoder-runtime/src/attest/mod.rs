@@ -448,6 +448,7 @@ pub fn record_tick(t: &Tick<'_>, report: &RunReport) -> Value {
         "model": t.model,
         "run": report.run_id,
         "decisions": decisions(report),
+        "instructions": report.instructions,
         "policy_sha256": policy,
         "time": time,
     });

@@ -38,6 +38,12 @@ struct RawMonitor {
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
+struct RawContext {
+    instructions: Option<Vec<String>>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct RawConverge {
     max_rounds: Option<u32>,
 }
@@ -163,6 +169,9 @@ pub struct RunConfig {
     pub approval_wait: std::time::Duration,
     /// `[attest]`.
     pub attest: AttestConfig,
+    /// `[context] instructions`: the file names read per directory as the
+    /// repository's instructions for agents (F-073); empty: none.
+    pub instructions: Vec<String>,
 }
 
 impl Default for RunConfig {
@@ -182,6 +191,7 @@ impl Default for RunConfig {
             format: None,
             approval_wait: std::time::Duration::from_secs(7 * 24 * 3600),
             attest: AttestConfig::default(),
+            instructions: vec!["AGENTS.md".to_owned()],
         }
     }
 }
@@ -305,6 +315,20 @@ pub fn parse(text: &str) -> Result<RunConfig, String> {
             .and_then(|s| s.identity.clone()),
         sigstore_issuer: raw_attest.sigstore.and_then(|s| s.issuer),
     };
+    let context: RawContext = match table.get("context") {
+        Some(v) => v
+            .clone()
+            .try_into()
+            .map_err(|e| format!("[context]: {e}"))?,
+        None => RawContext::default(),
+    };
+    if let Some(bad) = context.instructions.iter().flatten().find(|n| {
+        n.is_empty() || n.contains('/') || n.contains('\\') || matches!(n.as_str(), "." | "..")
+    }) {
+        return Err(format!(
+            "[context]: instructions = \"{bad}\": a file name such as AGENTS.md, without a directory"
+        ));
+    }
     let d = RunConfig::default();
     let approval_wait = match approvals.wait.as_deref() {
         Some(w) => wait(w)?,
@@ -329,12 +353,28 @@ pub fn parse(text: &str) -> Result<RunConfig, String> {
         format: format.map(|f| f.argv),
         approval_wait,
         attest,
+        instructions: context.instructions.unwrap_or(d.instructions),
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn agents_md_is_read_unless_configured_otherwise() {
+        assert_eq!(parse("").unwrap().instructions, ["AGENTS.md"]);
+        let c = parse("[context]\ninstructions = [\"AGENTS.md\", \"CLAUDE.md\"]\n").unwrap();
+        assert_eq!(c.instructions, ["AGENTS.md", "CLAUDE.md"]);
+        assert!(
+            parse("[context]\ninstructions = []\n")
+                .unwrap()
+                .instructions
+                .is_empty()
+        );
+        assert!(parse("[context]\ninstructions = [\"docs/AGENTS.md\"]\n").is_err());
+        assert!(parse("[context]\nfiles = []\n").is_err());
+    }
 
     #[test]
     fn attestations_are_on_and_signed_by_git_unless_configured() {

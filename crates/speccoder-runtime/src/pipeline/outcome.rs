@@ -185,6 +185,7 @@ pub(crate) fn bare_report(
         samples: Vec::new(),
         scope: None,
         attestation: None,
+        instructions: Vec::new(),
     }
 }
 

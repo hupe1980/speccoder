@@ -94,6 +94,12 @@ Keep the list narrow: an allowed command runs whatever the model passes after th
 |---|---|---|
 | `[spec] format` | detected | The spec format: `speckit`, `openspec` or `kiro`. `--format` and `SPECCODER_FORMAT` override it. This version runs Spec Kit; OpenSpec and Kiro are recognised and refused as not yet supported |
 
+## `[context]`
+
+| Key | Default | Meaning |
+|---|---|---|
+| `instructions` | `["AGENTS.md"]` | The file names read as the [repository's instructions](@/docs/running.md#repository-instructions), per directory the first that exists, e.g. `["AGENTS.md", "CLAUDE.md"]`; `[]` reads none |
+
 ## `[acceptance]`, `[converge]`, `[monitor]`, `[git]`, `[format]`
 
 | Key | Default | Meaning |

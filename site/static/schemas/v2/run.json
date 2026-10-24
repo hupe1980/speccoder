@@ -293,6 +293,36 @@
       ],
       "type": "object"
     },
+    "InstructionFile": {
+      "description": "A repository instructions file given to an attempt.",
+      "properties": {
+        "bytes": {
+          "description": "Its size.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "cut": {
+          "description": "Cut to fit the instructions budget.",
+          "type": "boolean"
+        },
+        "path": {
+          "description": "Repository-relative path.",
+          "type": "string"
+        },
+        "sha256": {
+          "description": "sha256 of the file.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "sha256",
+        "bytes",
+        "cut"
+      ],
+      "type": "object"
+    },
     "Regression": {
       "description": "A test that passed in the baseline and no longer does.",
       "properties": {
@@ -527,6 +557,13 @@
     "feature": {
       "description": "Feature directory name.",
       "type": "string"
+    },
+    "instructions": {
+      "description": "The repository's instructions the attempt was given (`AGENTS.md`,\nF-073), root first.",
+      "items": {
+        "$ref": "#/$defs/InstructionFile"
+      },
+      "type": "array"
     },
     "integrity": {
       "description": "Integrity findings of the attempt's diff (each also fails the verdict).",

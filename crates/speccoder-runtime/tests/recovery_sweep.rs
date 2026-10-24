@@ -114,7 +114,12 @@ fn every_crash_point_of_an_attempt_resumes_honestly() {
     let origin = Arc::new(RedbStore::open_in_memory().unwrap());
     let plane = Plane::on_store(Arc::clone(&origin), &model, Arc::new(Steps), tools()).unwrap();
     let (outcome, _) = rt
-        .block_on(plane.attempt_keyed("001-login", "T001", input(bundle(), &settings, None), "k1"))
+        .block_on(plane.attempt_keyed(
+            "001-login",
+            "T001",
+            input(bundle(), &settings, None, &[]),
+            "k1",
+        ))
         .unwrap();
     assert!(
         matches!(outcome.status, agentplane::prelude::RunStatus::Succeeded),

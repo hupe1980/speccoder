@@ -243,6 +243,19 @@ pub const PAYLOADS: &[&str] = &[
     "schema",
 ];
 
+/// A repository instructions file given to an attempt.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct InstructionFile {
+    /// Repository-relative path.
+    pub path: String,
+    /// sha256 of the file.
+    pub sha256: String,
+    /// Its size.
+    pub bytes: usize,
+    /// Cut to fit the instructions budget.
+    pub cut: bool,
+}
+
 /// One code, as `explain` shows it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct CodeInfo {
@@ -541,6 +554,10 @@ pub struct RunReport {
     /// missing, signer, reason }` (F-061).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub attestation: Option<serde_json::Value>,
+    /// The repository's instructions the attempt was given (`AGENTS.md`,
+    /// F-073), root first.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub instructions: Vec<InstructionFile>,
 }
 
 /// A failed attempt that was undone and retried.

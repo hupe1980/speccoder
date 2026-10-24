@@ -184,7 +184,12 @@ pub struct Attempt {
 /// output (`speccoder://verifier`); the settings list MCP tool descriptions
 /// (their servers).
 #[must_use]
-pub fn input(bundle: Value, settings: &Settings<'_>, digest: Option<&Value>) -> Tainted<Value> {
+pub fn input(
+    bundle: Value,
+    settings: &Settings<'_>,
+    digest: Option<&Value>,
+    instructions: &[crate::instructions::Instruction],
+) -> Tainted<Value> {
     let digest = match digest.filter(|d| !d.is_null()) {
         Some(d) => Tainted::with_label(d.clone(), provenance::from(provenance::VERIFIER)),
         None => Tainted::trusted(Value::Null),
@@ -223,6 +228,16 @@ pub fn input(bundle: Value, settings: &Settings<'_>, digest: Option<&Value>) -> 
         ("bundle", Tainted::trusted(bundle)),
         ("digest", digest),
         ("settings", settings),
+        // The repository's text, as if the model had read the files itself;
+        // none is no text, and no label.
+        (
+            "instructions",
+            if instructions.is_empty() {
+                Tainted::trusted(json!([]))
+            } else {
+                Tainted::with_label(json!(instructions), provenance::from(provenance::WORKTREE))
+            },
+        ),
     ])
 }
 
@@ -234,8 +249,9 @@ fn refusal(text: String, call: &agentplane::core::Label) -> Tainted<String> {
 }
 
 /// The parts of an attempt's input its messages quote.
-const MESSAGE_PARTS: [&str; 5] = [
+const MESSAGE_PARTS: [&str; 6] = [
     "/bundle",
+    "/instructions",
     "/digest",
     "/settings/nudges",
     "/settings/rejected",
@@ -451,6 +467,17 @@ impl Skill for Attempt {
                     &self::policy(self.format.wording()),
                     self.format,
                 );
+                let given: Vec<crate::instructions::Instruction> =
+                    serde_json::from_value(input["instructions"].clone()).unwrap_or_default();
+                if let Some(text) = crate::instructions::section(&given) {
+                    let (key, kind) = match style {
+                        PromptStyle::OpenAi => ("input", "input_text"),
+                        PromptStyle::Anthropic | PromptStyle::Chat => ("messages", "text"),
+                    };
+                    if let Some(content) = p[key][0]["content"].as_array_mut() {
+                        content.push(json!({ "type": kind, "text": text }));
+                    }
+                }
                 if !input["digest"].is_null() {
                     let (key, kind) = match style {
                         PromptStyle::OpenAi => ("input", "input_text"),

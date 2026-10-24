@@ -107,8 +107,10 @@ pub fn held_out_input(
     scenarios: &[speccoder_core::spec::ScenarioRef],
     visible: &[(String, String)],
     composition: bool,
+    instructions: &[crate::instructions::Instruction],
 ) -> Tainted<Value> {
     Tainted::object([
+        ("instructions", instructions_part(instructions)),
         ("set", Tainted::trusted(json!("held_out"))),
         ("bundle", Tainted::trusted(bundle)),
         ("scenarios", Tainted::trusted(json!(scenarios))),
@@ -167,10 +169,12 @@ pub fn input(
     scenarios: &[speccoder_core::spec::ScenarioRef],
     files: &[String],
     manifest: &str,
+    instructions: &[crate::instructions::Instruction],
 ) -> Tainted<Value> {
-    // The bundle and its scenarios are the person's; the file list and
-    // manifest are the worktree's.
+    // The bundle and its scenarios are the person's; the file list,
+    // manifest and instructions are the worktree's.
     Tainted::object([
+        ("instructions", instructions_part(instructions)),
         ("bundle", Tainted::trusted(bundle)),
         ("scenarios", Tainted::trusted(json!(scenarios))),
         (
@@ -181,6 +185,17 @@ pub fn input(
             ),
         ),
     ])
+}
+
+/// The repository's instructions, labelled as the worktree's.
+fn instructions_part(instructions: &[crate::instructions::Instruction]) -> Tainted<Value> {
+    if instructions.is_empty() {
+        return Tainted::trusted(json!([]));
+    }
+    Tainted::with_label(
+        json!(instructions),
+        super::provenance::from(super::provenance::WORKTREE),
+    )
 }
 
 /// The coded skill.
@@ -232,6 +247,12 @@ impl Skill for Acceptance {
                     "# Project files\n\n{files}\n\n# Manifest\n\n{}",
                     input["project"]["manifest"].as_str().unwrap_or("(none)")
                 );
+                let given: Vec<crate::instructions::Instruction> =
+                    serde_json::from_value(input["instructions"].clone()).unwrap_or_default();
+                if let Some(section) = crate::instructions::section(&given) {
+                    text.push_str("\n\n");
+                    text.push_str(&section);
+                }
                 let scenarios = input["scenarios"].as_array().into_iter().flatten();
                 if scenarios.clone().next().is_some() {
                     text.push_str("\n\n# Scenarios (cite these IDs)\n");

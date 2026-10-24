@@ -93,7 +93,7 @@ Where the OS has no sandbox, every run says `commands run unsandboxed`; `[sandbo
 speccoder runs on the [agentplane](https://crates.io/crates/agentplane) runtime, whose gates decide by **labels**: where a piece of content came from. speccoder labels everything the model reads by its real source, where it enters:
 
 - **trusted:** speccoder's own instructions, and your committed spec, plan, notes and decisions;
-- **untrusted, by source:** check output quoted in a retry, worktree content, MCP tool descriptions and results, speccoder's own tool results, and the model's answers.
+- **untrusted, by source:** check output quoted in a retry, worktree content (the repository's `AGENTS.md` included), MCP tool descriptions and results, speccoder's own tool results, and the model's answers.
 
 Tool results reach the model through the runtime's conversation record, so every model call carries the label of everything the conversation has read, and a refusal speccoder sends back carries the label of the call it quotes. A mutating call's arguments may only come from the model, speccoder's tools, the verifier, the worktree and your configured MCP tools; any other source is refused. Labels are never inferred from content, so a source nobody anticipated is never trusted by default.
 

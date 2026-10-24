@@ -141,6 +141,17 @@ ticks a task only on evidence the model cannot produce or edit.
   `speccoder replay` re-derives a recorded run offline. Failed attempts are
   kept under `refs/speccoder/attempts/…`.
 
+**Repository instructions**
+
+- `AGENTS.md` reaches every attempt and the acceptance test author: one
+  file per directory from the repository root down to the directories the
+  task names, the nearest last (agents.md's "closest file wins"), at most
+  32 KiB (farther files cut, and said), labelled as repository text and
+  ranked below the task, the spec and the checks. The run summary and the
+  attestation name the files with their hashes; they are journaled, so a
+  replay needs none. `[context] instructions` sets the names
+  (`["AGENTS.md", "CLAUDE.md"]`) or turns it off (`[]`).
+
 **Look and accessibility**
 
 - Colour by meaning: each task state, error, stop and warning has its own

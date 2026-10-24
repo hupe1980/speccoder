@@ -455,6 +455,20 @@ pub fn run(w: &mut impl Write, r: &RunReport, message: &str) -> io::Result<()> {
     if let Some(reason) = &r.reason {
         writeln!(w, "Reason     {reason}")?;
     }
+    if !r.instructions.is_empty() {
+        let files: Vec<String> = r
+            .instructions
+            .iter()
+            .map(|i| {
+                if i.cut {
+                    format!("{} (cut)", i.path)
+                } else {
+                    i.path.clone()
+                }
+            })
+            .collect();
+        writeln!(w, "Guided by  {}", files.join(", "))?;
+    }
     if let Some(a) = &r.attestation {
         let detail = match (
             a["state"].as_str(),

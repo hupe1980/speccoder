@@ -439,6 +439,20 @@ pub(crate) fn run_task(
         Ok(v) => v,
         Err(e) => return fail(CommandStatus::Error, e.to_string()),
     };
+    // The repository's instructions for agents (F-073), from the tree the
+    // attempt starts in: for speccoder's own calls (the attempt, the test
+    // authors); an external agent reads its own files.
+    let instructions = crate::instructions::collect(
+        &wt_root,
+        &project,
+        &speccoder_core::scope::named_paths(&bundle.task.title),
+        &run_config.instructions,
+    );
+    let attempt_instructions: &[crate::instructions::Instruction] = if executor.is_none() {
+        &instructions
+    } else {
+        &[]
+    };
 
     // MCP servers, started in the worktree for this task's attempts.
     let servers = match mcp::parse(&config_text) {
@@ -578,6 +592,7 @@ pub(crate) fn run_task(
             task,
             bundle: bundle_value.clone(),
             scenarios: &scenarios,
+            instructions: &instructions,
             runner: &runner,
         }))
     } else {
@@ -613,6 +628,7 @@ pub(crate) fn run_task(
                     task,
                     bundle: bundle_value.clone(),
                     scenarios: &scenarios,
+                    instructions: &instructions,
                     runner: &runner,
                 },
                 a,
@@ -805,6 +821,7 @@ pub(crate) fn run_task(
                     hidden: &hidden,
                 },
                 digest.as_ref(),
+                attempt_instructions,
             );
             let attempt_began = std::time::Instant::now();
             let attempt_detail = if run_config.best_of > 1 {
@@ -1499,6 +1516,15 @@ pub(crate) fn run_task(
                 }
             }
         }
+        report.instructions = attempt_instructions
+            .iter()
+            .map(|i| speccoder_core::InstructionFile {
+                path: i.path.clone(),
+                sha256: i.sha256.clone(),
+                bytes: i.bytes,
+                cut: i.cut,
+            })
+            .collect();
         // Signed, portable evidence of the tick (F-061): never undoes it.
         if let Some(commit) = report
             .commit
