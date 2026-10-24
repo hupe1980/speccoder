@@ -774,10 +774,16 @@ mod tests {
         // the local person, through the editor that asked — a name the
         // connection reports, recorded as such on the decision.
         let by = a.by.clone().unwrap_or_else(|| panic!("no one answered"));
-        assert_eq!((by.via.as_str(), by.basis.as_str()), ("editor Zed", "connected"));
+        assert_eq!(
+            (by.via.as_str(), by.basis.as_str()),
+            ("editor Zed", "connected")
+        );
         let d = speccoder_runtime::approvals::tasks::decision_for(&a, &by, None)
             .unwrap_or_else(|| panic!("no decision"));
-        let op = d.decided.operator().unwrap_or_else(|| panic!("no operator"));
+        let op = d
+            .decided
+            .operator()
+            .unwrap_or_else(|| panic!("no operator"));
         assert_eq!(op.basis().to_string(), "connected");
         assert_eq!(d.amendment["via"], "editor Zed");
     }

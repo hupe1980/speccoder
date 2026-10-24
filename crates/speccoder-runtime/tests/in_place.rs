@@ -719,3 +719,46 @@ fn return_withdraws_a_call_waiting_in_place() {
         "a set-aside attempt still waits"
     );
 }
+
+#[test]
+fn a_refused_run_keeps_the_waiting_attempt_resumable() {
+    // Found by dogfooding: a stop before the attempt started deleted the
+    // waiting attempt's resume marker, and the next run began afresh.
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    waits_on_a_manifest(&f);
+    let first = run(r.path(), state.path(), d, &in_place());
+    assert_eq!(
+        first.status(),
+        CommandStatus::NeedsHuman,
+        "{}",
+        first.message()
+    );
+
+    // The repository's config changes while the call waits: the run stops.
+    git(r.path(), &["config", "speccoder.test", "1"]);
+    let (_f, d) = fake();
+    let stopped = run(r.path(), state.path(), d, &in_place());
+    assert!(
+        stopped.message().contains("GIT-CHANGED"),
+        "{}",
+        stopped.message()
+    );
+    git(r.path(), &["config", "--unset", "speccoder.test"]);
+
+    // Decided, the same attempt continues: nothing is asked again.
+    let ok = speccoder_runtime::approvals::decide_with(
+        r.path(),
+        None,
+        speccoder_runtime::approvals::Verb::Approve("T005"),
+        state.path(),
+    );
+    assert_eq!(ok.status(), CommandStatus::Ok, "{}", ok.message());
+    let (f, d) = fake();
+    f.will_structure(json!({ "summary": "manifest", "status": "done", "files_changed": ["package.json"], "checks_run": [], "notes": [] }));
+    let resumed = run(r.path(), state.path(), d, &in_place());
+    assert_eq!(resumed.status(), CommandStatus::Ok, "{}", resumed.message());
+    assert_eq!(f.asked().len(), 1, "the attempt started afresh");
+    assert_eq!(report(&resumed).run_id, report(&first).run_id);
+}

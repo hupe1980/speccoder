@@ -189,7 +189,7 @@ pub(crate) fn run_task(
         .unwrap_or_default();
     let interrupted = resume::load(&marker_path)
         .filter(|m| m.head == head_now && options.lane.is_none() && !head_now.is_empty());
-    let marker_guard = resume::Guard(marker_path.clone());
+    let marker_guard = resume::Guard::new(marker_path.clone());
     // Where the interrupted attempt was, from the live record it left
     // (read before this run overwrites it).
     let resumed_from = interrupted.as_ref().map(|_| {
@@ -513,9 +513,19 @@ pub(crate) fn run_task(
     // it changes no code until a failing test demonstrates the gap.
     let demand_red = run_config.acceptance && format.is_convergence(&bundle.task.phase);
     // Where this run started: an attempt that does not pass is undone to here.
-    let start = match worktree::checkpoint(&wt_root, &tmp) {
-        Ok(c) => c,
-        Err(e) => return fail(CommandStatus::GitPrecondition, e.0),
+    // Where an attempt that does not pass is undone to: the tree the task
+    // started from. A resumed attempt (interrupted, or waiting for a
+    // person) left its own writes in the tree, so its start is the branch
+    // tip it began at — a task always starts from a clean tip.
+    let start = match &interrupted {
+        Some(_) => match git::Git::at(&wt_root).line(&["rev-parse", "HEAD^{tree}"]) {
+            Ok(tree) => worktree::Checkpoint(tree),
+            Err(e) => return fail(CommandStatus::GitPrecondition, e.0),
+        },
+        None => match worktree::checkpoint(&wt_root, &tmp) {
+            Ok(c) => c,
+            Err(e) => return fail(CommandStatus::GitPrecondition, e.0),
+        },
     };
 
     let began = std::time::Instant::now();
@@ -830,6 +840,7 @@ pub(crate) fn run_task(
                         acceptance: acceptance_saved.clone(),
                     },
                 );
+                marker_guard.arm();
                 let outcome = match rt.block_on(plane.attempt_keyed(
                     &feature_name,
                     task,

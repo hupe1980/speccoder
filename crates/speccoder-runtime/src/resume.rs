@@ -77,20 +77,42 @@ pub fn new_key(feature: &str, task: &str) -> String {
     format!("attempt-{hex}")
 }
 
-/// Removes the marker when the task run ends in any ordinary way.
+/// Removes the marker when a task run that started an attempt ends in any
+/// ordinary way. A run refused before its attempt starts (a session check,
+/// a worktree held by a waiting call) leaves an interrupted or waiting
+/// attempt's marker alone: that attempt still resumes.
 #[derive(Debug)]
-pub struct Guard(pub PathBuf);
+pub struct Guard {
+    path: PathBuf,
+    armed: std::cell::Cell<bool>,
+}
 
 impl Guard {
+    /// A guard for the marker at `path`, not yet armed.
+    #[must_use]
+    pub fn new(path: PathBuf) -> Self {
+        Self {
+            path,
+            armed: std::cell::Cell::new(false),
+        }
+    }
+
+    /// An attempt is starting: the marker goes when the run ends.
+    pub fn arm(&self) {
+        self.armed.set(true);
+    }
+
     /// Leaves the marker in place: the attempt waits for a person and the
     /// next run resumes it.
     pub fn keep(self) {
-        std::mem::forget(self);
+        self.armed.set(false);
     }
 }
 
 impl Drop for Guard {
     fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.0);
+        if self.armed.get() {
+            let _ = std::fs::remove_file(&self.path);
+        }
     }
 }

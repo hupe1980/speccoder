@@ -431,6 +431,18 @@ fn main() {
         }
     };
     let result = speccoder_runtime::next::attach(result, feature_flag(&cli.command));
+    // While an in-place session holds the project, the way on is in place.
+    let result = match (
+        decision_path(&cli.command),
+        speccoder_runtime::worktree::state_dir(),
+    ) {
+        (Some(path), Some(state))
+            if speccoder_runtime::in_place::session_at(path, &state).is_some() =>
+        {
+            speccoder_runtime::next::in_place(result)
+        }
+        _ => result,
+    };
     let code = match output::render(&result, cli.json) {
         Ok(()) => result.exit_code(),
         Err(_) => ExitCode::INTERNAL,
@@ -450,6 +462,21 @@ fn verbosity(cli: &cli::Cli) -> progress::Verbosity {
 }
 
 /// The `--feature` a command was given.
+/// The project of a command whose next step is a run: decisions and
+/// controls taken while an in-place session may hold the checkout.
+fn decision_path(command: &cli::Command) -> Option<&std::path::Path> {
+    use cli::Command as C;
+    match command {
+        C::Approvals { path, .. }
+        | C::Approve { path, .. }
+        | C::Reject { path, .. }
+        | C::Skip { path, .. }
+        | C::Nudge { path, .. }
+        | C::Status { path } => Some(path.as_path()),
+        _ => None,
+    }
+}
+
 fn feature_flag(command: &cli::Command) -> Option<&str> {
     use cli::Command as C;
     match command {

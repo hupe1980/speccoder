@@ -193,7 +193,7 @@ pub fn catalog() -> Vec<ToolSpec> {
             server: "fs",
             mutates: true,
             model_fields: &["/path", "/old_string", "/new_string"],
-            description: "Replace an exact string in a file (exactly one occurrence unless replace_all).",
+            description: "Replace an exact string in a file: old_string is removed and new_string takes its place (exactly one occurrence unless replace_all). To add text without removing any, anchor on existing text and repeat it: old_string = an existing line, new_string = that same line followed by the new one.",
             parameters: schema::<EditFile>,
         },
         ToolSpec {

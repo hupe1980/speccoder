@@ -401,3 +401,47 @@ fn calls_decided_without_a_person_name_the_rule() {
     // No call a rule decided is recorded as a person's.
     assert!(calls.iter().all(|c| c["by"] != "person"));
 }
+
+#[test]
+fn a_resumed_attempt_that_fails_is_undone_to_where_the_task_started() {
+    // Found by dogfooding: the undo went to the tree the resumed run found,
+    // which already held the attempt's own writes.
+    let r = repo("\n[checks.no-manifest]\nargv = [\"sh\", \"-c\", \"test ! -e package.json\"]\n");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    write_manifest(&f, "c1");
+    let first = speccoder_runtime::run_with(r.path(), None, "T005", state.path(), d, None);
+    assert_eq!(
+        first.status(),
+        CommandStatus::NeedsHuman,
+        "{}",
+        first.message()
+    );
+    let ok = decide_with(r.path(), None, Verb::Approve("T005"), state.path());
+    assert_eq!(ok.status(), CommandStatus::Ok, "{}", ok.message());
+
+    let (f, d) = fake();
+    f.will_structure(done());
+    let res = speccoder_runtime::run_with(r.path(), None, "T005", state.path(), d, None);
+    let rep = report(&res);
+    assert!(
+        !rep.ticked && rep.saved_attempt.is_some(),
+        "{}",
+        res.message()
+    );
+    let wt = Path::new(&rep.worktree);
+    assert!(
+        !wt.join("package.json").exists(),
+        "the failed attempt's write is still there"
+    );
+    let status = Command::new("git")
+        .args(["status", "--porcelain"])
+        .current_dir(wt)
+        .output()
+        .unwrap();
+    assert!(
+        status.stdout.is_empty(),
+        "{}",
+        String::from_utf8_lossy(&status.stdout)
+    );
+}

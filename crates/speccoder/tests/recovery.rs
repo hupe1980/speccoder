@@ -286,8 +286,16 @@ fn a_command_killed_mid_run_is_not_guessed_about() {
     // A person decides: the command is not run again on a guess.
     assert_eq!(out["status"], "needs_human", "{out}");
     assert_eq!(out["data"]["attempt_status"], "interrupted");
-    assert!(out["data"]["saved_attempt"].as_str().is_some());
-    assert_eq!(fs::read_to_string(&log).unwrap_or_default(), "started\n");
+    let saved = out["data"]["saved_attempt"].as_str().unwrap().to_owned();
+    // Undone: the worktree is back where the task started, and what the
+    // interrupted command wrote is kept in the saved attempt.
+    assert!(!log.exists(), "the interrupted attempt was not undone");
+    let kept = Command::new("git")
+        .args(["show", &format!("{saved}:calls.log")])
+        .current_dir(r)
+        .output()
+        .unwrap();
+    assert_eq!(String::from_utf8_lossy(&kept.stdout), "started\n");
     // The next run starts a fresh attempt (the mock answers it again).
     let third = run().wait_with_output().unwrap();
     let out: Value = serde_json::from_slice(&third.stdout).unwrap();
