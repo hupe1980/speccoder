@@ -17,7 +17,7 @@ const EXCERPT_BYTES: usize = 4000;
 const MARKERS: [&str; 5] = ["error", "panicked", "assert", "failed", "fail"];
 
 /// One check that did not pass.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct FailedCheck {
     /// Name from `speccoder.toml` (or `acceptance`).
     pub name: String,
@@ -32,7 +32,7 @@ pub struct FailedCheck {
 }
 
 /// What the next attempt is told about the previous one.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct Digest {
     /// The attempt this digest describes (1-based).
     pub attempt: u32,

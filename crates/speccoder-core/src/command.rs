@@ -7,14 +7,14 @@ use crate::verify::VerifyReport;
 
 /// Version of the machine-readable command result. Fields may be added within
 /// a version; renaming or removing one, or changing its meaning, bumps it.
-pub const SCHEMA_VERSION: u32 = 1;
+pub const SCHEMA_VERSION: u32 = 2;
 
 /// Process exit status of a command.
 ///
 /// Reserved ranges: `10..=19` for discovery and diagnostic failures, `20..=29`
 /// for run outcomes. Values outside the named constants and those ranges are
 /// not used.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 #[serde(transparent)]
 pub struct ExitCode(u8);
 
@@ -62,7 +62,7 @@ impl ExitCode {
 }
 
 /// Outcome class of a command.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum CommandStatus {
     /// The command succeeded.
@@ -128,7 +128,7 @@ impl CommandStatus {
 }
 
 /// Command-specific payload of a result.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, schemars::JsonSchema)]
 #[serde(untagged)]
 pub enum CommandData {
     /// `inspect`: the project snapshot.
@@ -175,24 +175,149 @@ pub enum CommandData {
     InPlace(Box<InPlaceReport>),
     /// `attest verify` / `attest sign`: what each task's attestation says.
     Attest(Box<AttestReport>),
+    /// `explain`: catalog entries.
+    Explain(Box<ExplainReport>),
+    /// `schema`: the published schemas, or one of them.
+    Schema(Box<SchemaReport>),
+}
+
+impl CommandData {
+    /// The payload's schema name (`run`, `feature`, `in-place`, …): the
+    /// envelope's `payload`.
+    #[must_use]
+    pub const fn kind(&self) -> &'static str {
+        match self {
+            Self::Inspect(_) => "inspect",
+            Self::Verify(_) => "verify",
+            Self::Worktree(_) => "worktree",
+            Self::Propose(_) => "propose",
+            Self::Replay(_) => "replay",
+            Self::Run(_) => "run",
+            Self::Eval(_) => "eval",
+            Self::Feature(_) => "feature",
+            Self::Converge(_) => "converge",
+            Self::Report(_) => "report",
+            Self::Approvals(_) => "approvals",
+            Self::Control(_) => "control",
+            Self::Cost(_) => "cost",
+            Self::Pr(_) => "pr",
+            Self::Bench(_) => "bench",
+            Self::Init(_) => "init",
+            Self::Skills(_) => "skills",
+            Self::Skill(_) => "skill",
+            Self::Checklists(_) => "checklists",
+            Self::Archive(_) => "archive",
+            Self::InPlace(_) => "in-place",
+            Self::Attest(_) => "attest",
+            Self::Explain(_) => "explain",
+            Self::Schema(_) => "schema",
+        }
+    }
+}
+
+/// Every payload's schema name, in [`CommandData`]'s order.
+pub const PAYLOADS: &[&str] = &[
+    "inspect",
+    "verify",
+    "worktree",
+    "propose",
+    "replay",
+    "run",
+    "eval",
+    "feature",
+    "converge",
+    "report",
+    "approvals",
+    "control",
+    "cost",
+    "pr",
+    "bench",
+    "init",
+    "skills",
+    "skill",
+    "checklists",
+    "archive",
+    "in-place",
+    "attest",
+    "explain",
+    "schema",
+];
+
+/// One code, as `explain` shows it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct CodeInfo {
+    /// `NEEDS-APPROVAL`.
+    pub code: String,
+    /// Error, stop or warning.
+    pub kind: crate::codes::Kind,
+    /// The status results with this code have.
+    pub status: CommandStatus,
+    /// Its exit code.
+    pub exit_code: u8,
+    /// One line.
+    pub title: String,
+    /// What it means and why it happens.
+    pub explain: String,
+    /// How to resolve it (templates: `<task>`, `<feature>` are blanks).
+    pub fix: Vec<String>,
+    /// Its section on the codes page.
+    pub docs: String,
+}
+
+impl CodeInfo {
+    /// The view of a catalog entry.
+    #[must_use]
+    pub fn of(e: &crate::codes::Entry) -> Self {
+        Self {
+            code: e.name.to_owned(),
+            kind: e.kind,
+            status: e.status,
+            exit_code: e.status.exit_code().code(),
+            title: e.title.to_owned(),
+            explain: e.explain.to_owned(),
+            fix: crate::codes::fixes(e, "<command>", None, None),
+            docs: e.docs(),
+        }
+    }
+}
+
+/// Result of `speccoder explain`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct ExplainReport {
+    /// The code asked for, or every code with `--list`.
+    pub codes: Vec<CodeInfo>,
+}
+
+/// One published schema.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct SchemaName {
+    /// `result`, `event`, `run`, …
+    pub name: String,
+    /// What it describes.
+    pub describes: String,
+    /// Where it is published.
+    pub url: String,
+}
+
+/// Result of `speccoder schema`.
+#[derive(Debug, Clone, PartialEq, Serialize, schemars::JsonSchema)]
+pub struct SchemaReport {
+    /// Every schema speccoder publishes.
+    pub names: Vec<SchemaName>,
+    /// The schema asked for.
+    pub schema: Option<serde_json::Value>,
 }
 
 /// Why an in-place run refused or stopped.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct InPlaceReport {
-    /// `DIRTY-CHECKOUT`, `UNBORN-HEAD`, `CONFIG-NOT-TRACKED`,
-    /// `BRANCH-IN-WORKTREE`, `IN-PLACE-ACTIVE`, `IN-PLACE-PARALLEL`,
-    /// `MERGE-CONFLICT`, `IN-PLACE-SESSION`, `INTENT-CHANGED`,
-    /// `JUDGE-CHANGED`, `CHECKOUT-CHANGED` or `RETURN-BLOCKED`.
-    pub code: String,
-    /// The paths involved, with why.
+    /// The paths involved, with why (the code and the fixes are the
+    /// envelope's).
     pub paths: Vec<RefusedPath>,
-    /// What to run: the first fixes it, the others are alternatives.
-    pub fix: Vec<String>,
 }
 
 /// Result of `speccoder spec archive` (an OpenSpec change).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct ArchiveReport {
     /// The change.
     pub change: String,
@@ -216,7 +341,7 @@ pub struct ArchiveReport {
 }
 
 /// One Spec Kit checklist (`specs/<feature>/checklists/*.md`).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct ChecklistStatus {
     /// Path relative to the project root.
     pub file: String,
@@ -229,7 +354,7 @@ pub struct ChecklistStatus {
 }
 
 /// Result of `speccoder eval`.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, schemars::JsonSchema)]
 pub struct EvalReport {
     /// The model the suite ran with, `provider/model`.
     pub model: String,
@@ -240,7 +365,7 @@ pub struct EvalReport {
 }
 
 /// One judged case.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, schemars::JsonSchema)]
 pub struct EvalCase {
     /// Directory name.
     pub name: String,
@@ -280,7 +405,7 @@ pub struct EvalCase {
 }
 
 /// Suite counts and metrics.
-#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, schemars::JsonSchema)]
 pub struct EvalSummary {
     /// Cases run.
     pub cases: usize,
@@ -316,7 +441,7 @@ pub struct EvalSummary {
 }
 
 /// Visible passes the held-out tests caught.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, schemars::JsonSchema)]
 pub struct HeldOutGap {
     /// Attempts the held-out tests judged (they had passed visibly).
     pub visible_passed: usize,
@@ -327,7 +452,7 @@ pub struct HeldOutGap {
 }
 
 /// Held-out passes the hidden oracle agreed with, or not.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, schemars::JsonSchema)]
 pub struct HeldOutOracle {
     /// The oracle passed too.
     pub agree: usize,
@@ -337,7 +462,7 @@ pub struct HeldOutOracle {
 
 /// The gaming monitor against the oracle's ground truth: a positive is a
 /// cheat or a false completion (both passed the visible checks).
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, schemars::JsonSchema)]
 pub struct MonitorScore {
     /// Cases the monitor judged.
     pub judged: usize,
@@ -354,7 +479,7 @@ pub struct MonitorScore {
 }
 
 /// Result of `speccoder run`.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, schemars::JsonSchema)]
 pub struct RunReport {
     /// The agentplane run of the attempt.
     pub run_id: String,
@@ -419,7 +544,7 @@ pub struct RunReport {
 }
 
 /// A failed attempt that was undone and retried.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, schemars::JsonSchema)]
 pub struct EarlierAttempt {
     /// The agentplane run of the attempt.
     pub run_id: String,
@@ -436,7 +561,7 @@ pub struct EarlierAttempt {
 }
 
 /// Result of `speccoder run` without `--task`: a feature worked through.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, schemars::JsonSchema)]
 pub struct FeatureReport {
     /// Feature directory name.
     pub feature: String,
@@ -456,7 +581,7 @@ pub struct FeatureReport {
 }
 
 /// The `full` check tier at the end of a feature.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct FullTier {
     /// The checks that ran.
     pub ran: Vec<String>,
@@ -469,14 +594,14 @@ pub struct FullTier {
 }
 
 /// Result of `speccoder skill` without a name.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct SkillsReport {
     /// Installed skills by name.
     pub skills: Vec<SkillEntry>,
 }
 
 /// One installed Agent Skill.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct SkillEntry {
     /// Its name.
     pub name: String,
@@ -489,7 +614,7 @@ pub struct SkillEntry {
 }
 
 /// Result of `speccoder skill <name>`.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, schemars::JsonSchema)]
 pub struct SkillRunReport {
     /// The skill.
     pub skill: String,
@@ -516,7 +641,7 @@ pub struct SkillRunReport {
 }
 
 /// Result of `speccoder init`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct InitReport {
     /// The configuration file.
     pub path: String,
@@ -529,7 +654,7 @@ pub struct InitReport {
 }
 
 /// One detected check.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct InitCheck {
     /// `[checks.<name>]`.
     pub name: String,
@@ -542,7 +667,7 @@ pub struct InitCheck {
 }
 
 /// Result of `accept`, `skip` and `nudge`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct ControlReport {
     /// Feature directory name.
     pub feature: String,
@@ -557,7 +682,7 @@ pub struct ControlReport {
 }
 
 /// Result of `speccoder cost`.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, schemars::JsonSchema)]
 pub struct CostReport {
     /// Feature directory name.
     pub feature: String,
@@ -572,7 +697,7 @@ pub struct CostReport {
 }
 
 /// One task's cost.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, schemars::JsonSchema)]
 pub struct TaskCost {
     /// Task ID.
     pub task: String,
@@ -583,7 +708,7 @@ pub struct TaskCost {
 }
 
 /// Token counts, and USD when prices are configured.
-#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, schemars::JsonSchema)]
 pub struct Usage {
     /// Input tokens (including those read from the cache).
     pub input_tokens: u64,
@@ -598,7 +723,7 @@ pub struct Usage {
 }
 
 /// Result of `speccoder approvals`, `approve` and `reject`.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, schemars::JsonSchema)]
 pub struct ApprovalsReport {
     /// Feature directory name.
     pub feature: String,
@@ -610,7 +735,7 @@ pub struct ApprovalsReport {
 
 /// A call that stopped an attempt for approval, or a question, waiting for
 /// a person.
-#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, schemars::JsonSchema)]
 pub struct PendingCall {
     /// Task ID.
     pub task: String,
@@ -642,7 +767,7 @@ pub struct PendingCall {
 }
 
 /// Who decided, and how speccoder knows the name.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct OperatorView {
     /// The name.
     pub actor: String,
@@ -653,7 +778,7 @@ pub struct OperatorView {
 
 /// A pending call as a person sees it: what, why, what it can reach, what
 /// the model claimed, and what approving it grants.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct ApprovalView {
     /// `write`, `edit`, `run`, `network` or `mcp`.
     pub kind: String,
@@ -674,7 +799,7 @@ pub struct ApprovalView {
 }
 
 /// A person's decision.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct DecidedCall {
     /// Task ID.
     pub task: String,
@@ -701,7 +826,7 @@ pub struct DecidedCall {
 }
 
 /// What `attest verify` found for one task object (F-061).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum VerifyOutcome {
     /// Every line parses, every signature verifies against the trust input,
@@ -754,7 +879,7 @@ impl VerifyOutcome {
 }
 
 /// Why an object got its outcome.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct VerifyReason {
     /// A stable code, e.g. `subject`, `trailer`, `line_hash`, `signature`.
     pub code: String,
@@ -770,7 +895,7 @@ pub struct VerifyReason {
 }
 
 /// Who signed.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct SignerView {
     /// `ssh`, `openpgp` or `sigstore`.
     pub kind: String,
@@ -782,7 +907,7 @@ pub struct SignerView {
 }
 
 /// One task object's verification.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct ObjectVerification {
     /// The commit (or skip record) id.
     pub object: String,
@@ -805,7 +930,7 @@ pub struct ObjectVerification {
 }
 
 /// Result of `speccoder attest verify` and `attest sign`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct AttestReport {
     /// Feature directory name.
     pub feature: String,
@@ -819,7 +944,7 @@ pub struct AttestReport {
 }
 
 /// One row of the requirement → scenario → test → verdict matrix.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct TraceRow {
     /// `FR-001`, `SC-002`.
     pub requirement: String,
@@ -834,7 +959,7 @@ pub struct TraceRow {
 }
 
 /// Result of `speccoder report`: what the branch's history shows.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, schemars::JsonSchema)]
 pub struct StatusReport {
     /// Feature directory name.
     pub feature: String,
@@ -856,7 +981,7 @@ pub struct StatusReport {
 }
 
 /// One task and its evidence.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct TaskStatus {
     /// Task ID.
     pub id: String,
@@ -890,7 +1015,7 @@ pub struct TaskStatus {
 }
 
 /// An attempt that did not pass, as saved under `refs/speccoder/attempts/`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct LastAttempt {
     /// `verification_failed`, `blocked`, `needs_approval`, `not_demonstrated`, `interrupted`, …
     pub outcome: String,
@@ -903,7 +1028,7 @@ pub struct LastAttempt {
 }
 
 /// One convergence round, from its commit.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct ConvergenceRound {
     /// Round number.
     pub round: u32,
@@ -914,7 +1039,7 @@ pub struct ConvergenceRound {
 }
 
 /// Counts of [`TaskStatus::state`].
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct StatusTotals {
     /// Ticked with task-specific evidence.
     pub verified: usize,
@@ -937,7 +1062,7 @@ pub struct StatusTotals {
 }
 
 /// Result of `speccoder bench import`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct BenchReport {
     /// The suite directory written.
     pub out: String,
@@ -948,7 +1073,7 @@ pub struct BenchReport {
 }
 
 /// Result of `speccoder pr`: a draft pull request with the evidence.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct PrReport {
     /// Feature directory name.
     pub feature: String,
@@ -971,7 +1096,7 @@ pub struct PrReport {
 }
 
 /// Result of `speccoder converge`.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, schemars::JsonSchema)]
 pub struct ConvergeReport {
     /// Feature directory name.
     pub feature: String,
@@ -1001,7 +1126,7 @@ pub struct ConvergeReport {
 }
 
 /// Result of `speccoder propose`.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, schemars::JsonSchema)]
 pub struct ProposeReport {
     /// The agentplane run that holds the call.
     pub run_id: String,
@@ -1018,7 +1143,7 @@ pub struct ProposeReport {
 }
 
 /// Result of `speccoder replay`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct ReplayReport {
     /// The replayed run.
     pub run_id: String,
@@ -1029,7 +1154,7 @@ pub struct ReplayReport {
 }
 
 /// Result of `speccoder worktree`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct WorktreeReport {
     /// The feature the worktree is for.
     pub feature: String,
@@ -1045,12 +1170,10 @@ pub struct WorktreeReport {
     pub created: bool,
     /// Offending paths with reasons, when refused.
     pub refused_paths: Vec<RefusedPath>,
-    /// What to do, when refused.
-    pub hint: Option<String>,
 }
 
 /// A path that blocks worktree mode.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct RefusedPath {
     /// Repository-relative path.
     pub path: String,
@@ -1071,34 +1194,79 @@ pub struct CommandResult {
     exit_code: ExitCode,
     data: Option<CommandData>,
     next: Vec<crate::next::NextStep>,
+    code: Option<&'static crate::codes::Entry>,
+    fix: Vec<String>,
 }
 
-/// `next` rides inside `data` (`data.next`), beside the payload's fields.
+/// Envelope v2: `next`, `code`, `fix` and `docs` beside the typed `data`.
 impl Serialize for CommandResult {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        use serde::ser::{Error as _, SerializeMap as _};
+        use serde::ser::SerializeMap as _;
         let mut map = serializer.serialize_map(None)?;
         map.serialize_entry("schema_version", &self.schema_version)?;
         map.serialize_entry("command", &self.command)?;
         map.serialize_entry("status", &self.status)?;
-        map.serialize_entry("message", &self.message)?;
         map.serialize_entry("exit_code", &self.exit_code)?;
-        if self.data.is_some() || !self.next.is_empty() {
-            let mut data = match &self.data {
-                Some(d) => serde_json::to_value(d).map_err(S::Error::custom)?,
-                None => serde_json::Value::Object(serde_json::Map::new()),
-            };
-            if !self.next.is_empty()
-                && let Some(object) = data.as_object_mut()
-            {
-                object.insert(
-                    "next".to_owned(),
-                    serde_json::to_value(&self.next).map_err(S::Error::custom)?,
-                );
-            }
-            map.serialize_entry("data", &data)?;
+        map.serialize_entry("message", &self.message)?;
+        if let Some(code) = self.code() {
+            map.serialize_entry("code", code.name)?;
+            map.serialize_entry("fix", &self.fix())?;
+            map.serialize_entry("docs", &code.docs())?;
+        }
+        if !self.next.is_empty() {
+            map.serialize_entry("next", &self.next)?;
+        }
+        if let Some(data) = &self.data {
+            map.serialize_entry("payload", data.kind())?;
+            map.serialize_entry("data", data)?;
         }
         map.end()
+    }
+}
+
+/// The envelope as it is serialised — the schema of [`CommandResult`]
+/// (whose fields are private and whose serialisation is written by hand).
+#[derive(schemars::JsonSchema)]
+#[allow(dead_code)] // schema only
+struct Envelope {
+    /// The envelope's version.
+    schema_version: u32,
+    /// The command.
+    command: String,
+    /// The outcome class.
+    status: CommandStatus,
+    /// The process exit status (always the status's).
+    exit_code: ExitCode,
+    /// One line, for a person.
+    message: String,
+    /// The catalog code: present for every non-ok result and for a
+    /// degraded success.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    code: Option<String>,
+    /// How to resolve it: commands, or `→ ` lines for a person.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    fix: Option<Vec<String>>,
+    /// The code's section on the codes page.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    docs: Option<String>,
+    /// The steps that continue.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    next: Option<Vec<crate::next::NextStep>>,
+    /// The name of `data`'s schema (`schemas/v2/<payload>.json`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    payload: Option<String>,
+    /// The command's payload.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    data: Option<CommandData>,
+}
+
+impl schemars::JsonSchema for CommandResult {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "CommandResult".into()
+    }
+
+    fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        Envelope::json_schema(generator)
     }
 }
 
@@ -1114,6 +1282,73 @@ impl CommandResult {
             exit_code: status.exit_code(),
             data: None,
             next: Vec::new(),
+            code: None,
+            fix: Vec::new(),
+        }
+    }
+
+    /// `from`'s outcome reported as `command`'s: status, message and code,
+    /// without `from`'s payload (a command passing on a failure it met).
+    #[must_use]
+    pub fn carried(command: &str, from: &Self) -> Self {
+        let mut out = Self::new(command, from.status, &from.message);
+        out.code = from.code;
+        out.fix.clone_from(&from.fix);
+        out
+    }
+
+    /// The same result with another status and message: payload and next
+    /// steps kept, the code kept only while the status stays the same.
+    #[must_use]
+    pub fn reworded(mut self, status: CommandStatus, message: &str) -> Self {
+        if status != self.status {
+            self.code = None;
+            self.fix.clear();
+        }
+        self.status = status;
+        self.exit_code = status.exit_code();
+        message.clone_into(&mut self.message);
+        self
+    }
+
+    /// Names the code (a catalog name); its fixes become the result's
+    /// unless [`Self::with_fix`] gives better ones. An unknown name is
+    /// ignored, and the status's default code applies later.
+    #[must_use]
+    pub fn with_code(mut self, name: &str) -> Self {
+        if let Some(entry) = crate::codes::lookup(name) {
+            self.code = Some(entry);
+        }
+        self
+    }
+
+    /// The fix lines, replacing the catalog's.
+    #[must_use]
+    pub fn with_fix(mut self, fix: Vec<String>) -> Self {
+        self.fix = fix;
+        self
+    }
+
+    /// The code: the one attached, else the status's default (none for a
+    /// plain `ok`) — no non-ok result is without one.
+    #[must_use]
+    pub fn code(&self) -> Option<&'static crate::codes::Entry> {
+        self.code.or_else(|| crate::codes::default_for(self.status))
+    }
+
+    /// Whether a code was named explicitly (not the status's default).
+    #[must_use]
+    pub fn has_explicit_code(&self) -> bool {
+        self.code.is_some()
+    }
+
+    /// How to resolve it: the fixes given, else the code's own.
+    #[must_use]
+    pub fn fix(&self) -> Vec<String> {
+        match self.code() {
+            Some(_) if !self.fix.is_empty() => self.fix.clone(),
+            Some(entry) => crate::codes::fixes(entry, &self.command, None, None),
+            None => Vec::new(),
         }
     }
 
@@ -1207,22 +1442,28 @@ mod tests {
     }
 
     #[test]
-    fn serializes_to_schema_version_1() {
-        let r = CommandResult::new("replay", CommandStatus::NotReplayable, "not replayable");
+    fn serializes_to_schema_version_2() {
+        let r = CommandResult::new("replay", CommandStatus::NotReplayable, "not replayable")
+            .with_code("NOT-REPLAYABLE")
+            .with_fix(vec!["x".to_owned()]);
         let json = serde_json::to_value(&r).unwrap();
         assert_eq!(
             json,
             serde_json::json!({
-                "schema_version": 1,
+                "schema_version": 2,
                 "command": "replay",
                 "status": "not_replayable",
+                "exit_code": 25,
                 "message": "not replayable",
-                "exit_code": 25
+                "code": "NOT-REPLAYABLE",
+                "fix": ["x"],
+                "docs": "https://hupe1980.github.io/speccoder/docs/codes/#not-replayable"
             })
         );
         let with_next = CommandResult::new("run", CommandStatus::NeedsHuman, "x")
             .with_next(crate::next::next(&crate::next::Outcome::Decided, None));
         let json = serde_json::to_value(&with_next).unwrap();
-        assert_eq!(json["data"]["next"][0]["command"], "speccoder run");
+        assert_eq!(json["next"][0]["command"], "speccoder run");
+        assert!(json.get("data").is_none());
     }
 }

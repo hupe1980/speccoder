@@ -125,7 +125,10 @@ pub fn run_with(
         .unwrap_or_default();
     let budget = match substrate::run_config::parse(&config_text) {
         Ok(c) => c,
-        Err(e) => return refuse(CommandStatus::ConfigError, format!("speccoder.toml: {e}")),
+        Err(e) => {
+            return refuse(CommandStatus::ConfigError, format!("speccoder.toml: {e}"))
+                .with_code("CONFIG-INVALID");
+        }
     };
 
     let tmp = s.plane_dir.join("tmp");
@@ -304,6 +307,7 @@ pub fn run_with(
         task: skill.name.clone(),
         outcome: status,
         message: redact(&message, secret),
+        run: None,
         input_tokens: tokens("input_tokens"),
         output_tokens: tokens("output_tokens"),
         cache_read_tokens: tokens("cache_read_tokens"),
@@ -326,7 +330,7 @@ pub fn run_with(
             Ok(lines) => hook_lines.extend(lines),
             Err(stop) => {
                 report.hooks = hook_lines;
-                return CommandResult::new("skill", stop.status(), stop.message())
+                return CommandResult::carried("skill", &stop)
                     .with_data(CommandData::Skill(Box::new(report)));
             }
         }

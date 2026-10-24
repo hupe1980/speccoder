@@ -66,7 +66,8 @@ pub(crate) fn with_driver(
             command,
             CommandStatus::ConfigError,
             "no state directory (set SPECCODER_STATE_DIR or HOME)",
-        );
+        )
+        .with_code("NO-STATE-DIR");
     };
     let model = match setup(path, feature, &state, command) {
         Ok(s) => s.model,
@@ -112,7 +113,7 @@ pub fn run_converged_with(
         if !finished {
             fr.attempts = attempts;
             fr.converge = rounds;
-            return CommandResult::new("run", res.status(), res.message())
+            return CommandResult::carried("run", &res)
                 .with_data(CommandData::Feature(Box::new(fr)));
         }
         if let Some(p) = &options.progress {
@@ -234,11 +235,10 @@ pub fn run_feature_with(
         // The next ready task, read from the worktree.
         let wt = workspace(path, feature_name.as_deref(), state, options);
         let Some(CommandData::Worktree(w)) = wt.data() else {
-            return CommandResult::new("run", wt.status(), wt.message());
+            return CommandResult::carried("run", &wt);
         };
         if wt.status() != CommandStatus::Ok {
-            return CommandResult::new("run", wt.status(), wt.message())
-                .with_data(CommandData::Worktree(w.clone()));
+            return CommandResult::carried("run", &wt).with_data(CommandData::Worktree(w.clone()));
         }
         feature_name = Some(w.feature.clone());
         let project = std::path::PathBuf::from(w.project_dir.clone().unwrap_or_default());

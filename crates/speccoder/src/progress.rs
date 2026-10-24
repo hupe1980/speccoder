@@ -151,7 +151,20 @@ pub fn lines(event: &Event, seconds: Option<u64>, verbosity: Verbosity) -> Vec<S
                 .map(|c| format!(" ({c})"))
                 .unwrap_or_default()
         )],
-        Event::NeedsPerson { task, what } => vec![format!("△ {task} needs approval — {what}")],
+        Event::ApprovalRequested { task, what, .. } => {
+            vec![format!("△ {task} needs approval — {what}")]
+        }
+        Event::ApprovalDecided {
+            task,
+            decision,
+            scope,
+            by,
+            ..
+        } => vec![match (decision.as_str(), scope) {
+            ("approve", Some(scope)) => format!("  {task} approved ({scope}) by {by}"),
+            ("approve", None) => format!("  {task} approved by {by}"),
+            _ => format!("  {task} rejected by {by}"),
+        }],
         Event::TaskFinished {
             task,
             outcome,
@@ -233,6 +246,7 @@ mod tests {
             task: "T002".to_owned(),
             outcome: "verified".to_owned(),
             message: "verdict: verified".to_owned(),
+            run: None,
             input_tokens: 12_345,
             output_tokens: 678,
             cache_read_tokens: 0,
@@ -361,8 +375,11 @@ mod tests {
             lines(&bare, None, Verbosity::Normal),
             ["Resuming — T004 was interrupted during a run; finished calls will not repeat."]
         );
-        let needs = Event::NeedsPerson {
+        let needs = Event::ApprovalRequested {
             task: "T004".to_owned(),
+            call: "c1".to_owned(),
+            tool: "run_command".to_owned(),
+            class: String::new(),
             what: "run_command cargo add x".to_owned(),
         };
         assert_eq!(

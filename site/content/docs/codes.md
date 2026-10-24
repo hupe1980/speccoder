@@ -1,0 +1,540 @@
++++
+title = "Codes"
+description = "Every code speccoder prints with an error, a stop or a warning: what it means, why it happens and how to fix it."
+weight = 135
+
+[extra]
+group = "Reference"
++++
+
+<!-- Generated from crates/speccoder-core/src/codes.rs by `SPECCODER_BLESS=1 cargo nextest run -p speccoder --test contract`; do not edit by hand. -->
+
+Every result that is not plainly `ok` names a code — `error[CODE]`, `stopped[CODE]` (the run waits for you) or `warning[CODE]` (it worked, with less evidence) — with a `fix:` line and a link here. In JSON the same is `code`, `fix` and `docs` on the [result envelope](@/docs/cli.md#json-output). `speccoder explain CODE` prints an entry offline.
+
+| Code | Kind | Exit | Means |
+|---|---|---|---|
+| [`USAGE`](#usage) | error | 2 | the arguments are not valid for this command |
+| [`USAGE-CONFLICT`](#usage-conflict) | error | 2 | two options were given that exclude each other |
+| [`USAGE-UNKNOWN-CODE`](#usage-unknown-code) | error | 2 | there is no code by that name |
+| [`INTERNAL`](#internal) | error | 1 | speccoder failed in a way it does not expect |
+| [`NO-PROJECT`](#no-project) | error | 10 | speccoder works on a Spec Kit or OpenSpec project, and found none here |
+| [`SPEC-DIAGNOSTICS`](#spec-diagnostics) | error | 11 | the spec artifacts have errors speccoder will not guess around |
+| [`FEATURE-SELECTION`](#feature-selection) | error | 12 | more than one feature could be meant |
+| [`CONFIG`](#config) | error | 13 | the configuration or the environment is not usable |
+| [`NO-STATE-DIR`](#no-state-dir) | error | 13 | speccoder has nowhere to keep its state |
+| [`CONFIG-MISSING`](#config-missing) | error | 13 | the project has no speccoder.toml |
+| [`CONFIG-INVALID`](#config-invalid) | error | 13 | speccoder.toml has an error |
+| [`KEY-MISSING`](#key-missing) | error | 13 | the model provider's API key is not in the environment |
+| [`NO-CHECKS`](#no-checks) | error | 13 | no check applies, so nothing could show that nothing regressed |
+| [`GIT`](#git) | error | 14 | git is not in the state this command needs |
+| [`NO-REPOSITORY`](#no-repository) | error | 14 | speccoder needs a git repository with at least one commit |
+| [`UNCOMMITTED-INTENT`](#uncommitted-intent) | error | 14 | the spec has uncommitted changes the run would not see |
+| [`NO-REMOTE`](#no-remote) | error | 14 | there is no git remote to push to |
+| [`WORKTREE-DIRTY`](#worktree-dirty) | error | 14 | the feature's worktree has uncommitted changes |
+| [`NOTHING-TO-HAND-OFF`](#nothing-to-hand-off) | error | 14 | the speccoder branch has nothing the base does not have |
+| [`DIRTY-CHECKOUT`](#dirty-checkout) | error | 14 | an in-place run needs a clean checkout |
+| [`UNBORN-HEAD`](#unborn-head) | error | 14 | the checkout has no commit yet |
+| [`CONFIG-NOT-TRACKED`](#config-not-tracked) | error | 14 | speccoder.toml must be committed |
+| [`BRANCH-IN-WORKTREE`](#branch-in-worktree) | error | 14 | the feature's branch is checked out in a worktree |
+| [`IN-PLACE-ACTIVE`](#in-place-active) | error | 14 | an in-place run holds this checkout |
+| [`IN-PLACE-SESSION`](#in-place-session) | error | 14 | an in-place session is recorded for this checkout |
+| [`IN-PLACE-PARALLEL`](#in-place-parallel) | error | 2 | an in-place run works one task at a time |
+| [`MERGE-CONFLICT`](#merge-conflict) | error | 14 | the checkout is in the middle of a merge or rebase |
+| [`INTENT-CHANGED`](#intent-changed) | stop | 23 | the spec, plan or tasks changed during the run |
+| [`JUDGE-CHANGED`](#judge-changed) | stop | 23 | the judge's inputs changed during the run |
+| [`CHECKOUT-CHANGED`](#checkout-changed) | stop | 23 | the checkout moved under the run |
+| [`GIT-CHANGED`](#git-changed) | stop | 23 | git's configuration, hooks or refs changed during the run |
+| [`RETURN-BLOCKED`](#return-blocked) | stop | 23 | the in-place run cannot switch back to your branch |
+| [`NOT-FOUND`](#not-found) | error | 15 | nothing by that name exists |
+| [`NOT-FOUND-SCHEMA`](#not-found-schema) | error | 15 | there is no schema by that name |
+| [`TASK-NOT-READY`](#task-not-ready) | error | 16 | no task can run now |
+| [`TASK-DONE`](#task-done) | error | 16 | the task is already ticked |
+| [`TASK-BLOCKED`](#task-blocked) | error | 16 | the task waits for tasks it depends on |
+| [`VERIFICATION-FAILED`](#verification-failed) | error | 20 | the checks or the acceptance tests did not pass |
+| [`REGRESSION-ONLY`](#regression-only) | warning | 0 | ticked on the regression checks alone, nothing task-specific was shown |
+| [`ATTESTATION-FAILED`](#attestation-failed) | error | 26 | an attestation is missing, unsigned where required, or does not hold |
+| [`NEEDS-HUMAN`](#needs-human) | stop | 23 | the run stopped for a person |
+| [`NEEDS-APPROVAL`](#needs-approval) | stop | 23 | a call waits for a person's decision; nothing ran |
+| [`BLOCKED`](#blocked) | stop | 23 | the model says the task cannot be done as written |
+| [`BUDGET-EXHAUSTED`](#budget-exhausted) | stop | 23 | the attempt ran out of turns, calls or tokens |
+| [`NOT-DEMONSTRATED`](#not-demonstrated) | stop | 23 | the evidence the task needs could not be produced |
+| [`ACCEPTANCE-UNWRITTEN`](#acceptance-unwritten) | stop | 23 | the acceptance tests could not be written, so nothing was attempted |
+| [`SUSPECTED-GAMING`](#suspected-gaming) | stop | 23 | the gaming monitor suspects a shortcut |
+| [`INTERRUPTED`](#interrupted) | stop | 23 | the run was interrupted |
+| [`CHECKLISTS-OPEN`](#checklists-open) | stop | 23 | the feature's checklists have unchecked items |
+| [`ARCHIVE-AWAITING`](#archive-awaiting) | stop | 23 | the OpenSpec archive waits for your yes |
+| [`RUN-FAILED`](#run-failed) | error | 21 | the model call or the run failed |
+| [`PROVIDER-REFUSED`](#provider-refused) | error | 21 | the model provider refused the request |
+| [`REPLAY-DIVERGED`](#replay-diverged) | error | 22 | the replay did not reproduce the recorded run |
+| [`NOT-REPLAYABLE`](#not-replayable) | error | 25 | this build cannot re-derive the recorded run |
+| [`EVAL-FAILED`](#eval-failed) | error | 24 | the evaluation found a false completion or a cheat |
+
+### USAGE
+
+The arguments are not valid for this command.
+
+The command line could not be parsed: an unknown flag, a missing value, or a value outside the allowed set.
+
+- `speccoder <command> --help`
+
+### USAGE-CONFLICT
+
+Two options were given that exclude each other.
+
+`--json` prints one result object and `--events` prints a stream of events ending in that object; a command does one or the other.
+
+- `speccoder <command> --events`
+- `speccoder <command> --json`
+
+### USAGE-UNKNOWN-CODE
+
+There is no code by that name.
+
+`speccoder explain` knows the codes speccoder itself prints; the closest names are listed with the error.
+
+- `speccoder explain --list`
+
+### INTERNAL
+
+Speccoder failed in a way it does not expect.
+
+An unexpected failure inside speccoder: an IO error, a broken state file, a bug. The message says what failed.
+
+- Re-run with -v and report the output at https://github.com/hupe1980/speccoder/issues
+
+### NO-PROJECT
+
+Speccoder works on a Spec Kit or OpenSpec project, and found none here.
+
+No `.specify/` (Spec Kit) or `openspec/` (OpenSpec) directory was found here or above. speccoder implements specs; it does not write them from nothing.
+
+- `specify init --here`
+- `openspec init`
+
+### SPEC-DIAGNOSTICS
+
+The spec artifacts have errors speccoder will not guess around.
+
+The task list or spec could not be read as written: a dependency on a task that does not exist, a cycle, a malformed task line. `inspect` lists every diagnostic with its line.
+
+- `speccoder inspect`
+
+### FEATURE-SELECTION
+
+More than one feature could be meant.
+
+Several features exist and none is selected by `--feature`, the branch or the format's own pointer.
+
+- `speccoder inspect`
+- `speccoder <command> --feature <name>`
+
+### CONFIG
+
+The configuration or the environment is not usable.
+
+`speccoder.toml` or the environment does not allow this command to run; the message names what is wrong.
+
+- `speccoder init`
+
+### NO-STATE-DIR
+
+Speccoder has nowhere to keep its state.
+
+Journals, worktrees and live progress live in a state directory: `$SPECCODER_STATE_DIR`, else `$XDG_STATE_HOME/speccoder`, else `~/.local/state/speccoder`. None of these variables is set.
+
+- `export SPECCODER_STATE_DIR="$PWD/.speccoder-state"`
+
+### CONFIG-MISSING
+
+The project has no speccoder.toml.
+
+speccoder needs to know which checks decide "nothing regressed" and which model to use; `init` detects them and writes a commented file.
+
+- `speccoder init`
+
+### CONFIG-INVALID
+
+Speccoder.toml has an error.
+
+An unknown section or key, a wrong type, or a value outside the allowed set. Unknown keys are errors so a typo never goes unnoticed.
+
+- Fix the line the message names in speccoder.toml, then commit it
+
+### KEY-MISSING
+
+The model provider's API key is not in the environment.
+
+speccoder reads API keys from the environment only. The message names the variable the configured provider needs.
+
+- Export the variable the message names, e.g. export ANTHROPIC_API_KEY=…
+
+### NO-CHECKS
+
+No check applies, so nothing could show that nothing regressed.
+
+Every configured check was skipped (`when_exists` did not match) or none is configured. A task cannot be judged without at least one check.
+
+- `speccoder init --force`
+
+### GIT
+
+Git is not in the state this command needs.
+
+A git precondition does not hold; the message names it.
+
+- `git status`
+
+### NO-REPOSITORY
+
+Speccoder needs a git repository with at least one commit.
+
+Evidence lives in commits and refs, and work happens on a branch of its own, so the project must be a git repository with a first commit.
+
+- `git init && git add -A && git commit -m init`
+
+### UNCOMMITTED-INTENT
+
+The spec has uncommitted changes the run would not see.
+
+speccoder reads committed files only — a worktree is checked out from a commit — so an uncommitted edit to the spec, plan or tasks would silently not count.
+
+- `git status`
+- `speccoder run --in-place`
+
+### NO-REMOTE
+
+There is no git remote to push to.
+
+`pr` pushes `speccoder/<feature>` to a remote and opens the pull request there.
+
+- `git remote -v`
+- `speccoder pr --remote <name>`
+
+### WORKTREE-DIRTY
+
+The feature's worktree has uncommitted changes.
+
+Work left in the worktree outside a commit — a failed attempt's, or an edit by hand — would be mixed into what comes next.
+
+- `speccoder worktree`
+- `speccoder run`
+
+### NOTHING-TO-HAND-OFF
+
+The speccoder branch has nothing the base does not have.
+
+`pr` hands off work on `speccoder/<feature>`; there is none yet, or it is already merged.
+
+- `speccoder run`
+
+### DIRTY-CHECKOUT
+
+An in-place run needs a clean checkout.
+
+In place, the attempt runs in your checkout; uncommitted changes would be judged as the agent's.
+
+- `git stash -u`
+- `git commit -am wip`
+
+### UNBORN-HEAD
+
+The checkout has no commit yet.
+
+An in-place run branches from HEAD; there is no HEAD to branch from.
+
+- `git add -A && git commit -m init`
+
+### CONFIG-NOT-TRACKED
+
+Speccoder.toml must be committed.
+
+The judge's configuration is a reviewed input; an untracked or modified one could be changed without review.
+
+- `git add speccoder.toml && git commit -m "speccoder: config"`
+
+### BRANCH-IN-WORKTREE
+
+The feature's branch is checked out in a worktree.
+
+git refuses to check out a branch twice; an in-place run needs `speccoder/<feature>` free.
+
+- `git worktree list`
+- `git worktree remove <path>`
+
+### IN-PLACE-ACTIVE
+
+An in-place run holds this checkout.
+
+Another in-place session is active (or was killed); it owns the checkout until it ends or is left.
+
+- `speccoder run --in-place`
+- `speccoder run --in-place --return`
+
+### IN-PLACE-SESSION
+
+An in-place session is recorded for this checkout.
+
+A worktree-mode command would not see what the in-place session holds.
+
+- `speccoder run --in-place`
+- `speccoder run --in-place --return`
+
+### IN-PLACE-PARALLEL
+
+An in-place run works one task at a time.
+
+Parallel lanes need worktrees of their own; in place there is only your checkout.
+
+- `speccoder run --in-place`
+- `speccoder run --parallel 2`
+
+### MERGE-CONFLICT
+
+The checkout is in the middle of a merge or rebase.
+
+An in-place run cannot start or return while git waits for a conflict to be resolved.
+
+- `git status`
+- `git merge --abort`
+
+### INTENT-CHANGED
+
+The spec, plan or tasks changed during the run.
+
+Intent files are hashed when an in-place run starts and compared before every task; a change means the work would be judged against a spec it was not given.
+
+- `git diff`
+- `speccoder run --in-place`
+
+### JUDGE-CHANGED
+
+The judge's inputs changed during the run.
+
+Checks, test configuration or agent configuration changed after the run started; a verdict under changed rules would mean nothing.
+
+- `git diff`
+- `speccoder run --in-place`
+
+### CHECKOUT-CHANGED
+
+The checkout moved under the run.
+
+HEAD, the branch or the tree is not where speccoder left it; someone or something else changed the checkout.
+
+- `git status`
+- `speccoder run --in-place --return`
+
+### GIT-CHANGED
+
+Git's configuration, hooks or refs changed during the run.
+
+Where the sandbox cannot keep `.git` read-only, speccoder fingerprints it; a change stops the run before the next tick.
+
+- `git config --list --show-origin`
+- `speccoder run --in-place --return`
+
+### RETURN-BLOCKED
+
+The in-place run cannot switch back to your branch.
+
+Switching back would overwrite changes or fail; the session stays until the checkout allows it.
+
+- `git status`
+- `speccoder run --in-place --return`
+
+### NOT-FOUND
+
+Nothing by that name exists.
+
+No task, run, call or object matches what was asked for; the message names it.
+
+- `speccoder report`
+
+### NOT-FOUND-SCHEMA
+
+There is no schema by that name.
+
+`speccoder schema` lists the schemas speccoder publishes.
+
+- `speccoder schema`
+
+### TASK-NOT-READY
+
+No task can run now.
+
+The task is done, or waits for tasks it depends on.
+
+- `speccoder report`
+
+### TASK-DONE
+
+The task is already ticked.
+
+A ticked task is not run again; its evidence is in its commit.
+
+- `speccoder report`
+
+### TASK-BLOCKED
+
+The task waits for tasks it depends on.
+
+Dependencies come from the task list's phases, `[P]` markers and explicit references; the message names the open ones.
+
+- `speccoder run`
+- `speccoder skip --task <dependency> --reason "…"`
+
+### VERIFICATION-FAILED
+
+The checks or the acceptance tests did not pass.
+
+After the retries, a check regressed or the spec-derived acceptance tests did not go from red to green. The attempt is saved under its ref.
+
+- `speccoder report`
+- `speccoder nudge --task <task> --note "…"`
+
+### REGRESSION-ONLY
+
+Ticked on the regression checks alone, nothing task-specific was shown.
+
+The checks still pass, but no acceptance test showed this task's behaviour (the spec has no example for it, or the tests could not be made red first). It is ticked `regression_only`, never `verified`.
+
+- Add an acceptance example to the task's story, then converge
+- `speccoder converge`
+
+### ATTESTATION-FAILED
+
+An attestation is missing, unsigned where required, or does not hold.
+
+`attest verify` found a tick whose signed statements are missing, malformed, edited, about another commit, or signed by no one you trust.
+
+- `speccoder attest verify --json`
+
+### NEEDS-HUMAN
+
+The run stopped for a person.
+
+The run cannot go on without a decision; the message says what waits.
+
+- `speccoder report`
+
+### NEEDS-APPROVAL
+
+A call waits for a person's decision; nothing ran.
+
+The model asked for something the policy does not allow on its own — a dependency change, the network, a protected file. The attempt waits; deciding continues it from that call.
+
+- `speccoder approvals`
+- `speccoder approve --task <task>`
+- `speccoder reject --task <task> --reason "…"`
+
+### BLOCKED
+
+The model says the task cannot be done as written.
+
+The model used its honest exit: something in the spec or the code stops it. Its reason is a claim, shown as "Model says".
+
+- `speccoder nudge --task <task> --note "…"`
+- `speccoder skip --task <task> --reason "…"`
+
+### BUDGET-EXHAUSTED
+
+The attempt ran out of turns, calls or tokens.
+
+The attempt reached a limit of `[budget]` before finishing. The work so far is saved under the attempt's ref.
+
+- `speccoder nudge --task <task> --note "…"`
+- Raise the limit in speccoder.toml [budget]
+
+### NOT-DEMONSTRATED
+
+The evidence the task needs could not be produced.
+
+The acceptance tests could not be made red before the attempt (they already pass, or fail for another reason), or a convergence gap shows in no failing test. Ticking would claim more than was shown.
+
+- `speccoder report`
+- `speccoder accept --task <task> --reason "…"`
+
+### ACCEPTANCE-UNWRITTEN
+
+The acceptance tests could not be written, so nothing was attempted.
+
+The call that derives acceptance tests from the spec failed — the provider refused it (no credits, a rejected key) or the run broke. Without those tests the task could only be judged on the regression checks, which would look like a spec without examples.
+
+- `speccoder run`
+- Or set [acceptance] generate = false to rely on the checks alone
+
+### SUSPECTED-GAMING
+
+The gaming monitor suspects a shortcut.
+
+A separate review of the passing attempt found something like a hard-coded result or a weakened test. The task stays unticked until a person decides.
+
+- `speccoder report`
+- `speccoder accept --task <task> --reason "…"`
+- `speccoder nudge --task <task> --note "…"`
+
+### INTERRUPTED
+
+The run was interrupted.
+
+The process was stopped or killed; the journal holds what finished. The next run resumes without repeating finished calls.
+
+- `speccoder run`
+
+### CHECKLISTS-OPEN
+
+The feature's checklists have unchecked items.
+
+Spec Kit checklists gate implementation; nothing ran.
+
+- Finish the checklists in the feature's checklists/ directory
+- `speccoder run --ignore-checklists`
+
+### ARCHIVE-AWAITING
+
+The OpenSpec archive waits for your yes.
+
+The diff of the archive is shown; nothing is written until a person confirms.
+
+- `speccoder spec archive --yes`
+
+### RUN-FAILED
+
+The model call or the run failed.
+
+The provider returned an error, the journal could not be written, or the run broke; the message names it. Nothing was ticked.
+
+- `speccoder run -v`
+
+### PROVIDER-REFUSED
+
+The model provider refused the request.
+
+No credits, a rejected or revoked key, or an account limit. speccoder stops instead of judging the task on less evidence.
+
+- Check the provider account's credits and the API key
+- `speccoder run`
+
+### REPLAY-DIVERGED
+
+The replay did not reproduce the recorded run.
+
+Strict replay re-derives a run from its journal without a model; a difference means the code's decisions changed.
+
+- `speccoder replay <run> --json`
+
+### NOT-REPLAYABLE
+
+This build cannot re-derive the recorded run.
+
+The run was recorded by a build whose skills or effects this one does not have.
+
+- Replay with the speccoder version that recorded the run
+
+### EVAL-FAILED
+
+The evaluation found a false completion or a cheat.
+
+A case ended done although its hidden oracle fails, or the attempt gamed its tests.
+
+- `speccoder eval --keep <dir>`

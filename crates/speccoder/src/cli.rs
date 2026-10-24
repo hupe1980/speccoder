@@ -33,6 +33,10 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub json: bool,
 
+    /// Stream JSON Lines events on stdout, ending in the result object.
+    #[arg(long, global = true, conflicts_with = "json")]
+    pub events: bool,
+
     /// Print only stops, finishes, resumes and what needs you.
     #[arg(short, long, global = true, conflicts_with = "verbose")]
     pub quiet: bool,
@@ -183,6 +187,9 @@ pub enum Command {
         /// id, also as --change).
         #[arg(long, visible_alias = "change")]
         feature: Option<String>,
+        /// The report as GitHub-flavoured Markdown (pull requests, CI summaries).
+        #[arg(long)]
+        markdown: bool,
     },
     /// What the project's current (or last) run is doing, from another terminal.
     Status {
@@ -414,6 +421,20 @@ pub enum Command {
         /// id, also as --change).
         #[arg(long, visible_alias = "change")]
         feature: Option<String>,
+    },
+    /// Explain a code speccoder prints (`error[CODE]`, `stopped[CODE]`), offline.
+    Explain {
+        /// The code, e.g. NEEDS-APPROVAL.
+        code: Option<String>,
+        /// List every code.
+        #[arg(long)]
+        list: bool,
+    },
+    /// Print the JSON Schema of speccoder's output: `result`, `event`, or a
+    /// command's payload; without a name, list them.
+    Schema {
+        /// The schema's name.
+        name: Option<String>,
     },
 }
 

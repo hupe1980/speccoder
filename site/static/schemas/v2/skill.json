@@ -1,0 +1,90 @@
+{
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/skill.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Result of `speccoder skill <name>`.",
+  "properties": {
+    "changes": {
+      "description": "Paths changed in the checkout: `added` / `modified` / `deleted`.",
+      "items": {
+        "maxItems": 2,
+        "minItems": 2,
+        "prefixItems": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "type": "array"
+      },
+      "type": "array"
+    },
+    "hooks": {
+      "description": "Extension hooks run, offered or skipped around it.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "pending": {
+      "description": "The call awaiting approval, if any."
+    },
+    "questions": {
+      "description": "Questions it could not get answered.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "reason": {
+      "description": "Why it stopped, when it did not complete.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "run_id": {
+      "description": "The agentplane run.",
+      "type": "string"
+    },
+    "skill": {
+      "description": "The skill.",
+      "type": "string"
+    },
+    "status": {
+      "description": "`completed`, `incomplete`, `needs_approval`, `blocked`, `denied`, `budget_exhausted` or `failed`.",
+      "type": "string"
+    },
+    "summary": {
+      "description": "The model's summary.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "tool_calls": {
+      "description": "Every tool call with the policy's decision.",
+      "items": true,
+      "type": "array"
+    },
+    "usage": {
+      "description": "Token usage."
+    }
+  },
+  "required": [
+    "skill",
+    "run_id",
+    "status",
+    "summary",
+    "questions",
+    "changes",
+    "tool_calls",
+    "pending",
+    "reason",
+    "usage",
+    "hooks"
+  ],
+  "title": "spec SKILL: the hosted skill's run",
+  "type": "object"
+}

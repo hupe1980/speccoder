@@ -31,7 +31,43 @@ pub fn render_into(
         return writeln!(out);
     }
     human_body(result, out, err)?;
-    human::next(&mut out, result.next())
+    let shown = code_block(result, err)?;
+    let next: Vec<_> = result
+        .next()
+        .iter()
+        .filter(|s| !shown.contains(&s.command))
+        .cloned()
+        .collect();
+    human::next(&mut out, &next)
+}
+
+/// `error[CODE]: …` (or `stopped`, `warning`), why, `fix:` lines and
+/// `docs:` — on stderr; the fixes shown, so `Next:` does not repeat them.
+/// With a payload the report already said what happened, so the headline
+/// is the code's title; without one it is the message.
+fn code_block(result: &CommandResult, err: &mut dyn Write) -> std::io::Result<Vec<String>> {
+    let Some(code) = result.code() else {
+        return Ok(Vec::new());
+    };
+    let fix = result.fix();
+    let prefix = code.kind.prefix();
+    let reported = !matches!(result.data(), None | Some(CommandData::InPlace(_)));
+    if reported || result.message().is_empty() {
+        writeln!(err, "{prefix}[{}]: {}", code.name, code.title)?;
+    } else {
+        writeln!(err, "{prefix}[{}]: {}", code.name, result.message())?;
+        writeln!(err, "  {}", code.title)?;
+    }
+    if let Some(CommandData::InPlace(p)) = result.data() {
+        for r in &p.paths {
+            writeln!(err, "  {}  ({})", r.path, r.reason)?;
+        }
+    }
+    for f in &fix {
+        writeln!(err, "  fix: {f}")?;
+    }
+    writeln!(err, "  docs: {}", code.docs())?;
+    Ok(fix)
 }
 
 /// The human rendering of `result`, before its `Next:` block.
@@ -160,6 +196,33 @@ fn human_body(
             }
             writeln!(out, "{}", result.message())
         }
+        (_, Some(CommandData::Explain(e))) => {
+            for (i, c) in e.codes.iter().enumerate() {
+                if e.codes.len() > 1 {
+                    writeln!(out, "  {:<22} {}", c.code, c.title)?;
+                } else {
+                    if i > 0 {
+                        writeln!(out)?;
+                    }
+                    crate::explain::entry(out, c)?;
+                }
+            }
+            Ok(())
+        }
+        (_, Some(CommandData::Schema(k))) => match &k.schema {
+            // The schema is the content: pretty JSON, also in human mode.
+            Some(schema) => writeln!(
+                out,
+                "{}",
+                serde_json::to_string_pretty(schema).unwrap_or_default()
+            ),
+            None => {
+                for n in &k.names {
+                    writeln!(out, "  {:<12} {}", n.name, n.describes)?;
+                }
+                writeln!(out, "Published at {}", crate::schema::BASE)
+            }
+        },
         (_, Some(CommandData::Cost(c))) => human::cost(&mut out, c, result.message()),
         (_, Some(CommandData::Attest(a))) => human::attest(&mut out, a, result.message()),
         (_, Some(CommandData::Approvals(a))) => human::approvals(&mut out, a, result.message()),
@@ -178,19 +241,14 @@ fn human_body(
             )
         }
         (CommandStatus::Ok, Some(CommandData::Worktree(w))) => human::worktree(&mut out, w),
-        (_, Some(CommandData::Worktree(w))) => {
-            human::worktree_refused(&mut err, result.message(), w)
-        }
+        (_, Some(CommandData::Worktree(w))) => human::worktree_refused(&mut err, w),
         (CommandStatus::SelectionNeeded, Some(CommandData::Inspect(s))) => {
             human::selection_needed(&mut err, s)
         }
         (CommandStatus::Ok, None) => writeln!(&mut *out, "{}", result.message()),
-        _ => writeln!(
-            &mut *err,
-            "speccoder {}: {}",
-            result.command(),
-            result.message()
-        ),
+        // The code block says it (`error[CODE]: message`).
+        (_, None | Some(CommandData::InPlace(_))) => Ok(()),
+        _ => writeln!(&mut *err, "{}", result.message()),
     }
 }
 
@@ -211,7 +269,7 @@ mod next_tests {
         render_into(&result, true, &mut json_out, &mut err).unwrap_or_else(|e| panic!("{e}"));
         let json: serde_json::Value =
             serde_json::from_slice(&json_out).unwrap_or_else(|e| panic!("{e}"));
-        let commands: Vec<&str> = json["data"]["next"]
+        let commands: Vec<&str> = json["next"]
             .as_array()
             .into_iter()
             .flatten()

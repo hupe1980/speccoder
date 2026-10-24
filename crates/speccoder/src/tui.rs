@@ -463,7 +463,8 @@ pub fn run(path: &Path, feature: Option<&str>) -> CommandResult {
             "tui",
             CommandStatus::ConfigError,
             "no state directory (set SPECCODER_STATE_DIR or HOME)",
-        );
+        )
+        .with_code("NO-STATE-DIR");
     };
     let path: PathBuf = path.to_path_buf();
     let mut app = App::new(load(&path, feature, &state));

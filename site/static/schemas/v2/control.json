@@ -1,0 +1,42 @@
+{
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/control.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Result of `accept`, `skip` and `nudge`.",
+  "properties": {
+    "action": {
+      "description": "`accepted`, `skipped`, `unskipped`, `nudged` or `nudges_cleared`.",
+      "type": "string"
+    },
+    "feature": {
+      "description": "Feature directory name.",
+      "type": "string"
+    },
+    "record": {
+      "description": "The commit or ref that records it, when it lives in git.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "task": {
+      "description": "Task ID.",
+      "type": "string"
+    },
+    "text": {
+      "description": "The person's reason or note.",
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "feature",
+    "task",
+    "action",
+    "text",
+    "record"
+  ],
+  "title": "approve, reject, accept, skip, nudge: the decision",
+  "type": "object"
+}

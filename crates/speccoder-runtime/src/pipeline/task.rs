@@ -21,7 +21,8 @@ pub fn run(path: &Path, feature: Option<&str>, task: &str, options: &RunOptions)
             "run",
             CommandStatus::ConfigError,
             "no state directory (set SPECCODER_STATE_DIR or HOME)",
-        );
+        )
+        .with_code("NO-STATE-DIR");
     };
     let model = match setup(path, feature, &state, "run") {
         Ok(s) => s.model,
@@ -29,7 +30,14 @@ pub fn run(path: &Path, feature: Option<&str>, task: &str, options: &RunOptions)
     };
     let (driver, key) = match substrate::model_config::open_driver(&model) {
         Ok((d, k)) => (Ok::<_, String>(d), k.unwrap_or_default()),
-        Err(e) => return CommandResult::new("run", CommandStatus::ConfigError, &e),
+        Err(e) => {
+            let code = if e.contains("is not set") {
+                "KEY-MISSING"
+            } else {
+                "CONFIG-INVALID"
+            };
+            return CommandResult::new("run", CommandStatus::ConfigError, &e).with_code(code);
+        }
     };
     match driver {
         Ok(provider) => run_task(path, feature, task, &state, provider, Some(&key), options),
@@ -140,11 +148,10 @@ pub(crate) fn run_task(
     // 2. The worktree.
     let wt = workspace(path, Some(&feature_name), state, options);
     let Some(CommandData::Worktree(w)) = wt.data() else {
-        return CommandResult::new("run", wt.status(), wt.message());
+        return CommandResult::carried("run", &wt);
     };
     if wt.status() != CommandStatus::Ok {
-        return CommandResult::new("run", wt.status(), wt.message())
-            .with_data(CommandData::Worktree(w.clone()));
+        return CommandResult::carried("run", &wt).with_data(CommandData::Worktree(w.clone()));
     }
     let (Some(wt_path), Some(project_dir)) = (w.path.clone(), w.project_dir.clone()) else {
         return refuse(CommandStatus::Error, "worktree without a path".to_owned());
@@ -238,13 +245,15 @@ pub(crate) fn run_task(
             return refuse(
                 CommandStatus::TaskNotReady,
                 format!("{task} is already done"),
-            );
+            )
+            .with_code("TASK-DONE");
         }
         TaskState::Blocked => {
             return refuse(
                 CommandStatus::TaskNotReady,
                 format!("{task} is blocked by {}", st.blocked_by.join(", ")),
-            );
+            )
+            .with_code("TASK-BLOCKED");
         }
         TaskState::Ready => {}
     }
@@ -279,22 +288,32 @@ pub(crate) fn run_task(
         return refuse(
             CommandStatus::ConfigError,
             "the worktree has no speccoder.toml (is it committed?)".to_owned(),
-        );
+        )
+        .with_code("CONFIG-MISSING");
     };
     let config_text =
         std::fs::read_to_string(config_root.join(verify::config::FILE)).unwrap_or_default();
     let run_config = match substrate::run_config::parse(&config_text) {
         Ok(c) => c,
-        Err(e) => return refuse(CommandStatus::ConfigError, format!("speccoder.toml: {e}")),
+        Err(e) => {
+            return refuse(CommandStatus::ConfigError, format!("speccoder.toml: {e}"))
+                .with_code("CONFIG-INVALID");
+        }
     };
     let executor = match external::parse(&config_text) {
         Ok(e) => e,
-        Err(e) => return refuse(CommandStatus::ConfigError, format!("speccoder.toml: {e}")),
+        Err(e) => {
+            return refuse(CommandStatus::ConfigError, format!("speccoder.toml: {e}"))
+                .with_code("CONFIG-INVALID");
+        }
     };
     // Every command this task starts runs confined to the worktree.
     let sandbox_config = match sandbox::parse(&config_text) {
         Ok(c) => c,
-        Err(e) => return refuse(CommandStatus::ConfigError, format!("speccoder.toml: {e}")),
+        Err(e) => {
+            return refuse(CommandStatus::ConfigError, format!("speccoder.toml: {e}"))
+                .with_code("CONFIG-INVALID");
+        }
     };
     let (runner, sandbox_notice) = match sandbox::runner(&wt_root, &sandbox_config) {
         Ok(r) => r,
@@ -302,7 +321,10 @@ pub(crate) fn run_task(
     };
     let mutation_config = match mutation::parse(&config_text) {
         Ok(c) => c,
-        Err(e) => return refuse(CommandStatus::ConfigError, format!("speccoder.toml: {e}")),
+        Err(e) => {
+            return refuse(CommandStatus::ConfigError, format!("speccoder.toml: {e}"))
+                .with_code("CONFIG-INVALID");
+        }
     };
     let check_argvs = verify::check_argvs(&config_root);
     let policy = tools::policy::Policy::new(&check_argvs, &run_config.allow).rules(format.rules());
@@ -361,6 +383,7 @@ pub(crate) fn run_task(
             task: task.to_owned(),
             outcome: "error".to_owned(),
             message: redact(&m, secret),
+            run: None,
             input_tokens: 0,
             output_tokens: 0,
             cache_read_tokens: 0,
@@ -420,7 +443,10 @@ pub(crate) fn run_task(
     // MCP servers, started in the worktree for this task's attempts.
     let servers = match mcp::parse(&config_text) {
         Ok(s) => s,
-        Err(e) => return fail(CommandStatus::ConfigError, format!("speccoder.toml: {e}")),
+        Err(e) => {
+            return fail(CommandStatus::ConfigError, format!("speccoder.toml: {e}"))
+                .with_code("CONFIG-INVALID");
+        }
     };
     let mut connected = if servers.is_empty() {
         mcp::Connected::default()
@@ -664,6 +690,7 @@ pub(crate) fn run_task(
             redact(&reason, secret),
         ));
         return CommandResult::new("run", CommandStatus::NeedsHuman, &redact(&reason, secret))
+            .with_code("ACCEPTANCE-UNWRITTEN")
             .with_data(CommandData::Run(Box::new(report)));
     }
 
@@ -1418,7 +1445,7 @@ pub(crate) fn run_task(
         });
     let mut attempt_status = attempt_status;
     if let Some(e) = &in_place_stop {
-        report.reason = Some(e.result("run").message().to_owned());
+        report.reason = Some(e.line());
         report.verdict = None;
         // The saved attempt names the cause: `intent_changed`, `judge_changed`, …
         attempt_status = e.code.to_lowercase().replace('-', "_");

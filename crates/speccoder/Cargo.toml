@@ -20,10 +20,13 @@ speccoder-core.workspace = true
 speccoder-runtime.workspace = true
 clap.workspace = true
 ratatui.workspace = true
+schemars.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies]
 assert_cmd.workspace = true
+jsonschema.workspace = true
 tempfile.workspace = true
 serde_json.workspace = true
 

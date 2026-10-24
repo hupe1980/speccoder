@@ -616,19 +616,44 @@ fn emit_with_tail(
 /// A person is needed for `asked`: the run tells whoever watches.
 fn needs_person(
     observer: Option<&(String, std::sync::Arc<dyn crate::progress::Progress>)>,
-    tool: &str,
-    arguments: &Value,
+    asked: &agentplane::model::ToolCall,
 ) {
     if let Some((task, p)) = observer {
+        let (tool, arguments) = (asked.name.as_str(), &asked.arguments);
         let target = crate::progress::target(tool, arguments);
         let what: String = format!("{tool} {target}")
             .chars()
             .filter(|c| !c.is_control())
             .take(60)
             .collect();
-        p.event(&crate::progress::Event::NeedsPerson {
+        p.event(&crate::progress::Event::ApprovalRequested {
             task: task.clone(),
+            call: asked.id.clone(),
+            tool: tool.to_owned(),
             what,
+            class: crate::tools::policy::Grant::of(tool, arguments)
+                .map(|g| g.describe())
+                .unwrap_or_default(),
+        });
+    }
+}
+
+/// A person decided `asked`: the run tells whoever watches.
+fn person_decided(
+    observer: Option<&(String, std::sync::Arc<dyn crate::progress::Progress>)>,
+    asked: &agentplane::model::ToolCall,
+    decision: &str,
+    scope: Option<&str>,
+    who: Option<&Who>,
+) {
+    if let Some((task, p)) = observer {
+        p.event(&crate::progress::Event::ApprovalDecided {
+            task: task.clone(),
+            call: asked.id.clone(),
+            decision: decision.to_owned(),
+            scope: scope.map(str::to_owned),
+            by: who.map_or_else(|| "nobody (expired)".to_owned(), |w| w.name.clone()),
+            how: who.map_or_else(|| "expired".to_owned(), |w| w.basis.clone()),
         });
     }
 }
@@ -941,7 +966,7 @@ pub(crate) async fn tool_loop(
                     claim: claim.clone(),
                     options: crate::approvals::options(risk, grant.is_some()),
                 };
-                needs_person(observer.as_ref(), &asked.name, &asked.arguments);
+                needs_person(observer.as_ref(), &asked);
                 let decided = wait_for_person(
                     cx,
                     asker,
@@ -954,6 +979,17 @@ pub(crate) async fn tool_loop(
                 // Who decided, and how that is known, is journaled with it.
                 let approver = serde_json::to_value(&answer.by).unwrap_or(Value::Null);
                 let operator = read.by.as_ref().map(Who::view);
+                person_decided(
+                    observer.as_ref(),
+                    &asked,
+                    if answer.decision == Said::Approve {
+                        "approve"
+                    } else {
+                        "reject"
+                    },
+                    (answer.decision == Said::Approve).then(|| answer.scope.name()),
+                    read.by.as_ref().filter(|_| !read.expired),
+                );
                 match answer.decision {
                     Said::Approve => {
                         person = Some(json!({
@@ -1046,7 +1082,7 @@ pub(crate) async fn tool_loop(
                 Decision::Approval(reason) => {
                     let entry = json!({ "tool": asked.name, "arguments": asked.arguments, "decision": "approval", "reason": reason });
                     emit(observer.as_ref(), turn + 1, &entry);
-                    needs_person(observer.as_ref(), &asked.name, &asked.arguments);
+                    needs_person(observer.as_ref(), &asked);
                     log.push(entry);
                     return end(
                         "needs_approval",

@@ -1,97 +1,587 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "command": "inspect",
   "status": "ok",
-  "message": "1 feature, 001-sample selected: 28 tasks, 0 done, 28 open; 0 errors, 7 warnings",
   "exit_code": 0,
+  "message": "1 feature, 001-sample selected: 28 tasks, 0 done, 28 open; 0 errors, 7 warnings",
+  "payload": "inspect",
   "data": {
+    "root": "<repo>/crates/speccoder-speckit/tests/fixtures/compat/1.0.13",
+    "speckit": {
+      "version": "1.0.13",
+      "integration": "claude",
+      "script": "sh",
+      "feature_numbering": "sequential",
+      "current_feature": null
+    },
     "constitution": "unfilled",
-    "diagnostics": [
+    "features": [
       {
-        "code": "discover.constitution-unfilled",
-        "hint": "run /speckit-constitution to fill it in",
-        "line": null,
-        "message": "the constitution is still the Spec Kit template",
-        "path": ".specify/memory/constitution.md",
-        "severity": "warning"
-      },
-      {
-        "code": "tasks.missing-id",
-        "hint": "start the item with an ID such as T001",
-        "line": 154,
-        "message": "checklist item without a task ID; not treated as a task",
-        "path": "specs/001-sample/tasks.md",
-        "severity": "warning"
-      },
-      {
-        "code": "tasks.missing-id",
-        "hint": "start the item with an ID such as T001",
-        "line": 155,
-        "message": "checklist item without a task ID; not treated as a task",
-        "path": "specs/001-sample/tasks.md",
-        "severity": "warning"
-      },
-      {
-        "code": "tasks.missing-id",
-        "hint": "start the item with an ID such as T001",
-        "line": 156,
-        "message": "checklist item without a task ID; not treated as a task",
-        "path": "specs/001-sample/tasks.md",
-        "severity": "warning"
-      },
-      {
-        "code": "tasks.missing-id",
-        "hint": "start the item with an ID such as T001",
-        "line": 157,
-        "message": "checklist item without a task ID; not treated as a task",
-        "path": "specs/001-sample/tasks.md",
-        "severity": "warning"
-      },
-      {
-        "code": "tasks.missing-id",
-        "hint": "start the item with an ID such as T001",
-        "line": 158,
-        "message": "checklist item without a task ID; not treated as a task",
-        "path": "specs/001-sample/tasks.md",
-        "severity": "warning"
-      },
-      {
-        "code": "tasks.missing-id",
-        "hint": "start the item with an ID such as T001",
-        "line": 159,
-        "message": "checklist item without a task ID; not treated as a task",
-        "path": "specs/001-sample/tasks.md",
-        "severity": "warning"
+        "dir": "specs/001-sample",
+        "name": "001-sample",
+        "prefix": "001"
       }
     ],
+    "selection": {
+      "reason": "only_feature",
+      "feature": "001-sample"
+    },
     "feature": {
-      "artifacts": {
-        "checklists": false,
-        "contracts": false,
-        "data_model": false,
-        "plan": true,
-        "quickstart": false,
-        "research": false,
-        "spec": true,
-        "tasks": true
-      },
       "feature": {
         "dir": "specs/001-sample",
         "name": "001-sample",
         "prefix": "001"
       },
+      "artifacts": {
+        "spec": true,
+        "plan": true,
+        "tasks": true,
+        "research": false,
+        "data_model": false,
+        "contracts": false,
+        "quickstart": false,
+        "checklists": false
+      },
+      "tasks": {
+        "path": "specs/001-sample/tasks.md",
+        "phases": [
+          {
+            "title": "description: \"Task list template for feature implementation\"",
+            "line": 3,
+            "section_hash": "8e4b4b9df5099fa0fd2de71ca0cd0fd63656ee2f3171249cdf4ac673aca7806c"
+          },
+          {
+            "title": "Format: `[ID] [P?] [Story] Description`",
+            "line": 16,
+            "section_hash": "8bd1b0ab9448894263c4525862f6b859631c5df906debb8177d3c029b2e56b0d"
+          },
+          {
+            "title": "Path Conventions",
+            "line": 22,
+            "section_hash": "b9fe2668109251162ec6da4c96cd9eb5fac84a4e2abbbe7d6fba4f74f2415b80"
+          },
+          {
+            "title": "Phase 1: Setup (Shared Infrastructure)",
+            "line": 48,
+            "section_hash": "4bcc9e8bfab9b1865d2c898161b19078303e2fc0e3d048760ea1a06d9684474e"
+          },
+          {
+            "title": "Phase 2: Foundational (Blocking Prerequisites)",
+            "line": 58,
+            "section_hash": "762b84280cf5a5489a730ec34d9a14e985356c12a7cbbe66c31d8d811defbffa"
+          },
+          {
+            "title": "Phase 3: User Story 1 - [Title] (Priority: P1) 🎯 MVP",
+            "line": 77,
+            "section_hash": "fbed28b9764d190454a51b7d9bcd4ae175dc2638de15c4ce6da61e1029522a40"
+          },
+          {
+            "title": "Phase 4: User Story 2 - [Title] (Priority: P2)",
+            "line": 103,
+            "section_hash": "ee2ef22b2bf85ca77a61fe331cebfeafdfdf8a66afdf7081eacbdebc50cbc5e6"
+          },
+          {
+            "title": "Phase 5: User Story 3 - [Title] (Priority: P3)",
+            "line": 125,
+            "section_hash": "beebc966a8ca54aafe69f4d23cc345cf89679019f986b3247709811ce968850c"
+          },
+          {
+            "title": "Phase N: Polish & Cross-Cutting Concerns",
+            "line": 150,
+            "section_hash": "aa7199f8b30222f3034a9b2bcd37cb8fa228a2d2fbf5fa88bc838451ffc31665"
+          },
+          {
+            "title": "Dependencies & Execution Order",
+            "line": 163,
+            "section_hash": "03f9fc0878c12db1f2dc1bb0cbc084c4e16bd9d67bce5725b69b62a2c62903fb"
+          },
+          {
+            "title": "Parallel Example: User Story 1",
+            "line": 199,
+            "section_hash": "a74f4bd87f1faca5cf508e4e7f9b3f58006e2995fadc749e266efe16b30619bb"
+          },
+          {
+            "title": "Implementation Strategy",
+            "line": 213,
+            "section_hash": "c115badde7c1cda982e79b49eb2dbcb7cd3c61b21073739165c1498941373461"
+          },
+          {
+            "title": "Notes",
+            "line": 244,
+            "section_hash": "f91b0216b412bb7bf84e9016198a997e49e07b6a65b7b12a83a8a76de828616f"
+          }
+        ],
+        "tasks": [
+          {
+            "id": "T001",
+            "done": false,
+            "parallel": false,
+            "story": null,
+            "title": "Create project structure per implementation plan",
+            "depends_on": [],
+            "phase": "Phase 1: Setup (Shared Infrastructure)",
+            "subsection": null,
+            "line": 52,
+            "byte_range": [
+              1832,
+              1892
+            ],
+            "line_hash": "5cc99ead535b38132d23e3c50584f68b07749633feda97d32e831889f29c52ac"
+          },
+          {
+            "id": "T002",
+            "done": false,
+            "parallel": false,
+            "story": null,
+            "title": "Initialize [language] project with [framework] dependencies",
+            "depends_on": [],
+            "phase": "Phase 1: Setup (Shared Infrastructure)",
+            "subsection": null,
+            "line": 53,
+            "byte_range": [
+              1892,
+              1963
+            ],
+            "line_hash": "b88691ccd1a882f31a1e1060965aaaafc8aacaef63bb7e604bd168840f1ee193"
+          },
+          {
+            "id": "T003",
+            "done": false,
+            "parallel": true,
+            "story": null,
+            "title": "Configure linting and formatting tools",
+            "depends_on": [],
+            "phase": "Phase 1: Setup (Shared Infrastructure)",
+            "subsection": null,
+            "line": 54,
+            "byte_range": [
+              1963,
+              2018
+            ],
+            "line_hash": "c1dab14042c17934160ada1f0dce16cd8427f947c78ecd5f51e06f947c21bfff"
+          },
+          {
+            "id": "T004",
+            "done": false,
+            "parallel": false,
+            "story": null,
+            "title": "Setup database schema and migrations framework",
+            "depends_on": [],
+            "phase": "Phase 2: Foundational (Blocking Prerequisites)",
+            "subsection": null,
+            "line": 66,
+            "byte_range": [
+              2315,
+              2373
+            ],
+            "line_hash": "d65ef2086ccbe3f91d1ebf304dcd8dc092fc2ff52f85aca4f8ab2d280f3e76b6"
+          },
+          {
+            "id": "T005",
+            "done": false,
+            "parallel": true,
+            "story": null,
+            "title": "Implement authentication/authorization framework",
+            "depends_on": [],
+            "phase": "Phase 2: Foundational (Blocking Prerequisites)",
+            "subsection": null,
+            "line": 67,
+            "byte_range": [
+              2373,
+              2437
+            ],
+            "line_hash": "5d223d8c3a606aa1fc460ef4ef172ebcba9be79efae3d66b47fae6a487e4ac08"
+          },
+          {
+            "id": "T006",
+            "done": false,
+            "parallel": true,
+            "story": null,
+            "title": "Setup API routing and middleware structure",
+            "depends_on": [],
+            "phase": "Phase 2: Foundational (Blocking Prerequisites)",
+            "subsection": null,
+            "line": 68,
+            "byte_range": [
+              2437,
+              2495
+            ],
+            "line_hash": "a00d486d84ebcbf80d97cd89802fdd88c7059307433cecdaa719402f7c3b2011"
+          },
+          {
+            "id": "T007",
+            "done": false,
+            "parallel": false,
+            "story": null,
+            "title": "Create base models/entities that all stories depend on",
+            "depends_on": [],
+            "phase": "Phase 2: Foundational (Blocking Prerequisites)",
+            "subsection": null,
+            "line": 69,
+            "byte_range": [
+              2495,
+              2561
+            ],
+            "line_hash": "97cda69c14fea397a98abed93278a9bb5db9dc8eba9961a357507f15744601c0"
+          },
+          {
+            "id": "T008",
+            "done": false,
+            "parallel": false,
+            "story": null,
+            "title": "Configure error handling and logging infrastructure",
+            "depends_on": [],
+            "phase": "Phase 2: Foundational (Blocking Prerequisites)",
+            "subsection": null,
+            "line": 70,
+            "byte_range": [
+              2561,
+              2624
+            ],
+            "line_hash": "560d0f8882a237acbfde28909aba6d5760286e9f4e22012308453ecb8ce28a76"
+          },
+          {
+            "id": "T009",
+            "done": false,
+            "parallel": false,
+            "story": null,
+            "title": "Setup environment configuration management",
+            "depends_on": [],
+            "phase": "Phase 2: Foundational (Blocking Prerequisites)",
+            "subsection": null,
+            "line": 71,
+            "byte_range": [
+              2624,
+              2679
+            ],
+            "line_hash": "f18b759c9a7fe0e99132ca7dc34c7f951bf051efc3493c3ed388c513effa49d2"
+          },
+          {
+            "id": "T010",
+            "done": false,
+            "parallel": true,
+            "story": "US1",
+            "title": "Contract test for [endpoint] in tests/contract/test_[name].py",
+            "depends_on": [],
+            "phase": "Phase 3: User Story 1 - [Title] (Priority: P1) 🎯 MVP",
+            "subsection": "Tests for User Story 1 (OPTIONAL - only if tests requested) ⚠️",
+            "line": 87,
+            "byte_range": [
+              3107,
+              3190
+            ],
+            "line_hash": "002ff2f28e379ad941cf0a11df4d792933d842cbb02bb8ead5f16453617a72d3"
+          },
+          {
+            "id": "T011",
+            "done": false,
+            "parallel": true,
+            "story": "US1",
+            "title": "Integration test for [user journey] in tests/integration/test_[name].py",
+            "depends_on": [],
+            "phase": "Phase 3: User Story 1 - [Title] (Priority: P1) 🎯 MVP",
+            "subsection": "Tests for User Story 1 (OPTIONAL - only if tests requested) ⚠️",
+            "line": 88,
+            "byte_range": [
+              3190,
+              3284
+            ],
+            "line_hash": "c99df267d6e7ec425633bc27785ee640c6a518440cbed7c04408c3181a56862b"
+          },
+          {
+            "id": "T012",
+            "done": false,
+            "parallel": true,
+            "story": "US1",
+            "title": "Create [Entity1] model in src/models/[entity1].py",
+            "depends_on": [],
+            "phase": "Phase 3: User Story 1 - [Title] (Priority: P1) 🎯 MVP",
+            "subsection": "Implementation for User Story 1",
+            "line": 92,
+            "byte_range": [
+              3321,
+              3392
+            ],
+            "line_hash": "04d8ea6033c0d6e33e336fe21d38b0821e832331689d434def36229176224e16"
+          },
+          {
+            "id": "T013",
+            "done": false,
+            "parallel": true,
+            "story": "US1",
+            "title": "Create [Entity2] model in src/models/[entity2].py",
+            "depends_on": [],
+            "phase": "Phase 3: User Story 1 - [Title] (Priority: P1) 🎯 MVP",
+            "subsection": "Implementation for User Story 1",
+            "line": 93,
+            "byte_range": [
+              3392,
+              3463
+            ],
+            "line_hash": "4d72456c2427ddd8c4c5752ebcbe89fb8a1f9cdfda85768877ae28699972d5a4"
+          },
+          {
+            "id": "T014",
+            "done": false,
+            "parallel": false,
+            "story": "US1",
+            "title": "Implement [Service] in src/services/[service].py (depends on T012, T013)",
+            "depends_on": [
+              "T012",
+              "T013"
+            ],
+            "phase": "Phase 3: User Story 1 - [Title] (Priority: P1) 🎯 MVP",
+            "subsection": "Implementation for User Story 1",
+            "line": 94,
+            "byte_range": [
+              3463,
+              3553
+            ],
+            "line_hash": "70f9868f98a7113c6f53f38abbc5f343ed5e31af4b24f215e0828916a5cc5090"
+          },
+          {
+            "id": "T015",
+            "done": false,
+            "parallel": false,
+            "story": "US1",
+            "title": "Implement [endpoint/feature] in src/[location]/[file].py",
+            "depends_on": [],
+            "phase": "Phase 3: User Story 1 - [Title] (Priority: P1) 🎯 MVP",
+            "subsection": "Implementation for User Story 1",
+            "line": 95,
+            "byte_range": [
+              3553,
+              3627
+            ],
+            "line_hash": "50a1f930c69b92cddaead134de67b1353d4f3fe086decdef92a936de94a4e3de"
+          },
+          {
+            "id": "T016",
+            "done": false,
+            "parallel": false,
+            "story": "US1",
+            "title": "Add validation and error handling",
+            "depends_on": [],
+            "phase": "Phase 3: User Story 1 - [Title] (Priority: P1) 🎯 MVP",
+            "subsection": "Implementation for User Story 1",
+            "line": 96,
+            "byte_range": [
+              3627,
+              3678
+            ],
+            "line_hash": "4ca48c6f0b7a7288e85ee5660ee79b9525c567c55e8c19671008ece227be6d88"
+          },
+          {
+            "id": "T017",
+            "done": false,
+            "parallel": false,
+            "story": "US1",
+            "title": "Add logging for user story 1 operations",
+            "depends_on": [],
+            "phase": "Phase 3: User Story 1 - [Title] (Priority: P1) 🎯 MVP",
+            "subsection": "Implementation for User Story 1",
+            "line": 97,
+            "byte_range": [
+              3678,
+              3736
+            ],
+            "line_hash": "d1ea9f989b6f1bf797a96e6f68a0de49750c3078426497712f9ea69042127e39"
+          },
+          {
+            "id": "T018",
+            "done": false,
+            "parallel": true,
+            "story": "US2",
+            "title": "Contract test for [endpoint] in tests/contract/test_[name].py",
+            "depends_on": [],
+            "phase": "Phase 4: User Story 2 - [Title] (Priority: P2)",
+            "subsection": "Tests for User Story 2 (OPTIONAL - only if tests requested) ⚠️",
+            "line": 111,
+            "byte_range": [
+              4089,
+              4172
+            ],
+            "line_hash": "9ab07961bf17c4dd11d18743fdcc134056b0ae074a3df8cfafb78432b2b513fe"
+          },
+          {
+            "id": "T019",
+            "done": false,
+            "parallel": true,
+            "story": "US2",
+            "title": "Integration test for [user journey] in tests/integration/test_[name].py",
+            "depends_on": [],
+            "phase": "Phase 4: User Story 2 - [Title] (Priority: P2)",
+            "subsection": "Tests for User Story 2 (OPTIONAL - only if tests requested) ⚠️",
+            "line": 112,
+            "byte_range": [
+              4172,
+              4266
+            ],
+            "line_hash": "8dc7430bb49dead1b2d598a5eb38ad93f457184c7b9a100a100dd3f3a6b0ef06"
+          },
+          {
+            "id": "T020",
+            "done": false,
+            "parallel": true,
+            "story": "US2",
+            "title": "Create [Entity] model in src/models/[entity].py",
+            "depends_on": [],
+            "phase": "Phase 4: User Story 2 - [Title] (Priority: P2)",
+            "subsection": "Implementation for User Story 2",
+            "line": 116,
+            "byte_range": [
+              4303,
+              4372
+            ],
+            "line_hash": "2de71aa3c60220277f0e47dcd99b293e0f9a2588a71377ab6166b095ee76295a"
+          },
+          {
+            "id": "T021",
+            "done": false,
+            "parallel": false,
+            "story": "US2",
+            "title": "Implement [Service] in src/services/[service].py",
+            "depends_on": [],
+            "phase": "Phase 4: User Story 2 - [Title] (Priority: P2)",
+            "subsection": "Implementation for User Story 2",
+            "line": 117,
+            "byte_range": [
+              4372,
+              4438
+            ],
+            "line_hash": "6a26abda3ce6b8dc5dba2d8dd46e9af1d5c5e59bbd393fa8da748c35307d879f"
+          },
+          {
+            "id": "T022",
+            "done": false,
+            "parallel": false,
+            "story": "US2",
+            "title": "Implement [endpoint/feature] in src/[location]/[file].py",
+            "depends_on": [],
+            "phase": "Phase 4: User Story 2 - [Title] (Priority: P2)",
+            "subsection": "Implementation for User Story 2",
+            "line": 118,
+            "byte_range": [
+              4438,
+              4512
+            ],
+            "line_hash": "2066e0275de6bd2c3700a8d067e781e52219596358a4ede1188282108bd2f2fc"
+          },
+          {
+            "id": "T023",
+            "done": false,
+            "parallel": false,
+            "story": "US2",
+            "title": "Integrate with User Story 1 components (if needed)",
+            "depends_on": [],
+            "phase": "Phase 4: User Story 2 - [Title] (Priority: P2)",
+            "subsection": "Implementation for User Story 2",
+            "line": 119,
+            "byte_range": [
+              4512,
+              4581
+            ],
+            "line_hash": "e3c95e1d01e33a26592c5d0a3019c9cef5955b3661cbe00a424a370ea57755cf"
+          },
+          {
+            "id": "T024",
+            "done": false,
+            "parallel": true,
+            "story": "US3",
+            "title": "Contract test for [endpoint] in tests/contract/test_[name].py",
+            "depends_on": [],
+            "phase": "Phase 5: User Story 3 - [Title] (Priority: P3)",
+            "subsection": "Tests for User Story 3 (OPTIONAL - only if tests requested) ⚠️",
+            "line": 133,
+            "byte_range": [
+              4919,
+              5002
+            ],
+            "line_hash": "4bf59946496df93e74b83cd57c5b0b0d4a45fc49d3e88aab11ae8f6edb9c4452"
+          },
+          {
+            "id": "T025",
+            "done": false,
+            "parallel": true,
+            "story": "US3",
+            "title": "Integration test for [user journey] in tests/integration/test_[name].py",
+            "depends_on": [],
+            "phase": "Phase 5: User Story 3 - [Title] (Priority: P3)",
+            "subsection": "Tests for User Story 3 (OPTIONAL - only if tests requested) ⚠️",
+            "line": 134,
+            "byte_range": [
+              5002,
+              5096
+            ],
+            "line_hash": "616607398ce07bf966fd319197feabf7450f34ebe30d8076ef1f5396f5996642"
+          },
+          {
+            "id": "T026",
+            "done": false,
+            "parallel": true,
+            "story": "US3",
+            "title": "Create [Entity] model in src/models/[entity].py",
+            "depends_on": [],
+            "phase": "Phase 5: User Story 3 - [Title] (Priority: P3)",
+            "subsection": "Implementation for User Story 3",
+            "line": 138,
+            "byte_range": [
+              5133,
+              5202
+            ],
+            "line_hash": "f7cf51b4c15fe7a608bc593be1359695f692451db4fb85558801dd4e550ebb41"
+          },
+          {
+            "id": "T027",
+            "done": false,
+            "parallel": false,
+            "story": "US3",
+            "title": "Implement [Service] in src/services/[service].py",
+            "depends_on": [],
+            "phase": "Phase 5: User Story 3 - [Title] (Priority: P3)",
+            "subsection": "Implementation for User Story 3",
+            "line": 139,
+            "byte_range": [
+              5202,
+              5268
+            ],
+            "line_hash": "12443a46d4eb97334f7df69c49d3dbfc2c7ef8ac61dc3099010a1af299de9061"
+          },
+          {
+            "id": "T028",
+            "done": false,
+            "parallel": false,
+            "story": "US3",
+            "title": "Implement [endpoint/feature] in src/[location]/[file].py",
+            "depends_on": [],
+            "phase": "Phase 5: User Story 3 - [Title] (Priority: P3)",
+            "subsection": "Implementation for User Story 3",
+            "line": 140,
+            "byte_range": [
+              5268,
+              5343
+            ],
+            "line_hash": "5399eab140e98c9a931f7a8f10f27a262a084487578de11a1a783e986ab69fd3"
+          }
+        ],
+        "totals": {
+          "total": 28,
+          "done": 0,
+          "open": 28
+        },
+        "dependency_mode": "structural"
+      },
       "schedule": {
         "tasks": [
           {
-            "blocked_by": [],
-            "depends_on": [],
             "id": "T001",
-            "state": "ready"
+            "state": "ready",
+            "depends_on": [],
+            "blocked_by": []
           },
           {
-            "blocked_by": [
-              "T001"
-            ],
+            "id": "T002",
+            "state": "blocked",
             "depends_on": [
               {
                 "id": "T001",
@@ -99,13 +589,13 @@
                 "missing": false
               }
             ],
-            "id": "T002",
-            "state": "blocked"
+            "blocked_by": [
+              "T001"
+            ]
           },
           {
-            "blocked_by": [
-              "T002"
-            ],
+            "id": "T003",
+            "state": "blocked",
             "depends_on": [
               {
                 "id": "T002",
@@ -113,74 +603,39 @@
                 "missing": false
               }
             ],
-            "id": "T003",
-            "state": "blocked"
+            "blocked_by": [
+              "T002"
+            ]
           },
           {
+            "id": "T004",
+            "state": "blocked",
+            "depends_on": [
+              {
+                "id": "T001",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T002",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T003",
+                "kind": "structural",
+                "missing": false
+              }
+            ],
             "blocked_by": [
               "T001",
               "T002",
               "T003"
-            ],
-            "depends_on": [
-              {
-                "id": "T001",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T002",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T003",
-                "kind": "structural",
-                "missing": false
-              }
-            ],
-            "id": "T004",
-            "state": "blocked"
+            ]
           },
           {
-            "blocked_by": [
-              "T001",
-              "T002",
-              "T003",
-              "T004"
-            ],
-            "depends_on": [
-              {
-                "id": "T001",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T002",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T003",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T004",
-                "kind": "structural",
-                "missing": false
-              }
-            ],
             "id": "T005",
-            "state": "blocked"
-          },
-          {
-            "blocked_by": [
-              "T001",
-              "T002",
-              "T003",
-              "T004"
-            ],
+            "state": "blocked",
             "depends_on": [
               {
                 "id": "T001",
@@ -203,17 +658,86 @@
                 "missing": false
               }
             ],
-            "id": "T006",
-            "state": "blocked"
+            "blocked_by": [
+              "T001",
+              "T002",
+              "T003",
+              "T004"
+            ]
           },
           {
+            "id": "T006",
+            "state": "blocked",
+            "depends_on": [
+              {
+                "id": "T001",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T002",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T003",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T004",
+                "kind": "structural",
+                "missing": false
+              }
+            ],
+            "blocked_by": [
+              "T001",
+              "T002",
+              "T003",
+              "T004"
+            ]
+          },
+          {
+            "id": "T007",
+            "state": "blocked",
+            "depends_on": [
+              {
+                "id": "T001",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T002",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T003",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T005",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T006",
+                "kind": "structural",
+                "missing": false
+              }
+            ],
             "blocked_by": [
               "T001",
               "T002",
               "T003",
               "T005",
               "T006"
-            ],
+            ]
+          },
+          {
+            "id": "T008",
+            "state": "blocked",
             "depends_on": [
               {
                 "id": "T001",
@@ -231,26 +755,21 @@
                 "missing": false
               },
               {
-                "id": "T005",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T006",
+                "id": "T007",
                 "kind": "structural",
                 "missing": false
               }
             ],
-            "id": "T007",
-            "state": "blocked"
-          },
-          {
             "blocked_by": [
               "T001",
               "T002",
               "T003",
               "T007"
-            ],
+            ]
+          },
+          {
+            "id": "T009",
+            "state": "blocked",
             "depends_on": [
               {
                 "id": "T001",
@@ -268,109 +787,68 @@
                 "missing": false
               },
               {
-                "id": "T007",
+                "id": "T008",
                 "kind": "structural",
                 "missing": false
               }
             ],
-            "id": "T008",
-            "state": "blocked"
-          },
-          {
             "blocked_by": [
               "T001",
               "T002",
               "T003",
               "T008"
-            ],
-            "depends_on": [
-              {
-                "id": "T001",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T002",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T003",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T008",
-                "kind": "structural",
-                "missing": false
-              }
-            ],
-            "id": "T009",
-            "state": "blocked"
+            ]
           },
           {
-            "blocked_by": [
-              "T001",
-              "T002",
-              "T003",
-              "T004",
-              "T005",
-              "T006",
-              "T007",
-              "T008",
-              "T009"
-            ],
-            "depends_on": [
-              {
-                "id": "T001",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T002",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T003",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T004",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T005",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T006",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T007",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T008",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T009",
-                "kind": "structural",
-                "missing": false
-              }
-            ],
             "id": "T010",
-            "state": "blocked"
-          },
-          {
+            "state": "blocked",
+            "depends_on": [
+              {
+                "id": "T001",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T002",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T003",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T004",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T005",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T006",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T007",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T008",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T009",
+                "kind": "structural",
+                "missing": false
+              }
+            ],
             "blocked_by": [
               "T001",
               "T002",
@@ -381,71 +859,11 @@
               "T007",
               "T008",
               "T009"
-            ],
-            "depends_on": [
-              {
-                "id": "T001",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T002",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T003",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T004",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T005",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T006",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T007",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T008",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T009",
-                "kind": "structural",
-                "missing": false
-              }
-            ],
+            ]
+          },
+          {
             "id": "T011",
-            "state": "blocked"
-          },
-          {
-            "blocked_by": [
-              "T001",
-              "T002",
-              "T003",
-              "T004",
-              "T005",
-              "T006",
-              "T007",
-              "T008",
-              "T009",
-              "T010",
-              "T011"
-            ],
+            "state": "blocked",
             "depends_on": [
               {
                 "id": "T001",
@@ -491,35 +909,23 @@
                 "id": "T009",
                 "kind": "structural",
                 "missing": false
-              },
-              {
-                "id": "T010",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T011",
-                "kind": "structural",
-                "missing": false
               }
             ],
+            "blocked_by": [
+              "T001",
+              "T002",
+              "T003",
+              "T004",
+              "T005",
+              "T006",
+              "T007",
+              "T008",
+              "T009"
+            ]
+          },
+          {
             "id": "T012",
-            "state": "blocked"
-          },
-          {
-            "blocked_by": [
-              "T001",
-              "T002",
-              "T003",
-              "T004",
-              "T005",
-              "T006",
-              "T007",
-              "T008",
-              "T009",
-              "T010",
-              "T011"
-            ],
+            "state": "blocked",
             "depends_on": [
               {
                 "id": "T001",
@@ -577,10 +983,6 @@
                 "missing": false
               }
             ],
-            "id": "T013",
-            "state": "blocked"
-          },
-          {
             "blocked_by": [
               "T001",
               "T002",
@@ -592,10 +994,86 @@
               "T008",
               "T009",
               "T010",
-              "T011",
-              "T012",
-              "T013"
+              "T011"
+            ]
+          },
+          {
+            "id": "T013",
+            "state": "blocked",
+            "depends_on": [
+              {
+                "id": "T001",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T002",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T003",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T004",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T005",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T006",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T007",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T008",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T009",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T010",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T011",
+                "kind": "structural",
+                "missing": false
+              }
             ],
+            "blocked_by": [
+              "T001",
+              "T002",
+              "T003",
+              "T004",
+              "T005",
+              "T006",
+              "T007",
+              "T008",
+              "T009",
+              "T010",
+              "T011"
+            ]
+          },
+          {
+            "id": "T014",
+            "state": "blocked",
             "depends_on": [
               {
                 "id": "T001",
@@ -663,10 +1141,6 @@
                 "missing": false
               }
             ],
-            "id": "T014",
-            "state": "blocked"
-          },
-          {
             "blocked_by": [
               "T001",
               "T002",
@@ -679,8 +1153,13 @@
               "T009",
               "T010",
               "T011",
-              "T014"
-            ],
+              "T012",
+              "T013"
+            ]
+          },
+          {
+            "id": "T015",
+            "state": "blocked",
             "depends_on": [
               {
                 "id": "T001",
@@ -743,10 +1222,6 @@
                 "missing": false
               }
             ],
-            "id": "T015",
-            "state": "blocked"
-          },
-          {
             "blocked_by": [
               "T001",
               "T002",
@@ -759,8 +1234,12 @@
               "T009",
               "T010",
               "T011",
-              "T015"
-            ],
+              "T014"
+            ]
+          },
+          {
+            "id": "T016",
+            "state": "blocked",
             "depends_on": [
               {
                 "id": "T001",
@@ -823,10 +1302,6 @@
                 "missing": false
               }
             ],
-            "id": "T016",
-            "state": "blocked"
-          },
-          {
             "blocked_by": [
               "T001",
               "T002",
@@ -839,8 +1314,12 @@
               "T009",
               "T010",
               "T011",
-              "T016"
-            ],
+              "T015"
+            ]
+          },
+          {
+            "id": "T017",
+            "state": "blocked",
             "depends_on": [
               {
                 "id": "T001",
@@ -903,134 +1382,6 @@
                 "missing": false
               }
             ],
-            "id": "T017",
-            "state": "blocked"
-          },
-          {
-            "blocked_by": [
-              "T001",
-              "T002",
-              "T003",
-              "T004",
-              "T005",
-              "T006",
-              "T007",
-              "T008",
-              "T009"
-            ],
-            "depends_on": [
-              {
-                "id": "T001",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T002",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T003",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T004",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T005",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T006",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T007",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T008",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T009",
-                "kind": "structural",
-                "missing": false
-              }
-            ],
-            "id": "T018",
-            "state": "blocked"
-          },
-          {
-            "blocked_by": [
-              "T001",
-              "T002",
-              "T003",
-              "T004",
-              "T005",
-              "T006",
-              "T007",
-              "T008",
-              "T009"
-            ],
-            "depends_on": [
-              {
-                "id": "T001",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T002",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T003",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T004",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T005",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T006",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T007",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T008",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T009",
-                "kind": "structural",
-                "missing": false
-              }
-            ],
-            "id": "T019",
-            "state": "blocked"
-          },
-          {
             "blocked_by": [
               "T001",
               "T002",
@@ -1041,9 +1392,138 @@
               "T007",
               "T008",
               "T009",
-              "T018",
-              "T019"
+              "T010",
+              "T011",
+              "T016"
+            ]
+          },
+          {
+            "id": "T018",
+            "state": "blocked",
+            "depends_on": [
+              {
+                "id": "T001",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T002",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T003",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T004",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T005",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T006",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T007",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T008",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T009",
+                "kind": "structural",
+                "missing": false
+              }
             ],
+            "blocked_by": [
+              "T001",
+              "T002",
+              "T003",
+              "T004",
+              "T005",
+              "T006",
+              "T007",
+              "T008",
+              "T009"
+            ]
+          },
+          {
+            "id": "T019",
+            "state": "blocked",
+            "depends_on": [
+              {
+                "id": "T001",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T002",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T003",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T004",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T005",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T006",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T007",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T008",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T009",
+                "kind": "structural",
+                "missing": false
+              }
+            ],
+            "blocked_by": [
+              "T001",
+              "T002",
+              "T003",
+              "T004",
+              "T005",
+              "T006",
+              "T007",
+              "T008",
+              "T009"
+            ]
+          },
+          {
+            "id": "T020",
+            "state": "blocked",
             "depends_on": [
               {
                 "id": "T001",
@@ -1101,10 +1581,6 @@
                 "missing": false
               }
             ],
-            "id": "T020",
-            "state": "blocked"
-          },
-          {
             "blocked_by": [
               "T001",
               "T002",
@@ -1116,9 +1592,12 @@
               "T008",
               "T009",
               "T018",
-              "T019",
-              "T020"
-            ],
+              "T019"
+            ]
+          },
+          {
+            "id": "T021",
+            "state": "blocked",
             "depends_on": [
               {
                 "id": "T001",
@@ -1181,10 +1660,6 @@
                 "missing": false
               }
             ],
-            "id": "T021",
-            "state": "blocked"
-          },
-          {
             "blocked_by": [
               "T001",
               "T002",
@@ -1197,8 +1672,12 @@
               "T009",
               "T018",
               "T019",
-              "T021"
-            ],
+              "T020"
+            ]
+          },
+          {
+            "id": "T022",
+            "state": "blocked",
             "depends_on": [
               {
                 "id": "T001",
@@ -1261,10 +1740,6 @@
                 "missing": false
               }
             ],
-            "id": "T022",
-            "state": "blocked"
-          },
-          {
             "blocked_by": [
               "T001",
               "T002",
@@ -1277,8 +1752,12 @@
               "T009",
               "T018",
               "T019",
-              "T022"
-            ],
+              "T021"
+            ]
+          },
+          {
+            "id": "T023",
+            "state": "blocked",
             "depends_on": [
               {
                 "id": "T001",
@@ -1341,134 +1820,6 @@
                 "missing": false
               }
             ],
-            "id": "T023",
-            "state": "blocked"
-          },
-          {
-            "blocked_by": [
-              "T001",
-              "T002",
-              "T003",
-              "T004",
-              "T005",
-              "T006",
-              "T007",
-              "T008",
-              "T009"
-            ],
-            "depends_on": [
-              {
-                "id": "T001",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T002",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T003",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T004",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T005",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T006",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T007",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T008",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T009",
-                "kind": "structural",
-                "missing": false
-              }
-            ],
-            "id": "T024",
-            "state": "blocked"
-          },
-          {
-            "blocked_by": [
-              "T001",
-              "T002",
-              "T003",
-              "T004",
-              "T005",
-              "T006",
-              "T007",
-              "T008",
-              "T009"
-            ],
-            "depends_on": [
-              {
-                "id": "T001",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T002",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T003",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T004",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T005",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T006",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T007",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T008",
-                "kind": "structural",
-                "missing": false
-              },
-              {
-                "id": "T009",
-                "kind": "structural",
-                "missing": false
-              }
-            ],
-            "id": "T025",
-            "state": "blocked"
-          },
-          {
             "blocked_by": [
               "T001",
               "T002",
@@ -1479,9 +1830,138 @@
               "T007",
               "T008",
               "T009",
-              "T024",
-              "T025"
+              "T018",
+              "T019",
+              "T022"
+            ]
+          },
+          {
+            "id": "T024",
+            "state": "blocked",
+            "depends_on": [
+              {
+                "id": "T001",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T002",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T003",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T004",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T005",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T006",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T007",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T008",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T009",
+                "kind": "structural",
+                "missing": false
+              }
             ],
+            "blocked_by": [
+              "T001",
+              "T002",
+              "T003",
+              "T004",
+              "T005",
+              "T006",
+              "T007",
+              "T008",
+              "T009"
+            ]
+          },
+          {
+            "id": "T025",
+            "state": "blocked",
+            "depends_on": [
+              {
+                "id": "T001",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T002",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T003",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T004",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T005",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T006",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T007",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T008",
+                "kind": "structural",
+                "missing": false
+              },
+              {
+                "id": "T009",
+                "kind": "structural",
+                "missing": false
+              }
+            ],
+            "blocked_by": [
+              "T001",
+              "T002",
+              "T003",
+              "T004",
+              "T005",
+              "T006",
+              "T007",
+              "T008",
+              "T009"
+            ]
+          },
+          {
+            "id": "T026",
+            "state": "blocked",
             "depends_on": [
               {
                 "id": "T001",
@@ -1539,10 +2019,6 @@
                 "missing": false
               }
             ],
-            "id": "T026",
-            "state": "blocked"
-          },
-          {
             "blocked_by": [
               "T001",
               "T002",
@@ -1554,9 +2030,12 @@
               "T008",
               "T009",
               "T024",
-              "T025",
-              "T026"
-            ],
+              "T025"
+            ]
+          },
+          {
+            "id": "T027",
+            "state": "blocked",
             "depends_on": [
               {
                 "id": "T001",
@@ -1619,10 +2098,6 @@
                 "missing": false
               }
             ],
-            "id": "T027",
-            "state": "blocked"
-          },
-          {
             "blocked_by": [
               "T001",
               "T002",
@@ -1635,8 +2110,12 @@
               "T009",
               "T024",
               "T025",
-              "T027"
-            ],
+              "T026"
+            ]
+          },
+          {
+            "id": "T028",
+            "state": "blocked",
             "depends_on": [
               {
                 "id": "T001",
@@ -1699,564 +2178,86 @@
                 "missing": false
               }
             ],
-            "id": "T028",
-            "state": "blocked"
-          }
-        ],
-        "totals": {
-          "blocked": 27,
-          "done": 0,
-          "ready": 1
-        }
-      },
-      "tasks": {
-        "dependency_mode": "structural",
-        "path": "specs/001-sample/tasks.md",
-        "phases": [
-          {
-            "line": 3,
-            "section_hash": "8e4b4b9df5099fa0fd2de71ca0cd0fd63656ee2f3171249cdf4ac673aca7806c",
-            "title": "description: \"Task list template for feature implementation\""
-          },
-          {
-            "line": 16,
-            "section_hash": "8bd1b0ab9448894263c4525862f6b859631c5df906debb8177d3c029b2e56b0d",
-            "title": "Format: `[ID] [P?] [Story] Description`"
-          },
-          {
-            "line": 22,
-            "section_hash": "b9fe2668109251162ec6da4c96cd9eb5fac84a4e2abbbe7d6fba4f74f2415b80",
-            "title": "Path Conventions"
-          },
-          {
-            "line": 48,
-            "section_hash": "4bcc9e8bfab9b1865d2c898161b19078303e2fc0e3d048760ea1a06d9684474e",
-            "title": "Phase 1: Setup (Shared Infrastructure)"
-          },
-          {
-            "line": 58,
-            "section_hash": "762b84280cf5a5489a730ec34d9a14e985356c12a7cbbe66c31d8d811defbffa",
-            "title": "Phase 2: Foundational (Blocking Prerequisites)"
-          },
-          {
-            "line": 77,
-            "section_hash": "fbed28b9764d190454a51b7d9bcd4ae175dc2638de15c4ce6da61e1029522a40",
-            "title": "Phase 3: User Story 1 - [Title] (Priority: P1) 🎯 MVP"
-          },
-          {
-            "line": 103,
-            "section_hash": "ee2ef22b2bf85ca77a61fe331cebfeafdfdf8a66afdf7081eacbdebc50cbc5e6",
-            "title": "Phase 4: User Story 2 - [Title] (Priority: P2)"
-          },
-          {
-            "line": 125,
-            "section_hash": "beebc966a8ca54aafe69f4d23cc345cf89679019f986b3247709811ce968850c",
-            "title": "Phase 5: User Story 3 - [Title] (Priority: P3)"
-          },
-          {
-            "line": 150,
-            "section_hash": "aa7199f8b30222f3034a9b2bcd37cb8fa228a2d2fbf5fa88bc838451ffc31665",
-            "title": "Phase N: Polish & Cross-Cutting Concerns"
-          },
-          {
-            "line": 163,
-            "section_hash": "03f9fc0878c12db1f2dc1bb0cbc084c4e16bd9d67bce5725b69b62a2c62903fb",
-            "title": "Dependencies & Execution Order"
-          },
-          {
-            "line": 199,
-            "section_hash": "a74f4bd87f1faca5cf508e4e7f9b3f58006e2995fadc749e266efe16b30619bb",
-            "title": "Parallel Example: User Story 1"
-          },
-          {
-            "line": 213,
-            "section_hash": "c115badde7c1cda982e79b49eb2dbcb7cd3c61b21073739165c1498941373461",
-            "title": "Implementation Strategy"
-          },
-          {
-            "line": 244,
-            "section_hash": "f91b0216b412bb7bf84e9016198a997e49e07b6a65b7b12a83a8a76de828616f",
-            "title": "Notes"
-          }
-        ],
-        "tasks": [
-          {
-            "byte_range": [
-              1832,
-              1892
-            ],
-            "depends_on": [],
-            "done": false,
-            "id": "T001",
-            "line": 52,
-            "line_hash": "5cc99ead535b38132d23e3c50584f68b07749633feda97d32e831889f29c52ac",
-            "parallel": false,
-            "phase": "Phase 1: Setup (Shared Infrastructure)",
-            "story": null,
-            "subsection": null,
-            "title": "Create project structure per implementation plan"
-          },
-          {
-            "byte_range": [
-              1892,
-              1963
-            ],
-            "depends_on": [],
-            "done": false,
-            "id": "T002",
-            "line": 53,
-            "line_hash": "b88691ccd1a882f31a1e1060965aaaafc8aacaef63bb7e604bd168840f1ee193",
-            "parallel": false,
-            "phase": "Phase 1: Setup (Shared Infrastructure)",
-            "story": null,
-            "subsection": null,
-            "title": "Initialize [language] project with [framework] dependencies"
-          },
-          {
-            "byte_range": [
-              1963,
-              2018
-            ],
-            "depends_on": [],
-            "done": false,
-            "id": "T003",
-            "line": 54,
-            "line_hash": "c1dab14042c17934160ada1f0dce16cd8427f947c78ecd5f51e06f947c21bfff",
-            "parallel": true,
-            "phase": "Phase 1: Setup (Shared Infrastructure)",
-            "story": null,
-            "subsection": null,
-            "title": "Configure linting and formatting tools"
-          },
-          {
-            "byte_range": [
-              2315,
-              2373
-            ],
-            "depends_on": [],
-            "done": false,
-            "id": "T004",
-            "line": 66,
-            "line_hash": "d65ef2086ccbe3f91d1ebf304dcd8dc092fc2ff52f85aca4f8ab2d280f3e76b6",
-            "parallel": false,
-            "phase": "Phase 2: Foundational (Blocking Prerequisites)",
-            "story": null,
-            "subsection": null,
-            "title": "Setup database schema and migrations framework"
-          },
-          {
-            "byte_range": [
-              2373,
-              2437
-            ],
-            "depends_on": [],
-            "done": false,
-            "id": "T005",
-            "line": 67,
-            "line_hash": "5d223d8c3a606aa1fc460ef4ef172ebcba9be79efae3d66b47fae6a487e4ac08",
-            "parallel": true,
-            "phase": "Phase 2: Foundational (Blocking Prerequisites)",
-            "story": null,
-            "subsection": null,
-            "title": "Implement authentication/authorization framework"
-          },
-          {
-            "byte_range": [
-              2437,
-              2495
-            ],
-            "depends_on": [],
-            "done": false,
-            "id": "T006",
-            "line": 68,
-            "line_hash": "a00d486d84ebcbf80d97cd89802fdd88c7059307433cecdaa719402f7c3b2011",
-            "parallel": true,
-            "phase": "Phase 2: Foundational (Blocking Prerequisites)",
-            "story": null,
-            "subsection": null,
-            "title": "Setup API routing and middleware structure"
-          },
-          {
-            "byte_range": [
-              2495,
-              2561
-            ],
-            "depends_on": [],
-            "done": false,
-            "id": "T007",
-            "line": 69,
-            "line_hash": "97cda69c14fea397a98abed93278a9bb5db9dc8eba9961a357507f15744601c0",
-            "parallel": false,
-            "phase": "Phase 2: Foundational (Blocking Prerequisites)",
-            "story": null,
-            "subsection": null,
-            "title": "Create base models/entities that all stories depend on"
-          },
-          {
-            "byte_range": [
-              2561,
-              2624
-            ],
-            "depends_on": [],
-            "done": false,
-            "id": "T008",
-            "line": 70,
-            "line_hash": "560d0f8882a237acbfde28909aba6d5760286e9f4e22012308453ecb8ce28a76",
-            "parallel": false,
-            "phase": "Phase 2: Foundational (Blocking Prerequisites)",
-            "story": null,
-            "subsection": null,
-            "title": "Configure error handling and logging infrastructure"
-          },
-          {
-            "byte_range": [
-              2624,
-              2679
-            ],
-            "depends_on": [],
-            "done": false,
-            "id": "T009",
-            "line": 71,
-            "line_hash": "f18b759c9a7fe0e99132ca7dc34c7f951bf051efc3493c3ed388c513effa49d2",
-            "parallel": false,
-            "phase": "Phase 2: Foundational (Blocking Prerequisites)",
-            "story": null,
-            "subsection": null,
-            "title": "Setup environment configuration management"
-          },
-          {
-            "byte_range": [
-              3107,
-              3190
-            ],
-            "depends_on": [],
-            "done": false,
-            "id": "T010",
-            "line": 87,
-            "line_hash": "002ff2f28e379ad941cf0a11df4d792933d842cbb02bb8ead5f16453617a72d3",
-            "parallel": true,
-            "phase": "Phase 3: User Story 1 - [Title] (Priority: P1) 🎯 MVP",
-            "story": "US1",
-            "subsection": "Tests for User Story 1 (OPTIONAL - only if tests requested) ⚠️",
-            "title": "Contract test for [endpoint] in tests/contract/test_[name].py"
-          },
-          {
-            "byte_range": [
-              3190,
-              3284
-            ],
-            "depends_on": [],
-            "done": false,
-            "id": "T011",
-            "line": 88,
-            "line_hash": "c99df267d6e7ec425633bc27785ee640c6a518440cbed7c04408c3181a56862b",
-            "parallel": true,
-            "phase": "Phase 3: User Story 1 - [Title] (Priority: P1) 🎯 MVP",
-            "story": "US1",
-            "subsection": "Tests for User Story 1 (OPTIONAL - only if tests requested) ⚠️",
-            "title": "Integration test for [user journey] in tests/integration/test_[name].py"
-          },
-          {
-            "byte_range": [
-              3321,
-              3392
-            ],
-            "depends_on": [],
-            "done": false,
-            "id": "T012",
-            "line": 92,
-            "line_hash": "04d8ea6033c0d6e33e336fe21d38b0821e832331689d434def36229176224e16",
-            "parallel": true,
-            "phase": "Phase 3: User Story 1 - [Title] (Priority: P1) 🎯 MVP",
-            "story": "US1",
-            "subsection": "Implementation for User Story 1",
-            "title": "Create [Entity1] model in src/models/[entity1].py"
-          },
-          {
-            "byte_range": [
-              3392,
-              3463
-            ],
-            "depends_on": [],
-            "done": false,
-            "id": "T013",
-            "line": 93,
-            "line_hash": "4d72456c2427ddd8c4c5752ebcbe89fb8a1f9cdfda85768877ae28699972d5a4",
-            "parallel": true,
-            "phase": "Phase 3: User Story 1 - [Title] (Priority: P1) 🎯 MVP",
-            "story": "US1",
-            "subsection": "Implementation for User Story 1",
-            "title": "Create [Entity2] model in src/models/[entity2].py"
-          },
-          {
-            "byte_range": [
-              3463,
-              3553
-            ],
-            "depends_on": [
-              "T012",
-              "T013"
-            ],
-            "done": false,
-            "id": "T014",
-            "line": 94,
-            "line_hash": "70f9868f98a7113c6f53f38abbc5f343ed5e31af4b24f215e0828916a5cc5090",
-            "parallel": false,
-            "phase": "Phase 3: User Story 1 - [Title] (Priority: P1) 🎯 MVP",
-            "story": "US1",
-            "subsection": "Implementation for User Story 1",
-            "title": "Implement [Service] in src/services/[service].py (depends on T012, T013)"
-          },
-          {
-            "byte_range": [
-              3553,
-              3627
-            ],
-            "depends_on": [],
-            "done": false,
-            "id": "T015",
-            "line": 95,
-            "line_hash": "50a1f930c69b92cddaead134de67b1353d4f3fe086decdef92a936de94a4e3de",
-            "parallel": false,
-            "phase": "Phase 3: User Story 1 - [Title] (Priority: P1) 🎯 MVP",
-            "story": "US1",
-            "subsection": "Implementation for User Story 1",
-            "title": "Implement [endpoint/feature] in src/[location]/[file].py"
-          },
-          {
-            "byte_range": [
-              3627,
-              3678
-            ],
-            "depends_on": [],
-            "done": false,
-            "id": "T016",
-            "line": 96,
-            "line_hash": "4ca48c6f0b7a7288e85ee5660ee79b9525c567c55e8c19671008ece227be6d88",
-            "parallel": false,
-            "phase": "Phase 3: User Story 1 - [Title] (Priority: P1) 🎯 MVP",
-            "story": "US1",
-            "subsection": "Implementation for User Story 1",
-            "title": "Add validation and error handling"
-          },
-          {
-            "byte_range": [
-              3678,
-              3736
-            ],
-            "depends_on": [],
-            "done": false,
-            "id": "T017",
-            "line": 97,
-            "line_hash": "d1ea9f989b6f1bf797a96e6f68a0de49750c3078426497712f9ea69042127e39",
-            "parallel": false,
-            "phase": "Phase 3: User Story 1 - [Title] (Priority: P1) 🎯 MVP",
-            "story": "US1",
-            "subsection": "Implementation for User Story 1",
-            "title": "Add logging for user story 1 operations"
-          },
-          {
-            "byte_range": [
-              4089,
-              4172
-            ],
-            "depends_on": [],
-            "done": false,
-            "id": "T018",
-            "line": 111,
-            "line_hash": "9ab07961bf17c4dd11d18743fdcc134056b0ae074a3df8cfafb78432b2b513fe",
-            "parallel": true,
-            "phase": "Phase 4: User Story 2 - [Title] (Priority: P2)",
-            "story": "US2",
-            "subsection": "Tests for User Story 2 (OPTIONAL - only if tests requested) ⚠️",
-            "title": "Contract test for [endpoint] in tests/contract/test_[name].py"
-          },
-          {
-            "byte_range": [
-              4172,
-              4266
-            ],
-            "depends_on": [],
-            "done": false,
-            "id": "T019",
-            "line": 112,
-            "line_hash": "8dc7430bb49dead1b2d598a5eb38ad93f457184c7b9a100a100dd3f3a6b0ef06",
-            "parallel": true,
-            "phase": "Phase 4: User Story 2 - [Title] (Priority: P2)",
-            "story": "US2",
-            "subsection": "Tests for User Story 2 (OPTIONAL - only if tests requested) ⚠️",
-            "title": "Integration test for [user journey] in tests/integration/test_[name].py"
-          },
-          {
-            "byte_range": [
-              4303,
-              4372
-            ],
-            "depends_on": [],
-            "done": false,
-            "id": "T020",
-            "line": 116,
-            "line_hash": "2de71aa3c60220277f0e47dcd99b293e0f9a2588a71377ab6166b095ee76295a",
-            "parallel": true,
-            "phase": "Phase 4: User Story 2 - [Title] (Priority: P2)",
-            "story": "US2",
-            "subsection": "Implementation for User Story 2",
-            "title": "Create [Entity] model in src/models/[entity].py"
-          },
-          {
-            "byte_range": [
-              4372,
-              4438
-            ],
-            "depends_on": [],
-            "done": false,
-            "id": "T021",
-            "line": 117,
-            "line_hash": "6a26abda3ce6b8dc5dba2d8dd46e9af1d5c5e59bbd393fa8da748c35307d879f",
-            "parallel": false,
-            "phase": "Phase 4: User Story 2 - [Title] (Priority: P2)",
-            "story": "US2",
-            "subsection": "Implementation for User Story 2",
-            "title": "Implement [Service] in src/services/[service].py"
-          },
-          {
-            "byte_range": [
-              4438,
-              4512
-            ],
-            "depends_on": [],
-            "done": false,
-            "id": "T022",
-            "line": 118,
-            "line_hash": "2066e0275de6bd2c3700a8d067e781e52219596358a4ede1188282108bd2f2fc",
-            "parallel": false,
-            "phase": "Phase 4: User Story 2 - [Title] (Priority: P2)",
-            "story": "US2",
-            "subsection": "Implementation for User Story 2",
-            "title": "Implement [endpoint/feature] in src/[location]/[file].py"
-          },
-          {
-            "byte_range": [
-              4512,
-              4581
-            ],
-            "depends_on": [],
-            "done": false,
-            "id": "T023",
-            "line": 119,
-            "line_hash": "e3c95e1d01e33a26592c5d0a3019c9cef5955b3661cbe00a424a370ea57755cf",
-            "parallel": false,
-            "phase": "Phase 4: User Story 2 - [Title] (Priority: P2)",
-            "story": "US2",
-            "subsection": "Implementation for User Story 2",
-            "title": "Integrate with User Story 1 components (if needed)"
-          },
-          {
-            "byte_range": [
-              4919,
-              5002
-            ],
-            "depends_on": [],
-            "done": false,
-            "id": "T024",
-            "line": 133,
-            "line_hash": "4bf59946496df93e74b83cd57c5b0b0d4a45fc49d3e88aab11ae8f6edb9c4452",
-            "parallel": true,
-            "phase": "Phase 5: User Story 3 - [Title] (Priority: P3)",
-            "story": "US3",
-            "subsection": "Tests for User Story 3 (OPTIONAL - only if tests requested) ⚠️",
-            "title": "Contract test for [endpoint] in tests/contract/test_[name].py"
-          },
-          {
-            "byte_range": [
-              5002,
-              5096
-            ],
-            "depends_on": [],
-            "done": false,
-            "id": "T025",
-            "line": 134,
-            "line_hash": "616607398ce07bf966fd319197feabf7450f34ebe30d8076ef1f5396f5996642",
-            "parallel": true,
-            "phase": "Phase 5: User Story 3 - [Title] (Priority: P3)",
-            "story": "US3",
-            "subsection": "Tests for User Story 3 (OPTIONAL - only if tests requested) ⚠️",
-            "title": "Integration test for [user journey] in tests/integration/test_[name].py"
-          },
-          {
-            "byte_range": [
-              5133,
-              5202
-            ],
-            "depends_on": [],
-            "done": false,
-            "id": "T026",
-            "line": 138,
-            "line_hash": "f7cf51b4c15fe7a608bc593be1359695f692451db4fb85558801dd4e550ebb41",
-            "parallel": true,
-            "phase": "Phase 5: User Story 3 - [Title] (Priority: P3)",
-            "story": "US3",
-            "subsection": "Implementation for User Story 3",
-            "title": "Create [Entity] model in src/models/[entity].py"
-          },
-          {
-            "byte_range": [
-              5202,
-              5268
-            ],
-            "depends_on": [],
-            "done": false,
-            "id": "T027",
-            "line": 139,
-            "line_hash": "12443a46d4eb97334f7df69c49d3dbfc2c7ef8ac61dc3099010a1af299de9061",
-            "parallel": false,
-            "phase": "Phase 5: User Story 3 - [Title] (Priority: P3)",
-            "story": "US3",
-            "subsection": "Implementation for User Story 3",
-            "title": "Implement [Service] in src/services/[service].py"
-          },
-          {
-            "byte_range": [
-              5268,
-              5343
-            ],
-            "depends_on": [],
-            "done": false,
-            "id": "T028",
-            "line": 140,
-            "line_hash": "5399eab140e98c9a931f7a8f10f27a262a084487578de11a1a783e986ab69fd3",
-            "parallel": false,
-            "phase": "Phase 5: User Story 3 - [Title] (Priority: P3)",
-            "story": "US3",
-            "subsection": "Implementation for User Story 3",
-            "title": "Implement [endpoint/feature] in src/[location]/[file].py"
+            "blocked_by": [
+              "T001",
+              "T002",
+              "T003",
+              "T004",
+              "T005",
+              "T006",
+              "T007",
+              "T008",
+              "T009",
+              "T024",
+              "T025",
+              "T027"
+            ]
           }
         ],
         "totals": {
           "done": 0,
-          "open": 28,
-          "total": 28
+          "ready": 1,
+          "blocked": 27
         }
       }
     },
-    "features": [
+    "diagnostics": [
       {
-        "dir": "specs/001-sample",
-        "name": "001-sample",
-        "prefix": "001"
+        "severity": "warning",
+        "code": "discover.constitution-unfilled",
+        "path": ".specify/memory/constitution.md",
+        "line": null,
+        "message": "the constitution is still the Spec Kit template",
+        "hint": "run /speckit-constitution to fill it in"
+      },
+      {
+        "severity": "warning",
+        "code": "tasks.missing-id",
+        "path": "specs/001-sample/tasks.md",
+        "line": 154,
+        "message": "checklist item without a task ID; not treated as a task",
+        "hint": "start the item with an ID such as T001"
+      },
+      {
+        "severity": "warning",
+        "code": "tasks.missing-id",
+        "path": "specs/001-sample/tasks.md",
+        "line": 155,
+        "message": "checklist item without a task ID; not treated as a task",
+        "hint": "start the item with an ID such as T001"
+      },
+      {
+        "severity": "warning",
+        "code": "tasks.missing-id",
+        "path": "specs/001-sample/tasks.md",
+        "line": 156,
+        "message": "checklist item without a task ID; not treated as a task",
+        "hint": "start the item with an ID such as T001"
+      },
+      {
+        "severity": "warning",
+        "code": "tasks.missing-id",
+        "path": "specs/001-sample/tasks.md",
+        "line": 157,
+        "message": "checklist item without a task ID; not treated as a task",
+        "hint": "start the item with an ID such as T001"
+      },
+      {
+        "severity": "warning",
+        "code": "tasks.missing-id",
+        "path": "specs/001-sample/tasks.md",
+        "line": 158,
+        "message": "checklist item without a task ID; not treated as a task",
+        "hint": "start the item with an ID such as T001"
+      },
+      {
+        "severity": "warning",
+        "code": "tasks.missing-id",
+        "path": "specs/001-sample/tasks.md",
+        "line": 159,
+        "message": "checklist item without a task ID; not treated as a task",
+        "hint": "start the item with an ID such as T001"
       }
-    ],
-    "root": "<repo>/crates/speccoder-speckit/tests/fixtures/compat/1.0.13",
-    "selection": {
-      "feature": "001-sample",
-      "reason": "only_feature"
-    },
-    "speckit": {
-      "current_feature": null,
-      "feature_numbering": "sequential",
-      "integration": "claude",
-      "script": "sh",
-      "version": "1.0.13"
-    }
+    ]
   }
 }

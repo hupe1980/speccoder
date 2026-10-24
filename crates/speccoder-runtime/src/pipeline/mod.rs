@@ -46,11 +46,7 @@ pub(crate) fn setup(
 ) -> Result<Setup, Box<CommandResult>> {
     let inspected = inspect(path, feature);
     let Some(CommandData::Inspect(snapshot)) = inspected.data() else {
-        return Err(Box::new(CommandResult::new(
-            command,
-            inspected.status(),
-            inspected.message(),
-        )));
+        return Err(Box::new(CommandResult::carried(command, &inspected)));
     };
     let snapshot = snapshot.clone();
     preflight(&snapshot, command)?;
@@ -195,7 +191,6 @@ pub(crate) fn workspace(
             base: Some(session.tip.clone()),
             created: false,
             refused_paths: Vec::new(),
-            hint: None,
         },
     ))
 }
@@ -292,32 +287,26 @@ pub(crate) fn in_session(
                 .map(|s| s.branch.as_str())
                 .unwrap_or("the speccoder branch"),
         );
-        let out = CommandResult::new(res.command(), res.status(), &message)
-            .with_next(res.next().to_vec());
-        return match res.data() {
-            Some(d) => out.with_data(d.clone()),
-            None => out,
-        };
+        let status = res.status();
+        return res.reworded(status, &message);
     }
     let (back, notes) = match session {
         Ok(s) => (s.finish(&plane_dir), s.notes),
         Err(_) => (Ok(()), Vec::new()),
     };
     let told: String = notes.iter().map(|n| format!("\n{n}")).collect();
-    let (status, message) = match back {
-        Ok(()) => (
-            res.status(),
-            format!("{} — back on {original}{told}", res.message()),
-        ),
-        Err(e) => (
-            CommandStatus::NeedsHuman,
-            format!("{}{told}\n{}", res.message(), e.result(command).message()),
-        ),
-    };
-    let out = CommandResult::new(res.command(), status, &message).with_next(res.next().to_vec());
-    match res.data() {
-        Some(d) => out.with_data(d.clone()),
-        None => out,
+    match back {
+        Ok(()) => {
+            let message = format!("{} — back on {original}{told}", res.message());
+            let status = res.status();
+            res.reworded(status, &message)
+        }
+        Err(e) => {
+            let message = format!("{}{told}\n{}", res.message(), e.line());
+            res.reworded(CommandStatus::NeedsHuman, &message)
+                .with_code(e.code)
+                .with_fix(e.fix.clone())
+        }
     }
 }
 

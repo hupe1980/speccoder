@@ -1,0 +1,69 @@
+{
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/archive.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Result of `speccoder spec archive` (an OpenSpec change).",
+  "properties": {
+    "archived_as": {
+      "description": "Where OpenSpec moved the change.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "change": {
+      "description": "The change.",
+      "type": "string"
+    },
+    "commit": {
+      "description": "The commit `archive <id>`.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "confirmed_by": {
+      "description": "Who confirmed.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "diff": {
+      "description": "What archiving changes (`openspec show <id> --diff`), when shown.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "openspec_status": {
+      "description": "OpenSpec's own `{severity, code, message, fix}` from its last answer."
+    },
+    "stage": {
+      "description": "`probe`, `incomplete`, `unverified`, `awaiting_confirmation`,\n`declined`, `archived` or `failed`.",
+      "type": "string"
+    },
+    "totals": {
+      "description": "OpenSpec's counts of added, modified, removed and renamed requirements."
+    },
+    "unverified_tasks": {
+      "description": "Tasks ticked without a speccoder verdict commit.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "change",
+    "stage",
+    "openspec_status",
+    "unverified_tasks",
+    "diff",
+    "archived_as",
+    "totals",
+    "commit",
+    "confirmed_by"
+  ],
+  "title": "spec archive: the OpenSpec archive",
+  "type": "object"
+}

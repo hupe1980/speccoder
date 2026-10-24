@@ -38,7 +38,7 @@ speccoder report                     # every task and the evidence behind its ti
 git merge speccoder/001-my-feature   # after reviewing the branch
 ```
 
-`speccoder status` or `speccoder tui` in another terminal shows a run as it happens. No spec yet? `speccoder skill specify "…"`, then `plan` and `tasks`, runs Spec Kit's own planning skills.
+`speccoder status` or `speccoder tui` in another terminal shows a run as it happens. For CI and tools, every command takes `--json` (one result object) or `--events` (JSON Lines as it works), both with [published JSON Schemas](https://hupe1980.github.io/speccoder/docs/cli/#json-output), and every failure names a [code](https://hupe1980.github.io/speccoder/docs/codes/) with the command that fixes it; in GitHub Actions the report lands in the job summary. No spec yet? `speccoder skill specify "…"`, then `plan` and `tasks`, runs Spec Kit's own planning skills.
 
 ## How a task is decided
 
@@ -61,6 +61,7 @@ Pre-release (0.x): it works end to end on small projects with OpenAI, Anthropic 
 |---|---|
 | `speccoder-core` | Pure domain types: no IO, no async |
 | `speccoder-speckit` | Reads Spec Kit projects |
+| `speccoder-openspec` | Reads OpenSpec projects |
 | `speccoder-runtime` | Everything that executes: checks, tools, sandbox, git, the embedded [agentplane](https://crates.io/crates/agentplane) runtime |
 | `speccoder` | The CLI |
 

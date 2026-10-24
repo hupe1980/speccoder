@@ -1,0 +1,45 @@
+{
+  "$defs": {
+    "ChecklistStatus": {
+      "description": "One Spec Kit checklist (`specs/<feature>/checklists/*.md`).",
+      "properties": {
+        "done": {
+          "description": "Items checked.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "file": {
+          "description": "Path relative to the project root.",
+          "type": "string"
+        },
+        "open": {
+          "description": "Items not checked.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "total": {
+          "description": "Checklist items.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "file",
+        "total",
+        "done",
+        "open"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/checklists.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "items": {
+    "$ref": "#/$defs/ChecklistStatus"
+  },
+  "title": "run: the unfinished checklists that stopped it",
+  "type": "array"
+}

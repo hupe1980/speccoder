@@ -25,11 +25,14 @@ pub struct Refusal {
     pub paths: Vec<(String, String)>,
     /// What to do.
     pub hint: String,
+    /// The catalog code (`GIT`, `NO-REPOSITORY`, `UNCOMMITTED-INTENT`).
+    pub code: &'static str,
 }
 
 impl Refusal {
     fn new(message: impl Into<String>, hint: impl Into<String>) -> Self {
         Self {
+            code: "GIT",
             message: message.into(),
             paths: Vec::new(),
             hint: hint.into(),
@@ -112,10 +115,13 @@ pub fn ensure_worktree(
     let artifacts = &committed.into();
     let repo = Git::at(repo_root);
     let Some(_head) = repo.head()? else {
-        return Err(Refusal::new(
-            "the repository has no commits yet; a worktree needs one",
-            artifacts.no_commits_hint,
-        ));
+        return Err(Refusal {
+            code: "NO-REPOSITORY",
+            ..Refusal::new(
+                "the repository has no commits yet; a worktree needs one",
+                artifacts.no_commits_hint,
+            )
+        });
     };
     require_committed(&repo, artifacts)?;
 
@@ -374,6 +380,7 @@ fn require_committed(repo: &Git, a: &CommitPrecondition) -> Result<(), Refusal> 
     paths.sort();
     paths.dedup();
     Err(Refusal {
+        code: "UNCOMMITTED-INTENT",
         message: a.message.to_owned(),
         paths,
         hint: a.hint.to_owned(),
@@ -412,6 +419,7 @@ pub fn require_clean(dir: &Path) -> Result<(), Refusal> {
         Ok(())
     } else {
         Err(Refusal {
+            code: "DIRTY-CHECKOUT",
             message: "the working tree has uncommitted changes".to_owned(),
             paths,
             hint: "commit or stash them first".to_owned(),

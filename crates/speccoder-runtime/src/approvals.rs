@@ -482,11 +482,7 @@ fn locate(
 ) -> Result<(String, std::path::PathBuf, std::path::PathBuf), Box<CommandResult>> {
     let inspected = crate::inspect(path, feature);
     let Some(CommandData::Inspect(snapshot)) = inspected.data() else {
-        return Err(Box::new(CommandResult::new(
-            command,
-            inspected.status(),
-            inspected.message(),
-        )));
+        return Err(Box::new(CommandResult::carried(command, &inspected)));
     };
     let Some(f) = snapshot.feature.as_ref() else {
         return Err(Box::new(CommandResult::new(
@@ -1102,7 +1098,8 @@ pub fn decide(path: &Path, feature: Option<&str>, verb: Verb<'_>) -> CommandResu
             "approvals",
             CommandStatus::ConfigError,
             "no state directory (set SPECCODER_STATE_DIR or HOME)",
-        ),
+        )
+        .with_code("NO-STATE-DIR"),
     }
 }
 

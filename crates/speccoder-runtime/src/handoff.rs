@@ -188,11 +188,15 @@ pub fn pr(path: &Path, feature: Option<&str>, options: &PrOptions<'_>) -> Comman
         return refuse(
             CommandStatus::GitPrecondition,
             "speccoder has not worked on this feature yet (no speccoder branch)",
-        );
+        )
+        .with_code("NOTHING-TO-HAND-OFF");
     };
     let repo_root = match Git::at(path).toplevel() {
         Ok(Some(r)) => r,
-        _ => return refuse(CommandStatus::GitPrecondition, "not a git repository"),
+        _ => {
+            return refuse(CommandStatus::GitPrecondition, "not a git repository")
+                .with_code("NO-REPOSITORY");
+        }
     };
     let repo = Git::at(&repo_root);
     let base = match options.base {
@@ -222,7 +226,8 @@ pub fn pr(path: &Path, feature: Option<&str>, options: &PrOptions<'_>) -> Comman
         return refuse(
             CommandStatus::GitPrecondition,
             &format!("{branch} has nothing that {base} does not have"),
-        );
+        )
+        .with_code("NOTHING-TO-HAND-OFF");
     }
     if !repo
         .succeeds(&["remote", "get-url", options.remote])
@@ -231,7 +236,8 @@ pub fn pr(path: &Path, feature: Option<&str>, options: &PrOptions<'_>) -> Comman
         return refuse(
             CommandStatus::GitPrecondition,
             &format!("no git remote `{}`", options.remote),
-        );
+        )
+        .with_code("NO-REMOTE");
     }
     let t = &report.totals;
     let title = format!(

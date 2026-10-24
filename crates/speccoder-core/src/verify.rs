@@ -9,7 +9,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::{Deserialize, Serialize};
 
 /// Outcome of one check.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum CheckStatus {
     /// Exited 0.
@@ -33,7 +33,7 @@ impl CheckStatus {
 }
 
 /// Outcome of one test from a JUnit report.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum TestOutcome {
     /// Passed.
@@ -56,7 +56,7 @@ impl TestOutcome {
 }
 
 /// One test.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct TestResult {
     /// `classname::name`, or `name` when there is no class.
     pub id: String,
@@ -65,7 +65,7 @@ pub struct TestResult {
 }
 
 /// One check run.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct CheckResult {
     /// Name from `speccoder.toml`.
     pub name: String,
@@ -134,7 +134,7 @@ impl CheckResult {
 }
 
 /// Everything one `verify` run established.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct VerifyReport {
     /// Project root the checks ran in.
     pub root: String,
@@ -149,7 +149,7 @@ pub struct VerifyReport {
 }
 
 /// What changed relative to a baseline (pass-to-pass).
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct Comparison {
     /// Tests that passed in the baseline and now fail or are missing.
     pub regressions: Vec<Regression>,
@@ -166,7 +166,7 @@ pub struct Comparison {
 }
 
 /// A test that passed in the baseline and no longer does.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct Regression {
     /// `check/test`.
     pub id: String,
@@ -268,7 +268,7 @@ pub fn passes(checks: &[CheckResult], cmp: Option<&Comparison>) -> bool {
 /// collected and failed on an assertion, or the tests could not build only
 /// because symbols the task is to introduce do not exist yet. Everything
 /// else is not demonstrated.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum RedClass {
     /// A collected test failed on an assertion.
@@ -301,7 +301,9 @@ impl RedClass {
 
 /// Counts read from a test runner's own summary output (libtest, pytest,
 /// jest/vitest, go test), when it writes no JUnit report.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema,
+)]
 pub struct RunnerSummary {
     /// Tests that passed.
     pub passed: usize,
@@ -362,7 +364,7 @@ pub fn classify_red(result: &CheckResult, summary: Option<&RunnerSummary>) -> Re
 }
 
 /// How strong the evidence for a task is.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case", tag = "verdict")]
 pub enum Verdict {
     /// A task-specific check produced evidence, nothing failed, nothing regressed.
@@ -405,7 +407,7 @@ pub fn verdict(task_checks: &[&str], checks: &[CheckResult], cmp: Option<&Compar
 
 /// What the held-out acceptance tests said about an attempt that passed
 /// visibly (F-059, D-061): the judge's own tests, never shown to the model.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case", tag = "outcome")]
 pub enum HeldOut {
     /// `[acceptance] held_out = false`.

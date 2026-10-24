@@ -5,17 +5,83 @@
 use speccoder_core::next::{Outcome, next};
 use speccoder_core::{CommandData, CommandResult, CommandStatus, RunReport};
 
-/// `result` with its next steps attached; `feature` is the `--feature` the
-/// command was given, carried to speccoder's own commands.
+/// `result` with its next steps and its code attached; `feature` is the
+/// `--feature` the command was given, carried to speccoder's own commands.
+/// A code the result already names is kept; otherwise the outcome's, or
+/// the status's default — every non-ok result leaves with one (F-056).
 #[must_use]
 pub fn attach(result: CommandResult, feature: Option<&str>) -> CommandResult {
-    match classify(&result) {
-        Some(outcome) => {
-            let steps = next(&outcome, feature);
+    let outcome = classify(&result);
+    let mut result = match &outcome {
+        Some(o) => {
+            let steps = next(o, feature);
             result.with_next(steps)
         }
         None => result,
+    };
+    if !result.has_explicit_code() {
+        let task = outcome.as_ref().and_then(outcome_task);
+        let named = outcome
+            .as_ref()
+            .and_then(outcome_code)
+            .or_else(|| regression_only(&result).then_some("REGRESSION-ONLY"))
+            .and_then(speccoder_core::codes::lookup)
+            .filter(|e| e.status == result.status())
+            .or_else(|| speccoder_core::codes::default_for(result.status()));
+        if let Some(entry) = named {
+            let fix =
+                speccoder_core::codes::fixes(entry, result.command(), task.as_deref(), feature);
+            result = result.with_code(entry.name).with_fix(fix);
+        }
     }
+    result
+}
+
+/// The catalog code an outcome stands for.
+const fn outcome_code(outcome: &Outcome) -> Option<&'static str> {
+    Some(match outcome {
+        Outcome::NeedsApproval { .. } => "NEEDS-APPROVAL",
+        Outcome::Blocked { .. } => "BLOCKED",
+        Outcome::BudgetExhausted { .. } => "BUDGET-EXHAUSTED",
+        Outcome::VerificationFailed { .. } => "VERIFICATION-FAILED",
+        Outcome::SuspectedGaming { .. } => "SUSPECTED-GAMING",
+        Outcome::NotDemonstrated { .. } => "NOT-DEMONSTRATED",
+        Outcome::RunFailed { .. } => "RUN-FAILED",
+        Outcome::Interrupted { .. } => "INTERRUPTED",
+        Outcome::NothingReady => "TASK-NOT-READY",
+        Outcome::ChecklistsOpen => "CHECKLISTS-OPEN",
+        Outcome::ConfigError => "CONFIG",
+        Outcome::GitPrecondition => "GIT",
+        Outcome::ArchiveAwaiting { .. } => "ARCHIVE-AWAITING",
+        _ => return None,
+    })
+}
+
+fn outcome_task(outcome: &Outcome) -> Option<String> {
+    match outcome {
+        Outcome::NeedsApproval { task }
+        | Outcome::Blocked { task }
+        | Outcome::BudgetExhausted { task }
+        | Outcome::VerificationFailed { task }
+        | Outcome::SuspectedGaming { task }
+        | Outcome::NotDemonstrated { task }
+        | Outcome::Interrupted { task }
+        | Outcome::TaskPassed { task, .. } => Some(task.clone()),
+        Outcome::RunFailed { task } => task.clone(),
+        _ => None,
+    }
+}
+
+/// An `ok` run that ticked a task on the regression checks alone.
+fn regression_only(result: &CommandResult) -> bool {
+    use speccoder_core::verify::Verdict;
+    let is = |r: &RunReport| r.ticked && r.verdict == Some(Verdict::RegressionOnly);
+    result.status() == CommandStatus::Ok
+        && match result.data() {
+            Some(CommandData::Run(r)) => is(r),
+            Some(CommandData::Feature(f)) => f.attempts.iter().any(is),
+            _ => false,
+        }
 }
 
 /// The steps of a result from an in-place run, in place: `speccoder run`,
@@ -152,13 +218,12 @@ mod tests {
             "speccoder run --in-place --feature 001-x"
         );
         let refused = attach(
-            CommandResult::new("run", CommandStatus::GitPrecondition, "x").with_data(
-                CommandData::InPlace(Box::new(speccoder_core::InPlaceReport {
-                    code: "DIRTY-CHECKOUT".to_owned(),
-                    paths: Vec::new(),
-                    fix: vec!["git stash -u".to_owned()],
-                })),
-            ),
+            CommandResult::new("run", CommandStatus::GitPrecondition, "x")
+                .with_data(CommandData::InPlace(Box::new(
+                    speccoder_core::InPlaceReport { paths: Vec::new() },
+                )))
+                .with_code("DIRTY-CHECKOUT")
+                .with_fix(vec!["git stash -u".to_owned()]),
             None,
         );
         assert!(refused.next().is_empty(), "the fix lines say what to do");

@@ -343,10 +343,7 @@ fn a_call_needing_approval_stops_the_attempt_unexecuted() {
         ]
     );
     let json = serde_json::to_value(&next).unwrap();
-    assert_eq!(
-        json["data"]["next"][1]["command"],
-        "speccoder approve --task T005"
-    );
+    assert_eq!(json["next"][1]["command"], "speccoder approve --task T005");
     assert_eq!(json["data"]["attempt_status"], "needs_approval");
 }
 
@@ -1833,7 +1830,8 @@ fn a_run_reports_its_steps_live_and_status_reads_them() {
                 serde_json::to_value(state).unwrap().as_str().unwrap()
             ),
             Event::Resumed { task, .. } => format!("resumed {task}"),
-            Event::NeedsPerson { task, .. } => format!("needs person {task}"),
+            Event::ApprovalRequested { task, .. } => format!("needs person {task}"),
+            Event::ApprovalDecided { task, decision, .. } => format!("{decision} {task}"),
             Event::ToolCall {
                 tool,
                 decision,

@@ -99,11 +99,7 @@ fn locate(
 ) -> Result<(String, PathBuf), Box<CommandResult>> {
     let inspected = crate::inspect(path, feature);
     let Some(CommandData::Inspect(snapshot)) = inspected.data() else {
-        return Err(Box::new(CommandResult::new(
-            command,
-            inspected.status(),
-            inspected.message(),
-        )));
+        return Err(Box::new(CommandResult::carried(command, &inspected)));
     };
     let Some(f) = snapshot.feature.as_ref() else {
         return Err(Box::new(CommandResult::new(
@@ -172,10 +168,10 @@ fn accept_task(
     let refuse = |status, m: String| CommandResult::new("accept", status, &m);
     let wt = crate::pipeline::workspace(path, feature, state, options);
     let Some(CommandData::Worktree(w)) = wt.data() else {
-        return CommandResult::new("accept", wt.status(), wt.message());
+        return CommandResult::carried("accept", &wt);
     };
     if wt.status() != CommandStatus::Ok {
-        return CommandResult::new("accept", wt.status(), wt.message());
+        return CommandResult::carried("accept", &wt);
     }
     let (Some(wt_path), Some(project_dir)) = (w.path.clone(), w.project_dir.clone()) else {
         return refuse(CommandStatus::Error, "worktree without a path".to_owned());
@@ -187,7 +183,8 @@ fn accept_task(
             format!(
                 "the worktree {wt_path} has uncommitted changes; the next `speccoder run` sets them aside, or commit them yourself"
             ),
-        );
+        )
+        .with_code("WORKTREE-DIRTY");
     }
     let project = PathBuf::from(&project_dir);
     let format = crate::format::at(&project);
@@ -213,7 +210,8 @@ fn accept_task(
         return refuse(
             CommandStatus::TaskNotReady,
             format!("{task} is already done"),
-        );
+        )
+        .with_code("TASK-DONE");
     }
     let reason = one_line(reason);
     let by = person(&project);

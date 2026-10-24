@@ -5,7 +5,7 @@
 use serde::{Deserialize, Serialize};
 
 /// What an attempt changed beyond the paths its task names.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct ScopeFinding {
     /// The task names at least one path.
     pub stated: bool,

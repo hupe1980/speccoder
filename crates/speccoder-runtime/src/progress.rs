@@ -78,11 +78,33 @@ pub enum Event {
         last_call: Option<String>,
     },
     /// A call waits for a person: notify them.
-    NeedsPerson {
+    ApprovalRequested {
         /// Task ID.
         task: String,
+        /// The model's call id.
+        call: String,
+        /// The tool.
+        tool: String,
         /// What waits, e.g. `cargo add x` (no control characters, ≤ 60 chars).
         what: String,
+        /// The grant class an approval for the task or run would cover
+        /// (empty: none, the call is decided once).
+        class: String,
+    },
+    /// A person decided a call inline.
+    ApprovalDecided {
+        /// Task ID.
+        task: String,
+        /// The model's call id.
+        call: String,
+        /// `approve` or `reject`.
+        decision: String,
+        /// `once`, `task` or `run`, for an approval.
+        scope: Option<String>,
+        /// Who decided.
+        by: String,
+        /// How that is known: `asserted`, `connected` (or `expired`).
+        how: String,
     },
     /// A tool call the model asked for, with the policy's decision.
     ToolCall {
@@ -124,6 +146,8 @@ pub enum Event {
         outcome: String,
         /// The run's message.
         message: String,
+        /// The attempt's agentplane run, when one ran.
+        run: Option<String>,
         /// Input tokens, all attempts and the acceptance call.
         input_tokens: u64,
         /// Output tokens.
@@ -301,7 +325,10 @@ impl Progress for Live {
                     s.stage = Some(*stage);
                     s.stage_detail.clone_from(detail);
                 }
-                Event::Stage { .. } | Event::Resumed { .. } | Event::NeedsPerson { .. } => {}
+                Event::Stage { .. }
+                | Event::Resumed { .. }
+                | Event::ApprovalRequested { .. }
+                | Event::ApprovalDecided { .. } => {}
                 Event::ToolCall {
                     turn,
                     tool,
@@ -455,7 +482,7 @@ fn status_inner(path: &Path, state: &Path) -> CommandResult {
     let inspected = crate::inspect(path, None);
     let root = match inspected.data() {
         Some(CommandData::Inspect(s)) => PathBuf::from(&s.root),
-        _ => return CommandResult::new("status", inspected.status(), inspected.message()),
+        _ => return CommandResult::carried("status", &inspected),
     };
     let plane_dir = crate::worktree::project_state_dir(state, &root);
     // An in-place session: the mode, and for an interrupted one both ways out.
@@ -582,6 +609,7 @@ pub fn status(path: &Path) -> CommandResult {
             "status",
             CommandStatus::ConfigError,
             "no state directory (set SPECCODER_STATE_DIR or HOME)",
-        ),
+        )
+        .with_code("NO-STATE-DIR"),
     }
 }

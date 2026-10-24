@@ -9,7 +9,9 @@ use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 
 /// A spec-driven format.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum FormatKind {
     /// GitHub Spec Kit (`.specify/`, `specs/NNN-name/`).
@@ -72,7 +74,7 @@ impl FromStr for FormatKind {
 }
 
 /// Where a part of an artifact is: its file and byte range.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct SourceRange {
     /// Path relative to the project root.
     pub path: String,
@@ -83,7 +85,7 @@ pub struct SourceRange {
 }
 
 /// One acceptance scenario of a requirement.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct Scenario {
     /// Stable within the unit: `US1/AC2`, `greeting/Default greeting/No name given`, `1.2`.
     pub key: String,
@@ -95,7 +97,7 @@ pub struct Scenario {
 
 /// A scenario a task's acceptance tests cite: `US1-2` (Spec Kit), or
 /// `capability: requirement / scenario` (OpenSpec), with the spec's words.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct ScenarioRef {
     /// Stable within the unit.
     pub id: String,
@@ -105,7 +107,7 @@ pub struct ScenarioRef {
 
 /// One requirement (a Spec Kit user story, an OpenSpec requirement, a Kiro
 /// requirement) and its scenarios.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct Requirement {
     /// Stable within the unit: `US1`, `greeting/Default greeting`, `3`.
     pub key: String,
@@ -120,7 +122,7 @@ pub struct Requirement {
 }
 
 /// What an OpenSpec project adds to its snapshot.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct OpenSpecMeta {
     /// The workflow schema (`spec-driven` is the one speccoder runs).
     pub schema: String,
@@ -133,7 +135,7 @@ pub struct OpenSpecMeta {
 }
 
 /// One requirement of a change's spec delta.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct DeltaRequirement {
     /// The capability (`openspec/specs/<capability>/spec.md`).
     pub capability: String,

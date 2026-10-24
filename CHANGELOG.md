@@ -141,6 +141,28 @@ ticks a task only on evidence the model cannot produce or edit.
   `speccoder replay` re-derives a recorded run offline. Failed attempts are
   kept under `refs/speccoder/attempts/…`.
 
+**Machine contract**
+
+- `--events` on every command: JSON Lines as the command works —
+  `session.started` (version and capabilities), tasks, stages, tool calls,
+  approvals requested and decided, usage, notices — ending in a `result`
+  line holding what `--json` prints; `seq` without gaps, RFC 3339 `ts`; a
+  reader that goes away does not break the run.
+- Result envelope v2: `code`, `fix`, `docs` and `next` beside the typed
+  `data`, and `payload` naming its schema. JSON Schemas (2020-12) for the
+  envelope, every payload and the event line are generated from the types
+  that print them, published under `/schemas/v2/` and checked by a test;
+  `speccoder schema [NAME]` prints them.
+- Every failure and stop names a code — `error[CODE]`, `stopped[CODE]`,
+  `warning[CODE]` — with copy-pasteable `fix:` lines and a docs link;
+  `speccoder explain CODE` explains it offline; the codes page is generated
+  from the catalog. Wrong arguments under `--json` or `--events` are a
+  result too, not clap's text.
+- `report --markdown`; in GitHub Actions `run` and `report` write the report
+  to the job summary (under GitHub's 1 MiB limit) and annotate tasks that
+  need a look (within GitHub's ten per kind, the rest counted). The model's
+  words never appear in either.
+
 **Attestations**
 
 - Every tick leaves signed in-toto statements in a git note

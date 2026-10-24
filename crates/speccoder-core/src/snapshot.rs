@@ -8,7 +8,7 @@
 use serde::Serialize;
 
 /// Everything discovered about one Spec Kit project.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct ProjectSnapshot {
     /// Absolute, canonical project root (the directory containing `.specify/`).
     pub root: String,
@@ -44,7 +44,7 @@ impl ProjectSnapshot {
 }
 
 /// Spec Kit metadata from `.specify/*.json`; each field is `None` when absent.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct SpeckitMeta {
     /// `speckit_version` from `init-options.json`.
     pub version: Option<String>,
@@ -59,7 +59,7 @@ pub struct SpeckitMeta {
 }
 
 /// State of the project constitution.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ConstitutionState {
     /// Present and filled in.
@@ -71,7 +71,7 @@ pub enum ConstitutionState {
 }
 
 /// A feature directory under `specs/`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct FeatureRef {
     /// Workspace-relative directory, e.g. `specs/002-speckit-inspect`.
     pub dir: String,
@@ -82,7 +82,7 @@ pub struct FeatureRef {
 }
 
 /// How the feature was selected.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct Selection {
     /// Why this feature (or none) was selected.
     pub reason: SelectionReason,
@@ -91,7 +91,7 @@ pub struct Selection {
 }
 
 /// Why a feature was selected.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum SelectionReason {
     /// Named on the command line.
@@ -107,7 +107,7 @@ pub enum SelectionReason {
 }
 
 /// The selected feature's artifacts and tasks.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct FeatureSnapshot {
     /// The feature directory.
     pub feature: FeatureRef,
@@ -120,7 +120,7 @@ pub struct FeatureSnapshot {
 }
 
 /// Presence of a feature's artifacts.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 #[allow(clippy::struct_excessive_bools)] // one flag per Spec Kit artifact
 pub struct Artifacts {
     /// `spec.md`
@@ -142,7 +142,7 @@ pub struct Artifacts {
 }
 
 /// A parsed `tasks.md`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct ParsedTasks {
     /// Workspace-relative path of the file.
     pub path: String,
@@ -157,7 +157,7 @@ pub struct ParsedTasks {
 }
 
 /// How dependencies within a phase are determined.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum DependencyMode {
     /// Default template: subsections, `[P]` runs and document order, plus written references.
@@ -172,7 +172,7 @@ pub enum DependencyMode {
 }
 
 /// A level-2 heading of `tasks.md`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct Phase {
     /// Heading text, e.g. `Phase 1: Setup`.
     pub title: String,
@@ -183,7 +183,7 @@ pub struct Phase {
 }
 
 /// One task line of `tasks.md`, as written.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct Task {
     /// Task ID, e.g. `T014`.
     pub id: String,
@@ -210,7 +210,7 @@ pub struct Task {
 }
 
 /// Which tasks can start now, and what blocks the rest.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct Schedule {
     /// One entry per task, in document order.
     pub tasks: Vec<ScheduledTask>,
@@ -219,7 +219,7 @@ pub struct Schedule {
 }
 
 /// A task's dependencies and state.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct ScheduledTask {
     /// Task ID.
     pub id: String,
@@ -232,7 +232,7 @@ pub struct ScheduledTask {
 }
 
 /// Whether a task can start.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum TaskState {
     /// Ticked in `tasks.md`.
@@ -244,7 +244,7 @@ pub enum TaskState {
 }
 
 /// One direct dependency.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct Dependency {
     /// The task depended on.
     pub id: String,
@@ -255,7 +255,7 @@ pub struct Dependency {
 }
 
 /// Origin of a dependency.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum DependencyKind {
     /// From phase, subsection or `[P]` structure.
@@ -265,7 +265,7 @@ pub enum DependencyKind {
 }
 
 /// Schedule counts.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct ScheduleTotals {
     /// Ticked tasks.
     pub done: usize,
@@ -276,7 +276,7 @@ pub struct ScheduleTotals {
 }
 
 /// Task counts.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct Totals {
     /// All tasks.
     pub total: usize,
@@ -287,7 +287,7 @@ pub struct Totals {
 }
 
 /// A problem found while discovering or parsing.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct Diagnostic {
     /// How serious it is.
     pub severity: Severity,
@@ -340,7 +340,7 @@ impl Diagnostic {
 }
 
 /// Diagnostic severity.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Severity {
     /// Unsafe to act on.

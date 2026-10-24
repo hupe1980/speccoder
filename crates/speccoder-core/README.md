@@ -6,7 +6,8 @@ Entry points:
 
 - `snapshot` — what a spec project holds (features or changes, tasks, diagnostics) and `graph::schedule`, which orders tasks from documented structure only.
 - `verify` — check outcomes and the verdict levels (`verified`, `regression_only`, `failed`, …), red kinds and flaky re-runs.
-- `command` — `CommandResult`, its status and exit code, and the per-command payloads (`--json`).
+- `command` — `CommandResult` (the `--json` envelope, v2), its status and exit code, and the per-command payloads; every output type derives `schemars::JsonSchema`, from which the published schemas are generated.
+- `codes` — the catalog of codes every non-ok result carries, with fixes and docs links.
 - `spec` — the spec formats (Spec Kit, OpenSpec, Kiro) and their requirements and scenarios.
 - `next` — the steps that continue after a result.
 

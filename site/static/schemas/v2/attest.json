@@ -1,0 +1,210 @@
+{
+  "$defs": {
+    "ObjectVerification": {
+      "description": "One task object's verification.",
+      "properties": {
+        "kind": {
+          "description": "`task` or `skip`.",
+          "type": "string"
+        },
+        "object": {
+          "description": "The commit (or skip record) id.",
+          "type": "string"
+        },
+        "outcome": {
+          "$ref": "#/$defs/VerifyOutcome",
+          "description": "The outcome."
+        },
+        "reasons": {
+          "description": "Every reason found.",
+          "items": {
+            "$ref": "#/$defs/VerifyReason"
+          },
+          "type": "array"
+        },
+        "same_tree_as": {
+          "description": "For a missing attestation: an attested commit with the same tree.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "signer": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SignerView"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Who signed, when signed."
+        },
+        "statements": {
+          "description": "How many statements the bundle holds.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "task": {
+          "description": "Task ID.",
+          "type": "string"
+        },
+        "verdict": {
+          "description": "The verdict the statements claim.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "object",
+        "kind",
+        "task",
+        "verdict",
+        "outcome",
+        "reasons",
+        "signer",
+        "statements",
+        "same_tree_as"
+      ],
+      "type": "object"
+    },
+    "SignerView": {
+      "description": "Who signed.",
+      "properties": {
+        "keyid": {
+          "description": "The key's fingerprint (`SHA256:…`, an OpenPGP fingerprint).",
+          "type": "string"
+        },
+        "kind": {
+          "description": "`ssh`, `openpgp` or `sigstore`.",
+          "type": "string"
+        },
+        "principal": {
+          "description": "The principal the verifier's trust input names for it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "keyid"
+      ],
+      "type": "object"
+    },
+    "VerifyOutcome": {
+      "description": "What `attest verify` found for one task object (F-061).",
+      "oneOf": [
+        {
+          "const": "ok",
+          "description": "Every line parses, every signature verifies against the trust input,\nand every statement agrees with the commit.",
+          "type": "string"
+        },
+        {
+          "const": "unsigned",
+          "description": "The statements hold but are not signed.",
+          "type": "string"
+        },
+        {
+          "const": "missing",
+          "description": "No speccoder attestation on the object.",
+          "type": "string"
+        },
+        {
+          "const": "bad_signature",
+          "description": "A signature does not verify.",
+          "type": "string"
+        },
+        {
+          "const": "untrusted_signer",
+          "description": "A signature verifies, but its key is not trusted by the verifier.",
+          "type": "string"
+        },
+        {
+          "const": "mismatch",
+          "description": "A statement disagrees with the commit, its trailers, the spec or the bundle.",
+          "type": "string"
+        },
+        {
+          "const": "malformed",
+          "description": "A line does not parse.",
+          "type": "string"
+        }
+      ]
+    },
+    "VerifyReason": {
+      "description": "Why an object got its outcome.",
+      "properties": {
+        "code": {
+          "description": "A stable code, e.g. `subject`, `trailer`, `line_hash`, `signature`.",
+          "type": "string"
+        },
+        "expected": {
+          "description": "What it should be.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "field": {
+          "description": "The field that disagrees.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "found": {
+          "description": "What it is.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "code"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/attest.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Result of `speccoder attest verify` and `attest sign`.",
+  "properties": {
+    "feature": {
+      "description": "Feature directory name.",
+      "type": "string"
+    },
+    "objects": {
+      "description": "One per object.",
+      "items": {
+        "$ref": "#/$defs/ObjectVerification"
+      },
+      "type": "array"
+    },
+    "totals": {
+      "additionalProperties": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "description": "Count per outcome word.",
+      "type": "object"
+    },
+    "trust": {
+      "description": "Where trust came from: the allowed-signers file, whether GPG's keyring\nwas used, the expected Sigstore identity."
+    }
+  },
+  "required": [
+    "feature",
+    "trust",
+    "objects",
+    "totals"
+  ],
+  "title": "attest: each task's attestation",
+  "type": "object"
+}

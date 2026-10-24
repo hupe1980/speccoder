@@ -329,13 +329,9 @@ pub fn worktree(w: &mut impl Write, r: &WorktreeReport) -> io::Result<()> {
 }
 
 /// Why speccoder will not use a worktree here.
-pub fn worktree_refused(w: &mut impl Write, message: &str, r: &WorktreeReport) -> io::Result<()> {
-    writeln!(w, "speccoder worktree: {message}")?;
+pub fn worktree_refused(w: &mut impl Write, r: &WorktreeReport) -> io::Result<()> {
     for p in &r.refused_paths {
         writeln!(w, "  {:<10} {}", p.reason, p.path)?;
-    }
-    if let Some(h) = &r.hint {
-        writeln!(w, "{h}")?;
     }
     Ok(())
 }

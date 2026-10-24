@@ -1,0 +1,26 @@
+{
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/replay.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Result of `speccoder replay`.",
+  "properties": {
+    "detail": {
+      "description": "What the replay said.",
+      "type": "string"
+    },
+    "result": {
+      "description": "`reproduced`, `diverged` or `not_found`.",
+      "type": "string"
+    },
+    "run_id": {
+      "description": "The replayed run.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "run_id",
+    "result",
+    "detail"
+  ],
+  "title": "replay: the replayed run",
+  "type": "object"
+}
