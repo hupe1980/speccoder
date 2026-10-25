@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/hupe1980/speccoder/main/crates/speccoder/icons/128x128@2x.png" width="104" height="104" alt="speccoder">
+  <img src="crates/speccoder/icons/128x128@2x.png" width="104" height="104" alt="speccoder">
 </p>
 
 <h1 align="center">speccoder</h1>
@@ -24,7 +24,7 @@
   ⌨️ <a href="https://hupe1980.github.io/speccoder/docs/cli/">CLI</a>
 </p>
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/hupe1980/speccoder/main/site/static/screenshots/drawer-dark.webp"><img alt="The speccoder app: a feature's tasks by verdict, and one task's evidence — acceptance tests red to green, checks, diff audit, attestation" src="https://raw.githubusercontent.com/hupe1980/speccoder/main/site/static/screenshots/drawer-light.webp"></picture>
+<picture><source media="(prefers-color-scheme: dark)" srcset="site/static/screenshots/drawer-dark.webp"><img alt="The speccoder app: a feature's tasks by verdict, and one task's evidence — acceptance tests red to green, checks, diff audit, attestation" src="site/static/screenshots/drawer-light.webp"></picture>
 
 ## 💡 Why
 
@@ -87,12 +87,12 @@ Then, as you need them:
 
 <table>
   <tr>
-    <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/hupe1980/speccoder/main/site/static/screenshots/inbox-dark.webp"><img alt="Needs You: a call waiting for approval, an open question and requirements to review, across two features" src="https://raw.githubusercontent.com/hupe1980/speccoder/main/site/static/screenshots/inbox-light.webp"></picture><br><b>Needs You</b> — every decision the agents wait on, in every feature, settled in place.</td>
-    <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/hupe1980/speccoder/main/site/static/screenshots/review-dark.webp"><img alt="Reviewing the spec: an open question to answer in place and requirements approved by name" src="https://raw.githubusercontent.com/hupe1980/speccoder/main/site/static/screenshots/review-light.webp"></picture><br><b>Spec review</b> — answer open questions, approve or reword each requirement.</td>
+    <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="site/static/screenshots/inbox-dark.webp"><img alt="Needs You: a call waiting for approval, an open question and requirements to review, across two features" src="site/static/screenshots/inbox-light.webp"></picture><br><b>Needs You</b> — every decision the agents wait on, in every feature, settled in place.</td>
+    <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="site/static/screenshots/review-dark.webp"><img alt="Reviewing the spec: an open question to answer in place and requirements approved by name" src="site/static/screenshots/review-light.webp"></picture><br><b>Spec review</b> — answer open questions, approve or reword each requirement.</td>
   </tr>
   <tr>
-    <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/hupe1980/speccoder/main/site/static/screenshots/board-dark.webp"><img alt="The board: the journey from spec to review, the next step, and tasks by verdict" src="https://raw.githubusercontent.com/hupe1980/speccoder/main/site/static/screenshots/board-light.webp"></picture><br><b>Board</b> — the journey, the next step, and every task by verdict.</td>
-    <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/hupe1980/speccoder/main/site/static/screenshots/report-dark.webp"><img alt="The report: verdicts, the waiting call and every requirement with the task that proves it" src="https://raw.githubusercontent.com/hupe1980/speccoder/main/site/static/screenshots/report-light.webp"></picture><br><b>Report</b> — every requirement with the task that proves it.</td>
+    <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="site/static/screenshots/board-dark.webp"><img alt="The board: the journey from spec to review, the next step, and tasks by verdict" src="site/static/screenshots/board-light.webp"></picture><br><b>Board</b> — the journey, the next step, and every task by verdict.</td>
+    <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="site/static/screenshots/report-dark.webp"><img alt="The report: verdicts, the waiting call and every requirement with the task that proves it" src="site/static/screenshots/report-light.webp"></picture><br><b>Report</b> — every requirement with the task that proves it.</td>
   </tr>
 </table>
 

@@ -50,7 +50,8 @@ package:
             grep -qx "$f" <<<"$files" || { echo "package: $crate is missing $f" >&2; exit 1; }
         done
         if [ "$crate" = speccoder ]; then
-            cmp -s README.md crates/speccoder/README.md || { echo "package: crates/speccoder/README.md differs from README.md" >&2; exit 1; }
+            # Its README is the repository's (relative image paths resolve from the root).
+            grep -qx 'readme = "../../README.md"' crates/speccoder/Cargo.toml || { echo "package: speccoder's readme must be ../../README.md" >&2; exit 1; }
         elif [ "$(head -n 1 "crates/$crate/README.md")" != "# $crate" ]; then
             echo "package: crates/$crate/README.md must start with \"# $crate\"" >&2; exit 1
         fi

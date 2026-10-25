@@ -7,9 +7,9 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-readme = "README.md"
+readme = "../../README.md"
 # The window's build (`--features app`) reads these.
-include = ["/src", "/build.rs", "/tauri.conf.json", "/icons", "/README.md", "/LICENSE-APACHE", "/LICENSE-MIT"]
+include = ["/src", "/build.rs", "/tauri.conf.json", "/icons", "/LICENSE-APACHE", "/LICENSE-MIT"]
 authors.workspace = true
 keywords.workspace = true
 categories.workspace = true
