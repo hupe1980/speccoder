@@ -8,6 +8,7 @@ edition = "2024"
 rust-version = "1.99"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/hupe1980/speccoder"
+homepage = "https://hupe1980.github.io/speccoder/"
 authors = ["hupe1980"]
 keywords = ["spec-kit", "coding-agent", "spec-driven", "llm", "cli"]
 categories = ["command-line-utilities", "development-tools"]
