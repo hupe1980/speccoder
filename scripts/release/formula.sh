@@ -7,7 +7,7 @@ version="${1:?usage: formula.sh <version> <SHA256SUMS>}"
 sums="${2:?usage: formula.sh <version> <SHA256SUMS>}"
 template="$(cd "$(dirname "$0")/../.." && pwd)/packaging/homebrew/speccoder.rb.in"
 out="$(sed "s/@VERSION@/$version/g" "$template")"
-for target in aarch64-apple-darwin x86_64-apple-darwin aarch64-unknown-linux-gnu x86_64-unknown-linux-gnu; do
+for target in aarch64-apple-darwin aarch64-unknown-linux-gnu x86_64-unknown-linux-gnu; do
   archive="speccoder-$version-$target.tar.gz"
   sum="$(awk -v a="$archive" '$2 == a || $2 == "*" a { print $1 }' "$sums")"
   if ! [[ "$sum" =~ ^[0-9a-f]{64}$ ]]; then

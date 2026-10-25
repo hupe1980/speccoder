@@ -12,7 +12,7 @@ fail() { echo "test-installer: FAIL: $*" >&2; exit 1; }
 version=9.8.7
 case "$(uname -s) $(uname -m)" in
   "Darwin arm64") target=aarch64-apple-darwin ;;
-  "Darwin x86_64") target=x86_64-apple-darwin ;;
+  "Darwin x86_64") echo "test-installer: skipped (no Intel macOS build)"; exit 0 ;;
   "Linux aarch64" | "Linux arm64") target=aarch64-unknown-linux-gnu ;;
   *) target=x86_64-unknown-linux-gnu ;;
 esac
@@ -45,5 +45,10 @@ set +e
 SPECCODER_TEST_UNAME="Windows_NT x86_64" run --to "$work/bin3" 2>/dev/null; code=$?
 set -e
 [ "$code" = 2 ] || fail "unsupported platform: exit $code, want 2"
+set +e
+SPECCODER_TEST_UNAME="Darwin x86_64" run --to "$work/bin4" 2>"$work/log4"; code=$?
+set -e
+[ "$code" = 2 ] || fail "Intel Mac: exit $code, want 2"
+grep -q "cargo install speccoder" "$work/log4" || fail "Intel Mac: no build-from-source hint"
 
 echo "test-installer: ok"

@@ -109,14 +109,14 @@ refuses "is a pre-release" "$scripts/publish.sh" speccoder-core
 
 # Formula: every checksum substituted, no placeholder left.
 cd "$work"
-for t in aarch64-apple-darwin x86_64-apple-darwin aarch64-unknown-linux-gnu x86_64-unknown-linux-gnu; do
+for t in aarch64-apple-darwin aarch64-unknown-linux-gnu x86_64-unknown-linux-gnu; do
   printf '%064d  speccoder-0.1.0-%s.tar.gz\n' "${#t}" "$t"
 done > SHA256SUMS
 "$scripts/formula.sh" 0.1.0 SHA256SUMS > speccoder.rb || fail "formula"
-[ "$(grep -c 'sha256 "0\{40\}' speccoder.rb)" = 4 ] || fail "four checksums"
+[ "$(grep -c 'sha256 "0\{40\}' speccoder.rb)" = 3 ] || fail "three checksums"
 grep -q 'version "0.1.0"' speccoder.rb || fail "formula version"
 ! grep -q '@' speccoder.rb || fail "placeholder left in the formula"
-head -n 3 SHA256SUMS > short
+head -n 2 SHA256SUMS > short
 refuses "no checksum for" "$scripts/formula.sh" 0.1.0 short
 
 echo "release-test: ok"

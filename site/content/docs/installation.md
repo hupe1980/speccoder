@@ -19,7 +19,7 @@ group = "Start"
 
 ## Install
 
-Release builds exist for macOS and Linux (glibc) on Apple silicon/arm64 and x86_64. musl-based Linux and Windows are not supported.
+Release builds exist for macOS on Apple silicon and Linux (glibc) on arm64 and x86_64. On an Intel Mac, build from source (`cargo install speccoder --locked`); musl-based Linux and Windows are not supported.
 
 **Homebrew** (macOS, Linux):
 

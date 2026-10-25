@@ -92,8 +92,8 @@ cannot produce or edit.
 
 **Distribution**
 
-- Release archives for macOS and Linux (x86_64, aarch64) with SHA-256
-  checksums and build-provenance attestations; a shell installer
+- Release archives for macOS (Apple silicon) and Linux (x86_64, aarch64)
+  with SHA-256 checksums and build-provenance attestations; a shell installer
   (`--verify-attestation`); a Homebrew tap; the crates on crates.io.
 - Documentation at https://hupe1980.github.io/speccoder/.
 

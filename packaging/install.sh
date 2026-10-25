@@ -46,10 +46,10 @@ else
 fi
 case "$os $arch" in
   "Darwin arm64" | "Darwin aarch64") target=aarch64-apple-darwin ;;
-  "Darwin x86_64") target=x86_64-apple-darwin ;;
+  "Darwin x86_64") die 2 "no speccoder build for Intel Macs; build it from source: cargo install speccoder --locked" ;;
   "Linux aarch64" | "Linux arm64") target=aarch64-unknown-linux-gnu ;;
   "Linux x86_64") target=x86_64-unknown-linux-gnu ;;
-  *) die 2 "no speccoder build for $os $arch (macOS and Linux on x86_64 or arm64 are supported)" ;;
+  *) die 2 "no speccoder build for $os $arch (supported: macOS on Apple silicon, Linux on x86_64 or arm64)" ;;
 esac
 if [ "$os" = Linux ] && [ -z "${SPECCODER_TEST_UNAME:-}" ] && ldd --version 2>&1 | grep -qi musl; then
   die 2 "musl-based Linux is not supported (the builds link glibc)"

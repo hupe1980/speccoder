@@ -1,7 +1,7 @@
 name: Release
 
 # Cuts a release from a tag `v<version>` (made after `just bump <version>`
-# on main). Builds four archives without secrets, attests their build
+# on main). Builds three archives without secrets, attests their build
 # provenance, publishes the GitHub Release with the CHANGELOG notes, then —
 # for a release, not a pre-release (`-` in the version) — publishes the
 # crates and updates the Homebrew tap, and installs the result on clean
@@ -65,8 +65,6 @@ jobs:
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-22.04-arm
           - target: aarch64-apple-darwin
-            os: macos-latest
-          - target: x86_64-apple-darwin
             os: macos-latest
     runs-on: ${{ matrix.os }}
     env:
