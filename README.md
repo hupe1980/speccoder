@@ -1,17 +1,30 @@
-# speccoder
+<p align="center">
+  <img src="https://raw.githubusercontent.com/hupe1980/speccoder/main/crates/speccoder/icons/128x128@2x.png" width="104" height="104" alt="speccoder">
+</p>
 
-[![CI](https://github.com/hupe1980/speccoder/actions/workflows/ci.yml/badge.svg)](https://github.com/hupe1980/speccoder/actions/workflows/ci.yml)
-[![Docs](https://img.shields.io/badge/docs-hupe1980.github.io%2Fspeccoder-5b4bff)](https://hupe1980.github.io/speccoder/)
-[![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue)](#-license)
+<h1 align="center">speccoder</h1>
 
-✅ **Spec-driven coding, decided by evidence.** speccoder implements [GitHub Spec Kit](https://github.com/github/spec-kit) features and [OpenSpec](https://github.com/Fission-AI/OpenSpec) changes task by task, and ticks a task only when tests derived from your spec go from red to green — never on the model's word.
+<p align="center">
+  <b>Spec-driven coding, decided by evidence.</b><br>
+  Implements <a href="https://github.com/github/spec-kit">Spec Kit</a> features and <a href="https://github.com/Fission-AI/OpenSpec">OpenSpec</a> changes task by task — and ticks a task only when tests derived from your spec go from red to green, never on the model's word.
+</p>
 
-📖 **[Documentation](https://hupe1980.github.io/speccoder/docs/)** · [Quickstart](https://hupe1980.github.io/speccoder/docs/quickstart/) · [How it works](https://hupe1980.github.io/speccoder/docs/how-it-works/) · [Configuration](https://hupe1980.github.io/speccoder/docs/configuration/) · [CLI](https://hupe1980.github.io/speccoder/docs/cli/)
+<p align="center">
+  <a href="https://github.com/hupe1980/speccoder/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/hupe1980/speccoder/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://crates.io/crates/speccoder"><img alt="crates.io" src="https://img.shields.io/crates/v/speccoder"></a>
+  <a href="https://hupe1980.github.io/speccoder/"><img alt="Docs" src="https://img.shields.io/badge/docs-hupe1980.github.io%2Fspeccoder-4f46e5"></a>
+  <a href="#-license"><img alt="License" src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue"></a>
+</p>
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/hupe1980/speccoder/main/site/static/screenshots/drawer-dark.webp">
-  <img alt="speccoder's app: a feature's tasks by verdict, and one task's evidence — acceptance tests red to green, checks, diff audit, attestation" src="https://raw.githubusercontent.com/hupe1980/speccoder/main/site/static/screenshots/drawer-light.webp">
-</picture>
+<p align="center">
+  📖 <a href="https://hupe1980.github.io/speccoder/docs/"><b>Documentation</b></a> ·
+  🚀 <a href="https://hupe1980.github.io/speccoder/docs/quickstart/">Quickstart</a> ·
+  ⚖️ <a href="https://hupe1980.github.io/speccoder/docs/how-it-works/">How it works</a> ·
+  🖥️ <a href="https://hupe1980.github.io/speccoder/docs/web/">The app</a> ·
+  ⌨️ <a href="https://hupe1980.github.io/speccoder/docs/cli/">CLI</a>
+</p>
+
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/hupe1980/speccoder/main/site/static/screenshots/drawer-dark.webp"><img alt="The speccoder app: a feature's tasks by verdict, and one task's evidence — acceptance tests red to green, checks, diff audit, attestation" src="https://raw.githubusercontent.com/hupe1980/speccoder/main/site/static/screenshots/drawer-light.webp"></picture>
 
 ## 💡 Why
 
@@ -43,12 +56,45 @@ speccoder report                     # every task and the evidence behind its ti
 git merge speccoder/001-my-feature   # after reviewing the branch
 ```
 
+A run at the terminal (`--plain`; at a terminal it is a live dashboard):
+
+```text
+▶ T002 Collapse every run of other characters into one `-` in src/lib.rs  (001-url-slugs)
+  ✓ baseline
+  ✓ red assertion
+  · attempt 1/2
+    “Every run of other characters should become a single dash, so I'll track the last character pushed.”
+    turn 1   read_file    src/lib.rs        allow
+    turn 2   write_file   src/lib.rs        allow
+    turn 3   run_command  cargo test        allow
+  ✓ attempt 1/2
+  ✓ verify
+  ✓ audit
+  ✓ commit 4be81c2
+✓ T002 verified · 42.5k in / 2170 out · 3s — verdict: verified
+```
+
 Then, as you need them:
 
-- 👀 **Watch and decide.** At a terminal, `run` shows a live dashboard and asks approvals with one key (`--plain` for lines). `speccoder ui --window` opens the same work as an app: **Needs You** first, then the board, each task's evidence, the code, the spec review and the report.
+- 👀 **Watch and decide.** At a terminal, `run` is a live dashboard that asks approvals with one key; [the app](#-the-app) shows the same work.
 - ⚙️ **Automate.** Every command takes `--json` or `--events`, both with [published schemas](https://hupe1980.github.io/speccoder/docs/cli/#json-output); every failure names a [code](https://hupe1980.github.io/speccoder/docs/codes/) and the command that fixes it.
 - 🐙 **Work from GitHub.** `speccoder auth login` once; `speccoder issue start 42` specifies a feature from an issue, `speccoder pr` opens a draft whose description is the evidence. No `gh` needed.
 - 📝 **Plan with your spec tool.** `speccoder spec specify "…"`, then `plan` and `tasks`, runs Spec Kit's own skills (OpenSpec: `propose`).
+
+## 📸 The app
+
+`speccoder ui` (or `ui --window`) shows the project on your machine, local only. What waits for you comes first; everything else is one click away.
+
+<table>
+  <tr>
+    <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/hupe1980/speccoder/main/site/static/screenshots/inbox-dark.webp"><img alt="Needs You: a call waiting for approval, an open question and requirements to review, across two features" src="https://raw.githubusercontent.com/hupe1980/speccoder/main/site/static/screenshots/inbox-light.webp"></picture><br><b>Needs You</b> — every decision the agents wait on, in every feature, settled in place.</td>
+    <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/hupe1980/speccoder/main/site/static/screenshots/review-dark.webp"><img alt="Reviewing the spec: an open question to answer in place and requirements approved by name" src="https://raw.githubusercontent.com/hupe1980/speccoder/main/site/static/screenshots/review-light.webp"></picture><br><b>Spec review</b> — answer open questions, approve or reword each requirement.</td>
+  </tr>
+  <tr>
+    <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/hupe1980/speccoder/main/site/static/screenshots/board-dark.webp"><img alt="The board: the journey from spec to review, the next step, and tasks by verdict" src="https://raw.githubusercontent.com/hupe1980/speccoder/main/site/static/screenshots/board-light.webp"></picture><br><b>Board</b> — the journey, the next step, and every task by verdict.</td>
+    <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/hupe1980/speccoder/main/site/static/screenshots/report-dark.webp"><img alt="The report: verdicts, the waiting call and every requirement with the task that proves it" src="https://raw.githubusercontent.com/hupe1980/speccoder/main/site/static/screenshots/report-light.webp"></picture><br><b>Report</b> — every requirement with the task that proves it.</td>
+  </tr>
+</table>
 
 ## ⚖️ How a task is decided
 
@@ -65,7 +111,7 @@ Then, as you need them:
 
 ## 🚧 Status
 
-Pre-release (0.x): it works end to end on small projects with OpenAI, Anthropic and local models. **Your checks run code the model wrote** — read the [security model](https://hupe1980.github.io/speccoder/docs/security/) and [SECURITY.md](https://github.com/hupe1980/speccoder/blob/main/SECURITY.md) before pointing it at anything important.
+Early (0.x): it works end to end on small projects with OpenAI, Anthropic and local models. **Your checks run code the model wrote** — read the [security model](https://hupe1980.github.io/speccoder/docs/security/) and [SECURITY.md](https://github.com/hupe1980/speccoder/blob/main/SECURITY.md) before pointing it at anything important.
 
 ## 🧑‍💻 Development
 
