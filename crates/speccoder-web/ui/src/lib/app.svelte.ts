@@ -58,6 +58,8 @@ class AppState {
   task = $state<{ id: string; title: string } | null>(null);
   stages = $state<StageView[]>([]);
   calls = $state<string[]>([]);
+  /** What the model said last, its first line (F-095): a claim. */
+  said = $state<string | null>(null);
   usage = $state<{ in: number; out: number; usd: number | null }>({ in: 0, out: 0, usd: null });
   waiting = $state<Waiting | null>(null);
   toasts = $state<Toast[]>([]);
@@ -185,6 +187,7 @@ class AppState {
         this.job = { id: e.id, command: e.command, running: true, result: null };
         this.stages = [];
         this.calls = [];
+        this.said = null;
         this.usage = { in: 0, out: 0, usd: null };
         break;
       case "progress":
@@ -242,6 +245,15 @@ class AppState {
         const row = { stage: ev.stage, state: ev.state, detail: ev.detail ?? null, elapsed_ms: ev.elapsed_ms ?? null };
         const i = this.stages.findIndex((s) => s.stage === ev.stage);
         this.stages = i >= 0 ? this.stages.map((s, j) => (j === i ? row : s)) : [...this.stages, row];
+        break;
+      }
+      case "said": {
+        // The model's own words: kept apart (a quote mark leads), a claim.
+        const first = String(ev.text ?? "").split("\n").find((l: string) => l.trim()) ?? "";
+        if (first) {
+          this.said = first.trim();
+          this.calls = [...this.calls.slice(-199), `“${first.trim()}”`];
+        }
         break;
       }
       case "tool_call":

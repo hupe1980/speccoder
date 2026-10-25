@@ -1926,6 +1926,7 @@ fn a_run_reports_its_steps_live_and_status_reads_them() {
             } => format!("{turn} {tool} {decision}"),
             Event::Usage { .. } => "usage".to_owned(),
             Event::TaskFinished { outcome, .. } => format!("end {outcome}"),
+            Event::Said { .. } => "said".to_owned(),
             Event::Notice { text } => text.clone(),
         })
         .filter(|k| k != "usage")
@@ -3313,5 +3314,77 @@ fn a_required_review_stops_the_run_until_the_spec_is_approved() {
         Some("REVIEW-PENDING"),
         "{}",
         res.message()
+    );
+}
+
+/// F-095: what the model says beside its calls is shown live as its own
+/// words (`Said`), and read back from the journal afterwards — a claim,
+/// apart from the evidence.
+#[test]
+fn the_model_s_account_is_live_and_kept() {
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_answer(agentplane::model::Completion {
+        tool_calls: vec![agentplane::model::ToolCall {
+            id: "c1".to_owned(),
+            name: "edit_file".to_owned(),
+            arguments: json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\npub fn login() {}" }),
+        }],
+        text: "I'll add login() next to ok(), the smallest change the test needs.\n\x1b[31mred\x1b[0m".to_owned(),
+        model: None,
+        usage: agentplane::model::Usage::default(),
+        stop_reason: Some("tool_use".to_owned()),
+        truncated: false,
+        structured: None,
+        continuation: None,
+    });
+    f.will_structure(done("added login"));
+    let rec = Arc::new(Recorder::default());
+    let options = speccoder_runtime::RunOptions {
+        progress: Some(rec.clone()),
+        ..speccoder_runtime::RunOptions::default()
+    };
+    let res = speccoder_runtime::run_with_options(
+        r.path(),
+        None,
+        "T005",
+        state.path(),
+        d,
+        None,
+        &options,
+    );
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let said: Vec<(u32, String)> = rec
+        .0
+        .lock()
+        .unwrap()
+        .iter()
+        .filter_map(|e| match e {
+            Event::Said { turn, text, .. } => Some((*turn, text.clone())),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(said.len(), 1, "{said:?}");
+    assert_eq!(said[0].0, 1);
+    assert!(said[0].1.starts_with("I'll add login()"), "{}", said[0].1);
+    assert!(
+        !said[0].1.contains('\x1b'),
+        "control characters escaped: {:?}",
+        said[0].1
+    );
+    // Afterwards, from the journal.
+    let plane = speccoder_runtime::worktree::project_state_dir(state.path(), r.path());
+    let run_id = report(&res).run_id.clone();
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let kept = rt
+        .block_on(speccoder_runtime::substrate::narration(&plane, &run_id))
+        .unwrap();
+    assert!(
+        kept.iter().any(|t| t.starts_with("I'll add login()")),
+        "{kept:?}"
     );
 }

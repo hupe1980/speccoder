@@ -850,6 +850,45 @@ pub async fn earlier_ask(dir: &Path, run: &str) -> Result<Option<String>, PlaneE
     }))
 }
 
+/// What the model said in each turn of `run`, in order (F-095): the text
+/// of every `model.complete` effect the journal holds — its account, a
+/// claim. Empty turns are left out.
+///
+/// # Errors
+///
+/// The journal cannot be read.
+pub async fn narration(dir: &Path, run: &str) -> Result<Vec<String>, PlaneError> {
+    let Ok(id) = agentplane::core::RunId::parse(run) else {
+        return Ok(Vec::new());
+    };
+    let store = open_store(dir)?;
+    let history = store
+        .read(id, 1)
+        .await
+        .map_err(|e| PlaneError(e.to_string()))?;
+    let mut out = Vec::new();
+    let mut model = false;
+    for r in &history {
+        match &r.body.kind {
+            agentplane::journal::RecordKind::EffectStarted { descriptor, .. } => {
+                model = descriptor.kind == "model.complete";
+            }
+            agentplane::journal::RecordKind::EffectDone { output, .. } if model => {
+                model = false;
+                if let Some(text) = output["text"]
+                    .as_str()
+                    .map(str::trim)
+                    .filter(|t| !t.is_empty())
+                {
+                    out.push(crate::approvals::present::escape(text));
+                }
+            }
+            _ => {}
+        }
+    }
+    Ok(out)
+}
+
 /// The tool servers when no worktree is bound: every call is refused.
 #[derive(Debug)]
 struct Unbound;

@@ -331,6 +331,15 @@ impl App {
                     None => h.stages.push(row),
                 }
             }
+            Event::Said { turn, text, .. } => {
+                if let Some(line) = text.lines().map(str::trim).find(|l| !l.is_empty()) {
+                    let cut: String = line.chars().take(120).collect();
+                    h.recent.push(format!("turn {turn}  “{cut}”"));
+                    if h.recent.len() > RECENT {
+                        h.recent.remove(0);
+                    }
+                }
+            }
             Event::ToolCall {
                 turn,
                 tool,

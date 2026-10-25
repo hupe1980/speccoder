@@ -1222,7 +1222,41 @@ fn task_action(
             ),
             None => no_state("task rule"),
         },
-        T::Show { task } => speccoder_runtime::status::show(path, feature, task),
+        T::Show { task, account } => {
+            let shown = speccoder_runtime::status::show(path, feature, task);
+            if !*account {
+                return shown;
+            }
+            // The attempt the tick came from, else the last one tried.
+            let run = match shown.data() {
+                Some(speccoder_core::CommandData::Report(r)) => r.tasks.first().and_then(|t| {
+                    t.run_id
+                        .clone()
+                        .or_else(|| t.last_attempt.as_ref().and_then(|a| a.run_id.clone()))
+                }),
+                _ => None,
+            };
+            let said = match run
+                .as_deref()
+                .map(|r| speccoder_runtime::evidence::narration_of(path, r))
+            {
+                Some(Ok(turns)) if !turns.is_empty() => turns
+                    .iter()
+                    .enumerate()
+                    .map(|(i, t)| format!("  {:>2}  {}", i + 1, t.replace('\n', "\n      ")))
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+                Some(Ok(_)) => "  (it said nothing beside its calls)".to_owned(),
+                Some(Err(e)) => format!("  (the journal cannot be read: {e})"),
+                None => "  (no attempt has run)".to_owned(),
+            };
+            let status = shown.status();
+            let message = format!(
+                "{}\nThe model's account — what it said it was doing; a claim, not evidence:\n{said}",
+                shown.message()
+            );
+            shown.reworded(status, &message)
+        }
     }
 }
 

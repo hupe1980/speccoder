@@ -159,6 +159,17 @@ pub enum Event {
         /// USD, when priced.
         usd: Option<f64>,
     },
+    /// What the model said in a turn, beside its tool calls (F-095): its
+    /// account of what it is doing — a claim, never evidence. Control
+    /// characters escaped; at most 2000 characters.
+    Said {
+        /// Task ID.
+        task: String,
+        /// Model turn (1-based) within the attempt.
+        turn: u32,
+        /// The words.
+        text: String,
+    },
     /// Anything else worth a line (convergence rounds, notices).
     Notice {
         /// The line.
@@ -191,6 +202,9 @@ pub struct LiveState {
     pub stage_detail: Option<String>,
     /// The last tool call, e.g. `edit_file src/lib.rs (allow)`.
     pub last_call: Option<String>,
+    /// What the model last said, its first line (a claim; F-095).
+    #[serde(default)]
+    pub said: Option<String>,
     /// The latest tool calls, oldest first (at most [`RECENT`]).
     #[serde(default)]
     pub recent: Vec<String>,
@@ -324,6 +338,12 @@ impl Progress for Live {
                 } => {
                     s.stage = Some(*stage);
                     s.stage_detail.clone_from(detail);
+                }
+                Event::Said { text, .. } => {
+                    s.said = text
+                        .lines()
+                        .find(|l| !l.trim().is_empty())
+                        .map(|l| l.chars().take(160).collect());
                 }
                 Event::Stage { .. }
                 | Event::Resumed { .. }
@@ -549,13 +569,17 @@ fn status_live(plane_dir: &Path) -> CommandResult {
     };
     let message = match (&live.finished, alive(live.pid)) {
         (None, true) => format!(
-            "running (pid {}): {} {} — {} for {}s; last: {}; {tokens}",
+            "running (pid {}): {} {} — {} for {}s; last: {}; {tokens}{}",
             live.pid,
             live.feature,
             live.task,
             stage_word(&live),
             now().saturating_sub(live.started_at),
             live.last_call.as_deref().unwrap_or("-"),
+            live.said
+                .as_deref()
+                .map(|s| format!("\nthe model says (a claim): “{s}”"))
+                .unwrap_or_default(),
         ),
         (None, false) => format!(
             "interrupted: {} {} stopped during {} {ago}s ago (pid {} is gone); the next `speccoder run` sets its leftovers aside",

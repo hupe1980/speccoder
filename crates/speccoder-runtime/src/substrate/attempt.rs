@@ -803,6 +803,21 @@ pub(crate) async fn tool_loop(
             });
         }
 
+        // The model's own words this turn, live: its account, a claim.
+        if let Some((task, p)) = &observer {
+            let said = completion.peek().text.trim();
+            if !said.is_empty() {
+                let text: String = crate::approvals::present::escape(said)
+                    .chars()
+                    .take(2000)
+                    .collect();
+                p.event(&crate::progress::Event::Said {
+                    task: task.clone(),
+                    turn: turn + 1,
+                    text,
+                });
+            }
+        }
         if completion.peek().truncated {
             return Ok(Outcome::fail(
                 "the model ran out of output budget mid-turn; nothing it was still writing was executed — raise [model] max_output_tokens",

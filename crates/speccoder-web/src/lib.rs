@@ -238,6 +238,25 @@ async fn review(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Json<
     envelope(&r)
 }
 
+#[derive(Debug, Deserialize)]
+struct RunQuery {
+    run: String,
+}
+
+/// What the model said in each turn of a run: its account (a claim).
+async fn narration(State(s): State<Shared>, Query(q): Query<RunQuery>) -> Json<Value> {
+    let root = s.root.clone();
+    Json(
+        off(
+            move || match speccoder_runtime::evidence::narration_of(&root, &q.run) {
+                Ok(turns) => json!({ "turns": turns }),
+                Err(e) => json!({ "error": e }),
+            },
+        )
+        .await,
+    )
+}
+
 async fn inbox(State(s): State<Shared>) -> Json<Value> {
     let root = s.root.clone();
     let r = off(move || speccoder_runtime::inbox::inbox(&root, None)).await;
@@ -727,6 +746,7 @@ pub fn router(s: Shared) -> Router {
         .route("/api/report", get(report))
         .route("/api/actions", get(actions))
         .route("/api/inbox", get(inbox))
+        .route("/api/narration", get(narration))
         .route("/api/review", get(review))
         .route("/api/approvals", get(approvals))
         .route("/api/evidence", get(evidence))

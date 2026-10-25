@@ -41,7 +41,7 @@ export interface Task {
   note: string | null;
   attestation: string | null;
   strength?: string | null;
-  last_attempt?: { outcome: string; reason: string; reference: string } | null;
+  last_attempt?: { outcome: string; reason: string; reference: string; run_id?: string | null } | null;
   /** The intent changed since the tick (F-085). */
   drift?: Drift | null;
 }

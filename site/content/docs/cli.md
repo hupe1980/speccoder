@@ -62,6 +62,7 @@ Every stop and finish ends with a `Next:` block — the commands that continue, 
 |---|---|
 | `speccoder review [approve\|request\|clear\|answer\|edit]` | The spec as a conversation: approve each wording, request changes, answer its open questions in place, reword a requirement; what changed since the last commit and the spec's history ([review](@/docs/planning.md#review-the-spec)) |
 | `speccoder do "…" [--check "…"]… [--no-run]` | A small change, judged like any other: a story, an approved requirement and a task in `NNN-quick-changes`, committed, then run ([quick changes](@/docs/running.md#quick-changes)) |
+| `speccoder task show T [--account]` | One task and its evidence; `--account`: what the model said it was doing in its last attempt, turn by turn (a claim, read from the journal) |
 | `speccoder inbox` | Every decision waiting for you, in every feature (or `--feature`), the most urgent first, each with the command that settles it |
 | `speccoder report` | Every task and the evidence behind its tick, the requirement trace, ticks proven against an earlier spec, and what is open |
 | `speccoder report --live` | What the current or last run is doing, from another terminal |
@@ -140,6 +141,7 @@ With `--events` stdout carries JSON Lines as the command works, and nothing else
 | `tool_call` | a call the model made, with the policy's decision |
 | `approval.requested`, `approval.decided` | a call waits for a person; who decided, and the scope |
 | `usage` | tokens so far (at most once a second per task) |
+| `said` | what the model said beside its calls in a turn — its account, a claim (`task`, `turn`, `text`) |
 | `notice` | anything else worth a line |
 | `result` | last line, exactly once |
 

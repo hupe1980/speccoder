@@ -65,6 +65,7 @@
           <code>{app.job.command}</code>
           {#if app.task}<span class="task">{app.task.title}</span>{/if}
         </div>
+        {#if app.said}<p class="now" title="What the model says it is doing — its account, not evidence">“{app.said}”</p>{/if}
         <ol class="pipeline" aria-label="Pipeline">
           {#each stages as s}
             {@const v = at.get(s)}
@@ -78,7 +79,7 @@
           {/each}
         </ol>
         <div class="log mono" bind:this={log} aria-live="polite">
-          {#each app.calls as c}<div class:deny={c.includes(" deny")} class:ask={c.includes(" approval")}>{c}</div>{:else}<div class="dim">No tool calls yet.</div>{/each}
+          {#each app.calls as c}<div class:said={c.startsWith("“")} class:deny={c.includes(" deny")} class:ask={c.includes(" approval")}>{c}</div>{:else}<div class="dim">No tool calls yet.</div>{/each}
         </div>
         <div class="foot">
           {#if app.usage.in || app.usage.out}<span class="usage mono">{app.usage.in.toLocaleString()} in · {app.usage.out.toLocaleString()} out{#if app.usage.usd != null} · ${app.usage.usd.toFixed(4)}{/if}</span>{/if}
@@ -94,6 +95,8 @@
 {/if}
 
 <style>
+  .now { margin: 0; font-size: 0.8rem; line-height: 1.4; font-style: italic; color: rgba(235, 235, 245, 0.7); display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .log .said { font-family: var(--text-font, -apple-system, system-ui, sans-serif); font-style: italic; color: rgba(235, 235, 245, 0.62); white-space: normal; }
   .island {
     position: fixed; left: 50%; bottom: calc(1.25rem + 26px); transform: translateX(-50%); z-index: 15;
     width: min(420px, calc(100vw - 2rem)); border-radius: 22px; overflow: hidden;
