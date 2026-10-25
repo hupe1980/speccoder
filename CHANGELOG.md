@@ -11,6 +11,21 @@ ticks a task only on evidence the model cannot produce or edit.
 
 ### Added
 
+**The spec as a conversation**
+
+- Open questions: every `[NEEDS CLARIFICATION: …]` in the feature's
+  documents is a question (`Q1`, where it is, the requirement it is in);
+  `speccoder review answer Q1 "…"` puts the answer in its place. Inbox
+  kind `question`; a required review waits for them too.
+- `speccoder review edit FR-003 "…" [--approve]`: reword a requirement
+  yourself; its approval lapses, or is given to the new words.
+- A wording that still asks a question cannot be approved.
+- What changed since the spec's last commit, and its history — every
+  version and what it added, reworded or removed — in `review` and the app.
+- The app's Review: question cards with an answer field and **Ask Me
+  with clarify**, **Edit** on every card (a live word diff; ⌘↩ saves and
+  approves), questions shown as pills, **Commit**, a timeline.
+
 **Sign in with GitHub, tell the issue**
 
 - `speccoder auth login` signs in through speccoder's GitHub App

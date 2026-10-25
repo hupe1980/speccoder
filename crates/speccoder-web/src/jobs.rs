@@ -351,9 +351,19 @@ fn execute(
             &issue.to_string(),
             *assign,
         ),
-        Runnable::Review { ids, verdict } => {
-            speccoder_runtime::review::decide(root, feature, ids, verdict, text, "web")
-        }
+        Runnable::Review { ids, verdict } => match (verdict.as_str(), ids.first(), text) {
+            ("answer", Some(q), Some(t)) => speccoder_runtime::review::answer(root, feature, q, t),
+            ("edit" | "edit-approve", Some(id), Some(t)) => speccoder_runtime::review::edit(
+                root,
+                feature,
+                id,
+                t,
+                verdict == "edit-approve",
+                "web",
+            ),
+            ("answer" | "edit" | "edit-approve", _, _) => needs("the words"),
+            _ => speccoder_runtime::review::decide(root, feature, ids, verdict, text, "web"),
+        },
         Runnable::Rule { task } => match (text, &state) {
             (Some(why), Some(s)) => {
                 speccoder_runtime::controls::rule(root, feature, task, why, None, s)

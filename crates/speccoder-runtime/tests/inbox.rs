@@ -354,3 +354,35 @@ fn a_change_request_waits_to_be_revised() {
     let at = |k: &str| i.items.iter().position(|x| x.kind == k).unwrap();
     assert!(at("revise") < at("handoff"));
 }
+
+#[test]
+fn an_open_question_comes_before_the_review_it_blocks() {
+    let r = repo();
+    write(
+        r.path(),
+        "specs/001-login/spec.md",
+        "# Spec\n\n## Requirements\n\n- **FR-001**: Users MUST log in [NEEDS CLARIFICATION: with what?].\n",
+    );
+    let (i, _) = inbox(r.path());
+    let q = i
+        .items
+        .iter()
+        .position(|x| x.kind == "question")
+        .expect("question item");
+    assert_eq!(i.items[q].feature, "001-login");
+    assert!(
+        i.items[q].detail.contains("Q1: with what?"),
+        "{}",
+        i.items[q].detail
+    );
+    let review = i
+        .items
+        .iter()
+        .position(|x| x.kind == "review")
+        .expect("review item");
+    assert!(
+        q < review,
+        "{:?}",
+        i.items.iter().map(|x| &x.kind).collect::<Vec<_>>()
+    );
+}

@@ -561,6 +561,23 @@ pub enum ReviewAction {
         #[arg(long, short)]
         comment: String,
     },
+    /// Answer an open question (`Q1`): your words replace it where it stands.
+    Answer {
+        /// `Q1`, `Q2`, … as `speccoder review` lists them.
+        question: String,
+        /// The answer.
+        answer: String,
+    },
+    /// Reword a requirement yourself; its approval lapses (or `--approve` the new words).
+    Edit {
+        /// `FR-001`, `SC-002`, …
+        id: String,
+        /// The new wording (the line keeps its identifier).
+        wording: String,
+        /// Approve the new wording as you write it.
+        #[arg(long)]
+        approve: bool,
+    },
     /// Remove the decision on requirements.
     Clear {
         /// `FR-001`, `SC-002`, …

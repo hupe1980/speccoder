@@ -156,13 +156,21 @@
           "format": "uint",
           "minimum": 0,
           "type": "integer"
+        },
+        "questions": {
+          "default": 0,
+          "description": "Questions the documents leave open (F-093).",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
         }
       },
       "required": [
         "approved",
         "changes_requested",
         "open",
-        "lapsed"
+        "lapsed",
+        "questions"
       ],
       "type": "object"
     },

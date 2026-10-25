@@ -10,7 +10,8 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use speccoder_core::{
-    CommandData, CommandResult, CommandStatus, ReviewItem, ReviewReport, ReviewTotals,
+    CommandData, CommandResult, CommandStatus, OpenQuestion, RequirementDrift, ReviewItem,
+    ReviewReport, ReviewTotals, SpecVersion,
 };
 
 use crate::tools::paths::REVIEW_FILE;
@@ -135,14 +136,175 @@ fn items(requirements: &[(String, String)], record: &Record) -> Vec<ReviewItem> 
         .collect()
 }
 
-fn totals(items: &[ReviewItem]) -> ReviewTotals {
+fn totals(items: &[ReviewItem], questions: usize) -> ReviewTotals {
     let n = |s: &str| items.iter().filter(|i| i.state == s).count();
     ReviewTotals {
         approved: n("approved"),
         changes_requested: n("changes_requested"),
         open: n("open"),
         lapsed: n("lapsed"),
+        questions,
     }
+}
+
+/// The marker a skill leaves where it could not decide.
+const MARKER: &str = "[NEEDS CLARIFICATION";
+
+/// The unit's Markdown documents, the requirements file first, then by
+/// name: (project-relative path, text).
+fn documents(u: &Unit) -> Vec<(String, String)> {
+    let dir = u.root.join(&u.dir);
+    let mut names: Vec<String> = std::fs::read_dir(&dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter(|e| e.path().is_file())
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .filter(|n| n.ends_with(".md"))
+        .collect();
+    let first = u.format.requirements_file().unwrap_or_default();
+    names.sort_by_key(|n| (n != first, n.clone()));
+    names
+        .into_iter()
+        .filter_map(|n| {
+            let text = std::fs::read_to_string(dir.join(&n)).ok()?;
+            Some((format!("{}/{n}", u.dir.trim_end_matches('/')), text))
+        })
+        .collect()
+}
+
+/// Every `[NEEDS CLARIFICATION: …]` in `text`: (the marker as written, the
+/// question), in order.
+fn markers(line: &str) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    let mut rest = line;
+    while let Some(at) = rest.find(MARKER) {
+        let tail = &rest[at..];
+        let Some(end) = tail.find(']') else { break };
+        let raw = &tail[..=end];
+        let question = raw[MARKER.len()..raw.len() - 1]
+            .trim_start_matches(':')
+            .trim()
+            .to_owned();
+        out.push((raw.to_owned(), question));
+        rest = &tail[end + 1..];
+    }
+    out
+}
+
+/// The questions the unit's documents leave open, with their markers.
+fn questions(u: &Unit) -> Vec<(OpenQuestion, String)> {
+    let mut out = Vec::new();
+    for (file, text) in documents(u) {
+        let mut section: Option<String> = None;
+        for (i, line) in text.lines().enumerate() {
+            if let Some(h) = line
+                .strip_prefix("## ")
+                .or_else(|| line.strip_prefix("### "))
+            {
+                section = Some(h.trim().to_owned());
+            }
+            let near = u
+                .format
+                .requirements_in(line)
+                .first()
+                .map(|(id, _)| id.clone())
+                .or_else(|| section.clone());
+            for (raw, text) in markers(line) {
+                out.push((
+                    OpenQuestion {
+                        id: format!("Q{}", out.len() + 1),
+                        text,
+                        file: file.clone(),
+                        line: i + 1,
+                        near: near.clone(),
+                    },
+                    raw,
+                ));
+            }
+        }
+    }
+    out
+}
+
+/// The requirements as `rev` (`HEAD`, a commit) has the requirements file.
+fn requirements_at(u: &Unit, rev: &str) -> Option<Vec<(String, String)>> {
+    let file = u.format.requirements_file()?;
+    let rel = format!("{}/{file}", u.dir.trim_end_matches('/'));
+    let text = crate::git::Git::at(&u.root)
+        .run(&["show", &format!("{rev}:./{rel}")])
+        .ok()?;
+    Some(u.format.requirements_in(&String::from_utf8_lossy(&text)))
+}
+
+/// What changed from `before` to `after`, requirement by requirement.
+fn compare(before: &[(String, String)], after: &[(String, String)]) -> Vec<RequirementDrift> {
+    let mut ids: Vec<&String> = after.iter().map(|(id, _)| id).collect();
+    for (id, _) in before {
+        if !ids.contains(&id) {
+            ids.push(id);
+        }
+    }
+    let line = |v: &[(String, String)], id: &str| {
+        v.iter()
+            .find(|(i, _)| i == id)
+            .map(|(_, l)| l.trim_end().to_owned())
+    };
+    ids.into_iter()
+        .filter_map(|id| {
+            let (then, now) = (line(before, id), line(after, id));
+            (then != now).then(|| RequirementDrift {
+                id: id.clone(),
+                then,
+                now,
+            })
+        })
+        .collect()
+}
+
+/// The spec's last commits and what each changed in its requirements.
+fn history(u: &Unit) -> Vec<SpecVersion> {
+    let Some(file) = u.format.requirements_file() else {
+        return Vec::new();
+    };
+    let rel = format!("{}/{file}", u.dir.trim_end_matches('/'));
+    let git = crate::git::Git::at(&u.root);
+    let log = git
+        .run(&[
+            "log",
+            "-n",
+            "12",
+            "--format=%H%x1f%as%x1f%an%x1f%s",
+            "--",
+            &rel,
+        ])
+        .map(|b| String::from_utf8_lossy(&b).into_owned())
+        .unwrap_or_default();
+    log.lines()
+        .filter_map(|l| {
+            let mut f = l.split('\u{1f}');
+            let (commit, date, author, subject) = (f.next()?, f.next()?, f.next()?, f.next()?);
+            let now = requirements_at(u, commit).unwrap_or_default();
+            let before = requirements_at(u, &format!("{commit}^")).unwrap_or_default();
+            let changes = compare(&before, &now);
+            let pick = |want: fn(&RequirementDrift) -> bool| {
+                changes
+                    .iter()
+                    .filter(|c| want(c))
+                    .map(|c| c.id.clone())
+                    .collect::<Vec<_>>()
+            };
+            Some(SpecVersion {
+                commit: commit.to_owned(),
+                date: date.to_owned(),
+                author: author.to_owned(),
+                subject: subject.to_owned(),
+                added: pick(|c| c.then.is_none()),
+                reworded: pick(|c| c.then.is_some() && c.now.is_some()),
+                removed: pick(|c| c.now.is_none()),
+            })
+        })
+        .collect()
 }
 
 /// The review state of the feature in `dir` (project-relative) under
@@ -162,23 +324,37 @@ pub fn totals_of(
         format,
     };
     let requirements = u.requirements();
-    (!requirements.is_empty()).then(|| totals(&items(&requirements, &u.record())))
+    (!requirements.is_empty())
+        .then(|| totals(&items(&requirements, &u.record()), questions(&u).len()))
 }
 
-fn report_of(u: &Unit) -> ReviewReport {
+/// The review; `full` adds what changed since the last commit and the
+/// history (git reads, for the review view — not for the inbox).
+fn report_of(u: &Unit, full: bool) -> ReviewReport {
     let items = items(&u.requirements(), &u.record());
     let skills = crate::skills::discover_with(&u.root, u.format.planning());
     let installed = |name: &str| {
         let full = format!("{}{name}", u.format.planning().prefix);
         skills.iter().any(|s| s.name == full && s.refused.is_none())
     };
-    let totals = totals(&items);
+    let open: Vec<OpenQuestion> = questions(u).into_iter().map(|(q, _)| q).collect();
+    let totals = totals(&items, open.len());
     let revision = (totals.changes_requested > 0).then(|| revision_request(&items));
+    let changes = if full {
+        requirements_at(u, "HEAD")
+            .map(|then| compare(&then, &u.requirements()))
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
     ReviewReport {
         feature: u.feature.clone(),
         file: u.rel(),
         totals,
         revision,
+        questions: open,
+        changes,
+        history: if full { history(u) } else { Vec::new() },
         requirements: items,
         revise_with: u
             .format
@@ -198,20 +374,41 @@ fn message(r: &ReviewReport) -> String {
     if t.complete() {
         return format!("{n}/{n} requirements approved");
     }
+    let plural =
+        |n: usize, one: &str, many: &str| format!("{n} {}", if n == 1 { one } else { many });
     let parts: Vec<String> = [
-        (t.open, "to review"),
-        (t.changes_requested, "with changes requested"),
-        (t.lapsed, "changed since they were decided"),
+        (
+            t.questions,
+            plural(t.questions, "open question", "open questions"),
+        ),
+        (t.open, format!("{} to review", t.open)),
+        (
+            t.changes_requested,
+            format!("{} with changes requested", t.changes_requested),
+        ),
+        (
+            t.lapsed,
+            format!("{} changed since they were decided", t.lapsed),
+        ),
     ]
-    .iter()
+    .into_iter()
     .filter(|(k, _)| *k > 0)
-    .map(|(k, w)| format!("{k} {w}"))
+    .map(|(_, w)| w)
     .collect();
     format!(
         "{}/{n} requirements approved; {}",
         t.approved,
         parts.join(", ")
     )
+}
+
+/// The review without its git reads (changes, history): what the inbox
+/// needs, per feature, on every refresh.
+#[must_use]
+pub fn summary(path: &Path, feature: Option<&str>) -> Option<ReviewReport> {
+    unit("review", path, feature)
+        .ok()
+        .map(|u| report_of(&u, false))
 }
 
 /// `speccoder review`: every requirement and its review.
@@ -221,7 +418,7 @@ pub fn report(path: &Path, feature: Option<&str>) -> CommandResult {
         Ok(u) => u,
         Err(r) => return *r,
     };
-    let r = report_of(&u);
+    let r = report_of(&u, true);
     CommandResult::new("review", CommandStatus::Ok, &message(&r))
         .with_data(CommandData::Review(Box::new(r)))
 }
@@ -254,10 +451,41 @@ pub fn decide(
     let requirements = u.requirements();
     let mut record = u.record();
     let before = items(&requirements, &record);
+    // A wording that still asks a question is not one to sign: approving
+    // it is refused; approving "the rest" passes it by and says so.
+    let asks = |line: &str| line.contains(MARKER);
+    let undecided: Vec<&str> = requirements
+        .iter()
+        .filter(|(_, l)| asks(l))
+        .map(|(id, _)| id.as_str())
+        .collect();
+    if verdict == "approve" && !ids.is_empty() {
+        let blocked: Vec<&str> = ids
+            .iter()
+            .map(String::as_str)
+            .filter(|id| undecided.contains(id))
+            .collect();
+        if !blocked.is_empty() {
+            return CommandResult::new(
+                "review",
+                CommandStatus::UsageError,
+                &format!(
+                    "{} still {} an open question: answer it first (`speccoder review answer …`), or reword it (`speccoder review edit {} \"…\" --approve`)",
+                    blocked.join(", "),
+                    if blocked.len() == 1 { "asks" } else { "ask" },
+                    blocked[0]
+                ),
+            )
+            .with_code("USAGE");
+        }
+    }
     let chosen: Vec<&(String, String)> = if ids.is_empty() {
         requirements
             .iter()
-            .filter(|(id, _)| before.iter().any(|i| i.id == *id && i.state != "approved"))
+            .filter(|(id, l)| {
+                before.iter().any(|i| i.id == *id && i.state != "approved")
+                    && !(verdict == "approve" && asks(l))
+            })
             .collect()
     } else {
         let unknown: Vec<&String> = ids
@@ -336,17 +564,27 @@ pub fn decide(
     if let Err(e) = std::fs::write(u.file(), text) {
         return CommandResult::new("review", CommandStatus::Error, &format!("{}: {e}", u.rel()));
     }
-    let r = report_of(&u);
+    let r = report_of(&u, true);
     let word = match verdict {
         "approve" => "approved",
         "request" => "changes requested on",
         _ => "cleared",
     };
+    let skipped = if verdict == "approve" && ids.is_empty() && !undecided.is_empty() {
+        format!(
+            "; not {} — {} still {} an open question",
+            undecided.join(", "),
+            if undecided.len() == 1 { "it" } else { "they" },
+            if undecided.len() == 1 { "asks" } else { "ask" }
+        )
+    } else {
+        String::new()
+    };
     let message = if chosen.is_empty() {
-        format!("nothing to decide: {}", message(&r))
+        format!("nothing to decide{skipped}: {}", message(&r))
     } else {
         format!(
-            "{word} {}; {} — commit {} to share it",
+            "{word} {}{skipped}; {} — commit {} to share it",
             chosen
                 .iter()
                 .map(|(id, _)| id.as_str())
@@ -357,6 +595,165 @@ pub fn decide(
         )
     };
     CommandResult::new("review", CommandStatus::Ok, &message)
+        .with_data(CommandData::Review(Box::new(r)))
+}
+
+/// `speccoder review answer Q1 "…"`: writes the person's answer where the
+/// question was — the marker replaced by the answer, nothing else touched.
+#[must_use]
+pub fn answer(path: &Path, feature: Option<&str>, id: &str, text: &str) -> CommandResult {
+    let u = match unit("review", path, feature) {
+        Ok(u) => u,
+        Err(r) => return *r,
+    };
+    let text = text.trim();
+    if text.is_empty() {
+        return CommandResult::new("review", CommandStatus::UsageError, "an answer needs words")
+            .with_code("USAGE");
+    }
+    let open = questions(&u);
+    let Some((q, raw)) = open.iter().find(|(q, _)| q.id.eq_ignore_ascii_case(id)) else {
+        return CommandResult::new(
+            "review",
+            CommandStatus::NotFound,
+            &format!(
+                "no open question {id}; open: {}",
+                if open.is_empty() {
+                    "none".to_owned()
+                } else {
+                    open.iter()
+                        .map(|(q, _)| q.id.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                }
+            ),
+        )
+        .with_code("NOT-FOUND");
+    };
+    let file = u.root.join(&q.file);
+    let Ok(body) = std::fs::read_to_string(&file) else {
+        return CommandResult::new(
+            "review",
+            CommandStatus::Error,
+            &format!("{} cannot be read", q.file),
+        );
+    };
+    let mut lines: Vec<String> = body.lines().map(str::to_owned).collect();
+    let Some(line) = lines
+        .get_mut(q.line - 1)
+        .filter(|l| l.contains(raw.as_str()))
+    else {
+        return CommandResult::new(
+            "review",
+            CommandStatus::Error,
+            &format!("{} changed under the question; look again", q.file),
+        );
+    };
+    *line = line.replacen(raw.as_str(), text, 1);
+    let mut out = lines.join("\n");
+    if body.ends_with('\n') {
+        out.push('\n');
+    }
+    if let Err(e) = std::fs::write(&file, out) {
+        return CommandResult::new("review", CommandStatus::Error, &format!("{}: {e}", q.file));
+    }
+    let r = report_of(&u, true);
+    CommandResult::ok(
+        "review",
+        &format!("answered {} in {} — {}", q.id, q.file, message(&r)),
+    )
+    .with_data(CommandData::Review(Box::new(r)))
+}
+
+/// `speccoder review edit FR-003 "…" [--approve]`: the person rewords a
+/// requirement — its line keeps its identifier, its decision lapses (or is
+/// approved on the new words with `approve`).
+#[must_use]
+pub fn edit(
+    path: &Path,
+    feature: Option<&str>,
+    id: &str,
+    wording: &str,
+    approve: bool,
+    via: &str,
+) -> CommandResult {
+    let u = match unit("review", path, feature) {
+        Ok(u) => u,
+        Err(r) => return *r,
+    };
+    let wording = wording.trim();
+    if wording.is_empty() || wording.contains('\n') {
+        return CommandResult::new(
+            "review",
+            CommandStatus::UsageError,
+            "a requirement's wording is one line of words",
+        )
+        .with_code("USAGE");
+    }
+    let Some(spec) = u.format.requirements_file() else {
+        return CommandResult::new(
+            "review",
+            CommandStatus::UsageError,
+            "this format has no requirement identifiers",
+        )
+        .with_code("USAGE");
+    };
+    let Some((_, old)) = u.requirements().into_iter().find(|(r, _)| r == id) else {
+        return CommandResult::new(
+            "review",
+            CommandStatus::NotFound,
+            &format!("the spec has no {id}"),
+        )
+        .with_code("NOT-FOUND");
+    };
+    // `- **FR-003**: …` keeps everything up to the identifier and its colon.
+    let key = format!("**{id}**");
+    let Some(at) = old.find(&key) else {
+        return CommandResult::new(
+            "review",
+            CommandStatus::Error,
+            &format!("{id}'s line has no `{key}`"),
+        );
+    };
+    let new = format!("{}{key}: {wording}", &old[..at]);
+    let file = u.root.join(&u.dir).join(spec);
+    let body = std::fs::read_to_string(&file).unwrap_or_default();
+    if !body.lines().any(|l| l.trim_end() == old.trim_end()) {
+        return CommandResult::new(
+            "review",
+            CommandStatus::Error,
+            &format!("{spec} changed under {id}; look again"),
+        );
+    }
+    let mut done = false;
+    let mut out: Vec<String> = Vec::new();
+    for l in body.lines() {
+        if !done && l.trim_end() == old.trim_end() {
+            out.push(new.clone());
+            done = true;
+        } else {
+            out.push(l.to_owned());
+        }
+    }
+    let mut text = out.join("\n");
+    if body.ends_with('\n') {
+        text.push('\n');
+    }
+    if let Err(e) = std::fs::write(&file, text) {
+        return CommandResult::new("review", CommandStatus::Error, &format!("{spec}: {e}"));
+    }
+    if approve {
+        let r = decide(path, feature, &[id.to_owned()], "approve", None, via);
+        let status = r.status();
+        let message = if status == CommandStatus::Ok {
+            format!("reworded {id} and approved it; {}", r.message())
+        } else {
+            format!("reworded {id}; not approved: {}", r.message())
+        };
+        return r.reworded(status, &message);
+    }
+    let r = report_of(&u, true);
+    CommandResult::ok("review", &format!("reworded {id}; {}", message(&r)))
         .with_data(CommandData::Review(Box::new(r)))
 }
 

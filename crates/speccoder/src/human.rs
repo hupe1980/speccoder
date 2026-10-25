@@ -1502,6 +1502,40 @@ pub fn inbox(r: &speccoder_core::InboxReport, look: &crate::style::Look) -> Vec<
 pub fn review(r: &speccoder_core::ReviewReport, look: &crate::style::Look) -> Vec<String> {
     use crate::style::{Glyph, Token};
     let mut out = Vec::new();
+    if !r.questions.is_empty() {
+        out.push(look.paint(Token::Attention, "Open questions"));
+        for q in &r.questions {
+            out.push(format!(
+                "{} {:<7} {}",
+                look.cell(Glyph::Attention),
+                q.id,
+                shorten(&q.text, 90)
+            ));
+            out.push(format!(
+                "            {}",
+                look.paint(
+                    Token::Muted,
+                    &format!(
+                        "{}:{}{}",
+                        q.file,
+                        q.line,
+                        q.near
+                            .as_deref()
+                            .map(|n| format!(" · {n}"))
+                            .unwrap_or_default()
+                    )
+                )
+            ));
+        }
+        out.push(look.paint(
+            Token::Accent,
+            &format!(
+                "            → speccoder review answer {} \"…\"",
+                r.questions[0].id
+            ),
+        ));
+        out.push(String::new());
+    }
     for i in &r.requirements {
         let (g, word) = match i.state.as_str() {
             "approved" => (Glyph::Verified, "approved"),
@@ -1527,6 +1561,41 @@ pub fn review(r: &speccoder_core::ReviewReport, look: &crate::style::Look) -> Ve
             )),
             (Some(by), None) => out.push(format!("            {}", look.paint(Token::Muted, by))),
             _ => {}
+        }
+    }
+    if !r.changes.is_empty() {
+        out.push(String::new());
+        out.push(look.paint(Token::Accent, "Since the last commit"));
+        for c in &r.changes {
+            let how = match (&c.then, &c.now) {
+                (None, _) => "added",
+                (_, None) => "removed",
+                _ => "reworded",
+            };
+            out.push(format!("  {:<7} {how}", c.id));
+        }
+    }
+    if r.history.len() > 1 {
+        out.push(String::new());
+        out.push(look.paint(Token::Muted, "History"));
+        for v in r.history.iter().take(5) {
+            let mut what: Vec<String> = Vec::new();
+            for (n, w) in [
+                (&v.added, "added"),
+                (&v.reworded, "reworded"),
+                (&v.removed, "removed"),
+            ] {
+                if !n.is_empty() {
+                    what.push(format!("{} {w}", n.len()));
+                }
+            }
+            out.push(format!(
+                "  {} {}  {}  {}",
+                v.date,
+                v.commit.get(..7).unwrap_or(&v.commit),
+                shorten(&v.subject, 50),
+                look.paint(Token::Muted, &what.join(", "))
+            ));
         }
     }
     out

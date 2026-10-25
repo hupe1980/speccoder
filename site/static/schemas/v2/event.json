@@ -2620,7 +2620,7 @@
           "type": "string"
         },
         "kind": {
-          "description": "What kind, in the order of urgency: `approval` (a run waits on it),\n`ruling` (a verified attempt is held: its tests reject an\nalternative the spec allows), `gaming` (the monitor suspects a\nshortcut), `stale` (proven against an earlier wording), `review`\n(requirements not approved on their current wording), `revise`\n(changes requested on the spec), `stuck` (the\nlast attempt did not pass), `commit` (planning files a run cannot\nread yet), `handoff` (every task done: review and hand it off).",
+          "description": "What kind, in the order of urgency: `approval` (a run waits on it),\n`ruling` (a verified attempt is held: its tests reject an\nalternative the spec allows), `gaming` (the monitor suspects a\nshortcut), `stale` (proven against an earlier wording), `question`\n(the spec leaves questions open), `review`\n(requirements not approved on their current wording), `revise`\n(changes requested on the spec), `stuck` (the\nlast attempt did not pass), `commit` (planning files a run cannot\nread yet), `handoff` (every task done: review and hand it off).",
           "type": "string"
         },
         "since": {
@@ -3235,6 +3235,44 @@
         "signer",
         "statements",
         "same_tree_as"
+      ],
+      "type": "object"
+    },
+    "OpenQuestion": {
+      "description": "A question a document leaves open, to answer in place (F-093).",
+      "properties": {
+        "file": {
+          "description": "The document (project-relative).",
+          "type": "string"
+        },
+        "id": {
+          "description": "`Q1`, `Q2`, … in reading order.",
+          "type": "string"
+        },
+        "line": {
+          "description": "Its line (1-based).",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "near": {
+          "description": "The requirement or section it is in.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text": {
+          "description": "The question.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "text",
+        "file",
+        "line",
+        "near"
       ],
       "type": "object"
     },
@@ -3885,6 +3923,13 @@
     "ReviewReport": {
       "description": "Result of `speccoder review` (F-087): every requirement of the feature's\nspec as a card, with the person's decision on its exact wording.",
       "properties": {
+        "changes": {
+          "description": "Requirements changed in the checkout since the last commit of the\nspec: what a commit would record.",
+          "items": {
+            "$ref": "#/$defs/RequirementDrift"
+          },
+          "type": "array"
+        },
         "feature": {
           "description": "The feature.",
           "type": "string"
@@ -3892,6 +3937,20 @@
         "file": {
           "description": "Where the review is recorded (project-relative); commit it to share.",
           "type": "string"
+        },
+        "history": {
+          "description": "The spec's versions in git, newest first (the last twelve).",
+          "items": {
+            "$ref": "#/$defs/SpecVersion"
+          },
+          "type": "array"
+        },
+        "questions": {
+          "description": "The questions the documents leave open (`[NEEDS CLARIFICATION: …]`),\nin reading order (F-093).",
+          "items": {
+            "$ref": "#/$defs/OpenQuestion"
+          },
+          "type": "array"
         },
         "requirements": {
           "description": "One per requirement, in the spec's order.",
@@ -3925,7 +3984,10 @@
         "requirements",
         "totals",
         "revise_with",
-        "revision"
+        "revision",
+        "questions",
+        "changes",
+        "history"
       ],
       "type": "object"
     },
@@ -3955,13 +4017,21 @@
           "format": "uint",
           "minimum": 0,
           "type": "integer"
+        },
+        "questions": {
+          "default": 0,
+          "description": "Questions the documents leave open (F-093).",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
         }
       },
       "required": [
         "approved",
         "changes_requested",
         "open",
-        "lapsed"
+        "lapsed",
+        "questions"
       ],
       "type": "object"
     },
@@ -4409,7 +4479,7 @@
               "type": "string"
             },
             "verdict": {
-              "description": "`approve`, `request` (changes) or `clear`.",
+              "description": "`approve`, `request` (changes), `clear`; `answer` (ids: the\nquestion) and `edit` / `edit-approve` (ids: the requirement) take\nthe input as the words.",
               "type": "string"
             }
           },
@@ -4863,6 +4933,58 @@
       },
       "required": [
         "skills"
+      ],
+      "type": "object"
+    },
+    "SpecVersion": {
+      "description": "One commit of the spec and what it changed in its requirements.",
+      "properties": {
+        "added": {
+          "description": "Requirements it added.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "author": {
+          "description": "Its author.",
+          "type": "string"
+        },
+        "commit": {
+          "description": "The commit.",
+          "type": "string"
+        },
+        "date": {
+          "description": "`YYYY-MM-DD`.",
+          "type": "string"
+        },
+        "removed": {
+          "description": "Requirements it removed.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "reworded": {
+          "description": "Requirements it reworded.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "subject": {
+          "description": "Its subject line.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "commit",
+        "date",
+        "author",
+        "subject",
+        "added",
+        "reworded",
+        "removed"
       ],
       "type": "object"
     },
