@@ -64,6 +64,7 @@ Every stop and finish ends with a `Next:` block — the commands that continue, 
 | `speccoder report --live` | What the current or last run is doing, from another terminal |
 | `speccoder report --approvals` | Calls waiting for a decision, and the decisions made, with who made them |
 | `speccoder report --cost` | Tokens, and money with prices configured, per task |
+| `speccoder ui [--port N] [--no-open] [--window]` | The [web interface](@/docs/web.md): the feature, its evidence and the next step in the browser, or a desktop window |
 | `speccoder report --markdown` | The report as Markdown, for pull requests and CI summaries |
 | `speccoder pr [--remote R] [--base B] [--yes] [--dry-run] [--force]` | Push the branch and its attestation notes and open a draft pull request with the evidence; `--force` hands off although the full-tier checks failed |
 | `speccoder attest verify [REV\|RANGE] [--allowed-signers FILE] [--certificate-identity I --certificate-oidc-issuer O] [--require-signed]` | Re-check every tick's [attestation](@/docs/attestations.md) against its commit, and its signatures against your trust |

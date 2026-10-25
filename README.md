@@ -35,7 +35,7 @@ speccoder report                     # every task and the evidence behind its ti
 git merge speccoder/001-my-feature   # after reviewing the branch
 ```
 
-At a terminal, `run` works inside a dashboard — the pipeline stage by stage, tool calls, approvals answered with one key, and per task the evidence behind its verdict and its diff; `--plain` keeps lines. `speccoder` alone opens the dashboard on a run elsewhere, `speccoder report --live` shows one as it happens, and `speccoder doctor` checks the setup. For CI and tools, every command takes `--json` (one result object) or `--events` (JSON Lines as it works), both with [published JSON Schemas](https://hupe1980.github.io/speccoder/docs/cli/#json-output), and every failure names a [code](https://hupe1980.github.io/speccoder/docs/codes/) with the command that fixes it; in GitHub Actions the report lands in the job summary. No spec yet? `speccoder spec specify "…"`, then `plan` and `tasks`, runs Spec Kit's own planning skills.
+At a terminal, `run` works inside a dashboard — the pipeline stage by stage, tool calls, approvals answered with one key, and per task the evidence behind its verdict and its diff; `--plain` keeps lines. `speccoder` alone opens the dashboard on a run elsewhere, `speccoder report --live` shows one as it happens, and `speccoder doctor` checks the setup. For CI and tools, every command takes `--json` (one result object) or `--events` (JSON Lines as it works), both with [published JSON Schemas](https://hupe1980.github.io/speccoder/docs/cli/#json-output), and every failure names a [code](https://hupe1980.github.io/speccoder/docs/codes/) with the command that fixes it; in GitHub Actions the report lands in the job summary. Prefer a browser? `speccoder ui` serves the same feature as a page on your machine — the journey with one button for the next step, a board of tasks by verdict, each task's evidence and diff, approvals in a sheet — or in a desktop window with `--window`. No spec yet? `speccoder spec specify "…"`, then `plan` and `tasks`, runs Spec Kit's own planning skills.
 
 ## How a task is decided
 
@@ -60,7 +60,8 @@ Pre-release (0.x): it works end to end on small projects with OpenAI, Anthropic 
 | `speccoder-speckit` | Reads Spec Kit projects |
 | `speccoder-openspec` | Reads OpenSpec projects |
 | `speccoder-runtime` | Everything that executes: checks, tools, sandbox, git, the embedded [agentplane](https://crates.io/crates/agentplane) runtime |
-| `speccoder` | The CLI |
+| `speccoder-web` | The web interface's host: the embedded UI (Svelte, in `ui/`) and its API, on 127.0.0.1 |
+| `speccoder` | The CLI (and the desktop window, feature `app`) |
 
 `just ci` runs every gate CI runs: formatting, clippy, tests, cargo-deny, layering, docs, a package dry run, the `status` cold-start budget and the release scripts' tests. It needs `just`, `cargo-nextest` and `cargo-deny`; the toolchain is pinned in `rust-toolchain.toml`. `just site` serves the documentation site (needs [Zola](https://www.getzola.org/)). [`evals/`](https://github.com/hupe1980/speccoder/tree/main/evals) holds Spec Kit projects with hidden oracles and impossible tasks that measure whether completions are really correct.
 

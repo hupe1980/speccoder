@@ -135,6 +135,18 @@ pub enum Command {
         #[arg(long)]
         bug_report: bool,
     },
+    /// The web interface: the project in your browser (or a window), on 127.0.0.1 only.
+    Ui {
+        /// The port (default: a free one).
+        #[arg(long, default_value_t = 0)]
+        port: u16,
+        /// Print the address instead of opening the browser.
+        #[arg(long)]
+        no_open: bool,
+        /// Open it in speccoder's own window (needs a build with `--features app`).
+        #[arg(long)]
+        window: bool,
+    },
     /// Which feature commands work on: list them, or make one current (`feature 2`, `feature greet`).
     Feature {
         /// A name, a number (`2` is `002-…`), or a part of the name only one feature has.

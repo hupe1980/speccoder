@@ -401,7 +401,7 @@ fn untracked_check(root: &Path) -> Option<DoctorCheck> {
     let list = found.join(" ");
     Some(DoctorCheck {
         fix: vec![format!(
-            "→ git add {list} && git commit -m \"…\"   (if the checks need them)"
+            "git add {list} && git commit -m \"Track project config\"   (if the checks need them)"
         )],
         ..check(
             "untracked",

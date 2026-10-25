@@ -7,6 +7,11 @@ all-features = true
 [advisories]
 version = 2
 yanked = "deny"
+ignore = [
+    # Through Tauri's Linux stack (gtk3-macros), only with the `app` feature;
+    # a build-time macro crate, no code of it runs in the window.
+    { id = "RUSTSEC-2024-0370", reason = "proc-macro-error via gtk3-macros, `app` feature only, build time only" },
+]
 
 [licenses]
 version = 2
@@ -24,6 +29,16 @@ allow = [
     # data licence of the Mozilla CA bundle (webpki-root-certs).
     "MIT-0",
     "CDLA-Permissive-2.0",
+]
+# MPL-2.0 is file-level copyleft: shipping these unmodified is compatible
+# with MIT OR Apache-2.0. Allowed per crate, not globally, and all arrive
+# with the optional desktop window (Tauri, feature `app`).
+exceptions = [
+    { allow = ["MPL-2.0"], crate = "cssparser" },
+    { allow = ["MPL-2.0"], crate = "cssparser-macros" },
+    { allow = ["MPL-2.0"], crate = "dtoa-short" },
+    { allow = ["MPL-2.0"], crate = "selectors" },
+    { allow = ["MPL-2.0"], crate = "option-ext" },
 ]
 confidence-threshold = 0.8
 unused-allowed-license = "allow"

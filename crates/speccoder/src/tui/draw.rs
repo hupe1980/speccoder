@@ -554,7 +554,9 @@ fn evidence_screen(f: &mut Frame<'_>, app: &App, area: Rect) {
         );
         return;
     };
-    let (g, token, words) = super::evidence::banner(&t.state);
+    let (m, words) = super::evidence::banner(&t.state);
+    let g = super::evidence::glyph(m);
+    let token = g.token();
     let mut lines: Vec<Line<'_>> = vec![
         Line::styled(
             a(&format!(" {} {words} ", mark(g))),
@@ -591,7 +593,10 @@ fn evidence_screen(f: &mut Frame<'_>, app: &App, area: Rect) {
             Style::default()
         };
         lines.push(Line::from(vec![
-            Span::styled(format!("  {} ", mark(r.glyph)), st(r.glyph.token())),
+            Span::styled(
+                format!("  {} ", mark(super::evidence::glyph(&r.mark))),
+                st(super::evidence::glyph(&r.mark).token()),
+            ),
             Span::styled(format!("{:<15} ", r.label), bold()),
             Span::styled(a(&r.text), text_style),
         ]));

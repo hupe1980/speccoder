@@ -11,6 +11,27 @@ ticks a task only on evidence the model cannot produce or edit.
 
 ### Added
 
+**The web interface**
+
+- `speccoder ui`: the feature in a browser tab, served on 127.0.0.1 from the
+  binary (nothing fetched from the network). The journey with one primary
+  button for the next step; what `doctor` would warn about above it, each
+  with its fix; a board of tasks by verdict with **Run task**; each task's
+  evidence rows and diff; the spec, plan and tasks rendered; the report with
+  pending calls to approve or reject and every requirement beside the tasks
+  that prove it; a palette (⌘K) with each action's CLI command; a live dock.
+- A call that needs a person opens as a sheet with the same scopes and keys
+  as the terminal (`y t r n s`), recorded `via web`; the tab title and an
+  optional desktop notification call you back when you look elsewhere.
+- `speccoder ui --window`: the same page in a desktop window (Tauri, build
+  with `--features app`), which loads the local page and navigates nowhere
+  else.
+- The host takes a per-start key (in the address's fragment, then a header),
+  refuses other hosts (DNS rebinding) and cross-site writes, and serves a
+  strict content policy.
+- The journey marks a step whose file was never written (a task list without
+  a spec) as skipped instead of offering it as the next step.
+
 **Spec formats**
 
 - [GitHub Spec Kit](https://github.com/github/spec-kit) projects, tested

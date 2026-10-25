@@ -660,6 +660,10 @@
         {
           "$ref": "#/$defs/FeaturesReport",
           "description": "`feature`: the project's features and which one is current."
+        },
+        {
+          "$ref": "#/$defs/UiReport",
+          "description": "`ui`: where the web interface is served."
         }
       ],
       "description": "Command-specific payload of a result."
@@ -4084,6 +4088,11 @@
           "const": "todo",
           "description": "Later.",
           "type": "string"
+        },
+        {
+          "const": "skipped",
+          "description": "Passed without its file: a task list written without a spec or a\nplan. Not a step left to take.",
+          "type": "string"
         }
       ]
     },
@@ -4476,6 +4485,32 @@
         "test",
         "task",
         "verdict"
+      ],
+      "type": "object"
+    },
+    "UiReport": {
+      "description": "Result of `speccoder ui`, printed once the host listens (under `--json`\nthe only result: the host keeps serving after it).",
+      "properties": {
+        "port": {
+          "description": "The port on 127.0.0.1.",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "root": {
+          "description": "The project served.",
+          "type": "string"
+        },
+        "url": {
+          "description": "The address to open, with this start's key in its fragment.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url",
+        "port",
+        "root"
       ],
       "type": "object"
     },

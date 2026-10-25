@@ -8,6 +8,7 @@
 pub mod actions;
 pub mod codes;
 mod command;
+pub mod evidence;
 pub mod graph;
 pub mod next;
 pub mod retry;
@@ -27,6 +28,6 @@ pub use command::{
     InitKey, InitReport, InitRun, InstructionFile, LastAttempt, MonitorScore, ObjectVerification,
     OperatorView, PAYLOADS, PendingCall, PrReport, ProposeReport, RefusedPath, ReplayReport,
     RunReport, SCHEMA_VERSION, SchemaName, SchemaReport, SignerView, SkillEntry, SkillRunReport,
-    SkillsReport, StatusReport, StatusTotals, TaskCost, TaskStatus, TraceRow, Usage, VerifyOutcome,
-    VerifyReason, WorktreeReport,
+    SkillsReport, StatusReport, StatusTotals, TaskCost, TaskStatus, TraceRow, UiReport, Usage,
+    VerifyOutcome, VerifyReason, WorktreeReport,
 };

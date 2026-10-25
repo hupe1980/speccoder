@@ -1,6 +1,8 @@
 //! The `speccoder` binary: parse, delegate to the runtime, render.
 
 mod acp;
+#[cfg(feature = "app")]
+mod app;
 mod attention;
 mod cli;
 #[cfg(test)]
@@ -88,6 +90,88 @@ fn archive(
             program: None,
         },
     )
+}
+
+/// `speccoder ui`: serves the web interface on 127.0.0.1 until interrupted.
+/// The address carries the token in its fragment, which no server sees.
+fn ui(
+    path: &std::path::Path,
+    port: u16,
+    no_open: bool,
+    window: bool,
+    json: bool,
+) -> speccoder_core::CommandResult {
+    use speccoder_core::{CommandData, CommandResult, CommandStatus, UiReport};
+    let root = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    if window && !cfg!(feature = "app") {
+        return CommandResult::new(
+            "ui",
+            CommandStatus::UsageError,
+            "this speccoder was built without its window: `cargo install speccoder --features app`, or use the browser (`speccoder ui`)",
+        );
+    }
+    // The window must own the main thread: the host serves from another.
+    #[cfg(feature = "app")]
+    if window {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let served_root = root.clone();
+        std::thread::spawn(move || {
+            let _ = speccoder_web::serve(&served_root, port, |s| {
+                let _ = tx.send(s.url.clone());
+            });
+        });
+        return match rx.recv() {
+            Ok(url) => match app::run(&url) {
+                Ok(()) => CommandResult::new("ui", CommandStatus::Ok, "the window was closed"),
+                Err(e) => CommandResult::new(
+                    "ui",
+                    CommandStatus::Error,
+                    &format!("the window failed: {e}"),
+                ),
+            },
+            Err(_) => CommandResult::new("ui", CommandStatus::Error, "the host did not start"),
+        };
+    }
+    // Under `--json` the result is printed once the host listens — the
+    // address a tool needs — and is the only one: the host serves on.
+    let announced = std::sync::atomic::AtomicBool::new(false);
+    let served = speccoder_web::serve(&root, port, |s| {
+        if json {
+            let ready = CommandResult::new("ui", CommandStatus::Ok, "serving the web interface")
+                .with_data(CommandData::Ui(Box::new(UiReport {
+                    url: s.url.clone(),
+                    port: s.port,
+                    root: root.display().to_string(),
+                })));
+            if output::render(&ready, true).is_ok() {
+                announced.store(true, std::sync::atomic::Ordering::SeqCst);
+            }
+        }
+        eprintln!("speccoder is serving {} at", root.display());
+        eprintln!("  {}", s.url);
+        eprintln!(
+            "  (127.0.0.1 only; the address holds this session's key — do not share it; ctrl-c stops)"
+        );
+        if !no_open {
+            let opener = if cfg!(target_os = "macos") {
+                "open"
+            } else {
+                "xdg-open"
+            };
+            let _ = std::process::Command::new(opener)
+                .arg(&s.url)
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .spawn();
+        }
+    });
+    if announced.load(std::sync::atomic::Ordering::SeqCst) && served.is_ok() {
+        std::process::exit(0);
+    }
+    match served {
+        Ok(()) => CommandResult::new("ui", CommandStatus::Ok, "stopped serving"),
+        Err(e) => CommandResult::new("ui", CommandStatus::Error, &format!("could not serve: {e}")),
+    }
 }
 
 /// Whether the planning skill `name` creates a feature (it needs none).
@@ -359,6 +443,11 @@ fn main() {
             }
         }
         Command::Task { action } => task_action(action, path, feature),
+        Command::Ui {
+            port,
+            no_open,
+            window,
+        } => ui(path, *port, *no_open, *window, cli.json),
         Command::Feature { query, clear } => match (query, clear) {
             (_, true) => speccoder_runtime::current::clear(path),
             (Some(q), false) => speccoder_runtime::current::switch(path, q),
@@ -886,6 +975,7 @@ fn command_name(command: Option<&Command>) -> &'static str {
             C::Doctor { .. } => "doctor",
             C::Spec { .. } => "spec",
             C::Feature { .. } => "feature",
+            C::Ui { .. } => "ui",
             C::Run { .. } => "run",
             C::Task { action } => match action {
                 cli::TaskAction::Approve { .. } => "task approve",

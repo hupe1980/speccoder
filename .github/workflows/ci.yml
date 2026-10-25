@@ -35,3 +35,25 @@ jobs:
         with:
           tool: just,cargo-nextest,cargo-deny
       - run: just ci
+
+  # The web interface is embedded from its committed build: rebuilding it
+  # from source must give the same files, so what ships is what is reviewed.
+  ui:
+    name: web interface builds to the committed bundle
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: crates/speccoder-web/ui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: crates/speccoder-web/ui/package-lock.json
+      - run: npm ci
+      - run: npm run check
+      - run: npm run build
+      - run: git diff --exit-code -- dist
+      # The whole interface stays small: under 50 KB gzipped.
+      - run: test "$(cat dist/* | gzip -9 | wc -c)" -lt 51200
