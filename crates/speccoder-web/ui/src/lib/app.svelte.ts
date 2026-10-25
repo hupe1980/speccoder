@@ -33,6 +33,8 @@ class AppState {
   approvals = $state<PendingCall[]>([]);
   /** Which document the Spec & Plan view shows (`review`: the review cards). */
   doc = $state("spec");
+  /** The section of the shown document, by its outline id (F-090). */
+  section = $state<string | null>(null);
   /** Every decision waiting for the person, across features (F-086). */
   inbox = $state<Envelope<Inbox> | null>(null);
   documents = $state<Document[]>([]);
@@ -264,6 +266,8 @@ class AppState {
     if (this.view === "code" && this.codeMode === "files") s.set("mode", "files");
     if (this.view === "code" && this.codeFile) s.set("file", this.codeFile);
     if (this.view === "code" && this.codeFile && this.codeLine) s.set("line", String(this.codeLine));
+    if (this.view === "documents" && this.doc !== "spec") s.set("doc", this.doc);
+    if (this.view === "documents" && this.section) s.set("section", this.section);
     const t = s.toString();
     return location.pathname + (t ? `?${t}` : "");
   }
@@ -279,6 +283,8 @@ class AppState {
     this.codeLine = Number.isInteger(line) && line > 0 ? line : null;
     this.codeMode = s.get("mode") === "files" || this.codeFile ? "files" : "changes";
     this.palette = s.has("palette");
+    this.doc = s.get("doc") ?? "spec";
+    this.section = s.get("section");
   }
 
   start() {

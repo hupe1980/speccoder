@@ -11,6 +11,14 @@ ticks a task only on evidence the model cannot produce or edit.
 
 ### Added
 
+**Read the spec by its outline**
+
+- Spec & Plan shows the open document's outline in a side nav that stays
+  in view: every H2/H3, the section being read marked, a dot per
+  requirement a section names (cited or not), each phase's progress in the
+  task list. Click to go, `[` `]` to step, a reading bar, and the address
+  keeps the document and section.
+
 **The workbench: menus, a status bar, context menus**
 
 - The window has a real menu bar in the order the HIG gives — speccoder,
