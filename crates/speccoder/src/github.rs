@@ -169,6 +169,7 @@ mod tests {
             }),
             note: None,
             attestation: None,
+            strength: None,
         }
     }
 

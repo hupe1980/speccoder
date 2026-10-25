@@ -44,12 +44,14 @@ Every stop and finish ends with a `Next:` block — the commands that continue, 
 | Command | What it does |
 |---|---|
 | `speccoder run [--task T] [--max-tasks N] [--parallel N] [--converge] [--no-prompt] [--ignore-checklists]` | Work through the ready tasks, or one task; resumes where it stopped |
+| `speccoder run --task T --fresh-acceptance` | Set the task's held attempt aside and write its acceptance tests anew |
 | `speccoder run --in-place …` | The same in your checkout on `speccoder/<feature>`, for git-ignored specs; switches back at the end. `--return` leaves an interrupted in-place run |
 | `speccoder task approve T [--call ID] [--all] [--scope once\|task\|run] [--note "…"]` | Approve a waiting call (its class for the task by default); no model needed; the next `run` continues the attempt from that call. `--all` without `T`: every waiting call of the feature |
 | `speccoder task reject T [--call ID] [--all] --reason R` | Reject it; the attempt continues and the model is told why |
 | `speccoder task accept T --reason R [--in-place]` | Tick a task on your word (`attested`) |
 | `speccoder task skip T [--reason R] [--undo]` | Skip a task; its dependents stay blocked |
 | `speccoder task nudge T [--note N] [--clear]` | Leave a note the next attempts read |
+| `speccoder task rule T --tests-right --reason R [--variant ID]` | Rule on a held attempt whose tests rejected an alternative: the tests are right; the next `run` ticks it ([over-strict tests](@/docs/evidence.md#over-strict-tests)) |
 | `speccoder task show T` | One task's state and evidence |
 
 ## Review

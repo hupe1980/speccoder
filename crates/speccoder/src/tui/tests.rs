@@ -23,6 +23,7 @@ fn task(id: &str, state: &str) -> TaskStatus {
         last_attempt: None,
         note: None,
         attestation: None,
+        strength: None,
     }
 }
 

@@ -112,6 +112,7 @@ struct RunJob {
     converge: bool,
     parallel: usize,
     ignore_checklists: bool,
+    fresh_acceptance: bool,
     in_place: bool,
 }
 
@@ -130,6 +131,7 @@ impl RunJob {
             cancel,
             parallel: self.parallel,
             ignore_checklists: self.ignore_checklists,
+            fresh_acceptance: self.fresh_acceptance,
             in_place: self.in_place,
             ..speccoder_runtime::RunOptions::default()
         };
@@ -251,6 +253,7 @@ fn main() {
             no_prompt,
             parallel,
             ignore_checklists,
+            fresh_acceptance,
             in_place,
             return_: _,
         } => {
@@ -262,6 +265,7 @@ fn main() {
                 converge: *converge,
                 parallel: usize::from(*parallel),
                 ignore_checklists: *ignore_checklists,
+                fresh_acceptance: *fresh_acceptance,
                 in_place: *in_place,
             };
             if dashboard(&cli) {
@@ -774,6 +778,7 @@ fn command_name(command: Option<&Command>) -> &'static str {
                 cli::TaskAction::Accept { .. } => "task accept",
                 cli::TaskAction::Skip { .. } => "task skip",
                 cli::TaskAction::Nudge { .. } => "task nudge",
+                cli::TaskAction::Rule { .. } => "task rule",
                 cli::TaskAction::Show { .. } => "task show",
             },
             C::Report { .. } => "report",
@@ -866,6 +871,22 @@ fn task_action(
                 &state,
             ),
             None => no_state("task nudge"),
+        },
+        T::Rule {
+            task,
+            reason,
+            variant,
+            ..
+        } => match speccoder_runtime::worktree::state_dir() {
+            Some(state) => speccoder_runtime::controls::rule(
+                path,
+                feature,
+                task,
+                reason,
+                variant.as_deref(),
+                &state,
+            ),
+            None => no_state("task rule"),
         },
         T::Show { task } => speccoder_runtime::status::show(path, feature, task),
     }

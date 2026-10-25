@@ -61,6 +61,8 @@ Every result that is not plainly `ok` names a code — `error[CODE]`, `stopped[C
 | [`NOT-DEMONSTRATED`](#not-demonstrated) | stop | 23 | the evidence the task needs could not be produced |
 | [`ACCEPTANCE-UNWRITTEN`](#acceptance-unwritten) | stop | 23 | the acceptance tests could not be written, so nothing was attempted |
 | [`SUSPECTED-GAMING`](#suspected-gaming) | stop | 23 | the gaming monitor suspects a shortcut |
+| [`TESTS-OVER-STRICT`](#tests-over-strict) | stop | 23 | an acceptance test rejects an implementation the spec appears to allow |
+| [`ACCEPTANCE-WEAK`](#acceptance-weak) | stop | 23 | the acceptance tests are too weak for [acceptance] min_strength |
 | [`INTERRUPTED`](#interrupted) | stop | 23 | the run was interrupted |
 | [`CHECKLISTS-OPEN`](#checklists-open) | stop | 23 | the feature's checklists have unchecked items |
 | [`ARCHIVE-AWAITING`](#archive-awaiting) | stop | 23 | the OpenSpec archive waits for your yes |
@@ -482,6 +484,26 @@ A separate review of the passing attempt found something like a hard-coded resul
 - `speccoder report`
 - `speccoder task accept <task> --reason "…"`
 - `speccoder task nudge <task> --note "…"`
+
+### TESTS-OVER-STRICT
+
+An acceptance test rejects an implementation the spec appears to allow.
+
+After the task passed, an alternative the spec leaves open (another order, wording, tie-break) was run against the acceptance tests, and they failed it on an assertion: the tests may encode a choice the spec did not make. The attempt is held — its tree kept — until a person rules. A ruling that the tests are right ticks the held attempt on the next run without a model call.
+
+- `speccoder task rule <task> --tests-right --reason "…"`
+- `speccoder run --task <task> --fresh-acceptance`
+- `speccoder task accept <task> --reason "…"`
+
+### ACCEPTANCE-WEAK
+
+The acceptance tests are too weak for [acceptance] min_strength.
+
+Wrong implementations — mutants of the changed code and model-written near misses — passed the acceptance tests too often, and adding tests once did not fix it. The task stays unticked; the report names what got through.
+
+- `speccoder report`
+- `speccoder run --task <task>`
+- `speccoder task accept <task> --reason "…"`
 
 ### INTERRUPTED
 

@@ -252,6 +252,8 @@ fn run_case(
         replays: None,
         held_out: None,
         gap: false,
+        strength: None,
+        over_strict: false,
     };
     let spec: CaseFile = match fs::read_to_string(path.join("case.toml"))
         .map_err(|e| e.to_string())
@@ -374,6 +376,15 @@ fn run_case(
         .and_then(|a| a.get("held_out"))
         .cloned();
     case.gap = case.held_out.as_ref().is_some_and(|h| h["gap"] == true);
+    case.strength = report.strength.as_ref().and_then(|s| {
+        (s.combined.state == speccoder_core::strength::State::Measured)
+            .then_some(s.combined.share)
+            .flatten()
+    });
+    case.over_strict = report
+        .strength
+        .as_ref()
+        .is_some_and(|s| !speccoder_core::strength::over_strict(&s.permitted).is_empty());
     case.model_said = report
         .model_report
         .as_ref()
@@ -478,6 +489,8 @@ fn summarise(cases: &[EvalCase]) -> EvalSummary {
         replayed: cases.iter().filter(|c| c.replays == Some(true)).count(),
         caught: n("caught"),
         held_out_gap: held_out_gap(cases),
+        median_acceptance_strength: median_strength(cases),
+        over_strict_stops: cases.iter().filter(|c| c.over_strict).count(),
         held_out_oracle: held_out_oracle(cases),
     }
 }
@@ -500,6 +513,25 @@ fn held_out_gap(cases: &[EvalCase]) -> Option<speccoder_core::HeldOutGap> {
         visible_passed: judged,
         held_out_failed: failed,
         rate: failed as f64 / judged as f64,
+    })
+}
+
+/// The median combined strength over verified cases that measured it.
+fn median_strength(cases: &[EvalCase]) -> Option<f64> {
+    let mut shares: Vec<f64> = cases
+        .iter()
+        .filter(|c| matches!(c.verdict, Some(speccoder_core::verify::Verdict::Verified)))
+        .filter_map(|c| c.strength)
+        .collect();
+    if shares.is_empty() {
+        return None;
+    }
+    shares.sort_by(f64::total_cmp);
+    let mid = shares.len() / 2;
+    Some(if shares.len().is_multiple_of(2) {
+        f64::midpoint(shares[mid - 1], shares[mid])
+    } else {
+        shares[mid]
     })
 }
 
@@ -539,7 +571,35 @@ mod tests {
             replays: None,
             held_out: None,
             gap: false,
+            strength: None,
+            over_strict: false,
         }
+    }
+
+    #[test]
+    fn the_median_strength_is_over_measured_verified_cases() {
+        let verified = |share: Option<f64>, over_strict: bool| EvalCase {
+            verdict: Some(speccoder_core::verify::Verdict::Verified),
+            strength: share,
+            over_strict,
+            ..case("correct", None)
+        };
+        assert_eq!(
+            summarise(&[case("correct", None)]).median_acceptance_strength,
+            None
+        );
+        let s = summarise(&[
+            verified(Some(0.5), false),
+            verified(Some(1.0), false),
+            verified(None, true),
+            verified(Some(0.8), false),
+        ]);
+        assert_eq!(s.median_acceptance_strength, Some(0.8));
+        assert_eq!(s.over_strict_stops, 1);
+        assert_eq!(
+            median_strength(&[verified(Some(0.5), false), verified(Some(1.0), false)]),
+            Some(0.75)
+        );
     }
 
     #[test]

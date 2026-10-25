@@ -342,10 +342,12 @@ fn switched_off_it_is_visible_evidence_only_and_says_so() {
     assert_eq!(rep.verdict, Some(Verdict::Verified));
     let body = git(Path::new(&rep.worktree), &["log", "-1", "--format=%B"]);
     assert!(body.contains("Held-Out: off"), "{body}");
-    assert_eq!(
-        f.asked().iter().filter(|a| a.tools.is_empty()).count(),
-        1,
-        "one author call"
+    // No held-out author was asked (the near-miss author is F-060's).
+    assert!(
+        !f.asked().iter().any(|a| serde_json::to_string(&a.prompt)
+            .unwrap()
+            .contains("HELD-OUT")),
+        "a held-out author call"
     );
 }
 

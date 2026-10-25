@@ -401,6 +401,92 @@ pub fn skip(path: &Path, feature: Option<&str>, task: &str, reason: Option<&str>
 
 // ── nudge ──────────────────────────────────────────────────────────────────
 
+/// `speccoder task rule <task> --tests-right --reason …` (F-060, D-085): a
+/// person rules that the tests of a held attempt are right — the flagged
+/// alternative is not what the spec allows. The ruling is bound to the
+/// alternative's digest; the next `run` of the task judges the held attempt
+/// again from the journal and ticks it with the ruling recorded.
+pub fn rule(
+    path: &Path,
+    feature: Option<&str>,
+    task: &str,
+    reason: &str,
+    variant: Option<&str>,
+    state: &Path,
+) -> CommandResult {
+    let (feature, root) = match locate("rule", path, feature) {
+        Ok(x) => x,
+        Err(r) => return *r,
+    };
+    if reason.trim().is_empty() {
+        return CommandResult::new("rule", CommandStatus::UsageError, "a ruling needs a reason");
+    }
+    let keep = crate::strength::dir(
+        &crate::worktree::project_state_dir(state, &root),
+        &feature,
+        task,
+    );
+    let Some(held) = crate::strength::held(&keep) else {
+        return CommandResult::new(
+            "rule",
+            CommandStatus::NotFound,
+            &format!("{task} has no attempt held for a ruling on its tests"),
+        )
+        .with_code("NOT-FOUND");
+    };
+    let chosen: Vec<_> = held
+        .findings
+        .iter()
+        .filter(|p| variant.is_none_or(|v| p.id == v))
+        .collect();
+    if chosen.is_empty() {
+        return CommandResult::new(
+            "rule",
+            CommandStatus::NotFound,
+            &format!(
+                "{task} has no finding `{}` (held: {})",
+                variant.unwrap_or_default(),
+                held.findings
+                    .iter()
+                    .map(|p| p.id.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        )
+        .with_code("NOT-FOUND");
+    }
+    let by = crate::approvals::Who::local_in(&root, "cli").name;
+    for p in &chosen {
+        let ruling = speccoder_core::strength::Ruling {
+            digest: p.digest.clone(),
+            scenario: p.scenario.clone(),
+            by: by.clone(),
+            reason: reason.trim().to_owned(),
+        };
+        if let Err(e) = crate::strength::add_ruling(&keep, ruling) {
+            return CommandResult::new("rule", CommandStatus::Error, &e.to_string());
+        }
+    }
+    done(
+        "rule",
+        ControlReport {
+            feature,
+            task: task.to_owned(),
+            action: "ruled_tests_right".to_owned(),
+            text: Some(reason.trim().to_owned()),
+            record: None,
+        },
+        &format!(
+            "ruled by {by}: {task}'s tests are right about {}; `speccoder run --task {task}` judges the held attempt again and ticks it",
+            chosen
+                .iter()
+                .map(|p| format!("{} ({})", p.id, p.scenario))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+    )
+}
+
 /// `speccoder task nudge T "note"` (or `--clear`): a person's note for the
 /// task's next attempts, journaled with them.
 pub fn nudge_with(

@@ -1,0 +1,5 @@
+task = "T002"
+expect = "complete"
+
+[oracle]
+argv = ["cargo", "test", "--quiet", "--test", "oracle"]

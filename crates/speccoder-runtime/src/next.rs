@@ -46,6 +46,8 @@ const fn outcome_code(outcome: &Outcome) -> Option<&'static str> {
         Outcome::BudgetExhausted { .. } => "BUDGET-EXHAUSTED",
         Outcome::VerificationFailed { .. } => "VERIFICATION-FAILED",
         Outcome::SuspectedGaming { .. } => "SUSPECTED-GAMING",
+        Outcome::TestsOverStrict { .. } => "TESTS-OVER-STRICT",
+        Outcome::AcceptanceWeak { .. } => "ACCEPTANCE-WEAK",
         Outcome::NotDemonstrated { .. } => "NOT-DEMONSTRATED",
         Outcome::RunFailed { .. } => "RUN-FAILED",
         Outcome::Interrupted { .. } => "INTERRUPTED",
@@ -65,6 +67,8 @@ fn outcome_task(outcome: &Outcome) -> Option<String> {
         | Outcome::BudgetExhausted { task }
         | Outcome::VerificationFailed { task }
         | Outcome::SuspectedGaming { task }
+        | Outcome::TestsOverStrict { task }
+        | Outcome::AcceptanceWeak { task }
         | Outcome::NotDemonstrated { task }
         | Outcome::Interrupted { task }
         | Outcome::TaskPassed { task, .. } => Some(task.clone()),
@@ -167,6 +171,8 @@ fn of_run(status: CommandStatus, r: &RunReport) -> Outcome {
     match (status, r.attempt_status.as_str()) {
         (CommandStatus::Ok, _) => Outcome::TaskPassed { task, ready: 1 },
         _ if suspected => Outcome::SuspectedGaming { task },
+        (_, "over_strict") => Outcome::TestsOverStrict { task },
+        (_, "acceptance_weak") => Outcome::AcceptanceWeak { task },
         (_, "needs_approval") => Outcome::NeedsApproval { task },
         (_, "blocked") => Outcome::Blocked { task },
         (_, "budget_exhausted" | "incomplete" | "denied") => Outcome::BudgetExhausted { task },

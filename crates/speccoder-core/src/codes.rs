@@ -507,6 +507,30 @@ pub const CATALOG: &[Entry] = &[
         ]
     ),
     entry!(
+        "TESTS-OVER-STRICT",
+        P,
+        S::NeedsHuman,
+        "an acceptance test rejects an implementation the spec appears to allow",
+        "After the task passed, an alternative the spec leaves open (another order, wording, tie-break) was run against the acceptance tests, and they failed it on an assertion: the tests may encode a choice the spec did not make. The attempt is held — its tree kept — until a person rules. A ruling that the tests are right ticks the held attempt on the next run without a model call.",
+        [
+            "speccoder task rule {task} --tests-right --reason \"…\"",
+            "speccoder run --task {task} --fresh-acceptance",
+            "speccoder task accept {task} --reason \"…\""
+        ]
+    ),
+    entry!(
+        "ACCEPTANCE-WEAK",
+        P,
+        S::NeedsHuman,
+        "the acceptance tests are too weak for [acceptance] min_strength",
+        "Wrong implementations — mutants of the changed code and model-written near misses — passed the acceptance tests too often, and adding tests once did not fix it. The task stays unticked; the report names what got through.",
+        [
+            "speccoder report",
+            "speccoder run --task {task}",
+            "speccoder task accept {task} --reason \"…\""
+        ]
+    ),
+    entry!(
         "INTERRUPTED",
         P,
         S::NeedsHuman,

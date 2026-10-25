@@ -181,7 +181,8 @@ pub(crate) struct TickFacts<'a> {
 
 /// The commit message of a ticked task: subject, title, and the trailers
 /// `report` reads back (`Spec-Task`, `Verdict`, `Red`, `Flaky`,
-/// `Scope-Outside`, `Checklists`, `Held-Out`, `Run`, `Usage`, `Mutation`).
+/// `Scope-Outside`, `Checklists`, `Held-Out`, `Acceptance-Strength`,
+/// `Ruling`, `Run`, `Usage`, `Mutation`).
 pub(crate) fn tick_message(f: &TickFacts<'_>) -> String {
     let report = f.report;
     let verdict_word = report
@@ -209,6 +210,9 @@ pub(crate) fn tick_message(f: &TickFacts<'_>) -> String {
     evidence.push_str(&held_out_trailer(report.acceptance.as_ref()));
     evidence.push_str(&flaky_trailer(report.verification.as_ref()));
     evidence.push_str(&scope_trailer(report.scope.as_ref()));
+    if let Some(strength) = &report.strength {
+        evidence.push_str(&speccoder_core::strength::trailers(strength));
+    }
     if f.checklists_overridden {
         evidence.push_str("Checklists: overridden\n");
     }

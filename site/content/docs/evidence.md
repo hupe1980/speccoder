@@ -1,6 +1,6 @@
 +++
 title = "Reading the evidence"
-description = "What each task state means, where the evidence lives in git, how the diff audit, mutation testing and the gaming monitor work, and how to inspect any attempt."
+description = "What each task state means, where the evidence lives in git, how the diff audit, acceptance strength, mutation testing and the gaming monitor work, and how to inspect any attempt."
 weight = 60
 
 [extra]
@@ -81,10 +81,11 @@ Verdict: verified
 Red: assertion
 Run: run_01M5…
 Usage: input=40250 output=3383 cache_read=30976 cache_write=0
+Acceptance-Strength: 0.83 mutants=9/11 near-miss=1/2
 Mutation: caught=26 missed=13 timeout=0 unviable=6
 ```
 
-Other trailers appear when they apply: `Held-Out:` (the [held-out tests](#held-out-tests)), `Flaky:` (checks that passed only when run again), `Scope-Outside:` (changed files the task line did not name — reported, never a failure), `Checklists: overridden` (the run was started with `--ignore-checklists`).
+Other trailers appear when they apply: `Held-Out:` (the [held-out tests](#held-out-tests)), `Acceptance-Strength-Visible:` (the visible tests alone, with held-out tests on), `Ruling:` (a person ruled on an [over-strict test](#over-strict-tests)), `Flaky:` (checks that passed only when run again), `Scope-Outside:` (changed files the task line did not name — reported, never a failure), `Checklists: overridden` (the run was started with `--ignore-checklists`).
 
 Each tick commit also carries signed in-toto statements of the same evidence in a git note, which anyone can re-check with `speccoder attest verify` — see [attestations](@/docs/attestations.md).
 
@@ -113,6 +114,39 @@ Regardless of what the checks say, a verdict fails when the attempt:
 
 The audit reads the diff, so it also catches what a command or an MCP server wrote. Files git ignores are checked too (an agent loads `.claude/settings.local.json`), and after every command speccoder runs, these inputs are re-checked: a command that changes one ends the attempt at once.
 
+## Acceptance strength
+
+A test that went red → green shows the task's work made it pass. It does not show the test would have failed a *wrong* implementation — studies of model-written tests find many that do not ([SWE-Mutation](https://preview.aclanthology.org/ingest-acl/2026.findings-acl.1976/), [*Beyond Fail-to-Pass*](https://arxiv.org/abs/2607.19843)). So after every `verified` verdict speccoder tries wrong implementations against the acceptance tests and counts how many they reject:
+
+- **near misses** — two (up to three) variants of the changed code, written by a separate model call that sees the spec and the code but never a test: plausible, and wrong about exactly one scenario;
+- **mutants** — when `[mutation]` is configured, the tool's mutants of the changed code, judged by the acceptance command alone.
+
+Each variant is written into the worktree, the acceptance tests run, and the tree is put back; afterwards speccoder checks the tree and the judge's inputs are exactly as they were. A variant the tests fail on an assertion (or by timing out) is **rejected**; one that does not build is **unviable** and not counted; one that passes **survived**. Strength is rejected / judged:
+
+```text
+Strength   0.67 mutants=9/11 near-miss=1/2
+  survived: near-miss-2 (US1-2: an empty name is accepted)
+```
+
+It is recorded on the tick (`Acceptance-Strength:`), in the report and the attestation, and in `--json` (`strength`). With [held-out tests](#held-out-tests) there are two numbers: the visible tests alone, and visible and held-out together — the set the verdict rests on. Survivors' patches are kept in the state directory. Nothing of it reaches the implementing model.
+
+Strength never changes a verdict unless you ask: with `[acceptance] min_strength = 0.8`, a set below it is strengthened **once** — the test author is told what got through and adds tests, which must fail without the change and pass with it — and measured again. Still below, or not measurable (no variant, a tool error, the budget ran out), the task stops for you: `stopped[ACCEPTANCE-WEAK]`. No evidence is not good evidence.
+
+How this differs from [mutation testing](#mutation-testing): mutation testing asks whether *all* your tests check the changed code; acceptance strength asks whether the *acceptance tests* — what `verified` rests on — tell right from wrong.
+
+### Over-strict tests
+
+The variant author also writes one alternative the spec **permits** — another order where the spec fixes none, other wording, another tie-break. If the acceptance tests reject it on an assertion, they may encode a choice the spec did not make, and only you can decide. The task stops — `stopped[TESTS-OVER-STRICT]` — with the scenario, the alternative's patch and the failing test, and its attempt is **held**: its tree stays, the feature's other tasks wait.
+
+```sh
+speccoder task rule T004 --tests-right --reason "the plan fixes the order"   # the tests are right
+speccoder run --task T004                     # judges the held attempt again — no model call — and ticks it
+speccoder run --task T004 --fresh-acceptance  # the tests are too strict: write them anew, attempt again
+speccoder task accept T004 --reason "…"       # tick it on your word (attested)
+```
+
+A ruling is bound to that exact alternative (its hash) and recorded on the tick (`Ruling:`) and in the attestation, with who made it. The implementing model is never told.
+
 ## Mutation testing
 
 Green tests prove that the code passes them, not that they test it. With `[mutation] tool = "cargo-mutants"`, speccoder mutates **only the code the passing attempt changed** — flips a comparison, returns a default — and runs the tests against each mutant. A mutant the tests do not catch is behaviour nobody checks.
@@ -125,4 +159,4 @@ With `[monitor] enabled = true`, a separate model call reviews every passing att
 
 ## What the evidence does not show
 
-The checks and tests you configured, and the examples in your spec, bound what `verified` can mean. An `absent` red shows the tests needed the task's work to build; how sharply they then test it is what [mutation testing](#mutation-testing) measures. A spec without acceptance examples yields `regression_only`; an example that is wrong yields a wrong test. When speccoder cannot demonstrate something, it says so — `not_demonstrated`, `blocked` — rather than guessing.
+The checks and tests you configured, and the examples in your spec, bound what `verified` can mean. An `absent` red shows the tests needed the task's work to build; how sharply they then test it is what [acceptance strength](#acceptance-strength) and [mutation testing](#mutation-testing) measure — a strength of 1.0 means the tests rejected every wrong variant that was tried, not every possible one, and a surviving near miss may be one the author got wrong. A spec without acceptance examples yields `regression_only`; an example that is wrong yields a wrong test. When speccoder cannot demonstrate something, it says so — `not_demonstrated`, `blocked` — rather than guessing.

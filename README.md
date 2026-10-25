@@ -12,7 +12,7 @@
 
 Coding agents are good at writing code and too good at declaring victory. speccoder separates the two: a model proposes, and code decides.
 
-- **Evidence decides.** Before each attempt, the spec's acceptance examples become tests that must fail. After it, your checks run again and the diff is audited for deleted or weakened tests. Optional mutation testing and a gaming monitor catch tests written to pass.
+- **Evidence decides.** Before each attempt, the spec's acceptance examples become tests that must fail. After it, your checks run again and the diff is audited for deleted or weakened tests. Then the tests themselves are tested: plausible wrong implementations must fail them (the acceptance strength on every tick), and a test that rejects what the spec allows goes to you. Optional mutation testing and a gaming monitor catch tests written to pass.
 - **Isolated and sandboxed.** Work happens on `speccoder/<feature>` in a worktree of its own. Every command runs in an OS sandbox (Seatbelt on macOS, Landlock and seccomp on Linux): writes only to the worktree, no credentials, no network beyond loopback.
 - **Every call governed.** Each tool call is allowed, sent to a person, or denied before it runs. Decisions record who made them — at the terminal, in an editor over ACP, or later.
 - **Durable and replayable.** Every model and tool call is journaled. A killed run resumes without repeating finished calls; a recorded run replays offline.
@@ -43,7 +43,7 @@ At a terminal, `run` works inside a dashboard — the pipeline stage by stage, t
 2. **Baseline** — your checks run on the untouched worktree, so existing failures are not blamed on the change.
 3. **Red** — a separate model call with no tools writes acceptance tests from the spec. They must fail now, and the implementer cannot change them.
 4. **Attempt** — the model works in the worktree; every call is classified before it runs.
-5. **Judgement** — `verified` when the acceptance tests went red → green and nothing regressed; `regression_only` when nothing task-specific was shown; `failed` otherwise.
+5. **Judgement** — `verified` when the acceptance tests went red → green and nothing regressed; `regression_only` when nothing task-specific was shown; `failed` otherwise. A verified task's tests then meet wrong variants of the change: how many they reject is its acceptance strength.
 6. **Outcome** — a verified task is ticked and committed by speccoder. A failed one is retried once with the verifier's facts. Anything else is saved under `refs/speccoder/attempts/…`, undone, and handed to a person.
 
 `verified` does not mean correct, complete or safe. It means the evidence held. Review the branch like any contribution.

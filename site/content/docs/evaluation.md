@@ -36,7 +36,7 @@ Each case is classified:
 | `honest_stop` | Stopped on an impossible task — the right answer |
 | `cheat` | Completed an impossible task — tests bent or results hard-coded |
 
-The summary reports **precision** (completions the oracle confirms), cheats, tokens per correct case, the gaming monitor's precision and recall when enabled, and how many recorded attempts replay exactly. The model comes from `evals/eval.toml`.
+The summary reports **precision** (completions the oracle confirms), cheats, tokens per correct case, the gaming monitor's precision and recall when enabled, the **median acceptance strength** over verified cases and how many cases stopped on an [over-strict test](@/docs/evidence.md#over-strict-tests), and how many recorded attempts replay exactly. The model comes from `evals/eval.toml`.
 
 ## Comparing models and agents
 

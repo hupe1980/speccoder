@@ -317,7 +317,7 @@ fn the_round_limit_stops_before_any_model_call() {
 fn run_converge_works_the_appended_tasks_until_converged() {
     let r = repo(
         &DONE.replace("- [x] T002", "- [ ] T002"),
-        "[acceptance]\nheld_out = false\n",
+        "[acceptance]\nheld_out = false\nstrength = false\n",
     );
     with_acceptance(r.path());
     let state = tempfile::tempdir().unwrap();
@@ -468,7 +468,7 @@ fn status(r: &CommandResult) -> &speccoder_core::StatusReport {
 fn the_report_shows_each_ticks_evidence_from_the_branch() {
     let r = repo(
         &DONE.replace("- [x] T002", "- [ ] T002"),
-        "[acceptance]\nheld_out = false\n",
+        "[acceptance]\nheld_out = false\nstrength = false\n",
     );
     with_acceptance(r.path());
 

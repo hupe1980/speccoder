@@ -245,6 +245,32 @@ pub fn rows(task: &TaskStatus, statements: &[Value], run: Option<&RunReport>) ->
             ));
         }
     }
+    // Acceptance strength (F-060): how well the set tells right from wrong.
+    if let Some(st) = tv
+        .and_then(|tv| tv.get("strength"))
+        .filter(|v| !v.is_null())
+    {
+        let share = st["combined"]["share"].as_f64();
+        let rejected = st["permitted"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .any(|p| p["outcome"] == "rejected");
+        out.push(row(
+            "Strength",
+            match share {
+                _ if rejected => Glyph::Attention,
+                Some(x) if x >= 0.999 => Glyph::Verified,
+                Some(_) => Glyph::Regression,
+                None => Glyph::Ready,
+            },
+            task.strength.clone().unwrap_or_else(|| {
+                share.map_or_else(|| "not measured".to_owned(), |x| format!("{x:.2}"))
+            }),
+        ));
+    } else if let Some(st) = &task.strength {
+        out.push(row("Strength", Glyph::Ready, st.clone()));
+    }
     out.push(match task.attestation.as_deref() {
         Some(a) if a.starts_with("signed") => row("Attestation", Glyph::Verified, a.to_owned()),
         Some(a) => row("Attestation", Glyph::Regression, a.to_owned()),
@@ -303,6 +329,7 @@ mod tests {
             last_attempt: None,
             note: None,
             attestation: Some("signed ssh SHA256:x".to_owned()),
+            strength: None,
         }
     }
 

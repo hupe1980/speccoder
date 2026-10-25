@@ -282,6 +282,24 @@ fn decisions(tool_calls: &[Value]) -> Vec<Value> {
         .collect()
 }
 
+/// The acceptance set's strength (F-060) as evidence: shares, counts,
+/// what got through, the permitted alternatives and the rulings — never the
+/// local patch paths or the variants' code.
+fn strength(report: &RunReport) -> Value {
+    let Some(a) = &report.strength else {
+        return Value::Null;
+    };
+    json!({
+        "visible": a.visible,
+        "combined": a.combined,
+        "held_out": a.held_out,
+        "gate": a.gate,
+        "near_misses": a.near_misses.iter().map(|n| json!({ "id": n.id, "scenario": n.scenario, "visible": n.visible, "combined": n.combined })).collect::<Vec<_>>(),
+        "permitted": a.permitted.iter().map(|p| json!({ "id": p.id, "scenario": p.scenario, "digest": p.digest, "outcome": p.outcome })).collect::<Vec<_>>(),
+        "rulings": a.rulings,
+    })
+}
+
 /// The monitor's result, `unreviewed` when it did not finish, `off` when
 /// not configured.
 fn monitor(report: &RunReport) -> Value {
@@ -448,6 +466,7 @@ pub fn record_tick(t: &Tick<'_>, report: &RunReport) -> Value {
         "model": t.model,
         "run": report.run_id,
         "decisions": decisions(&report.tool_calls),
+        "strength": strength(report),
         "instructions": report.instructions,
         "policy_sha256": policy,
         "time": time,

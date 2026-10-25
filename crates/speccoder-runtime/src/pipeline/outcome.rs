@@ -54,6 +54,21 @@ pub(crate) fn status_and_message(
     suspected: bool,
 ) -> (CommandStatus, String) {
     match (&report.verdict, attempt_status) {
+        (_, "over_strict") => (
+            CommandStatus::NeedsHuman,
+            format!(
+                "the checks passed, but {}; the attempt is held, not ticked — rule on it (`speccoder task rule {task} --tests-right --reason …`), regenerate the tests (`speccoder run --task {task} --fresh-acceptance`) or accept it (`speccoder task accept {task}`)",
+                report.reason.clone().unwrap_or_default(),
+                task = report.task
+            ),
+        ),
+        (_, "acceptance_weak") => (
+            CommandStatus::NeedsHuman,
+            format!(
+                "the checks passed, but the {}; the attempt is saved, not ticked",
+                report.reason.clone().unwrap_or_default()
+            ),
+        ),
         _ if suspected => (
             CommandStatus::NeedsHuman,
             format!(
@@ -186,6 +201,7 @@ pub(crate) fn bare_report(
         scope: None,
         attestation: None,
         instructions: Vec::new(),
+        strength: None,
     }
 }
 

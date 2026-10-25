@@ -569,13 +569,15 @@ mod tests {
         let (a, _) = layer(settings, &[]);
         a.event(&started());
         a.event(&needs());
+        // The file exists before printf has written it: wait for the text.
+        let mut got = String::new();
         for _ in 0..100 {
-            if out.exists() {
+            got = std::fs::read_to_string(&out).unwrap_or_default();
+            if !got.is_empty() {
                 break;
             }
             std::thread::sleep(Duration::from_millis(20));
         }
-        let got = std::fs::read_to_string(&out).unwrap_or_default();
         assert_eq!(got, "speccoder 001-x: T004 needs approval — cargo add x");
     }
 }

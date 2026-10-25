@@ -119,7 +119,7 @@ speccoder                 # at a terminal: the same dashboard, watching (it does
 
 ## Watching a run
 
-Every task goes through the same stages, named the same in the progress lines, `report --live`, the dashboard and editors: `baseline · red · attempt · verify · audit · mutation · monitor · commit`. A stage that does not apply (no acceptance examples, mutation or the monitor not configured) is shown only with `-v`.
+Every task goes through the same stages, named the same in the progress lines, `report --live`, the dashboard and editors: `baseline · red · attempt · verify · audit · mutation · strength · monitor · commit`. A stage that does not apply (no acceptance examples, mutation or the monitor not configured, strength switched off) is shown only with `-v`.
 
 ```text
 ▶ T004 Handle Unicode input  (001-slugify)

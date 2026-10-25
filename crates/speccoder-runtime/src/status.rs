@@ -29,6 +29,8 @@ struct Evidence {
     task_line: String,
     /// The intent it was judged against, when made in place.
     intent: String,
+    /// `Acceptance-Strength:` (F-060).
+    strength: String,
 }
 
 /// Reads the trailers speccoder writes (`Spec-Task`, `Verdict`, `Run`) and
@@ -48,6 +50,7 @@ fn read_log(log: &str, feature: &str) -> (BTreeMap<String, Evidence>, Vec<Conver
             reason,
             task_line,
             intent,
+            strength,
             body,
         ] = fields[..]
         else {
@@ -61,6 +64,7 @@ fn read_log(log: &str, feature: &str) -> (BTreeMap<String, Evidence>, Vec<Conver
                 reason: reason.trim().to_owned(),
                 task_line: task_line.trim().to_owned(),
                 intent: intent.trim().trim_start_matches("sha256:").to_owned(),
+                strength: strength.trim().to_owned(),
             });
         } else if let Some(n) = subject
             .strip_prefix("speccoder: converge round ")
@@ -134,6 +138,9 @@ fn statuses(
                     .filter(|_| t.done || untick.is_some())
                     .map(|e| e.commit.clone()),
                 attestation: None,
+                strength: found
+                    .filter(|e| t.done && !e.strength.is_empty())
+                    .map(|e| e.strength.clone()),
                 intent_changed: found.is_some_and(|e| {
                     !e.intent.is_empty() && intent_now.is_some_and(|now| now != e.intent)
                 }),
@@ -255,7 +262,7 @@ pub fn report(path: &Path, feature: Option<&str>) -> CommandResult {
             }
         };
         let format = format!(
-            "--format=%H{FS}%s{FS}%(trailers:key=Spec-Task,valueonly){FS}%(trailers:key=Verdict,valueonly){FS}%(trailers:key=Run,valueonly){FS}%(trailers:key=Reason,valueonly){FS}%(trailers:key=Task-Line,valueonly){FS}%(trailers:key=Intent-Digest,valueonly){FS}%b{RS}"
+            "--format=%H{FS}%s{FS}%(trailers:key=Spec-Task,valueonly){FS}%(trailers:key=Verdict,valueonly){FS}%(trailers:key=Run,valueonly){FS}%(trailers:key=Reason,valueonly){FS}%(trailers:key=Task-Line,valueonly){FS}%(trailers:key=Intent-Digest,valueonly){FS}%(trailers:key=Acceptance-Strength,valueonly){FS}%b{RS}"
         );
         let log = git
             .run(&["log", &format, &branch])
@@ -464,6 +471,7 @@ mod tests {
             last_attempt: None,
             note: None,
             attestation: None,
+            strength: None,
         };
         let ids = |v: &[&str]| {
             v.iter()
@@ -500,7 +508,7 @@ mod tests {
     #[test]
     fn trailers_and_rounds_are_read_newest_first() {
         let rec = |c: &str, s: &str, t: &str, v: &str, r: &str, b: &str| {
-            format!("{c}{FS}{s}{FS}{t}\n{FS}{v}\n{FS}{r}\n{FS}{FS}{FS}{FS}{b}{RS}\n")
+            format!("{c}{FS}{s}{FS}{t}\n{FS}{v}\n{FS}{r}\n{FS}{FS}{FS}{FS}{FS}{b}{RS}\n")
         };
         let log = [
             rec(

@@ -424,6 +424,7 @@ mod look_tests {
             last_attempt: None,
             note: None,
             attestation: None,
+            strength: None,
         }
     }
 

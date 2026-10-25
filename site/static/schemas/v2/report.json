@@ -195,6 +195,13 @@
           "description": "`verified`, `regression_only` (ticked by speccoder with that verdict),\n`attested` (ticked by `speccoder task accept`), `ticked_without_evidence`\n(ticked, no speccoder commit), `evidence_without_tick` (in place: a\nverdict commit names the task, its local tick is missing),\n`skipped`, `ready` or `blocked`.",
           "type": "string"
         },
+        "strength": {
+          "description": "A verified tick's acceptance strength as its trailer says\n(`0.83 mutants=9/11 near-miss=1/2`, `not measured (…)`; F-060).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "title": {
           "description": "Title after markers.",
           "type": "string"

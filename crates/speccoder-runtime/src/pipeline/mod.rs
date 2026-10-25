@@ -154,6 +154,9 @@ pub struct RunOptions {
     /// Run although the feature's checklists have unchecked items; the
     /// override is recorded on every commit of the run.
     pub ignore_checklists: bool,
+    /// Set a task's held or interrupted attempt aside and write its
+    /// acceptance tests anew (`run --task T --fresh-acceptance`, F-060).
+    pub fresh_acceptance: bool,
     /// Classes a person approved "for this run": shared by every task (and
     /// lane) of one `speccoder run`, gone with it.
     pub run_grants: Arc<std::sync::Mutex<Vec<crate::tools::policy::Grant>>>,

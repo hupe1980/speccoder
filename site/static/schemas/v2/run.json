@@ -1,5 +1,91 @@
 {
   "$defs": {
+    "AcceptanceStrength": {
+      "description": "The acceptance set's strength, as recorded with a verdict.",
+      "properties": {
+        "combined": {
+          "$ref": "#/$defs/Strength",
+          "description": "Visible and held-out together: what the verdict rests on (equal to\n`visible` without held-out tests). Mutants run with the visible\ncommand only, so its mutant counts are a lower bound."
+        },
+        "duration_ms": {
+          "description": "How long the stage took.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "gate": {
+          "$ref": "#/$defs/Gate",
+          "description": "The gate."
+        },
+        "held_out": {
+          "description": "A held-out set was overlaid.",
+          "type": "boolean"
+        },
+        "mutants": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Mutants"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The mutants."
+        },
+        "near_misses": {
+          "description": "The near misses.",
+          "items": {
+            "$ref": "#/$defs/NearMiss"
+          },
+          "type": "array"
+        },
+        "notes": {
+          "description": "Why not (fully) measured, or what was dropped.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "permitted": {
+          "description": "The permitted alternatives.",
+          "items": {
+            "$ref": "#/$defs/Permitted"
+          },
+          "type": "array"
+        },
+        "rulings": {
+          "description": "Rulings that applied.",
+          "items": {
+            "$ref": "#/$defs/Ruling"
+          },
+          "type": "array"
+        },
+        "run_id": {
+          "description": "The near-miss call's run.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "usage": {
+          "description": "The near-miss call's tokens."
+        },
+        "visible": {
+          "$ref": "#/$defs/Strength",
+          "description": "The visible set alone."
+        }
+      },
+      "required": [
+        "visible",
+        "combined",
+        "held_out",
+        "near_misses",
+        "permitted",
+        "gate",
+        "duration_ms"
+      ],
+      "type": "object"
+    },
     "CheckResult": {
       "description": "One check run.",
       "properties": {
@@ -171,6 +257,28 @@
       ],
       "type": "object"
     },
+    "Counts": {
+      "description": "Rejected of judged, for one source.",
+      "properties": {
+        "judged": {
+          "description": "Judged (unviable excluded).",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "rejected": {
+          "description": "Rejected (timeouts included).",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "rejected",
+        "judged"
+      ],
+      "type": "object"
+    },
     "Digest": {
       "description": "What the next attempt is told about the previous one.",
       "properties": {
@@ -293,6 +401,31 @@
       ],
       "type": "object"
     },
+    "Gate": {
+      "description": "The `min_strength` gate.",
+      "oneOf": [
+        {
+          "const": "off",
+          "description": "No `min_strength`.",
+          "type": "string"
+        },
+        {
+          "const": "met",
+          "description": "Met at once.",
+          "type": "string"
+        },
+        {
+          "const": "regenerated_met",
+          "description": "Met after one regeneration of the acceptance tests.",
+          "type": "string"
+        },
+        {
+          "const": "failed",
+          "description": "Not met, or not measurable.",
+          "type": "string"
+        }
+      ]
+    },
     "InstructionFile": {
       "description": "A repository instructions file given to an attempt.",
       "properties": {
@@ -323,6 +456,190 @@
       ],
       "type": "object"
     },
+    "Mutants": {
+      "description": "Mutants of the changed code, run against the acceptance command only.",
+      "properties": {
+        "caught": {
+          "description": "Caught by an assertion.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "missed": {
+          "description": "Not caught.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "survivors": {
+          "description": "The missed ones, as the tool names them.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "timeout": {
+          "description": "Caught by the deadline.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "tool": {
+          "description": "The tool.",
+          "type": "string"
+        },
+        "unviable": {
+          "description": "Did not build.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "tool",
+        "caught",
+        "missed",
+        "timeout",
+        "unviable",
+        "survivors"
+      ],
+      "type": "object"
+    },
+    "NearMiss": {
+      "description": "A model-written near miss: plausible, and wrong about one scenario.",
+      "properties": {
+        "combined": {
+          "$ref": "#/$defs/Outcome",
+          "description": "Against the visible and the held-out set together."
+        },
+        "id": {
+          "description": "`near-miss-1`, …",
+          "type": "string"
+        },
+        "rationale": {
+          "description": "What it gets wrong, in one line (the author's claim).",
+          "type": "string"
+        },
+        "scenario": {
+          "description": "The scenario or requirement it gets wrong.",
+          "type": "string"
+        },
+        "visible": {
+          "$ref": "#/$defs/Outcome",
+          "description": "Against the visible set."
+        }
+      },
+      "required": [
+        "id",
+        "scenario",
+        "rationale",
+        "visible",
+        "combined"
+      ],
+      "type": "object"
+    },
+    "Outcome": {
+      "description": "What a candidate run showed.",
+      "oneOf": [
+        {
+          "const": "rejected",
+          "description": "The acceptance run failed on an assertion (or a symbol it needs is gone).",
+          "type": "string"
+        },
+        {
+          "const": "survived",
+          "description": "The acceptance run passed: the set accepts this wrong implementation.",
+          "type": "string"
+        },
+        {
+          "const": "timeout",
+          "description": "The run hit its deadline: a detectable failure, counted as rejected.",
+          "type": "string"
+        },
+        {
+          "const": "unviable",
+          "description": "It did not build or the tests could not be collected: not judged.",
+          "type": "string"
+        }
+      ]
+    },
+    "Permitted": {
+      "description": "An alternative the author says the spec allows.",
+      "properties": {
+        "digest": {
+          "description": "`sha256:<hex>` of its files: what a ruling is bound to.",
+          "type": "string"
+        },
+        "failing": {
+          "description": "The failing run's last lines, when rejected.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "description": "`permitted-1`, …",
+          "type": "string"
+        },
+        "outcome": {
+          "$ref": "#/$defs/PermittedOutcome",
+          "description": "Against the visible and held-out set together."
+        },
+        "patch": {
+          "description": "Where its patch is kept for a person.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "rationale": {
+          "description": "The freedom it uses (the author's claim).",
+          "type": "string"
+        },
+        "scenario": {
+          "description": "The scenario whose open choice it takes differently.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "scenario",
+        "rationale",
+        "digest",
+        "outcome"
+      ],
+      "type": "object"
+    },
+    "PermittedOutcome": {
+      "description": "What a spec-permitted alternative showed.",
+      "oneOf": [
+        {
+          "const": "accepted",
+          "description": "The set accepts it, as it should.",
+          "type": "string"
+        },
+        {
+          "const": "rejected",
+          "description": "The set rejects it on an assertion: probably over-strict.",
+          "type": "string"
+        },
+        {
+          "const": "ruled",
+          "description": "Rejected, and a person ruled the tests right.",
+          "type": "string"
+        },
+        {
+          "const": "timeout",
+          "description": "Timed out: no finding (a hang is not an assertion).",
+          "type": "string"
+        },
+        {
+          "const": "unviable",
+          "description": "Did not build: no finding.",
+          "type": "string"
+        }
+      ]
+    },
     "Regression": {
       "description": "A test that passed in the baseline and no longer does.",
       "properties": {
@@ -338,6 +655,34 @@
       "required": [
         "id",
         "now"
+      ],
+      "type": "object"
+    },
+    "Ruling": {
+      "description": "A person's ruling that an over-strict finding was wrong: the tests were\nright, the alternative is not what the spec allows (D-074).",
+      "properties": {
+        "by": {
+          "description": "Who ruled.",
+          "type": "string"
+        },
+        "digest": {
+          "description": "The alternative's digest.",
+          "type": "string"
+        },
+        "reason": {
+          "description": "Why.",
+          "type": "string"
+        },
+        "scenario": {
+          "description": "Its scenario.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "digest",
+        "scenario",
+        "by",
+        "reason"
       ],
       "type": "object"
     },
@@ -367,6 +712,85 @@
         "stated",
         "named",
         "outside"
+      ],
+      "type": "object"
+    },
+    "State": {
+      "description": "How far a measurement got.",
+      "oneOf": [
+        {
+          "const": "measured",
+          "description": "Everything planned was run.",
+          "type": "string"
+        },
+        {
+          "const": "partial",
+          "description": "The budget ran out: what ran is recorded.",
+          "type": "string"
+        },
+        {
+          "const": "not_measured",
+          "description": "Nothing could be judged (no tool, no variant, an error).",
+          "type": "string"
+        },
+        {
+          "const": "not_applicable",
+          "description": "The change touches no source file.",
+          "type": "string"
+        }
+      ]
+    },
+    "Strength": {
+      "description": "One set's strength.",
+      "properties": {
+        "mutants": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Counts"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Mutants; `None` when not run."
+        },
+        "near_misses": {
+          "$ref": "#/$defs/Counts",
+          "description": "Near misses."
+        },
+        "share": {
+          "description": "Rejected / judged over every source; `None` when nothing was judged.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "state": {
+          "$ref": "#/$defs/State",
+          "description": "How far it got."
+        },
+        "survivors": {
+          "description": "What got through: mutant names and near-miss ids with their scenario.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "unviable": {
+          "description": "Candidates that did not build.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "state",
+        "share",
+        "mutants",
+        "near_misses",
+        "unviable",
+        "survivors"
       ],
       "type": "object"
     },
@@ -638,6 +1062,17 @@
         "string",
         "null"
       ]
+    },
+    "strength": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AcceptanceStrength"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "The acceptance set's strength (F-060): after a `verified` verdict."
     },
     "task": {
       "description": "Task ID.",

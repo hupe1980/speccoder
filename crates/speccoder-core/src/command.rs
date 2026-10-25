@@ -457,6 +457,12 @@ pub struct EvalCase {
     pub held_out: Option<serde_json::Value>,
     /// An attempt passed the visible checks and failed the held-out tests.
     pub gap: bool,
+    /// The combined acceptance strength, when measured (F-060).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub strength: Option<f64>,
+    /// Stopped because a test rejected a permitted alternative.
+    #[serde(default)]
+    pub over_strict: bool,
 }
 
 /// Suite counts and metrics.
@@ -493,6 +499,12 @@ pub struct EvalSummary {
     pub held_out_gap: Option<HeldOutGap>,
     /// Ticked cases whose held-out tests passed, against the oracle.
     pub held_out_oracle: Option<HeldOutOracle>,
+    /// The median combined acceptance strength over verified cases that
+    /// measured it (F-060); `None`: not measured.
+    pub median_acceptance_strength: Option<f64>,
+    /// Cases stopped for a person because a test rejected a permitted
+    /// alternative.
+    pub over_strict_stops: usize,
 }
 
 /// Visible passes the held-out tests caught.
@@ -600,6 +612,9 @@ pub struct RunReport {
     /// F-073), root first.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub instructions: Vec<InstructionFile>,
+    /// The acceptance set's strength (F-060): after a `verified` verdict.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub strength: Option<crate::strength::AcceptanceStrength>,
 }
 
 /// A failed attempt that was undone and retried.
@@ -1101,6 +1116,10 @@ pub struct TaskStatus {
     pub last_attempt: Option<LastAttempt>,
     /// The reason a person gave for `accept` or `skip`.
     pub note: Option<String>,
+    /// A verified tick's acceptance strength as its trailer says
+    /// (`0.83 mutants=9/11 near-miss=1/2`, `not measured (…)`; F-060).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub strength: Option<String>,
 }
 
 /// An attempt that did not pass, as saved under `refs/speccoder/attempts/`.

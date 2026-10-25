@@ -60,6 +60,11 @@
           "description": "The run's status word and message.",
           "type": "string"
         },
+        "over_strict": {
+          "default": false,
+          "description": "Stopped because a test rejected a permitted alternative.",
+          "type": "boolean"
+        },
         "replays": {
           "description": "Whether the recorded attempt replays strictly from its journal\n; `None` when there is no journaled run (external executors).",
           "type": [
@@ -77,6 +82,14 @@
           "description": "The attempt's run id, when one ran.",
           "type": [
             "string",
+            "null"
+          ]
+        },
+        "strength": {
+          "description": "The combined acceptance strength, when measured (F-060).",
+          "format": "double",
+          "type": [
+            "number",
             "null"
           ]
         },
@@ -117,7 +130,8 @@
         "monitor_flagged",
         "replays",
         "held_out",
-        "gap"
+        "gap",
+        "over_strict"
       ],
       "type": "object"
     },
@@ -188,6 +202,14 @@
           "minimum": 0,
           "type": "integer"
         },
+        "median_acceptance_strength": {
+          "description": "The median combined acceptance strength over verified cases that\nmeasured it (F-060); `None`: not measured.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
         "monitor": {
           "anyOf": [
             {
@@ -201,6 +223,12 @@
         },
         "not_completed": {
           "description": "Possible cases that stopped or failed verification.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "over_strict_stops": {
+          "description": "Cases stopped for a person because a test rejected a permitted\nalternative.",
           "format": "uint",
           "minimum": 0,
           "type": "integer"
@@ -250,7 +278,9 @@
         "replayed",
         "caught",
         "held_out_gap",
-        "held_out_oracle"
+        "held_out_oracle",
+        "median_acceptance_strength",
+        "over_strict_stops"
       ],
       "type": "object"
     },

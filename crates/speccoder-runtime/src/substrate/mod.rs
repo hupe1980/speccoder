@@ -11,6 +11,7 @@ pub mod converge;
 pub mod host;
 pub mod model_config;
 pub mod monitor;
+pub mod near_miss;
 pub mod propose;
 pub mod provenance;
 pub mod run_config;
@@ -67,6 +68,9 @@ pub fn manifest_with(
             spec.capabilities
                 .provides
                 .push(monitor::CAPABILITY.to_owned());
+            spec.capabilities
+                .provides
+                .push(near_miss::CAPABILITY.to_owned());
             spec.capabilities.provides.push(host::CAPABILITY.to_owned());
             spec.models = Some(Models {
                 privileged: Some(ModelRef {
@@ -277,6 +281,11 @@ fn builder(
             format,
         })
         .skill(monitor::Monitor {
+            style: model.prompt_style(),
+            cache_ttl: model.cache_ttl,
+            format,
+        })
+        .skill(near_miss::NearMiss {
             style: model.prompt_style(),
             cache_ttl: model.cache_ttl,
             format,
@@ -563,22 +572,83 @@ impl Plane {
             .map_err(|e| PlaneError(e.to_string()))
     }
 
-    /// Runs `speccoder.task.monitor`, correlated to the task.
+    /// Runs `speccoder.task.monitor`, correlated to the task, admitted once
+    /// per input: judging the same change again reads the recorded answer
+    /// back instead of asking again.
     pub async fn monitor(
         &self,
         feature: &str,
         task: &str,
         input: Tainted<Value>,
     ) -> Result<RunOutcome, PlaneError> {
-        self.runtime
-            .start(monitor::CAPABILITY, input)
-            .terms(RunTerms::default().correlated(
+        self.judge_once(monitor::CAPABILITY, feature, task, input)
+            .await
+    }
+
+    /// Runs `speccoder.task.near_miss` (F-060), admitted once per input like
+    /// [`monitor`](Self::monitor): a held attempt judged again after a
+    /// person's ruling meets the same variants, not new ones.
+    pub async fn near_miss(
+        &self,
+        feature: &str,
+        task: &str,
+        input: Tainted<Value>,
+    ) -> Result<RunOutcome, PlaneError> {
+        self.judge_once(near_miss::CAPABILITY, feature, task, input)
+            .await
+    }
+
+    /// A judge-side call admitted once per task and input: the first time it
+    /// runs; afterwards the recorded run is re-derived by strict replay,
+    /// which performs nothing (an interrupted one resumes).
+    async fn judge_once(
+        &self,
+        capability: &str,
+        feature: &str,
+        task: &str,
+        input: Tainted<Value>,
+    ) -> Result<RunOutcome, PlaneError> {
+        use agentplane::runtime::{Admission, Mode};
+        use sha2::Digest as _;
+        let err = |e: agentplane::RuntimeError| PlaneError(e.to_string());
+        let digest = sha2::Sha256::digest(
+            format!("{capability}\n{feature}/{task}\n{}", input.peek()).as_bytes(),
+        );
+        let key: String = digest.iter().take(16).map(|b| format!("{b:02x}")).collect();
+        let key = format!("judge-{key}");
+        let key = key.as_str();
+        let terms = || {
+            RunTerms::default().correlated(
                 "task",
                 &[CorrelationKey::new("task", format!("{feature}/{task}"))],
-            ))
+            )
+        };
+        let admitted = self
+            .runtime
+            .start(capability, input.clone())
+            .terms(terms())
+            .once(key)
             .run()
             .await
-            .map_err(|e| PlaneError(e.to_string()))
+            .map_err(err)?;
+        match admitted {
+            Admission::Fresh(o) => Ok(o),
+            // A call that failed (a provider error) is asked again, unkeyed:
+            // only an answer is worth reading back.
+            Admission::Replayed(o) if !matches!(o.status, RunStatus::Succeeded) => self
+                .runtime
+                .start(capability, input)
+                .terms(terms())
+                .run()
+                .await
+                .map_err(err),
+            Admission::Replayed(o) => self
+                .runtime
+                .replay(o.run_id, Mode::Strict)
+                .await
+                .map_err(err),
+            Admission::InFlight(run) => self.runtime.replay(run, Mode::Resume).await.map_err(err),
+        }
     }
 
     /// Runs `speccoder.task.acceptance`: acceptance tests derived from the spec.

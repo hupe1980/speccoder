@@ -181,6 +181,18 @@ pub(crate) fn run_task(
             ),
         );
     }
+    // 2a'. So does an attempt held for a ruling on its tests (F-060).
+    if options.lane.is_none()
+        && let Some(other) = crate::strength::held_elsewhere(&plane_dir, &feature_name, task)
+    {
+        return refuse(
+            CommandStatus::NeedsHuman,
+            format!(
+                "{other}'s acceptance tests reject an implementation the spec appears to allow, and its attempt holds the worktree: `speccoder task rule {other} --tests-right --reason …` or `speccoder run --task {other} --fresh-acceptance`"
+            ),
+        )
+        .with_code("TESTS-OVER-STRICT");
+    }
     // 2b. Leftovers of an interrupted run (or edits by hand) are saved under
     //     an attempt ref and set aside: a run starts from the branch tip
     //    . Without per-task commits, uncommitted work is expected.
@@ -191,6 +203,12 @@ pub(crate) fn run_task(
     // an attempt a killed process left behind is resumed, not set
     // aside — the worktree holds what its finished tool calls wrote.
     let marker_path = resume::path(&plane_dir, &feature_name, task);
+    // A fresh start for the task's tests: its held (or interrupted) attempt
+    // is set aside below like any leftover, and new tests are written.
+    if options.fresh_acceptance && options.lane.is_none() {
+        let _ = std::fs::remove_file(&marker_path);
+        crate::strength::release(&crate::strength::dir(&s.plane_dir, &feature_name, task));
+    }
     let head_now = git::Git::at(&wt_root)
         .line(&["rev-parse", "HEAD"])
         .unwrap_or_default();
@@ -778,7 +796,12 @@ pub(crate) fn run_task(
     let (mut report, attempt_status) = loop {
         let mut earlier: Vec<speccoder_core::EarlierAttempt> = Vec::new();
         let mut digest: Option<serde_json::Value> = None;
-        let mut attempt_no = 1u32;
+        // A resumed attempt continues at its own number: starting over at 1
+        // would admit a fresh run and repeat the model's work.
+        let mut attempt_no = interrupted
+            .as_ref()
+            .filter(|m| m.sample == samples.len())
+            .map_or(1, |m| m.attempt.max(1));
         let (mut report, attempt_status) = loop {
             // In place: what git ignored at the session's start.
             let hidden: Vec<String> = options
@@ -1254,17 +1277,21 @@ pub(crate) fn run_task(
                             | speccoder_core::verify::Verdict::RegressionOnly
                     )
                 );
-            if passing && mutation_config.is_none() {
+            if passing && mutation_config.as_ref().is_none_or(|m| !m.suite) {
                 stage(
                     &*live,
                     task,
                     Stage::Mutation,
                     StageState::Skipped,
-                    Some("not configured".to_owned()),
+                    Some(if mutation_config.is_none() {
+                        "not configured".to_owned()
+                    } else {
+                        "suite = false: for acceptance strength only".to_owned()
+                    }),
                     None,
                 );
             }
-            if let Some(m) = mutation_config.as_ref().filter(|_| passing) {
+            if let Some(m) = mutation_config.as_ref().filter(|m| passing && m.suite) {
                 let began = std::time::Instant::now();
                 stage(
                     &*live,
@@ -1388,6 +1415,251 @@ pub(crate) fn run_task(
     // Scope: what the attempt changed beyond the paths its task names.
     report.scope = parsed_task.as_ref().map(|t| scope_of(&report, &t.title));
 
+    // 7c. Acceptance strength (F-060, D-085): the set a verified verdict
+    //     rests on, run against wrong and permitted candidates. Judge-side;
+    //     the implementer never sees a variant, a survivor or a finding.
+    let strength_dir = crate::strength::dir(&s.plane_dir, &feature_name, task);
+    let mut attempt_status = attempt_status;
+    let verified = attempt_status == "completed"
+        && matches!(
+            report.verdict,
+            Some(speccoder_core::verify::Verdict::Verified)
+        );
+    let visible_argv = acceptance
+        .as_ref()
+        .filter(|a| a.red)
+        .and_then(|a| a.argv.clone());
+    if verified && !run_config.strength.enabled {
+        stage(
+            &*live,
+            task,
+            Stage::Strength,
+            StageState::Skipped,
+            Some("strength = false".to_owned()),
+            None,
+        );
+    }
+    if let Some(argv) = visible_argv.filter(|_| verified && run_config.strength.enabled) {
+        use speccoder_core::strength::{Gate, gate, over_strict};
+        let began = std::time::Instant::now();
+        stage(
+            &*live,
+            task,
+            Stage::Strength,
+            StageState::Started,
+            None,
+            None,
+        );
+        let fin = worktree::checkpoint(&wt_root, &tmp);
+        let patch = fin
+            .as_ref()
+            .ok()
+            .and_then(|now| worktree::patch(&wt_root, &start, now).ok())
+            .unwrap_or_default();
+        let mut notes = Vec::new();
+        let held: Vec<(crate::held_out::HeldOutFile, String)> =
+            match acceptance.as_ref().and_then(|a| a.held_out.clone()) {
+                None => Vec::new(),
+                Some(sha) => match crate::held_out::load_verified(&held_out_store, &sha) {
+                    Ok((manifest, contents)) => manifest
+                        .files
+                        .into_iter()
+                        .zip(contents.into_iter().map(|(_, c)| c))
+                        .collect(),
+                    Err(t) => {
+                        notes.push(format!("held-out set not overlaid: {}", t.0));
+                        Vec::new()
+                    }
+                },
+            };
+        let rulings = crate::strength::rulings(&strength_dir);
+        let mut commands = vec![argv];
+        let measure = |commands: &[Vec<String>]| {
+            crate::strength::measure(
+                &crate::strength::Setup {
+                    wt_root: &wt_root,
+                    project: &project,
+                    tmp: &tmp,
+                    runner: &runner,
+                    policy: &policy,
+                    acceptance: commands,
+                    held_out: &held,
+                    mutation: mutation_config.as_ref(),
+                    patch: &patch,
+                    config: &run_config.strength,
+                    keep: &strength_dir,
+                    rulings: &rulings,
+                },
+                |changed| {
+                    // Source files only: the author never sees a test.
+                    let input = substrate::near_miss::input(
+                        &bundle_value,
+                        changed,
+                        &crate::mutation::source_patch(&patch),
+                        run_config.strength.near_miss,
+                        run_config.strength.permitted,
+                    );
+                    match rt.block_on(plane.near_miss(&feature_name, task, input)) {
+                        Ok(o) => {
+                            let out = o
+                                .output
+                                .as_ref()
+                                .map(|v| v.peek().clone())
+                                .unwrap_or_default();
+                            let ok = matches!(o.status, agentplane::prelude::RunStatus::Succeeded)
+                                && !out["answer"].is_null();
+                            crate::strength::Authored {
+                                answer: if ok {
+                                    Ok(out["answer"].clone())
+                                } else {
+                                    Err(format!(
+                                        "the variant author did not answer ({})",
+                                        o.status.as_str()
+                                    ))
+                                },
+                                run_id: Some(o.run_id.to_string()),
+                                usage: Some(out["usage"].clone()).filter(|u| !u.is_null()),
+                            }
+                        }
+                        Err(e) => crate::strength::Authored {
+                            answer: Err(redact(&e.0, secret)),
+                            run_id: None,
+                            usage: None,
+                        },
+                    }
+                },
+            )
+        };
+        let mut measured = measure(&commands);
+        // The gate: one regeneration, told what got through; then it holds
+        // or the set is too weak for a tick.
+        let min = run_config.strength.min;
+        if let (Ok(a), Ok(fin)) = (&measured, &fin)
+            && gate(min, &a.combined, false) == Gate::Failed
+            && over_strict(&a.permitted).is_empty()
+        {
+            let visible_tests: Vec<(String, String)> = report
+                .acceptance
+                .as_ref()
+                .and_then(|a| a["files"].as_array().cloned())
+                .unwrap_or_default()
+                .iter()
+                .filter_map(|p| p.as_str())
+                .map(|p| {
+                    (
+                        p.to_owned(),
+                        std::fs::read_to_string(project.join(p)).unwrap_or_default(),
+                    )
+                })
+                .collect();
+            let setup = AcceptanceSetup {
+                rt: &rt,
+                plane: &plane,
+                project: &project,
+                worktree: &wt_root,
+                tmp: &tmp,
+                policy: &policy,
+                feature: &feature_name,
+                task,
+                bundle: bundle_value.clone(),
+                scenarios: &scenarios,
+                instructions: &instructions,
+                runner: &runner,
+            };
+            let weak = crate::strength::weak(a);
+            match strengthen(&setup, &visible_tests, weak, &before, fin) {
+                Ok(added) => {
+                    if let Some(acc) = report.acceptance.as_mut() {
+                        if let Some(files) = acc["files"].as_array_mut() {
+                            files.extend(added.files.iter().map(|f| serde_json::json!(f)));
+                        }
+                        acc["strengthened"] = serde_json::json!({
+                            "files": added.files,
+                            "argv": added.argv,
+                            "run_id": added.report["run_id"],
+                            "usage": added.report["usage"],
+                        });
+                    }
+                    report.usage = add_usage(report.usage.as_ref(), Some(&added.report["usage"]));
+                    commands.push(added.argv);
+                    let mut again = measure(&commands);
+                    if let Ok(b) = again.as_mut() {
+                        b.gate = gate(min, &b.combined, true);
+                        b.notes.insert(
+                            0,
+                            "strengthened once with added acceptance tests".to_owned(),
+                        );
+                    }
+                    measured = again;
+                }
+                Err(why) => {
+                    if let Ok(a) = measured.as_mut() {
+                        a.notes
+                            .insert(0, format!("could not strengthen the set: {why}"));
+                    }
+                }
+            }
+        }
+        match measured {
+            Ok(mut a) => {
+                if a.gate == Gate::Off {
+                    a.gate = gate(min, &a.combined, false);
+                }
+                a.notes.extend(notes);
+                let findings = over_strict(&a.permitted);
+                if !findings.is_empty() {
+                    attempt_status = "over_strict".to_owned();
+                    report.reason = Some(format!(
+                        "an acceptance test rejects an implementation the spec appears to allow: {}",
+                        findings
+                            .iter()
+                            .map(|p| format!("{} ({})", p.scenario, p.rationale))
+                            .collect::<Vec<_>>()
+                            .join("; ")
+                    ));
+                } else if a.gate == Gate::Failed {
+                    attempt_status = "acceptance_weak".to_owned();
+                    report.reason = Some(format!(
+                        "acceptance set too weak: strength {} is below min_strength {}{}",
+                        speccoder_core::strength::summary(&a.combined, None),
+                        min.unwrap_or_default(),
+                        a.notes
+                            .first()
+                            .map(|n| format!(" ({n})"))
+                            .unwrap_or_default()
+                    ));
+                } else {
+                    crate::strength::release(&strength_dir);
+                }
+                // The variant author's tokens count with the task's.
+                report.usage = add_usage(report.usage.as_ref(), a.usage.as_ref());
+                report.strength = Some(a);
+            }
+            Err(e) => {
+                report.integrity.push(e.clone());
+                report.reason = Some(e);
+                report.verdict = None;
+                attempt_status = "integrity".to_owned();
+            }
+        }
+        report.attempt_status.clone_from(&attempt_status);
+        let held_up = attempt_status == "completed";
+        stage(
+            &*live,
+            task,
+            Stage::Strength,
+            if held_up {
+                StageState::Passed
+            } else {
+                StageState::Failed
+            },
+            report.strength.as_ref().map(|a| {
+                speccoder_core::strength::summary(&a.combined, a.notes.first().map(String::as_str))
+            }),
+            Some(began),
+        );
+    }
+
     // 7b. The gaming monitor: reasoning-blind, judge-side, add-only.
     //     It sees the task, the diff and the tool calls — not the model's
     //     account — and a suspicion only stops the tick for a person.
@@ -1460,7 +1732,6 @@ pub(crate) fn run_task(
                 .ok()
                 .and_then(|s| s.check_before_tick(&policy).err())
         });
-    let mut attempt_status = attempt_status;
     if let Some(e) = &in_place_stop {
         report.reason = Some(e.line());
         report.verdict = None;
@@ -1589,9 +1860,26 @@ pub(crate) fn run_task(
         );
     }
 
+    // 9. An attempt whose tests reject what the spec appears to allow is
+    //    held for a person, as a waiting call is: its tree and resume marker
+    //    stay, and after a ruling the next run judges it again from the
+    //    journal, repeating no model call (D-085).
+    if attempt_status == "over_strict" {
+        let findings = report
+            .strength
+            .as_ref()
+            .map(|a| speccoder_core::strength::over_strict(&a.permitted))
+            .unwrap_or_default();
+        if let Err(e) = crate::strength::hold(&strength_dir, &findings) {
+            report
+                .integrity
+                .push(format!("holding the attempt failed: {e}"));
+        }
+        marker_guard.keep();
+    }
     // 9. An attempt that did not pass is saved under an attempt ref and
     //    undone: the next attempt starts where this one did.
-    if !passed {
+    if !passed && attempt_status != "over_strict" {
         let (outcome, reason) = saved_outcome(&report, &attempt_status, suspected);
         let run = (!report.run_id.is_empty()).then_some(report.run_id.as_str());
         let reason = redact(&reason, secret);

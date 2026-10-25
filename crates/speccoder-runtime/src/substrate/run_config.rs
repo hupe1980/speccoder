@@ -16,6 +16,44 @@ struct RawBudget {
 struct RawAcceptance {
     generate: Option<bool>,
     held_out: Option<bool>,
+    strength: Option<bool>,
+    min_strength: Option<f64>,
+    near_miss: Option<u32>,
+    permitted: Option<u32>,
+    strength_timeout_secs: Option<u64>,
+}
+
+/// How the acceptance set's strength is measured (F-060): `[acceptance]`
+/// `strength`, `min_strength`, `near_miss`, `permitted`,
+/// `strength_timeout_secs`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct StrengthConfig {
+    /// Measure after every `verified` verdict (default on).
+    pub enabled: bool,
+    /// The gate; `None` (default): strength never changes a verdict.
+    pub min: Option<f64>,
+    /// Wrong variants asked for (0–3, default 2).
+    pub near_miss: u32,
+    /// Spec-permitted alternatives asked for (0–2, default 1; 0: no
+    /// over-strict check).
+    pub permitted: u32,
+    /// The whole stage's budget.
+    pub timeout: std::time::Duration,
+}
+
+// `min` is validated to 0.0–1.0, so it is never NaN.
+impl Eq for StrengthConfig {}
+
+impl Default for StrengthConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            min: None,
+            near_miss: 2,
+            permitted: 1,
+            timeout: std::time::Duration::from_secs(900),
+        }
+    }
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -154,6 +192,8 @@ pub struct RunConfig {
     /// Also author held-out acceptance tests the implementer never sees
     /// (`[acceptance] held_out`, default on; nothing without `generate`).
     pub held_out: bool,
+    /// Acceptance strength (F-060).
+    pub strength: StrengthConfig,
     /// Convergence phases a feature may get (`[converge] max_rounds`).
     pub max_converge_rounds: u32,
     /// Ask the gaming monitor about every passing task (`[monitor] enabled`).
@@ -185,6 +225,7 @@ impl Default for RunConfig {
             commit_per_task: true,
             acceptance: true,
             held_out: true,
+            strength: StrengthConfig::default(),
             max_converge_rounds: 3,
             monitor: false,
             frozen_additions: false,
@@ -330,6 +371,33 @@ pub fn parse(text: &str) -> Result<RunConfig, String> {
         ));
     }
     let d = RunConfig::default();
+    let strength = {
+        let ds = StrengthConfig::default();
+        if let Some(m) = acceptance.min_strength
+            && !(0.0..=1.0).contains(&m)
+        {
+            return Err(format!(
+                "[acceptance]: min_strength = {m} (a share from 0.0 to 1.0)"
+            ));
+        }
+        let near_miss = acceptance.near_miss.unwrap_or(ds.near_miss);
+        if near_miss > 3 {
+            return Err(format!("[acceptance]: near_miss = {near_miss} (0 to 3)"));
+        }
+        let permitted = acceptance.permitted.unwrap_or(ds.permitted);
+        if permitted > 2 {
+            return Err(format!("[acceptance]: permitted = {permitted} (0 to 2)"));
+        }
+        StrengthConfig {
+            enabled: acceptance.strength.unwrap_or(ds.enabled),
+            min: acceptance.min_strength,
+            near_miss,
+            permitted,
+            timeout: acceptance
+                .strength_timeout_secs
+                .map_or(ds.timeout, |s| std::time::Duration::from_secs(s.max(1))),
+        }
+    };
     let approval_wait = match approvals.wait.as_deref() {
         Some(w) => wait(w)?,
         None => d.approval_wait,
@@ -347,6 +415,7 @@ pub fn parse(text: &str) -> Result<RunConfig, String> {
         commit_per_task,
         acceptance: acceptance.generate.unwrap_or(true),
         held_out: acceptance.held_out.unwrap_or(true),
+        strength,
         max_converge_rounds: converge.max_rounds.unwrap_or(d.max_converge_rounds),
         monitor: monitor.enabled.unwrap_or(false),
         frozen_additions,
@@ -403,6 +472,27 @@ mod tests {
         assert_eq!(w("12h"), Ok(43_200));
         for bad in ["0d", "7", "7w", "-1d", ""] {
             assert!(w(bad).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn strength_is_measured_by_default_and_bounded() {
+        let c = parse("").unwrap().strength;
+        assert!(c.enabled && c.min.is_none());
+        assert_eq!((c.near_miss, c.permitted), (2, 1));
+        let c = parse("[acceptance]\nmin_strength = 0.8\nnear_miss = 3\npermitted = 0\nstrength_timeout_secs = 60\n")
+            .unwrap()
+            .strength;
+        assert_eq!(c.min, Some(0.8));
+        assert_eq!((c.near_miss, c.permitted, c.timeout.as_secs()), (3, 0, 60));
+        assert!(
+            !parse("[acceptance]\nstrength = false\n")
+                .unwrap()
+                .strength
+                .enabled
+        );
+        for bad in ["min_strength = 1.5", "near_miss = 4", "permitted = 3"] {
+            assert!(parse(&format!("[acceptance]\n{bad}\n")).is_err(), "{bad}");
         }
     }
 
