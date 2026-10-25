@@ -664,6 +664,10 @@
         {
           "$ref": "#/$defs/UiReport",
           "description": "`ui`: where the web interface is served."
+        },
+        {
+          "$ref": "#/$defs/ConfigReport",
+          "description": "`config`: every key of `speccoder.toml`, its value and its default."
         }
       ],
       "description": "Command-specific payload of a result."
@@ -809,6 +813,185 @@
         "count_before",
         "count_after",
         "failing_as_before"
+      ],
+      "type": "object"
+    },
+    "ConfigKey": {
+      "description": "One key: what it is, what it is set to, and what it is otherwise.",
+      "properties": {
+        "about": {
+          "description": "What it does.",
+          "type": "string"
+        },
+        "choices": {
+          "description": "For `choice`: the allowed values.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "default": {
+          "description": "The value speccoder uses when the key is absent; none for keys\nwithout a default (unset means off, or the key is required)."
+        },
+        "key": {
+          "description": "The key, e.g. `max_turns`; dotted below a sub-table (`sigstore.identity`).",
+          "type": "string"
+        },
+        "kind": {
+          "description": "`bool`, `integer`, `number`, `string`, `choice`, `duration`, `argv`,\n`argv_list` or `string_list`.",
+          "type": "string"
+        },
+        "max": {
+          "description": "For numbers: the largest allowed.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "min": {
+          "description": "For numbers: the smallest allowed.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "required": {
+          "description": "The section (or table) is refused without it.",
+          "type": "boolean"
+        },
+        "value": {
+          "description": "The value in the file, when set."
+        }
+      },
+      "required": [
+        "key",
+        "kind",
+        "about",
+        "default",
+        "value",
+        "choices",
+        "min",
+        "max",
+        "required"
+      ],
+      "type": "object"
+    },
+    "ConfigReport": {
+      "description": "Result of `speccoder config`: the project's configuration as a catalogue\nof every key, each with its type, default and value (when set).",
+      "properties": {
+        "committed": {
+          "description": "Whether it is committed as it is on disk (speccoder reads committed\nconfiguration only, so an uncommitted change is not yet in force).",
+          "type": "boolean"
+        },
+        "diff": {
+          "description": "The uncommitted change, as a diff, when there is one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "error": {
+          "description": "The first parser's complaint, when not valid.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "exists": {
+          "description": "Whether it exists.",
+          "type": "boolean"
+        },
+        "file": {
+          "description": "The file, relative to the project root.",
+          "type": "string"
+        },
+        "sections": {
+          "description": "Sections, in the reference's order.",
+          "items": {
+            "$ref": "#/$defs/ConfigSection"
+          },
+          "type": "array"
+        },
+        "valid": {
+          "description": "Whether every parser accepts it.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "file",
+        "exists",
+        "committed",
+        "valid",
+        "error",
+        "sections",
+        "diff"
+      ],
+      "type": "object"
+    },
+    "ConfigSection": {
+      "description": "One section of `speccoder.toml`.",
+      "properties": {
+        "about": {
+          "description": "What the section decides.",
+          "type": "string"
+        },
+        "keys": {
+          "description": "The keys (for a named section: the keys of each table, unset).",
+          "items": {
+            "$ref": "#/$defs/ConfigKey"
+          },
+          "type": "array"
+        },
+        "name": {
+          "description": "The table name, e.g. `model`, or `checks` for `[checks.<name>]`.",
+          "type": "string"
+        },
+        "named": {
+          "description": "Named tables (`[checks.<name>]`, `[mcp.<name>]`): `keys` describe\none, `tables` hold the configured ones.",
+          "type": "boolean"
+        },
+        "tables": {
+          "description": "The configured named tables.",
+          "items": {
+            "$ref": "#/$defs/ConfigTable"
+          },
+          "type": "array"
+        },
+        "title": {
+          "description": "A title for people, e.g. `Model`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "title",
+        "about",
+        "named",
+        "keys",
+        "tables"
+      ],
+      "type": "object"
+    },
+    "ConfigTable": {
+      "description": "One configured named table, e.g. `[checks.test]`.",
+      "properties": {
+        "keys": {
+          "description": "Its keys, with values.",
+          "items": {
+            "$ref": "#/$defs/ConfigKey"
+          },
+          "type": "array"
+        },
+        "name": {
+          "description": "Its name, e.g. `test`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "keys"
       ],
       "type": "object"
     },

@@ -290,6 +290,16 @@ fn human_body(
         (_, Some(CommandData::Control(_))) => {
             writeln!(&mut *out, "{}", result.message())
         }
+        // `config get` says one key; `config` lists every one.
+        (_, Some(CommandData::Config(_))) if result.message().contains(" = ") => {
+            writeln!(out, "{}", result.message())
+        }
+        (_, Some(CommandData::Config(c))) => {
+            for line in crate::human::config(c) {
+                writeln!(out, "{line}")?;
+            }
+            writeln!(out, "{}", result.message())
+        }
         (_, Some(CommandData::Features(f))) => {
             for line in crate::human::features(f) {
                 writeln!(out, "{line}")?;

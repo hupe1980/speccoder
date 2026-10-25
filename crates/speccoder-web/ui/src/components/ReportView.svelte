@@ -2,6 +2,7 @@
   import { app } from "../lib/app.svelte";
   import { symbol, word } from "../lib/marks";
   import Icon from "./Icon.svelte";
+  import Spend from "./Spend.svelte";
   const r = $derived(app.report?.data);
   const order = ["verified", "regression_only", "attested", "ticked_without_evidence", "skipped", "ready", "blocked"];
   const segments = $derived(order.map((k) => ({ k, n: r?.totals?.[k] ?? 0 })).filter((s) => s.n > 0));
@@ -48,10 +49,12 @@
         </div>
       {:else}<p class="muted">Nothing.</p>{/each}
     </section>
+    {#if matrix.length}
     <section class="card">
       <h3>Requirements no task cites <span class="muted">{uncited.length}</span></h3>
       {#if uncited.length}<p>{#each uncited as u}<span class="chip s-regression_only">{u.requirement}</span> {/each}</p>{:else}<p class="muted">Every requirement is cited.</p>{/if}
     </section>
+    {/if}
     <section class="card wide">
       <h3>Requirements <span class="muted">{proven} of {matrix.length} proven by evidence</span></h3>
       {#if !matrix.length}
@@ -76,6 +79,7 @@
         </ul>
       {/if}
     </section>
+    <Spend />
     {#if r.convergence.length}
       <section class="card wide">
         <h3>Convergence</h3>

@@ -282,14 +282,15 @@ pub fn checks(
                 DoctorLevel::Pass,
                 format!("attestations signed with {}", s.kind()),
             ),
-            Err(e) => warned(
-                "signing",
-                format!("attestations stay unsigned: {e}"),
-                &[
-                    "git config --global gpg.format ssh",
-                    "git config --global user.signingKey ~/.ssh/id_ed25519.pub",
-                ],
-            ),
+            Err(e) => {
+                let fix = signing_fix(
+                    std::env::var_os("HOME")
+                        .map(std::path::PathBuf::from)
+                        .as_deref(),
+                );
+                let fix: Vec<&str> = fix.iter().map(String::as_str).collect();
+                warned("signing", format!("attestations stay unsigned: {e}"), &fix)
+            }
         });
     }
     // The repository's instructions for agents.
@@ -481,5 +482,53 @@ mod tests {
         for c in checks.iter().filter(|c| c.level != DoctorLevel::Pass) {
             assert!(!c.fix.is_empty(), "{} has no fix", c.check);
         }
+    }
+}
+
+/// How to sign with SSH: with a public key the person has, the newest kind
+/// first; without one, make one first. Never a key that does not exist.
+fn signing_fix(home: Option<&Path>) -> Vec<String> {
+    let found = home.and_then(|h| {
+        [
+            "id_ed25519.pub",
+            "id_ecdsa.pub",
+            "id_ed25519_sk.pub",
+            "id_ecdsa_sk.pub",
+            "id_rsa.pub",
+        ]
+        .iter()
+        .find(|k| h.join(".ssh").join(k).is_file())
+    });
+    let mut fix = Vec::new();
+    let key = match found {
+        Some(k) => format!("~/.ssh/{k}"),
+        None => {
+            fix.push("ssh-keygen -t ed25519".to_owned());
+            "~/.ssh/id_ed25519.pub".to_owned()
+        }
+    };
+    fix.push("git config --global gpg.format ssh".to_owned());
+    fix.push(format!("git config --global user.signingKey {key}"));
+    fix
+}
+
+#[cfg(test)]
+mod signing_tests {
+    use super::*;
+
+    #[test]
+    fn the_signing_fix_names_a_key_that_exists() {
+        let home = tempfile::tempdir().unwrap_or_else(|e| panic!("{e}"));
+        let none = signing_fix(Some(home.path()));
+        assert_eq!(none[0], "ssh-keygen -t ed25519");
+        std::fs::create_dir_all(home.path().join(".ssh")).unwrap_or_else(|e| panic!("{e}"));
+        std::fs::write(home.path().join(".ssh/id_rsa.pub"), "ssh-rsa AAAA")
+            .unwrap_or_else(|e| panic!("{e}"));
+        let rsa = signing_fix(Some(home.path()));
+        assert_eq!(
+            rsa.last().map(String::as_str),
+            Some("git config --global user.signingKey ~/.ssh/id_rsa.pub")
+        );
+        assert!(!rsa.iter().any(|f| f.starts_with("ssh-keygen")));
     }
 }

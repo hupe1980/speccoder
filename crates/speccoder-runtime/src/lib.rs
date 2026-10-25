@@ -36,6 +36,7 @@ pub mod pipeline;
 pub mod progress;
 pub mod resume;
 pub mod sandbox;
+pub mod settings;
 pub mod skills;
 pub mod status;
 pub mod strength;

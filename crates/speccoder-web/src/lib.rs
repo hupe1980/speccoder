@@ -324,6 +324,45 @@ async fn doctor(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Json<
     envelope(&r)
 }
 
+async fn config(State(s): State<Shared>) -> Json<Value> {
+    let root = s.root.clone();
+    let r = off(move || speccoder_runtime::settings::show(&root)).await;
+    envelope(&r)
+}
+
+#[derive(Debug, Deserialize)]
+struct ConfigBody {
+    changes: Vec<speccoder_core::ConfigChange>,
+}
+
+/// Saves changes to `speccoder.toml`, all or nothing, after every parser
+/// accepts the result. Safe while a job runs: runs read the committed file,
+/// so a saved change is in force only once committed.
+async fn config_save(State(s): State<Shared>, Json(b): Json<ConfigBody>) -> Json<Value> {
+    let root = s.root.clone();
+    let r = off(move || speccoder_runtime::settings::apply(&root, &b.changes)).await;
+    envelope(&r)
+}
+
+/// Commits `speccoder.toml` alone — not while a job runs (an in-place run
+/// commits in the same checkout).
+async fn config_commit(State(s): State<Shared>) -> Json<Value> {
+    if s.hub.job().is_some_and(|j| j.running) {
+        return Json(
+            json!({ "status": "error", "message": "a job is running; commit when it ends" }),
+        );
+    }
+    let root = s.root.clone();
+    let r = off(move || speccoder_runtime::settings::commit(&root)).await;
+    envelope(&r)
+}
+
+async fn cost(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Json<Value> {
+    let root = s.root.clone();
+    let r = off(move || speccoder_runtime::controls::cost(&root, q.feature.as_deref())).await;
+    envelope(&r)
+}
+
 async fn job(State(s): State<Shared>) -> Json<Value> {
     Json(json!({ "job": s.hub.job(), "waiting": s.hub.waiting() }))
 }
@@ -404,6 +443,9 @@ pub fn router(s: Shared) -> Router {
         .route("/api/documents", get(documents))
         .route("/api/doctor", get(doctor))
         .route("/api/job", get(job))
+        .route("/api/config", get(config).post(config_save))
+        .route("/api/config/commit", post(config_commit))
+        .route("/api/cost", get(cost))
         .route("/api/events", get(events))
         .route("/api/run", post(start))
         .route("/api/answer", post(answer))

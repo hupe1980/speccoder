@@ -174,6 +174,72 @@ fn ui(
     }
 }
 
+/// `speccoder config [get|set|unset|commit]`.
+fn config(
+    path: &std::path::Path,
+    action: Option<&cli::ConfigAction>,
+) -> speccoder_core::CommandResult {
+    use speccoder_core::{CommandResult, CommandStatus, ConfigChange};
+    use speccoder_runtime::settings;
+    let change = |key: &str, value| {
+        vec![ConfigChange {
+            key: key.to_owned(),
+            value,
+            append: None,
+        }]
+    };
+    match action {
+        None => settings::show(path),
+        Some(cli::ConfigAction::Get { key }) => {
+            let report = settings::read(path);
+            let (section, rest) = key.split_once('.').unwrap_or((key.as_str(), ""));
+            let found = report
+                .sections
+                .iter()
+                .find(|s| s.name == section)
+                .and_then(|s| {
+                    if s.named {
+                        let (table, k) = rest.split_once('.')?;
+                        s.tables
+                            .iter()
+                            .find(|t| t.name == table)?
+                            .keys
+                            .iter()
+                            .find(|x| x.key == k)
+                            .cloned()
+                    } else {
+                        s.keys.iter().find(|x| x.key == rest).cloned()
+                    }
+                });
+            match found {
+                Some(k) => {
+                    let shown = match (&k.value, &k.default) {
+                        (Some(v), _) => v.to_string(),
+                        (None, Some(d)) => format!("{d} (default)"),
+                        (None, None) => "unset".to_owned(),
+                    };
+                    CommandResult::new("config", CommandStatus::Ok, &format!("{key} = {shown}"))
+                        .with_data(speccoder_core::CommandData::Config(Box::new(report)))
+                }
+                None => CommandResult::new(
+                    "config",
+                    CommandStatus::NotFound,
+                    &format!("no key `{key}` in speccoder.toml's catalogue"),
+                )
+                .with_fix(vec!["speccoder config".to_owned()]),
+            }
+        }
+        Some(cli::ConfigAction::Set { key, value }) => match settings::value_of(key, value) {
+            Ok(v) => settings::apply(path, &change(key, Some(v))),
+            Err(e) => CommandResult::new("config", CommandStatus::ConfigError, &e)
+                .with_code("CONFIG-INVALID")
+                .with_fix(vec![format!("speccoder config get {key}")]),
+        },
+        Some(cli::ConfigAction::Unset { key }) => settings::apply(path, &change(key, None)),
+        Some(cli::ConfigAction::Commit) => settings::commit(path),
+    }
+}
+
 /// Whether the planning skill `name` creates a feature (it needs none).
 fn creates(path: &std::path::Path, name: &str) -> bool {
     let planning = speccoder_runtime::format::at(path).planning();
@@ -448,6 +514,7 @@ fn main() {
             no_open,
             window,
         } => ui(path, *port, *no_open, *window, cli.json),
+        Command::Config { action } => config(path, action.as_ref()),
         Command::Feature { query, clear } => match (query, clear) {
             (_, true) => speccoder_runtime::current::clear(path),
             (Some(q), false) => speccoder_runtime::current::switch(path, q),
@@ -976,6 +1043,7 @@ fn command_name(command: Option<&Command>) -> &'static str {
             C::Spec { .. } => "spec",
             C::Feature { .. } => "feature",
             C::Ui { .. } => "ui",
+            C::Config { .. } => "config",
             C::Run { .. } => "run",
             C::Task { action } => match action {
                 cli::TaskAction::Approve { .. } => "task approve",

@@ -147,6 +147,11 @@ pub enum Command {
         #[arg(long)]
         window: bool,
     },
+    /// The project's configuration: every key of speccoder.toml, its value and default; set, unset, commit.
+    Config {
+        #[command(subcommand)]
+        action: Option<ConfigAction>,
+    },
     /// Which feature commands work on: list them, or make one current (`feature 2`, `feature greet`).
     Feature {
         /// A name, a number (`2` is `002-…`), or a part of the name only one feature has.
@@ -491,6 +496,33 @@ pub enum BenchAction {
         #[arg(long, value_name = "CMD")]
         test_cmd: Option<String>,
     },
+}
+
+/// `speccoder config` actions.
+#[derive(Debug, Subcommand)]
+pub enum ConfigAction {
+    /// One key's value (or its default), e.g. `config get budget.max_turns`.
+    Get {
+        /// The dotted key.
+        key: String,
+    },
+    /// Set a key: `config set budget.max_turns 40`, `config set format.argv cargo fmt`,
+    /// or JSON (`config set commands.allow '[["cargo","check"]]'`); words starting
+    /// with `-` after `--` (`config set checks.lint.argv -- cargo clippy -- -D warnings`).
+    Set {
+        /// The dotted key.
+        key: String,
+        /// The value: words read by the key's kind, or JSON.
+        #[arg(required = true, num_args = 1..)]
+        value: Vec<String>,
+    },
+    /// Remove a key, so its default applies.
+    Unset {
+        /// The dotted key.
+        key: String,
+    },
+    /// Commit speccoder.toml (alone): speccoder reads committed configuration only.
+    Commit,
 }
 
 /// `speccoder workflow` actions.

@@ -24,11 +24,17 @@ opens the project in your browser. The same page runs in a desktop window with `
 - **Report.** The verdict bar; calls waiting for a decision, with **Approve** and **Reject**; and every requirement with the tasks that prove it. When the task list cites no requirement at all, the page says so and offers the analysis that finds the gaps.
 - **The live capsule.** A running job floats at the bottom of the page: the task, its stage and the time, at a glance; it turns orange when the run needs you. Click it for the pipeline stage by stage, the tool calls with the policy's decision, tokens and money. **Stop** ends the job after the current task; the attempt stays resumable.
 
+- **Spend.** In the report: tokens in and out, the share read from the cache, attempts and — with prices set — money, per task (the dearest first) and for the feature.
+
+## Settings
+
+The gear (or `,`) opens **Settings**: `speccoder.toml` as System Settings shows preferences — each section with what it decides, each key as the control that fits it (a switch, a choice, a stepper, a command, a list) with its default and its meaning, and checks and MCP servers as tables you add and remove. Edits gather until **Save**, which writes the file only when every parser accepts it, keeping its comments. speccoder reads committed configuration only, so the page then shows the change and offers to **Commit** `speccoder.toml` alone. The bar shows the `speccoder config` commands that do the same.
+
 Every action shows the CLI command it runs, so what you click is what you could type. ⌘K (Ctrl+K) opens the palette: every action, filtered as you type; Enter runs it, or copies a command that would leave your machine (a pull request).
 
 ## When a run needs you
 
-A call that needs a person opens as a sheet over the page: what the call is (a diff or the exact command), which task it is for, why it stopped, what the sandbox allows, the model's claim labelled as a claim, and the scopes — **Allow Once** (`y`), **Allow for Task** (`t`), **Allow for Run** (`r`), **Don't Allow…** with a reason (`n`), **Stop Task** (`s`). It is the same decision as the [inline prompt](@/docs/approvals.md#inline), recorded with your name and `via web`. Questions from planning skills are answered in the same sheet.
+A call that needs a person opens as a sheet over the page: what the call is (a diff or the exact command), which task it is for, why it stopped, what the sandbox allows, the model's claim labelled as a claim, and the scopes — **Allow Once** (`y`), **Allow for Task** (`t`), **Allow for Run** (`r`), **Don't Allow…** with a reason (`n`), **Stop Task** (`s`). For an exact command, **Always Allow…** (`a`) allows it now and adds it to the project's policy — `[commands] allow`, or `[sandbox] network_allow` for a network call — as a saved change you commit and review like code. There is no grant for "this session": a decision reaches at most the run, and anything longer is policy. It is the same decision as the [inline prompt](@/docs/approvals.md#inline), recorded with your name and `via web`. Questions from planning skills are answered in the same sheet.
 
 Looking at another window? The tab's title changes to *● Needs you*, and with **Notify me** allowed once, a desktop notification calls you back.
 
@@ -38,9 +44,10 @@ Looking at another window? The tab's title changes to *● Needs you*, and with 
 |---|---|
 | `n` | The next step |
 | `1` `2` `3` `4` | Overview, Board, Spec & Plan, Report |
+| `,` | Settings |
 | ⌘K / Ctrl+K | The palette |
 | `Esc` | Close the task |
-| `y` `t` `r` `n` `s` | Decide a call (in its sheet) |
+| `y` `t` `r` `n` `s` `a` | Decide a call (in its sheet); `a` is Always Allow |
 
 Light, dark or automatic is a switch in the toolbar; the page follows the system's increased-contrast and reduced-motion settings. The page's address follows what you look at (`?view=report&task=T003`), so reload, Back and a bookmark land in the same place for as long as the host runs.
 

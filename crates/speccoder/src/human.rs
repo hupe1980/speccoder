@@ -1356,3 +1356,45 @@ pub fn card_in(look: &crate::style::Look, title: &str, lines: &[String]) -> Stri
     ));
     out
 }
+
+/// `speccoder config`: per section, each key with its value — set values
+/// plain, defaults marked — and the uncommitted change, if any.
+#[must_use]
+pub fn config(c: &speccoder_core::ConfigReport) -> Vec<String> {
+    let shown = |k: &speccoder_core::ConfigKey| match (&k.value, &k.default) {
+        (Some(v), _) => v.to_string(),
+        (None, Some(d)) => format!("{d}  (default)"),
+        (None, None) if k.required => "—  (required)".to_owned(),
+        (None, None) => "—".to_owned(),
+    };
+    let mut out = Vec::new();
+    for s in &c.sections {
+        if s.named {
+            out.push(format!("[{}.<name>]  {}", s.name, s.title));
+            if s.tables.is_empty() {
+                out.push("  (none)".to_owned());
+            }
+            for t in &s.tables {
+                for k in t.keys.iter().filter(|k| k.value.is_some()) {
+                    out.push(format!("  {}.{}.{} = {}", s.name, t.name, k.key, shown(k)));
+                }
+            }
+        } else {
+            out.push(format!("[{}]  {}", s.name, s.title));
+            for k in &s.keys {
+                out.push(format!("  {}.{} = {}", s.name, k.key, shown(k)));
+            }
+        }
+    }
+    if let Some(d) = &c.diff {
+        out.push(String::new());
+        out.push("Not committed yet:".to_owned());
+        out.extend(
+            d.lines()
+                .filter(|l| l.starts_with('+') || l.starts_with('-'))
+                .filter(|l| !l.starts_with("+++") && !l.starts_with("---"))
+                .map(|l| format!("  {l}")),
+        );
+    }
+    out
+}

@@ -1,6 +1,6 @@
 //! The result vocabulary shared by every CLI command.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::snapshot::ProjectSnapshot;
 use crate::verify::VerifyReport;
@@ -185,6 +185,94 @@ pub enum CommandData {
     Features(Box<FeaturesReport>),
     /// `ui`: where the web interface is served.
     Ui(Box<UiReport>),
+    /// `config`: every key of `speccoder.toml`, its value and its default.
+    Config(Box<ConfigReport>),
+}
+
+/// Result of `speccoder config`: the project's configuration as a catalogue
+/// of every key, each with its type, default and value (when set).
+#[derive(Debug, Clone, PartialEq, Serialize, schemars::JsonSchema)]
+pub struct ConfigReport {
+    /// The file, relative to the project root.
+    pub file: String,
+    /// Whether it exists.
+    pub exists: bool,
+    /// Whether it is committed as it is on disk (speccoder reads committed
+    /// configuration only, so an uncommitted change is not yet in force).
+    pub committed: bool,
+    /// Whether every parser accepts it.
+    pub valid: bool,
+    /// The first parser's complaint, when not valid.
+    pub error: Option<String>,
+    /// Sections, in the reference's order.
+    pub sections: Vec<ConfigSection>,
+    /// The uncommitted change, as a diff, when there is one.
+    pub diff: Option<String>,
+}
+
+/// One section of `speccoder.toml`.
+#[derive(Debug, Clone, PartialEq, Serialize, schemars::JsonSchema)]
+pub struct ConfigSection {
+    /// The table name, e.g. `model`, or `checks` for `[checks.<name>]`.
+    pub name: String,
+    /// A title for people, e.g. `Model`.
+    pub title: String,
+    /// What the section decides.
+    pub about: String,
+    /// Named tables (`[checks.<name>]`, `[mcp.<name>]`): `keys` describe
+    /// one, `tables` hold the configured ones.
+    pub named: bool,
+    /// The keys (for a named section: the keys of each table, unset).
+    pub keys: Vec<ConfigKey>,
+    /// The configured named tables.
+    pub tables: Vec<ConfigTable>,
+}
+
+/// One configured named table, e.g. `[checks.test]`.
+#[derive(Debug, Clone, PartialEq, Serialize, schemars::JsonSchema)]
+pub struct ConfigTable {
+    /// Its name, e.g. `test`.
+    pub name: String,
+    /// Its keys, with values.
+    pub keys: Vec<ConfigKey>,
+}
+
+/// One key: what it is, what it is set to, and what it is otherwise.
+#[derive(Debug, Clone, PartialEq, Serialize, schemars::JsonSchema)]
+pub struct ConfigKey {
+    /// The key, e.g. `max_turns`; dotted below a sub-table (`sigstore.identity`).
+    pub key: String,
+    /// `bool`, `integer`, `number`, `string`, `choice`, `duration`, `argv`,
+    /// `argv_list` or `string_list`.
+    pub kind: String,
+    /// What it does.
+    pub about: String,
+    /// The value speccoder uses when the key is absent; none for keys
+    /// without a default (unset means off, or the key is required).
+    pub default: Option<serde_json::Value>,
+    /// The value in the file, when set.
+    pub value: Option<serde_json::Value>,
+    /// For `choice`: the allowed values.
+    pub choices: Vec<String>,
+    /// For numbers: the smallest allowed.
+    pub min: Option<f64>,
+    /// For numbers: the largest allowed.
+    pub max: Option<f64>,
+    /// The section (or table) is refused without it.
+    pub required: bool,
+}
+
+/// A change to `speccoder.toml`: set a key, remove it, or append to a list.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct ConfigChange {
+    /// The dotted key, e.g. `budget.max_turns` or `checks.test.argv`.
+    pub key: String,
+    /// The new value; absent (with no `append`) removes the key.
+    #[serde(default)]
+    pub value: Option<serde_json::Value>,
+    /// An item to add to a list key (`commands.allow`), unless present.
+    #[serde(default)]
+    pub append: Option<serde_json::Value>,
 }
 
 /// Result of `speccoder ui`, printed once the host listens (under `--json`
@@ -307,6 +395,7 @@ impl CommandData {
             Self::Doctor(_) => "doctor",
             Self::Features(_) => "features",
             Self::Ui(_) => "ui",
+            Self::Config(_) => "config",
         }
     }
 }
@@ -340,6 +429,7 @@ pub const PAYLOADS: &[&str] = &[
     "doctor",
     "features",
     "ui",
+    "config",
 ];
 
 /// A repository instructions file given to an attempt.

@@ -32,6 +32,16 @@ ticks a task only on evidence the model cannot produce or edit.
   controls, symbols for every verdict, a sliding segmented control,
   Spotlight-style actions, permission wording ("Allow Once", "Don't
   Allow…"), and the OS's contrast and motion settings.
+- Settings: `speccoder.toml` as typed controls (switches, choices,
+  steppers, commands, lists; checks and MCP servers as tables), saved only
+  when every parser accepts the result, comments kept, then committed alone;
+  `speccoder config [get|set|unset|commit]` does the same from the terminal,
+  with a `config` JSON payload. Spend in the report: tokens, cache share,
+  attempts and money per task and for the feature. Always Allow… adds an
+  exact command to the project's policy as a reviewed change — no grant
+  outlives a run.
+- `doctor`'s signing fix names an SSH key you have (or says to make one)
+  instead of always `~/.ssh/id_ed25519.pub`.
 - `speccoder ui --window`: the same page in a desktop window (Tauri, build
   with `--features app`), which loads the local page and navigates nowhere
   else.

@@ -69,6 +69,7 @@ const fn describe(payload: &str) -> &'static str {
         b"doctor" => "doctor: every check of the machine and the project",
         b"features" => "feature: the features and which one is current",
         b"ui" => "ui: where the web interface is served",
+        b"config" => "config: every key of speccoder.toml, its value and its default",
         _ => "",
     }
 }
@@ -107,6 +108,7 @@ pub fn get(name: &str) -> Option<Value> {
         "doctor" => generate::<core::DoctorReport>(name, title),
         "features" => generate::<core::FeaturesReport>(name, title),
         "ui" => generate::<core::UiReport>(name, title),
+        "config" => generate::<core::ConfigReport>(name, title),
         _ => return None,
     })
 }

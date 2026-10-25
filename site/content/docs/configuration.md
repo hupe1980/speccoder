@@ -29,6 +29,23 @@ allow = [["cargo", "test"], ["cargo", "check"]]
 network_allow = [["cargo", "fetch"]]
 ```
 
+## Changing it
+
+Edit the file, or let speccoder do it — the result is checked by every parser before it is written, and the file's comments, order and layout are kept:
+
+```sh
+speccoder config                                   # every key: its value, or its default
+speccoder config get budget.max_turns
+speccoder config set budget.max_turns 40
+speccoder config set format.argv cargo fmt         # words, read by the key's kind
+speccoder config set commands.allow '[["cargo", "check"]]'   # or JSON
+speccoder config set checks.lint.argv -- cargo clippy -- -D warnings
+speccoder config unset budget.max_turns            # back to the default
+speccoder config commit                            # commits speccoder.toml, and nothing else
+```
+
+The same is **Settings** in the [web interface](@/docs/web.md#settings): every section and key as a control that fits it, with its default and what it does. Either way a change is in force once committed — speccoder reads committed configuration only.
+
 ## `[checks.<name>]`
 
 The commands that decide whether nothing regressed. A check's command up to its first option is also something the model may run (`cargo nextest run …` allows `cargo nextest run`); a check that starts with an option allows only itself.
