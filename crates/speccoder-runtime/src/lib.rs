@@ -5,6 +5,7 @@
 //! through the embedded `agentplane` runtime (see [`substrate`]).
 //! The CLI only parses arguments, calls a service and renders its result.
 
+pub mod actions;
 pub mod approvals;
 pub mod attempts;
 pub mod attest;

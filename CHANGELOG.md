@@ -108,6 +108,18 @@ ticks a task only on evidence the model cannot produce or edit.
   `report`, bare `speccoder` and the dashboard — not as an error; a
   project with no features yet points to `spec specify`.
 
+**The next step, taken**
+
+- At a terminal, after a planning step, a task decision or the report, the
+  CLI offers the next step — commit the feature's planning files (exactly
+  those, `spec(<feature>): <files>`), the next planning skill, the run — as
+  a card with the command it stands for, below the feature's journey
+  (`✓ spec ── ✓ plan ── ● tasks ── · commit ── · run ── · review`, also in
+  `report`). In the dashboard, `n` hands off to it.
+- One action model in the runtime (what can be done now, why, the command,
+  what blocks it) behind every interface; the report carries the journey
+  and the uncommitted planning files.
+
 **Acceptance strength**
 
 - After every `verified` verdict the acceptance tests are tested: near-miss

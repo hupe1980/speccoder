@@ -167,12 +167,13 @@ fn footer(f: &mut Frame<'_>, app: &App, area: Rect) {
         (None, None) => match (&app.snap.problem, &app.snap.report) {
             (Some(p), _) => Line::styled(a(&format!(" {p}")), st(Token::Danger)),
             (None, Some(r)) => {
-                let next = app
-                    .snap
-                    .next
-                    .as_ref()
-                    .map(|n| format!(" Next: {} — {}   |", n.command, n.why))
-                    .unwrap_or_default();
+                let next = match (&app.snap.primary, &app.snap.next) {
+                    (Some(p), _) if app.hosted.is_none() => {
+                        format!(" n  {} — {} (at the terminal)   |", p.label, p.why)
+                    }
+                    (_, Some(n)) => format!(" Next: {} — {}   |", n.command, n.why),
+                    _ => String::new(),
+                };
                 Line::raw(a(&format!("{next} {}", totals(&r.totals))))
             }
             _ => Line::raw(""),
@@ -234,9 +235,13 @@ fn task_list(f: &mut Frame<'_>, app: &App, area: Rect, focused: bool) {
             ]));
         }
         lines.push(Line::raw(""));
-        for s in &report.planning {
+        for (i, s) in report.planning.iter().enumerate() {
             lines.push(Line::styled(
-                format!("  next: speccoder spec {s}"),
+                if i == 0 {
+                    format!("  n  next: speccoder spec {s}")
+                } else {
+                    format!("     then: speccoder spec {s}")
+                },
                 st(Token::Accent),
             ));
         }
@@ -755,6 +760,10 @@ pub fn keys(screen: Screen) -> Vec<(&'static str, &'static str)> {
         (
             "f",
             "pick the feature to show (made current for every tool)",
+        ),
+        (
+            "n",
+            "leave and take the next step at the terminal (it asks first)",
         ),
     ];
     match screen {

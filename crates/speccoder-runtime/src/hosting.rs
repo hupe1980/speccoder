@@ -523,3 +523,117 @@ fn core_event<'a>(planning: &Planning, skill: &'a str) -> Option<&'a str> {
     let short = skill.strip_prefix(planning.prefix).unwrap_or(skill);
     planning.core.contains(&short).then_some(short)
 }
+
+/// The current unit's planning files that are not committed — new or
+/// changed files under the unit's directory. `speccoder run` reads committed
+/// files only, so these are what stands between planning and a run.
+#[must_use]
+pub fn uncommitted(path: &Path, feature: Option<&str>) -> Vec<String> {
+    let format = crate::format::at(path);
+    let Some(snap) = format.open(path, feature) else {
+        return Vec::new();
+    };
+    let Some(f) = snap.feature.as_ref() else {
+        return Vec::new();
+    };
+    let (top, dir) = repo_dir(Path::new(&snap.root), &f.feature.dir);
+    crate::git::Git::at(&top)
+        .run(&[
+            "status",
+            "--porcelain",
+            "-z",
+            "--untracked-files=all",
+            "--",
+            &dir,
+        ])
+        .map(|out| {
+            String::from_utf8_lossy(&out)
+                .split('\0')
+                .filter(|e| e.len() > 3)
+                .map(|e| e[3..].to_owned())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Commits exactly `paths` (repository-root relative, inside the current
+/// unit's directory) as the unit's planning: `spec(<unit>): <files>`.
+/// Nothing else that is staged or changed goes into the commit.
+#[must_use]
+pub fn commit_planning(path: &Path, feature: Option<&str>, paths: &[String]) -> CommandResult {
+    let refuse = |status, m: &str| CommandResult::new("commit", status, m);
+    let format = crate::format::at(path);
+    let Some(snap) = format.open(path, feature) else {
+        return refuse(
+            CommandStatus::NotAProject,
+            &(format.messages().not_a_project)(path),
+        );
+    };
+    let Some(f) = snap.feature.as_ref() else {
+        return refuse(
+            CommandStatus::SelectionNeeded,
+            "no current feature to commit for",
+        );
+    };
+    let (top, unit) = repo_dir(Path::new(&snap.root), &f.feature.dir);
+    let dir = format!("{unit}/");
+    if paths.is_empty() {
+        return refuse(CommandStatus::NotFound, "nothing to commit");
+    }
+    if let Some(p) = paths.iter().find(|p| !p.starts_with(&dir)) {
+        return refuse(
+            CommandStatus::UsageError,
+            &format!(
+                "`{p}` is not in {}; only planning files are committed here",
+                f.feature.dir
+            ),
+        );
+    }
+    let git = crate::git::Git::at(&top);
+    let names: Vec<&str> = paths
+        .iter()
+        .map(|p| p.rsplit('/').next().unwrap_or(p))
+        .collect();
+    let message = format!("spec({}): {}", f.feature.name, names.join(", "));
+    let mut add = vec!["add", "--"];
+    add.extend(paths.iter().map(String::as_str));
+    let mut commit = vec!["commit", "-q", "-m", &message, "--"];
+    commit.extend(paths.iter().map(String::as_str));
+    match git.run(&add).and_then(|_| git.run(&commit)) {
+        Ok(_) => {
+            let id = git
+                .line(&["rev-parse", "--short", "HEAD"])
+                .unwrap_or_default();
+            CommandResult::new(
+                "commit",
+                CommandStatus::Ok,
+                &format!("committed {} file(s) as {id} \"{message}\"", paths.len()),
+            )
+        }
+        Err(e) => refuse(
+            CommandStatus::GitPrecondition,
+            &format!("commit failed: {}", e.0),
+        ),
+    }
+}
+
+/// The repository's top level and `unit_dir` (relative to `root`) relative
+/// to it: git's porcelain paths are repository-relative.
+fn repo_dir(root: &Path, unit_dir: &str) -> (std::path::PathBuf, String) {
+    let canonical = |p: &Path| std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+    let top = crate::git::Git::at(root)
+        .toplevel()
+        .ok()
+        .flatten()
+        .map_or_else(|| root.to_path_buf(), |t| canonical(&t));
+    let prefix = canonical(root)
+        .strip_prefix(&top)
+        .map(|p| p.to_string_lossy().replace('\\', "/"))
+        .unwrap_or_default();
+    let dir = if prefix.is_empty() {
+        unit_dir.to_owned()
+    } else {
+        format!("{prefix}/{unit_dir}")
+    };
+    (top, dir)
+}

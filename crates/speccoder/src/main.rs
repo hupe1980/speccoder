@@ -8,6 +8,7 @@ mod contract;
 mod doctor;
 mod events;
 mod explain;
+mod follow;
 mod github;
 mod help;
 mod human;
@@ -586,7 +587,40 @@ fn finish(
         Ok(()) => result.exit_code(),
         Err(_) => ExitCode::INTERNAL,
     };
+    // At a terminal, the next step is offered rather than only printed.
+    let code = if result.status() == speccoder_core::CommandStatus::Ok && offers_next(cli) {
+        follow::offer(path, feature, verbosity(cli), code)
+    } else {
+        code
+    };
     std::process::exit(i32::from(code.code()));
+}
+
+/// Whether the next step is offered after this command: a planning step, a
+/// decision on a task, or the report — at a terminal, for a person.
+fn offers_next(cli: &Cli) -> bool {
+    use std::io::IsTerminal;
+    if cli.json || cli.events || !std::io::stdin().is_terminal() || !std::io::stderr().is_terminal()
+    {
+        return false;
+    }
+    match &cli.command {
+        Some(Command::Spec {
+            name: Some(n),
+            no_prompt: false,
+            ..
+        }) => n != "archive",
+        Some(Command::Task { action }) => !matches!(action, cli::TaskAction::Show { .. }),
+        Some(Command::Report {
+            live: false,
+            cost: false,
+            approvals: false,
+            markdown: false,
+        }) => true,
+        // Bare `speccoder`: after the report, or when the dashboard handed off.
+        None => !dashboard(cli) || tui::handed_off(),
+        _ => false,
+    }
 }
 
 /// A command line clap refused. Text for a person; with `--json` or

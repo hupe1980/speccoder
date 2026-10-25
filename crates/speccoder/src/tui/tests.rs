@@ -40,6 +40,8 @@ fn snapshot() -> Snapshot {
             selected_by: String::new(),
             artifacts: Vec::new(),
             planning: Vec::new(),
+            uncommitted: Vec::new(),
+            journey: Vec::new(),
             unmerged_commits: 1,
             tasks: vec![verified, task("T002", "ready"), blocked],
             convergence: Vec::new(),
@@ -98,6 +100,7 @@ fn snapshot() -> Snapshot {
             why: "allow it; the attempt resumes on the next run".to_owned(),
         }),
         in_place: Some("in-place · speccoder/001-x (returns to main)".to_owned()),
+        primary: None,
     }
 }
 
@@ -713,4 +716,37 @@ fn a_feature_being_planned_shows_what_writes_its_tasks() {
     ] {
         assert!(s.contains(needle), "missing {needle:?} in\n{s}");
     }
+}
+
+#[test]
+fn n_hands_the_next_step_to_the_terminal() {
+    let mut snap = snapshot();
+    snap.primary = Some(speccoder_core::actions::Action {
+        group: "next".to_owned(),
+        label: "spec tasks".to_owned(),
+        why: "break the plan into tasks".to_owned(),
+        command: "speccoder spec tasks".to_owned(),
+        run: Some(speccoder_core::actions::Runnable::Skill {
+            name: "tasks".to_owned(),
+            arguments: String::new(),
+        }),
+        blocked: None,
+        input: None,
+    });
+    let mut app = App::new(snap);
+    assert!(screen(&app).contains("n  spec tasks — break the plan into tasks (at the terminal)"));
+    assert_eq!(app.key(KeyCode::Char('n')), Action::Handoff);
+    // Nothing to take: said so, nothing happens.
+    let mut idle = App::new(snapshot());
+    assert_eq!(idle.key(KeyCode::Char('n')), Action::None);
+    assert!(
+        idle.flash
+            .as_deref()
+            .unwrap_or_default()
+            .contains("nothing to take next")
+    );
+    // While a hosted run works, it keeps the terminal.
+    let mut busy = hosted();
+    assert_eq!(busy.key(KeyCode::Char('n')), Action::None);
+    let _ = &mut app;
 }

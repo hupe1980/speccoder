@@ -1127,6 +1127,13 @@ pub struct StatusReport {
     /// next (`plan`, `tasks`); empty once it has one.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub planning: Vec<String>,
+    /// Planning files under the feature's directory not yet committed
+    /// (`speccoder run` reads committed files only).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub uncommitted: Vec<String>,
+    /// Where the feature is: spec → plan → tasks → commit → run → review.
+    #[serde(default)]
+    pub journey: Vec<crate::actions::JourneyStep>,
     /// Commits on the branch that the checkout's HEAD does not contain.
     pub unmerged_commits: usize,
     /// Every task, in document order.

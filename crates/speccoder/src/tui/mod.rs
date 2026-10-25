@@ -43,6 +43,8 @@ pub struct Snapshot {
     pub next: Option<speccoder_core::next::NextStep>,
     /// An in-place session: `in-place · <branch> (returns to <original>)`.
     pub in_place: Option<String>,
+    /// The step `n` takes (at the terminal, after leaving).
+    pub primary: Option<speccoder_core::actions::Action>,
 }
 
 /// A screen.
@@ -163,6 +165,8 @@ pub enum Action {
     Features,
     /// Make this feature current and show it.
     Switch(String),
+    /// Leave, and take the next step at the terminal.
+    Handoff,
 }
 
 /// The dashboard's state.
@@ -641,6 +645,18 @@ impl App {
                 self.overlay = Overlay::Help;
                 Action::None
             }
+            KeyCode::Char('n') => {
+                if self.active() {
+                    self.flash =
+                        Some("the run is working; its next step comes when it ends".to_owned());
+                    Action::None
+                } else if self.snap.primary.is_some() {
+                    Action::Handoff
+                } else {
+                    self.flash = Some("nothing to take next here".to_owned());
+                    Action::None
+                }
+            }
             KeyCode::Char('f') => {
                 if self.active() {
                     self.flash =
@@ -741,6 +757,17 @@ impl App {
     }
 }
 
+/// Set when the person pressed `n`: leave the dashboard and take the next
+/// step at the terminal (D-087: the dashboard is a live view; steps are
+/// taken by the CLI, and by the web UI later).
+static HANDOFF: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Whether the dashboard was left to take the next step.
+#[must_use]
+pub fn handed_off() -> bool {
+    HANDOFF.load(Ordering::SeqCst)
+}
+
 /// Loads a fresh snapshot.
 #[must_use]
 pub fn load(path: &Path, feature: Option<&str>, state: &Path) -> Snapshot {
@@ -773,6 +800,7 @@ pub fn load(path: &Path, feature: Option<&str>, state: &Path) -> Snapshot {
         report,
         live: read_live(path, state),
         approvals,
+        primary: None,
         in_place: speccoder_runtime::in_place::session_at(path, state).map(|s| {
             format!(
                 "in-place · {} (returns to {})",
@@ -781,6 +809,30 @@ pub fn load(path: &Path, feature: Option<&str>, state: &Path) -> Snapshot {
             )
         }),
     }
+}
+
+/// The step `n` takes. Only while watching, and from the waiting calls the
+/// snapshot already listed: the journal is not opened again.
+fn with_primary(mut snap: Snapshot, path: &Path, feature: Option<&str>) -> Snapshot {
+    snap.primary = speccoder_core::actions::primary(&speccoder_runtime::actions::available_with(
+        path,
+        feature,
+        None,
+        // Not listed (the journal was busy): none, rather than opening it again.
+        Some(
+            &snap
+                .approvals
+                .clone()
+                .unwrap_or(speccoder_core::ApprovalsReport {
+                    feature: String::new(),
+                    pending: Vec::new(),
+                    decided: Vec::new(),
+                }),
+        ),
+    ))
+    .filter(|a| a.input.is_none())
+    .cloned();
+    snap
 }
 
 /// Reads the selected task's evidence when it changed.
@@ -873,7 +925,7 @@ pub fn run(path: &Path, feature: Option<&str>) -> CommandResult {
     };
     let path: PathBuf = path.to_path_buf();
     let mut chosen: Option<String> = feature.map(str::to_owned);
-    let mut app = App::new(load(&path, feature, &state));
+    let mut app = App::new(with_primary(load(&path, feature, &state), &path, feature));
     // Several features and none current: open on the picker.
     let features = speccoder_runtime::current::list(&path, feature);
     let listed = match features.data() {
@@ -906,6 +958,10 @@ pub fn run(path: &Path, feature: Option<&str>) -> CommandResult {
                 if let Some(code) = event::read().ok().as_ref().and_then(key_of) {
                     match app.key(code) {
                         Action::Quit => break Ok(()),
+                        Action::Handoff => {
+                            HANDOFF.store(true, Ordering::SeqCst);
+                            break Ok(());
+                        }
                         a => perform(&mut app, a, &path, &mut chosen, &state),
                     }
                 }
@@ -914,7 +970,11 @@ pub fn run(path: &Path, feature: Option<&str>) -> CommandResult {
             Err(e) => break Err(e.to_string()),
         }
         if loaded.elapsed() >= Duration::from_secs(1) {
-            app.snap = load(&path, chosen.as_deref(), &state);
+            app.snap = with_primary(
+                load(&path, chosen.as_deref(), &state),
+                &path,
+                chosen.as_deref(),
+            );
             loaded = Instant::now();
         }
     };
