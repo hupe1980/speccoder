@@ -2,7 +2,9 @@
   // A task's inspector: its verdict, the evidence behind it as a grouped
   // list, the diff that ticked it, and what can be done with it.
   import { app } from "../lib/app.svelte";
-  import { get, q } from "../lib/api";
+  import { get, latest, q } from "../lib/api";
+  const evidenceOf = latest();
+  const patchOf = latest();
   import { symbol, word } from "../lib/marks";
   import type { Row, Task } from "../lib/types";
   import Diff from "./Diff.svelte";
@@ -30,16 +32,23 @@
     data = null;
     patch = "";
     if (!id) return;
-    void get<typeof data>(`/api/evidence${q({ feature, task: id })}`).then((d) => (data = d));
+    evidenceOf(get<typeof data>(`/api/evidence${q({ feature, task: id })}`), (d) => (data = d));
   });
   $effect(() => {
     const s = source;
     if (tab !== "diff" || !s || patch) return;
     loadingPatch = true;
-    void get<{ patch: string }>(`/api/diff${q(s.q)}`)
-      .then((d) => (patch = d.patch))
-      .catch(() => (patch = ""))
-      .finally(() => (loadingPatch = false));
+    patchOf(
+      get<{ patch: string }>(`/api/diff${q(s.q)}`),
+      (d) => {
+        patch = d.patch;
+        loadingPatch = false;
+      },
+      () => {
+        patch = "";
+        loadingPatch = false;
+      },
+    );
   });
 
   // "accept T001" in the inspector of T001 is "Accept".

@@ -25,11 +25,18 @@ pub fn run(url: &str, events: Option<speccoder_web::Events>) -> Result<(), Strin
             if let Some(mut rx) = events {
                 let handle = app.handle().clone();
                 std::thread::spawn(move || {
-                    while let Ok(line) = rx.blocking_recv() {
-                        let Some(w) = handle.get_webview_window("main") else {
-                            break;
-                        };
-                        follow(&w, &line);
+                    loop {
+                        match rx.blocking_recv() {
+                            Ok(line) => {
+                                let Some(w) = handle.get_webview_window("main") else {
+                                    break;
+                                };
+                                follow(&w, &line);
+                            }
+                            // Fell behind: skip what was missed, keep following.
+                            Err(speccoder_web::RecvError::Lagged(_)) => {}
+                            Err(speccoder_web::RecvError::Closed) => break,
+                        }
                     }
                 });
             }

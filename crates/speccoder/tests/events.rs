@@ -539,6 +539,20 @@ fn the_web_host_guards_itself_and_a_run_is_answered_over_its_api() {
     // The decision names who made it and through what.
     assert!(end.to_string().contains(r#""via":"web""#), "{end}");
 
+    // A value that once aborted the host (a multi-byte unit) is refused,
+    // and the host goes on answering.
+    let bad = json!({ "changes": [{ "key": "approvals.wait", "value": "7д" }] });
+    let (status, _, body) = http(
+        port,
+        &request(port, "POST", "/api/config", &auth, &bad.to_string()),
+    );
+    assert_eq!(status, 200, "{body}");
+    assert!(body.contains("CONFIG-INVALID"), "{body}");
+    assert_eq!(
+        http(port, &request(port, "GET", "/api/job", &auth, "")).0,
+        200
+    );
+
     // The code view: the branch's change, its tick commit, its files; a file
     // the tree does not list is refused (no path reaches git unchecked).
     let (_, _, body) = http(port, &request(port, "GET", "/api/changes", &auth, ""));

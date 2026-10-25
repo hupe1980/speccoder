@@ -2,7 +2,7 @@
   // The feature's code: what its branch changed — by commit (one per task,
   // with its verdict) and by file — and its files, browsable and readable.
   import { app } from "../lib/app.svelte";
-  import { get, q } from "../lib/api";
+  import { get, latest, q } from "../lib/api";
   import { symbol, word } from "../lib/marks";
   import { language } from "../lib/highlight";
   import Diff from "./Diff.svelte";
@@ -10,6 +10,8 @@
   import Source from "./Source.svelte";
   import FileTree from "./FileTree.svelte";
   import { diagrams } from "../lib/mermaid";
+  import QuickOpen from "./QuickOpen.svelte";
+  import { tick } from "svelte";
 
   interface Changes {
     branch: string | null;
@@ -35,27 +37,48 @@
   let preview = $state(true);
   let loading = $state(false);
 
+  const changesOf = latest();
+  const treeOf = latest();
+  const patchOf = latest();
+  const fileOf = latest();
+  // A feature switched: what was picked belonged to the other one.
+  let shownFeature: string | null = null;
+  $effect(() => {
+    const f = app.feature;
+    if (shownFeature !== null && f !== shownFeature) {
+      commit = null;
+      focus = null;
+      tree = null;
+    }
+    shownFeature = f;
+  });
   $effect(() => {
     void app.report;
     const feature = app.feature ?? undefined;
     loading = true;
-    void get<Changes>(`/api/changes${q({ feature })}`)
-      .then((c) => (changes = c))
-      .finally(() => (loading = false));
+    changesOf(get<Changes>(`/api/changes${q({ feature })}`), (c) => {
+      changes = c;
+      loading = false;
+    }, () => (loading = false));
   });
+  // The tree follows the feature and every new tick (a run adds files).
   $effect(() => {
-    if (mode !== "files" || tree) return;
-    void get<{ rev: string; files: string[] }>(`/api/tree${q({ feature: app.feature ?? undefined })}`).then((t) => (tree = t));
+    void app.report;
+    const feature = app.feature ?? undefined;
+    if (mode !== "files") return;
+    treeOf(get<{ rev: string; files: string[] }>(`/api/tree${q({ feature })}`), (t) => (tree = t));
   });
   $effect(() => {
     const c = commit;
     commitPatch = "";
-    if (c) void get<{ patch: string }>(`/api/diff${q({ commit: c })}`).then((d) => (commitPatch = d.patch));
+    if (c) patchOf(get<{ patch: string }>(`/api/diff${q({ commit: c })}`), (d) => (commitPatch = d.patch));
   });
   $effect(() => {
     const p = open;
+    void app.report;
+    const feature = app.feature ?? undefined;
     text = null;
-    if (p) void get<{ text?: string; html?: string; error?: string }>(`/api/file${q({ feature: app.feature ?? undefined, path: p })}`).then((t) => (text = t));
+    if (p) fileOf(get<{ text?: string; html?: string; error?: string }>(`/api/file${q({ feature, path: p })}`), (t) => (text = t), (e) => (text = { error: String(e) }));
   });
 
   const total = $derived((changes?.files ?? []).reduce((a, f) => ({ add: a.add + (f.add ?? 0), del: a.del + (f.del ?? 0) }), { add: 0, del: 0 }));
@@ -67,8 +90,85 @@
   const changed = $derived(new Set((changes?.files ?? []).map((f) => f.path)));
   const taskOf = (t: string | null) => t?.split("/").pop() ?? null;
   const lines = $derived(text?.text?.split("\n") ?? []);
+
+  // Go to a line: the address keeps it; the row is marked and scrolled to.
+  let body: HTMLElement | undefined = $state();
+  $effect(() => {
+    const n = app.codeLine;
+    void lines.length;
+    if (!n || !body) return;
+    void tick().then(() => body?.querySelector(`[data-line="${n}"]`)?.scrollIntoView({ block: "center" }));
+  });
+  function pickLine(n: number) {
+    app.codeLine = app.codeLine === n ? null : n;
+  }
+
+  // Find in the file (⌘F): the window has no find of its own.
+  let finding = $state(false);
+  let needle = $state("");
+  let at = $state(0);
+  let findInput: HTMLInputElement | undefined = $state();
+  const hits = $derived.by(() => {
+    const q = needle.toLowerCase();
+    return q ? lines.flatMap((l, i) => (l.toLowerCase().includes(q) ? [i + 1] : [])) : [];
+  });
+  $effect(() => {
+    void needle;
+    at = 0;
+  });
+  function jump(step: number) {
+    if (!hits.length) return;
+    at = (at + step + hits.length) % hits.length;
+    body?.querySelector(`[data-line="${hits[at]}"]`)?.scrollIntoView({ block: "center" });
+  }
+
+  let quick = $state(false);
+  function keys(e: KeyboardEvent) {
+    const mod = e.metaKey || e.ctrlKey;
+    if (mod && e.key.toLowerCase() === "p") {
+      e.preventDefault();
+      app.codeMode = "files";
+      quick = true;
+    } else if (mod && e.key.toLowerCase() === "f" && open && !(text?.html !== undefined && preview)) {
+      e.preventDefault();
+      finding = true;
+      void tick().then(() => findInput?.select());
+    }
+  }
+
+  // Links in a previewed Markdown file: a file of the branch opens here, a
+  // web address in the browser, never this page away.
+  function follow(e: MouseEvent) {
+    const a = (e.target as HTMLElement).closest("a");
+    const href = a?.getAttribute("href");
+    if (!a || !href) return;
+    e.preventDefault();
+    if (/^https?:\/\//.test(href)) {
+      window.open(href, "_blank", "noopener,noreferrer");
+      return;
+    }
+    if (href.startsWith("#")) return;
+    const base = (open ?? "").split("/").slice(0, -1);
+    for (const part of href.split("#")[0]!.split("/")) {
+      if (part === "..") base.pop();
+      else if (part && part !== ".") base.push(decodeURIComponent(part));
+    }
+    const target = base.join("/");
+    if (tree?.files.includes(target)) app.codeFile = target;
+    else app.toast({ tone: "warn", text: "Not in this branch", detail: target });
+  }
+  function copyPath() {
+    navigator.clipboard?.writeText(open ?? "");
+    app.toast({ tone: "ok", text: "Copied the path", detail: open ?? "" });
+  }
   const when = (d: string) => new Date(d).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 </script>
+
+<svelte:window onkeydown={keys} />
+
+{#if quick && tree}
+  <QuickOpen files={tree.files} {changed} onpick={(p) => { app.codeFile = p; app.codeLine = null; quick = false; }} onclose={() => (quick = false)} />
+{/if}
 
 <section class="code">
   <header>
@@ -131,7 +231,10 @@
   {:else}
     <div class="split">
       <aside class="side">
-        <input class="search" placeholder="Filter files" bind:value={filter} aria-label="Filter files" />
+        <div class="tools">
+          <input class="search" placeholder="Filter files" bind:value={filter} aria-label="Filter files" />
+          <button class="btn small" title="Go to file (⌘P)" onclick={() => (quick = true)}><Icon name="search" size={12} /> Go to <kbd>⌘P</kbd></button>
+        </div>
         {#key filter}
           <FileTree paths={shown} selected={open} {changed} onpick={(p) => (app.codeFile = p)} />
         {/key}
@@ -147,7 +250,7 @@
         {:else}
           <div class="viewer">
             <div class="vhead">
-              <span class="mono">{open}</span>
+              <button class="path mono" title="Copy the path" onclick={copyPath}>{open}<Icon name="copy" size={11} /></button>
               {#if text.html !== undefined}
                 <div class="seg small" role="tablist" aria-label="Show">
                   <button role="tab" aria-selected={preview} class:on={preview} onclick={() => (preview = true)}>Preview</button>
@@ -155,16 +258,35 @@
                 </div>
               {/if}
               <span class="muted">{lines.length} lines</span>
+              {#if !(text.html !== undefined && preview)}
+                <button class="btn small icon" title="Find (⌘F)" aria-label="Find in file" onclick={() => { finding = true; void tick().then(() => findInput?.focus()); }}><Icon name="search" size={12} /></button>
+              {/if}
             </div>
+            {#if finding && !(text.html !== undefined && preview)}
+              <div class="find">
+                <Icon name="search" size={12} />
+                <input bind:this={findInput} bind:value={needle} placeholder="Find in {open.split('/').pop()}" aria-label="Find"
+                  onkeydown={(e) => { if (e.key === "Enter") { e.preventDefault(); jump(e.shiftKey ? -1 : 1); } else if (e.key === "Escape") { finding = false; needle = ""; } }} />
+                <span class="count">{hits.length ? `${at + 1} of ${hits.length}` : needle ? "no match" : ""}</span>
+                <button class="btn small icon" aria-label="Previous" onclick={() => jump(-1)} disabled={!hits.length}><Icon name="arrowup" size={11} /></button>
+                <button class="btn small icon" aria-label="Next" onclick={() => jump(1)} disabled={!hits.length}><Icon name="down" size={11} /></button>
+                <button class="btn small icon" aria-label="Close find" onclick={() => { finding = false; needle = ""; }}><Icon name="xmark" size={10} weight={2.4} /></button>
+              </div>
+            {/if}
             {#if text.html !== undefined && preview}
               <!-- Rendered by the host from Markdown; raw HTML in the file is shown as text. -->
-              <article class="md" use:diagrams={text.html}>{@html text.html}</article>
+              <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+              <article class="md" use:diagrams={text.html} onclick={follow}>{@html text.html}</article>
             {:else}
-            <div class="vbody">
+            <div class="vbody" bind:this={body}>
               <table>
                 <tbody>
                   {#each lines as l, i}
-                    <tr><td class="ln">{i + 1}</td><td class="src"><Source line={l} lang={language(open)} /></td></tr>
+                    {@const n = i + 1}
+                    <tr data-line={n} class:sel={app.codeLine === n} class:hit={hits.includes(n)} class:cur={hits[at] === n}>
+                      <td class="ln"><button tabindex="-1" title="Link to line {n}" onclick={() => pickLine(n)}>{n}</button></td>
+                      <td class="src"><Source line={l} lang={language(open)} /></td>
+                    </tr>
                   {/each}
                 </tbody>
               </table>
@@ -188,12 +310,12 @@
   .a { color: var(--add); font-weight: 600; font-variant-numeric: tabular-nums; }
   .d { color: var(--del); font-weight: 600; font-variant-numeric: tabular-nums; margin-left: 0.3rem; }
   .split { display: grid; grid-template-columns: 19rem minmax(0, 1fr); gap: 1.25rem; align-items: start; }
-  .side { position: sticky; top: 0; display: grid; gap: 0.4rem; max-height: calc(100vh - 9rem); overflow: auto; padding-right: 0.25rem; }
+  .side { position: sticky; top: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.4rem; max-height: calc(100vh - 9rem); overflow: auto; padding-right: 0.25rem; }
   ul { list-style: none; margin: 0 0 0.6rem; padding: 0; display: grid; gap: 1px; }
-  .side button { width: 100%; text-align: left; border: 0; background: none; padding: 0.4rem 0.55rem; border-radius: 8px; cursor: pointer; display: grid; gap: 0.1rem; }
-  .side button:hover { background: var(--fill); }
-  .side button.on { background: var(--accent); color: #fff; }
-  .side button.on .muted, .side button.on .when, .side button.on .dir, .side button.on .a, .side button.on .d { color: rgba(255, 255, 255, 0.8); }
+  .commits button { width: 100%; text-align: left; border: 0; background: none; padding: 0.4rem 0.55rem; border-radius: 8px; cursor: pointer; display: grid; gap: 0.1rem; }
+  .commits button:hover { background: var(--fill); }
+  .commits button.on { background: var(--accent); color: #fff; }
+  .commits button.on .muted, .commits button.on .when { color: rgba(255, 255, 255, 0.8); }
   .all { font-weight: 600; }
   .small { font-size: 0.78rem; }
   .row1 { display: flex; align-items: center; gap: 0.4rem; font-size: 0.76rem; }
@@ -230,6 +352,21 @@
   .md :global(figure.diagram) { margin: 1.25rem 0; padding: 1rem; border-radius: var(--radius); background: var(--surface-2); overflow-x: auto; text-align: center; }
   .md :global(figure.diagram svg) { max-width: 100%; height: auto; }
   .md :global(.diagram-error) { color: var(--danger); font-size: 0.82rem; text-align: left; }
+  .tools { display: flex; gap: 0.4rem; align-items: center; }
+  .tools .search { flex: 1; min-width: 0; }
+  .path { border: 0; background: none; padding: 0; display: inline-flex; align-items: center; gap: 0.35rem; cursor: copy; color: var(--text); font-size: 0.82rem; }
+  .path :global(svg) { color: var(--muted); opacity: 0; transition: opacity var(--speed); }
+  .path:hover :global(svg) { opacity: 1; }
+  .find { display: flex; align-items: center; gap: 0.4rem; padding: 0.35rem 0.6rem; border-bottom: 0.5px solid var(--separator); background: var(--surface); color: var(--muted); }
+  .find input { flex: 1; border: 0; background: var(--fill); border-radius: 6px; height: 24px; padding: 0 0.5rem; outline: none; font-size: 0.84rem; color: var(--text); }
+  .find input:focus { box-shadow: 0 0 0 3px var(--focus); }
+  .count { font-size: 0.76rem; min-width: 5rem; text-align: right; font-variant-numeric: tabular-nums; }
+  .ln button { all: unset; cursor: pointer; display: block; text-align: right; }
+  .ln button:hover { color: var(--accent-ink); text-decoration: underline; }
+  tr.sel { background: color-mix(in srgb, #ffcc00 22%, transparent); }
+  tr.sel .ln { color: var(--text); font-weight: 600; }
+  tr.hit .src { background: color-mix(in srgb, #ffcc00 14%, transparent); }
+  tr.cur .src { background: color-mix(in srgb, #ff9500 30%, transparent); }
   .vhead { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 0.5rem 0.8rem; background: var(--surface-2); border-bottom: 0.5px solid var(--separator); font-size: 0.82rem; }
   .vbody { overflow: auto; max-height: calc(100vh - 12rem); font: 0.8rem/1.6 var(--mono); }
   table { border-collapse: collapse; width: 100%; }

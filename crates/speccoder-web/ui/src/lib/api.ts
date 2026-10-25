@@ -100,3 +100,17 @@ export function listen(onEvent: (e: any) => void, onState: (connected: boolean) 
     controller?.abort();
   };
 }
+
+/** For an effect that fetches: of overlapping requests, only the newest's
+ *  answer is applied — a slow answer for what was asked before never
+ *  overwrites what is asked now. */
+export function latest() {
+  let n = 0;
+  return <T>(request: Promise<T>, apply: (value: T) => void, failed?: (e: unknown) => void) => {
+    const mine = ++n;
+    request.then(
+      (v) => mine === n && apply(v),
+      (e) => mine === n && failed?.(e),
+    );
+  };
+}

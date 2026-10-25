@@ -112,8 +112,16 @@
   function addTable(s: ConfigSection) {
     const name = newTable.trim().toLowerCase();
     if (!/^[a-z0-9_-]+$/.test(name)) return;
+    // An existing name is that table, not a new one to overwrite.
+    if (s.tables.some((t) => t.name === name) || Object.keys(draft).some((k) => k.startsWith(`${s.name}.${name}.`))) {
+      error = `[${s.name}.${name}] exists already — edit it above`;
+      return;
+    }
+    // Its command starts empty: Save refuses it until you write one (never a
+    // placeholder that would pass).
     const req = s.keys.find((k) => k.required);
-    if (req) set(`${s.name}.${name}.${req.key}`, req, [name === "test" ? "cargo" : "true"]);
+    if (req) draft = { ...draft, [`${s.name}.${name}.${req.key}`]: { key: `${s.name}.${name}.${req.key}`, value: [] } };
+    error = null;
     newTable = "";
   }
   function removeTable(s: ConfigSection, table: string) {

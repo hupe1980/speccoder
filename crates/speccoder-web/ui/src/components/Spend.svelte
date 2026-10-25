@@ -3,15 +3,16 @@
   // money (when prices are set) — per task, the dearest first, with a bar
   // against the dearest, and the feature's total.
   import { app } from "../lib/app.svelte";
-  import { get, q } from "../lib/api";
+  import { get, latest, q } from "../lib/api";
   import type { CostReport, Envelope } from "../lib/types";
   import Icon from "./Icon.svelte";
 
   let cost = $state<CostReport | null>(null);
+  const costOf = latest();
   $effect(() => {
     void app.report;
     const f = app.feature ?? undefined;
-    void get<Envelope<CostReport>>(`/api/cost${q({ feature: f })}`).then((r) => (cost = r.data ?? null)).catch(() => (cost = null));
+    costOf(get<Envelope<CostReport>>(`/api/cost${q({ feature: f })}`), (r) => (cost = r.data ?? null), () => (cost = null));
   });
   const priced = $derived(cost?.total.usd != null);
   const weight = (u: { input_tokens: number; output_tokens: number; usd: number | null }) => (priced ? (u.usd ?? 0) : u.input_tokens + u.output_tokens);

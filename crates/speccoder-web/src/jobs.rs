@@ -150,6 +150,25 @@ impl Hub {
         rx.recv().ok()
     }
 
+    /// Runs `f` while no job runs and none can start — for a short change
+    /// to the checkout (a commit): the check and the change are one step.
+    ///
+    /// # Errors
+    ///
+    /// A job is working.
+    pub fn exclusive<T>(&self, f: impl FnOnce() -> T) -> Result<T, String> {
+        let job = self
+            .job
+            .lock()
+            .map_err(|_| "the host is broken".to_owned())?;
+        if job.as_ref().is_some_and(|j| j.running) {
+            return Err("a job is working; do this when it ends".to_owned());
+        }
+        let out = f();
+        drop(job);
+        Ok(out)
+    }
+
     /// Starts `run` (with `input` for actions that take one) for `feature`;
     /// `Err` when a job is already working.
     pub fn start(

@@ -26,6 +26,10 @@
   let idea = $state("");
   let error = $state<string | null>(null);
 
+  // Once shown, the assistant stays until it is finished or left: committing
+  // the configuration must not take it away before the first feature.
+  if (app.view !== "setup") app.view = "setup";
+
   $effect(() => {
     void get<SetupState>("/api/setup").then((s) => {
       setup = s;
