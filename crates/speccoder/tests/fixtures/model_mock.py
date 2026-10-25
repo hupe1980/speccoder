@@ -13,6 +13,7 @@ request received).
 import http.server
 import json
 import os
+import socketserver
 import sys
 import threading
 import time
@@ -66,7 +67,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
         pass
 
 
-server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+class Server(http.server.ThreadingHTTPServer):
+    # HTTPServer.server_bind looks up the host's FQDN, a reverse DNS query
+    # that can stall for many seconds on CI runners; a loopback mock needs none.
+    def server_bind(self):
+        socketserver.TCPServer.server_bind(self)
+        self.server_name, self.server_port = "127.0.0.1", self.server_address[1]
+
+
+server = Server(("127.0.0.1", 0), Handler)
 with open(os.path.join(DIR, "port.tmp"), "w") as f:
     f.write(str(server.server_address[1]))
 os.rename(os.path.join(DIR, "port.tmp"), os.path.join(DIR, "port"))

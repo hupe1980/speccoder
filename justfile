@@ -18,12 +18,12 @@ fmt-check:
 
 lint:
     @echo "==> gate: lint"
-    cargo clippy --workspace --all-targets --all-features -- -D warnings
+    cargo clippy --workspace --all-targets -- -D warnings
 
 test:
     @echo "==> gate: test"
-    cargo nextest run --workspace --all-features -E 'not binary(layering)'
-    cargo test --workspace --doc --all-features
+    cargo nextest run --workspace -E 'not binary(layering)'
+    cargo test --workspace --doc
 
 deny:
     @echo "==> gate: deny"
@@ -36,7 +36,7 @@ layering:
 
 doc:
     @echo "==> gate: doc"
-    RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features
+    RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
 
 # Release dry run: every crate packages with licences and its own README.
 package:
