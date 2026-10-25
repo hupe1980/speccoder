@@ -66,8 +66,8 @@ Every stop and finish ends with a `Next:` block — the commands that continue, 
 | `speccoder report --live` | What the current or last run is doing, from another terminal |
 | `speccoder report --approvals` | Calls waiting for a decision, and the decisions made, with who made them |
 | `speccoder report --cost` | Tokens, and money with prices configured, per task |
-| `speccoder issue [start N]` | The repository's open GitHub issues; `start` specifies a feature from one ([GitHub](@/docs/github.md)) |
-| `speccoder auth [login\|status\|logout]` | Sign in to GitHub (a token from stdin, kept in your keychain; `GH_TOKEN` in CI), see who speccoder is there, sign out |
+| `speccoder issue [start N \| comment N]` | The repository's open GitHub issues; `start` specifies a feature from one and offers to tell the issue; `comment` tells it later ([GitHub](@/docs/github.md)) |
+| `speccoder auth [login\|status\|logout]` | Sign in to GitHub through speccoder's GitHub App with a short code (or `--with-token`; `GH_TOKEN` in CI) — the token kept in your keychain; see who speccoder is there; sign out |
 | `speccoder config [get KEY \| set KEY VALUE… \| unset KEY \| commit]` | Every key of `speccoder.toml` with its value or default; change one (checked by every parser, comments kept); commit the file alone ([configuration](@/docs/configuration.md#changing-it)) |
 | `speccoder ui [--port N] [--no-open] [--window]` | The [web interface](@/docs/web.md): the feature, its evidence, its code and the next step in the browser — or in a desktop window (`--window`; built in on macOS) |
 | `speccoder report --markdown` | The report as Markdown, for pull requests and CI summaries |

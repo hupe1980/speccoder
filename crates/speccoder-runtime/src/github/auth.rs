@@ -123,13 +123,30 @@ pub fn forget(host: &str) -> Result<bool, String> {
     }
 }
 
-/// The OAuth App the device flow signs in with: `SPECCODER_GITHUB_CLIENT_ID`
-/// (an Enterprise server's own app, or speccoder's once registered).
+/// speccoder's GitHub App (F-092): its Client ID (public by design — it
+/// names the app, it proves nothing) and its slug. Repository permissions:
+/// Contents, Checks, Commit statuses, Metadata read; Issues and Pull requests
+/// read and write; user tokens that do not expire; the device flow.
+pub const APP_CLIENT_ID: &str = "Iv23liZofBDOUS5F5z2g";
+
+/// `https://github.com/apps/speccoder-app`.
+pub const APP_SLUG: &str = "speccoder-app";
+
+/// Where a repository's owner installs speccoder's app.
 #[must_use]
-pub fn client_id() -> Option<String> {
+pub fn install_url() -> String {
+    format!("https://github.com/apps/{APP_SLUG}/installations/new")
+}
+
+/// The app the device flow signs in with on `host`:
+/// `SPECCODER_GITHUB_CLIENT_ID` (an Enterprise server's own app, or another
+/// one), else speccoder's on github.com; none on another host.
+#[must_use]
+pub fn client_id(host: &str) -> Option<String> {
     std::env::var("SPECCODER_GITHUB_CLIENT_ID")
         .ok()
         .filter(|c| !c.trim().is_empty())
+        .or_else(|| (host == "github.com").then(|| APP_CLIENT_ID.to_owned()))
 }
 
 /// A device-flow sign-in waiting for the person: the code to type, where.

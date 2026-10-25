@@ -276,3 +276,124 @@ fn a_pull_request_is_looked_up_where_the_remote_points() {
         "{sent}"
     );
 }
+
+/// A project with a feature, on a repository whose remote is o/r.
+fn project() -> tempfile::TempDir {
+    let dir = repo();
+    for (p, t) in [
+        (".specify/memory/constitution.md", "# Constitution\n"),
+        (".specify/init-options.json", "{}\n"),
+        (
+            "specs/001-greet/spec.md",
+            "# Spec\n\n- **FR-001**: Greet.\n",
+        ),
+    ] {
+        std::fs::create_dir_all(dir.path().join(p).parent().unwrap()).unwrap();
+        std::fs::write(dir.path().join(p), t).unwrap();
+    }
+    dir
+}
+
+#[test]
+fn an_issue_is_told_once_that_it_is_being_specified() {
+    let dir = project();
+    let api = fake_github::serve(vec![
+        ("GET /repos/o/r/issues/42/comments", 200, "[]".to_owned()),
+        (
+            "POST /repos/o/r/issues/42/comments",
+            201,
+            r#"{"html_url":"https://github.com/o/r/issues/42#issuecomment-1"}"#.to_owned(),
+        ),
+        ("GET /user", 200, r#"{"login":"me"}"#.to_owned()),
+        ("POST /repos/o/r/issues/42/assignees", 201, "{}".to_owned()),
+    ]);
+    let ctx = Ctx::fixed(&api.url, Some("t"));
+    let r = github::comment(&ctx, dir.path(), Some("001-greet"), "#42", true);
+    assert_eq!(
+        r.status(),
+        speccoder_core::CommandStatus::Ok,
+        "{}",
+        r.message()
+    );
+    assert!(
+        r.message().contains("as 001-greet, and assigned it to you"),
+        "{}",
+        r.message()
+    );
+    let reqs = api.requests.lock().unwrap().clone();
+    let posted = reqs
+        .iter()
+        .find(|q| q.method == "POST" && q.path.ends_with("/comments"))
+        .unwrap();
+    assert!(
+        posted.body.contains("speccoder:feature 001-greet"),
+        "{}",
+        posted.body
+    );
+    assert!(
+        posted.body.contains("specs/001-greet/spec.md")
+            && posted.body.contains("speccoder/001-greet"),
+        "{}",
+        posted.body
+    );
+    let assigned = reqs
+        .iter()
+        .find(|q| q.path.ends_with("/assignees"))
+        .unwrap();
+    assert!(assigned.body.contains("\"me\""), "{}", assigned.body);
+
+    // Said already: nothing is posted again.
+    let again = fake_github::serve(vec![(
+        "GET /repos/o/r/issues/42/comments",
+        200,
+        r#"[{"body":"<!-- speccoder:feature 001-greet -->\nBeing specified…"}]"#.to_owned(),
+    )]);
+    let r = github::comment(
+        &Ctx::fixed(&again.url, Some("t")),
+        dir.path(),
+        Some("001-greet"),
+        "42",
+        false,
+    );
+    assert!(r.message().contains("already says"), "{}", r.message());
+    assert!(
+        !again.calls().iter().any(|c| c.starts_with("POST")),
+        "{:?}",
+        again.calls()
+    );
+}
+
+#[test]
+fn the_app_is_the_default_way_in_and_a_missing_install_is_said() {
+    // speccoder's GitHub App on github.com; an Enterprise host needs its own.
+    assert_eq!(
+        github::auth::client_id("github.com").as_deref(),
+        std::env::var("SPECCODER_GITHUB_CLIENT_ID")
+            .ok()
+            .as_deref()
+            .or(Some(github::auth::APP_CLIENT_ID))
+    );
+    if std::env::var_os("SPECCODER_GITHUB_CLIENT_ID").is_none() {
+        assert!(github::auth::client_id("ghe.corp").is_none());
+    }
+    assert_eq!(
+        github::auth::install_url(),
+        "https://github.com/apps/speccoder-app/installations/new"
+    );
+    // Signed in, but the app is not installed where the repository is.
+    let dir = repo();
+    let api = fake_github::serve(vec![]);
+    let todo = github::reach(&Ctx::fixed(&api.url, Some("t")), dir.path()).unwrap();
+    assert!(
+        todo.contains("install the speccoder-app app") && todo.contains("installations/new"),
+        "{todo}"
+    );
+    for (r, n) in [
+        ("42", 42),
+        ("#42", 42),
+        ("https://github.com/o/r/issues/42", 42),
+    ] {
+        assert_eq!(github::issue_number(r), Some(n), "{r}");
+    }
+    assert_eq!(github::issue_number("abc"), None);
+}

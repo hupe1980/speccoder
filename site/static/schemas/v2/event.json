@@ -4421,6 +4421,31 @@
           "type": "object"
         },
         {
+          "description": "Tell a GitHub issue it is being specified as the current feature.",
+          "properties": {
+            "assign": {
+              "description": "Also assign it to the person.",
+              "type": "boolean"
+            },
+            "issue": {
+              "description": "The issue's number.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "kind": {
+              "const": "issue_comment",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "issue",
+            "assign"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Pick the current feature.",
           "properties": {
             "kind": {

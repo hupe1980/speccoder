@@ -202,6 +202,11 @@ async fn answer(host: &str, what: &str, resp: reqwest::Response) -> Result<Value
         403 => format!(
             "the token may not do this ({says}); it needs `{SCOPES}`, or for a fine-grained token: Issues read, Pull requests read and write, Contents and Metadata read"
         ),
+        404 if host == "github.com" => format!(
+            "{what} was not found on {host}: the repository, or the token cannot see it — signed in with `speccoder auth login`? Install the {} app on the repository: {}",
+            super::auth::APP_SLUG,
+            super::auth::install_url()
+        ),
         404 => {
             format!("{what} was not found on {host}: the repository, or the token cannot see it")
         }

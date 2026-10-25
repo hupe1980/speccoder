@@ -47,6 +47,22 @@
       starting = null;
     }
   }
+  // Tell the issue, in the feature's own selection, after a confirmation:
+  // it is written on GitHub, as the person.
+  async function tell(n: number, feature: string) {
+    if (app.feature !== feature) await app.selectFeature(feature);
+    const action: Action = {
+      group: "plan",
+      label: `comment on #${n}`,
+      why: "the issue shows it is being specified; once per feature",
+      command: `speccoder issue comment ${n} --feature ${feature}`,
+      run: { kind: "issue_comment", issue: n, assign: false },
+      blocked: null,
+      input: null,
+      confirm: `Comment on #${n}, as you, that it is being specified as ${feature} — with the spec's path and its branch. Said once: a second time changes nothing.`,
+    };
+    await app.perform(action);
+  }
   const copy = (t: string) => {
     navigator.clipboard?.writeText(t);
     app.toast({ tone: "ok", text: "Copied", detail: t });
@@ -90,7 +106,10 @@
             </span>
           </span>
           {#if i.feature}
-            <button class="btn small" onclick={() => { void app.selectFeature(i.feature!); app.view = "board"; }}><Icon name="chevron" size={10} weight={2.6} /> {i.feature.replace(/^\d+-/, "")}</button>
+            <span class="acts">
+              <button class="btn small ghost" disabled={!!app.job?.running} title="Tell #{i.number} it is being specified as {i.feature} (asked first; once per feature)" onclick={() => tell(i.number, i.feature!)}><Icon name="sparkle" size={10} weight={2.2} /> Comment</button>
+              <button class="btn small" onclick={() => { void app.selectFeature(i.feature!); app.view = "board"; }}><Icon name="chevron" size={10} weight={2.6} /> {i.feature.replace(/^\d+-/, "")}</button>
+            </span>
           {:else}
             <button class="btn small tinted" disabled={!!app.job?.running || starting !== null} title="Spec Kit's specify, with the issue as the description ($ speccoder issue start {i.number})" onclick={() => start(i.number)}>
               {#if starting === i.number}<span class="spin"></span>{:else}<Icon name="sparkle" size={11} weight={2.2} />{/if} Start Feature
@@ -119,6 +138,7 @@
   .label { padding: 0 0.45rem; border-radius: 999px; background: var(--fill); color: var(--text-2); }
   .d { color: var(--muted); font-size: 0.82rem; }
   .meta .d { font-size: 0.74rem; }
+  .acts { display: inline-flex; gap: 0.35rem; }
   .fix { border: 0; border-radius: 7px; background: var(--fill); padding: 0.25rem 0.6rem; font-size: 0.78rem; cursor: copy; }
   .empty { display: grid; place-items: center; padding: 1.25rem; }
   .spinner { width: 18px; height: 18px; border-radius: 50%; border: 2.5px solid var(--fill-2); border-top-color: var(--muted); animation: spin 800ms linear infinite; }

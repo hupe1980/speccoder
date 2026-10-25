@@ -11,6 +11,22 @@ ticks a task only on evidence the model cannot produce or edit.
 
 ### Added
 
+**Sign in with GitHub, tell the issue**
+
+- `speccoder auth login` signs in through speccoder's GitHub App
+  (speccoder-app) with a short code — copied to the clipboard, GitHub's
+  page opened — with only the permissions speccoder needs, in the
+  repositories it is installed on; then checks it can see this repository
+  and gives the install link when not. The app's **Continue with GitHub**
+  shows the code large and waits. `SPECCODER_GITHUB_CLIENT_ID` names an
+  Enterprise server's own app; a token still works (`--with-token`).
+- A 404 on github.com says to install the app on the repository, with the
+  link.
+- `issue start` offers to comment on the issue that it is being specified
+  (feature, spec, branch), once per feature, `--assign` to assign it to
+  you; `speccoder issue comment N` says it later; **Comment** in the app,
+  confirmed first.
+
 - **A splash while the app starts**: the mark (its tick drawing itself),
   the name and a progress line, in the system's light or dark, from the
   first frame — before any script; it fades into the page once the first
