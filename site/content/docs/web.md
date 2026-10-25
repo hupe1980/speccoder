@@ -11,7 +11,7 @@ group = "Use"
 speccoder ui
 ```
 
-opens the project in your browser. `speccoder ui --window` opens the same page in a desktop window of its own — built in on macOS (it uses the system's WebView), and on Linux with `cargo install speccoder --features app` (WebKitGTK). The window follows the run itself: when a call needs you, its Dock icon asks for attention and its title says so; after every job its Dock badge counts the decisions waiting for you. The terminal keeps the line CLI; the page is where you look at a feature and take its next step with a click.
+opens the project in your browser. `speccoder ui --window` opens the same page in a desktop window of its own — built in on macOS (it uses the system's WebView), and on Linux with `cargo install speccoder --features app` (WebKitGTK). It opens on speccoder's mark — its tick drawing itself — while the project is read, and fades into the page; the window appears only once it has something to show. The window follows the run itself: when a call needs you, its Dock icon asks for attention and its title says so; after every job its Dock badge counts the decisions waiting for you. The terminal keeps the line CLI; the page is where you look at a feature and take its next step with a click.
 
 ## What you see
 

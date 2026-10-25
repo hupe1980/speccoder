@@ -6,10 +6,27 @@
     <meta name="color-scheme" content="light dark" />
     <title>speccoder</title>
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <!-- The splash (F-091): drawn from the first frame, before any script —
+         the app's mark, whose tick draws itself, on the app's own
+         background; the app fades it out when its first data is in. -->
+    <style>#splash{z-index:100;color:#1d1d1f;background:#f5f5f7;place-items:center;font-family:-apple-system,BlinkMacSystemFont,SF Pro Display,Helvetica Neue,Inter,Segoe UI,system-ui,sans-serif;transition:opacity .42s cubic-bezier(.2,.8,.2,1),transform .42s cubic-bezier(.2,.8,.2,1);display:grid;position:fixed;inset:0}#splash.out{opacity:0;pointer-events:none;transform:scale(1.015)}#splash .stack{justify-items:center;gap:.9rem;display:grid;transform:translateY(-4vh)}#splash svg{filter:drop-shadow(0 10px 24px #0060df47);width:84px;height:84px;animation:.7s cubic-bezier(.2,.8,.2,1) both rise}#splash .tick{stroke-dasharray:48;stroke-dashoffset:48px;animation:.62s cubic-bezier(.65,0,.35,1) .26s forwards draw}#splash .name{letter-spacing:-.02em;font-size:1.55rem;font-weight:650;animation:.6s .38s both fade}#splash .line{color:#3c3c4399;font-size:.86rem;animation:.6s .52s both fade}#splash .track{background:#78788029;border-radius:3px;width:132px;height:3px;margin-top:.6rem;animation:.4s .9s both fade;overflow:hidden}#splash .slow{color:#3c3c4399;opacity:0;font-size:.8rem;animation:.5s 5s forwards appear}#splash.dark{color:#f5f5f7;background:#121214}#splash.dark .line,#splash.dark .slow{color:#ebebf58c}#splash.light{color:#1d1d1f;background:#f5f5f7}#splash .track i{background:#007aff;border-radius:3px;width:40%;height:100%;animation:1.15s cubic-bezier(.45,0,.55,1) infinite slide;display:block}@keyframes rise{0%{opacity:0;transform:scale(.86)translateY(6px)}}@keyframes draw{to{stroke-dashoffset:0}}@keyframes appear{0%{opacity:0}to{opacity:1}}@keyframes fade{0%{opacity:0;transform:translateY(4px)}}@keyframes slide{0%{transform:translate(-110%)}to{transform:translate(260%)}}@media (prefers-color-scheme:dark){#splash:not(.light){color:#f5f5f7;background:#121214}#splash:not(.light) .line,#splash:not(.light) .slow{color:#ebebf58c}#splash .track{background:#78788052}#splash .track i{background:#0a84ff}}@media (prefers-reduced-motion:reduce){#splash,#splash *{transition:none!important;animation:none!important}#splash .tick{stroke-dashoffset:0}#splash .track{display:none}#splash .slow{animation:1ms 5s forwards appear!important}}</style>
     <script type="module" crossorigin src="/app.js"></script>
     <link rel="stylesheet" crossorigin href="/style.css">
   </head>
   <body>
+    <div id="splash" role="status" aria-label="speccoder is starting">
+      <div class="stack">
+        <svg viewBox="0 0 64 64" aria-hidden="true">
+          <defs><linearGradient id="sg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3b9bff" /><stop offset="1" stop-color="#0060df" /></linearGradient></defs>
+          <rect width="64" height="64" rx="15" fill="url(#sg)" />
+          <path class="tick" d="M19 33.5 28.5 43 46 22" fill="none" stroke="#fff" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        <div class="name">speccoder</div>
+        <div class="line">Spec-driven coding, decided by evidence.</div>
+        <div class="track" aria-hidden="true"><i></i></div>
+        <div class="slow">Still reading the project…</div>
+      </div>
+    </div>
     <div id="app"></div>
   </body>
 </html>

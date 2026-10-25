@@ -36,11 +36,26 @@ pub fn run(
                 .title("speccoder")
                 .inner_size(1360.0, 880.0)
                 .min_inner_size(900.0, 600.0)
+                // Shown once the page has drawn (its splash first): no
+                // black frame while the WebView starts.
+                .visible(false)
+                .on_page_load(|w, payload| {
+                    if payload.event() == tauri::webview::PageLoadEvent::Finished {
+                        let _ = w.show();
+                    }
+                })
                 // The host's page only: a link elsewhere is not followed.
                 .on_navigation(move |u| {
                     u.scheme() == "http" && u.host_str() == Some("127.0.0.1") && u.port() == port
                 })
                 .build()?;
+            // Should the page never say it loaded, the window shows anyway.
+            if let Some(w) = app.get_webview_window("main") {
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_secs(3));
+                    let _ = w.show();
+                });
+            }
             if let Some(w) = app.get_webview_window("main") {
                 let root = root.clone();
                 // Counting reads every feature's report: off the main thread.

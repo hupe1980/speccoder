@@ -11,6 +11,12 @@ ticks a task only on evidence the model cannot produce or edit.
 
 ### Added
 
+- **A splash while the app starts**: the mark (its tick drawing itself),
+  the name and a progress line, in the system's light or dark, from the
+  first frame — before any script; it fades into the page once the first
+  data is in. The window stays hidden until its page has drawn: no black
+  frame. Reduced motion: no animation.
+
 **Read the spec by its outline**
 
 - Spec & Plan shows the open document's outline in a side nav that stays

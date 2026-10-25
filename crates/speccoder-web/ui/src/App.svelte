@@ -105,6 +105,16 @@
     return () => window.removeEventListener("speccoder:menu", on);
   });
 
+  // The splash (index.html) gives way once the first data is in: a fade
+  // into the page it was standing in for, then it is gone.
+  $effect(() => {
+    if (app.loading) return;
+    const splash = document.getElementById("splash");
+    if (!splash) return;
+    splash.classList.add("out");
+    setTimeout(() => splash.remove(), 450);
+  });
+
   const report = $derived(app.report?.data ?? null);
   // A project without speccoder.toml (or not yet a spec project) starts in
   // the setup assistant, until it is set up or the person leaves it.
