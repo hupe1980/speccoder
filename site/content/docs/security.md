@@ -89,10 +89,21 @@ A command gets the network only when its prefix is in `[sandbox] network_allow`,
 
 Where the OS has no sandbox, every run says `commands run unsandboxed`; with `[sandbox] mode = "required"` it stops instead.
 
+**Ubuntu 23.10 and later** restrict unprivileged user namespaces through AppArmor. Landlock and seccomp still apply, but without the namespace a command can write `.git` (the [git guard](#in-place-mode) catches it), read git-ignored secrets and reach daemon sockets; every run says so. To give speccoder its namespace, allow it in an AppArmor profile (the path is where your `speccoder` is installed):
+
+```text
+# /etc/apparmor.d/speccoder — then: sudo apparmor_parser -r /etc/apparmor.d/speccoder
+abi <abi/4.0>,
+include <tunables/global>
+profile speccoder /usr/local/bin/speccoder flags=(unconfined) {
+  userns,
+}
+```
+
 ## Secrets
 
 - API keys are read only from the environment, and never written to the journal or the output.
-- Every command speccoder starts gets an environment without secret-looking variables: `*_API_KEY`, `*_TOKEN`, `*SECRET*`, `*PASSWORD*`, `AWS_*`, `ANTHROPIC_*`, `OPENAI_*`, `SSH_AUTH_SOCK`, `GIT_ASKPASS`, `SSH_ASKPASS`.
+- Every command speccoder starts gets an environment without secret-looking variables: `*_API_KEY`, `*_TOKEN`, `*SECRET*`, `*PASSWORD*`, `AWS_*`, `ANTHROPIC_*`, `OPENAI_*`, `SSH_AUTH_SOCK`, `GIT_ASKPASS`, `SSH_ASKPASS`. Colour is switched off for these commands (`NO_COLOR=1`, `CARGO_TERM_COLOR=never`): speccoder reads their output, it does not show it.
 - Commands run with stdin closed, a deadline for their whole process group, and capped output.
 
 ## Provenance labels

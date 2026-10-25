@@ -520,7 +520,7 @@ impl Runner {
                 {
                     return (
                         Self::Sandboxed(s),
-                        Some("this machine does not allow user namespaces, so commands can write `.git` and read ignored secrets in place; the run stops if `.git` changes".to_owned()),
+                        Some("this machine does not allow user namespaces (on Ubuntu 23.10+: AppArmor), so commands can write `.git`, read ignored secrets in place and reach daemon sockets such as Docker's; the run stops if `.git` changes".to_owned()),
                     );
                 }
                 s.profile = s.profile.carve(read_only, hidden);
@@ -694,10 +694,16 @@ mod linux {
             .into_iter()
             .filter(|p| !inside(p))
             .collect();
-        if profile.read_only.is_empty() && hidden.is_empty() && sockets.is_empty() {
+        let carved = !profile.read_only.is_empty() || !hidden.is_empty();
+        if !carved && sockets.is_empty() {
             return Ok(());
         }
-        private_namespace()?;
+        // Without user namespaces (AppArmor on Ubuntu 23.10+) the runner has
+        // already said so and asked for no carve-outs: the sockets stay
+        // reachable rather than every command failing.
+        if let Err(e) = private_namespace() {
+            return if carved { Err(e) } else { Ok(()) };
+        }
         let none: Option<&str> = None;
         for p in profile.read_only.iter().filter(|p| p.exists()) {
             mount(Some(p), p, none, MsFlags::MS_BIND | MsFlags::MS_REC, none)

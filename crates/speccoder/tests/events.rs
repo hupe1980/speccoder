@@ -358,6 +358,13 @@ fn after_planning_the_cli_offers_the_commit_and_then_the_run() {
         .args(["spec", "tasks", "-C"])
         .arg(r)
         .env("SPECCODER_STATE_DIR", state.path())
+        // The commit needs an identity; a fresh CI runner has none.
+        .envs([
+            ("GIT_AUTHOR_NAME", "t"),
+            ("GIT_AUTHOR_EMAIL", "t@example.com"),
+            ("GIT_COMMITTER_NAME", "t"),
+            ("GIT_COMMITTER_EMAIL", "t@example.com"),
+        ])
         .output()
         .unwrap();
     let v: Value = serde_json::from_slice(&out.stdout)

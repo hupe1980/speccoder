@@ -67,6 +67,10 @@ fn repo(fixture: &str, extra: &str) -> tempfile::TempDir {
     fs::write(r.join("accept.sh"), ACCEPT_SH).unwrap();
     fs::set_permissions(r.join("accept.sh"), fs::Permissions::from_mode(0o755)).unwrap();
     git(r, &["init", "-q"]);
+    // speccoder's own commits (the archive) use the repository's identity;
+    // a fresh CI runner has no global one.
+    git(r, &["config", "user.name", "t"]);
+    git(r, &["config", "user.email", "t@example.com"]);
     git(r, &["add", "-A"]);
     git(r, &["commit", "-q", "-m", "init"]);
     dir

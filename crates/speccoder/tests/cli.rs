@@ -751,6 +751,13 @@ fn init_at_a_terminal_commits_only_the_config_on_yes() {
     let child = cmd
         .current_dir(dir.path())
         .env_remove("ANTHROPIC_API_KEY")
+        // The commit needs an identity; a fresh CI runner has none.
+        .envs([
+            ("GIT_AUTHOR_NAME", "t"),
+            ("GIT_AUTHOR_EMAIL", "t@example.com"),
+            ("GIT_COMMITTER_NAME", "t"),
+            ("GIT_COMMITTER_EMAIL", "t@example.com"),
+        ])
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .spawn();
@@ -874,6 +881,12 @@ fn init_at_a_terminal_commits_the_nextest_profile_with_the_config() {
     }
     let Ok(mut child) = cmd
         .current_dir(dir.path())
+        .envs([
+            ("GIT_AUTHOR_NAME", "t"),
+            ("GIT_AUTHOR_EMAIL", "t@example.com"),
+            ("GIT_COMMITTER_NAME", "t"),
+            ("GIT_COMMITTER_EMAIL", "t@example.com"),
+        ])
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .spawn()

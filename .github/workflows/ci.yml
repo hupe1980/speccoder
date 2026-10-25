@@ -29,6 +29,10 @@ jobs:
         os: [macos-latest, ubuntu-latest]
     steps:
       - uses: actions/checkout@v4
+      # Ubuntu 23.10+ restricts unprivileged user namespaces (AppArmor); the
+      # sandbox then degrades and says so. CI tests the full sandbox.
+      - if: runner.os == 'Linux'
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - run: rustup toolchain install # from rust-toolchain.toml
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@v2
