@@ -55,5 +55,6 @@ jobs:
       - run: npm run check
       - run: npm run build
       - run: git diff --exit-code -- dist
-      # The whole interface stays small: under 64 KB gzipped.
-      - run: test "$(cat dist/* | gzip -9 | wc -c)" -lt 65536
+      # The interface ships inside the binary, so its size hardly matters;
+      # this only catches an accidental giant dependency (1 MB gzipped).
+      - run: test "$(cat dist/* | gzip -9 | wc -c)" -lt 1048576

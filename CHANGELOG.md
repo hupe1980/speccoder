@@ -42,9 +42,15 @@ ticks a task only on evidence the model cannot produce or edit.
   outlives a run.
 - `doctor`'s signing fix names an SSH key you have (or says to make one)
   instead of always `~/.ssh/id_ed25519.pub`.
-- `speccoder ui --window`: the same page in a desktop window (Tauri, build
-  with `--features app`), which loads the local page and navigates nowhere
-  else.
+- `speccoder ui --window`: the same page in a desktop window (Tauri), built
+  in on macOS (the system's WebView), on Linux with `--features
+  app`; it loads the local page and navigates nowhere else, and asks for
+  attention (Dock) when a run needs you.
+- Code: the feature's branch as commits (one per tick, with its verdict),
+  files and a highlighted diff with line numbers, and every file of the
+  branch to read. A setup assistant for a project without `speccoder.toml`:
+  what was found, the model and its key, the proposed checks, writing them
+  and running them on the untouched code, the commit, the first feature.
 - The host takes a per-start key (in the address's fragment, then a header),
   refuses other hosts (DNS rebinding) and cross-site writes, and serves a
   strict content policy.

@@ -29,16 +29,20 @@ serde.workspace = true
 serde_json.workspace = true
 unicode-width.workspace = true
 
-# The desktop window (`speccoder ui --window`). Off by default, so
-# `cargo install speccoder` links no WebView.
+# The desktop window (`speccoder ui --window`): on Linux behind the `app`
+# feature (it needs WebKitGTK installed); on macOS and Windows always, on
+# the system's own WebView (WKWebView, WebView2), which adds no library.
 tauri = { version = "2", optional = true }
 
+[target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
+tauri = { version = "2" }
+
 [build-dependencies]
-tauri-build = { version = "2", optional = true }
+tauri-build = { version = "2" }
 
 [features]
 default = []
-app = ["dep:tauri", "dep:tauri-build"]
+app = ["dep:tauri"]
 
 [dev-dependencies]
 assert_cmd.workspace = true

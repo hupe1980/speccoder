@@ -539,6 +539,47 @@ fn the_web_host_guards_itself_and_a_run_is_answered_over_its_api() {
     // The decision names who made it and through what.
     assert!(end.to_string().contains(r#""via":"web""#), "{end}");
 
+    // The code view: the branch's change, its tick commit, its files; a file
+    // the tree does not list is refused (no path reaches git unchecked).
+    let (_, _, body) = http(port, &request(port, "GET", "/api/changes", &auth, ""));
+    let changes: Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(changes["branch"], "speccoder/001-graph", "{changes}");
+    assert!(
+        changes["files"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|f| f["path"] == "package.json"),
+        "{changes}"
+    );
+    assert!(
+        changes["commits"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|c| c["task"].as_str().is_some_and(|t| t.ends_with("T005"))),
+        "{changes}"
+    );
+    assert!(
+        changes["patch"]
+            .as_str()
+            .unwrap()
+            .contains("+++ b/package.json"),
+        "{changes}"
+    );
+    let (_, _, body) = http(
+        port,
+        &request(port, "GET", "/api/file?path=package.json", &auth, ""),
+    );
+    assert!(body.contains("\"text\""), "{body}");
+    for bad in ["../../etc/passwd", "%2E%2E/secret", "nope.txt"] {
+        let (_, _, body) = http(
+            port,
+            &request(port, "GET", &format!("/api/file?path={bad}"), &auth, ""),
+        );
+        assert!(body.contains("\"error\""), "{bad}: {body}");
+    }
+
     // Ticked on the feature's branch; the decision names the web.
     let log = Command::new("git")
         .args(["log", "--format=%s%n%b%n%N", "speccoder/001-graph"])
@@ -550,7 +591,7 @@ fn the_web_host_guards_itself_and_a_run_is_answered_over_its_api() {
 }
 
 /// Without the `app` feature, `--window` says how to get it.
-#[cfg(not(feature = "app"))]
+#[cfg(not(window))]
 #[test]
 fn a_window_without_the_app_feature_says_how_to_build_it() {
     let out = Command::new(env!("CARGO_BIN_EXE_speccoder"))

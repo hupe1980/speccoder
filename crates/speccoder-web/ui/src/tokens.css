@@ -83,6 +83,9 @@
   --shadow-md: 0 1px 2px rgba(0, 0, 0, 0.06), 0 8px 24px rgba(0, 0, 0, 0.08);
   --shadow-lg: 0 2px 6px rgba(0, 0, 0, 0.06), 0 24px 64px rgba(0, 0, 0, 0.18);
 
+  /* Syntax, after Xcode's default themes */
+  --syn-k: #ad3da4; --syn-s: #d12f1b; --syn-c: #707f8c; --syn-n: #272ad8; --syn-y: #0b4f79; --syn-f: #326d74; --syn-p: #4b4b52;
+
   /* Motion: the system's spring and sheet curves */
   --speed: 220ms;
   --ease: cubic-bezier(0.32, 0.72, 0, 1);
@@ -126,6 +129,7 @@
     --glass-strong: rgba(34, 34, 36, 0.95);
     --glass-edge: inset 0 0 0 0.5px rgba(255, 255, 255, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.06);
     --scrim: rgba(0, 0, 0, 0.45);
+    --syn-k: #fc5fa3; --syn-s: #fc6a5d; --syn-c: #7f8c98; --syn-n: #d0bf69; --syn-y: #5dd8ff; --syn-f: #67b7a4; --syn-p: #a3a3ab;
     --shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.06), 0 2px 8px rgba(0, 0, 0, 0.3);
     --shadow-md: 0 0 0 0.5px rgba(255, 255, 255, 0.07), 0 8px 24px rgba(0, 0, 0, 0.4);
     --shadow-lg: 0 0 0 0.5px rgba(255, 255, 255, 0.08), 0 24px 64px rgba(0, 0, 0, 0.6);
@@ -149,6 +153,7 @@
   --glass: rgba(30, 30, 32, 0.66); --glass-strong: rgba(34, 34, 36, 0.95);
   --glass-edge: inset 0 0 0 0.5px rgba(255, 255, 255, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.06);
   --scrim: rgba(0, 0, 0, 0.45);
+  --syn-k: #fc5fa3; --syn-s: #fc6a5d; --syn-c: #7f8c98; --syn-n: #d0bf69; --syn-y: #5dd8ff; --syn-f: #67b7a4; --syn-p: #a3a3ab;
   --shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.06), 0 2px 8px rgba(0, 0, 0, 0.3);
   --shadow-md: 0 0 0 0.5px rgba(255, 255, 255, 0.07), 0 8px 24px rgba(0, 0, 0, 0.4);
   --shadow-lg: 0 0 0 0.5px rgba(255, 255, 255, 0.08), 0 24px 64px rgba(0, 0, 0, 0.6);

@@ -15,6 +15,8 @@
   import Icon from "./components/Icon.svelte";
   import Overview from "./components/Overview.svelte";
   import Settings from "./components/Settings.svelte";
+  import CodeView from "./components/CodeView.svelte";
+  import Setup from "./components/Setup.svelte";
 
   let theme = $state<string>(localStorage.getItem("speccoder-theme") ?? "auto");
   $effect(() => {
@@ -29,8 +31,9 @@
   const views = [
     { v: "overview", label: "Overview", icon: "list", key: "1" },
     { v: "board", label: "Board", icon: "grid", key: "2" },
-    { v: "documents", label: "Spec & Plan", icon: "doc", key: "3" },
-    { v: "report", label: "Report", icon: "chart", key: "4" },
+    { v: "code", label: "Code", icon: "terminal", key: "3" },
+    { v: "documents", label: "Spec & Plan", icon: "doc", key: "4" },
+    { v: "report", label: "Report", icon: "chart", key: "5" },
   ] as const;
 
   /** Changes the view with a cross-fade where the browser can. */
@@ -58,6 +61,13 @@
   }
 
   const report = $derived(app.report?.data ?? null);
+  // A project without speccoder.toml (or not yet a spec project) starts in
+  // the setup assistant, until it is set up or the person leaves it.
+  const needsSetup = $derived(
+    app.view !== "settings" &&
+      app.view !== "overview" &&
+      (app.report?.code === "NO-PROJECT" || app.preflight.some((c) => c.check === "config" && c.level === "fail")),
+  );
   const at = $derived(views.findIndex((x) => x.v === app.view));
 
   // The tab says when a run needs you, and what is running.
@@ -124,9 +134,10 @@
     {#if app.loading}
       <div class="loading" aria-busy="true"><span class="spinner"></span></div>
     {:else}
-      {#if app.view === "overview"}<Overview />{:else if app.view === "settings"}<Settings />{:else}<Hero compact={app.view !== "board"} />{/if}
-      {#if report && app.view !== "overview" && app.view !== "settings"}
+      {#if app.view === "setup" || needsSetup}<Setup />{:else if app.view === "overview"}<Overview />{:else if app.view === "settings"}<Settings />{:else}<Hero compact={app.view !== "board"} />{/if}
+      {#if report && !needsSetup && app.view !== "setup" && app.view !== "overview" && app.view !== "settings"}
         {#if app.view === "board"}<Board />{/if}
+        {#if app.view === "code"}<CodeView />{/if}
         {#if app.view === "documents"}<Documents />{/if}
         {#if app.view === "report"}<ReportView />{/if}
       {/if}

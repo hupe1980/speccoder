@@ -54,6 +54,17 @@ Check it:
 speccoder --version
 ```
 
+### The desktop window
+
+`speccoder ui --window` opens the [web interface](@/docs/web.md) as an app. On macOS it is part of every build (WKWebView, nothing to install). On Linux it needs WebKitGTK and a build with the feature:
+
+```sh
+sudo apt install libwebkit2gtk-4.1-dev   # Debian, Ubuntu
+cargo install speccoder --locked --features app
+```
+
+Without it, `speccoder ui` serves the same page to your browser.
+
 ## Verify a download
 
 Every release lists `SHA256SUMS` and carries a [build-provenance attestation](https://docs.github.com/actions/security-for-github-actions/using-artifact-attestations) for each archive, signed by the release workflow:

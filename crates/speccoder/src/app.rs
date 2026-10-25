@@ -1,11 +1,14 @@
 //! speccoder's window (`speccoder ui --window`, F-076): the web interface
 //! in a window of its own. It loads the loopback host's page and nothing
-//! else — no IPC on the data path, no other origin, no new windows.
+//! else — no IPC on the data path, no other origin, no new windows. The
+//! host runs in this process, so the window follows its jobs directly: when
+//! a run needs the person, the Dock icon asks for attention and the title
+//! says so.
 
 /// Opens the window on `url` (the host's page with its token) and runs
 /// until it is closed. Must run on the main thread.
-pub fn run(url: &str) -> Result<(), String> {
-    use tauri::{WebviewUrl, WebviewWindowBuilder};
+pub fn run(url: &str, events: Option<speccoder_web::Events>) -> Result<(), String> {
+    use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
     let page: tauri::Url = url.parse().map_err(|e| format!("{url}: {e}"))?;
     let port = page.port();
     tauri::Builder::default()
@@ -19,8 +22,51 @@ pub fn run(url: &str) -> Result<(), String> {
                     u.scheme() == "http" && u.host_str() == Some("127.0.0.1") && u.port() == port
                 })
                 .build()?;
+            if let Some(mut rx) = events {
+                let handle = app.handle().clone();
+                std::thread::spawn(move || {
+                    while let Ok(line) = rx.blocking_recv() {
+                        let Some(w) = handle.get_webview_window("main") else {
+                            break;
+                        };
+                        follow(&w, &line);
+                    }
+                });
+            }
             Ok(())
         })
         .run(tauri::generate_context!())
         .map_err(|e| e.to_string())
+}
+
+/// What one host event means for the window.
+fn follow(w: &tauri::WebviewWindow, line: &str) {
+    let Ok(event) = serde_json::from_str::<serde_json::Value>(line) else {
+        return;
+    };
+    match event["type"].as_str() {
+        Some("ask" | "question") => {
+            let _ = w.set_title("speccoder — needs you");
+            let _ = w.request_user_attention(Some(tauri::UserAttentionType::Critical));
+        }
+        Some("answered") => {
+            let _ = w.set_title("speccoder — running");
+            let _ = w.request_user_attention(None);
+        }
+        Some("started") => {
+            let _ = w.set_title("speccoder — running");
+        }
+        Some("done") => {
+            let ok = event["result"]["status"] == "ok";
+            let _ = w.set_title(if ok {
+                "speccoder — done"
+            } else {
+                "speccoder"
+            });
+            if !w.is_focused().unwrap_or(true) {
+                let _ = w.request_user_attention(Some(tauri::UserAttentionType::Informational));
+            }
+        }
+        _ => {}
+    }
 }

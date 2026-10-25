@@ -47,7 +47,7 @@ class AppState {
   selected = $state<string | null>(null);
   input = $state<{ action: Action } | null>(null);
   palette = $state(false);
-  view = $state<"overview" | "board" | "documents" | "report" | "settings">("board");
+  view = $state<"overview" | "board" | "code" | "documents" | "report" | "settings" | "setup">("board");
 
   #toast = 1;
 
@@ -238,7 +238,7 @@ class AppState {
   #restore() {
     const s = new URLSearchParams(location.search);
     const view = s.get("view");
-    if (view === "overview" || view === "board" || view === "documents" || view === "report" || view === "settings") this.view = view;
+    if (view === "overview" || view === "board" || view === "code" || view === "documents" || view === "report" || view === "settings" || view === "setup") this.view = view;
     this.feature = s.get("feature") ?? this.feature;
     this.selected = s.get("task");
     this.palette = s.has("palette");

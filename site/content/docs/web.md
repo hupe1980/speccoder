@@ -11,15 +11,17 @@ group = "Use"
 speccoder ui
 ```
 
-opens the project in your browser. The same page runs in a desktop window with `speccoder ui --window` (a build with the `app` feature). The terminal keeps the line CLI; the page is where you look at a feature and take its next step with a click.
+opens the project in your browser. `speccoder ui --window` opens the same page in a desktop window of its own — built in on macOS (it uses the system's WebView), and on Linux with `cargo install speccoder --features app` (WebKitGTK). The window follows the run itself: when a call needs you, its Dock icon asks for attention and its title says so. The terminal keeps the line CLI; the page is where you look at a feature and take its next step with a click.
 
 ## What you see
 
+- **Setting up.** A project without `speccoder.toml` opens in the setup assistant: what was found (git, the spec project, the spec tool, the sandbox), the model (with whether its key is set), the checks speccoder proposes for your project, then **Set Up** — it writes the file, runs the checks on the untouched code and shows each result — and **Commit**, and finally your first feature in your own words. Each step names its `speccoder init` command.
 - **Overview.** Every feature at a glance — the spec of the specs: each one's ring of verdicts, where it is on the journey, how many of its requirements are proven by evidence, and calls waiting for you. A card opens its board.
 - **Before you run.** What `speccoder doctor` would warn about, above everything else: a missing model key, configuration a worktree would not have because it is not committed, an unsigned attestation. Each comes with the command that fixes it, ready to copy. When a failure would stop the run, the Run button says so and steps back to "Run anyway".
 - **The journey.** Spec → plan → tasks → commit → run → review, where the feature is on it, and one primary button for the next step — the same step the CLI offers after a command and the dashboard's `n`. A step whose file was never written (a task list without a spec) shows as skipped, not as the next step.
 - **The board.** Tasks in lanes by verdict: verified, regression only, attested, no evidence, skipped, ready, blocked. A ready card has **Run task**; the running card glows and shows its stage. Long lanes fold after five cards.
 - **A task's evidence.** Click a card: the inspector shows the verdict, the evidence rows (acceptance, held-out, checks, attestation, the last attempt — the same rows the terminal dashboard shows), and the code: the commit that ticked the task, or — when its last attempt failed or was held — that attempt's code, kept for you to read and never merged. Files come with old and new line numbers, additions and removals counted. **Accept**, **Skip**, **Nudge** and **Run** act on the task.
+- **Code.** What the feature's branch changed since it forked: every commit (one per ticked task, with its verdict), every file with lines added and removed, and the change itself — highlighted, with old and new line numbers. **Files** lets you browse the branch and read any file. Nothing here is the model's word: it is git's.
 - **Spec & plan.** The feature's documents rendered from Markdown (never its raw HTML), requirement IDs marked cited or uncited.
 - **Report.** The verdict bar; calls waiting for a decision, with **Approve** and **Reject**; and every requirement with the tasks that prove it. When the task list cites no requirement at all, the page says so and offers the analysis that finds the gaps.
 - **The live capsule.** A running job floats at the bottom of the page: the task, its stage and the time, at a glance; it turns orange when the run needs you. Click it for the pipeline stage by stage, the tool calls with the policy's decision, tokens and money. **Stop** ends the job after the current task; the attempt stays resumable.
@@ -43,7 +45,7 @@ Looking at another window? The tab's title changes to *● Needs you*, and with 
 | Key | Does |
 |---|---|
 | `n` | The next step |
-| `1` `2` `3` `4` | Overview, Board, Spec & Plan, Report |
+| `1` `2` `3` `4` `5` | Overview, Board, Code, Spec & Plan, Report |
 | `,` | Settings |
 | ⌘K / Ctrl+K | The palette |
 | `Esc` | Close the task |
