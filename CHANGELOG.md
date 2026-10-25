@@ -11,6 +11,17 @@ ticks a task only on evidence the model cannot produce or edit.
 
 ### Added
 
+**The model's account**
+
+- What the model says beside its calls is shown as it works — quoted,
+  muted, never as evidence: in the terminal (first line per turn, `-v`
+  all), the dashboard, the app's live panel, editors (ACP thoughts), and
+  the `said` event in `--events`. `report --live` shows the latest line.
+- Afterwards from the journal: `speccoder task show T --account`, and The
+  Model's Account in the inspector.
+- Upstream: AP-20 asks agentplane for a typed reasoning summary, to show
+  the model's thinking the same way once providers' summaries are exposed.
+
 **Quick changes**
 
 - `speccoder do "…" [--check "…"]… [--no-run]`: a small change without the

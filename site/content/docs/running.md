@@ -22,6 +22,10 @@ The feature is selected the way Spec Kit selects it: `--feature`, then `SPECIFY_
 
 Progress streams to stderr; the run report — tool calls with their decisions, changes, acceptance tests, checks, tokens and the commit — goes to stdout.
 
+## The model's account
+
+What the model says beside its calls — "I'll add `login()` next to `ok()`, the smallest change the test needs" — is shown as it works, quoted and muted, apart from the calls and never as evidence: in the terminal (the first line of each turn; `-v` all of it), in the dashboard's calls, in the app's live panel (the latest line in the capsule), and in an editor as the agent's thoughts (ACP `agent_thought_chunk`). The approval sheet shows what it said in the turn that asked. Afterwards it is read from the journal: `speccoder task show T005 --account`, and **The Model's Account** in a task's inspector. A verdict never rests on it — that is the evidence's job.
+
 ## Quick changes
 
 Not everything needs a spec, a plan and a task list — but nothing should skip the evidence:

@@ -294,6 +294,24 @@ pub fn rows(task: &TaskStatus, statements: &[Value], run: Option<&RunReport>) ->
     out
 }
 
+/// What the model said in each turn of `run` (F-095), read from the
+/// project's journal: its account of the attempt — a claim, shown beside
+/// the evidence, never as it.
+///
+/// # Errors
+///
+/// No project or state directory, or the journal cannot be read.
+pub fn narration_of(path: &std::path::Path, run: &str) -> Result<Vec<String>, String> {
+    let root = crate::format::at(path)
+        .detect(path)
+        .ok_or_else(|| "not a spec project".to_owned())?;
+    let state = crate::worktree::state_dir().ok_or_else(|| "no state directory".to_owned())?;
+    let plane = crate::worktree::project_state_dir(&state, &root);
+    crate::pipeline::tokio_runtime()?
+        .block_on(crate::substrate::narration(&plane, run))
+        .map_err(|e| e.0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

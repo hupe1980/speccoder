@@ -201,6 +201,16 @@ pub enum Body {
         /// USD, when priced.
         usd: Option<f64>,
     },
+    /// What the model said in a turn: its account, a claim (F-095).
+    #[serde(rename = "said")]
+    Said {
+        /// Task ID.
+        task: String,
+        /// Model turn (1-based).
+        turn: u32,
+        /// The words.
+        text: String,
+    },
     /// Anything else worth a line.
     #[serde(rename = "notice")]
     Notice {
@@ -390,6 +400,11 @@ pub fn body(event: &Event) -> Body {
             cache_read_tokens: *cache_read_tokens,
             cache_write_tokens: *cache_write_tokens,
             usd: *usd,
+        },
+        Event::Said { task, turn, text } => Body::Said {
+            task: clean(task),
+            turn: *turn,
+            text: text.clone(),
         },
         Event::Notice { text } => Body::Notice { text: clean(text) },
     }

@@ -6574,6 +6574,36 @@
       "type": "object"
     },
     {
+      "description": "What the model said in a turn: its account, a claim (F-095).",
+      "properties": {
+        "task": {
+          "description": "Task ID.",
+          "type": "string"
+        },
+        "text": {
+          "description": "The words.",
+          "type": "string"
+        },
+        "turn": {
+          "description": "Model turn (1-based).",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "said",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "task",
+        "turn",
+        "text"
+      ],
+      "type": "object"
+    },
+    {
       "description": "Anything else worth a line.",
       "properties": {
         "text": {

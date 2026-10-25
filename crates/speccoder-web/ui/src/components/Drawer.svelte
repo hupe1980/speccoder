@@ -66,6 +66,17 @@
   });
   // The report's, which compares the tick with the spec now.
   const drift = $derived(app.report?.data?.tasks.find((t) => t.id === app.selected)?.drift ?? null);
+  // The attempt whose narration the journal holds: the tick's, else the last.
+  const run = $derived(data?.task.run_id ?? data?.task.last_attempt?.run_id ?? null);
+  let account = $state<string[] | null>(null);
+  let accountOf = $state<string | null>(null);
+  async function loadAccount() {
+    if (!run || accountOf === run) return;
+    accountOf = run;
+    account = null;
+    const r = await get<{ turns?: string[]; error?: string }>(`/api/narration${q({ run })}`).catch(() => ({ turns: [] as string[] }));
+    account = r.turns ?? [];
+  }
   const icons: Record<string, string> = { run: "play", accept: "check", skip: "skip", nudge: "sparkle", approve: "check", reject: "xmark" };
 </script>
 
@@ -102,6 +113,16 @@
     {:else}
       {#if source?.label === "Last Attempt"}<p class="note"><Icon name="info" size={13} /> The attempt did not pass; its code is kept for you to read, never merged.</p>{/if}
       <Diff {patch} loading={loadingPatch} />
+    {/if}
+    {#if run}
+      <details class="account" ontoggle={(e) => (e.currentTarget as HTMLDetailsElement).open && loadAccount()}>
+        <summary><Icon name="sparkle" size={12} weight={2.2} /> The Model's Account <span class="muted">— what it said it was doing; a claim, not evidence</span></summary>
+        {#if account === null}<p class="muted small">Reading the journal…</p>
+        {:else if !account.length}<p class="muted small">The model said nothing beside its calls in this attempt.</p>
+        {:else}
+          <ol>{#each account as said, i (i)}<li><span class="turn mono">{i + 1}</span><p>{said}</p></li>{/each}</ol>
+        {/if}
+      </details>
     {/if}
     {#if actions.length}
       <div class="acts">
@@ -147,6 +168,14 @@
   .claim dd { font-style: italic; color: var(--muted); }
   .note { display: flex; align-items: center; gap: 0.35rem; margin: -0.25rem 0.25rem 0; font-size: 0.78rem; color: var(--muted); }
   .note code { font-size: 0.95em; }
+  .account { border-radius: var(--radius); background: var(--surface); padding: 0.6rem 0.85rem; }
+  .account summary { cursor: pointer; font-weight: 600; font-size: 0.88rem; display: flex; gap: 0.35rem; align-items: center; flex-wrap: wrap; }
+  .account summary .muted { font-weight: 500; font-size: 0.78rem; }
+  .account ol { list-style: none; margin: 0.6rem 0 0; padding: 0; display: grid; gap: 0.5rem; max-height: 40vh; overflow: auto; }
+  .account li { display: grid; grid-template-columns: 1.6rem 1fr; gap: 0.4rem; }
+  .account .turn { color: var(--faint); font-size: 0.72rem; padding-top: 0.15rem; }
+  .account p { margin: 0; font-size: 0.86rem; font-style: italic; color: var(--text-2); white-space: pre-wrap; }
+  .small { font-size: 0.82rem; margin: 0.4rem 0 0; }
   .acts { display: flex; flex-wrap: wrap; gap: 0.4rem; }
   .loading { display: grid; place-items: center; padding: 3rem; }
   .spinner { width: 20px; height: 20px; border-radius: 50%; border: 2.5px solid var(--fill-2); border-top-color: var(--muted); animation: spin 800ms linear infinite; }

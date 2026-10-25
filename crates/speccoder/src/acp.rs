@@ -223,6 +223,14 @@ impl Progress for Updates {
                     );
                 }
             }
+            // The model's account, as the protocol's thought stream: an
+            // editor shows it apart from results.
+            Event::Said { text, .. } => {
+                c.update(
+                    &self.session,
+                    json!({ "sessionUpdate": "agent_thought_chunk", "content": { "type": "text", "text": format!("{text}\n") } }),
+                );
+            }
             Event::ToolCall {
                 tool,
                 target,

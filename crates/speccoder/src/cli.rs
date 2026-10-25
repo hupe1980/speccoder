@@ -476,6 +476,9 @@ pub enum TaskAction {
     Show {
         /// The task, e.g. T005.
         task: String,
+        /// Also what the model said in the task's last attempt, turn by turn (a claim).
+        #[arg(long)]
+        account: bool,
     },
 }
 
