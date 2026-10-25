@@ -3,10 +3,10 @@
 //! desktop app or another workbench later. Every action is a CLI command
 //! too, so nothing an interface offers is out of reach of a script.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// How an interface runs an action itself.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Runnable {
     /// A planning skill (`speccoder spec <name> <arguments>`).
@@ -99,6 +99,9 @@ pub enum StepState {
     Now,
     /// Later.
     Todo,
+    /// Passed without its file: a task list written without a spec or a
+    /// plan. Not a step left to take.
+    Skipped,
 }
 
 /// One step of a feature's journey: `spec`, `plan`, `tasks`, `commit`,
@@ -129,24 +132,33 @@ pub struct JourneyFacts {
 }
 
 /// The journey from a spec to a reviewed branch, and where the feature is
-/// on it: everything before the first open step is done, that one is now.
+/// on it: everything before the first open step is done (or skipped, when a
+/// later planning file exists without it), that one is now.
 #[must_use]
 pub fn journey(f: JourneyFacts) -> Vec<JourneyStep> {
+    let skipped = [!f.spec && (f.plan || f.tasks), !f.plan && f.tasks];
     let done = [
         ("spec", f.spec),
-        ("plan", f.plan || (f.tasks && !f.plan && f.total > 0)),
+        ("plan", f.plan),
         ("tasks", f.tasks),
         ("commit", f.tasks && !f.uncommitted),
         ("run", f.total > 0 && f.finished == f.total),
         ("review", false),
     ];
-    let now = done.iter().position(|(_, d)| !d).unwrap_or(done.len());
+    let passed = |i: usize| skipped.get(i).copied().unwrap_or(false);
+    let now = done
+        .iter()
+        .enumerate()
+        .position(|(i, (_, d))| !d && !passed(i))
+        .unwrap_or(done.len());
     done.iter()
         .enumerate()
         .map(|(i, (name, d))| JourneyStep {
             name: (*name).to_owned(),
             state: if *d && i < now {
                 StepState::Done
+            } else if passed(i) && i < now {
+                StepState::Skipped
             } else if i == now {
                 StepState::Now
             } else {
@@ -197,5 +209,38 @@ mod tests {
             ..running
         };
         assert_eq!(states(finished), at([Done, Done, Done, Done, Done, Now]));
+    }
+
+    #[test]
+    fn a_task_list_without_a_spec_skips_to_the_run() {
+        use StepState::{Now, Skipped, Todo};
+        let names = ["spec", "plan", "tasks", "commit", "run", "review"].map(String::from);
+        let at = |v: [StepState; 6]| names.iter().cloned().zip(v).collect::<Vec<_>>();
+        let only_tasks = JourneyFacts {
+            tasks: true,
+            total: 4,
+            finished: 1,
+            ..JourneyFacts::default()
+        };
+        assert_eq!(
+            states(only_tasks),
+            at([
+                Skipped,
+                Skipped,
+                StepState::Done,
+                StepState::Done,
+                Now,
+                Todo
+            ])
+        );
+        // A plan without a spec: the spec is skipped, the tasks are next.
+        let planned = JourneyFacts {
+            plan: true,
+            ..JourneyFacts::default()
+        };
+        assert_eq!(
+            states(planned),
+            at([Skipped, StepState::Done, Now, Todo, Todo, Todo])
+        );
     }
 }

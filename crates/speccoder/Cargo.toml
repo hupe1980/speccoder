@@ -7,6 +7,8 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 readme = "README.md"
+# The window's build (`--features app`) reads these.
+include = ["/src", "/build.rs", "/tauri.conf.json", "/icons", "/README.md", "/LICENSE-APACHE", "/LICENSE-MIT"]
 authors.workspace = true
 keywords.workspace = true
 categories.workspace = true
@@ -18,6 +20,7 @@ path = "src/main.rs"
 [dependencies]
 speccoder-core.workspace = true
 speccoder-runtime.workspace = true
+speccoder-web.workspace = true
 clap.workspace = true
 clap_complete.workspace = true
 ratatui.workspace = true
@@ -25,6 +28,17 @@ schemars.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 unicode-width.workspace = true
+
+# The desktop window (`speccoder ui --window`). Off by default, so
+# `cargo install speccoder` links no WebView.
+tauri = { version = "2", optional = true }
+
+[build-dependencies]
+tauri-build = { version = "2", optional = true }
+
+[features]
+default = []
+app = ["dep:tauri", "dep:tauri-build"]
 
 [dev-dependencies]
 assert_cmd.workspace = true

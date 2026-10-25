@@ -1,0 +1,147 @@
+/* speccoder's design tokens. Colour carries meaning, never decoration, and
+   the meanings are the CLI's: verified, regression only, attested, no
+   evidence, skipped, ready, blocked, running, needs you, failed. Every
+   state also has a mark and a word, so nothing depends on colour alone. */
+
+:root {
+  color-scheme: light;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, "Helvetica Neue", sans-serif;
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --surface-2: #f1f3f6;
+  --surface-3: #e8ebf0;
+  --border: #e2e5eb;
+  --border-strong: #cdd2db;
+  --text: #12151c;
+  --text-2: #464c5a;
+  --muted: #7a8091;
+  --accent: #4f46e5;
+  --accent-text: #ffffff;
+  --accent-soft: #eef0ff;
+  --focus: #4f46e5;
+
+  --verified: #15803d;   --verified-bg: #e7f6ec;
+  --regression: #b45309; --regression-bg: #fdf3e2;
+  --attested: #7c3aed;   --attested-bg: #f2ecff;
+  --noevidence: #c2410c; --noevidence-bg: #fdeee5;
+  --skipped: #6b7280;    --skipped-bg: #eff0f2;
+  --ready: #2563eb;      --ready-bg: #e8effd;
+  --blocked: #64748b;    --blocked-bg: #edf0f4;
+  --running: #0e7490;    --running-bg: #e1f4f8;
+  --attention: #c2570c;  --attention-bg: #fff1e1;
+  --danger: #dc2626;     --danger-bg: #fdecec;
+  --add: #116329;        --add-bg: #dafbe1;
+  --del: #a40e26;        --del-bg: #ffebe9;
+
+  --radius: 10px;
+  --radius-sm: 6px;
+  --shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.08);
+  --shadow-lg: 0 12px 32px rgba(16, 24, 40, 0.16), 0 2px 6px rgba(16, 24, 40, 0.08);
+  --speed: 160ms;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0d0f14;
+    --surface: #14171f;
+    --surface-2: #1a1e28;
+    --surface-3: #222736;
+    --border: #262b38;
+    --border-strong: #353b4b;
+    --text: #e8eaf0;
+    --text-2: #b4b9c7;
+    --muted: #7f8597;
+    --accent: #8b84ff;
+    --accent-text: #0d0f14;
+    --accent-soft: #23234a;
+    --focus: #a5a0ff;
+    --verified: #4ade80;   --verified-bg: #10291a;
+    --regression: #fbbf24; --regression-bg: #2e2410;
+    --attested: #c4a5ff;   --attested-bg: #24193f;
+    --noevidence: #fb923c; --noevidence-bg: #301a0e;
+    --skipped: #9ca3af;    --skipped-bg: #1d2027;
+    --ready: #7aa7ff;      --ready-bg: #15213a;
+    --blocked: #94a3b8;    --blocked-bg: #1a1f29;
+    --running: #4fd1e8;    --running-bg: #0f2730;
+    --attention: #ffa94d;  --attention-bg: #33210e;
+    --danger: #f87171;     --danger-bg: #351414;
+    --add: #7ee2a8;        --add-bg: #12301f;
+    --del: #ffa198;        --del-bg: #3b1616;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.55);
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0d0f14; --surface: #14171f; --surface-2: #1a1e28; --surface-3: #222736;
+  --border: #262b38; --border-strong: #353b4b; --text: #e8eaf0; --text-2: #b4b9c7; --muted: #7f8597;
+  --accent: #8b84ff; --accent-text: #0d0f14; --accent-soft: #23234a; --focus: #a5a0ff;
+  --verified: #4ade80; --verified-bg: #10291a; --regression: #fbbf24; --regression-bg: #2e2410;
+  --attested: #c4a5ff; --attested-bg: #24193f; --noevidence: #fb923c; --noevidence-bg: #301a0e;
+  --skipped: #9ca3af; --skipped-bg: #1d2027; --ready: #7aa7ff; --ready-bg: #15213a;
+  --blocked: #94a3b8; --blocked-bg: #1a1f29; --running: #4fd1e8; --running-bg: #0f2730;
+  --attention: #ffa94d; --attention-bg: #33210e; --danger: #f87171; --danger-bg: #351414;
+  --add: #7ee2a8; --add-bg: #12301f; --del: #ffa198; --del-bg: #3b1616;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4); --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.55);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --speed: 0ms; }
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.5 var(--font);
+  -webkit-font-smoothing: antialiased;
+}
+button, input, textarea, select { font: inherit; color: inherit; }
+code, pre, kbd, .mono { font-family: var(--mono); font-size: 0.92em; }
+kbd {
+  display: inline-block; min-width: 1.4em; padding: 0 0.35em; border-radius: 4px;
+  border: 1px solid var(--border-strong); border-bottom-width: 2px; background: var(--surface);
+  color: var(--text-2); font-size: 0.78em; line-height: 1.5; text-align: center;
+}
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
+::selection { background: var(--accent-soft); }
+
+.btn {
+  display: inline-flex; align-items: center; gap: 0.5em; border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong); background: var(--surface); padding: 0.42em 0.85em;
+  cursor: pointer; transition: background var(--speed), border-color var(--speed), transform var(--speed);
+  white-space: nowrap;
+}
+.btn:hover { background: var(--surface-2); }
+.btn:active { transform: translateY(1px); }
+.btn[disabled] { opacity: 0.5; cursor: not-allowed; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 600; }
+.btn.primary:hover { filter: brightness(1.06); }
+.btn.ghost { border-color: transparent; background: transparent; }
+.btn.ghost:hover { background: var(--surface-2); }
+.btn.danger { color: var(--danger); }
+.btn.small { padding: 0.2em 0.6em; font-size: 0.86em; }
+
+.chip {
+  display: inline-flex; align-items: center; gap: 0.35em; padding: 0.05em 0.55em; border-radius: 999px;
+  font-size: 0.8em; font-weight: 600; white-space: nowrap;
+}
+.s-verified { color: var(--verified); background: var(--verified-bg); }
+.s-regression_only { color: var(--regression); background: var(--regression-bg); }
+.s-attested { color: var(--attested); background: var(--attested-bg); }
+.s-ticked_without_evidence, .s-evidence_without_tick { color: var(--noevidence); background: var(--noevidence-bg); }
+.s-skipped { color: var(--skipped); background: var(--skipped-bg); }
+.s-ready { color: var(--ready); background: var(--ready-bg); }
+.s-blocked { color: var(--blocked); background: var(--blocked-bg); }
+.s-running { color: var(--running); background: var(--running-bg); }
+.s-needs_approval { color: var(--attention); background: var(--attention-bg); }
+.s-failed, .s-error, .s-verification_failed { color: var(--danger); background: var(--danger-bg); }
+
+.muted { color: var(--muted); }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

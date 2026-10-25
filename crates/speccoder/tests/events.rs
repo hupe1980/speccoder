@@ -381,3 +381,186 @@ fn after_planning_the_cli_offers_the_commit_and_then_the_run() {
     );
     assert_eq!(v["exit"], 0, "{text}");
 }
+
+/// One HTTP/1.1 exchange with the web host: (status, head, body).
+fn http(port: u16, req: &str) -> (u16, String, String) {
+    use std::io::{Read, Write};
+    let mut s = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+    s.write_all(req.as_bytes()).unwrap();
+    let mut out = String::new();
+    s.read_to_string(&mut out).unwrap();
+    let (head, body) = out.split_once("\r\n\r\n").unwrap_or((&out, ""));
+    let status = head.split(' ').nth(1).unwrap().parse().unwrap();
+    (status, head.to_ascii_lowercase(), body.to_owned())
+}
+
+fn request(port: u16, method: &str, path: &str, extra: &str, body: &str) -> String {
+    format!(
+        "{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n{extra}Content-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        body.len()
+    )
+}
+
+/// `speccoder ui` (F-076): the host refuses a request without the token,
+/// with a foreign `Host` (DNS rebinding) and a cross-origin write; with the
+/// token, a run started over the API stops at the call that needs a person,
+/// the page's answer lets it finish, and the decision is recorded `via web`.
+#[test]
+fn the_web_host_guards_itself_and_a_run_is_answered_over_its_api() {
+    if !has_python() {
+        eprintln!("skipped: no python3");
+        return;
+    }
+    let done = json!({ "summary": "wrote it", "status": "done", "files_changed": ["package.json"], "checks_run": [], "notes": [] });
+    let (_mock, repo, state) = project(&json!([
+        { "tool": "write_file", "args": { "path": "package.json", "content": "{}\n" } },
+        { "content": done.to_string() },
+    ]));
+    // `--json` prints the documented result once the host listens.
+    let mut child = Command::new(env!("CARGO_BIN_EXE_speccoder"))
+        .args(["--json", "ui", "--no-open", "--port", "0", "-C"])
+        .arg(repo.path())
+        .env("SPECCODER_STATE_DIR", state.path())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    let mut first = String::new();
+    BufReader::new(child.stdout.take().unwrap())
+        .read_line(&mut first)
+        .unwrap();
+    let _host = Killed(child);
+    let ready = support::checked(serde_json::from_str(&first).unwrap());
+    assert_eq!(ready["payload"], "ui", "{ready}");
+    let port = u16::try_from(ready["data"]["port"].as_u64().unwrap()).unwrap();
+    let url = ready["data"]["url"].as_str().unwrap();
+    let token = url.split_once("#token=").unwrap().1.to_owned();
+    let auth = format!("Authorization: Bearer {token}\r\n");
+
+    // Refused: no token, a foreign Host, a cross-origin write.
+    assert_eq!(
+        http(port, &request(port, "GET", "/api/project", "", "")).0,
+        401
+    );
+    let rebound = format!(
+        "GET /api/project HTTP/1.1\r\nHost: evil.example:{port}\r\n{auth}Connection: close\r\n\r\n"
+    );
+    assert_eq!(http(port, &rebound).0, 421);
+    let foreign = format!("{auth}Origin: https://evil.example\r\n");
+    assert_eq!(
+        http(port, &request(port, "POST", "/api/stop", &foreign, "{}")).0,
+        403
+    );
+    // The page itself: served with the policy, never cached or framed.
+    let (status, head, body) = http(port, &request(port, "GET", "/", "", ""));
+    assert_eq!(status, 200);
+    assert!(
+        body.contains("<div id=\"app\">") || body.contains("id=\"app\""),
+        "{body}"
+    );
+    for h in [
+        "content-security-policy: default-src 'self'",
+        "cache-control: no-store",
+        "x-frame-options: deny",
+        "referrer-policy: no-referrer",
+    ] {
+        assert!(head.contains(h), "{h}: {head}");
+    }
+    // With the token: the project, and the next step offered.
+    let (status, _, body) = http(port, &request(port, "GET", "/api/actions", &auth, ""));
+    assert_eq!(status, 200, "{body}");
+    let actions: Value = serde_json::from_str(&body).unwrap();
+    assert!(
+        actions
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|a| a["run"]["kind"] == "run"),
+        "{actions}"
+    );
+
+    // Listen, then start the task; answer the ask; wait for the end.
+    let (tx, rx) = std::sync::mpsc::channel::<Value>();
+    let listen = request(port, "GET", "/api/events", &auth, "");
+    std::thread::spawn(move || {
+        use std::io::Write;
+        let mut s = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+        s.write_all(listen.as_bytes()).unwrap();
+        for line in BufReader::new(s).lines().map_while(Result::ok) {
+            if let Some(data) = line.strip_prefix("data:")
+                && let Ok(v) = serde_json::from_str::<Value>(data.trim())
+                && tx.send(v).is_err()
+            {
+                break;
+            }
+        }
+    });
+    let next = |want: &str| -> Value {
+        let until = Instant::now() + Duration::from_secs(90);
+        loop {
+            let left = until.saturating_duration_since(Instant::now());
+            let v = rx
+                .recv_timeout(left)
+                .unwrap_or_else(|_| panic!("no {want} event"));
+            if v["type"] == want {
+                return v;
+            }
+        }
+    };
+    next("hello");
+    let start = json!({ "run": { "kind": "run", "task": "T005" }, "input": null, "feature": null, "command": "speccoder run --task T005" });
+    let (status, _, body) = http(
+        port,
+        &request(port, "POST", "/api/run", &auth, &start.to_string()),
+    );
+    assert_eq!(status, 200, "{body}");
+    // A second job while one runs is refused.
+    assert_eq!(
+        http(
+            port,
+            &request(port, "POST", "/api/run", &auth, &start.to_string())
+        )
+        .0,
+        409
+    );
+    let ask = next("ask");
+    assert!(
+        ask["presentation"].to_string().contains("package.json"),
+        "{ask}"
+    );
+    let answer = json!({ "id": ask["id"], "answer": { "decision": "approve", "scope": "once" } });
+    let (status, _, body) = http(
+        port,
+        &request(port, "POST", "/api/answer", &auth, &answer.to_string()),
+    );
+    assert_eq!(status, 200, "{body}");
+    let end = next("done");
+    assert_eq!(end["result"]["status"], "ok", "{end}");
+    // The decision names who made it and through what.
+    assert!(end.to_string().contains(r#""via":"web""#), "{end}");
+
+    // Ticked on the feature's branch; the decision names the web.
+    let log = Command::new("git")
+        .args(["log", "--format=%s%n%b%n%N", "speccoder/001-graph"])
+        .current_dir(repo.path())
+        .output()
+        .unwrap();
+    let log = String::from_utf8_lossy(&log.stdout);
+    assert!(log.contains("T005"), "{log}");
+}
+
+/// Without the `app` feature, `--window` says how to get it.
+#[cfg(not(feature = "app"))]
+#[test]
+fn a_window_without_the_app_feature_says_how_to_build_it() {
+    let out = Command::new(env!("CARGO_BIN_EXE_speccoder"))
+        .args(["--json", "ui", "--window", "--no-open"])
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(2));
+    let v = support::result(&out.stdout);
+    assert!(
+        v["message"].as_str().unwrap().contains("--features app"),
+        "{v}"
+    );
+}

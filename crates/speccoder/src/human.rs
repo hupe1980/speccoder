@@ -1295,16 +1295,17 @@ pub fn journey_in(
                     StepState::Done => "done",
                     StepState::Now => "next",
                     StepState::Todo => "to do",
+                    StepState::Skipped => "skipped",
                 };
                 format!("{} {w}", s.name)
             })
             .collect();
         return format!("journey: {}", words.join(", "));
     }
-    let (done, now, todo, join) = if look.ascii {
-        ("[x]", "[>]", "[ ]", " - ")
+    let (done, now, todo, skipped, join) = if look.ascii {
+        ("[x]", "[>]", "[ ]", "[-]", " - ")
     } else {
-        ("✓", "●", "·", " ── ")
+        ("✓", "●", "·", "–", " ── ")
     };
     let cells: Vec<String> = steps
         .iter()
@@ -1312,6 +1313,7 @@ pub fn journey_in(
             StepState::Done => look.paint(Token::Verified, &format!("{done} {}", s.name)),
             StepState::Now => look.paint(Token::Accent, &format!("{now} {}", s.name)),
             StepState::Todo => look.paint(Token::Muted, &format!("{todo} {}", s.name)),
+            StepState::Skipped => look.paint(Token::Muted, &format!("{skipped} {}", s.name)),
         })
         .collect();
     cells.join(&look.paint(Token::Muted, join))

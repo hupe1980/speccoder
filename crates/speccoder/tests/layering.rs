@@ -14,6 +14,7 @@ const CORE: &str = "speccoder-core";
 const SPECKIT: &str = "speccoder-speckit";
 const OPENSPEC: &str = "speccoder-openspec";
 const RUNTIME: &str = "speccoder-runtime";
+const WEB: &str = "speccoder-web";
 const BIN: &str = "speccoder";
 
 /// Crates the pure core must never reach, directly or transitively (rule 5).
@@ -112,13 +113,15 @@ fn allowed_workspace_deps(krate: &str) -> &'static [&'static str] {
         CORE => &[],
         SPECKIT | OPENSPEC => &[CORE],
         RUNTIME => &[CORE, SPECKIT, OPENSPEC],
-        BIN => &[CORE, SPECKIT, OPENSPEC, RUNTIME],
+        // The web host serves the runtime's payloads; it reads no format.
+        WEB => &[CORE, RUNTIME],
+        BIN => &[CORE, SPECKIT, OPENSPEC, RUNTIME, WEB],
         _ => &[],
     }
 }
 
 fn violations(g: &Graph) -> Vec<String> {
-    let workspace = [CORE, SPECKIT, OPENSPEC, RUNTIME, BIN];
+    let workspace = [CORE, SPECKIT, OPENSPEC, RUNTIME, WEB, BIN];
     let mut errors = Vec::new();
 
     for (rule, krate) in [
@@ -126,6 +129,7 @@ fn violations(g: &Graph) -> Vec<String> {
         (2, SPECKIT),
         (2, OPENSPEC),
         (3, RUNTIME),
+        (4, WEB),
         (4, BIN),
     ] {
         let allowed = allowed_workspace_deps(krate);

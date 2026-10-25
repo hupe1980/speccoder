@@ -68,6 +68,7 @@ const fn describe(payload: &str) -> &'static str {
         b"schema" => "schema: the published schemas",
         b"doctor" => "doctor: every check of the machine and the project",
         b"features" => "feature: the features and which one is current",
+        b"ui" => "ui: where the web interface is served",
         _ => "",
     }
 }
@@ -105,6 +106,7 @@ pub fn get(name: &str) -> Option<Value> {
         "schema" => generate::<core::SchemaReport>(name, title),
         "doctor" => generate::<core::DoctorReport>(name, title),
         "features" => generate::<core::FeaturesReport>(name, title),
+        "ui" => generate::<core::UiReport>(name, title),
         _ => return None,
     })
 }

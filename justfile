@@ -1,7 +1,7 @@
 # speccoder — development task runner (https://just.systems). `just ci` mirrors CI.
 
 # Publish order: every crate after the crates it depends on.
-crates := "speccoder-core speccoder-speckit speccoder-openspec speccoder-runtime speccoder"
+crates := "speccoder-core speccoder-speckit speccoder-openspec speccoder-runtime speccoder-web speccoder"
 
 default:
     @just --list --unsorted
@@ -126,3 +126,7 @@ cold-start:
 # Re-record the real-model journals for tests/recorded.rs (needs a key, costs money, never CI).
 record-journals:
     scripts/record-journals.sh
+
+# Rebuild the web interface (crates/speccoder-web/ui) into its committed bundle.
+ui:
+    cd crates/speccoder-web/ui && npm ci && npm run check && npm run build

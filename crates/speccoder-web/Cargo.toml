@@ -1,0 +1,31 @@
+[package]
+name = "speccoder-web"
+description = "speccoder's web interface: a loopback host serving the embedded UI and an API over speccoder's own payloads"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "README.md"
+authors.workspace = true
+keywords.workspace = true
+categories.workspace = true
+# The built interface only; its source and node_modules stay out.
+include = ["/src", "/build.rs", "/ui/dist/*.html", "/ui/dist/*.js", "/ui/dist/*.css", "/ui/dist/*.svg", "/README.md", "/LICENSE-APACHE", "/LICENSE-MIT"]
+
+[dependencies]
+speccoder-core.workspace = true
+speccoder-runtime.workspace = true
+axum = { version = "0.8", default-features = false, features = ["json", "tokio", "http1", "query"] }
+tokio = { version = "1", features = ["rt-multi-thread", "net", "macros", "sync", "time", "signal"] }
+tokio-stream = { version = "0.1", features = ["sync"] }
+futures-util = { version = "0.3", default-features = false }
+getrandom = "0.3"
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

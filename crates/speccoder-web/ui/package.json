@@ -1,0 +1,19 @@
+{
+  "name": "speccoder-ui",
+  "private": true,
+  "type": "module",
+  "version": "0.0.0",
+  "description": "speccoder's interface. Built to flat files the Rust binary embeds at compile time: no second thing to run, nothing fetched from the network.",
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite",
+    "check": "svelte-check --tsconfig ./tsconfig.json"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "7.3.0",
+    "svelte": "5.57.1",
+    "svelte-check": "4.7.6",
+    "typescript": "5.9.3",
+    "vite": "8.3.0"
+  }
+}

@@ -39,3 +39,6 @@ rustc-ice-*.txt
 
 # Local environment files
 .env*
+
+# Tauri build output (feature `app`)
+/crates/speccoder/gen/

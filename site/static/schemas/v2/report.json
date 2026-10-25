@@ -165,6 +165,11 @@
           "const": "todo",
           "description": "Later.",
           "type": "string"
+        },
+        {
+          "const": "skipped",
+          "description": "Passed without its file: a task list written without a spec or a\nplan. Not a step left to take.",
+          "type": "string"
         }
       ]
     },

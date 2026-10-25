@@ -47,7 +47,7 @@ An edit shows a diff with line numbers, a new file its first lines, a command th
 - `s` stops the task here: the attempt waits, just as it does in an unattended run, for `speccoder task approve` or `task reject`.
 - `esc` decides later: nothing changes, the call keeps waiting. In the dashboard the overlay closes and the footer offers it again (`enter`).
 
-The dashboard's overlay takes the same keys, one keystroke each: `tab` adds a note before `y`, `t` or `r`; `n` asks for the reason; `v` shows the whole body, `↑ ↓` scroll it. Decisions made there are recorded `via dashboard`.
+The dashboard's overlay takes the same keys, one keystroke each: `tab` adds a note before `y`, `t` or `r`; `n` asks for the reason; `v` shows the whole body, `↑ ↓` scroll it. Decisions made there are recorded `via dashboard`. In the [web interface](@/docs/web.md#when-a-run-needs-you) the call opens as a sheet with the same keys, and calls stopped earlier are approved or rejected from its Report; those decisions are recorded `via web`.
 
 The attempt continues in the same turn, and a "for the task" or "for this run" answer also covers the same class later in that attempt. Take your time: a waiting prompt does not cost the run anything.
 
@@ -88,7 +88,7 @@ Decisions travel in each attempt's recorded input — "for this run" grants incl
 Every decision is a record in the run's journal: **who made it, how speccoder knows that name, through what, when, and what exactly was shown**.
 
 - The name is git's `user.name` in the project (what your commits say), else your operating-system user, else `unknown` — never a guess. `task accept`'s `Accepted-By` uses the same name.
-- How it is known: `asserted` for an answer at the terminal, in the dashboard or with `speccoder task approve`/`task reject`, `connected` for one an editor reports over ACP (`via editor Zed`). speccoder authenticates nobody, so it never claims more.
+- How it is known: `asserted` for an answer at the terminal, in the dashboard, in the web interface or with `speccoder task approve`/`task reject`, `connected` for one an editor reports over ACP (`via editor Zed`). speccoder authenticates nobody, so it never claims more.
 - An approval holds only for the call it was shown: a decision bound to anything else is refused and the call is presented again.
 - A call allowed or denied without asking names the **rule** that decided it (``allowed command `cargo test` ``, `workspace write`, a grant for the task), never a person; an expired call says `expired`.
 

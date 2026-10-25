@@ -1,0 +1,24 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "speccoder",
+  "identifier": "dev.speccoder.app",
+  "build": {
+    "frontendDist": "../speccoder-web/ui/dist"
+  },
+  "app": {
+    "windows": [],
+    "withGlobalTauri": false,
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": false,
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.png"],
+    "publisher": "hupe1980",
+    "copyright": "Copyright (c) hupe1980. MIT OR Apache-2.0.",
+    "license": "MIT OR Apache-2.0",
+    "category": "DeveloperTool",
+    "shortDescription": "Spec-driven coding, decided by evidence."
+  }
+}

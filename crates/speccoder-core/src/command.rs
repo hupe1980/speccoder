@@ -183,6 +183,20 @@ pub enum CommandData {
     Doctor(Box<DoctorReport>),
     /// `feature`: the project's features and which one is current.
     Features(Box<FeaturesReport>),
+    /// `ui`: where the web interface is served.
+    Ui(Box<UiReport>),
+}
+
+/// Result of `speccoder ui`, printed once the host listens (under `--json`
+/// the only result: the host keeps serving after it).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct UiReport {
+    /// The address to open, with this start's key in its fragment.
+    pub url: String,
+    /// The port on 127.0.0.1.
+    pub port: u16,
+    /// The project served.
+    pub root: String,
 }
 
 /// One feature (or change) of the project, as `speccoder feature` lists it.
@@ -292,6 +306,7 @@ impl CommandData {
             Self::Schema(_) => "schema",
             Self::Doctor(_) => "doctor",
             Self::Features(_) => "features",
+            Self::Ui(_) => "ui",
         }
     }
 }
@@ -324,6 +339,7 @@ pub const PAYLOADS: &[&str] = &[
     "schema",
     "doctor",
     "features",
+    "ui",
 ];
 
 /// A repository instructions file given to an attempt.
