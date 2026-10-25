@@ -312,6 +312,13 @@ fn human_body(
             }
             writeln!(out, "{}", result.message())
         }
+        (_, Some(CommandData::Review(r))) => {
+            let look = crate::style::out();
+            for line in crate::human::review(r, &look) {
+                writeln!(out, "{line}")?;
+            }
+            writeln!(out, "{}", result.message())
+        }
         (_, Some(CommandData::Inbox(r))) => {
             let look = crate::style::out();
             for line in crate::human::inbox(r, &look) {
@@ -504,6 +511,7 @@ mod look_tests {
         .collect();
         let r = CommandResult::ok("report", "8 tasks").with_data(CommandData::Report(Box::new(
             StatusReport {
+                review: None,
                 issues: Vec::new(),
                 feature: "001-x".to_owned(),
                 branch: Some("speccoder/001-x".to_owned()),

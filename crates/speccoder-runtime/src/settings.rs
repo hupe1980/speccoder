@@ -404,6 +404,18 @@ pub const CATALOGUE: &[Section] = &[
         )],
     },
     Section {
+        name: "review",
+        title: "Spec review",
+        about: "Whether a run waits for every requirement to be approved.",
+        named: false,
+        keys: &[k(
+            "required",
+            Kind::Bool,
+            Some("false"),
+            "A run waits until every requirement is approved on its current wording",
+        )],
+    },
+    Section {
         name: "monitor",
         title: "Gaming monitor",
         about: "A second model that reviews every passing attempt for gaming.",

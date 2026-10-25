@@ -740,6 +740,10 @@
         {
           "$ref": "#/$defs/InboxReport",
           "description": "`inbox`: what waits for a person's decision, across features."
+        },
+        {
+          "$ref": "#/$defs/ReviewReport",
+          "description": "`review`: the feature's requirements and the person's review of each."
         }
       ],
       "description": "Command-specific payload of a result."
@@ -2496,7 +2500,7 @@
           "type": "string"
         },
         "kind": {
-          "description": "What kind, in the order of urgency: `approval` (a run waits on it),\n`ruling` (a verified attempt is held: its tests reject an\nalternative the spec allows), `gaming` (the monitor suspects a\nshortcut), `stale` (proven against an earlier wording), `stuck` (the\nlast attempt did not pass), `commit` (planning files a run cannot\nread yet), `handoff` (every task done: review and hand it off).",
+          "description": "What kind, in the order of urgency: `approval` (a run waits on it),\n`ruling` (a verified attempt is held: its tests reject an\nalternative the spec allows), `gaming` (the monitor suspects a\nshortcut), `stale` (proven against an earlier wording), `review`\n(requirements not approved on their current wording), `revise`\n(changes requested on the spec), `stuck` (the\nlast attempt did not pass), `commit` (planning files a run cannot\nread yet), `handoff` (every task done: review and hand it off).",
           "type": "string"
         },
         "since": {
@@ -3678,6 +3682,146 @@
       ],
       "type": "object"
     },
+    "ReviewItem": {
+      "description": "One requirement and its review.",
+      "properties": {
+        "at": {
+          "description": "When (Unix seconds).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "by": {
+          "description": "Who decided (as for every decision: git's `user.name`, else the OS\nuser), when someone did.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "comment": {
+          "description": "The comment, for a change request (or a note on an approval).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "decided_on": {
+          "description": "For `lapsed`: the wording that was decided on.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "description": "`FR-001`.",
+          "type": "string"
+        },
+        "state": {
+          "description": "`open` (not reviewed), `approved`, `changes_requested`, or `lapsed`\n(decided on a wording that has changed since).",
+          "type": "string"
+        },
+        "text": {
+          "description": "Its wording now (the line, markup aside).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "text",
+        "state",
+        "by",
+        "at",
+        "comment",
+        "decided_on"
+      ],
+      "type": "object"
+    },
+    "ReviewReport": {
+      "description": "Result of `speccoder review` (F-087): every requirement of the feature's\nspec as a card, with the person's decision on its exact wording.",
+      "properties": {
+        "feature": {
+          "description": "The feature.",
+          "type": "string"
+        },
+        "file": {
+          "description": "Where the review is recorded (project-relative); commit it to share.",
+          "type": "string"
+        },
+        "requirements": {
+          "description": "One per requirement, in the spec's order.",
+          "items": {
+            "$ref": "#/$defs/ReviewItem"
+          },
+          "type": "array"
+        },
+        "revise_with": {
+          "description": "The format's skill that revises the spec from the comments\n(Spec Kit: `clarify`), when it has one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "revision": {
+          "description": "What that skill is asked, while changes are requested: every\nrequest with its requirement.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "totals": {
+          "$ref": "#/$defs/ReviewTotals",
+          "description": "Counts by state."
+        }
+      },
+      "required": [
+        "feature",
+        "file",
+        "requirements",
+        "totals",
+        "revise_with",
+        "revision"
+      ],
+      "type": "object"
+    },
+    "ReviewTotals": {
+      "description": "Counts of [`ReviewItem::state`].",
+      "properties": {
+        "approved": {
+          "description": "Approved on their current wording.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "changes_requested": {
+          "description": "Changes requested.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "lapsed": {
+          "description": "Decided on an earlier wording.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "open": {
+          "description": "Never reviewed.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "approved",
+        "changes_requested",
+        "open",
+        "lapsed"
+      ],
+      "type": "object"
+    },
     "Ruling": {
       "description": "A person's ruling that an over-strict finding was wrong: the tests were\nright, the alternative is not what the spec allows (D-074).",
       "properties": {
@@ -4104,6 +4248,32 @@
           "required": [
             "kind",
             "task"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Record the person's review of requirements (the input is the\ncomment; required to request changes).",
+          "properties": {
+            "ids": {
+              "description": "The requirement identifiers; empty: every one not yet approved.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "kind": {
+              "const": "review",
+              "type": "string"
+            },
+            "verdict": {
+              "description": "`approve`, `request` (changes) or `clear`.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "ids",
+            "verdict"
           ],
           "type": "object"
         },
@@ -4651,6 +4821,17 @@
             "type": "string"
           },
           "type": "array"
+        },
+        "review": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ReviewTotals"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The person's review of the spec's requirements (F-087), when the\nformat has requirement identifiers."
         },
         "selected_by": {
           "default": "",

@@ -31,6 +31,8 @@ class AppState {
   report = $state<Envelope<Report> | null>(null);
   actions = $state<Action[]>([]);
   approvals = $state<PendingCall[]>([]);
+  /** Which document the Spec & Plan view shows (`review`: the review cards). */
+  doc = $state("spec");
   /** Every decision waiting for the person, across features (F-086). */
   inbox = $state<Envelope<Inbox> | null>(null);
   documents = $state<Document[]>([]);

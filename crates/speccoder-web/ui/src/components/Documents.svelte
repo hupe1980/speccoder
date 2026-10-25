@@ -1,9 +1,16 @@
 <script lang="ts">
   import { app } from "../lib/app.svelte";
   import { diagrams } from "../lib/mermaid";
-  let pick = $state("spec");
+  import ReviewCards from "./ReviewCards.svelte";
   const docs = $derived(app.documents);
-  const shown = $derived(docs.find((d) => d.name === pick) ?? docs[0]);
+  // Review is offered when the spec names requirements to review.
+  const reviewable = $derived(!!app.report?.data?.review);
+  const reviewing = $derived(reviewable && app.doc === "review");
+  const shown = $derived(docs.find((d) => d.name === app.doc) ?? docs[0]);
+  const pendingReview = $derived.by(() => {
+    const t = app.report?.data?.review;
+    return t ? t.open + t.lapsed + t.changes_requested : 0;
+  });
   const names: Record<string, string> = { spec: "Spec", plan: "Plan", tasks: "Tasks", research: "Research", "data-model": "Data model", quickstart: "Quickstart" };
   // Requirement IDs become chips that say which task cites them (the report's trace).
   const cites = $derived(new Map((app.report?.data?.trace ?? []).map((t) => [t.requirement, t.task])));
@@ -20,15 +27,22 @@
 {:else}
   <div class="docs">
     <nav aria-label="Documents">
+      {#if reviewable}
+        <button class:on={reviewing} onclick={() => (app.doc = "review")}>Review{#if pendingReview}<span class="count">{pendingReview}</span>{/if}</button>
+      {/if}
       {#each docs as d (d.name)}
-        <button class:on={shown?.name === d.name} onclick={() => (pick = d.name)}>{names[d.name] ?? d.name}</button>
+        <button class:on={!reviewing && shown?.name === d.name} onclick={() => (app.doc = d.name)}>{names[d.name] ?? d.name}</button>
       {/each}
     </nav>
-    <article class="prose" use:diagrams={html}>
-      <p class="path mono muted">{shown?.path}</p>
-      <!-- Rendered by the host from Markdown; raw HTML in the file is shown as text. -->
-      {@html html}
-    </article>
+    {#if reviewing}
+      <ReviewCards />
+    {:else}
+      <article class="prose" use:diagrams={html}>
+        <p class="path mono muted">{shown?.path}</p>
+        <!-- Rendered by the host from Markdown; raw HTML in the file is shown as text. -->
+        {@html html}
+      </article>
+    {/if}
   </div>
 {/if}
 
@@ -38,6 +52,7 @@
   nav button { text-align: left; border: 0; background: none; padding: 0.4rem 0.7rem; border-radius: 8px; cursor: pointer; color: var(--text-2); font-weight: 500; }
   nav button:hover { background: var(--fill); }
   nav button.on { background: var(--accent); color: #fff; font-weight: 600; }
+  nav .count { float: right; min-width: 1.2rem; padding: 0 0.35rem; border-radius: 999px; background: var(--attention-fill); color: #fff; font: 700 0.68rem/1.2rem var(--rounded); text-align: center; }
   .prose {
     background: var(--surface); border-radius: var(--radius-lg); box-shadow: var(--shadow); padding: 2.25rem 2.75rem 2.75rem;
     max-width: 78ch; font-size: 15px; line-height: 1.65; letter-spacing: -0.008em;

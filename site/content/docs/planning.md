@@ -29,6 +29,31 @@ Results are left **uncommitted**: review them with `git diff`, then commit, beca
 
 `speckit-implement` and `speckit-converge` are not hosted — `speccoder run` and `speccoder converge` do that work, with evidence. `speckit-taskstoissues` is not hosted either, because it writes to GitHub.
 
+## Review the spec
+
+The spec is what the result will be judged against: its requirements are the words you sign off. Review them one at a time:
+
+```sh
+speccoder review                       # every requirement and its review
+speccoder review approve FR-001 FR-002 # on their wording as it is now
+speccoder review request FR-003 -c "say what happens to open sessions"
+speccoder review approve               # every one not yet approved
+```
+
+```text
+✓ FR-001  Users MUST log in.                          approved
+            Ada
+△ FR-003  Users MUST be logged out after 30 minutes.  changes requested
+            Ada — say what happens to open sessions
+1/3 requirements approved; 1 to review, 1 with changes requested
+```
+
+Each decision is bound to the exact line it was made on and names who made it (git's `user.name`). Reword a requirement and its decision **lapses**: it shows again, with the wording you decided on beside the new one. Change requests go to the format's revising skill (Spec Kit: `clarify`) in one request — **Revise the Spec** in the app, or `speccoder spec clarify "…"` — and you review the result.
+
+The review is recorded in `review.json` beside the spec; commit it with the spec, and the team, the pull request and every later run see the same sign-off. The model never writes it: a planning skill may write the spec, but a change to the review — even through a command it was allowed to run — is undone and reported. The report and the pull request description say how many requirements are approved; [**Needs You**](@/docs/web.md#what-you-see) lists what waits for your review. With `[review] required = true` in `speccoder.toml`, a run waits (`REVIEW-PENDING`) until every requirement is approved in the committed review.
+
+In the [app](@/docs/web.md), **Spec & Plan › Review** shows each requirement as a card with **Approve**, **Request Changes** and **Clear**, a lapsed one word by word.
+
 ## The current feature
 
 Every command works on one feature. Which one is the **current feature**, and speccoder keeps it where Spec Kit does — `.specify/feature.json`, a per-checkout file git ignores — so `speccoder`, Spec Kit's scripts and the `/speckit-*` commands in your editor always agree.

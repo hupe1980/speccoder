@@ -31,6 +31,7 @@ cd my-project
 export ANTHROPIC_API_KEY=…           # or OPENAI_API_KEY — read from the environment only
 speccoder init                       # detects your checks, runs them, offers to commit speccoder.toml
 speccoder run                        # works through the feature's tasks
+speccoder review                     # sign off the spec, requirement by requirement
 speccoder inbox                      # what waits for your decision, in every feature
 speccoder report                     # every task and the evidence behind its tick
 git merge speccoder/001-my-feature   # after reviewing the branch

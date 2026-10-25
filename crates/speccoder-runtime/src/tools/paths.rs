@@ -149,6 +149,11 @@ pub fn is_test_path(rel: &str) -> bool {
     SET.get_or_init(|| set(TESTS)).is_match(rel)
 }
 
+/// The file a person's spec review is recorded in, in a unit's directory
+/// (F-087). The model never writes it — not while implementing, not while
+/// running a planning skill: an agent must not approve its own spec.
+pub const REVIEW_FILE: &str = "review.json";
+
 /// Why a path is protected.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Class {
@@ -223,6 +228,13 @@ impl Protected {
     #[must_use]
     pub fn reason(&self, class: Class) -> &'static str {
         class.reason_with(self.rules)
+    }
+
+    /// Whether a normalised path is a review record: an intent path named
+    /// [`REVIEW_FILE`]. A planning skill writes intent; never this.
+    #[must_use]
+    pub fn is_review(&self, rel: &str) -> bool {
+        self.intent.is_match(rel) && rel.rsplit('/').next() == Some(REVIEW_FILE)
     }
 
     /// Whether a normalised path is a secret (refused for reading too).

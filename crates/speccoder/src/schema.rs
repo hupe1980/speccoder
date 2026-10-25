@@ -72,6 +72,7 @@ const fn describe(payload: &str) -> &'static str {
         b"config" => "config: every key of speccoder.toml, its value and its default",
         b"issues" => "issue: the repository's open GitHub issues",
         b"inbox" => "inbox: every decision waiting for a person, across features",
+        b"review" => "review: the spec's requirements and the person's decision on each",
         _ => "",
     }
 }
@@ -113,6 +114,7 @@ pub fn get(name: &str) -> Option<Value> {
         "config" => generate::<core::ConfigReport>(name, title),
         "issues" => generate::<core::IssuesReport>(name, title),
         "inbox" => generate::<core::InboxReport>(name, title),
+        "review" => generate::<core::ReviewReport>(name, title),
         _ => return None,
     })
 }

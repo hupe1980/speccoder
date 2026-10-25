@@ -8,6 +8,7 @@ export type Runnable =
   | { kind: "feature" }
   | { kind: "converge" }
   | { kind: "rule"; task: string }
+  | { kind: "review"; ids: string[]; verdict: "approve" | "request" | "clear" }
   | { kind: "pull_request" };
 
 export interface Action {
@@ -72,6 +73,7 @@ export interface Report {
   convergence: { round: number; commit: string; tasks: string[] }[];
   totals: Record<string, number>;
   issues?: string[];
+  review?: ReviewTotals | null;
 }
 
 export interface Envelope<T = unknown> {
@@ -243,4 +245,32 @@ export interface InboxItem {
 export interface Inbox {
   items: InboxItem[];
   features: number;
+}
+
+/** One requirement and the person's review of its wording (F-087). */
+export interface ReviewItem {
+  id: string;
+  text: string;
+  state: "open" | "approved" | "changes_requested" | "lapsed";
+  by: string | null;
+  at: number | null;
+  comment: string | null;
+  decided_on: string | null;
+}
+
+export interface ReviewTotals {
+  approved: number;
+  changes_requested: number;
+  open: number;
+  lapsed: number;
+}
+
+export interface Review {
+  feature: string;
+  file: string;
+  requirements: ReviewItem[];
+  totals: ReviewTotals;
+  revise_with: string | null;
+  /** What the revising skill is asked, while changes are requested. */
+  revision: string | null;
 }

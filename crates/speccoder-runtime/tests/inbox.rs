@@ -59,6 +59,18 @@ fn repo() -> tempfile::TempDir {
     git(r, &["init", "-q", "-b", "main"]);
     git(r, &["add", "-A"]);
     git(r, &["commit", "-q", "-m", "init"]);
+    // The person approved both specs (F-087) and committed the review.
+    for f in ["001-login", "002-logout"] {
+        let res = speccoder_runtime::review::decide(r, Some(f), &[], "approve", None, "cli");
+        assert_eq!(
+            res.status(),
+            speccoder_core::CommandStatus::Ok,
+            "{}",
+            res.message()
+        );
+    }
+    git(r, &["add", "-A"]);
+    git(r, &["commit", "-q", "-m", "review"]);
     for f in ["001-login", "002-logout"] {
         git(r, &["checkout", "-q", "-b", &format!("speccoder/{f}")]);
         git(
@@ -130,8 +142,16 @@ fn a_changed_spec_comes_before_a_handoff_and_replaces_it() {
         .iter()
         .map(|x| (x.kind.as_str(), x.feature.as_str()))
         .collect();
-    // A stale feature is not handed off: its evidence is for the old wording.
-    assert_eq!(kinds, [("stale", "002-logout"), ("handoff", "001-login")]);
+    // A stale feature is not handed off: its evidence is for the old wording;
+    // the reworded requirement waits for the person's review again.
+    assert_eq!(
+        kinds,
+        [
+            ("stale", "002-logout"),
+            ("review", "002-logout"),
+            ("handoff", "001-login")
+        ]
+    );
     let stale = &i.items[0];
     assert!(stale.detail.contains("T001 (FR-001)"), "{}", stale.detail);
     assert_eq!(stale.actions[0].run, Some(Runnable::Converge));
@@ -176,6 +196,18 @@ fn nothing_waiting_says_so() {
     git(r, &["init", "-q", "-b", "main"]);
     git(r, &["add", "-A"]);
     git(r, &["commit", "-q", "-m", "init"]);
+    let (i, _) = inbox(r);
+    assert_eq!(i.items.len(), 1, "the unreviewed spec: {:?}", i.items);
+    assert_eq!(i.items[0].kind, "review");
+    let res = speccoder_runtime::review::decide(r, None, &[], "approve", None, "cli");
+    assert_eq!(
+        res.status(),
+        speccoder_core::CommandStatus::Ok,
+        "{}",
+        res.message()
+    );
+    git(r, &["add", "-A"]);
+    git(r, &["commit", "-q", "-m", "review"]);
     let (i, message) = inbox(r);
     assert!(i.items.is_empty(), "{:?}", i.items);
     assert!(message.starts_with("nothing waits for you"), "{message}");
@@ -281,4 +313,44 @@ fn an_unknown_feature_is_refused_not_ignored() {
         "{}",
         res.message()
     );
+}
+
+#[test]
+fn a_change_request_waits_to_be_revised() {
+    let r = repo();
+    let res = speccoder_runtime::review::decide(
+        r.path(),
+        Some("001-login"),
+        &["FR-001".to_owned()],
+        "request",
+        Some("name the login methods"),
+        "cli",
+    );
+    assert_eq!(
+        res.status(),
+        speccoder_core::CommandStatus::Ok,
+        "{}",
+        res.message()
+    );
+    let (i, _) = inbox(r.path());
+    let revise = i
+        .items
+        .iter()
+        .find(|x| x.kind == "revise")
+        .expect("revise item");
+    assert_eq!(revise.feature, "001-login");
+    assert!(
+        revise.detail.contains("FR-001: name the login methods"),
+        "{}",
+        revise.detail
+    );
+    // No revising skill installed here: editing by hand is what is offered.
+    assert_eq!(revise.actions.len(), 1);
+    assert_eq!(
+        revise.actions[0].command,
+        "speccoder review --feature 001-login"
+    );
+    // Revise ranks before the hand-off of the other feature.
+    let at = |k: &str| i.items.iter().position(|x| x.kind == k).unwrap();
+    assert!(at("revise") < at("handoff"));
 }

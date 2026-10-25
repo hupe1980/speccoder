@@ -70,6 +70,23 @@ pub fn sections(r: &StatusReport) -> Vec<Section> {
         t.blocked,
         t.skipped
     );
+    // What the person signed off: the requirements the evidence is for.
+    if let Some(rv) = &r.review {
+        let n = rv.approved + rv.open + rv.changes_requested + rv.lapsed;
+        let _ = writeln!(
+            headline,
+            "\n**Spec review**: {}/{n} requirements approved{}.",
+            rv.approved,
+            if rv.complete() {
+                String::new()
+            } else {
+                format!(
+                    " — {} not reviewed, {} with changes requested, {} changed since approval",
+                    rv.open, rv.changes_requested, rv.lapsed
+                )
+            }
+        );
+    }
     if t.without_attestation > 0 {
         let _ = writeln!(
             headline,
@@ -288,6 +305,7 @@ mod tests {
                 .collect(),
             convergence: Vec::new(),
             trace: Vec::new(),
+            review: None,
             totals: StatusTotals {
                 verified: n,
                 ..StatusTotals::default()

@@ -145,6 +145,7 @@ pub static PLANNING: Planning = Planning {
     creates: &[],
     current_env: None,
     toward_tasks,
+    revises: None,
 };
 
 fn toward_tasks(_has_plan: bool) -> &'static [&'static str] {

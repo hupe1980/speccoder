@@ -59,6 +59,14 @@ pub enum Runnable {
         /// The task.
         task: String,
     },
+    /// Record the person's review of requirements (the input is the
+    /// comment; required to request changes).
+    Review {
+        /// The requirement identifiers; empty: every one not yet approved.
+        ids: Vec<String>,
+        /// `approve`, `request` (changes) or `clear`.
+        verdict: String,
+    },
     /// Pick the current feature.
     Feature,
     /// Push the feature's branch and open (or update) its draft pull request.

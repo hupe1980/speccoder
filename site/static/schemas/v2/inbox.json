@@ -83,7 +83,7 @@
           "type": "string"
         },
         "kind": {
-          "description": "What kind, in the order of urgency: `approval` (a run waits on it),\n`ruling` (a verified attempt is held: its tests reject an\nalternative the spec allows), `gaming` (the monitor suspects a\nshortcut), `stale` (proven against an earlier wording), `stuck` (the\nlast attempt did not pass), `commit` (planning files a run cannot\nread yet), `handoff` (every task done: review and hand it off).",
+          "description": "What kind, in the order of urgency: `approval` (a run waits on it),\n`ruling` (a verified attempt is held: its tests reject an\nalternative the spec allows), `gaming` (the monitor suspects a\nshortcut), `stale` (proven against an earlier wording), `review`\n(requirements not approved on their current wording), `revise`\n(changes requested on the spec), `stuck` (the\nlast attempt did not pass), `commit` (planning files a run cannot\nread yet), `handoff` (every task done: review and hand it off).",
           "type": "string"
         },
         "since": {
@@ -304,6 +304,32 @@
           "required": [
             "kind",
             "task"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Record the person's review of requirements (the input is the\ncomment; required to request changes).",
+          "properties": {
+            "ids": {
+              "description": "The requirement identifiers; empty: every one not yet approved.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "kind": {
+              "const": "review",
+              "type": "string"
+            },
+            "verdict": {
+              "description": "`approve`, `request` (changes) or `clear`.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "ids",
+            "verdict"
           ],
           "type": "object"
         },

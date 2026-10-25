@@ -149,6 +149,11 @@ pub enum Command {
     },
     /// What waits for your decision in every feature, the most urgent first, with the command for each.
     Inbox,
+    /// Review the spec requirement by requirement: approve each wording, or request changes with a comment.
+    Review {
+        #[command(subcommand)]
+        action: Option<ReviewAction>,
+    },
     /// GitHub issues through your `gh`: list the open ones; `start 42` specifies a feature from one.
     Issue {
         #[command(subcommand)]
@@ -502,6 +507,34 @@ pub enum BenchAction {
         /// The test command, when the dataset has none (default: detected).
         #[arg(long, value_name = "CMD")]
         test_cmd: Option<String>,
+    },
+}
+
+/// `speccoder review` actions; without one, every requirement and its review.
+#[derive(Debug, Subcommand)]
+pub enum ReviewAction {
+    /// Approve requirements on their current wording (none named: every one not yet approved).
+    Approve {
+        /// `FR-001`, `SC-002`, …
+        ids: Vec<String>,
+        /// A note kept with the approval.
+        #[arg(long)]
+        comment: Option<String>,
+    },
+    /// Request changes to requirements: the comment says what they should say.
+    Request {
+        /// `FR-001`, `SC-002`, …
+        #[arg(required = true)]
+        ids: Vec<String>,
+        /// What should change (required).
+        #[arg(long, short)]
+        comment: String,
+    },
+    /// Remove the decision on requirements.
+    Clear {
+        /// `FR-001`, `SC-002`, …
+        #[arg(required = true)]
+        ids: Vec<String>,
     },
 }
 

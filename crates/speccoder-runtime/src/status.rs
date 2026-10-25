@@ -285,6 +285,12 @@ pub fn report(path: &Path, feature: Option<&str>) -> CommandResult {
             ),
         )
         .with_data(CommandData::Report(Box::new(StatusReport {
+            review: crate::review::totals_of(
+                Path::new(&snapshot.root),
+                format,
+                &f.feature.name,
+                &f.feature.dir,
+            ),
             issues: issues_of(path, Some(&f.feature.name)),
             feature: f.feature.name.clone(),
             branch: None,
@@ -499,6 +505,7 @@ pub fn report(path: &Path, feature: Option<&str>) -> CommandResult {
     }
     CommandResult::new("report", CommandStatus::Ok, &message).with_data(CommandData::Report(
         Box::new(StatusReport {
+            review: crate::review::totals_of(root, format, &name, &f.feature.dir),
             issues: issues_of(root, Some(&name)),
             feature: name,
             branch: has_branch.then_some(branch),

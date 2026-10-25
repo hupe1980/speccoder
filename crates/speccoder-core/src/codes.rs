@@ -160,6 +160,14 @@ pub const CATALOG: &[Entry] = &[
         ]
     ),
     entry!(
+        "REVIEW-PENDING",
+        P,
+        S::NeedsHuman,
+        "the spec is not approved yet",
+        "`[review] required` is on: a run waits until every requirement of the spec is approved on its current wording, in the review committed with it (`review.json`). A requirement reworded since its approval needs approving again.",
+        ["speccoder review", "speccoder review approve", "git commit"]
+    ),
+    entry!(
         "FEATURE-UNKNOWN",
         E,
         S::SelectionNeeded,

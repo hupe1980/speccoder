@@ -290,6 +290,7 @@ impl Policy {
         if self.authoring
             && (self.protected.rules().authoring_path)(rel)
             && !self.protected.is_secret(rel)
+            && !self.protected.is_review(rel)
         {
             return None;
         }
@@ -437,12 +438,18 @@ impl Policy {
         if self.authoring
             && (self.protected.rules().authoring_path)(&p)
             && !self.protected.is_secret(&p)
+            && !self.protected.is_review(&p)
         {
             return Decision::Allow;
         }
         if self.is_hidden(&p) {
             return Decision::Deny(format!(
                 "`{p}` is ignored by git in this checkout; an in-place run does not write it"
+            ));
+        }
+        if self.protected.is_review(&p) {
+            return Decision::Deny(format!(
+                "`{p}` is protected: it records a person's review of the spec; only the person writes it (`speccoder review`)"
             ));
         }
         if let Some(class) = self.protected.write_class(&p) {
@@ -911,6 +918,13 @@ mod tests {
         ));
         assert!(matches!(w("speccoder.toml"), Decision::Deny(_)));
         assert!(matches!(w("specs/.env"), Decision::Deny(_)));
+        // A planning skill writes the spec, never the person's review of it.
+        assert!(
+            matches!(w("specs/002-login/review.json"), Decision::Deny(ref why) if why.contains("review")),
+            "{:?}",
+            w("specs/002-login/review.json")
+        );
+        assert!(p.write_protected("specs/002-login/review.json").is_some());
         assert!(matches!(w("src/lib.rs"), Decision::Approval(_)));
         let run = |argv: &[&str]| p.classify("run_command", &json!({ "argv": argv }));
         assert_eq!(

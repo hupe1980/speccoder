@@ -39,6 +39,7 @@ pub mod next;
 pub mod pipeline;
 pub mod progress;
 pub mod resume;
+pub mod review;
 pub mod sandbox;
 pub mod settings;
 pub mod skills;

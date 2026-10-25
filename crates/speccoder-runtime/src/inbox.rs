@@ -17,8 +17,8 @@ use crate::actions::action;
 
 /// The kinds, most urgent first: what blocks a run, what questions the
 /// evidence, what stops a task, what blocks a hand-off.
-pub const KINDS: [&str; 7] = [
-    "approval", "ruling", "gaming", "stale", "stuck", "commit", "handoff",
+pub const KINDS: [&str; 9] = [
+    "approval", "ruling", "gaming", "stale", "review", "revise", "stuck", "commit", "handoff",
 ];
 
 /// `speccoder inbox [--feature]`: the decisions waiting in every feature of
@@ -307,6 +307,85 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
             format!("proven against an earlier wording: {}", stale.join(", ")),
             vec![a],
         ));
+    }
+
+    // The spec, reviewed requirement by requirement (F-087).
+    if let Some(CommandData::Review(rv)) = crate::review::report(path, Some(feature)).data() {
+        let t = rv.totals;
+        if t.open + t.lapsed > 0 {
+            let pending: Vec<&str> = rv
+                .requirements
+                .iter()
+                .filter(|i| i.state == "open" || i.state == "lapsed")
+                .map(|i| i.id.as_str())
+                .collect();
+            let read = action(
+                "plan",
+                "read the requirements",
+                "each one, as the result will be judged against it",
+                flag("speccoder review".to_owned()),
+            );
+            let mut all = action(
+                "plan",
+                format!("approve {} requirement(s)", pending.len()),
+                "on their current wording, as you",
+                flag("speccoder review approve".to_owned()),
+            );
+            all.run = Some(Runnable::Review {
+                ids: Vec::new(),
+                verdict: "approve".to_owned(),
+            });
+            out.push(item(
+                "review",
+                None,
+                format!("{} requirement(s) wait for your review", pending.len()),
+                if t.lapsed > 0 {
+                    format!(
+                        "{}; {} changed since you decided",
+                        pending.join(", "),
+                        t.lapsed
+                    )
+                } else {
+                    pending.join(", ")
+                },
+                vec![read, all],
+            ));
+        }
+        if t.changes_requested > 0 {
+            let asked: Vec<String> = rv
+                .requirements
+                .iter()
+                .filter(|i| i.state == "changes_requested")
+                .map(|i| format!("{}: {}", i.id, i.comment.as_deref().unwrap_or_default()))
+                .collect();
+            let mut actions = Vec::new();
+            if let Some(skill) = &rv.revise_with {
+                let mut a = action(
+                    "plan",
+                    format!("revise the spec ({skill})"),
+                    "the format's skill rewrites what you asked; you review the result",
+                    flag(format!("speccoder spec {skill} \"…\"")),
+                );
+                a.run = Some(Runnable::Skill {
+                    name: skill.clone(),
+                    arguments: rv.revision.clone().unwrap_or_default(),
+                });
+                actions.push(a);
+            }
+            actions.push(action(
+                "plan",
+                "edit the spec yourself",
+                "then approve the new wording",
+                flag("speccoder review".to_owned()),
+            ));
+            out.push(item(
+                "revise",
+                None,
+                format!("{} change request(s) on the spec", t.changes_requested),
+                asked.join("; "),
+                actions,
+            ));
+        }
     }
 
     if !r.uncommitted.is_empty() {
