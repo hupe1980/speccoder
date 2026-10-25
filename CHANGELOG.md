@@ -11,6 +11,21 @@ ticks a task only on evidence the model cannot produce or edit.
 
 ### Added
 
+**The workbench: menus, a status bar, context menus**
+
+- The window has a real menu bar in the order the HIG gives — speccoder,
+  File, Edit, View, Run, Review, Window, Help — with ⌘1–⌘6 for the views,
+  ⌘R to run, ⌘. to stop, ⌥⌘R to review the spec; the system's Edit menu
+  makes copy and paste work in the page. A menu does what the same button
+  does (tested: every command the menus send is handled).
+- A status bar along the bottom, VS Code's way: the feature, branch and
+  commits not merged, verdicts, review progress and stale ticks on the left;
+  the run and its stage, spend, the model, the sandbox, the decisions
+  waiting and the connection on the right — each opens where it leads.
+- Right-click a task for its commands; ↑ ↓, Return and Esc work.
+- View › Toggle Sidebar and Toggle Status Bar.
+- `doctor` names the model (`model  anthropic/claude-sonnet-5-5`).
+
 **Review the spec** (requirement by requirement)
 
 - `speccoder review [approve|request|clear] [ID…]`: each requirement is a

@@ -42,12 +42,20 @@ A call that needs a person opens as a sheet over the page: what the call is (a d
 
 Looking at another window? The tab's title changes to *● Needs you*, and with **Notify me** allowed once, a desktop notification calls you back.
 
+## The window's menus, the status bar
+
+In the window (`speccoder ui --window`), the menu bar has what a Mac app has, in the order the Human Interface Guidelines give: **speccoder** (About, Settings… ⌘,, Hide, Quit), **File** (New Feature… ⌘N, Start from a GitHub Issue…, Commit the Planning Files, Close Window), **Edit** (the system's Undo, Cut, Copy, Paste, Select All — what makes copy and paste work in the page), **View** (the six views ⌘1–⌘6, Toggle Sidebar ⌥⌘S, Toggle Status Bar ⌥⌘B, Actions… ⌘K, Appearance, Enter Full Screen), **Run** (Run the Feature ⌘R, Run the Selected Task ⇧⌘R, Re-check Against the Spec, Stop ⌘.), **Review** (Needs You ⇧⌘I, Review the Spec ⌥⌘R, Evidence Report, Open Draft Pull Request…), **Window** and **Help** (the documentation, error codes, reporting an issue — in your browser). A menu does what the same button does: what cannot be done now says why.
+
+The **status bar** along the bottom, in the page and the window alike, is the project at a glance — on the left the feature, its branch and the commits not merged, its verdicts, how many requirements are approved, ticks the spec changed under; on the right what runs now and its stage, the feature's spend, the model, the sandbox, the decisions waiting for you and the connection to the host. Every item opens where it leads.
+
+**Right-click a task** on the board for its own commands — Show Evidence, Run, Nudge, Skip, Accept, Copy Task ID, Copy the Run Command — each also in the inspector. ↑ ↓ and Return choose, Esc closes.
+
 ## Keys
 
 | Key | Does |
 |---|---|
 | `n` | The next step |
-| `1` `2` `3` `4` `5` `6` | Needs You, Overview, Board, Code, Spec & Plan, Report |
+| `1` … `6` (⌘1 … ⌘6 in the window) | Needs You, Overview, Board, Code, Spec & Plan, Report |
 | `,` | Settings |
 | ⌘P / Ctrl+P | Go to a file (in Code) |
 | ⌘F / Ctrl+F | Find in the open file (in Code) |
@@ -55,7 +63,7 @@ Looking at another window? The tab's title changes to *● Needs you*, and with 
 | `Esc` | Close the task |
 | `y` `t` `r` `n` `s` `a` | Decide a call (in its sheet); `a` is Always Allow |
 
-Light, dark or automatic is a switch in the toolbar; the page follows the system's increased-contrast and reduced-motion settings. The page's address follows what you look at (`?view=report&task=T003`), so reload, Back and a bookmark land in the same place for as long as the host runs.
+Light, dark or automatic is a switch in the toolbar (and View › Appearance in the window); as the window narrows, the toolbar's views keep their icons and lose their names, the names staying as tooltips; the page follows the system's increased-contrast and reduced-motion settings. The page's address follows what you look at (`?view=report&task=T003`), so reload, Back and a bookmark land in the same place for as long as the host runs.
 
 ## Safety
 

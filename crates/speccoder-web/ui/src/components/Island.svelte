@@ -95,7 +95,7 @@
 
 <style>
   .island {
-    position: fixed; left: 50%; bottom: 1.25rem; transform: translateX(-50%); z-index: 15;
+    position: fixed; left: 50%; bottom: calc(1.25rem + 26px); transform: translateX(-50%); z-index: 15;
     width: min(420px, calc(100vw - 2rem)); border-radius: 22px; overflow: hidden;
     background: color-mix(in srgb, #000 82%, transparent); color: #f5f5f7;
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35), inset 0 0 0 0.5px rgba(255, 255, 255, 0.12);

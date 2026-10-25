@@ -38,6 +38,13 @@ class AppState {
   documents = $state<Document[]>([]);
   /** The doctor's warnings and failures: what would stop or spoil a run. */
   preflight = $state<{ check: string; level: string; detail: string; fix: string[]; code?: string | null }[]>([]);
+  /** Every doctor check (the status bar reads the model and the sandbox). */
+  doctor = $state<{ check: string; level: string; detail: string }[]>([]);
+  /** An open context menu: where, and its items (F-088). */
+  context = $state<{ x: number; y: number; title: string; items: { label: string; icon?: string; disabled?: string | null; hint?: string; act: () => void }[] } | null>(null);
+  /** Whether the sidebar and the status bar are shown (View menu). */
+  sidebar = $state(true);
+  statusbar = $state(true);
   connected = $state(false);
   loading = $state(true);
 
@@ -88,7 +95,10 @@ class AppState {
         .then((i) => (this.inbox = i))
         .catch(() => {});
       void get<Envelope<{ checks: { check: string; level: string; detail: string; fix: string[]; code?: string | null }[] }>>(`/api/doctor${q({ feature: f })}`)
-        .then((d) => (this.preflight = (d.data?.checks ?? []).filter((c) => c.level === "warn" || c.level === "fail")))
+        .then((d) => {
+          this.doctor = d.data?.checks ?? [];
+          this.preflight = this.doctor.filter((c) => c.level === "warn" || c.level === "fail") as typeof this.preflight;
+        })
         .catch(() => {});
       this.project = project;
       this.report = report;

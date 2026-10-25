@@ -15,6 +15,8 @@
   import Icon from "./components/Icon.svelte";
   import Overview from "./components/Overview.svelte";
   import Inbox from "./components/Inbox.svelte";
+  import StatusBar from "./components/StatusBar.svelte";
+  import ContextMenu from "./components/ContextMenu.svelte";
   import Settings from "./components/Settings.svelte";
   import CodeView from "./components/CodeView.svelte";
   import Setup from "./components/Setup.svelte";
@@ -62,6 +64,46 @@
     if (e.key === "n" && app.primary) app.perform(app.primary);
     if (e.key === "Escape") app.selectTask(null);
   }
+
+  // The menu bar (F-088): the window's native menus send a command id to
+  // the page; the page does what the same button or key would.
+  function command(id: string) {
+    const find = (f: (a: (typeof app.actions)[number]) => boolean) => app.actions.find(f);
+    const run = (a: (typeof app.actions)[number] | undefined, missing: string) => (a ? void app.perform(a) : app.toast({ tone: "warn", text: missing }));
+    const v = views.find((x) => `view.${x.v}` === id);
+    if (v) return go(v.v);
+    switch (id) {
+      case "app.settings": return go("settings");
+      case "view.sidebar": app.sidebar = !app.sidebar; return;
+      case "view.statusbar": app.statusbar = !app.statusbar; return;
+      case "view.actions": app.palette = true; return;
+      case "theme.light": case "theme.dark": case "theme.auto": theme = id.slice(6); return;
+      case "file.new": return run(find((a) => a.run?.kind === "skill" && !!a.input), "No skill writes a new feature here — set up the spec tool first");
+      case "file.issues": return go("overview");
+      case "file.commit": return run(find((a) => a.run?.kind === "commit"), "Nothing to commit: the planning files are committed");
+      case "run.feature": return run(find((a) => a.run?.kind === "run" && a.run.task === null), "No task is ready to run");
+      case "run.task": return run(find((a) => a.run?.kind === "run" && a.run.task !== null), "Select a ready task first");
+      case "run.converge": return run(find((a) => a.run?.kind === "converge"), "Nothing to re-check: no tick was proven against an earlier wording");
+      case "task.nudge": case "task.skip": case "task.accept": {
+        const verb = id.slice(5);
+        if (!app.selected) return app.toast({ tone: "warn", text: "Select a task first (click its card on the board)" });
+        return run(find((a) => a.group === "task" && a.label === `${verb} ${app.selected}`), `${app.selected} cannot be ${verb === "accept" ? "accepted" : verb === "skip" ? "skipped" : "nudged"} now`);
+      }
+      case "task.evidence":
+        if (!app.selected) return app.toast({ tone: "warn", text: "Select a task first (click its card on the board)" });
+        return go("board");
+      case "run.stop": return app.job?.running ? void app.stop() : app.toast({ tone: "warn", text: "Nothing is running" });
+      case "review.spec": app.doc = "review"; return go("documents");
+      case "review.inbox": return go("inbox");
+      case "review.pr": return run(find((a) => a.run?.kind === "pull_request"), "No pull request can be opened from here");
+      case "review.report": return go("report");
+    }
+  }
+  $effect(() => {
+    const on = (e: Event) => command((e as CustomEvent<string>).detail);
+    window.addEventListener("speccoder:menu", on);
+    return () => window.removeEventListener("speccoder:menu", on);
+  });
 
   const report = $derived(app.report?.data ?? null);
   // A project without speccoder.toml (or not yet a spec project) starts in
@@ -117,7 +159,7 @@
 
 <svelte:window onkeydown={keydown} />
 
-<div class="shell">
+<div class="shell" class:nosidebar={!app.sidebar} class:nostatus={!app.statusbar}>
   <header class="toolbar glass">
     <div class="brand">
       <svg viewBox="0 0 64 64" width="24" height="24" aria-hidden="true">
@@ -153,11 +195,10 @@
           <button role="radio" aria-checked={theme === t} class:on={theme === t} title={label} aria-label={label} onclick={() => (theme = t)}><Icon name={icon} size={14} /></button>
         {/each}
       </div>
-      <span class="conn" class:off={!app.connected} role="status" title={app.connected ? "Connected to the host" : "Reconnecting to the host…"}><span class="sr-only">{app.connected ? "connected" : "reconnecting"}</span></span>
     </div>
   </header>
 
-  <Sidebar />
+  {#if app.sidebar}<Sidebar />{/if}
 
   <main>
     {#if app.loading}
@@ -174,6 +215,7 @@
   </main>
 
   {#if app.selected}<Drawer />{/if}
+  {#if app.statusbar}<StatusBar />{/if}
 </div>
 
 <Island />
@@ -181,6 +223,7 @@
 {#if app.input}<InputSheet />{/if}
 {#if app.confirming}<ConfirmSheet />{/if}
 {#if app.palette}<Palette />{/if}
+{#if app.context}<ContextMenu />{/if}
 <Toasts />
 
 <style>
@@ -188,10 +231,13 @@
   .shell {
     display: grid;
     grid-template-columns: 260px 1fr;
-    grid-template-rows: 56px 1fr;
-    grid-template-areas: "head head" "side main";
+    grid-template-rows: 56px 1fr 26px;
+    grid-template-areas: "head head" "side main" "foot foot";
     height: 100vh;
   }
+  .shell.nostatus { grid-template-rows: 56px 1fr; grid-template-areas: "head head" "side main"; }
+  .shell.nosidebar { grid-template-columns: 1fr; grid-template-areas: "head" "main" "foot"; }
+  .shell.nosidebar.nostatus { grid-template-areas: "head" "main"; }
   .toolbar {
     grid-area: head; position: relative; z-index: 10;
     display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 1rem; padding: 0 0.9rem 0 1rem;
@@ -237,8 +283,6 @@
   .themes { display: flex; padding: 2px; border-radius: 8px; background: var(--fill); }
   .themes button { display: grid; place-items: center; width: 26px; height: 24px; border: 0; background: none; border-radius: 6px; color: var(--muted); cursor: pointer; }
   .themes button.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12); }
-  .conn { width: 8px; height: 8px; border-radius: 50%; background: var(--verified-fill); margin: 0 0.25rem; }
-  .conn.off { background: var(--attention-fill); animation: blink 1.2s ease-in-out infinite; }
   @keyframes blink { 50% { opacity: 0.35; } }
 
   main { grid-area: main; overflow: auto; padding: 2rem 2.5rem 7rem; scroll-padding-top: 1rem; }
@@ -258,7 +302,8 @@
   }
   @media (max-width: 1040px) { .themes, .names { display: none; } }
   @media (max-width: 900px) {
-    .shell { grid-template-columns: 1fr; grid-template-areas: "head" "main"; }
+    .shell { grid-template-columns: 1fr; grid-template-areas: "head" "main" "foot"; }
+    .shell.nostatus { grid-template-areas: "head" "main"; }
     .segmented button { padding: 0 0.6rem; }
     main { padding: 1.25rem 1rem 7rem; }
   }

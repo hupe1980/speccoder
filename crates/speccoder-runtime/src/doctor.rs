@@ -197,8 +197,13 @@ pub fn checks(
             &["speccoder init"],
         )),
     }
-    // The model key.
+    // The model, then its key.
     if let Some(m) = &model {
+        out.push(check(
+            "model",
+            DoctorLevel::Pass,
+            format!("{}/{}", m.provider, m.model),
+        ));
         let variable = m.key_variable().to_owned();
         out.push(
             if variable.is_empty() || env(&variable).is_some_and(|v| !v.is_empty()) {

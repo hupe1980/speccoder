@@ -79,10 +79,18 @@ pub fn inbox_with(path: &Path, feature: Option<&str>, state: Option<&Path>) -> C
     ))
 }
 
+/// `n` with the word for one or for many: `1 tick`, `2 ticks`.
+fn count(n: usize, one: &str, many: &str) -> String {
+    format!("{n} {}", if n == 1 { one } else { many })
+}
+
 /// `3 decisions waiting in 2 features: 1 approval, 2 stuck`.
 fn summary(items: &[InboxItem], features: usize) -> String {
     if items.is_empty() {
-        return format!("nothing waits for you in {features} feature(s): the agents can work");
+        return format!(
+            "nothing waits for you in {}: the agents can work",
+            count(features, "feature", "features")
+        );
     }
     let mut in_features: Vec<&str> = items.iter().map(|i| i.feature.as_str()).collect();
     in_features.sort_unstable();
@@ -95,9 +103,9 @@ fn summary(items: &[InboxItem], features: usize) -> String {
         })
         .collect();
     format!(
-        "{} decision(s) waiting in {} feature(s): {}",
-        items.len(),
-        in_features.len(),
+        "{} waiting in {}: {}",
+        count(items.len(), "decision", "decisions"),
+        count(in_features.len(), "feature", "features"),
         parts.join(", ")
     )
 }
@@ -303,7 +311,10 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
         out.push(item(
             "stale",
             None,
-            format!("the spec changed under {} tick(s)", stale.len()),
+            format!(
+                "the spec changed under {}",
+                count(stale.len(), "tick", "ticks")
+            ),
             format!("proven against an earlier wording: {}", stale.join(", ")),
             vec![a],
         ));
@@ -327,7 +338,10 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
             );
             let mut all = action(
                 "plan",
-                format!("approve {} requirement(s)", pending.len()),
+                format!(
+                    "approve {}",
+                    count(pending.len(), "requirement", "requirements")
+                ),
                 "on their current wording, as you",
                 flag("speccoder review approve".to_owned()),
             );
@@ -338,7 +352,11 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
             out.push(item(
                 "review",
                 None,
-                format!("{} requirement(s) wait for your review", pending.len()),
+                if pending.len() == 1 {
+                    "1 requirement waits for your review".to_owned()
+                } else {
+                    format!("{} requirements wait for your review", pending.len())
+                },
                 if t.lapsed > 0 {
                     format!(
                         "{}; {} changed since you decided",
@@ -381,7 +399,10 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
             out.push(item(
                 "revise",
                 None,
-                format!("{} change request(s) on the spec", t.changes_requested),
+                format!(
+                    "{} on the spec",
+                    count(t.changes_requested, "change request", "change requests")
+                ),
                 asked.join("; "),
                 actions,
             ));
@@ -426,8 +447,8 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
             None,
             format!("every task is done: review {} and hand it off", r.feature),
             format!(
-                "{} commit(s) on {} not merged",
-                r.unmerged_commits,
+                "{} on {} not merged",
+                count(r.unmerged_commits, "commit", "commits"),
                 r.branch.as_deref().unwrap_or_default()
             ),
             vec![pr],
