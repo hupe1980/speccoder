@@ -912,3 +912,89 @@ fn init_at_a_terminal_commits_the_nextest_profile_with_the_config() {
     files.sort();
     assert_eq!(files, [".config/nextest.toml", "speccoder.toml"], "{text}");
 }
+
+/// `speccoder config` (F-079): a key set from words keeps the file's
+/// comments, an invalid value never reaches the file, unset brings the
+/// default back, and `commit` commits `speccoder.toml` alone.
+#[test]
+fn config_sets_checks_and_commits_the_configuration_alone() {
+    let dir = committed_project(false);
+    let d = dir.path();
+    std::fs::write(
+        d.join("speccoder.toml"),
+        "# Our checks.\n[checks.test]\nargv = [\"true\"] # fast\n",
+    )
+    .unwrap();
+    std::fs::write(d.join("other.txt"), "staged, not ours\n").unwrap();
+    git(d, &["add", "speccoder.toml", "other.txt"]);
+    git(d, &["commit", "-q", "-m", "config"]);
+    std::fs::write(d.join("other.txt"), "changed and staged\n").unwrap();
+    git(d, &["add", "other.txt"]);
+    let run = |args: &[&str]| {
+        let out = speccoder()
+            .args(["--json", "config"])
+            .args(args)
+            .arg("-C")
+            .arg(d)
+            .env("GIT_CONFIG_GLOBAL", "/dev/null")
+            .env("GIT_AUTHOR_NAME", "t")
+            .env("GIT_AUTHOR_EMAIL", "t@example.com")
+            .env("GIT_COMMITTER_NAME", "t")
+            .env("GIT_COMMITTER_EMAIL", "t@example.com")
+            .output()
+            .unwrap();
+        (
+            out.status.code(),
+            support::checked(support::result(&out.stdout)),
+        )
+    };
+
+    let (code, v) = run(&["set", "budget.max_turns", "40"]);
+    assert_eq!(code, Some(0), "{v}");
+    let text = std::fs::read_to_string(d.join("speccoder.toml")).unwrap();
+    assert!(
+        text.contains("# Our checks.") && text.contains("argv = [\"true\"] # fast"),
+        "{text}"
+    );
+    assert!(text.contains("max_turns = 40"), "{text}");
+    assert_eq!(v["data"]["committed"], false, "{v}");
+
+    // Refused before the file is touched.
+    let (code, v) = run(&["set", "budget.max_turns", "lots"]);
+    assert_eq!(code, Some(13), "{v}");
+    assert_eq!(v["code"], "CONFIG-INVALID");
+    assert_eq!(
+        std::fs::read_to_string(d.join("speccoder.toml")).unwrap(),
+        text
+    );
+
+    let (_, v) = run(&["get", "budget.max_turns"]);
+    assert_eq!(v["message"], "budget.max_turns = 40", "{v}");
+    let (_, v) = run(&["get", "budget.max_attempts"]);
+    assert_eq!(v["message"], "budget.max_attempts = 2 (default)", "{v}");
+
+    let (code, v) = run(&["commit"]);
+    assert_eq!(code, Some(0), "{v}");
+    let shown = std::process::Command::new("git")
+        .args(["show", "--name-only", "--format=%s", "HEAD"])
+        .current_dir(d)
+        .output()
+        .unwrap();
+    let shown = String::from_utf8_lossy(&shown.stdout);
+    assert!(
+        shown.starts_with("speccoder: configuration (budget)"),
+        "{shown}"
+    );
+    assert!(
+        shown.contains("speccoder.toml") && !shown.contains("other.txt"),
+        "{shown}"
+    );
+
+    let (_, v) = run(&["unset", "budget.max_turns"]);
+    assert!(
+        !std::fs::read_to_string(d.join("speccoder.toml"))
+            .unwrap()
+            .contains("[budget]"),
+        "{v}"
+    );
+}

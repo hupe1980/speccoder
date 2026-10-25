@@ -4,12 +4,13 @@
   // proven by evidence, and what it waits for. A card opens its board.
   import { app } from "../lib/app.svelte";
   import { get, q } from "../lib/api";
-  import type { Envelope, Report } from "../lib/types";
+  import type { CostReport, Envelope, Report } from "../lib/types";
   import Ring from "./Ring.svelte";
   import Icon from "./Icon.svelte";
 
   const features = $derived(app.project?.features?.features ?? []);
   let reports = $state<Record<string, Report | null>>({});
+  let costs = $state<Record<string, CostReport | null>>({});
 
   $effect(() => {
     void app.report; // refresh with the page
@@ -17,6 +18,9 @@
       void get<Envelope<Report>>(`/api/report${q({ feature: f.name })}`)
         .then((r) => (reports = { ...reports, [f.name]: r.data ?? null }))
         .catch(() => (reports = { ...reports, [f.name]: null }));
+      void get<Envelope<CostReport>>(`/api/cost${q({ feature: f.name })}`)
+        .then((r) => (costs = { ...costs, [f.name]: r.data ?? null }))
+        .catch(() => (costs = { ...costs, [f.name]: null }));
     }
   });
 
@@ -74,6 +78,10 @@
             <span class="facts">
               {#if f.tasks}<span><b>{f.done}</b>/{f.tasks} tasks</span>{/if}
               {#if p.all}<span class:good={p.ok === p.all}><b>{p.ok}</b>/{p.all} requirements proven</span>{/if}
+              {#if costs[f.name]?.total && (costs[f.name]!.total.input_tokens || costs[f.name]!.total.output_tokens)}
+                {@const t = costs[f.name]!.total}
+                <span title="{t.input_tokens.toLocaleString()} in · {t.output_tokens.toLocaleString()} out">{#if t.usd != null}<b>${t.usd.toFixed(2)}</b> spent{:else}<b>{Math.round((t.input_tokens + t.output_tokens) / 1000)}k</b> tokens{/if}</span>
+              {/if}
               {#if pending}<span class="attn"><Icon name="hand" size={11} weight={2.2} />{pending} waiting</span>{/if}
               {#if !f.tasks}<span>{f.artifacts.join(" · ") || "empty"}</span>{/if}
             </span>

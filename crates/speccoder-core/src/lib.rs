@@ -21,13 +21,14 @@ pub mod verify;
 
 pub use command::{
     ApprovalView, ApprovalsReport, ArchiveReport, AttestReport, BenchReport, ChecklistStatus,
-    CodeInfo, CommandData, CommandResult, CommandStatus, ControlReport, ConvergeReport,
-    ConvergenceRound, CostReport, DecidedCall, DoctorCheck, DoctorLevel, DoctorReport,
-    EarlierAttempt, EvalCase, EvalReport, EvalSummary, ExitCode, ExplainReport, FeatureEntry,
-    FeatureReport, FeaturesReport, FullTier, HeldOutGap, HeldOutOracle, InPlaceReport, InitCheck,
-    InitKey, InitReport, InitRun, InstructionFile, LastAttempt, MonitorScore, ObjectVerification,
-    OperatorView, PAYLOADS, PendingCall, PrReport, ProposeReport, RefusedPath, ReplayReport,
-    RunReport, SCHEMA_VERSION, SchemaName, SchemaReport, SignerView, SkillEntry, SkillRunReport,
-    SkillsReport, StatusReport, StatusTotals, TaskCost, TaskStatus, TraceRow, UiReport, Usage,
-    VerifyOutcome, VerifyReason, WorktreeReport,
+    CodeInfo, CommandData, CommandResult, CommandStatus, ConfigChange, ConfigKey, ConfigReport,
+    ConfigSection, ConfigTable, ControlReport, ConvergeReport, ConvergenceRound, CostReport,
+    DecidedCall, DoctorCheck, DoctorLevel, DoctorReport, EarlierAttempt, EvalCase, EvalReport,
+    EvalSummary, ExitCode, ExplainReport, FeatureEntry, FeatureReport, FeaturesReport, FullTier,
+    HeldOutGap, HeldOutOracle, InPlaceReport, InitCheck, InitKey, InitReport, InitRun,
+    InstructionFile, LastAttempt, MonitorScore, ObjectVerification, OperatorView, PAYLOADS,
+    PendingCall, PrReport, ProposeReport, RefusedPath, ReplayReport, RunReport, SCHEMA_VERSION,
+    SchemaName, SchemaReport, SignerView, SkillEntry, SkillRunReport, SkillsReport, StatusReport,
+    StatusTotals, TaskCost, TaskStatus, TraceRow, UiReport, Usage, VerifyOutcome, VerifyReason,
+    WorktreeReport,
 };

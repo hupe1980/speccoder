@@ -94,6 +94,7 @@ export interface Presentation {
     turn: number;
     tool: string;
     kind: string;
+    arguments?: { argv?: unknown } & Record<string, unknown>;
     reason: string;
     covers: string;
     risk: string;
@@ -121,4 +122,57 @@ export interface Document {
   name: string;
   path: string;
   html: string;
+}
+
+export interface ConfigKey {
+  key: string;
+  kind: "bool" | "integer" | "number" | "string" | "choice" | "duration" | "argv" | "argv_list" | "string_list";
+  about: string;
+  default: unknown;
+  value: unknown;
+  choices: string[];
+  min: number | null;
+  max: number | null;
+  required: boolean;
+}
+
+export interface ConfigSection {
+  name: string;
+  title: string;
+  about: string;
+  named: boolean;
+  keys: ConfigKey[];
+  tables: { name: string; keys: ConfigKey[] }[];
+}
+
+export interface ConfigReport {
+  file: string;
+  exists: boolean;
+  committed: boolean;
+  valid: boolean;
+  error: string | null;
+  sections: ConfigSection[];
+  diff: string | null;
+}
+
+export interface ConfigChange {
+  key: string;
+  value?: unknown;
+  append?: unknown;
+}
+
+export interface Usage {
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_tokens: number;
+  cache_write_tokens: number;
+  usd: number | null;
+}
+
+export interface CostReport {
+  feature: string;
+  tasks: { task: string; attempts: number; usage: Usage }[];
+  convergence: Usage;
+  total: Usage;
+  priced_model: string | null;
 }

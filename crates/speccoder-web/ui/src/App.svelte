@@ -14,6 +14,7 @@
   import Toasts from "./components/Toasts.svelte";
   import Icon from "./components/Icon.svelte";
   import Overview from "./components/Overview.svelte";
+  import Settings from "./components/Settings.svelte";
 
   let theme = $state<string>(localStorage.getItem("speccoder-theme") ?? "auto");
   $effect(() => {
@@ -49,6 +50,7 @@
       return;
     }
     if (typing || app.waiting || app.input || app.palette) return;
+    if (e.key === ",") go("settings");
     const v = views.find((x) => x.key === e.key);
     if (v) go(v.v);
     if (e.key === "n" && app.primary) app.perform(app.primary);
@@ -90,7 +92,7 @@
       </div>
     </div>
 
-    <div class="segmented" role="tablist" aria-label="Views" style="--at:{at}; --n:{views.length}">
+    <div class="segmented" class:none={at < 0} role="tablist" aria-label="Views" style="--at:{Math.max(at, 0)}; --n:{views.length}">
       <span class="thumb" aria-hidden="true"></span>
       {#each views as x (x.v)}
         <button role="tab" aria-selected={app.view === x.v} class:on={app.view === x.v} onclick={() => go(x.v)} title="{x.label} ({x.key})">
@@ -106,6 +108,7 @@
       {#if canAsk}
         <button class="btn icon ghost" title="Notify me when a run needs me while I look elsewhere" aria-label="Notify me" onclick={async () => { await app.allowNotifications(); canAsk = false; }}><Icon name="bell" size={17} /></button>
       {/if}
+      <button class="btn icon ghost" class:onv={app.view === "settings"} title="Settings (,)" aria-label="Settings" onclick={() => go("settings")}><Icon name="gear" size={17} /></button>
       <div class="themes" role="radiogroup" aria-label="Appearance">
         {#each themes as [t, icon, label] (t)}
           <button role="radio" aria-checked={theme === t} class:on={theme === t} title={label} aria-label={label} onclick={() => (theme = t)}><Icon name={icon} size={14} /></button>
@@ -121,8 +124,8 @@
     {#if app.loading}
       <div class="loading" aria-busy="true"><span class="spinner"></span></div>
     {:else}
-      {#if app.view === "overview"}<Overview />{:else}<Hero compact={app.view !== "board"} />{/if}
-      {#if report && app.view !== "overview"}
+      {#if app.view === "overview"}<Overview />{:else if app.view === "settings"}<Settings />{:else}<Hero compact={app.view !== "board"} />{/if}
+      {#if report && app.view !== "overview" && app.view !== "settings"}
         {#if app.view === "board"}<Board />{/if}
         {#if app.view === "documents"}<Documents />{/if}
         {#if app.view === "report"}<ReportView />{/if}
@@ -171,6 +174,7 @@
   }
   :global(:root[data-theme="dark"]) .thumb { background: #636366; }
   @media (prefers-color-scheme: dark) { :global(:root:not([data-theme="light"])) .thumb { background: #636366; } }
+  .segmented.none .thumb { opacity: 0; }
   .segmented button {
     position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem;
     height: 28px; padding: 0 0.95rem; border: 0; background: none; border-radius: 8px; cursor: pointer;
@@ -186,6 +190,7 @@
   }
   .search:hover { background: var(--fill-2); }
   .search span { flex: 1; text-align: left; }
+  .onv { background: var(--accent-soft); }
   .themes { display: flex; padding: 2px; border-radius: 8px; background: var(--fill); }
   .themes button { display: grid; place-items: center; width: 26px; height: 24px; border: 0; background: none; border-radius: 6px; color: var(--muted); cursor: pointer; }
   .themes button.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12); }
