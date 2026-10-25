@@ -8,6 +8,7 @@
   import { symbol, word } from "../lib/marks";
   import type { Row, Task } from "../lib/types";
   import Diff from "./Diff.svelte";
+  import Drift from "./Drift.svelte";
   import Code from "./Code.svelte";
   import Icon from "./Icon.svelte";
 
@@ -63,6 +64,8 @@
     const w = data?.banner.words ?? "";
     return w.toLowerCase() === verdictTitle.toLowerCase() ? "" : w.charAt(0) + w.slice(1).toLowerCase();
   });
+  // The report's, which compares the tick with the spec now.
+  const drift = $derived(app.report?.data?.tasks.find((t) => t.id === app.selected)?.drift ?? null);
   const icons: Record<string, string> = { run: "play", accept: "check", skip: "skip", nudge: "sparkle", approve: "check", reject: "xmark" };
 </script>
 
@@ -79,6 +82,7 @@
       <span class="sym"><Icon name={symbol(data.banner.mark)} size={20} weight={2} /></span>
       <span><strong>{verdictTitle}</strong>{#if verdictWords}<span class="words">{verdictWords}</span>{/if}</span>
     </div>
+    {#if drift}<Drift {drift} />{/if}
     <div class="tabs" role="tablist">
       <button role="tab" aria-selected={tab === "evidence"} class:on={tab === "evidence"} onclick={() => (tab = "evidence")}>Evidence</button>
       <button role="tab" aria-selected={tab === "diff"} class:on={tab === "diff"} disabled={!source} title={source ? "" : "No code yet: the task has no commit and no attempt"} onclick={() => (tab = "diff")}>{source?.label ?? "Changes"}</button>

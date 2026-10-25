@@ -420,7 +420,7 @@ fn a_tick_lost_after_its_commit_is_restored_from_the_commit() {
     };
     let (t5, message) = task_of("T005");
     assert_eq!(t5.state, "evidence_without_tick", "{message}");
-    assert!(t5.commit.is_some() && !t5.intent_changed);
+    assert!(t5.commit.is_some() && t5.drift.is_none());
     assert!(
         message.contains("1 committed without their local tick"),
         "{message}"
@@ -462,11 +462,14 @@ fn a_tick_lost_after_its_commit_is_restored_from_the_commit() {
         format!("{}\nUsers log out.\n", fs::read_to_string(&spec).unwrap()),
     )
     .unwrap();
+    // Ignored, the intent is not in git: the commits' `Intent-Digest` tells
+    // that it changed, not which file.
     let (t5, message) = task_of("T005");
     assert_eq!(t5.state, "regression_only");
-    assert!(t5.intent_changed, "{message}");
+    let d = t5.drift.as_ref().expect(&message);
+    assert!(d.files.is_empty() && !d.stale(), "{message}");
     assert!(
-        message.contains("2 judged against an earlier spec"),
+        message.contains("the spec changed since 2 tick(s)"),
         "{message}"
     );
 

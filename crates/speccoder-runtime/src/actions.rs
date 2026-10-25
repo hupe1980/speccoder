@@ -160,6 +160,31 @@ pub fn available_with(
         a.blocked = run_blocked.clone();
         out.push(a);
     }
+    // The spec changed under ticks that cite it: their evidence is for the
+    // earlier wording. Convergence assesses the code against it as it is.
+    let stale: Vec<&str> = report
+        .map(|r| {
+            r.tasks
+                .iter()
+                .filter(|t| t.drift.as_ref().is_some_and(speccoder_core::Drift::stale))
+                .map(|t| t.id.as_str())
+                .collect()
+        })
+        .unwrap_or_default();
+    if !stale.is_empty() && planning_next.is_empty() {
+        let mut a = action(
+            "next",
+            "re-check what the spec changed",
+            format!(
+                "{} was proven against an earlier wording; convergence assesses the code against the spec as it is now and adds tasks for what no longer holds",
+                stale.join(", ")
+            ),
+            "speccoder run --converge",
+        );
+        a.run = Some(Runnable::Converge);
+        a.blocked = run_blocked.clone();
+        out.push(a);
+    }
     if report.is_none()
         && feature_count == 0
         && format.detect(path).is_some()

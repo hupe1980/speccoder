@@ -305,7 +305,7 @@ mod tests {
             title: "t".to_owned(),
             phase: "P".to_owned(),
             state: state.to_owned(),
-            intent_changed: false,
+            drift: None,
             blocked_by: Vec::new(),
             commit: Some("abc".to_owned()),
             run_id: None,

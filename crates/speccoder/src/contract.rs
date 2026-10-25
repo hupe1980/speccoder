@@ -320,6 +320,7 @@ fn every_next_step_and_fix_is_a_command_that_parses() {
         Outcome::ReportShown {
             ready: 1,
             open_approvals: 1,
+            stale: 0,
         },
         Outcome::ApprovalsListed { first: Some(t()) },
         Outcome::Decided,

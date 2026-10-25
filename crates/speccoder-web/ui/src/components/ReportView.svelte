@@ -11,15 +11,18 @@
   const uncited = $derived((r?.trace ?? []).filter((t) => !t.task));
   // One row per requirement, the tasks that prove it beside it.
   const matrix = $derived.by(() => {
-    const rows = new Map<string, { task: string; verdict: string | null; test: string | null }[]>();
+    const rows = new Map<string, { task: string; verdict: string | null; test: string | null; changed: boolean }[]>();
     for (const t of r?.trace ?? []) {
       const row = rows.get(t.requirement) ?? [];
-      if (t.task) row.push({ task: t.task, verdict: t.verdict, test: t.test });
+      if (t.task) row.push({ task: t.task, verdict: t.verdict, test: t.test, changed: !!t.changed });
       rows.set(t.requirement, row);
     }
     return [...rows].map(([requirement, tasks]) => ({ requirement, tasks }));
   });
-  const proven = $derived(matrix.filter((m) => m.tasks.some((t) => t.verdict === "verified" || t.verdict === "regression_only")).length);
+  // Proven: evidence for the wording the spec has now, not an earlier one.
+  const proven = $derived(matrix.filter((m) => m.tasks.some((t) => !t.changed && (t.verdict === "verified" || t.verdict === "regression_only"))).length);
+  const stale = $derived((r?.tasks ?? []).filter((t) => t.drift?.requirements.length));
+  const recheck = $derived(app.actions.find((a) => a.run?.kind === "converge"));
   const analyze = $derived(app.actions.find((a) => a.run?.kind === "skill" && a.label.endsWith("analyze")));
 </script>
 
@@ -35,6 +38,15 @@
       </ul>
       <p class="muted small">{total} tasks · branch <code>{r.branch ?? "—"}</code>{#if r.unmerged_commits} · {r.unmerged_commits} commit(s) not merged{/if}</p>
     </section>
+    {#if stale.length}
+      <section class="card wide stale">
+        <div>
+          <h3><Icon name="exclaim" size={15} weight={2.2} /> The spec changed under {stale.length} {stale.length === 1 ? "tick" : "ticks"}</h3>
+          <p>{stale.map((t) => `${t.id} (${t.drift!.requirements.map((q) => q.id).join(", ")})`).join(" · ")} — proven against an earlier wording.</p>
+        </div>
+        {#if recheck}<button class="btn small primary" disabled={!!recheck.blocked || !!app.job?.running} title={`${recheck.blocked ?? recheck.why}\n$ ${recheck.command}`} onclick={() => app.perform(recheck)}><Icon name="sparkle" size={11} weight={2.2} /> Re-check Against the Spec</button>{/if}
+      </section>
+    {/if}
     <section class="card" class:wide={!matrix.length}>
       <h3>Waiting for you <span class="muted">{app.approvals.length}</span></h3>
       {#each app.approvals as p (p.task + p.covers)}
@@ -72,7 +84,7 @@
               <span class="req mono">{m.requirement}</span>
               <span class="tasks">
                 {#each m.tasks as t (t.task)}
-                  <button class="chip s-{t.verdict ?? 'blocked'}" title="{word(t.verdict ?? 'blocked')}{t.test ? ` · ${t.test}` : ''}" onclick={() => { app.view = 'board'; void app.selectTask(t.task); }}><Icon name={symbol(t.verdict ?? "blocked")} size={11} weight={2.4} /> {t.task}</button>
+                  <button class="chip s-{t.changed ? 'needs_approval' : (t.verdict ?? 'blocked')}" title="{t.changed ? `${word(t.verdict ?? 'blocked')} against an earlier wording — the requirement changed since` : word(t.verdict ?? 'blocked')}{t.test ? ` · ${t.test}` : ''}" onclick={() => { app.view = 'board'; void app.selectTask(t.task); }}><Icon name={t.changed ? "exclaim" : symbol(t.verdict ?? "blocked")} size={11} weight={2.4} /> {t.task}{#if t.changed}<span class="was">earlier wording</span>{/if}</button>
                 {:else}<span class="muted small">no task cites it</span>{/each}
               </span>
             </li>
@@ -113,6 +125,9 @@
   .matrix li.open .req { color: var(--regression); }
   .tasks { display: flex; flex-wrap: wrap; gap: 0.3rem; }
   .tasks button { border: 0; cursor: pointer; font-family: var(--mono); }
+  .was { font-family: var(--text-font, inherit); font-weight: 500; margin-left: 0.3rem; opacity: 0.85; }
+  .stale { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; background: var(--attention-bg); }
+  .stale p { margin: 0.2rem 0 0; color: var(--text-2); }
   .empty { display: grid; gap: 0.7rem; justify-items: start; padding: 0.9rem 1.1rem; border-radius: var(--radius); background: var(--regression-bg); }
   .empty p { margin: 0; color: var(--text-2); }
   @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }

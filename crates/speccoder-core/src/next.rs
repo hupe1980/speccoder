@@ -93,6 +93,8 @@ pub enum Outcome {
         ready: usize,
         /// Calls waiting for a person.
         open_approvals: usize,
+        /// Ticks proven against an earlier wording of what they cite.
+        stale: usize,
     },
     /// `approvals` listed.
     ApprovalsListed {
@@ -290,6 +292,10 @@ pub fn next(outcome: &Outcome, feature: Option<&str>) -> Vec<NextStep> {
             ),
             ("speccoder run".to_owned(), "continue the feature"),
         ],
+        O::ReportShown { stale, .. } if *stale > 0 => vec![(
+            "speccoder run --converge".to_owned(),
+            "the spec changed: re-check the code against it as it is now",
+        )],
         O::ReportShown { ready, .. } if *ready > 0 => {
             vec![("speccoder run".to_owned(), "continue with the ready tasks")]
         }
@@ -451,6 +457,7 @@ mod tests {
                 Outcome::ReportShown {
                     ready: 1,
                     open_approvals: 1,
+                    stale: 1,
                 },
                 vec!["speccoder report --approvals", "speccoder run"],
             ),
@@ -458,6 +465,7 @@ mod tests {
                 Outcome::ReportShown {
                     ready: 1,
                     open_approvals: 0,
+                    stale: 0,
                 },
                 vec!["speccoder run"],
             ),
@@ -465,6 +473,15 @@ mod tests {
                 Outcome::ReportShown {
                     ready: 0,
                     open_approvals: 0,
+                    stale: 2,
+                },
+                vec!["speccoder run --converge"],
+            ),
+            (
+                Outcome::ReportShown {
+                    ready: 0,
+                    open_approvals: 0,
+                    stale: 0,
                 },
                 vec!["speccoder pr"],
             ),

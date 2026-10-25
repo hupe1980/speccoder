@@ -1252,6 +1252,44 @@ pub struct TraceRow {
     pub task: Option<String>,
     /// That task's verdict.
     pub verdict: Option<String>,
+    /// The requirement changed since that task's tick: the verdict is for
+    /// its earlier wording.
+    #[serde(default)]
+    pub changed: bool,
+}
+
+/// What changed since a tick (F-085): the tick's commit holds the intent
+/// it was judged against; the checkout's `HEAD` holds the intent now.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct Drift {
+    /// The requirements the task cites whose line changed, appeared or went
+    /// away: the evidence no longer speaks for them. Empty: what changed is
+    /// elsewhere in the intent.
+    pub requirements: Vec<RequirementDrift>,
+    /// The intent files that differ (project-relative), task lists aside.
+    /// Empty when the intent is not in git (in place, ignored): it changed,
+    /// which file is not known.
+    pub files: Vec<String>,
+}
+
+impl Drift {
+    /// A requirement the task cites changed: the tick does not prove what
+    /// the spec asks now.
+    #[must_use]
+    pub fn stale(&self) -> bool {
+        !self.requirements.is_empty()
+    }
+}
+
+/// One cited requirement, as the tick saw it and as the spec has it now.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct RequirementDrift {
+    /// `FR-003`.
+    pub id: String,
+    /// Its line when the task was ticked; `None`: it did not exist yet.
+    pub then: Option<String>,
+    /// Its line now; `None`: it was removed.
+    pub now: Option<String>,
 }
 
 /// Result of `speccoder report`: what the branch's history shows.
@@ -1312,9 +1350,11 @@ pub struct TaskStatus {
     /// verdict commit names the task, its local tick is missing),
     /// `skipped`, `ready` or `blocked`.
     pub state: String,
-    /// In place: the spec, plan or constitution changed since this task's
-    /// evidence was committed (its `Intent-Digest` differs from now).
-    pub intent_changed: bool,
+    /// What changed in the intent (spec, plan, constitution) since this
+    /// task's evidence was committed: its tick was judged against an earlier
+    /// version. `None`: nothing changed, or the task has no commit.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub drift: Option<Drift>,
     /// For a task speccoder committed: its attestation as the note says,
     /// signatures unchecked — `signed <kind> <keyid>`, `unsigned` or
     /// `missing` (F-061; `attest verify` checks them).
@@ -1380,6 +1420,9 @@ pub struct StatusTotals {
     pub ready: usize,
     /// Open and blocked.
     pub blocked: usize,
+    /// Ticks whose cited requirements changed since (F-085).
+    #[serde(default)]
+    pub stale: usize,
 }
 
 /// Result of `speccoder bench import`.

@@ -70,7 +70,7 @@ pub fn question(a: &Action, steps: &[JourneyStep]) -> String {
     let look = crate::style::err();
     let verb = match &a.run {
         Some(Runnable::Commit { .. }) => "Commit them?",
-        Some(Runnable::Run { .. }) => "Start it now?",
+        Some(Runnable::Run { .. } | Runnable::Converge) => "Start it now?",
         _ => "Run it now?",
     };
     if look.screen_reader {
@@ -156,6 +156,7 @@ fn take(
         Some(Runnable::Run { task: None }) => {
             speccoder_runtime::run_feature(path, feature, &options, false)
         }
+        Some(Runnable::Converge) => speccoder_runtime::run_feature(path, feature, &options, true),
         _ => CommandResult::new(
             "next",
             CommandStatus::UsageError,

@@ -11,6 +11,24 @@ ticks a task only on evidence the model cannot produce or edit.
 
 ### Added
 
+**When the spec changes** (drift)
+
+- A tick is proven against the spec its commit holds. When a requirement it
+  cites is reworded, added or removed and committed, the report says so —
+  `1 tick(s) proven against an earlier wording of their requirements` — with
+  the line then and now; the verdict stays what the evidence showed.
+- Everywhere it is read: the terminal report and dashboard, the board card
+  (*Spec changed: FR-001*), the inspector (a word-by-word diff), the
+  report's requirement matrix (no longer counted as proven) and the pull
+  request description.
+- The next step is **re-check what the spec changed**: `speccoder run
+  --converge`, whose assessment is told which requirements changed since
+  their ticks. speccoder never unticks a task on its own.
+- From git alone, in both modes: each tick's commit against the checkout's
+  committed `HEAD`, a bounded number of git processes per report. Payload:
+  `tasks[].drift`, `trace[].changed`, `totals.stale` (replacing
+  `intent_changed`).
+
 **The first fifteen minutes** (from a newcomer's walkthrough)
 
 - A missing model key says `KEY-MISSING` with the `export` line from every

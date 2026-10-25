@@ -21,6 +21,9 @@ pub enum Runnable {
         /// One task, or the feature's ready tasks.
         task: Option<String>,
     },
+    /// `speccoder run --converge`: the ready tasks, then the assessment of
+    /// the code against the spec as it is now, appending what remains.
+    Converge,
     /// Commit exactly these planning files.
     Commit {
         /// Repository-relative paths.

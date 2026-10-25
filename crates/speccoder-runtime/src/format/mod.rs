@@ -97,11 +97,31 @@ pub trait Adapter: Send + Sync + std::fmt::Debug {
         None
     }
 
+    /// The unit's document that defines its requirements (`spec.md` in
+    /// Spec Kit), relative to the unit's directory; `None` when the format
+    /// has no requirement identifiers.
+    fn requirements_file(&self) -> Option<&'static str> {
+        None
+    }
+
+    /// The requirements `text` (the requirements file) defines, each with
+    /// the line that defines it, in the document's order.
+    fn requirements_in(&self, _text: &str) -> Vec<(String, String)> {
+        Vec::new()
+    }
+
     /// The unit's requirement identifiers, each with the hash of the line
     /// that defines it (`FR-001`, `SC-002` in Spec Kit): the rows of the
     /// trace matrix. None when the format has no such identifiers.
-    fn requirement_ids(&self, _root: &Path, _unit_dir: &str) -> Vec<(String, String)> {
-        Vec::new()
+    fn requirement_ids(&self, root: &Path, unit_dir: &str) -> Vec<(String, String)> {
+        let Some(file) = self.requirements_file() else {
+            return Vec::new();
+        };
+        let text = std::fs::read_to_string(root.join(unit_dir).join(file)).unwrap_or_default();
+        self.requirements_in(&text)
+            .into_iter()
+            .map(|(id, line)| (id, crate::integrity::sha256_hex(line.as_bytes())))
+            .collect()
     }
 
     /// The format's per-checkout pointer to the current unit

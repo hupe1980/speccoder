@@ -228,9 +228,12 @@ impl Adapter for SpecKit {
         speccoder_speckit::checklists::status(root, unit_dir)
     }
 
-    fn requirement_ids(&self, root: &Path, unit_dir: &str) -> Vec<(String, String)> {
+    fn requirements_file(&self) -> Option<&'static str> {
+        Some("spec.md")
+    }
+
+    fn requirements_in(&self, text: &str) -> Vec<(String, String)> {
         // `- **FR-001**: …` and `- **SC-001**: …` define the identifiers.
-        let text = std::fs::read_to_string(root.join(unit_dir).join("spec.md")).unwrap_or_default();
         text.lines()
             .filter_map(|line| {
                 let rest = line.trim_start().strip_prefix("- **")?;
@@ -239,12 +242,7 @@ impl Adapter for SpecKit {
                 (matches!(kind, "FR" | "SC")
                     && !number.is_empty()
                     && number.chars().all(|c| c.is_ascii_digit()))
-                .then(|| {
-                    (
-                        id.to_owned(),
-                        crate::integrity::sha256_hex(line.trim_end().as_bytes()),
-                    )
-                })
+                .then(|| (id.to_owned(), line.trim_end().to_owned()))
             })
             .collect()
     }
