@@ -12,7 +12,7 @@ speccoder implements; Spec Kit specifies. speccoder does not replace Spec Kit's 
 
 ## Spec Kit's planning skills
 
-`specify init` installs Spec Kit's commands as Agent Skills (`.claude/skills/speckit-*/SKILL.md`). speccoder runs them with its own model, so you can plan without a separate editor agent:
+`specify init --here --integration claude` installs Spec Kit's commands as Agent Skills (`.claude/skills/speckit-*/SKILL.md`) — without `--integration claude`, Spec Kit sets up another editor and these skills are missing. speccoder runs them with its own model, so you can plan without a separate editor agent:
 
 ```sh
 speccoder spec                                         # the installed skills

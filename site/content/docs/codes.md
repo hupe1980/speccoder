@@ -28,6 +28,7 @@ Every result that is not plainly `ok` names a code — `error[CODE]`, `stopped[C
 | [`GH-MISSING`](#gh-missing) | error | 1 | the GitHub CLI (`gh`) is not installed |
 | [`GH-AUTH`](#gh-auth) | error | 1 | the GitHub CLI is not logged in |
 | [`GH-FAILED`](#gh-failed) | error | 1 | the GitHub CLI could not do it |
+| [`CONFIG-EXISTS`](#config-exists) | error | 13 | the project has a speccoder.toml already |
 | [`CONFIG-MISSING`](#config-missing) | error | 13 | the project has no speccoder.toml |
 | [`CONFIG-INVALID`](#config-invalid) | error | 13 | speccoder.toml has an error |
 | [`KEY-MISSING`](#key-missing) | error | 13 | the model provider's API key is not in the environment |
@@ -114,9 +115,9 @@ An unexpected failure inside speccoder: an IO error, a broken state file, a bug.
 
 Speccoder works on a Spec Kit or OpenSpec project, and found none here.
 
-No `.specify/` (Spec Kit) or `openspec/` (OpenSpec) directory was found here or above. speccoder implements specs; it does not write them from nothing.
+No `.specify/` (Spec Kit) or `openspec/` (OpenSpec) directory was found here or above. Spec Kit makes one (`--integration claude` installs the skills speccoder runs); then `speccoder init` and `speccoder spec specify` take it from there.
 
-- `specify init --here`
+- `specify init --here --integration claude`
 - `openspec init`
 
 ### SPEC-DIAGNOSTICS
@@ -206,6 +207,15 @@ The message is `gh`'s own: no GitHub remote, no such issue, no access, or GitHub
 
 - `gh repo view`
 
+### CONFIG-EXISTS
+
+The project has a speccoder.toml already.
+
+`init` writes a new one; change the existing one with `speccoder config` (or Settings), or start over with `--force`.
+
+- `speccoder config`
+- `speccoder init --force`
+
 ### CONFIG-MISSING
 
 The project has no speccoder.toml.
@@ -234,9 +244,9 @@ speccoder reads API keys from the environment only. The message names the variab
 
 No check applies, so nothing could show that nothing regressed.
 
-Every configured check was skipped (`when_exists` did not match) or none is configured. A task cannot be judged without at least one check.
+Every configured check was skipped (`when_exists` did not match) or none is configured. A task cannot be judged without at least one check: add your test command as one.
 
-- `speccoder init --force`
+- `speccoder config set checks.test.argv -- <your test command>`
 
 ### GIT
 
@@ -267,8 +277,9 @@ speccoder reads committed files only — a worktree is checked out from a commit
 
 There is no git remote to push to.
 
-`pr` pushes `speccoder/<feature>` to a remote and opens the pull request there.
+`pr` pushes `speccoder/<feature>` to a remote and opens the pull request there; `issue` reads the remote's GitHub issues. Add the repository's GitHub address as a remote, or name the one to use.
 
+- `git remote add origin <url>`
 - `git remote -v`
 - `speccoder pr --remote <name>`
 
@@ -452,7 +463,6 @@ The checks or the acceptance tests did not pass.
 After the retries, a check regressed or the spec-derived acceptance tests did not go from red to green. The attempt is saved under its ref.
 
 - `speccoder report`
-- `speccoder task nudge <task> --note "…"`
 
 ### REGRESSION-ONLY
 
@@ -486,8 +496,6 @@ A call waits for a person's decision; nothing ran.
 The model asked for something the policy does not allow on its own — a dependency change, the network, a protected file. The attempt waits; deciding continues it from that call.
 
 - `speccoder report --approvals`
-- `speccoder task approve <task>`
-- `speccoder task reject <task> --reason "…"`
 
 ### BLOCKED
 
@@ -504,7 +512,6 @@ The attempt ran out of turns, calls or tokens.
 
 The attempt reached a limit of `[budget]` before finishing. The work so far is saved under the attempt's ref.
 
-- `speccoder task nudge <task> --note "…"`
 - Raise the limit in speccoder.toml [budget]
 
 ### NOT-DEMONSTRATED
@@ -514,7 +521,6 @@ The evidence the task needs could not be produced.
 The acceptance tests could not be made red before the attempt (they already pass, or fail for another reason), or a convergence gap shows in no failing test. Ticking would claim more than was shown.
 
 - `speccoder report`
-- `speccoder task accept <task> --reason "…"`
 
 ### ACCEPTANCE-UNWRITTEN
 
@@ -532,8 +538,6 @@ The gaming monitor suspects a shortcut.
 A separate review of the passing attempt found something like a hard-coded result or a weakened test. The task stays unticked until a person decides.
 
 - `speccoder report`
-- `speccoder task accept <task> --reason "…"`
-- `speccoder task nudge <task> --note "…"`
 
 ### TESTS-OVER-STRICT
 
@@ -552,8 +556,6 @@ The acceptance tests are too weak for [acceptance] min_strength.
 Wrong implementations — mutants of the changed code and model-written near misses — passed the acceptance tests too often, and adding tests once did not fix it. The task stays unticked; the report names what got through.
 
 - `speccoder report`
-- `speccoder run --task <task>`
-- `speccoder task accept <task> --reason "…"`
 
 ### INTERRUPTED
 

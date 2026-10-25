@@ -406,17 +406,38 @@ pub fn report(path: &Path, feature: Option<&str>) -> CommandResult {
         + totals.skipped;
     let done =
         totals.verified + totals.regression_only + totals.attested + totals.ticked_without_evidence;
-    let mut message = format!(
-        "{done}/{} done: {} verified, {} regression only, {} attested, {} without evidence; {} ready, {} blocked, {} skipped",
-        tasks.len(),
-        totals.verified,
-        totals.regression_only,
-        totals.attested,
-        totals.ticked_without_evidence,
-        totals.ready,
-        totals.blocked,
-        totals.skipped
-    );
+    // Only what there is: a first report says "0/11 done: 3 ready, 8
+    // blocked", not four kinds of evidence nothing has yet.
+    let parts: Vec<String> = [
+        (totals.verified, "verified"),
+        (totals.regression_only, "regression only"),
+        (totals.attested, "attested"),
+        (totals.ticked_without_evidence, "without evidence"),
+    ]
+    .iter()
+    .filter(|(n, _)| *n > 0)
+    .map(|(n, w)| format!("{n} {w}"))
+    .collect();
+    let open: Vec<String> = [
+        (totals.ready, "ready"),
+        (totals.blocked, "blocked"),
+        (totals.skipped, "skipped"),
+    ]
+    .iter()
+    .filter(|(n, _)| *n > 0)
+    .map(|(n, w)| format!("{n} {w}"))
+    .collect();
+    let mut message = format!("{done}/{} done", tasks.len());
+    if !parts.is_empty() {
+        message.push_str(&format!(": {}", parts.join(", ")));
+    }
+    if !open.is_empty() {
+        message.push_str(&format!(
+            "{}{}",
+            if parts.is_empty() { ": " } else { "; " },
+            open.join(", ")
+        ));
+    }
     if !convergence.is_empty() {
         message.push_str(&format!("; {} convergence round(s)", convergence.len()));
     }

@@ -66,6 +66,13 @@
           "description": "Passed on the untouched code.",
           "type": "boolean"
         },
+        "reason": {
+          "description": "Why it did not pass: the last line of its output that says something\n(`No module named pytest`), or the runner's note.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "status": {
           "description": "`passed`, `failed`, `timed_out`, `skipped`, `error`.",
           "type": "string"
@@ -75,7 +82,8 @@
         "name",
         "passed",
         "status",
-        "duration_ms"
+        "duration_ms",
+        "reason"
       ],
       "type": "object"
     }

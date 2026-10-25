@@ -12,7 +12,7 @@ group = "Start"
 | You need | Why |
 |---|---|
 | **git** | speccoder works in a git worktree and records every attempt in git. |
-| **A spec project** | A GitHub Spec Kit project (`specify init`; Spec Kit **0.13 to 1.2**, each release tested against what it generates) or an [OpenSpec](@/docs/openspec.md) project (OpenSpec 1.0 or newer). |
+| **A spec project** | A GitHub Spec Kit project (`specify init --here --integration claude`; Spec Kit **0.13 to 1.2**, each release tested against what it generates) or an [OpenSpec](@/docs/openspec.md) project (OpenSpec 1.0 or newer). |
 | **A model** | An Anthropic or OpenAI API key in the environment, or a local OpenAI-compatible server such as Ollama or vLLM. |
 | **Your toolchain** | Whatever your checks run — for a Rust project `cargo` (and ideally `cargo-nextest`), for Python `pytest`, and so on. |
 | **macOS or Linux** | The OS sandbox uses Seatbelt on macOS and Landlock (kernel 5.13+) on Linux. |

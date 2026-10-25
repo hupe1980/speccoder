@@ -1,28 +1,26 @@
 +++
 title = "Quickstart"
-description = "From a Spec Kit project to a verified branch: configure checks, run speccoder, read the evidence and merge."
+description = "From a git repository to a verified branch: a Spec Kit project, speccoder's checks, a spec, a run, the evidence, a pull request."
 weight = 20
 
 [extra]
 group = "Start"
 +++
 
-This walks through a first run on an existing Spec Kit project. It takes about ten minutes, most of it reading.
+From a git repository to a pull request whose every tick carries its evidence. About fifteen minutes, most of it reading what was written. Each command below says what to do next when you run it — you can follow those instead.
 
-## 1. Have a feature to implement
+## 1. Make it a Spec Kit project
 
-speccoder needs a Spec Kit feature with `spec.md`, `plan.md` and `tasks.md` under `specs/NNN-name/`. If you have only an idea, let Spec Kit's planning skills write them with speccoder's model:
+speccoder implements specs written in [GitHub Spec Kit](https://github.com/github/spec-kit)'s format, and runs Spec Kit's own planning skills. Install Spec Kit once, then in your repository:
 
 ```sh
-speccoder spec specify "A function slugify(text) that turns titles into URL slugs"
-speccoder spec plan
-speccoder spec tasks
-git add -A && git commit -m "spec: slugify"
+uv tool install specify-cli --from git+https://github.com/github/spec-kit.git
+specify init --here --integration claude
 ```
 
-Review what they wrote before you commit — the spec is what the result will be judged against. `spec specify` makes the new feature current, so `plan` and `tasks` work on it; `speccoder feature` shows and switches it. After each step speccoder offers the next one — answer `y` to commit what planning wrote and go on. More in [planning with Spec Kit](@/docs/planning.md).
+`--integration claude` matters: it installs the planning skills under `.claude/skills/`, which speccoder runs with its own model (it does not need Claude Code). In a script or CI, add `--force --non-interactive`. [OpenSpec](@/docs/openspec.md) works too.
 
-## 2. Set up
+## 2. Set up speccoder
 
 ```sh
 speccoder init
@@ -30,28 +28,43 @@ speccoder init
 
 ```text
 Checks speccoder runs to decide "nothing regressed":
-  test       fast  cargo nextest run --workspace --profile speccoder   Cargo.toml, cargo-nextest installed
-  clippy     full  cargo clippy --all-targets -- -D warnings          Cargo.toml
-  check  test       cargo nextest run --workspace --profile speccoder
-  test  passes on the untouched code
-Commit speccoder.toml? speccoder reads committed files only. [Y/n] y
-Model      anthropic/claude-sonnet-5-5  (ANTHROPIC_API_KEY found)
-Guidance   AGENTS.md (given to every attempt)
-Committed  4f2a1c9 "speccoder: config"
+  test       fast  .venv/bin/python -m pytest -q --junitxml=.speccoder/junit.xml   a Python project (pytest, .venv/bin/python)
+On the untouched code  test ✓ 0.4s
+Model      anthropic/claude-sonnet-5-5  (ANTHROPIC_API_KEY is not set)
+Commit speccoder.toml and .gitignore? speccoder reads committed files only. [Y/n]
 ```
 
-`init` looks at your project (Cargo, npm/pnpm/yarn/bun, pytest, Go, Make), proposes **checks** — the commands that decide whether nothing regressed — writes `speccoder.toml`, runs the checks on the untouched code, and offers to commit the file, because speccoder reads committed files only. A check that fails before any change is said, and the commit is then not the default: every task would be judged against a red baseline. Read the file afterwards — it also lists which commands the model may run without asking.
+`init` looks at your project (Cargo, npm/pnpm/yarn/bun, Python — with its `.venv` when there is one — Go, Make), proposes **checks** — the commands that decide whether nothing regressed — writes `speccoder.toml`, and runs the checks on your untouched code. A check that fails there is shown with the line that says why (`No module named pytest`), because every task would otherwise be judged against a red baseline. Commit what it wrote: speccoder reads committed files only. Change it later with `speccoder config` or **Settings** in the [app](@/docs/web.md).
 
-`speccoder doctor` checks the whole setup — git, the sandbox, the key, the spec tool, the signing key — without changing anything.
-
-## 3. Run
+## 3. A model key
 
 ```sh
-export OPENAI_API_KEY=…   # or ANTHROPIC_API_KEY
-speccoder run
+export ANTHROPIC_API_KEY=…   # or OPENAI_API_KEY
 ```
 
-speccoder picks the next ready task, writes acceptance tests that must fail, lets the model work, then judges. Progress streams to the terminal:
+speccoder reads the key from the environment only. A local model (Ollama, vLLM, LM Studio) works too: `speccoder config set model.provider openai-compatible` and its `base_url` ([configuration](@/docs/configuration.md#model)). `speccoder doctor` checks the whole setup — git, the project, the key, the sandbox — and changes nothing.
+
+## 4. Write the spec
+
+From an idea, or from a GitHub issue:
+
+```sh
+speccoder spec specify "A function slugify(text) that turns titles into URL slugs"
+#   or: speccoder issue start 42
+speccoder spec plan
+speccoder spec tasks
+```
+
+Spec Kit's skills write `spec.md`, `plan.md` and `tasks.md`; after each, speccoder offers the next step and to commit exactly what was written. Read the spec before you go on — it is what the result will be judged against. More in [planning](@/docs/planning.md).
+
+## 5. Run
+
+```sh
+speccoder run              # in the terminal
+speccoder ui --window      # or as an app (macOS; `speccoder ui` opens your browser)
+```
+
+speccoder picks the next ready task, writes acceptance tests from the spec that must fail first, lets the model work in its own worktree, then judges:
 
 ```text
 ▶ T002 Implement `slugify(text)` in src/lib.rs  (001-slugify)
@@ -65,9 +78,9 @@ speccoder picks the next ready task, writes acceptance tests that must fail, let
 ✓ T002 verified · 10.2k in / 798 out · $0.0031 · 9s
 ```
 
-When a call needs your approval, speccoder asks inline. When a task cannot pass, it stops and tells you why. Run `speccoder run` again after you have decided; it continues where it stopped.
+When a call needs your approval, speccoder asks. When a task cannot pass, it stops and says why. Run again after you have decided; it continues where it stopped.
 
-## 4. Read the evidence
+## 6. Read the evidence
 
 ```sh
 speccoder report
@@ -77,24 +90,21 @@ speccoder report
 Phase 2: User Story 1 - URL slugs (Priority: P1)
   ✓ T002 Implement `slugify(text)` …            verified
   · T003 Handle Unicode input …                 ready
-1/2 done: 1 verified · 1 ready · 1 commit on speccoder/001-slugify not merged
+1/2 done: 1 verified; 1 ready · 1 commit on speccoder/001-slugify not merged
 ```
 
-`verified` means the spec-derived tests went from red to green and nothing regressed. [Reading the evidence](@/docs/evidence.md) explains every state.
+`verified` means the tests derived from the spec went from red to green and nothing regressed. [Reading the evidence](@/docs/evidence.md) explains every state; the app's **Code** view shows each tick's commit.
 
-## 5. Review and merge
+## 7. Hand it off
 
-The work is on the branch `speccoder/001-slugify`, one commit per task:
+The work is on `speccoder/001-slugify`, one commit per task. Merge it, or open a draft pull request with the evidence in its description (and `Closes #42` for the issue it came from):
 
 ```sh
-git log --stat speccoder/001-slugify
-git merge speccoder/001-slugify
+speccoder pr
 ```
-
-Or hand it to your team as a draft pull request with the evidence in its description: `speccoder pr`.
 
 ## Next steps
 
-- Let speccoder close the gaps between spec and code: `speccoder run --converge`.
-- Watch a run from a second terminal: `speccoder report --live`, or just `speccoder` for the dashboard.
+- Close the gaps between spec and code: `speccoder run --converge`.
+- Watch a run from a second terminal: `speccoder report --live`, or `speccoder` for the dashboard.
 - Tighten or relax what the model may do: [configuration](@/docs/configuration.md).

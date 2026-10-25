@@ -30,14 +30,7 @@ pub fn run(path: &Path, feature: Option<&str>, task: &str, options: &RunOptions)
     };
     let (driver, key) = match substrate::model_config::open_driver(&model) {
         Ok((d, k)) => (Ok::<_, String>(d), k.unwrap_or_default()),
-        Err(e) => {
-            let code = if e.contains("is not set") {
-                "KEY-MISSING"
-            } else {
-                "CONFIG-INVALID"
-            };
-            return CommandResult::new("run", CommandStatus::ConfigError, &e).with_code(code);
-        }
+        Err(e) => return substrate::model_config::refused("run", &e),
     };
     match driver {
         Ok(provider) => run_task(path, feature, task, &state, provider, Some(&key), options),

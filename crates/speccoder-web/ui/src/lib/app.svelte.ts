@@ -81,7 +81,7 @@ class AppState {
         get<Document[]>(`/api/documents${q({ feature: f })}`),
       ]);
       void get<Envelope<{ checks: { check: string; level: string; detail: string; fix: string[]; code?: string | null }[] }>>(`/api/doctor${q({ feature: f })}`)
-        .then((d) => (this.preflight = (d.data?.checks ?? []).filter((c) => c.level !== "pass")))
+        .then((d) => (this.preflight = (d.data?.checks ?? []).filter((c) => c.level === "warn" || c.level === "fail")))
         .catch(() => {});
       this.project = project;
       this.report = report;

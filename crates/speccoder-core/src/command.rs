@@ -364,7 +364,9 @@ pub struct FeaturesReport {
 pub enum DoctorLevel {
     /// Fine.
     Pass,
-    /// Works, with less than it could (no signing key, no spec tool).
+    /// Works fully; something optional is not set up (no signing key).
+    Info,
+    /// Works, with less than it could (no spec tool).
     Warn,
     /// A run would fail or judge wrongly.
     Fail,
@@ -933,6 +935,9 @@ pub struct InitRun {
     pub status: String,
     /// How long it took.
     pub duration_ms: u64,
+    /// Why it did not pass: the last line of its output that says something
+    /// (`No module named pytest`), or the runner's note.
+    pub reason: Option<String>,
 }
 
 /// The model key `init` looked for.

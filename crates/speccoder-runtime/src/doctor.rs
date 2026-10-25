@@ -288,8 +288,15 @@ pub fn checks(
                         .map(std::path::PathBuf::from)
                         .as_deref(),
                 );
-                let fix: Vec<&str> = fix.iter().map(String::as_str).collect();
-                warned("signing", format!("attestations stay unsigned: {e}"), &fix)
+                // Optional: every tick is attested either way; a key signs it.
+                DoctorCheck {
+                    fix,
+                    ..check(
+                        "signing",
+                        DoctorLevel::Info,
+                        format!("attestations are not signed (optional): {e}"),
+                    )
+                }
             }
         });
     }
@@ -338,6 +345,10 @@ pub fn run(path: &Path, feature: Option<&str>, look: Option<&str>) -> CommandRes
         .iter()
         .filter(|c| c.level == DoctorLevel::Warn)
         .count();
+    let optional = checks
+        .iter()
+        .filter(|c| c.level == DoctorLevel::Info)
+        .count();
     let report = DoctorReport {
         speccoder: env!("CARGO_PKG_VERSION").to_owned(),
         os: format!("{} {}", std::env::consts::OS, std::env::consts::ARCH),
@@ -347,8 +358,13 @@ pub fn run(path: &Path, feature: Option<&str>, look: Option<&str>) -> CommandRes
         None => CommandResult::ok(
             "doctor",
             &format!(
-                "{} checks passed, {warnings} warning(s)",
-                checks.len() - warnings
+                "{} checks passed, {warnings} warning(s){}",
+                checks.len() - warnings - optional,
+                if optional > 0 {
+                    format!(", {optional} optional")
+                } else {
+                    String::new()
+                }
             ),
         ),
         Some(first) => {
@@ -383,9 +399,35 @@ fn untracked_check(root: &Path) -> Option<DoctorCheck> {
     let out = Git::at(root)
         .run(&["status", "--porcelain", "--untracked-files=normal", "."])
         .ok()?;
+    // Output and caches are no configuration: a worktree makes its own.
+    const OUTPUT: &[&str] = &[
+        ".DS_Store",
+        ".speccoder",
+        ".venv",
+        "venv",
+        "node_modules",
+        "target",
+        "__pycache__",
+        ".pytest_cache",
+        ".mypy_cache",
+        ".ruff_cache",
+        ".tox",
+        ".nox",
+        ".coverage",
+        "dist",
+        "build",
+        ".next",
+        ".turbo",
+        ".gradle",
+        ".idea",
+        ".vscode",
+    ];
     let config = |p: &str| {
         let name = p.trim_end_matches('/').rsplit('/').next().unwrap_or(p);
-        (name.starts_with('.') && name != ".DS_Store")
+        if OUTPUT.contains(&name) {
+            return false;
+        }
+        name.starts_with('.')
             || [".toml", ".json", ".yaml", ".yml", ".cfg", ".ini"]
                 .iter()
                 .any(|e| name.ends_with(e))

@@ -11,6 +11,26 @@ ticks a task only on evidence the model cannot produce or edit.
 
 ### Added
 
+**The first fifteen minutes** (from a newcomer's walkthrough)
+
+- A missing model key says `KEY-MISSING` with the `export` line from every
+  command that calls a model (it said `CONFIG` → `speccoder init`, which then
+  said the file exists).
+- Next steps follow the error's code: a missing key leads to `doctor`, an
+  existing config to `speccoder config` (`CONFIG-EXISTS`), nothing to hand
+  off to `run`; fixes about a task are not offered when there is none.
+- `init` shows why a check fails on the untouched code (`No module named
+  pytest`), uses a project's `.venv` interpreter, checks pytest is installed,
+  adds `.speccoder/` to `.gitignore`, says when there is no spec project yet
+  (with the format's own command first), and offers the first spec when
+  there is no feature. `specify init --here --integration claude` is the
+  documented setup (the skills speccoder runs come with it).
+- `doctor`: a missing signing key is optional, not a warning; output and
+  cache folders (`.speccoder`, `.venv`, `node_modules`, …) are no untracked
+  configuration. GitHub checks for a remote before the login (`NO-REMOTE`).
+- The report's first line shows only the counts there are; hints name
+  `speccoder spec …` before the editor's slash command.
+
 **GitHub**
 
 - `speccoder issue` lists the repository's open issues; `speccoder issue

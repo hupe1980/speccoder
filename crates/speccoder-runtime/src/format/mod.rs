@@ -243,6 +243,8 @@ pub struct Messages {
     pub no_current: &'static str,
     /// Who else reads the pointer, said when it changes.
     pub current_shared: &'static str,
+    /// The command that makes a project of this format here, and why.
+    pub make_project: (&'static str, &'static str),
 }
 
 /// Hosted planning skills.

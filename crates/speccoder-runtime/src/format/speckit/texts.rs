@@ -105,11 +105,15 @@ pub static MESSAGES: Messages = Messages {
     unit: "feature",
     no_current: "",
     current_shared: "Spec Kit's scripts and the /speckit-* commands in your editor read it too",
+    make_project: (
+        "specify init --here --integration claude",
+        "make it a Spec Kit project (the skills speccoder runs come with it)",
+    ),
 };
 
 fn not_a_project(path: &Path) -> String {
     format!(
-        "no Spec Kit project (.specify/) at or above {}; run `specify init` first",
+        "no Spec Kit project (.specify/) at or above {}; run `specify init --here --integration claude` first (speccoder runs Spec Kit's skills from .claude/skills/)",
         path.display()
     )
 }
@@ -159,7 +163,7 @@ fn refused(name: &str) -> Option<String> {
                 .to_owned(),
         ),
         "speckit-taskstoissues" => Some(
-            "it creates GitHub issues; speccoder never talks to a remote".to_owned(),
+            "it turns tasks into GitHub issues; speccoder goes the other way — `speccoder issue start N` makes a feature from an issue, and `speccoder pr` closes it".to_owned(),
         ),
         _ => None,
     }

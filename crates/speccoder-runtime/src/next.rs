@@ -11,6 +11,13 @@ use speccoder_core::{CommandData, CommandResult, CommandStatus, RunReport};
 /// the status's default — every non-ok result leaves with one (F-056).
 #[must_use]
 pub fn attach(result: CommandResult, feature: Option<&str>) -> CommandResult {
+    // A code that says exactly what is wrong decides what comes next; the
+    // status alone ("a config error") would send a missing key to `init`.
+    if result.next().is_empty()
+        && let Some(steps) = result.code().and_then(|c| by_code(c.name))
+    {
+        return result.with_next(steps);
+    }
     let outcome = classify(&result);
     // Steps already attached (an in-place run's) are kept.
     let mut result = match &outcome {
@@ -36,6 +43,44 @@ pub fn attach(result: CommandResult, feature: Option<&str>) -> CommandResult {
         }
     }
     result
+}
+
+/// Next steps for a failure whose code names it precisely.
+fn by_code(code: &str) -> Option<Vec<speccoder_core::next::NextStep>> {
+    let step = |command: &str, why: &str| speccoder_core::next::NextStep {
+        command: command.to_owned(),
+        why: why.to_owned(),
+    };
+    Some(match code {
+        "KEY-MISSING" => vec![step(
+            "speccoder doctor",
+            "check the rest of the setup once the key is set",
+        )],
+        "CONFIG-INVALID" => vec![step(
+            "speccoder config",
+            "every key, its value, and what is wrong",
+        )],
+        "NOTHING-TO-HAND-OFF" => vec![step(
+            "speccoder run",
+            "tick tasks first: a pull request carries their evidence",
+        )],
+        "NO-CHECKS" => vec![step(
+            "speccoder config",
+            "every key: add a check under Checks",
+        )],
+        "CONFIG-EXISTS" => vec![step(
+            "speccoder config",
+            "every key and its value: change what you need",
+        )],
+        "CONFIG-NOT-TRACKED" => vec![step(
+            "speccoder config commit",
+            "speccoder reads committed configuration only",
+        )],
+        "GH-MISSING" | "GH-AUTH" | "GH-FAILED" | "NO-REMOTE" => {
+            vec![step("speccoder doctor", "check the rest of the setup")]
+        }
+        _ => return None,
+    })
 }
 
 /// The catalog code an outcome stands for.

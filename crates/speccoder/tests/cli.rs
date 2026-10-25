@@ -1004,6 +1004,10 @@ fn config_sets_checks_and_commits_the_configuration_alone() {
 #[test]
 fn issue_lists_through_gh_and_says_how_to_log_in() {
     let dir = committed_project(false);
+    git(
+        dir.path(),
+        &["remote", "add", "origin", "https://github.com/o/r.git"],
+    );
     let bin = tempfile::tempdir().unwrap();
     let gh = bin.path().join("gh");
     std::fs::write(

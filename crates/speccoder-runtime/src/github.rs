@@ -24,6 +24,19 @@ pub fn gh() -> String {
         .unwrap_or_else(|| "gh".to_owned())
 }
 
+/// The repository has a remote: checked before `gh` (and its login) is
+/// asked anything, so a missing remote is said first, not after a login.
+fn remote(root: &Path) -> Result<(), String> {
+    let remotes = crate::git::Git::at(root)
+        .line(&["remote"])
+        .unwrap_or_default();
+    if remotes.trim().is_empty() {
+        Err("this repository has no remote: `git remote add origin <url>` (GitHub's address for it)".to_owned())
+    } else {
+        Ok(())
+    }
+}
+
 /// Runs `gh args…` in `root`: its stdout, or why not.
 fn run(program: &str, root: &Path, args: &[&str]) -> Result<String, String> {
     let mut child = Command::new(program)
@@ -115,7 +128,15 @@ struct Repo {
 /// Whether `gh` is there, logged in, and sees this repository.
 #[must_use]
 pub fn status(gh: &str, root: &Path) -> Status {
-    if let Err(e) = run(gh, root, &["--version"]) {
+    let version = run(gh, root, &["--version"]);
+    if let Err(e) = remote(root) {
+        return Status {
+            installed: version.is_ok(),
+            reason: Some(e),
+            ..Status::default()
+        };
+    }
+    if let Err(e) = version {
         return Status {
             reason: Some(e),
             ..Status::default()
@@ -202,6 +223,7 @@ pub fn issues(
     root: &Path,
     features: &std::collections::BTreeMap<String, String>,
 ) -> Result<IssuesReport, String> {
+    remote(root)?;
     let text = run(
         gh,
         root,
@@ -249,6 +271,7 @@ pub fn issues(
 ///
 /// Not a reference, or `gh`'s reason.
 pub fn issue(gh: &str, root: &Path, reference: &str) -> Result<Issue, String> {
+    remote(root)?;
     let r = reference.trim().trim_start_matches('#');
     let ok = r.chars().all(|c| c.is_ascii_digit()) && !r.is_empty()
         || (r.starts_with("https://")
@@ -431,14 +454,22 @@ pub fn list(gh: &str, root: &Path) -> CommandResult {
 /// A `gh` failure as a result: its code and fix.
 #[must_use]
 pub fn refused(reason: &str) -> CommandResult {
-    let code = if reason.contains("not installed") {
+    let code = if reason.contains("has no remote") {
+        "NO-REMOTE"
+    } else if reason.contains("not installed") {
         "GH-MISSING"
     } else if reason.contains("auth login") || reason.contains("not logged") {
         "GH-AUTH"
     } else {
         "GH-FAILED"
     };
-    CommandResult::new("issue", CommandStatus::Error, &format!("GitHub: {reason}")).with_code(code)
+    // The code's own status: a missing remote is a git precondition.
+    let status = if code == "NO-REMOTE" {
+        CommandStatus::GitPrecondition
+    } else {
+        CommandStatus::Error
+    };
+    CommandResult::new("issue", status, &format!("GitHub: {reason}")).with_code(code)
 }
 
 #[cfg(test)]

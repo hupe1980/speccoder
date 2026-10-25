@@ -89,7 +89,7 @@ fn list_features(ws: &Workspace, diags: &mut Vec<Diagnostic>) -> Vec<FeatureRef>
                     "discover.no-specs-dir",
                     "no specs/ directory",
                 )
-                .hint("run /speckit-specify to create the first feature"),
+                .hint("speccoder spec specify \"…\" creates the first feature (/speckit-specify in your editor)"),
             );
             Vec::new()
         }
@@ -127,7 +127,7 @@ fn feature_snapshot(
             diags.push(
                 Diagnostic::new(Severity::Warning, "tasks.missing", "no tasks.md yet")
                     .at(&tasks_path)
-                    .hint("run /speckit-tasks after /speckit-plan"),
+                    .hint("speccoder spec plan, then speccoder spec tasks (/speckit-plan, /speckit-tasks in your editor)"),
             );
             None
         }

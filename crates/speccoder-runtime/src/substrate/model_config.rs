@@ -72,6 +72,29 @@ pub fn strip_cache_control(v: &mut serde_json::Value) {
     }
 }
 
+/// Why the model could not be opened, as a result: a missing key is
+/// `KEY-MISSING` with the exact `export` (and the other ways to get a
+/// model), anything else `CONFIG-INVALID`. Every command that calls a model
+/// says it the same way.
+#[must_use]
+pub fn refused(command: &str, error: &str) -> speccoder_core::CommandResult {
+    use speccoder_core::{CommandResult, CommandStatus};
+    let missing = error.split_whitespace().next().filter(|v| {
+        error.contains("is not set")
+            && v.chars()
+                .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_')
+    });
+    match missing {
+        Some(variable) => CommandResult::new(command, CommandStatus::ConfigError, error)
+            .with_code("KEY-MISSING")
+            .with_fix(vec![
+                format!("export {variable}=…"),
+                "→ or another provider, or a local model: speccoder config set model.provider openai-compatible (see Settings › Model)".to_owned(),
+            ]),
+        None => CommandResult::new(command, CommandStatus::ConfigError, error).with_code("CONFIG-INVALID"),
+    }
+}
+
 /// The model driver for `model`, and the secret to redact from messages.
 /// Keys come only from the environment; a local `openai-compatible` server
 /// needs none unless `api_key_env` names one.
