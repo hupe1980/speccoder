@@ -215,8 +215,9 @@ jobs:
         run: |
           sh packaging/install.sh --version "$VERSION" --to "$RUNNER_TEMP/bin"
           [ "$("$RUNNER_TEMP/bin/speccoder" --version)" = "speccoder $VERSION" ]
+      # On Linux the installer above is the main path; Homebrew is checked on macOS.
       - name: Homebrew
-        if: env.PRERELEASE == 'false'
+        if: env.PRERELEASE == 'false' && runner.os == 'macOS'
         run: |
           brew install hupe1980/tap/speccoder
           brew test speccoder

@@ -43,6 +43,7 @@ You need git, a Spec Kit project (Spec Kit 0.13 to 1.2) or an OpenSpec project (
 ```sh
 brew install hupe1980/tap/speccoder
 # or: curl -LsSf https://github.com/hupe1980/speccoder/releases/latest/download/speccoder-installer.sh | sh
+# or: cargo binstall speccoder        (the release archive, no build)
 # or: cargo install speccoder --locked
 
 cd my-project

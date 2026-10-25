@@ -14,6 +14,12 @@ authors.workspace = true
 keywords.workspace = true
 categories.workspace = true
 
+# `cargo binstall speccoder` takes the release archive instead of building.
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ version }-{ target }.tar.gz"
+bin-dir = "{ name }-{ version }-{ target }/{ bin }{ binary-ext }"
+pkg-fmt = "tgz"
+
 [[bin]]
 name = "speccoder"
 path = "src/main.rs"

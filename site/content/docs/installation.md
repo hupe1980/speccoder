@@ -35,9 +35,10 @@ curl -LsSf https://github.com/hupe1980/speccoder/releases/latest/download/specco
 
 `--version 0.1.0` (or `SPECCODER_VERSION`) installs a given release, `--to DIR` (or `SPECCODER_INSTALL_DIR`) another directory, and `--verify-attestation` also checks the build provenance with the GitHub CLI.
 
-**Cargo** (Rust 1.99 or newer):
+**Cargo** — [`cargo binstall`](https://github.com/cargo-bins/cargo-binstall) takes the release archive; `cargo install` builds it (Rust 1.99 or newer):
 
 ```sh
+cargo binstall speccoder
 cargo install speccoder --locked
 ```
 
