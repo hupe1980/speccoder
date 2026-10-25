@@ -45,6 +45,9 @@ class AppState {
   waiting = $state<Waiting | null>(null);
   toasts = $state<Toast[]>([]);
   selected = $state<string | null>(null);
+  /** The Code view: which mode, which file is open. */
+  codeMode = $state<"changes" | "files">("changes");
+  codeFile = $state<string | null>(null);
   input = $state<{ action: Action } | null>(null);
   palette = $state(false);
   view = $state<"overview" | "board" | "code" | "documents" | "report" | "settings" | "setup">("board");
@@ -231,6 +234,8 @@ class AppState {
     if (this.feature) s.set("feature", this.feature);
     if (this.view !== "board") s.set("view", this.view);
     if (this.selected) s.set("task", this.selected);
+    if (this.view === "code" && this.codeMode === "files") s.set("mode", "files");
+    if (this.view === "code" && this.codeFile) s.set("file", this.codeFile);
     const t = s.toString();
     return location.pathname + (t ? `?${t}` : "");
   }
@@ -241,6 +246,8 @@ class AppState {
     if (view === "overview" || view === "board" || view === "code" || view === "documents" || view === "report" || view === "settings" || view === "setup") this.view = view;
     this.feature = s.get("feature") ?? this.feature;
     this.selected = s.get("task");
+    this.codeFile = s.get("file");
+    this.codeMode = s.get("mode") === "files" || this.codeFile ? "files" : "changes";
     this.palette = s.has("palette");
   }
 

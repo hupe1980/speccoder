@@ -15,5 +15,8 @@
     "svelte-check": "4.7.6",
     "typescript": "5.9.3",
     "vite": "8.3.0"
+  },
+  "dependencies": {
+    "mermaid": "12.1.0"
   }
 }
