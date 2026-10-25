@@ -7,6 +7,7 @@
   import type { CostReport, Envelope, Report } from "../lib/types";
   import Ring from "./Ring.svelte";
   import Icon from "./Icon.svelte";
+  import GitHub from "./GitHub.svelte";
 
   const features = $derived(app.project?.features?.features ?? []);
   let reports = $state<Record<string, Report | null>>({});
@@ -47,6 +48,7 @@
     void app.selectFeature(name);
     app.view = "board";
   }
+  const tokens = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}k` : String(n));
   const pretty = (n: string) => n.replace(/^\d+-/, "").replaceAll("-", " ");
 </script>
 
@@ -80,7 +82,7 @@
               {#if p.all}<span class:good={p.ok === p.all}><b>{p.ok}</b>/{p.all} requirements proven</span>{/if}
               {#if costs[f.name]?.total && (costs[f.name]!.total.input_tokens || costs[f.name]!.total.output_tokens)}
                 {@const t = costs[f.name]!.total}
-                <span title="{t.input_tokens.toLocaleString()} in · {t.output_tokens.toLocaleString()} out">{#if t.usd != null}<b>${t.usd.toFixed(2)}</b> spent{:else}<b>{Math.round((t.input_tokens + t.output_tokens) / 1000)}k</b> tokens{/if}</span>
+                <span title="{t.input_tokens.toLocaleString()} in · {t.output_tokens.toLocaleString()} out">{#if t.usd != null}<b>${t.usd.toFixed(2)}</b> spent{:else}<b>{tokens(t.input_tokens + t.output_tokens)}</b> tokens{/if}</span>
               {/if}
               {#if pending}<span class="attn"><Icon name="hand" size={11} weight={2.2} />{pending} waiting</span>{/if}
               {#if !f.tasks}<span>{f.artifacts.join(" · ") || "empty"}</span>{/if}
@@ -91,6 +93,8 @@
       {/each}
     </div>
   {/if}
+
+  <GitHub />
 </section>
 
 <style>

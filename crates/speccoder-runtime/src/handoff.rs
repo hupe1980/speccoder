@@ -278,6 +278,13 @@ pub fn pr(path: &Path, feature: Option<&str>, options: &PrOptions<'_>) -> Comman
                 .as_deref()
                 .zip(a.sigstore_issuer.as_deref())
         });
+    // The issues the spec names: merged, the pull request closes them.
+    if !report.issues.is_empty() {
+        body.push('\n');
+        for url in &report.issues {
+            body.push_str(&format!("Closes {url}\n"));
+        }
+    }
     if let Some(section) = verify_section(report, options.remote, sigstore) {
         body.push_str(&section);
     }
@@ -334,6 +341,23 @@ pub fn pr(path: &Path, feature: Option<&str>, options: &PrOptions<'_>) -> Comman
             )
         })
         .unwrap_or_default();
+    // A pull request for this branch already: the push updated it; a
+    // second one is never opened.
+    if let Ok(Some(existing)) = crate::github::pr_for(options.gh, &repo_root, &branch)
+        && existing.state == "OPEN"
+    {
+        out.opened = true;
+        out.url = Some(existing.url.clone());
+        return CommandResult::new(
+            "pr",
+            CommandStatus::Ok,
+            &format!(
+                "pushed {branch}: updated pull request #{} ({}){notes_warning}",
+                existing.number, existing.url
+            ),
+        )
+        .with_data(CommandData::Pr(Box::new(out)));
+    }
     let body_file = std::env::temp_dir().join(format!("speccoder-pr-{}.md", std::process::id()));
     if let Err(e) = std::fs::write(&body_file, &body) {
         return refuse(CommandStatus::Error, &e.to_string());

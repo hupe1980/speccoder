@@ -22,6 +22,7 @@ fn action(
         run: None,
         blocked: None,
         input: None,
+        confirm: None,
     }
 }
 
@@ -265,12 +266,18 @@ pub fn available_with(
     }
 
     // ── review: commands that leave the machine or are best read in full ─
-    out.push(action(
+    // It leaves the machine: an interface confirms it first.
+    let mut pr = action(
         "review",
         "open a draft pull request",
-        "it pushes and opens a PR: run it in your shell",
-        "speccoder pr",
-    ));
+        "push the branch and its evidence; open (or update) the draft",
+        "speccoder pr --yes",
+    );
+    pr.run = Some(Runnable::PullRequest);
+    pr.confirm = Some(
+        "Push the feature's speccoder branch and its attestation notes to `origin`, and open (or update) its draft pull request on GitHub through your `gh` login.".to_owned(),
+    );
+    out.push(pr);
     out.push(action(
         "review",
         "verify the attestations",

@@ -147,6 +147,11 @@ pub enum Command {
         #[arg(long)]
         window: bool,
     },
+    /// GitHub issues through your `gh`: list the open ones; `start 42` specifies a feature from one.
+    Issue {
+        #[command(subcommand)]
+        action: Option<IssueAction>,
+    },
     /// The project's configuration: every key of speccoder.toml, its value and default; set, unset, commit.
     Config {
         #[command(subcommand)]
@@ -495,6 +500,21 @@ pub enum BenchAction {
         /// The test command, when the dataset has none (default: detected).
         #[arg(long, value_name = "CMD")]
         test_cmd: Option<String>,
+    },
+}
+
+/// `speccoder issue` actions.
+#[derive(Debug, Subcommand)]
+pub enum IssueAction {
+    /// The repository's open issues (the default).
+    List,
+    /// Specify a feature from an issue: its title, text and address become the description.
+    Start {
+        /// The issue: `42`, `#42` or its address.
+        issue: String,
+        /// Never ask inline: questions are left as [NEEDS CLARIFICATION].
+        #[arg(long)]
+        no_prompt: bool,
     },
 }
 

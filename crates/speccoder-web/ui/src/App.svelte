@@ -17,6 +17,7 @@
   import Settings from "./components/Settings.svelte";
   import CodeView from "./components/CodeView.svelte";
   import Setup from "./components/Setup.svelte";
+  import ConfirmSheet from "./components/ConfirmSheet.svelte";
 
   let theme = $state<string>(localStorage.getItem("speccoder-theme") ?? "auto");
   $effect(() => {
@@ -152,6 +153,7 @@
 <Island />
 {#if app.waiting}<AskSheet />{/if}
 {#if app.input}<InputSheet />{/if}
+{#if app.confirming}<ConfirmSheet />{/if}
 {#if app.palette}<Palette />{/if}
 <Toasts />
 

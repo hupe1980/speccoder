@@ -279,6 +279,7 @@ pub fn report(path: &Path, feature: Option<&str>) -> CommandResult {
             ),
         )
         .with_data(CommandData::Report(Box::new(StatusReport {
+            issues: issues_of(path, Some(&f.feature.name)),
             feature: f.feature.name.clone(),
             branch: None,
             source: "checkout".to_owned(),
@@ -456,6 +457,7 @@ pub fn report(path: &Path, feature: Option<&str>) -> CommandResult {
     }
     CommandResult::new("report", CommandStatus::Ok, &message).with_data(CommandData::Report(
         Box::new(StatusReport {
+            issues: issues_of(root, Some(&name)),
             feature: name,
             branch: has_branch.then_some(branch),
             source: source.to_owned(),
@@ -561,6 +563,19 @@ fn journey_of(
         total,
         finished,
     })
+}
+
+/// The GitHub issue addresses the feature's documents name.
+fn issues_of(root: &Path, feature: Option<&str>) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for (_, _, text) in crate::documents::sources(root, feature) {
+        for url in crate::github::issue_urls(&text) {
+            if !out.contains(&url) {
+                out.push(url);
+            }
+        }
+    }
+    out
 }
 
 #[cfg(test)]

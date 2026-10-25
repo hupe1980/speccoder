@@ -476,6 +476,84 @@ async fn setup_commit(State(s): State<Shared>, Json(b): Json<SetupCommit>) -> Js
     })
 }
 
+/// GitHub as `gh` sees it: whether it is ready, the open issues (each with
+/// the feature that names it), and the feature's pull request.
+async fn github(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Json<Value> {
+    let root = s.root.clone();
+    Json(
+        off(move || {
+            use speccoder_runtime::github;
+            let gh = github::gh();
+            let status = github::status(&gh, &root);
+            if !status.ready {
+                return json!({ "status": status });
+            }
+            let issues = github::issues(&gh, &root, &github::started(&root));
+            let branch = match speccoder_runtime::status::report(&root, q.feature.as_deref()).data()
+            {
+                Some(speccoder_core::CommandData::Report(r)) => r.branch.clone(),
+                _ => None,
+            };
+            let pull = branch.as_deref().map(|b| github::pr_for(&gh, &root, b));
+            json!({
+                "status": status,
+                "issues": issues.as_ref().ok(),
+                "issues_error": issues.as_ref().err(),
+                "branch": branch,
+                "pull": pull.as_ref().and_then(|p| p.as_ref().ok()).cloned().flatten(),
+                "pull_error": pull.as_ref().and_then(|p| p.as_ref().err()),
+            })
+        })
+        .await,
+    )
+}
+
+#[derive(Debug, Deserialize)]
+struct IssueQuery {
+    number: String,
+}
+
+/// One issue, the description a feature started from it gets, and the
+/// skill that starts it.
+async fn github_issue(State(s): State<Shared>, Query(q): Query<IssueQuery>) -> Json<Value> {
+    let root = s.root.clone();
+    Json(
+        off(move || match speccoder_runtime::github::issue(&speccoder_runtime::github::gh(), &root, &q.number) {
+            Ok(issue) => {
+                let planning = speccoder_runtime::format::at(&root).planning();
+                json!({
+                    "description": speccoder_runtime::github::description(&issue),
+                    "skill": planning.creates.first().map(|c| format!("{}{c}", planning.prefix)),
+                    "issue": issue,
+                })
+            }
+            Err(e) => json!({ "error": e }),
+        })
+        .await,
+    )
+}
+
+/// What `pr` would do — pushed where, the title, the body — without doing it.
+async fn pr_preview(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Json<Value> {
+    let root = s.root.clone();
+    let r = off(move || {
+        let gh = speccoder_runtime::github::gh();
+        speccoder_runtime::handoff::pr(
+            &root,
+            q.feature.as_deref(),
+            &speccoder_runtime::handoff::PrOptions {
+                remote: "origin",
+                base: None,
+                gh: &gh,
+                open: false,
+                force: false,
+            },
+        )
+    })
+    .await;
+    envelope(&r)
+}
+
 async fn job(State(s): State<Shared>) -> Json<Value> {
     Json(json!({ "job": s.hub.job(), "waiting": s.hub.waiting() }))
 }
@@ -563,6 +641,9 @@ pub fn router(s: Shared) -> Router {
         .route("/api/tree", get(tree))
         .route("/api/file", get(file))
         .route("/api/setup", get(setup).post(setup_init))
+        .route("/api/github", get(github))
+        .route("/api/github/issue", get(github_issue))
+        .route("/api/pr/preview", get(pr_preview))
         .route("/api/setup/commit", post(setup_commit))
         .route("/api/events", get(events))
         .route("/api/run", post(start))

@@ -2667,6 +2667,91 @@ fn pr_is_a_dry_run_until_confirmed_then_a_draft_with_the_evidence() {
     );
 }
 
+/// F-083: the issues a feature's spec names are closed by its pull request,
+/// and a branch whose pull request is open is updated, never opened twice.
+#[test]
+fn pr_closes_the_spec_s_issues_and_updates_an_open_pull_request() {
+    use speccoder_runtime::handoff::{PrOptions, pr};
+    let r = repo("");
+    fs::write(
+        r.path().join("specs/001-graph/spec.md"),
+        "# Spec\n\n**Input**: Login (GitHub issue https://github.com/o/r/issues/42).\n\n### User Story 1 - Login\n\nUsers log in.\n",
+    )
+    .unwrap();
+    git(r.path(), &["commit", "-qam", "spec from issue 42"]);
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    login_attempt(&f);
+    let res = run(r.path(), state.path(), "T005", d);
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let remote = tempfile::tempdir().unwrap();
+    git(remote.path(), &["init", "-q", "--bare"]);
+    git(
+        r.path(),
+        &[
+            "remote",
+            "add",
+            "origin",
+            &remote.path().display().to_string(),
+        ],
+    );
+    // A `gh` with an open pull request for the branch; every call logged.
+    let bin = tempfile::tempdir().unwrap();
+    let gh = bin.path().join("gh");
+    fs::write(
+        &gh,
+        format!(
+            "#!/bin/sh\necho \"$@\" >> '{}/calls'\ncase \"$1 $2\" in\n  \"pr view\") echo '{{\"number\":7,\"title\":\"t\",\"url\":\"https://github.com/o/r/pull/7\",\"state\":\"OPEN\",\"isDraft\":true,\"reviewDecision\":\"\",\"statusCheckRollup\":[]}}';;\n  *) echo https://example.invalid/pr/new;;\nesac\n",
+            bin.path().display()
+        ),
+    )
+    .unwrap();
+    assert!(
+        Command::new("chmod")
+            .arg("+x")
+            .arg(&gh)
+            .status()
+            .unwrap()
+            .success()
+    );
+    let gh = gh.display().to_string();
+    let mut o = PrOptions {
+        remote: "origin",
+        base: Some("main"),
+        gh: &gh,
+        open: false,
+        force: false,
+    };
+
+    let dry = pr(r.path(), None, &o);
+    let Some(CommandData::Pr(p)) = dry.data() else {
+        panic!("{}", dry.message())
+    };
+    assert!(
+        p.body.contains("Closes https://github.com/o/r/issues/42"),
+        "{}",
+        p.body
+    );
+
+    o.open = true;
+    let updated = pr(r.path(), None, &o);
+    assert_eq!(updated.status(), CommandStatus::Ok, "{}", updated.message());
+    assert!(
+        updated.message().contains("updated pull request #7"),
+        "{}",
+        updated.message()
+    );
+    let calls = fs::read_to_string(bin.path().join("calls")).unwrap();
+    assert!(
+        !calls.contains("pr create"),
+        "a second pull request was opened: {calls}"
+    );
+    assert!(
+        git_out(remote.path(), &["branch", "--list"]).contains("speccoder/001-graph"),
+        "not pushed"
+    );
+}
+
 // ── provenance and replay verdicts ─────────────────────────────────
 
 fn admitted(

@@ -3,6 +3,7 @@
   import { symbol, word } from "../lib/marks";
   import Icon from "./Icon.svelte";
   import Spend from "./Spend.svelte";
+  import PullCard from "./PullCard.svelte";
   const r = $derived(app.report?.data);
   const order = ["verified", "regression_only", "attested", "ticked_without_evidence", "skipped", "ready", "blocked"];
   const segments = $derived(order.map((k) => ({ k, n: r?.totals?.[k] ?? 0 })).filter((s) => s.n > 0));
@@ -34,7 +35,7 @@
       </ul>
       <p class="muted small">{total} tasks · branch <code>{r.branch ?? "—"}</code>{#if r.unmerged_commits} · {r.unmerged_commits} commit(s) not merged{/if}</p>
     </section>
-    <section class="card">
+    <section class="card" class:wide={!matrix.length}>
       <h3>Waiting for you <span class="muted">{app.approvals.length}</span></h3>
       {#each app.approvals as p (p.task + p.covers)}
         {@const yes = app.actions.find((a) => a.run?.kind === "approve" && "task" in a.run && a.run.task === p.task)}
@@ -79,6 +80,7 @@
         </ul>
       {/if}
     </section>
+    <PullCard />
     <Spend />
     {#if r.convergence.length}
       <section class="card wide">

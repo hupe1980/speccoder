@@ -11,6 +11,18 @@ ticks a task only on evidence the model cannot produce or edit.
 
 ### Added
 
+**GitHub**
+
+- `speccoder issue` lists the repository's open issues; `speccoder issue
+  start 42` specifies a feature from one (the issue's title, text and
+  address become the description, so the spec keeps the link). Through your
+  own `gh`: no token of speccoder's. `GH-MISSING`, `GH-AUTH`, `GH-FAILED`.
+- `pr` closes every issue the spec names, and updates an open pull request
+  instead of opening a second one.
+- In the web interface: issues with **Start Feature** in the overview; the
+  pull request (draft, review, checks) in the report; **Open Draft PR** and
+  **Update** after a confirmation that shows what leaves the machine.
+
 **The web interface**
 
 - `speccoder ui`: the feature in a browser tab, served on 127.0.0.1 from the

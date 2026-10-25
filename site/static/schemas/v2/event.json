@@ -668,6 +668,10 @@
         {
           "$ref": "#/$defs/ConfigReport",
           "description": "`config`: every key of `speccoder.toml`, its value and its default."
+        },
+        {
+          "$ref": "#/$defs/IssuesReport",
+          "description": "`issue`: the repository's open issues."
         }
       ],
       "description": "Command-specific payload of a result."
@@ -2635,6 +2639,92 @@
       ],
       "type": "object"
     },
+    "IssueEntry": {
+      "description": "One open issue.",
+      "properties": {
+        "assignees": {
+          "description": "Who it is assigned to (logins).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "feature": {
+          "description": "The feature whose spec names this issue, when one does.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "labels": {
+          "description": "Label names.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "mine": {
+          "description": "Assigned to the person `gh` is logged in as.",
+          "type": "boolean"
+        },
+        "number": {
+          "description": "`#n`.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "title": {
+          "description": "Its title.",
+          "type": "string"
+        },
+        "updated": {
+          "description": "Last update, ISO 8601.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "url": {
+          "description": "Its address.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "number",
+        "title",
+        "url",
+        "labels",
+        "assignees",
+        "mine",
+        "updated",
+        "feature"
+      ],
+      "type": "object"
+    },
+    "IssuesReport": {
+      "description": "Result of `speccoder issue`: the repository's open GitHub issues, read\nthrough the person's own `gh`.",
+      "properties": {
+        "issues": {
+          "description": "Open issues: assigned to the person first, then the most recently\nupdated.",
+          "items": {
+            "$ref": "#/$defs/IssueEntry"
+          },
+          "type": "array"
+        },
+        "repo": {
+          "description": "`owner/name`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "repo",
+        "issues"
+      ],
+      "type": "object"
+    },
     "JourneyStep": {
       "description": "One step of a feature's journey: `spec`, `plan`, `tasks`, `commit`,\n`run`, `review`.",
       "properties": {
@@ -4297,6 +4387,13 @@
           "description": "Feature directory name.",
           "type": "string"
         },
+        "issues": {
+          "description": "GitHub issue URLs the feature's spec names: where it came from, and\nwhat its pull request closes.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "journey": {
           "default": [],
           "description": "Where the feature is: spec → plan → tasks → commit → run → review.",
@@ -4364,7 +4461,8 @@
         "tasks",
         "convergence",
         "trace",
-        "totals"
+        "totals",
+        "issues"
       ],
       "type": "object"
     },

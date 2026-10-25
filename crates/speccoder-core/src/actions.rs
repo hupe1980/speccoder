@@ -53,6 +53,8 @@ pub enum Runnable {
     },
     /// Pick the current feature.
     Feature,
+    /// Push the feature's branch and open (or update) its draft pull request.
+    PullRequest,
 }
 
 /// One thing a person can do now.
@@ -73,6 +75,9 @@ pub struct Action {
     pub blocked: Option<String>,
     /// What to ask for before it runs (`Describe the feature`).
     pub input: Option<String>,
+    /// It leaves the machine (a push, a pull request): what an interface
+    /// says in a confirmation before it runs it.
+    pub confirm: Option<String>,
 }
 
 impl Action {

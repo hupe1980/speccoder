@@ -25,6 +25,9 @@ Every result that is not plainly `ok` names a code — `error[CODE]`, `stopped[C
 | [`CONFIG`](#config) | error | 13 | the configuration or the environment is not usable |
 | [`NO-STATE-DIR`](#no-state-dir) | error | 13 | speccoder has nowhere to keep its state |
 | [`SANDBOX-UNAVAILABLE`](#sandbox-unavailable) | error | 13 | the OS sandbox is not available and the project requires it |
+| [`GH-MISSING`](#gh-missing) | error | 1 | the GitHub CLI (`gh`) is not installed |
+| [`GH-AUTH`](#gh-auth) | error | 1 | the GitHub CLI is not logged in |
+| [`GH-FAILED`](#gh-failed) | error | 1 | the GitHub CLI could not do it |
 | [`CONFIG-MISSING`](#config-missing) | error | 13 | the project has no speccoder.toml |
 | [`CONFIG-INVALID`](#config-invalid) | error | 13 | speccoder.toml has an error |
 | [`KEY-MISSING`](#key-missing) | error | 13 | the model provider's API key is not in the environment |
@@ -178,6 +181,30 @@ The OS sandbox is not available and the project requires it.
 
 - Run on macOS or a Linux with Landlock (5.13+)
 - Or set [sandbox] mode = "auto" to run unsandboxed and be told
+
+### GH-MISSING
+
+The GitHub CLI (`gh`) is not installed.
+
+speccoder reads issues and opens pull requests through your own `gh`, with its login; it stores no token of its own.
+
+- Install the GitHub CLI: https://cli.github.com (brew install gh, apt install gh, winget install GitHub.cli)
+
+### GH-AUTH
+
+The GitHub CLI is not logged in.
+
+`gh` holds your GitHub login; speccoder uses it as it is and asks for nothing.
+
+- `gh auth login`
+
+### GH-FAILED
+
+The GitHub CLI could not do it.
+
+The message is `gh`'s own: no GitHub remote, no such issue, no access, or GitHub did not answer.
+
+- `gh repo view`
 
 ### CONFIG-MISSING
 

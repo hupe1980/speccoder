@@ -16,7 +16,7 @@ opens the project in your browser. `speccoder ui --window` opens the same page i
 ## What you see
 
 - **Setting up.** A project without `speccoder.toml` opens in the setup assistant: what was found (git, the spec project, the spec tool, the sandbox), the model (with whether its key is set), the checks speccoder proposes for your project, then **Set Up** — it writes the file, runs the checks on the untouched code and shows each result — and **Commit**, and finally your first feature in your own words. Each step names its `speccoder init` command.
-- **Overview.** Every feature at a glance — the spec of the specs: each one's ring of verdicts, where it is on the journey, how many of its requirements are proven by evidence, and calls waiting for you. A card opens its board.
+- **Overview.** Every feature at a glance — the spec of the specs: each one's ring of verdicts, where it is on the journey, how many of its requirements are proven by evidence, and calls waiting for you. A card opens its board. Below, your repository's open [GitHub issues](@/docs/github.md), each with **Start Feature**.
 - **Before you run.** What `speccoder doctor` would warn about, above everything else: a missing model key, configuration a worktree would not have because it is not committed, an unsigned attestation. Each comes with the command that fixes it, ready to copy. When a failure would stop the run, the Run button says so and steps back to "Run anyway".
 - **The journey.** Spec → plan → tasks → commit → run → review, where the feature is on it, and one primary button for the next step — the same step the CLI offers after a command and the dashboard's `n`. A step whose file was never written (a task list without a spec) shows as skipped, not as the next step.
 - **The board.** Tasks in lanes by verdict: verified, regression only, attested, no evidence, skipped, ready, blocked. A ready card has **Run task**; the running card glows and shows its stage. Long lanes fold after five cards.
@@ -26,13 +26,14 @@ opens the project in your browser. `speccoder ui --window` opens the same page i
 - **Report.** The verdict bar; calls waiting for a decision, with **Approve** and **Reject**; and every requirement with the tasks that prove it. When the task list cites no requirement at all, the page says so and offers the analysis that finds the gaps.
 - **The live capsule.** A running job floats at the bottom of the page: the task, its stage and the time, at a glance; it turns orange when the run needs you. Click it for the pipeline stage by stage, the tool calls with the policy's decision, tokens and money. **Stop** ends the job after the current task; the attempt stays resumable.
 
+- **Pull request.** In the report: the feature's pull request as GitHub has it (draft, review, checks), and **Open Draft PR** or **Update** — after a confirmation that shows what is pushed where, and the description.
 - **Spend.** In the report: tokens in and out, the share read from the cache, attempts and — with prices set — money, per task (the dearest first) and for the feature.
 
 ## Settings
 
 The gear (or `,`) opens **Settings**: `speccoder.toml` as System Settings shows preferences — each section with what it decides, each key as the control that fits it (a switch, a choice, a stepper, a command, a list) with its default and its meaning, and checks and MCP servers as tables you add and remove. Edits gather until **Save**, which writes the file only when every parser accepts it, keeping its comments. speccoder reads committed configuration only, so the page then shows the change and offers to **Commit** `speccoder.toml` alone. The bar shows the `speccoder config` commands that do the same.
 
-Every action shows the CLI command it runs, so what you click is what you could type. ⌘K (Ctrl+K) opens the palette: every action, filtered as you type; Enter runs it, or copies a command that would leave your machine (a pull request).
+Every action shows the CLI command it runs, so what you click is what you could type. ⌘K (Ctrl+K) opens the palette: every action, filtered as you type; Enter runs it — and one that leaves your machine (a push, a pull request) first shows what it would do and waits for your yes.
 
 ## When a run needs you
 

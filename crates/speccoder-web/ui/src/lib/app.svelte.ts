@@ -109,7 +109,10 @@ class AppState {
   }
 
   /** Runs `a`; asks for its input first when it takes one. */
-  async perform(a: Action, input?: string) {
+  /** An action that leaves the machine, waiting for the person's yes. */
+  confirming = $state<{ action: Action } | null>(null);
+
+  async perform(a: Action, input?: string, confirmed = false) {
     if (!a.run) {
       await navigator.clipboard?.writeText(a.command).catch(() => {});
       this.toast({ tone: "ok", text: "Copied — run it in your shell", detail: a.command });
@@ -119,6 +122,12 @@ class AppState {
       this.toast({ tone: "warn", text: a.blocked });
       return;
     }
+    if (a.confirm && !confirmed) {
+      this.palette = false;
+      this.confirming = { action: a };
+      return;
+    }
+    this.confirming = null;
     if (a.input && input === undefined) {
       this.input = { action: a };
       return;
