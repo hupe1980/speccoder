@@ -23,7 +23,7 @@ Coding agents are good at writing code and too good at declaring victory. specco
 You need git, a Spec Kit project (Spec Kit 0.13 to 1.2) or an OpenSpec project (1.0 or newer), and a model.
 
 ```sh
-brew install hupe1980/speccoder/speccoder
+brew install hupe1980/tap/speccoder
 # or: curl -LsSf https://github.com/hupe1980/speccoder/releases/latest/download/speccoder-installer.sh | sh
 # or: cargo install speccoder --locked
 

@@ -24,7 +24,7 @@ Release builds exist for macOS and Linux (glibc) on Apple silicon/arm64 and x86_
 **Homebrew** (macOS, Linux):
 
 ```sh
-brew install hupe1980/speccoder/speccoder
+brew install hupe1980/tap/speccoder
 ```
 
 **Installer** — downloads the archive for your platform, checks its SHA-256 and installs to `~/.local/bin` (no `sudo`):

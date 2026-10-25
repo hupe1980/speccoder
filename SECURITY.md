@@ -37,5 +37,5 @@ The installer checks the SHA-256 always and the attestation with `--verify-attes
 
 ## Release secrets
 
-Publishing credentials live only in the GitHub environment `release`, which only tags `v*` can use: crates.io publishes through trusted publishing (short-lived tokens bound to the release workflow), with a scoped `CARGO_REGISTRY_TOKEN` as fallback, and the Homebrew tap is updated with a fine-grained token that can write only to `hupe1980/homebrew-speccoder`. Only the repository owner can create such tags and change the environment.
+Publishing credentials live only in the GitHub environment `release`, which only tags `v*` can use: crates.io publishes through trusted publishing (short-lived tokens bound to the release workflow), with a scoped `CARGO_REGISTRY_TOKEN` as fallback, and the Homebrew tap is updated with a short-lived token of a GitHub App installed only on `hupe1980/homebrew-tap`, limited to writing its contents. Only the repository owner can create such tags and change the environment.
 

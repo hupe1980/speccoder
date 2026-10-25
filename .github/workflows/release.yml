@@ -8,10 +8,12 @@ name: Release
 # runners.
 #
 # Owner setup (once, before the first real tag):
-# - repository hupe1980/homebrew-speccoder (the tap; may start empty);
+# - the tap hupe1980/homebrew-tap (the formula goes to Formula/speccoder.rb
+#   beside its casks), and a GitHub App installed on that repository only,
+#   with repository permission contents: read and write;
 # - GitHub environment `release`, deployment rule: tags `v*`, holding
-#   HOMEBREW_TAP_TOKEN (fine-grained PAT, contents: write on the tap only)
-#   and, as a fallback to trusted publishing, CARGO_REGISTRY_TOKEN
+#   HOMEBREW_APP_ID and HOMEBREW_APP_PRIVATE_KEY (the App's ID and a private
+#   key) and, as a fallback to trusted publishing, CARGO_REGISTRY_TOKEN
 #   (crates.io scope publish-update, limited to the five crates);
 # - crates.io trusted publishing for speccoder, speccoder-core,
 #   speccoder-speckit, speccoder-openspec and speccoder-runtime: workflow
@@ -169,11 +171,21 @@ jobs:
         with:
           name: sha256sums
           path: dist
+      # A short-lived installation token that can write to the tap only.
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        with:
+          app-id: ${{ secrets.HOMEBREW_APP_ID }}
+          private-key: ${{ secrets.HOMEBREW_APP_PRIVATE_KEY }}
+          owner: hupe1980
+          repositories: homebrew-tap
+          permission-contents: write
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          repository: hupe1980/homebrew-speccoder
-          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          repository: hupe1980/homebrew-tap
+          token: ${{ steps.app-token.outputs.token }}
           path: tap
+          persist-credentials: true
       - name: Update the formula
         run: |
           mkdir -p tap/Formula
@@ -207,5 +219,5 @@ jobs:
       - name: Homebrew
         if: env.PRERELEASE == 'false'
         run: |
-          brew install hupe1980/speccoder/speccoder
+          brew install hupe1980/tap/speccoder
           brew test speccoder
