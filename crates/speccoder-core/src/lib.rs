@@ -5,6 +5,7 @@
 //! in the `speccoder` crate keeps its dependency closure free of IO and async
 //! crates.
 
+pub mod actions;
 pub mod codes;
 mod command;
 pub mod graph;

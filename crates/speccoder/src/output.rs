@@ -464,6 +464,8 @@ mod look_tests {
                 selected_by: String::new(),
                 artifacts: Vec::new(),
                 planning: Vec::new(),
+                uncommitted: Vec::new(),
+                journey: Vec::new(),
                 unmerged_commits: 0,
                 tasks,
                 convergence: Vec::new(),

@@ -304,3 +304,80 @@ fn plain_keeps_lines_at_a_terminal() {
     assert!(!text.contains("1 Run"), "{text}");
     assert!(text.contains("T005"), "{text}");
 }
+
+/// The next step, taken at the terminal (F-075): after `spec tasks` the CLI
+/// offers to commit exactly the planning file it wrote, then the run.
+#[test]
+fn after_planning_the_cli_offers_the_commit_and_then_the_run() {
+    if !has_python() {
+        eprintln!("skipped: no python3");
+        return;
+    }
+    let done = json!({ "summary": "wrote the tasks", "status": "done", "files_written": ["specs/001-graph/tasks.md"], "questions": [] });
+    let tasks = fs::read_to_string(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../speccoder-speckit/tests/fixtures/graph/specs/001-graph/tasks.md"),
+    )
+    .unwrap();
+    let (_mock, repo, state) = project(&json!([
+        { "tool": "write_file", "args": { "path": "specs/001-graph/tasks.md", "content": tasks } },
+        { "content": done.to_string() },
+    ]));
+    let r = repo.path();
+    // A feature being planned: a spec and a plan, no task list yet.
+    git(r, &["rm", "-q", "specs/001-graph/tasks.md"]);
+    fs::create_dir_all(r.join("specs/001-graph")).unwrap();
+    fs::write(
+        r.join("specs/001-graph/spec.md"),
+        "# Spec\n\nUsers log in.\n",
+    )
+    .unwrap();
+    fs::write(r.join("specs/001-graph/plan.md"), "# Plan\n\nRust.\n").unwrap();
+    fs::create_dir_all(r.join(".claude/skills/speckit-tasks")).unwrap();
+    fs::write(
+        r.join(".claude/skills/speckit-tasks/SKILL.md"),
+        "---\nname: speckit-tasks\ndescription: Break the plan into tasks.\n---\n\nWrite tasks.md.\n",
+    )
+    .unwrap();
+    git(r, &["add", "-A"]);
+    git(r, &["commit", "-qm", "planned"]);
+    let driver = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/pty_drive.py");
+    let out = Command::new("python3")
+        .arg("-I")
+        .arg(&driver)
+        .args([
+            "120",
+            "40",
+            "wait:Commit them?",
+            "send:y\n",
+            "wait:Start it now?",
+            "send:n\n",
+            "--",
+        ])
+        .arg(env!("CARGO_BIN_EXE_speccoder"))
+        .args(["spec", "tasks", "-C"])
+        .arg(r)
+        .env("SPECCODER_STATE_DIR", state.path())
+        .output()
+        .unwrap();
+    let v: Value = serde_json::from_slice(&out.stdout)
+        .unwrap_or_else(|e| panic!("{e}: {}", String::from_utf8_lossy(&out.stderr)));
+    let text = v["text"].as_str().unwrap();
+    assert_eq!(v["met"], json!([true, true]), "{text}");
+    // Where the feature was, and the card with the file.
+    assert!(text.contains("● commit"), "{text}");
+    assert!(text.contains("+ specs/001-graph/tasks.md"), "{text}");
+    // Committed: exactly the planning file, under its own message.
+    let log = Command::new("git")
+        .args(["log", "-1", "--format=%s", "--name-only"])
+        .current_dir(r)
+        .output()
+        .unwrap();
+    let log = String::from_utf8_lossy(&log.stdout);
+    assert!(log.starts_with("spec(001-graph): tasks.md"), "{log}");
+    assert_eq!(
+        log.lines().filter(|l| l.contains('/')).collect::<Vec<_>>(),
+        ["specs/001-graph/tasks.md"]
+    );
+    assert_eq!(v["exit"], 0, "{text}");
+}

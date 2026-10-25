@@ -108,7 +108,7 @@ At a terminal, `speccoder run` opens the dashboard and runs inside it: the task 
 
 The evidence rows are read from the task commit's [attestation](@/docs/attestations.md) — never re-derived — so what the screen shows is what `speccoder attest verify` checks. `d` opens the task commit's diff: `]` `[` next and previous hunk, `n` `p` next and previous file.
 
-`f` picks which feature the dashboard shows (and makes it [current](@/docs/planning.md#the-current-feature) for every tool); with several features and none current, the dashboard opens on that picker. `?` lists every key. `esc` goes back — out of an overlay, then to the Run screen — and never quits. `q` (or `ctrl-c`) while the run works asks first: **finish this task, then stop**; **stop now** (the attempt is kept, and the next `speccoder run` resumes it without repeating finished calls); or keep watching.
+`n` leaves the dashboard and offers its next step at the terminal (the footer says which). `f` picks which feature the dashboard shows (and makes it [current](@/docs/planning.md#the-current-feature) for every tool); with several features and none current, the dashboard opens on that picker. `?` lists every key. `esc` goes back — out of an overlay, then to the Run screen — and never quits. `q` (or `ctrl-c`) while the run works asks first: **finish this task, then stop**; **stop now** (the attempt is kept, and the next `speccoder run` resumes it without repeating finished calls); or keep watching.
 
 The dashboard needs a terminal of at least 60×15. `--plain` (or not being at a terminal, `--json`, `--events`, screen-reader mode) keeps the line output below. Quitting stops a hosted run; to watch from elsewhere, use another terminal:
 

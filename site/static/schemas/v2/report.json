@@ -28,6 +28,24 @@
       ],
       "type": "object"
     },
+    "JourneyStep": {
+      "description": "One step of a feature's journey: `spec`, `plan`, `tasks`, `commit`,\n`run`, `review`.",
+      "properties": {
+        "name": {
+          "description": "Its name.",
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/$defs/StepState",
+          "description": "Where it is."
+        }
+      },
+      "required": [
+        "name",
+        "state"
+      ],
+      "type": "object"
+    },
     "LastAttempt": {
       "description": "An attempt that did not pass, as saved under `refs/speccoder/attempts/`.",
       "properties": {
@@ -129,6 +147,26 @@
         "blocked"
       ],
       "type": "object"
+    },
+    "StepState": {
+      "description": "Where a step of the journey is.",
+      "oneOf": [
+        {
+          "const": "done",
+          "description": "Done.",
+          "type": "string"
+        },
+        {
+          "const": "now",
+          "description": "The one to take now.",
+          "type": "string"
+        },
+        {
+          "const": "todo",
+          "description": "Later.",
+          "type": "string"
+        }
+      ]
     },
     "TaskStatus": {
       "description": "One task and its evidence.",
@@ -298,6 +336,14 @@
       "description": "Feature directory name.",
       "type": "string"
     },
+    "journey": {
+      "default": [],
+      "description": "Where the feature is: spec → plan → tasks → commit → run → review.",
+      "items": {
+        "$ref": "#/$defs/JourneyStep"
+      },
+      "type": "array"
+    },
     "planning": {
       "description": "While the feature has no task list: the planning skills that come\nnext (`plan`, `tasks`); empty once it has one.",
       "items": {
@@ -332,6 +378,13 @@
       },
       "type": "array"
     },
+    "uncommitted": {
+      "description": "Planning files under the feature's directory not yet committed\n(`speccoder run` reads committed files only).",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
     "unmerged_commits": {
       "description": "Commits on the branch that the checkout's HEAD does not contain.",
       "format": "uint",
@@ -345,6 +398,7 @@
     "source",
     "selected_by",
     "artifacts",
+    "journey",
     "unmerged_commits",
     "tasks",
     "convergence",

@@ -256,6 +256,7 @@ pub fn report(path: &Path, feature: Option<&str>) -> CommandResult {
     .filter(|(_, on)| *on)
     .map(|(n, _)| n.to_owned())
     .collect();
+    let uncommitted = crate::hosting::uncommitted(path, feature);
     // No task list yet: the feature is being planned — a stage, not an
     // error. The report says what exists and which planning skills are next.
     let Some(checkout_tasks) = f.tasks.as_ref() else {
@@ -282,8 +283,10 @@ pub fn report(path: &Path, feature: Option<&str>) -> CommandResult {
             branch: None,
             source: "checkout".to_owned(),
             selected_by: crate::current::reason_text(snapshot.selection.reason, format),
+            journey: journey_of(&artifacts, &uncommitted, 0, 0),
             artifacts,
             planning,
+            uncommitted,
             unmerged_commits: 0,
             tasks: Vec::new(),
             convergence: Vec::new(),
@@ -395,6 +398,11 @@ pub fn report(path: &Path, feature: Option<&str>) -> CommandResult {
     }
     let trace = trace(&format.requirement_ids(root, &f.feature.dir), &tasks);
     let totals = totals(&tasks);
+    let finished = totals.verified
+        + totals.regression_only
+        + totals.attested
+        + totals.ticked_without_evidence
+        + totals.skipped;
     let done =
         totals.verified + totals.regression_only + totals.attested + totals.ticked_without_evidence;
     let mut message = format!(
@@ -452,8 +460,10 @@ pub fn report(path: &Path, feature: Option<&str>) -> CommandResult {
             branch: has_branch.then_some(branch),
             source: source.to_owned(),
             selected_by: crate::current::reason_text(snapshot.selection.reason, format),
+            journey: journey_of(&artifacts, &uncommitted, tasks.len(), finished),
             artifacts,
             planning: Vec::new(),
+            uncommitted,
             unmerged_commits: unmerged,
             tasks,
             convergence,
@@ -534,6 +544,23 @@ fn open_lines(file: &Path, parsed: &ParsedTasks) -> BTreeMap<String, String> {
             Some((t.id.clone(), crate::integrity::sha256_hex(&open)))
         })
         .collect()
+}
+
+fn journey_of(
+    artifacts: &[String],
+    uncommitted: &[String],
+    total: usize,
+    finished: usize,
+) -> Vec<speccoder_core::actions::JourneyStep> {
+    let has = |a: &str| artifacts.iter().any(|x| x == a);
+    speccoder_core::actions::journey(speccoder_core::actions::JourneyFacts {
+        spec: has("spec"),
+        plan: has("plan"),
+        tasks: has("tasks"),
+        uncommitted: !uncommitted.is_empty(),
+        total,
+        finished,
+    })
 }
 
 #[cfg(test)]

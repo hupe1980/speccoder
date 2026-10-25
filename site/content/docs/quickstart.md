@@ -20,7 +20,7 @@ speccoder spec tasks
 git add -A && git commit -m "spec: slugify"
 ```
 
-Review what they wrote before you commit — the spec is what the result will be judged against. `spec specify` makes the new feature current, so `plan` and `tasks` work on it; `speccoder feature` shows and switches it. More in [planning with Spec Kit](@/docs/planning.md).
+Review what they wrote before you commit — the spec is what the result will be judged against. `spec specify` makes the new feature current, so `plan` and `tasks` work on it; `speccoder feature` shows and switches it. After each step speccoder offers the next one — answer `y` to commit what planning wrote and go on. More in [planning with Spec Kit](@/docs/planning.md).
 
 ## 2. Set up
 

@@ -46,7 +46,28 @@ switched to 002-farewell (recorded in .specify/feature.json: Spec Kit's scripts 
 - `speccoder spec specify` makes the feature it creates current — whether or not the model remembered to write the file — and says so. Every other planning skill's commands are told the feature (`SPECIFY_FEATURE_DIRECTORY`), so Spec Kit's scripts never lose it.
 - `--feature NAME` (and `SPECIFY_FEATURE_DIRECTORY`) choose for one command without changing the current one. With a single feature, it is current by itself.
 - With several features and none current, `run` and `spec` ask you at a terminal and remember the answer; elsewhere they stop with the list and the command that picks one. A pointer to a feature that no longer exists gets a "did you mean …" and shows up in `speccoder doctor`.
-- A feature with a spec but no `tasks.md` yet is **being planned**: `report`, bare `speccoder` and the dashboard show what exists (`✓ spec ✓ plan · tasks`) and the planning skills that come next. A project with no features points to `speccoder spec specify "…"`.
+- A feature with a spec but no `tasks.md` yet is **being planned**: `report`, bare `speccoder` and the dashboard show where it is on its journey and the planning skills that come next. A project with no features points to `speccoder spec specify "…"`.
+
+## The next step, taken
+
+At a terminal, after a planning step, a decision on a task or the report, speccoder **offers the next step** instead of only naming it — one yes at a time, each showing the command it stands for:
+
+```text
+  ✓ spec ── ✓ plan ── ✓ tasks ── ● commit ── · run ── · review
+
+  ┌─ Next ──────────────────────────────────────────────────────┐
+  │ Commit the planning files (1)                               │
+  │ speccoder runs from committed files                         │
+  │                                                             │
+  │ + specs/001-greet-function/tasks.md                         │
+  │ only these are committed; `git diff` shows them             │
+  │                                                             │
+  │ $ git add specs/001-greet-function/tasks.md && git commit … │
+  └─────────────────────────────────────────────────────────────┘
+  Commit them? [Y/n]
+```
+
+The journey — `spec → plan → tasks → commit → run → review` — says what is done, what is now and what is left. A commit takes exactly the feature's planning files, as `spec(<feature>): <files>`, and nothing else you have staged. After it comes the next planning skill or the run; answer `n` to stop and do it yourself. With `--json`, `--events`, without a terminal, or with `spec … --no-prompt`, nothing is asked. In the dashboard, `n` leaves it and offers the same step.
 - `report` and `doctor` say which feature and why (`recorded in .specify/feature.json`, `the only feature`, `named with --feature`); in the [dashboard](@/docs/running.md#the-dashboard), `f` opens a picker. `speccoder feature --clear` forgets the current feature.
 
 ## Extension hooks

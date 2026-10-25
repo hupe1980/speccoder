@@ -770,22 +770,11 @@ pub fn status(w: &mut impl Write, r: &StatusReport, message: &str) -> io::Result
             format!(" · {}", r.selected_by)
         }
     )?;
+    if !r.journey.is_empty() {
+        writeln!(w, "Journey    {}", journey(&r.journey))?;
+    }
     if !r.planning.is_empty() {
-        // Being planned: what exists, what comes next (the Next: block).
-        let look = crate::style::out();
-        let have = |a: &str| r.artifacts.iter().any(|x| x == a);
-        let cells: Vec<String> = ["spec", "plan", "tasks"]
-            .iter()
-            .map(|a| {
-                let g = if have(a) {
-                    crate::style::Glyph::Verified
-                } else {
-                    crate::style::Glyph::Ready
-                };
-                format!("{} {a}", look.mark(g))
-            })
-            .collect();
-        writeln!(w, "Planned    {}", cells.join("   "))?;
+        // Being planned: the journey says where; the Next: block what follows.
         return writeln!(w, "{message}");
     }
     let look = crate::style::out();
@@ -1280,4 +1269,88 @@ pub fn features(r: &speccoder_core::FeaturesReport) -> Vec<String> {
             }
         })
         .collect()
+}
+
+/// The journey as one line: `✓ spec ── ✓ plan ── ● tasks ── · commit ──
+/// · run ── · review` — what is done, the step now, what is left; each in
+/// its meaning's colour, ASCII and screen-reader words when asked.
+#[must_use]
+pub fn journey(steps: &[speccoder_core::actions::JourneyStep]) -> String {
+    journey_in(&crate::style::out(), steps)
+}
+
+/// [`journey`] in `look` (a prompt's, on stderr).
+#[must_use]
+pub fn journey_in(
+    look: &crate::style::Look,
+    steps: &[speccoder_core::actions::JourneyStep],
+) -> String {
+    use crate::style::Token;
+    use speccoder_core::actions::StepState;
+    if look.screen_reader {
+        let words: Vec<String> = steps
+            .iter()
+            .map(|s| {
+                let w = match s.state {
+                    StepState::Done => "done",
+                    StepState::Now => "next",
+                    StepState::Todo => "to do",
+                };
+                format!("{} {w}", s.name)
+            })
+            .collect();
+        return format!("journey: {}", words.join(", "));
+    }
+    let (done, now, todo, join) = if look.ascii {
+        ("[x]", "[>]", "[ ]", " - ")
+    } else {
+        ("✓", "●", "·", " ── ")
+    };
+    let cells: Vec<String> = steps
+        .iter()
+        .map(|s| match s.state {
+            StepState::Done => look.paint(Token::Verified, &format!("{done} {}", s.name)),
+            StepState::Now => look.paint(Token::Accent, &format!("{now} {}", s.name)),
+            StepState::Todo => look.paint(Token::Muted, &format!("{todo} {}", s.name)),
+        })
+        .collect();
+    cells.join(&look.paint(Token::Muted, join))
+}
+
+/// A framed card in `look`: a title in the top border, the lines inside, padded to
+/// the terminal's width (at most 76 columns).
+#[must_use]
+pub fn card_in(look: &crate::style::Look, title: &str, lines: &[String]) -> String {
+    use crate::style::Token;
+    let inner = look.width.clamp(40, 78).saturating_sub(4);
+    let (tl, tr, bl, br, h, v) = if look.ascii {
+        ("+", "+", "+", "+", "-", "|")
+    } else {
+        ("┌", "┐", "└", "┘", "─", "│")
+    };
+    let border = |t: &str| look.paint(Token::Border, t);
+    let head = format!(" {title} ");
+    let rest = inner.saturating_sub(crate::style::width(&head) + 1);
+    let mut out = format!(
+        "  {}{}{}{}\n",
+        border(&format!("{tl}{h}")),
+        look.paint(Token::Accent, &head),
+        border(&h.repeat(rest)),
+        border(tr)
+    );
+    for l in lines {
+        let l = look.fit(l, inner - 2);
+        let pad = (inner - 2).saturating_sub(crate::style::width(&l));
+        out.push_str(&format!(
+            "  {} {l}{} {}\n",
+            border(v),
+            " ".repeat(pad),
+            border(v)
+        ));
+    }
+    out.push_str(&format!(
+        "  {}\n",
+        border(&format!("{bl}{}{br}", h.repeat(inner)))
+    ));
+    out
 }
