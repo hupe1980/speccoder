@@ -128,8 +128,24 @@ pub const CATALOG: &[Entry] = &[
         E,
         S::SelectionNeeded,
         "more than one feature could be meant",
-        "Several features exist and none is selected by `--feature`, the branch or the format's own pointer.",
-        ["speccoder inspect", "speccoder {command} --feature <name>"]
+        "Several features exist and none is current: neither `--feature`, the format's variable nor its pointer (Spec Kit: `.specify/feature.json`) names one. Make one current, or name it for this command.",
+        [
+            "speccoder feature",
+            "speccoder feature <name>",
+            "speccoder {command} --feature <name>"
+        ]
+    ),
+    entry!(
+        "FEATURE-GONE",
+        E,
+        S::SelectionNeeded,
+        "the current feature no longer exists",
+        "The format's pointer (Spec Kit: `.specify/feature.json`) or its variable names a feature directory that is not there — renamed, deleted, or from another checkout.",
+        [
+            "speccoder feature",
+            "speccoder feature <name>",
+            "speccoder feature --clear"
+        ]
     ),
     // ── configuration ─────────────────────────────────────────────────
     entry!(

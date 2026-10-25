@@ -46,6 +46,7 @@ switched to 002-farewell (recorded in .specify/feature.json: Spec Kit's scripts 
 - `speccoder spec specify` makes the feature it creates current — whether or not the model remembered to write the file — and says so. Every other planning skill's commands are told the feature (`SPECIFY_FEATURE_DIRECTORY`), so Spec Kit's scripts never lose it.
 - `--feature NAME` (and `SPECIFY_FEATURE_DIRECTORY`) choose for one command without changing the current one. With a single feature, it is current by itself.
 - With several features and none current, `run` and `spec` ask you at a terminal and remember the answer; elsewhere they stop with the list and the command that picks one. A pointer to a feature that no longer exists gets a "did you mean …" and shows up in `speccoder doctor`.
+- A feature with a spec but no `tasks.md` yet is **being planned**: `report`, bare `speccoder` and the dashboard show what exists (`✓ spec ✓ plan · tasks`) and the planning skills that come next. A project with no features points to `speccoder spec specify "…"`.
 - `report` and `doctor` say which feature and why (`recorded in .specify/feature.json`, `the only feature`, `named with --feature`); in the [dashboard](@/docs/running.md#the-dashboard), `f` opens a picker. `speccoder feature --clear` forgets the current feature.
 
 ## Extension hooks

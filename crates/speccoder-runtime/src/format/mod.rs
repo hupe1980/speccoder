@@ -260,6 +260,9 @@ pub struct Planning {
     /// The variable the format's own scripts read the current unit from
     /// (Spec Kit: `SPECIFY_FEATURE_DIRECTORY`), passed to planning commands.
     pub current_env: Option<&'static str>,
+    /// The skills that lead from what exists to a task list, given whether
+    /// a plan exists (Spec Kit: `plan`, `tasks`).
+    pub toward_tasks: fn(bool) -> &'static [&'static str],
 }
 
 /// What a worktree needs committed: a worktree contains only commits.

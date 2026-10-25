@@ -770,6 +770,24 @@ pub fn status(w: &mut impl Write, r: &StatusReport, message: &str) -> io::Result
             format!(" · {}", r.selected_by)
         }
     )?;
+    if !r.planning.is_empty() {
+        // Being planned: what exists, what comes next (the Next: block).
+        let look = crate::style::out();
+        let have = |a: &str| r.artifacts.iter().any(|x| x == a);
+        let cells: Vec<String> = ["spec", "plan", "tasks"]
+            .iter()
+            .map(|a| {
+                let g = if have(a) {
+                    crate::style::Glyph::Verified
+                } else {
+                    crate::style::Glyph::Ready
+                };
+                format!("{} {a}", look.mark(g))
+            })
+            .collect();
+        writeln!(w, "Planned    {}", cells.join("   "))?;
+        return writeln!(w, "{message}");
+    }
     let look = crate::style::out();
     let id_width = r
         .tasks

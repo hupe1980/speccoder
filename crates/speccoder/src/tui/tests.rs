@@ -38,6 +38,8 @@ fn snapshot() -> Snapshot {
             branch: Some("speccoder/001-x".to_owned()),
             source: "branch".to_owned(),
             selected_by: String::new(),
+            artifacts: Vec::new(),
+            planning: Vec::new(),
             unmerged_commits: 1,
             tasks: vec![verified, task("T002", "ready"), blocked],
             convergence: Vec::new(),
@@ -692,4 +694,23 @@ fn f_picks_the_feature_and_a_working_run_keeps_its_own() {
             .unwrap_or_default()
             .contains("switch once it has ended")
     );
+}
+
+#[test]
+fn a_feature_being_planned_shows_what_writes_its_tasks() {
+    let mut snap = snapshot();
+    if let Some(r) = snap.report.as_mut() {
+        r.tasks.clear();
+        r.artifacts = vec!["spec".to_owned()];
+        r.planning = vec!["plan".to_owned(), "tasks".to_owned()];
+    }
+    let s = screen(&App::new(snap));
+    for needle in [
+        "being planned: no task list yet",
+        "✓ spec",
+        "· plan",
+        "next: speccoder spec plan",
+    ] {
+        assert!(s.contains(needle), "missing {needle:?} in\n{s}");
+    }
 }

@@ -194,22 +194,102 @@ pub fn report(path: &Path, feature: Option<&str>) -> CommandResult {
     };
     let format = crate::format::of(snapshot);
     let Some(f) = snapshot.feature.as_ref() else {
+        // A project with nothing planned yet is a beginning, not an error.
+        if snapshot.features.is_empty()
+            && !snapshot
+                .diagnostics
+                .iter()
+                .any(|d| d.code == "select.not-found")
+        {
+            let unit = format.messages().unit;
+            let create = (format.planning().creates.first())
+                .or((format.planning().toward_tasks)(false).first())
+                .map_or_else(
+                    || "speccoder spec".to_owned(),
+                    |s| format!("speccoder spec {s} \"…\""),
+                );
+            return CommandResult::new(
+                "report",
+                CommandStatus::Ok,
+                &format!("no {unit}s yet — `{create}` writes the first one"),
+            )
+            .with_next(vec![speccoder_core::next::NextStep {
+                command: create,
+                why: format!("describe the {unit}; its spec is written for you to review"),
+            }]);
+        }
+        // Several and none current, or a pointer to one that is gone: say
+        // which exist; the code's fixes say how to pick.
+        let unit = format.messages().unit;
+        let names: Vec<&str> = snapshot.features.iter().map(|f| f.name.as_str()).collect();
+        if let Some(d) = snapshot
+            .diagnostics
+            .iter()
+            .find(|d| d.code == "select.not-found")
+        {
+            return CommandResult::new(
+                "report",
+                CommandStatus::SelectionNeeded,
+                &match &d.hint {
+                    Some(h) => format!("{}; {h}", d.message),
+                    None => d.message.clone(),
+                },
+            )
+            .with_code("FEATURE-GONE");
+        }
         return CommandResult::new(
             "report",
             CommandStatus::SelectionNeeded,
-            inspected.message(),
-        );
-    };
-    let Some(checkout_tasks) = f.tasks.as_ref() else {
-        return CommandResult::new(
-            "report",
-            CommandStatus::NotFound,
             &format!(
-                "{} has no {} yet",
-                f.feature.name,
-                format.messages().tasks_file
+                "{} {unit}s and none is current ({})",
+                names.len(),
+                names.join(", ")
             ),
         );
+    };
+    let artifacts: Vec<String> = [
+        ("spec", f.artifacts.spec),
+        ("plan", f.artifacts.plan),
+        ("tasks", f.artifacts.tasks),
+    ]
+    .into_iter()
+    .filter(|(_, on)| *on)
+    .map(|(n, _)| n.to_owned())
+    .collect();
+    // No task list yet: the feature is being planned — a stage, not an
+    // error. The report says what exists and which planning skills are next.
+    let Some(checkout_tasks) = f.tasks.as_ref() else {
+        let planning: Vec<String> = (format.planning().toward_tasks)(f.artifacts.plan)
+            .iter()
+            .map(|s| (*s).to_owned())
+            .collect();
+        return CommandResult::new(
+            "report",
+            CommandStatus::Ok,
+            &format!(
+                "{} is being planned: {} written, no {} yet",
+                f.feature.name,
+                if artifacts.is_empty() {
+                    "nothing".to_owned()
+                } else {
+                    artifacts.join(" and ")
+                },
+                format.messages().tasks_file
+            ),
+        )
+        .with_data(CommandData::Report(Box::new(StatusReport {
+            feature: f.feature.name.clone(),
+            branch: None,
+            source: "checkout".to_owned(),
+            selected_by: crate::current::reason_text(snapshot.selection.reason, format),
+            artifacts,
+            planning,
+            unmerged_commits: 0,
+            tasks: Vec::new(),
+            convergence: Vec::new(),
+            trace: Vec::new(),
+            totals: speccoder_core::StatusTotals::default(),
+        })));
     };
     let name = f.feature.name.clone();
     let branch = format!("speccoder/{name}");
@@ -372,6 +452,8 @@ pub fn report(path: &Path, feature: Option<&str>) -> CommandResult {
             branch: has_branch.then_some(branch),
             source: source.to_owned(),
             selected_by: crate::current::reason_text(snapshot.selection.reason, format),
+            artifacts,
+            planning: Vec::new(),
             unmerged_commits: unmerged,
             tasks,
             convergence,

@@ -226,6 +226,8 @@ mod tests {
             branch: Some("speccoder/001-x".to_owned()),
             source: "branch".to_owned(),
             selected_by: String::new(),
+            artifacts: Vec::new(),
+            planning: Vec::new(),
             unmerged_commits: 0,
             tasks: (0..n)
                 .map(|i| {

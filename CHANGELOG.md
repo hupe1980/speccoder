@@ -101,7 +101,12 @@ ticks a task only on evidence the model cannot produce or edit.
   `spec specify` created — that feature becomes current by itself.
 - With several features and none current, `run` and `spec` ask at a
   terminal; the dashboard opens on a picker (`f`); a stale pointer gets a
-  "did you mean"; `report` and `doctor` say which feature and why.
+  "did you mean" (`FEATURE-GONE`); `report` and `doctor` say which feature
+  and why.
+- A feature with a spec but no task list is shown as being planned, with
+  the planning skills that come next (`spec plan`, `spec tasks`), in
+  `report`, bare `speccoder` and the dashboard — not as an error; a
+  project with no features yet points to `spec specify`.
 
 **Acceptance strength**
 

@@ -562,3 +562,72 @@ fn the_current_feature_is_listed_switched_and_cleared() {
         "{check:?}"
     );
 }
+
+#[test]
+fn a_feature_without_tasks_is_being_planned_not_an_error() {
+    let r = repo();
+    fs::create_dir_all(r.path().join("specs/002-login")).unwrap();
+    fs::write(r.path().join("specs/002-login/spec.md"), "# Spec\n").unwrap();
+    let res = speccoder_runtime::next::attach(
+        speccoder_runtime::status::report(r.path(), Some("002")),
+        None,
+    );
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    assert!(
+        res.message()
+            .contains("002-login is being planned: spec written, no tasks.md yet"),
+        "{}",
+        res.message()
+    );
+    let Some(CommandData::Report(s)) = res.data() else {
+        panic!()
+    };
+    assert_eq!(s.planning, ["plan", "tasks"]);
+    assert_eq!(s.artifacts, ["spec"]);
+    let steps: Vec<&str> = res.next().iter().map(|n| n.command.as_str()).collect();
+    assert_eq!(
+        steps,
+        [
+            "speccoder spec plan",
+            "speccoder spec tasks",
+            "speccoder run"
+        ]
+    );
+    // With a plan, only the task list is left.
+    fs::write(r.path().join("specs/002-login/plan.md"), "# Plan\n").unwrap();
+    let res = speccoder_runtime::status::report(r.path(), Some("002"));
+    let Some(CommandData::Report(s)) = res.data() else {
+        panic!()
+    };
+    assert_eq!(s.planning, ["tasks"]);
+}
+
+#[test]
+fn nothing_planned_is_a_beginning_and_a_gone_pointer_names_the_closest() {
+    let r = repo();
+    fs::remove_dir_all(r.path().join("specs")).unwrap();
+    let res =
+        speccoder_runtime::next::attach(speccoder_runtime::status::report(r.path(), None), None);
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    assert!(
+        res.message().starts_with("no features yet"),
+        "{}",
+        res.message()
+    );
+    assert_eq!(res.next()[0].command, "speccoder spec specify \"…\"");
+    fs::create_dir_all(r.path().join("specs/002-login")).unwrap();
+    fs::write(r.path().join("specs/002-login/spec.md"), "# Spec\n").unwrap();
+    fs::write(
+        r.path().join(".specify/feature.json"),
+        "{\"feature_directory\": \"specs/003-logn\"}",
+    )
+    .unwrap();
+    let res =
+        speccoder_runtime::next::attach(speccoder_runtime::status::report(r.path(), None), None);
+    assert_eq!(res.code().map(|c| c.name), Some("FEATURE-GONE"));
+    assert!(
+        res.message().contains("did you mean 002-login?"),
+        "{}",
+        res.message()
+    );
+}

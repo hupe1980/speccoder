@@ -143,7 +143,12 @@ pub static PLANNING: Planning = Planning {
     refused,
     creates: &[],
     current_env: None,
+    toward_tasks,
 };
+
+fn toward_tasks(_has_plan: bool) -> &'static [&'static str] {
+    &["propose"]
+}
 
 /// Skills speccoder does not host, and what to use instead.
 fn refused(name: &str) -> Option<String> {
