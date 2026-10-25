@@ -179,13 +179,23 @@ pub fn scrubbed_env(vars: impl IntoIterator<Item = (String, String)>) -> Vec<(St
     let mut env: Vec<(String, String)> = vars
         .into_iter()
         .filter(|(k, _)| !is_secret(k))
-        .filter(|(k, _)| k != "CI" && k != "GIT_TERMINAL_PROMPT")
+        .filter(|(k, _)| !OURS.contains(&k.as_str()) && !FORCES_COLOUR.contains(&k.as_str()))
         .collect();
     env.push(("CI".to_owned(), "1".to_owned()));
     env.push(("GIT_TERMINAL_PROMPT".to_owned(), "0".to_owned()));
+    // Output is parsed, not shown: colour would hide a compile error's code
+    // from the summary and turn a red test into an unexplained failure.
+    env.push(("CARGO_TERM_COLOR".to_owned(), "never".to_owned()));
+    env.push(("NO_COLOR".to_owned(), "1".to_owned()));
     env.sort();
     env
 }
+
+/// Set by [`scrubbed_env`] itself.
+const OURS: &[&str] = &["CI", "GIT_TERMINAL_PROMPT", "CARGO_TERM_COLOR", "NO_COLOR"];
+
+/// Variables that force colour on whatever the output goes to.
+const FORCES_COLOUR: &[&str] = &["FORCE_COLOR", "CLICOLOR_FORCE", "PY_COLORS"];
 
 /// Whether a variable name looks like a credential.
 #[must_use]
@@ -219,6 +229,8 @@ mod tests {
             ("SSH_AUTH_SOCK", "/s"),
             ("CI", "false"),
             ("RUSTUP_HOME", "/r"),
+            ("CARGO_TERM_COLOR", "always"),
+            ("FORCE_COLOR", "1"),
         ]
         .map(|(k, v)| (k.to_owned(), v.to_owned()));
         let keys: Vec<_> = scrubbed_env(vars)
@@ -228,9 +240,11 @@ mod tests {
         assert_eq!(
             keys,
             [
+                "CARGO_TERM_COLOR=never",
                 "CI=1",
                 "GIT_TERMINAL_PROMPT=0",
                 "HOME=/h",
+                "NO_COLOR=1",
                 "PATH=/bin",
                 "RUSTUP_HOME=/r"
             ]

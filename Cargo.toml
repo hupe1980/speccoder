@@ -59,3 +59,12 @@ all = { level = "deny", priority = -1 }
 unwrap_used = "deny"
 expect_used = "deny"
 panic = "deny"
+
+# Line tables keep our backtraces readable; dependencies carry none. Full
+# debug info made the ~35 test binaries tens of GB on Linux, more than a CI
+# runner's free disk.
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false

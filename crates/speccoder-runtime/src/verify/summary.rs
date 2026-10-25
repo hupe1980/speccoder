@@ -52,6 +52,16 @@ fn finds<'t>(r: &'t Option<Regex>, text: &'t str) -> impl Iterator<Item = regex:
     r.iter().flat_map(move |r| r.find_iter(text))
 }
 
+static ANSI: LazyLock<Option<Regex>> = LazyLock::new(|| re(r"\x1b\[[0-9;?]*[ -/]*[@-~]"));
+
+/// `text` without terminal escape sequences.
+fn plain(text: &str) -> String {
+    match ANSI.as_ref() {
+        Some(r) => r.replace_all(text, "").into_owned(),
+        None => text.to_owned(),
+    }
+}
+
 fn matches(r: &Option<Regex>, text: &str) -> bool {
     r.as_ref().is_some_and(|r| r.is_match(text))
 }
@@ -60,11 +70,13 @@ fn matches(r: &Option<Regex>, text: &str) -> bool {
 /// summary is present.
 #[must_use]
 pub fn parse(stdout: &str, stderr: &str, exit_code: Option<i32>) -> Option<RunnerSummary> {
-    let text = format!("{stdout}\n{stderr}");
-    rust(&text)
-        .or_else(|| python(&text, exit_code))
-        .or_else(|| javascript(&text))
-        .or_else(|| go(&text))
+    // A tool that colours its output anyway: the codes go before reading.
+    let text = plain(&format!("{stdout}\n{stderr}"));
+    let text = text.as_str();
+    rust(text)
+        .or_else(|| python(text, exit_code))
+        .or_else(|| javascript(text))
+        .or_else(|| go(text))
 }
 
 fn rust(text: &str) -> Option<RunnerSummary> {
@@ -208,6 +220,15 @@ mod tests {
     #[test]
     fn rustc_missing_function_is_unresolved_only() {
         let err = "error[E0425]: cannot find function `slugify` in this scope\n --> tests/acceptance_t004.rs:3:5\n\nerror[E0432]: unresolved import `crate::slug`\n\nerror: could not compile `demo` (test \"acceptance_t004\") due to 2 previous errors\n";
+        let r = parse("", err, Some(101)).unwrap();
+        assert!(r.build_failed && r.unresolved_only);
+    }
+
+    /// `CARGO_TERM_COLOR=always` in the person's environment: the same
+    /// error, read through its colour codes.
+    #[test]
+    fn coloured_rustc_output_reads_the_same() {
+        let err = "\x1b[0m\x1b[1m\x1b[38;5;9merror[E0425]\x1b[0m\x1b[0m\x1b[1m: cannot find function `slugify` in this scope\x1b[0m\n\x1b[1m\x1b[38;5;9merror\x1b[0m\x1b[1m:\x1b[0m could not compile `demo` (test \"held_out\") due to 1 previous error\n";
         let r = parse("", err, Some(101)).unwrap();
         assert!(r.build_failed && r.unresolved_only);
     }
