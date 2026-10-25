@@ -405,6 +405,7 @@ impl Glyph {
     pub const fn word_for_doctor(self) -> &'static str {
         match self {
             Self::Verified => "ok",
+            Self::Ready => "optional",
             Self::Regression => "warning",
             _ => "failed",
         }

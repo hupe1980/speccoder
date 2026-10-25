@@ -51,7 +51,9 @@ fn detects_a_node_project_and_writes_a_file_speccoder_accepts() {
     // An existing file is not replaced without --force.
     let again = init_with(r, None, None, false, None, &no_keys);
     assert_eq!(again.status(), CommandStatus::ConfigError);
-    assert!(again.message().contains("--force"));
+    // It exists: change it, or start over — never "init" again.
+    assert_eq!(again.code().map(|c| c.name), Some("CONFIG-EXISTS"));
+    assert_eq!(again.fix(), ["speccoder config", "speccoder init --force"]);
     let forced = init_with(r, Some("openai"), None, true, None, &no_keys);
     assert_eq!(forced.status(), CommandStatus::Ok, "{}", forced.message());
     assert!(

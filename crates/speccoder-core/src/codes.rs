@@ -112,8 +112,8 @@ pub const CATALOG: &[Entry] = &[
         E,
         S::NotAProject,
         "speccoder works on a Spec Kit or OpenSpec project, and found none here",
-        "No `.specify/` (Spec Kit) or `openspec/` (OpenSpec) directory was found here or above. speccoder implements specs; it does not write them from nothing.",
-        ["specify init --here", "openspec init"]
+        "No `.specify/` (Spec Kit) or `openspec/` (OpenSpec) directory was found here or above. Spec Kit makes one (`--integration claude` installs the skills speccoder runs); then `speccoder init` and `speccoder spec specify` take it from there.",
+        ["specify init --here --integration claude", "openspec init"]
     ),
     entry!(
         "SPEC-DIAGNOSTICS",
@@ -214,6 +214,14 @@ pub const CATALOG: &[Entry] = &[
         ["gh repo view"]
     ),
     entry!(
+        "CONFIG-EXISTS",
+        E,
+        S::ConfigError,
+        "the project has a speccoder.toml already",
+        "`init` writes a new one; change the existing one with `speccoder config` (or Settings), or start over with `--force`.",
+        ["speccoder config", "speccoder init --force"]
+    ),
+    entry!(
         "CONFIG-MISSING",
         E,
         S::ConfigError,
@@ -242,8 +250,8 @@ pub const CATALOG: &[Entry] = &[
         E,
         S::ConfigError,
         "no check applies, so nothing could show that nothing regressed",
-        "Every configured check was skipped (`when_exists` did not match) or none is configured. A task cannot be judged without at least one check.",
-        ["speccoder init --force"]
+        "Every configured check was skipped (`when_exists` did not match) or none is configured. A task cannot be judged without at least one check: add your test command as one.",
+        ["speccoder config set checks.test.argv -- <your test command>"]
     ),
     // ── git ───────────────────────────────────────────────────────────
     entry!(
@@ -275,8 +283,12 @@ pub const CATALOG: &[Entry] = &[
         E,
         S::GitPrecondition,
         "there is no git remote to push to",
-        "`pr` pushes `speccoder/<feature>` to a remote and opens the pull request there.",
-        ["git remote -v", "speccoder pr --remote <name>"]
+        "`pr` pushes `speccoder/<feature>` to a remote and opens the pull request there; `issue` reads the remote's GitHub issues. Add the repository's GitHub address as a remote, or name the one to use.",
+        [
+            "git remote add origin <url>",
+            "git remote -v",
+            "speccoder pr --remote <name>"
+        ]
     ),
     entry!(
         "WORKTREE-DIRTY",
@@ -729,9 +741,13 @@ pub fn fixes(
     task: Option<&str>,
     feature: Option<&str>,
 ) -> Vec<String> {
+    // Without a task, a fix about one is no step to take — unless every fix
+    // is about one (then the placeholder shows what to fill in).
+    let general = entry.fix.iter().any(|f| !f.contains("{task}"));
     entry
         .fix
         .iter()
+        .filter(|f| task.is_some() || !general || !f.contains("{task}"))
         .map(|f| {
             let feature_arg = feature.map_or_else(String::new, |f| f.to_owned());
             let mut line = f

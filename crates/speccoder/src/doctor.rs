@@ -52,6 +52,7 @@ pub fn bug_report(result: &CommandResult) -> String {
     for c in &d.checks {
         let level = match c.level {
             DoctorLevel::Pass => "ok",
+            DoctorLevel::Info => "optional",
             DoctorLevel::Warn => "warning",
             DoctorLevel::Fail => "**fail**",
         };

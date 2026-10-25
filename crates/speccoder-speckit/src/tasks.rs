@@ -137,7 +137,7 @@ fn check(path: &str, tasks: &[Task], diags: &mut Vec<Diagnostic>) {
                 "tasks.md contains no tasks",
             )
             .at(path)
-            .hint("run /speckit-tasks to generate them"),
+            .hint("speccoder spec tasks generates them (/speckit-tasks in your editor)"),
         );
         return;
     }

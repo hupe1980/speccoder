@@ -234,6 +234,17 @@ fn human_body(
                     })
                     .collect();
                 writeln!(out, "On the untouched code  {}", shown.join(" · "))?;
+                // Why a check fails before any change: the line that says it.
+                for r in i.ran.iter().filter(|r| !r.passed) {
+                    if let Some(why) = &r.reason {
+                        writeln!(
+                            out,
+                            "  {} {}",
+                            look.paint(Token::Danger, &format!("{}:", r.name)),
+                            why
+                        )?;
+                    }
+                }
             }
             let key = if i.key.set {
                 format!("{} found", i.key.variable)
@@ -260,6 +271,7 @@ fn human_body(
             for c in &d.checks {
                 let g = match c.level {
                     DoctorLevel::Pass => Glyph::Verified,
+                    DoctorLevel::Info => Glyph::Ready,
                     DoctorLevel::Warn => Glyph::Regression,
                     DoctorLevel::Fail => Glyph::Failed,
                 };
@@ -274,7 +286,7 @@ fn human_body(
                 } else {
                     writeln!(out, "  {} {:<13} {}", look.cell(g), c.check, c.detail)?;
                 }
-                if c.level == DoctorLevel::Warn {
+                if matches!(c.level, DoctorLevel::Warn | DoctorLevel::Info) {
                     for f in &c.fix {
                         let f = f.strip_prefix("→ ").unwrap_or(f);
                         writeln!(

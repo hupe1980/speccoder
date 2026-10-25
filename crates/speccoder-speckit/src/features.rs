@@ -159,7 +159,7 @@ pub fn select(
                     "select.no-features",
                     "the project has no features yet",
                 )
-                .hint("run /speckit-specify to create one"),
+                .hint("speccoder spec specify \"…\" creates one (/speckit-specify in your editor)"),
             );
             none
         }

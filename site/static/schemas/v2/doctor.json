@@ -48,8 +48,13 @@
           "type": "string"
         },
         {
+          "const": "info",
+          "description": "Works fully; something optional is not set up (no signing key).",
+          "type": "string"
+        },
+        {
           "const": "warn",
-          "description": "Works, with less than it could (no signing key, no spec tool).",
+          "description": "Works, with less than it could (no spec tool).",
           "type": "string"
         },
         {

@@ -75,7 +75,7 @@ pub(crate) fn with_driver(
     };
     let (driver, key) = match substrate::model_config::open_driver(&model) {
         Ok((d, k)) => (Ok::<_, String>(d), k.unwrap_or_default()),
-        Err(e) => return CommandResult::new(command, CommandStatus::ConfigError, &e),
+        Err(e) => return substrate::model_config::refused(command, &e),
     };
     match driver {
         Ok(provider) => f(&state, &provider, &key),

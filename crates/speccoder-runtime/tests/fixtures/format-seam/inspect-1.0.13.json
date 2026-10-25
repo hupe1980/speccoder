@@ -2208,7 +2208,7 @@
         "path": ".specify/memory/constitution.md",
         "line": null,
         "message": "the constitution is still the Spec Kit template",
-        "hint": "run /speckit-constitution to fill it in"
+        "hint": "speccoder spec constitution fills it in (/speckit-constitution in your editor)"
       },
       {
         "severity": "warning",

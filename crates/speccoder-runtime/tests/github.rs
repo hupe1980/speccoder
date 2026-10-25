@@ -31,6 +31,25 @@ fn fake(dir: &Path, cases: &[(&str, &str)], otherwise: &str) -> PathBuf {
     gh
 }
 
+/// A git repository with a GitHub remote (never contacted: `gh` is fake).
+fn repo() -> tempfile::TempDir {
+    let dir = tempfile::tempdir().unwrap();
+    for args in [
+        &["init", "-q"][..],
+        &["remote", "add", "origin", "https://github.com/o/r.git"][..],
+    ] {
+        assert!(
+            Command::new("git")
+                .args(args)
+                .current_dir(dir.path())
+                .status()
+                .unwrap()
+                .success()
+        );
+    }
+    dir
+}
+
 const ISSUES: &str = r#"[
  {"number":7,"title":"Old","url":"https://github.com/o/r/issues/7","labels":[],"assignees":[],"updatedAt":"2026-10-01T00:00:00Z"},
  {"number":42,"title":"Greet people","url":"https://github.com/o/r/issues/42","labels":[{"name":"feature"}],"assignees":[{"login":"me"}],"updatedAt":"2026-09-01T00:00:00Z"},
@@ -39,7 +58,7 @@ const ISSUES: &str = r#"[
 
 #[test]
 fn issues_come_assigned_first_then_freshest_and_one_reads_in_full() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = repo();
     let gh = fake(
         dir.path(),
         &[
@@ -106,7 +125,7 @@ fn issues_come_assigned_first_then_freshest_and_one_reads_in_full() {
 
 #[test]
 fn a_missing_gh_or_login_is_explained() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = repo();
     let missing = dir.path().join("no-such-gh").display().to_string();
     let s = github::status(&missing, dir.path());
     assert!(
@@ -125,6 +144,39 @@ fn a_missing_gh_or_login_is_explained() {
     let refused = github::refused(s.reason.as_deref().unwrap());
     assert_eq!(refused.code().map(|c| c.name), Some("GH-AUTH"));
     assert_eq!(refused.fix(), ["gh auth login"]);
+}
+
+#[test]
+fn a_missing_remote_is_said_before_any_login() {
+    // No remote: said first — not "log in", then "no remote".
+    let bare = tempfile::tempdir().unwrap();
+    assert!(
+        Command::new("git")
+            .args(["init", "-q"])
+            .current_dir(bare.path())
+            .status()
+            .unwrap()
+            .success()
+    );
+    let gh = fake(
+        bare.path(),
+        &[("--version", "gh version 2.80.0")],
+        "To get started with GitHub CLI, please run:  gh auth login",
+    );
+    let gh = gh.display().to_string();
+    let s = github::status(&gh, bare.path());
+    assert!(s.installed && !s.ready, "{s:?}");
+    let reason = s.reason.unwrap();
+    assert!(reason.contains("has no remote"), "{reason}");
+    assert_eq!(
+        github::refused(&reason).code().map(|c| c.name),
+        Some("NO-REMOTE")
+    );
+    assert!(
+        github::issues(&gh, bare.path(), &Default::default())
+            .unwrap_err()
+            .contains("has no remote")
+    );
 }
 
 #[test]

@@ -960,16 +960,16 @@ fn init(
         && std::io::stderr().is_terminal();
     if interactive {
         let default_yes = prepared.failed.is_empty();
-        // What the answer rests on, before the question.
-        for c in &prepared.report.checks {
-            eprintln!("  check  {:<10} {}", c.name, c.argv.join(" "));
-        }
+        // What the answer rests on, before the question: each check on the
+        // untouched code, and why one fails (the full list follows after).
         for r in &prepared.report.ran {
-            eprintln!(
-                "  {}  {} on the untouched code",
-                r.name,
-                if r.passed { "passes" } else { "FAILS" }
-            );
+            match (&r.reason, r.passed) {
+                (_, true) => eprintln!("  {:<10} passes on the untouched code", r.name),
+                (Some(why), false) => {
+                    eprintln!("  {:<10} FAILS on the untouched code: {why}", r.name)
+                }
+                (None, false) => eprintln!("  {:<10} FAILS on the untouched code", r.name),
+            }
         }
         eprint!(
             "Commit {}? speccoder reads committed files only. [{}] ",

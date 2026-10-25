@@ -49,7 +49,7 @@ pub fn constitution(ws: &Workspace, diags: &mut Vec<Diagnostic>) -> Constitution
                     "the constitution is still the Spec Kit template",
                 )
                 .at(CONSTITUTION)
-                .hint("run /speckit-constitution to fill it in"),
+                .hint("speccoder spec constitution fills it in (/speckit-constitution in your editor)"),
             );
             ConstitutionState::Unfilled
         }
@@ -62,7 +62,7 @@ pub fn constitution(ws: &Workspace, diags: &mut Vec<Diagnostic>) -> Constitution
                     "no project constitution",
                 )
                 .at(CONSTITUTION)
-                .hint("run /speckit-constitution"),
+                .hint("speccoder spec constitution (/speckit-constitution in your editor)"),
             );
             ConstitutionState::Absent
         }

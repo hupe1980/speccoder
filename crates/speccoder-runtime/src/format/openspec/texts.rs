@@ -123,6 +123,7 @@ pub static MESSAGES: Messages = Messages {
     unit: "change",
     no_current: "OpenSpec has no current change: name one with --change",
     current_shared: "",
+    make_project: ("openspec init", "make it an OpenSpec project"),
 };
 
 fn not_a_project(path: &Path) -> String {

@@ -28,6 +28,11 @@ pub struct Found {
     pub node_manager: Option<String>,
     /// `pyproject.toml`, `setup.cfg`, `setup.py` or `pytest.ini` exists.
     pub python: bool,
+    /// The project's own interpreter (`.venv/bin/python`), when it has one:
+    /// checks use it, so they work without an activated environment.
+    pub python_bin: Option<String>,
+    /// pytest runs with that interpreter (or `python3`).
+    pub pytest: bool,
     /// `[tool.ruff]` (or `ruff.toml`) is configured.
     pub ruff: bool,
     /// `[tool.mypy]` (or `mypy.ini`) is configured.
@@ -150,10 +155,18 @@ pub fn propose(found: &Found) -> Vec<Proposed> {
         } else {
             "test"
         };
+        let python = found.python_bin.as_deref().unwrap_or("python3");
+        let why = if found.pytest {
+            format!("a Python project (pytest, {python})")
+        } else {
+            format!(
+                "a Python project — pytest is not installed for {python}: `{python} -m pip install pytest`"
+            )
+        };
         out.push(check(
             name,
             &[
-                "python3",
+                python,
                 "-m",
                 "pytest",
                 "-q",
@@ -161,7 +174,7 @@ pub fn propose(found: &Found) -> Vec<Proposed> {
             ],
             "fast",
             Some(".speccoder/junit.xml"),
-            "a Python project (pytest)",
+            &why,
         ));
         if found.ruff {
             out.push(check(
@@ -232,7 +245,11 @@ pub fn allow(found: &Found) -> Vec<Vec<String>> {
         out.extend([v(&[pm, "test"]), v(&[pm, "run", "test"])]);
     }
     if found.python {
-        out.push(v(&["python3", "-m", "pytest"]));
+        out.push(v(&[
+            found.python_bin.as_deref().unwrap_or("python3"),
+            "-m",
+            "pytest",
+        ]));
     }
     if found.go {
         out.extend([v(&["go", "test"]), v(&["go", "build"]), v(&["go", "vet"])]);
@@ -293,14 +310,36 @@ pub fn detect(root: &Path) -> Found {
     };
     let pyproject = read("pyproject.toml");
     let makefile = read("Makefile");
+    let python = ["pyproject.toml", "setup.cfg", "setup.py", "pytest.ini"]
+        .iter()
+        .any(|p| exists(p));
+    // A project-local virtualenv: its interpreter, by the path checks run it.
+    let python_bin = [".venv/bin/python", "venv/bin/python"]
+        .iter()
+        .find(|p| python && exists(p))
+        .map(|p| (*p).to_owned());
     Found {
         cargo,
         nextest,
         npm_scripts,
         node_manager,
-        python: ["pyproject.toml", "setup.cfg", "setup.py", "pytest.ini"]
-            .iter()
-            .any(|p| exists(p)),
+        python,
+        pytest: python && {
+            let bin = python_bin.as_deref().unwrap_or("python3");
+            std::process::Command::new(if root.join(bin).is_file() {
+                root.join(bin)
+            } else {
+                bin.into()
+            })
+            .args(["-m", "pytest", "--version"])
+            .current_dir(root)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .is_ok_and(|s| s.success())
+        },
+        python_bin,
         ruff: pyproject.contains("[tool.ruff") || exists("ruff.toml") || exists(".ruff.toml"),
         mypy: pyproject.contains("[tool.mypy") || exists("mypy.ini"),
         go: exists("go.mod"),
@@ -445,10 +484,16 @@ pub fn init_with(
     };
     let file = root.join(FILE);
     if file.exists() && !force {
+        // It exists: change it, or start it over — never `init` again.
         return refuse(
             CommandStatus::ConfigError,
-            format!("{} exists; pass --force to replace it", file.display()),
-        );
+            format!("{} exists already", file.display()),
+        )
+        .with_code("CONFIG-EXISTS")
+        .with_fix(vec![
+            "speccoder config".to_owned(),
+            "speccoder init --force".to_owned(),
+        ]);
     }
     if let Some(p) = provider.filter(|p| !matches!(*p, "anthropic" | "openai")) {
         return refuse(
@@ -514,6 +559,41 @@ pub fn init_with(
             }
         }
     }
+    // Reports a check writes under .speccoder/ are output, not source: kept
+    // out of git — added to .gitignore only when that file is new or has no
+    // other uncommitted change (so committing it commits nothing else).
+    if checks
+        .iter()
+        .any(|c| c.argv.iter().any(|a| a.contains(".speccoder/")))
+    {
+        let ignore = root.join(".gitignore");
+        let existing = std::fs::read_to_string(&ignore).unwrap_or_default();
+        let listed = existing.lines().any(|l| {
+            matches!(
+                l.trim(),
+                ".speccoder" | ".speccoder/" | "/.speccoder/" | "/.speccoder"
+            )
+        });
+        let clean = !ignore.exists()
+            || Git::at(&root)
+                .line(&["status", "--porcelain", "--", ".gitignore"])
+                .is_ok_and(|l| l.trim().is_empty());
+        if !listed && clean {
+            let sep = if existing.is_empty() || existing.ends_with('\n') {
+                ""
+            } else {
+                "\n"
+            };
+            if std::fs::write(
+                &ignore,
+                format!("{existing}{sep}# speccoder's check reports\n.speccoder/\n"),
+            )
+            .is_ok()
+            {
+                wrote.push(".gitignore".to_owned());
+            }
+        }
+    }
     let message = if checks.is_empty() {
         format!("wrote {FILE} without checks — add one before `speccoder run`")
     } else {
@@ -569,6 +649,27 @@ pub fn verify_written(root: &Path) -> Vec<speccoder_core::InitRun> {
                 .and_then(|v| v.as_str().map(str::to_owned))
                 .unwrap_or_default(),
             duration_ms: c.duration_ms,
+            reason: (!matches!(c.status, CheckStatus::Passed | CheckStatus::Skipped))
+                .then(|| {
+                    let said = |t: &str| {
+                        t.lines()
+                            .rev()
+                            .map(str::trim)
+                            .find(|l| !l.is_empty())
+                            .map(str::to_owned)
+                    };
+                    said(&c.stderr_tail)
+                        .or_else(|| said(&c.stdout_tail))
+                        .or_else(|| c.note.clone())
+                        .unwrap_or_else(|| {
+                            format!(
+                                "exit {}",
+                                c.exit_code
+                                    .map_or_else(|| "?".to_owned(), |e| e.to_string())
+                            )
+                        })
+                })
+                .map(|r| r.chars().take(200).collect()),
         })
         .collect()
 }
@@ -604,7 +705,7 @@ pub struct Prepared {
 }
 
 /// The files `init` may commit: nothing else, whatever a caller asks.
-pub const COMMITTABLE: &[&str] = &[FILE, ".config/nextest.toml"];
+pub const COMMITTABLE: &[&str] = &[FILE, ".config/nextest.toml", ".gitignore"];
 
 /// Writes the configuration and (unless `no_verify`) runs its checks on the
 /// untouched code. A refusal comes back as `Err`.
@@ -679,10 +780,25 @@ pub fn commit_written(root: &Path, paths: &[String]) -> Result<String, String> {
     add.extend(&names);
     let mut commit = vec!["commit", "-q", "-m", "speccoder: config", "--"];
     commit.extend(&names);
-    g.run(&add)
-        .and_then(|_| g.run(&commit))
+    g.run(&add).map_err(|e| e.0)?;
+    // Nothing differs from the last commit: say that, not an empty failure.
+    let mut unchanged = vec!["diff", "--cached", "--quiet", "--"];
+    unchanged.extend(&names);
+    if g.succeeds(&unchanged).unwrap_or(false) {
+        return Err(format!(
+            "nothing to commit: {} is committed as it is",
+            names.join(" and ")
+        ));
+    }
+    g.run(&commit)
         .and_then(|_| g.line(&["rev-parse", "--short", "HEAD"]))
-        .map_err(|e| e.0)
+        .map_err(|e| {
+            if e.0.trim().is_empty() {
+                "git commit failed without saying why".to_owned()
+            } else {
+                e.0
+            }
+        })
 }
 
 /// The result of an `init` the person has decided about: the message, the
@@ -714,6 +830,18 @@ pub fn finish(p: Prepared) -> CommandResult {
         why: why.to_owned(),
     };
     let mut next = Vec::new();
+    // No spec project yet: the format's tool makes one — first, before the
+    // commit and the key matter.
+    let root = PathBuf::from(&report.path)
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_default();
+    let format = crate::format::at(&root);
+    if format.detect(&root).is_none() {
+        let (command, why) = format.messages().make_project;
+        message = format!("{message}; there is no spec project here yet");
+        next.push(step(command.to_owned(), why));
+    }
     if report.committed.is_none() {
         let listed = to_commit.join(" ");
         next.push(step(
@@ -727,10 +855,22 @@ pub fn finish(p: Prepared) -> CommandResult {
             "the model key, from the environment only",
         ));
     }
-    next.push(step(
-        "speccoder run".to_owned(),
-        "work through the ready tasks",
-    ));
+    // Something to run, or something to write first.
+    let features = match crate::current::list(&root, None).data() {
+        Some(CommandData::Features(f)) => f.features.len(),
+        _ => 0,
+    };
+    if features == 0 {
+        next.push(step(
+            "speccoder spec specify \"…\"".to_owned(),
+            "describe the first feature; its spec, plan and tasks follow",
+        ));
+    } else {
+        next.push(step(
+            "speccoder run".to_owned(),
+            "work through the ready tasks",
+        ));
+    }
     CommandResult::new("init", CommandStatus::Ok, &message)
         .with_data(CommandData::Init(Box::new(report)))
         .with_next(next)

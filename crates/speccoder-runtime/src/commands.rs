@@ -210,7 +210,7 @@ pub fn propose(path: &Path, feature: Option<&str>, task: &str) -> CommandResult 
     };
     let (driver, key) = match substrate::model_config::open_driver(&model) {
         Ok((d, k)) => (Ok::<_, String>(d), k.unwrap_or_default()),
-        Err(e) => return CommandResult::new("propose", CommandStatus::ConfigError, &e),
+        Err(e) => return substrate::model_config::refused("propose", &e),
     };
     let provider = match driver {
         Ok(p) => p,
@@ -416,7 +416,7 @@ pub fn eval(
 ) -> CommandResult {
     let suite = match crate::eval::suite_config(dir) {
         Ok(s) => s,
-        Err(e) => return CommandResult::new("eval", CommandStatus::ConfigError, &e),
+        Err(e) => return substrate::model_config::refused("eval", &e),
     };
     let model = match substrate::model_config::parse(&suite) {
         Ok(Some(m)) => m,

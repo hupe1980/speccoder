@@ -35,7 +35,7 @@ pub fn install(path: &Path, force: bool) -> CommandResult {
             return CommandResult::new(
                 "workflow",
                 CommandStatus::NotAProject,
-                "not a Spec Kit project (no .specify/ found); run `specify init` first",
+                "not a Spec Kit project (no .specify/ found); run `specify init --here --integration claude` first",
             );
         }
     };

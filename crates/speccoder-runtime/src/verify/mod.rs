@@ -49,6 +49,10 @@ pub fn verify(
     };
     let mut report = match run_checks(path, tier, runner) {
         Ok(r) => r,
+        // No check at all: add one — `init` would only say the file exists.
+        Err(e) if e.starts_with("no applicable checks") => {
+            return config_error(e).with_code("NO-CHECKS");
+        }
         Err(e) => return config_error(e),
     };
     report.comparison = baseline.as_ref().map(|b| compare(b, &report));
