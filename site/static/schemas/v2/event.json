@@ -382,6 +382,35 @@
       ],
       "type": "object"
     },
+    "AuthReport": {
+      "description": "Result of `speccoder auth` (F-089): who speccoder acts as on a GitHub\nhost, and where its token comes from. The token itself is never shown.",
+      "properties": {
+        "host": {
+          "description": "`github.com` or an Enterprise host.",
+          "type": "string"
+        },
+        "login": {
+          "description": "The account, when signed in.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source": {
+          "description": "`GH_TOKEN`, `GITHUB_TOKEN`, `the keychain`, when signed in.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "host",
+        "login",
+        "source"
+      ],
+      "type": "object"
+    },
     "BenchReport": {
       "description": "Result of `speccoder bench import`.",
       "properties": {
@@ -744,6 +773,10 @@
         {
           "$ref": "#/$defs/ReviewReport",
           "description": "`review`: the feature's requirements and the person's review of each."
+        },
+        {
+          "$ref": "#/$defs/AuthReport",
+          "description": "`auth`: who speccoder is on a GitHub host."
         }
       ],
       "description": "Command-specific payload of a result."
@@ -2850,7 +2883,7 @@
           "type": "array"
         },
         "mine": {
-          "description": "Assigned to the person `gh` is logged in as.",
+          "description": "Assigned to the person speccoder is signed in as.",
           "type": "boolean"
         },
         "number": {
@@ -2888,7 +2921,7 @@
       "type": "object"
     },
     "IssuesReport": {
-      "description": "Result of `speccoder issue`: the repository's open GitHub issues, read\nthrough the person's own `gh`.",
+      "description": "Result of `speccoder issue`: the repository's open GitHub issues, read\nthrough GitHub's API as the person (F-089).",
       "properties": {
         "issues": {
           "description": "Open issues: assigned to the person first, then the most recently\nupdated.",

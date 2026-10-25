@@ -1,17 +1,21 @@
 <script lang="ts" module>
   import type { GitHubState } from "../lib/types";
   import { get, q } from "../lib/api";
-  /** GitHub as `gh` sees it, for the current feature. */
+  /** GitHub as the person's token sees it, for the current feature. */
   export const load = (feature: string | null) => get<GitHubState>(`/api/github${q({ feature: feature ?? undefined })}`);
 </script>
 
 <script lang="ts">
-  // GitHub, through the person's own `gh`: the open issues (each starts a
-  // feature, or shows the one it started) — or why GitHub is not reachable.
+  // GitHub, through its API as the person: the open issues (each starts a
+  // feature, or shows the one it started) — or why GitHub is not reachable,
+  // and Sign In when that is the reason.
   import { app } from "../lib/app.svelte";
   import { latest } from "../lib/api";
   import type { Action } from "../lib/types";
   import Icon from "./Icon.svelte";
+  import SignIn from "./SignIn.svelte";
+
+  let signing = $state(false);
 
   let gh = $state<GitHubState | null>(null);
   let starting = $state<number | null>(null);
@@ -55,14 +59,19 @@
 </script>
 
 <section class="gh">
-  <h2 class="section-title"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 0a8 8 0 0 0-2.5 15.6c.4 0 .5-.2.5-.4v-1.5c-2.2.5-2.7-1-2.7-1-.4-.9-.9-1.2-.9-1.2-.7-.5.1-.5.1-.5.8.1 1.2.8 1.2.8.7 1.3 1.9.9 2.4.7 0-.5.3-.9.5-1.1-1.8-.2-3.6-.9-3.6-4 0-.9.3-1.6.8-2.1-.1-.2-.4-1 .1-2.1 0 0 .7-.2 2.2.8a7.5 7.5 0 0 1 4 0c1.5-1 2.2-.8 2.2-.8.4 1.1.2 1.9.1 2.1.5.6.8 1.3.8 2.1 0 3.1-1.9 3.7-3.6 3.9.3.3.6.8.6 1.5v2.2c0 .2.1.5.6.4A8 8 0 0 0 8 0z" /></svg> GitHub {#if gh?.status.repo}<a class="repo" href={gh.status.url} target="_blank" rel="noopener noreferrer">{gh.status.repo}</a>{/if}</h2>
+  <h2 class="section-title"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 0a8 8 0 0 0-2.5 15.6c.4 0 .5-.2.5-.4v-1.5c-2.2.5-2.7-1-2.7-1-.4-.9-.9-1.2-.9-1.2-.7-.5.1-.5.1-.5.8.1 1.2.8 1.2.8.7 1.3 1.9.9 2.4.7 0-.5.3-.9.5-1.1-1.8-.2-3.6-.9-3.6-4 0-.9.3-1.6.8-2.1-.1-.2-.4-1 .1-2.1 0 0 .7-.2 2.2.8a7.5 7.5 0 0 1 4 0c1.5-1 2.2-.8 2.2-.8.4 1.1.2 1.9.1 2.1.5.6.8 1.3.8 2.1 0 3.1-1.9 3.7-3.6 3.9.3.3.6.8.6 1.5v2.2c0 .2.1.5.6.4A8 8 0 0 0 8 0z" /></svg> GitHub {#if gh?.status.repo}<a class="repo" href={gh.status.url} target="_blank" rel="noopener noreferrer">{gh.status.repo}</a>{/if}{#if gh?.status.login}<span class="as">as {gh.status.login}</span>{/if}</h2>
   {#if !gh}
     <div class="grouped empty"><span class="spinner"></span></div>
   {:else if !gh.status.ready}
     <div class="grouped off">
-      <span class="w"><strong>{gh.status.installed ? "Not connected" : "GitHub CLI not installed"}</strong><span class="d">{gh.status.reason}</span></span>
-      <button class="fix mono" onclick={() => copy(gh?.status.installed ? "gh auth login" : "https://cli.github.com")}>{gh.status.installed ? "gh auth login" : "cli.github.com"}</button>
+      <span class="w"><strong>{gh.status.host ? (gh.status.fix?.startsWith("speccoder auth") ? `Not signed in to ${gh.status.host}` : `${gh.status.host} is not reachable`) : "No GitHub remote"}</strong><span class="d">{gh.status.reason}</span></span>
+      {#if gh.status.fix?.startsWith("speccoder auth") && gh.status.host}
+        <button class="btn small primary" onclick={() => (signing = true)}><Icon name="key" size={11} weight={2.2} /> Sign In</button>
+      {:else if gh.status.fix}
+        <button class="fix mono" onclick={() => copy(gh?.status.fix ?? "")}>{gh.status.fix}</button>
+      {/if}
     </div>
+    {#if signing && gh.status.host}<SignIn host={gh.status.host} onclose={() => (signing = false)} />{/if}
   {:else if gh.issues_error}
     <div class="grouped off"><span class="w"><strong>Issues could not be read</strong><span class="d">{gh.issues_error}</span></span></div>
   {:else if !gh.issues?.issues.length}
@@ -97,6 +106,7 @@
   .gh { display: grid; gap: 0.4rem; }
   .section-title { display: flex; align-items: center; gap: 0.4rem; }
   .repo { color: var(--accent-ink); text-decoration: none; font-weight: 500; }
+  .as { color: var(--muted); font-weight: 500; font-size: 0.85em; }
   ul { list-style: none; margin: 0; padding: 0; }
   li, .off { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 0.8rem; align-items: center; padding: 0.65rem 0.95rem; }
   .off { grid-template-columns: minmax(0, 1fr) auto; }

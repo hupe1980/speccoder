@@ -105,10 +105,17 @@ the bar gives way to icons as the window narrows.
 
 - `speccoder issue` lists the repository's open issues; `speccoder issue
   start 42` specifies a feature from one (the issue's title, text and
-  address become the description, so the spec keeps the link). Through your
-  own `gh`: no token of speccoder's. `GH-MISSING`, `GH-AUTH`, `GH-FAILED`.
+  address become the description, so the spec keeps the link).
+- Built in: GitHub's REST and GraphQL APIs over TLS, as you — nothing else
+  to install, github.com and Enterprise hosts alike (the remote's).
+  `speccoder auth login --with-token` keeps the token in the system keychain
+  (never a file); `GH_TOKEN`/`GITHUB_TOKEN` in CI; the device flow with an
+  OAuth App's client ID; `auth status`, `auth logout`; Sign In in the app.
+  `doctor` shows whether a token is there. `GITHUB-AUTH`, `GITHUB-FAILED`.
 - `pr` closes every issue the spec names, and updates an open pull request
-  instead of opening a second one.
+  — its title and description brought up to date with the evidence —
+  instead of opening a second one; nothing is pushed unless the pull
+  request can be opened (a GitHub repository, someone signed in).
 - In the web interface: issues with **Start Feature** in the overview; the
   pull request (draft, review, checks) in the report; **Open Draft PR** and
   **Update** after a confirmation that shows what leaves the machine.

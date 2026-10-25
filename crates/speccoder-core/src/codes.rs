@@ -204,30 +204,24 @@ pub const CATALOG: &[Entry] = &[
         ]
     ),
     entry!(
-        "GH-MISSING",
+        "GITHUB-AUTH",
         E,
         S::Error,
-        "the GitHub CLI (`gh`) is not installed",
-        "speccoder reads issues and opens pull requests through your own `gh`, with its login; it stores no token of its own.",
+        "not signed in to GitHub",
+        "speccoder reads issues and opens pull requests through GitHub's API as you: with GH_TOKEN (or GITHUB_TOKEN) from the environment, else the token `speccoder auth login` keeps in your system keychain. None was found, or GitHub refused it (expired or revoked).",
         [
-            "→ install the GitHub CLI: https://cli.github.com (brew install gh, apt install gh, winget install GitHub.cli)"
+            "speccoder auth login --with-token",
+            "speccoder auth status",
+            "→ or set GH_TOKEN (a fine-grained token: Issues read; Pull requests read and write; Contents and Metadata read)"
         ]
     ),
     entry!(
-        "GH-AUTH",
+        "GITHUB-FAILED",
         E,
         S::Error,
-        "the GitHub CLI is not logged in",
-        "`gh` holds your GitHub login; speccoder uses it as it is and asks for nothing.",
-        ["gh auth login"]
-    ),
-    entry!(
-        "GH-FAILED",
-        E,
-        S::Error,
-        "the GitHub CLI could not do it",
-        "The message is `gh`'s own: no GitHub remote, no such issue, no access, or GitHub did not answer.",
-        ["gh repo view"]
+        "the GitHub API could not do it",
+        "GitHub answered, and not as asked: no such issue, no access for the token, a rate limit used up, or GitHub did not answer in time. The message is GitHub's, in words.",
+        ["speccoder auth status", "git remote -v"]
     ),
     entry!(
         "CONFIG-EXISTS",

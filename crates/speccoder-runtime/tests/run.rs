@@ -3,6 +3,8 @@
 // Test code: panicking on unexpected input is the failure report.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
+mod fake_github;
+
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -2575,41 +2577,41 @@ fn pr_is_a_dry_run_until_confirmed_then_a_draft_with_the_evidence() {
     assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
     let remote = tempfile::tempdir().unwrap();
     git(remote.path(), &["init", "-q", "--bare"]);
+    // The remote names o/r on GitHub; pushes land in the bare repository.
+    git(
+        r.path(),
+        &["remote", "add", "origin", "https://github.com/o/r.git"],
+    );
     git(
         r.path(),
         &[
             "remote",
-            "add",
+            "set-url",
+            "--push",
             "origin",
             &remote.path().display().to_string(),
         ],
     );
-    // A stand-in for `gh` that records its arguments.
-    let bin = tempfile::tempdir().unwrap();
-    let gh = bin.path().join("gh");
-    fs::write(
-        &gh,
-        format!(
-            "#!/bin/sh\necho \"$@\" > '{}/args'\necho https://example.invalid/pr/1\n",
-            bin.path().display()
+    // GitHub's API, stood in: no pull request yet; a new draft is #1.
+    let api = fake_github::serve(vec![
+        (
+            "POST /graphql",
+            200,
+            r#"{"data":{"repository":{"pullRequests":{"nodes":[]}}}}"#.to_owned(),
         ),
-    )
-    .unwrap();
-    assert!(
-        Command::new("chmod")
-            .arg("+x")
-            .arg(&gh)
-            .status()
-            .unwrap()
-            .success()
-    );
-    let gh = gh.display().to_string();
+        (
+            "POST /repos/o/r/pulls",
+            201,
+            r#"{"number":1,"html_url":"https://github.com/o/r/pull/1"}"#.to_owned(),
+        ),
+    ]);
+    let ctx = speccoder_runtime::github::Ctx::fixed(&api.url, Some("t"));
     let mut o = PrOptions {
         remote: "origin",
         base: Some("main"),
-        gh: &gh,
         open: false,
         force: false,
+        github: &ctx,
     };
 
     let dry = pr(r.path(), None, &o);
@@ -2652,7 +2654,7 @@ fn pr_is_a_dry_run_until_confirmed_then_a_draft_with_the_evidence() {
     let Some(CommandData::Pr(p)) = opened.data() else {
         panic!()
     };
-    assert_eq!(p.url.as_deref(), Some("https://example.invalid/pr/1"));
+    assert_eq!(p.url.as_deref(), Some("https://github.com/o/r/pull/1"));
     assert!(git_out(remote.path(), &["branch", "--list"]).contains("speccoder/001-graph"));
     assert!(
         !git_out(remote.path(), &["notes", "--ref=speccoder", "list"])
@@ -2660,10 +2662,24 @@ fn pr_is_a_dry_run_until_confirmed_then_a_draft_with_the_evidence() {
             .is_empty(),
         "the attestation notes were not pushed"
     );
-    let args = fs::read_to_string(bin.path().join("args")).unwrap();
+    let calls = api.calls();
+    assert_eq!(
+        calls,
+        ["POST /graphql", "POST /repos/o/r/pulls"],
+        "{calls:?}"
+    );
+    let sent = api.requests.lock().unwrap()[1].body.clone();
+    let sent: serde_json::Value = serde_json::from_str(&sent).unwrap();
+    assert_eq!(sent["draft"], true);
+    assert_eq!(
+        (sent["base"].as_str(), sent["head"].as_str()),
+        (Some("main"), Some("speccoder/001-graph"))
+    );
     assert!(
-        args.starts_with("pr create --draft --base main --head speccoder/001-graph"),
-        "{args}"
+        sent["body"]
+            .as_str()
+            .unwrap()
+            .contains("speccoder never merges")
     );
 }
 
@@ -2686,41 +2702,37 @@ fn pr_closes_the_spec_s_issues_and_updates_an_open_pull_request() {
     assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
     let remote = tempfile::tempdir().unwrap();
     git(remote.path(), &["init", "-q", "--bare"]);
+    // The remote names o/r on GitHub; pushes land in the bare repository.
+    git(
+        r.path(),
+        &["remote", "add", "origin", "https://github.com/o/r.git"],
+    );
     git(
         r.path(),
         &[
             "remote",
-            "add",
+            "set-url",
+            "--push",
             "origin",
             &remote.path().display().to_string(),
         ],
     );
-    // A `gh` with an open pull request for the branch; every call logged.
-    let bin = tempfile::tempdir().unwrap();
-    let gh = bin.path().join("gh");
-    fs::write(
-        &gh,
-        format!(
-            "#!/bin/sh\necho \"$@\" >> '{}/calls'\ncase \"$1 $2\" in\n  \"pr view\") echo '{{\"number\":7,\"title\":\"t\",\"url\":\"https://github.com/o/r/pull/7\",\"state\":\"OPEN\",\"isDraft\":true,\"reviewDecision\":\"\",\"statusCheckRollup\":[]}}';;\n  *) echo https://example.invalid/pr/new;;\nesac\n",
-            bin.path().display()
+    // GitHub's API, stood in: the branch has open pull request #7.
+    let api = fake_github::serve(vec![
+        (
+            "POST /graphql",
+            200,
+            r#"{"data":{"repository":{"pullRequests":{"nodes":[{"number":7,"title":"t","url":"https://github.com/o/r/pull/7","state":"OPEN","isDraft":true,"reviewDecision":null,"commits":{"nodes":[]}}]}}}}"#.to_owned(),
         ),
-    )
-    .unwrap();
-    assert!(
-        Command::new("chmod")
-            .arg("+x")
-            .arg(&gh)
-            .status()
-            .unwrap()
-            .success()
-    );
-    let gh = gh.display().to_string();
+        ("PATCH /repos/o/r/pulls/7", 200, r#"{"number":7}"#.to_owned()),
+    ]);
+    let ctx = speccoder_runtime::github::Ctx::fixed(&api.url, Some("t"));
     let mut o = PrOptions {
         remote: "origin",
         base: Some("main"),
-        gh: &gh,
         open: false,
         force: false,
+        github: &ctx,
     };
 
     let dry = pr(r.path(), None, &o);
@@ -2741,10 +2753,26 @@ fn pr_closes_the_spec_s_issues_and_updates_an_open_pull_request() {
         "{}",
         updated.message()
     );
-    let calls = fs::read_to_string(bin.path().join("calls")).unwrap();
+    let calls = api.calls();
     assert!(
-        !calls.contains("pr create"),
-        "a second pull request was opened: {calls}"
+        !calls.iter().any(|c| c == "POST /repos/o/r/pulls"),
+        "a second pull request was opened: {calls:?}"
+    );
+    // The open one's description is brought up to date with the evidence.
+    let patch = api
+        .requests
+        .lock()
+        .unwrap()
+        .iter()
+        .find(|r| r.method == "PATCH")
+        .cloned()
+        .unwrap();
+    assert!(
+        patch
+            .body
+            .contains("Closes https://github.com/o/r/issues/42"),
+        "{}",
+        patch.body
     );
     assert!(
         git_out(remote.path(), &["branch", "--list"]).contains("speccoder/001-graph"),

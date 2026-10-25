@@ -516,6 +516,7 @@ fn main() {
         } => ui(path, *port, *no_open, *window, cli.json),
         Command::Config { action } => config(path, action.as_ref()),
         Command::Inbox => speccoder_runtime::inbox::inbox(path, feature),
+        Command::Auth { action } => auth(path, action.as_ref()),
         Command::Review { action } => {
             use cli::ReviewAction as R;
             use speccoder_runtime::review;
@@ -532,12 +533,16 @@ fn main() {
         }
         Command::Issue {
             action: None | Some(cli::IssueAction::List),
-        } => speccoder_runtime::github::list(&speccoder_runtime::github::gh(), path),
+        } => speccoder_runtime::github::list(&speccoder_runtime::github::Ctx::from_env(), path),
         Command::Issue {
             action: Some(cli::IssueAction::Start { issue, no_prompt }),
         } => {
-            match speccoder_runtime::github::issue(&speccoder_runtime::github::gh(), path, issue) {
-                Err(e) => speccoder_runtime::github::refused(&e),
+            match speccoder_runtime::github::issue(
+                &speccoder_runtime::github::Ctx::from_env(),
+                path,
+                issue,
+            ) {
+                Err(e) => speccoder_runtime::github::refused("issue", &e),
                 Ok(found) => {
                     // The format's creating skill (Spec Kit's specify), as `spec` runs it.
                     let planning = speccoder_runtime::format::at(path).planning();
@@ -677,16 +682,16 @@ fn main() {
             dry_run,
             force,
         } => {
-            let gh = speccoder_runtime::github::gh();
+            let github = speccoder_runtime::github::Ctx::from_env();
             let ask = |o: &speccoder_runtime::handoff::PrOptions<'_>| {
                 speccoder_runtime::handoff::pr(path, feature, o)
             };
             let mut options = speccoder_runtime::handoff::PrOptions {
                 remote,
                 base: base.as_deref(),
-                gh: &gh,
                 open: *yes,
                 force: *force,
+                github: &github,
             };
             // Talking to a remote is a person's decision: show the
             // dry run, then ask, unless --yes; never without a terminal.
@@ -1023,6 +1028,7 @@ fn command_name(command: Option<&Command>) -> &'static str {
             C::Config { .. } => "config",
             C::Issue { .. } => "issue",
             C::Inbox => "inbox",
+            C::Auth { .. } => "auth",
             C::Review { .. } => "review",
             C::Run { .. } => "run",
             C::Task { action } => match action {
@@ -1245,4 +1251,73 @@ fn resolve_looks(
         },
         reader_source,
     )
+}
+
+/// `speccoder auth`: sign in to GitHub (a token from stdin, or the device
+/// flow when an OAuth App is configured), see who speccoder is, sign out.
+fn auth(path: &std::path::Path, action: Option<&cli::AuthAction>) -> speccoder_core::CommandResult {
+    use speccoder_runtime::github;
+    let ctx = github::Ctx::from_env();
+    let host_of = |h: Option<&String>| {
+        h.cloned().unwrap_or_else(|| {
+            github::repo(path, None).map_or_else(|_| "github.com".to_owned(), |r| r.host)
+        })
+    };
+    match action {
+        None | Some(cli::AuthAction::Status { .. }) => {
+            let host = match action {
+                Some(cli::AuthAction::Status { host }) => host.as_deref(),
+                _ => None,
+            };
+            github::auth_status(&ctx, path, host)
+        }
+        Some(cli::AuthAction::Logout { host }) => github::logout(&host_of(host.as_ref())),
+        Some(cli::AuthAction::Login { host, with_token }) => {
+            let host = host_of(host.as_ref());
+            if *with_token {
+                let mut token = String::new();
+                if let Err(e) = std::io::Read::read_to_string(&mut std::io::stdin(), &mut token) {
+                    return speccoder_core::CommandResult::new(
+                        "auth",
+                        speccoder_core::CommandStatus::UsageError,
+                        &format!("stdin: {e}"),
+                    );
+                }
+                return github::login_with_token(&ctx, &host, &token);
+            }
+            let Some(client) = github::auth::client_id() else {
+                return speccoder_core::CommandResult::new(
+                    "auth",
+                    speccoder_core::CommandStatus::UsageError,
+                    &format!(
+                        "sign in with a token: create one at https://{host}/settings/personal-access-tokens/new (Issues: read; Pull requests: read and write; Contents and Metadata: read), then `speccoder auth login --with-token < token.txt` — or pipe an existing one: `gh auth token | speccoder auth login --with-token`. In CI, set GH_TOKEN."
+                    ),
+                )
+                .with_code("GITHUB-AUTH");
+            };
+            let oauth = github::http::oauth(&host);
+            let pending = match github::auth::start(&oauth, &client) {
+                Ok(p) => p,
+                Err(e) => return github::refused("auth", &e),
+            };
+            eprintln!(
+                "Open {} and enter the code {} — waiting…",
+                pending.verification_uri, pending.user_code
+            );
+            let opener = if cfg!(target_os = "macos") {
+                "open"
+            } else {
+                "xdg-open"
+            };
+            let _ = std::process::Command::new(opener)
+                .arg(&pending.verification_uri)
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .spawn();
+            match github::auth::wait(&oauth, &client, &pending) {
+                Ok(token) => github::login_with_token(&ctx, &host, token.expose()),
+                Err(e) => github::refused("auth", &e),
+            }
+        }
+    }
 }

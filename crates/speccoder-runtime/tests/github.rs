@@ -1,42 +1,22 @@
-//! GitHub through a scripted `gh` (F-083): readiness and its reasons, issues
-//! (assigned first, then the freshest), one issue read in full, a pull
-//! request's state and checks.
+//! GitHub, built in (F-089), against a stand-in API: readiness and its
+//! reasons, issues (assigned first, then the freshest), one issue read in
+//! full, a pull request's state and checks — no `gh` anywhere.
 
 // Test code: panicking on unexpected input is the failure report.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use std::fs;
-use std::path::{Path, PathBuf};
+mod fake_github;
+
 use std::process::Command;
 
-use speccoder_runtime::github;
+use speccoder_runtime::github::{self, Ctx, Repo};
 
-/// A `gh` that answers from a table of argument lines; anything else fails.
-fn fake(dir: &Path, cases: &[(&str, &str)], otherwise: &str) -> PathBuf {
-    let mut script = String::from("#!/bin/sh\ncase \"$*\" in\n");
-    for (args, out) in cases {
-        script.push_str(&format!("  \"{args}\") cat <<'JSON'\n{out}\nJSON\n  ;;\n"));
-    }
-    script.push_str(&format!("  *) echo \"{otherwise}\" >&2; exit 1;;\nesac\n"));
-    let gh = dir.join("gh");
-    fs::write(&gh, script).unwrap();
-    assert!(
-        Command::new("chmod")
-            .arg("+x")
-            .arg(&gh)
-            .status()
-            .unwrap()
-            .success()
-    );
-    gh
-}
-
-/// A git repository with a GitHub remote (never contacted: `gh` is fake).
+/// A git repository whose remote names o/r on github.com.
 fn repo() -> tempfile::TempDir {
     let dir = tempfile::tempdir().unwrap();
     for args in [
         &["init", "-q"][..],
-        &["remote", "add", "origin", "https://github.com/o/r.git"][..],
+        &["remote", "add", "origin", "git@github.com:o/r.git"][..],
     ] {
         assert!(
             Command::new("git")
@@ -50,60 +30,59 @@ fn repo() -> tempfile::TempDir {
     dir
 }
 
-const ISSUES: &str = r#"[
- {"number":7,"title":"Old","url":"https://github.com/o/r/issues/7","labels":[],"assignees":[],"updatedAt":"2026-10-01T00:00:00Z"},
- {"number":42,"title":"Greet people","url":"https://github.com/o/r/issues/42","labels":[{"name":"feature"}],"assignees":[{"login":"me"}],"updatedAt":"2026-09-01T00:00:00Z"},
- {"number":9,"title":"Fresh","url":"https://github.com/o/r/issues/9","labels":[],"assignees":[{"login":"other"}],"updatedAt":"2026-10-20T00:00:00Z"}
-]"#;
+fn issues() -> String {
+    r#"[
+ {"number":7,"title":"Old","html_url":"https://github.com/o/r/issues/7","labels":[],"assignees":[],"updated_at":"2026-10-01T00:00:00Z"},
+ {"number":42,"title":"Greet people","html_url":"https://github.com/o/r/issues/42","labels":[{"name":"feature"}],"assignees":[{"login":"me"}],"updated_at":"2026-09-01T00:00:00Z"},
+ {"number":5,"title":"A pull request","html_url":"https://github.com/o/r/pull/5","labels":[],"assignees":[],"updated_at":"2026-10-21T00:00:00Z","pull_request":{}},
+ {"number":9,"title":"Fresh","html_url":"https://github.com/o/r/issues/9","labels":[],"assignees":[{"login":"other"}],"updated_at":"2026-10-20T00:00:00Z"}
+]"#
+    .to_owned()
+}
 
 #[test]
 fn issues_come_assigned_first_then_freshest_and_one_reads_in_full() {
     let dir = repo();
-    let gh = fake(
-        dir.path(),
-        &[
-            ("--version", "gh version 2.80.0"),
-            (
-                "repo view --json nameWithOwner,url",
-                r#"{"nameWithOwner":"o/r","url":"https://github.com/o/r"}"#,
-            ),
-            (
-                "repo view --json nameWithOwner",
-                r#"{"nameWithOwner":"o/r"}"#,
-            ),
-            ("api user --jq .login", "me"),
-            (
-                "issue list --state open --limit 100 --json number,title,url,labels,assignees,updatedAt",
-                ISSUES,
-            ),
-            (
-                "issue view 42 --json number,title,body,url,labels",
-                r#"{"number":42,"title":"Greet people","body":"By name, politely.","url":"https://github.com/o/r/issues/42","labels":[{"name":"feature"}]}"#,
-            ),
-        ],
-        "unexpected",
-    );
-    let gh = gh.display().to_string();
-    let s = github::status(&gh, dir.path());
+    let api = fake_github::serve(vec![
+        ("GET /user", 200, r#"{"login":"me"}"#.to_owned()),
+        ("GET /repos/o/r", 200, r#"{"full_name":"o/r"}"#.to_owned()),
+        ("GET /repos/o/r/issues", 200, issues()),
+        (
+            "GET /repos/o/r/issues/42",
+            200,
+            r#"{"number":42,"title":"Greet people","body":"By name, politely.","html_url":"https://github.com/o/r/issues/42","labels":[{"name":"feature"}]}"#.to_owned(),
+        ),
+    ]);
+    let ctx = Ctx::fixed(&api.url, Some("t0ken"));
+    let s = github::status(&ctx, dir.path());
     assert!(s.ready && s.repo.as_deref() == Some("o/r"), "{s:?}");
+    assert_eq!(s.login.as_deref(), Some("me"));
+    // The token goes as a bearer, to its own host only.
+    assert!(
+        api.requests
+            .lock()
+            .unwrap()
+            .iter()
+            .all(|r| r.authorization == "Bearer t0ken")
+    );
 
     let started = std::collections::BTreeMap::from([(
         "https://github.com/o/r/issues/9".to_owned(),
         "003-fresh".to_owned(),
     )]);
-    let r = github::issues(&gh, dir.path(), &started).unwrap();
+    let r = github::issues(&ctx, dir.path(), &started).unwrap();
     let order: Vec<u64> = r.issues.iter().map(|i| i.number).collect();
     assert_eq!(
         order,
         [42, 9, 7],
-        "assigned first, then the most recently updated"
+        "assigned first, then the freshest; pull requests aside"
     );
     assert!(r.issues[0].mine && r.issues[0].labels == ["feature"]);
     assert_eq!(r.issues[1].feature.as_deref(), Some("003-fresh"));
     assert_eq!(r.repo.as_deref(), Some("o/r"));
 
-    for reference in ["42", "#42"] {
-        let i = github::issue(&gh, dir.path(), reference).unwrap();
+    for reference in ["42", "#42", "https://github.com/o/r/issues/42"] {
+        let i = github::issue(&ctx, dir.path(), reference).unwrap();
         let d = github::description(&i);
         assert!(d.starts_with("Greet people\n\nBy name, politely."), "{d}");
         assert!(
@@ -111,7 +90,8 @@ fn issues_come_assigned_first_then_freshest_and_one_reads_in_full() {
             "{d}"
         );
     }
-    // Not a reference: refused before `gh` runs.
+    // Not a reference: refused before GitHub is asked.
+    let asked = api.calls().len();
     for bad in [
         "",
         "abc",
@@ -119,36 +99,48 @@ fn issues_come_assigned_first_then_freshest_and_one_reads_in_full() {
         "42; rm -rf /",
         "https://github.com/o/r/pull/3",
     ] {
-        assert!(github::issue(&gh, dir.path(), bad).is_err(), "{bad}");
+        assert!(github::issue(&ctx, dir.path(), bad).is_err(), "{bad}");
     }
+    assert_eq!(api.calls().len(), asked);
 }
 
 #[test]
-fn a_missing_gh_or_login_is_explained() {
+fn signed_out_or_refused_is_explained_with_the_fix() {
     let dir = repo();
-    let missing = dir.path().join("no-such-gh").display().to_string();
-    let s = github::status(&missing, dir.path());
+    let api = fake_github::serve(vec![(
+        "GET /user",
+        401,
+        r#"{"message":"Bad credentials"}"#.to_owned(),
+    )]);
+    // No token at all: nothing is asked.
+    let s = github::status(&Ctx::fixed(&api.url, None), dir.path());
+    assert!(!s.ready, "{s:?}");
+    assert_eq!(s.reason.as_deref(), Some("not signed in to github.com"));
+    assert_eq!(s.fix.as_deref(), Some("speccoder auth login"));
+    assert!(api.calls().is_empty());
+    let e =
+        github::issues(&Ctx::fixed(&api.url, None), dir.path(), &Default::default()).unwrap_err();
+    let refused = github::refused("issue", &e);
+    assert_eq!(refused.code().map(|c| c.name), Some("GITHUB-AUTH"), "{e}");
+    assert_eq!(refused.fix()[0], "speccoder auth login --with-token");
+    // A token GitHub refuses.
+    let s = github::status(&Ctx::fixed(&api.url, Some("old")), dir.path());
     assert!(
-        !s.installed && s.reason.as_deref().unwrap_or("").contains("not installed"),
+        !s.ready && s.reason.as_deref().unwrap().contains("refused the token"),
         "{s:?}"
     );
-
-    let gh = fake(
-        dir.path(),
-        &[("--version", "gh version 2.80.0")],
-        "To get started with GitHub CLI, please run:  gh auth login",
+    // Signing in with it is refused, and nothing is kept.
+    let r = github::login_with_token(&Ctx::fixed(&api.url, None), "github.com", "old");
+    assert_eq!(
+        r.code().map(|c| c.name),
+        Some("GITHUB-AUTH"),
+        "{}",
+        r.message()
     );
-    let s = github::status(&gh.display().to_string(), dir.path());
-    assert!(s.installed && !s.ready, "{s:?}");
-    assert_eq!(s.reason.as_deref(), Some("not logged in: `gh auth login`"));
-    let refused = github::refused(s.reason.as_deref().unwrap());
-    assert_eq!(refused.code().map(|c| c.name), Some("GH-AUTH"));
-    assert_eq!(refused.fix(), ["gh auth login"]);
 }
 
 #[test]
 fn a_missing_remote_is_said_before_any_login() {
-    // No remote: said first — not "log in", then "no remote".
     let bare = tempfile::tempdir().unwrap();
     assert!(
         Command::new("git")
@@ -158,50 +150,129 @@ fn a_missing_remote_is_said_before_any_login() {
             .unwrap()
             .success()
     );
-    let gh = fake(
-        bare.path(),
-        &[("--version", "gh version 2.80.0")],
-        "To get started with GitHub CLI, please run:  gh auth login",
-    );
-    let gh = gh.display().to_string();
-    let s = github::status(&gh, bare.path());
-    assert!(s.installed && !s.ready, "{s:?}");
+    let api = fake_github::serve(vec![]);
+    let ctx = Ctx::fixed(&api.url, None);
+    let s = github::status(&ctx, bare.path());
     let reason = s.reason.unwrap();
     assert!(reason.contains("has no remote"), "{reason}");
     assert_eq!(
-        github::refused(&reason).code().map(|c| c.name),
+        github::refused("issue", &reason).code().map(|c| c.name),
         Some("NO-REMOTE")
     );
     assert!(
-        github::issues(&gh, bare.path(), &Default::default())
+        github::issues(&ctx, bare.path(), &Default::default())
             .unwrap_err()
             .contains("has no remote")
+    );
+    assert!(api.calls().is_empty());
+}
+
+#[test]
+fn a_branch_s_pull_request_reads_with_its_review_and_checks() {
+    let dir = repo();
+    let api = fake_github::serve(vec![(
+        "POST /graphql",
+        200,
+        r#"{"data":{"repository":{"pullRequests":{"nodes":[{"number":12,"title":"001-x","url":"https://github.com/o/r/pull/12","state":"OPEN","isDraft":true,"reviewDecision":"CHANGES_REQUESTED","commits":{"nodes":[{"commit":{"statusCheckRollup":{"contexts":{"nodes":[{"__typename":"CheckRun","status":"COMPLETED","conclusion":"SUCCESS"},{"__typename":"CheckRun","status":"COMPLETED","conclusion":"FAILURE"},{"__typename":"CheckRun","status":"IN_PROGRESS","conclusion":null},{"__typename":"StatusContext","state":"SUCCESS"}]}}}}]}}]}}}}"#.to_owned(),
+    )]);
+    let ctx = Ctx::fixed(&api.url, Some("t"));
+    let p = github::pr_for(&ctx, dir.path(), "speccoder/001-x")
+        .unwrap()
+        .unwrap();
+    assert_eq!((p.number, p.state.as_str(), p.draft), (12, "OPEN", true));
+    assert_eq!(p.review.as_deref(), Some("CHANGES_REQUESTED"));
+    assert_eq!(p.checks, (2, 1, 1));
+    let sent = api.requests.lock().unwrap()[0].body.clone();
+    assert!(
+        sent.contains("\"head\":\"speccoder/001-x\"") && sent.contains("\"owner\":\"o\""),
+        "{sent}"
     );
 }
 
 #[test]
-fn a_pull_request_reads_its_state_review_and_checks() {
-    let dir = tempfile::tempdir().unwrap();
-    let pr = r#"{"number":5,"title":"speccoder: 001-graph","url":"https://github.com/o/r/pull/5","state":"OPEN","isDraft":true,"reviewDecision":"CHANGES_REQUESTED",
-      "statusCheckRollup":[{"status":"COMPLETED","conclusion":"SUCCESS"},{"status":"COMPLETED","conclusion":"FAILURE"},{"status":"IN_PROGRESS","conclusion":""},{"state":"SUCCESS"},{"state":"PENDING"}]}"#;
-    let gh = fake(
-        dir.path(),
-        &[(
-            "pr view speccoder/001-graph --json number,title,url,state,isDraft,reviewDecision,statusCheckRollup",
-            pr,
-        )],
-        "no pull requests found for branch \"speccoder/002-x\"",
+fn an_enterprise_remote_speaks_to_its_own_host() {
+    let r = Repo::parse("https://ghe.corp.example/team/svc.git").unwrap();
+    assert_eq!(r.host, "ghe.corp.example");
+    let (rest, graphql) = github::http::endpoints(&r.host, None);
+    assert_eq!(rest, "https://ghe.corp.example/api/v3");
+    assert_eq!(graphql, "https://ghe.corp.example/api/graphql");
+    assert_eq!(
+        github::http::endpoints("github.com", None).0,
+        "https://api.github.com"
     );
-    let gh = gh.display().to_string();
-    let p = github::pr_for(&gh, dir.path(), "speccoder/001-graph")
-        .unwrap()
-        .unwrap();
-    assert_eq!((p.number, p.state.as_str(), p.draft), (5, "OPEN", true));
-    assert_eq!(p.review.as_deref(), Some("CHANGES_REQUESTED"));
-    assert_eq!(p.checks, (2, 1, 2), "passed, failed, running");
+}
+
+#[test]
+fn the_device_flow_waits_for_the_code_then_has_the_token() {
+    let pending = fake_github::serve(vec![
+        (
+            "POST /login/device/code",
+            200,
+            r#"{"device_code":"dc","user_code":"ABCD-1234","verification_uri":"https://github.com/login/device","interval":1,"expires_in":30}"#.to_owned(),
+        ),
+        ("POST /login/oauth/access_token", 200, r#"{"access_token":"gho_new","token_type":"bearer"}"#.to_owned()),
+    ]);
+    let p = github::auth::start(&pending.url, "client").unwrap();
+    assert_eq!(
+        (p.user_code.as_str(), p.verification_uri.as_str()),
+        ("ABCD-1234", "https://github.com/login/device")
+    );
+    let token = github::auth::wait(&pending.url, "client", &p).unwrap();
+    assert_eq!(token.expose(), "gho_new");
+    let sent = pending.requests.lock().unwrap()[1].body.clone();
+    assert!(sent.contains("grant_type=urn"), "{sent}");
     assert!(
-        github::pr_for(&gh, dir.path(), "speccoder/002-x")
+        sent.contains("client_id=client") && sent.contains("device_code=dc"),
+        "{sent}"
+    );
+
+    let denied = fake_github::serve(vec![
+        (
+            "POST /login/device/code",
+            200,
+            r#"{"device_code":"dc","user_code":"X","verification_uri":"u","interval":1,"expires_in":30}"#.to_owned(),
+        ),
+        ("POST /login/oauth/access_token", 200, r#"{"error":"access_denied"}"#.to_owned()),
+    ]);
+    let p = github::auth::start(&denied.url, "client").unwrap();
+    assert_eq!(
+        github::auth::wait(&denied.url, "client", &p).unwrap_err(),
+        "the sign-in was denied"
+    );
+}
+
+#[test]
+fn a_pull_request_is_looked_up_where_the_remote_points() {
+    let dir = repo();
+    assert!(
+        Command::new("git")
+            .args([
+                "remote",
+                "add",
+                "upstream",
+                "https://github.com/up/stream.git"
+            ])
+            .current_dir(dir.path())
+            .status()
+            .unwrap()
+            .success()
+    );
+    let up = github::repo(dir.path(), Some("upstream")).unwrap();
+    assert_eq!(up.slug(), "up/stream");
+    let api = fake_github::serve(vec![(
+        "POST /graphql",
+        200,
+        r#"{"data":{"repository":{"pullRequests":{"nodes":[]}}}}"#.to_owned(),
+    )]);
+    let ctx = Ctx::fixed(&api.url, Some("t"));
+    assert!(
+        github::pr_in(&ctx, &up, "speccoder/001-x")
             .unwrap()
             .is_none()
+    );
+    let sent = api.requests.lock().unwrap()[0].body.clone();
+    assert!(
+        sent.contains("\"owner\":\"up\"") && sent.contains("\"name\":\"stream\""),
+        "{sent}"
     );
 }

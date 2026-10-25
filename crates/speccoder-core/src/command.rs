@@ -193,6 +193,20 @@ pub enum CommandData {
     Inbox(Box<InboxReport>),
     /// `review`: the feature's requirements and the person's review of each.
     Review(Box<ReviewReport>),
+    /// `auth`: who speccoder is on a GitHub host.
+    Auth(Box<AuthReport>),
+}
+
+/// Result of `speccoder auth` (F-089): who speccoder acts as on a GitHub
+/// host, and where its token comes from. The token itself is never shown.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct AuthReport {
+    /// `github.com` or an Enterprise host.
+    pub host: String,
+    /// The account, when signed in.
+    pub login: Option<String>,
+    /// `GH_TOKEN`, `GITHUB_TOKEN`, `the keychain`, when signed in.
+    pub source: Option<String>,
 }
 
 /// Result of `speccoder review` (F-087): every requirement of the feature's
@@ -296,7 +310,7 @@ pub struct InboxItem {
 }
 
 /// Result of `speccoder issue`: the repository's open GitHub issues, read
-/// through the person's own `gh`.
+/// through GitHub's API as the person (F-089).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct IssuesReport {
     /// `owner/name`.
@@ -319,7 +333,7 @@ pub struct IssueEntry {
     pub labels: Vec<String>,
     /// Who it is assigned to (logins).
     pub assignees: Vec<String>,
-    /// Assigned to the person `gh` is logged in as.
+    /// Assigned to the person speccoder is signed in as.
     pub mine: bool,
     /// Last update, ISO 8601.
     pub updated: Option<String>,
@@ -539,6 +553,7 @@ impl CommandData {
             Self::Issues(_) => "issues",
             Self::Inbox(_) => "inbox",
             Self::Review(_) => "review",
+            Self::Auth(_) => "auth",
         }
     }
 }
@@ -576,6 +591,7 @@ pub const PAYLOADS: &[&str] = &[
     "issues",
     "inbox",
     "review",
+    "auth",
 ];
 
 /// A repository instructions file given to an attempt.

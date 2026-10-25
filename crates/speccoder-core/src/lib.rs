@@ -20,16 +20,16 @@ pub mod strength;
 pub mod verify;
 
 pub use command::{
-    ApprovalView, ApprovalsReport, ArchiveReport, AttestReport, BenchReport, ChecklistStatus,
-    CodeInfo, CommandData, CommandResult, CommandStatus, ConfigChange, ConfigKey, ConfigReport,
-    ConfigSection, ConfigTable, ControlReport, ConvergeReport, ConvergenceRound, CostReport,
-    DecidedCall, DoctorCheck, DoctorLevel, DoctorReport, Drift, EarlierAttempt, EvalCase,
-    EvalReport, EvalSummary, ExitCode, ExplainReport, FeatureEntry, FeatureReport, FeaturesReport,
-    FullTier, HeldOutGap, HeldOutOracle, InPlaceReport, InboxItem, InboxReport, InitCheck, InitKey,
-    InitReport, InitRun, InstructionFile, IssueEntry, IssuesReport, LastAttempt, MonitorScore,
-    ObjectVerification, OperatorView, PAYLOADS, PendingCall, PrReport, ProposeReport, RefusedPath,
-    ReplayReport, RequirementDrift, ReviewItem, ReviewReport, ReviewTotals, RunReport,
-    SCHEMA_VERSION, SchemaName, SchemaReport, SignerView, SkillEntry, SkillRunReport, SkillsReport,
-    StatusReport, StatusTotals, TaskCost, TaskStatus, TraceRow, UiReport, Usage, VerifyOutcome,
-    VerifyReason, WorktreeReport,
+    ApprovalView, ApprovalsReport, ArchiveReport, AttestReport, AuthReport, BenchReport,
+    ChecklistStatus, CodeInfo, CommandData, CommandResult, CommandStatus, ConfigChange, ConfigKey,
+    ConfigReport, ConfigSection, ConfigTable, ControlReport, ConvergeReport, ConvergenceRound,
+    CostReport, DecidedCall, DoctorCheck, DoctorLevel, DoctorReport, Drift, EarlierAttempt,
+    EvalCase, EvalReport, EvalSummary, ExitCode, ExplainReport, FeatureEntry, FeatureReport,
+    FeaturesReport, FullTier, HeldOutGap, HeldOutOracle, InPlaceReport, InboxItem, InboxReport,
+    InitCheck, InitKey, InitReport, InitRun, InstructionFile, IssueEntry, IssuesReport,
+    LastAttempt, MonitorScore, ObjectVerification, OperatorView, PAYLOADS, PendingCall, PrReport,
+    ProposeReport, RefusedPath, ReplayReport, RequirementDrift, ReviewItem, ReviewReport,
+    ReviewTotals, RunReport, SCHEMA_VERSION, SchemaName, SchemaReport, SignerView, SkillEntry,
+    SkillRunReport, SkillsReport, StatusReport, StatusTotals, TaskCost, TaskStatus, TraceRow,
+    UiReport, Usage, VerifyOutcome, VerifyReason, WorktreeReport,
 };

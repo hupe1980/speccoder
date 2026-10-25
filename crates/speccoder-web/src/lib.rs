@@ -488,25 +488,26 @@ async fn setup_commit(State(s): State<Shared>, Json(b): Json<SetupCommit>) -> Js
     })
 }
 
-/// GitHub as `gh` sees it: whether it is ready, the open issues (each with
-/// the feature that names it), and the feature's pull request.
+/// GitHub as the person's token sees it: whether it is ready, the open
+/// issues (each with the feature that names it), and the feature's pull
+/// request.
 async fn github(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Json<Value> {
     let root = s.root.clone();
     Json(
         off(move || {
             use speccoder_runtime::github;
-            let gh = github::gh();
-            let status = github::status(&gh, &root);
+            let ctx = github::Ctx::from_env();
+            let status = github::status(&ctx, &root);
             if !status.ready {
                 return json!({ "status": status });
             }
-            let issues = github::issues(&gh, &root, &github::started(&root));
+            let issues = github::issues(&ctx, &root, &github::started(&root));
             let branch = match speccoder_runtime::status::report(&root, q.feature.as_deref()).data()
             {
                 Some(speccoder_core::CommandData::Report(r)) => r.branch.clone(),
                 _ => None,
             };
-            let pull = branch.as_deref().map(|b| github::pr_for(&gh, &root, b));
+            let pull = branch.as_deref().map(|b| github::pr_for(&ctx, &root, b));
             json!({
                 "status": status,
                 "issues": issues.as_ref().ok(),
@@ -525,12 +526,34 @@ struct IssueQuery {
     number: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct TokenBody {
+    token: String,
+}
+
+/// Signs in to the repository's GitHub host with a token the person pasted
+/// (kept in the credential store, never echoed or logged).
+async fn github_login(State(s): State<Shared>, Json(b): Json<TokenBody>) -> Json<Value> {
+    let root = s.root.clone();
+    let r = off(move || {
+        let host = speccoder_runtime::github::repo(&root, None)
+            .map_or_else(|_| "github.com".to_owned(), |r| r.host);
+        speccoder_runtime::github::login_with_token(
+            &speccoder_runtime::github::Ctx::from_env(),
+            &host,
+            &b.token,
+        )
+    })
+    .await;
+    envelope(&r)
+}
+
 /// One issue, the description a feature started from it gets, and the
 /// skill that starts it.
 async fn github_issue(State(s): State<Shared>, Query(q): Query<IssueQuery>) -> Json<Value> {
     let root = s.root.clone();
     Json(
-        off(move || match speccoder_runtime::github::issue(&speccoder_runtime::github::gh(), &root, &q.number) {
+        off(move || match speccoder_runtime::github::issue(&speccoder_runtime::github::Ctx::from_env(), &root, &q.number) {
             Ok(issue) => {
                 let planning = speccoder_runtime::format::at(&root).planning();
                 json!({
@@ -549,16 +572,15 @@ async fn github_issue(State(s): State<Shared>, Query(q): Query<IssueQuery>) -> J
 async fn pr_preview(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Json<Value> {
     let root = s.root.clone();
     let r = off(move || {
-        let gh = speccoder_runtime::github::gh();
         speccoder_runtime::handoff::pr(
             &root,
             q.feature.as_deref(),
             &speccoder_runtime::handoff::PrOptions {
                 remote: "origin",
                 base: None,
-                gh: &gh,
                 open: false,
                 force: false,
+                github: &speccoder_runtime::github::Ctx::from_env(),
             },
         )
     })
@@ -657,6 +679,7 @@ pub fn router(s: Shared) -> Router {
         .route("/api/setup", get(setup).post(setup_init))
         .route("/api/github", get(github))
         .route("/api/github/issue", get(github_issue))
+        .route("/api/github/login", post(github_login))
         .route("/api/pr/preview", get(pr_preview))
         .route("/api/setup/commit", post(setup_commit))
         .route("/api/events", get(events))

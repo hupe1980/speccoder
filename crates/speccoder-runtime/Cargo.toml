@@ -24,6 +24,8 @@ regex.workspace = true
 similar.workspace = true
 schemars.workspace = true
 tokio = { workspace = true, features = ["rt"] }
+reqwest = { workspace = true }
+keyring = { workspace = true }
 nix.workspace = true
 quick-xml.workspace = true
 serde.workspace = true

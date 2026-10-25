@@ -39,6 +39,8 @@ unicode-width = "0.2"
 clap_complete = "4.6"
 jsonschema = { version = "0.60", default-features = false }
 tokio = { version = "1", features = ["rt", "process", "time"] }
+reqwest = { version = "0.13", default-features = false, features = ["json", "form", "rustls"] }
+keyring = { version = "3", default-features = false, features = ["apple-native", "windows-native", "sync-secret-service", "vendored"] }
 serde-saphyr = "2.0.0"
 ratatui = { version = "0.30.2", default-features = false, features = ["crossterm"] }
 nix = { version = "0.31", default-features = false, features = ["signal", "process", "sched", "mount", "user", "fs"] }

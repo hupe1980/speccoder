@@ -149,12 +149,17 @@ pub enum Command {
     },
     /// What waits for your decision in every feature, the most urgent first, with the command for each.
     Inbox,
+    /// GitHub: sign in (a token, kept in the keychain), see who speccoder is there, sign out.
+    Auth {
+        #[command(subcommand)]
+        action: Option<AuthAction>,
+    },
     /// Review the spec requirement by requirement: approve each wording, or request changes with a comment.
     Review {
         #[command(subcommand)]
         action: Option<ReviewAction>,
     },
-    /// GitHub issues through your `gh`: list the open ones; `start 42` specifies a feature from one.
+    /// GitHub issues: list the open ones; `start 42` specifies a feature from one.
     Issue {
         #[command(subcommand)]
         action: Option<IssueAction>,
@@ -507,6 +512,32 @@ pub enum BenchAction {
         /// The test command, when the dataset has none (default: detected).
         #[arg(long, value_name = "CMD")]
         test_cmd: Option<String>,
+    },
+}
+
+/// `speccoder auth` actions; without one, `status`.
+#[derive(Debug, Subcommand)]
+pub enum AuthAction {
+    /// Sign in: `--with-token` reads a token from stdin; without it, the device flow (needs an OAuth App).
+    Login {
+        /// The GitHub host (default: the repository's remote's, else github.com).
+        #[arg(long)]
+        host: Option<String>,
+        /// Read the token from stdin.
+        #[arg(long)]
+        with_token: bool,
+    },
+    /// Who speccoder is on the host, and where its token comes from.
+    Status {
+        /// The GitHub host (default: the repository's remote's, else github.com).
+        #[arg(long)]
+        host: Option<String>,
+    },
+    /// Forget the host's token (the keychain's; an environment variable stays yours).
+    Logout {
+        /// The GitHub host (default: the repository's remote's, else github.com).
+        #[arg(long)]
+        host: Option<String>,
     },
 }
 
