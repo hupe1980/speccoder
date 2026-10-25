@@ -240,7 +240,8 @@ impl Default for RunConfig {
 /// `30m`, `12h` or `7d`; never zero.
 fn wait(text: &str) -> Result<std::time::Duration, String> {
     let text = text.trim();
-    let (n, unit) = text.split_at(text.len().saturating_sub(1));
+    // The unit is the last character, which may be more than a byte (`7д`).
+    let (n, unit) = text.split_at(text.char_indices().last().map_or(0, |(i, _)| i));
     let secs = match unit {
         "m" => 60,
         "h" => 3600,

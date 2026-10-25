@@ -616,9 +616,9 @@ pub fn validate(text: &str) -> Result<(), String> {
 /// The directory holding the configuration: the nearest with one, else the
 /// repository's top level, else `root`.
 fn home(root: &Path) -> PathBuf {
-    crate::verify::find_config(root)
-        .or_else(|| Git::at(root).toplevel().ok().flatten())
-        .unwrap_or_else(|| root.to_path_buf())
+    // Where the file is, else where `init` would write it (the spec
+    // project's root, which in a nested project is not the repository's).
+    crate::verify::find_config(root).unwrap_or_else(|| crate::init::root_of(root))
 }
 
 fn lookup<'a>(table: &'a toml::Table, path: &[&str]) -> Option<&'a toml::Value> {
@@ -854,7 +854,8 @@ fn check(dotted: &str, kind: Kind, value: &Value) -> Result<(), String> {
         Kind::Str => value.as_str().is_some_and(|s| !s.is_empty()),
         Kind::Choice(c) => value.as_str().is_some_and(|s| c.contains(&s)),
         Kind::Duration => value.as_str().is_some_and(|s| {
-            let (n, u) = s.split_at(s.len().saturating_sub(1));
+            // The unit is the last character, which may be more than a byte.
+            let (n, u) = s.split_at(s.char_indices().last().map_or(0, |(i, _)| i));
             n.parse::<u64>().is_ok_and(|n| n > 0) && ["m", "h", "d"].contains(&u)
         }),
         Kind::Argv => strings(value) && value.as_array().is_some_and(|a| !a.is_empty()),
@@ -902,43 +903,55 @@ fn toml_value(v: &Value) -> Option<toml_edit::Value> {
     })
 }
 
-/// The table at `path`, made when missing. The containers of named tables
-/// (`[checks]`, `[mcp]`) are implicit: they never get a header of their own.
+/// The table at `path` — a `[table]` or an inline `{ … }` — made when
+/// missing and `create`; `None` when missing and not. The containers of
+/// named tables (`[checks]`, `[mcp]`) are implicit: no header of their own.
 fn table_mut<'a>(
     doc: &'a mut toml_edit::DocumentMut,
     path: &[String],
-) -> Result<&'a mut toml_edit::Table, String> {
-    let mut t = doc.as_table_mut();
+    create: bool,
+) -> Result<Option<&'a mut dyn toml_edit::TableLike>, String> {
+    let mut t: &mut dyn toml_edit::TableLike = doc.as_table_mut();
+    let mut inline = false;
     for (i, p) in path.iter().enumerate() {
-        if !t.contains_key(p) {
-            let mut fresh = toml_edit::Table::new();
-            let container = i == 0 && CATALOGUE.iter().any(|c| c.named && c.name == p);
-            fresh.set_implicit(container || i + 1 < path.len());
-            t.insert(p, toml_edit::Item::Table(fresh));
+        if t.get(p).is_none() {
+            if !create {
+                return Ok(None);
+            }
+            let fresh = if inline {
+                // Inside an inline table, what is made is inline too.
+                toml_edit::Item::Value(toml_edit::Value::InlineTable(toml_edit::InlineTable::new()))
+            } else {
+                let mut table = toml_edit::Table::new();
+                let container = i == 0 && CATALOGUE.iter().any(|c| c.named && c.name == p);
+                table.set_implicit(container || i + 1 < path.len());
+                toml_edit::Item::Table(table)
+            };
+            t.insert(p, fresh);
         }
-        t = t
-            .get_mut(p)
-            .and_then(toml_edit::Item::as_table_mut)
+        let Some(item) = t.get_mut(p) else {
+            return Err(format!("`{}` could not be made", path[..=i].join(".")));
+        };
+        inline = inline || item.is_inline_table();
+        t = item
+            .as_table_like_mut()
             .ok_or_else(|| format!("`{}` is not a table", path[..=i].join(".")))?;
     }
-    Ok(t)
+    Ok(Some(t))
 }
 
-/// Removes empty tables left behind by an unset, innermost first.
+/// Removes empty tables (or inline tables) left behind by an unset,
+/// innermost first.
 fn prune(doc: &mut toml_edit::DocumentMut, path: &[String]) {
     for depth in (1..=path.len()).rev() {
         let (parent, last) = (&path[..depth - 1], &path[depth - 1]);
-        let mut t = doc.as_table_mut();
-        for p in parent {
-            match t.get_mut(p).and_then(toml_edit::Item::as_table_mut) {
-                Some(next) => t = next,
-                None => return,
-            }
-        }
+        let Ok(Some(t)) = table_mut(doc, parent, false) else {
+            return;
+        };
         let empty = t
             .get(last)
-            .and_then(toml_edit::Item::as_table)
-            .is_some_and(toml_edit::Table::is_empty);
+            .and_then(toml_edit::Item::as_table_like)
+            .is_some_and(toml_edit::TableLike::is_empty);
         if empty {
             t.remove(last);
         }
@@ -961,7 +974,8 @@ pub fn edit(text: &str, changes: &[ConfigChange]) -> Result<String, String> {
                 check(&c.key, at.key.kind, v)?;
                 let value = toml_value(v)
                     .ok_or_else(|| format!("`{}`: a value TOML cannot hold", c.key))?;
-                let t = table_mut(&mut doc, &at.tables)?;
+                let t = table_mut(&mut doc, &at.tables, true)?
+                    .ok_or_else(|| format!("`{}` could not be made", c.key))?;
                 match t.get_mut(&at.leaf).and_then(toml_edit::Item::as_value_mut) {
                     // Keep the key's own comment and spacing.
                     Some(old) => {
@@ -993,10 +1007,13 @@ pub fn edit(text: &str, changes: &[ConfigChange]) -> Result<String, String> {
                 check(&c.key, at.key.kind, &all)?;
                 let value = toml_value(&all)
                     .ok_or_else(|| format!("`{}`: a value TOML cannot hold", c.key))?;
-                table_mut(&mut doc, &at.tables)?.insert(&at.leaf, toml_edit::value(value));
+                table_mut(&mut doc, &at.tables, true)?
+                    .ok_or_else(|| format!("`{}` could not be made", c.key))?
+                    .insert(&at.leaf, toml_edit::value(value));
             }
             (None, None) => {
-                if let Ok(t) = table_mut(&mut doc, &at.tables) {
+                // Missing is already unset; anything else in the way is an error.
+                if let Some(t) = table_mut(&mut doc, &at.tables, false)? {
                     t.remove(&at.leaf);
                 }
                 prune(&mut doc, &at.tables);
@@ -1424,6 +1441,48 @@ mod tests {
             out.contains("[checks.lint]") && !out.contains("[checks]\n"),
             "{out}"
         );
+    }
+
+    /// A unit of more than one byte is refused, never a panic (it aborted
+    /// the web host).
+    #[test]
+    fn a_multibyte_unit_is_refused_not_a_panic() {
+        let w = |s: &str| vec![s.to_owned()];
+        for bad in ["7д", "1€", "д", "€"] {
+            assert!(value_of("approvals.wait", &w(bad)).is_err(), "{bad}");
+        }
+        assert!(crate::substrate::run_config::parse("[approvals]\nwait = \"7д\"\n").is_err());
+    }
+
+    /// Inline tables are tables: a key in one is set and unset like any.
+    #[test]
+    fn inline_tables_are_edited_not_skipped() {
+        let text = "[attest]\nsigstore = { identity = \"a@b\", issuer = \"https://x\" }\n\n[checks]\nlint = { argv = [\"cargo\", \"clippy\"] }\n";
+        let unset = |k: &str| ConfigChange {
+            key: k.into(),
+            value: None,
+            append: None,
+        };
+        let set = |k: &str, v: Value| ConfigChange {
+            key: k.into(),
+            value: Some(v),
+            append: None,
+        };
+        let out =
+            edit(text, &[unset("attest.sigstore.identity")]).unwrap_or_else(|e| panic!("{e}"));
+        assert!(!out.contains("a@b") && out.contains("issuer"), "{out}");
+        let out =
+            edit(text, &[set("checks.lint.tier", json!("full"))]).unwrap_or_else(|e| panic!("{e}"));
+        assert!(out.contains("tier = \"full\""), "{out}");
+        let out = edit(
+            text,
+            &[
+                unset("attest.sigstore.identity"),
+                unset("attest.sigstore.issuer"),
+            ],
+        )
+        .unwrap_or_else(|e| panic!("{e}"));
+        assert!(!out.contains("sigstore"), "{out}");
     }
 
     #[test]

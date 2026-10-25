@@ -53,7 +53,9 @@ async fn off<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> T {
     });
     match rx.await {
         Ok(v) => v,
-        Err(_) => std::process::abort(),
+        // The work panicked: that request fails (its connection drops), the
+        // host and a running job go on. Never abort the process for one.
+        Err(_) => std::panic::resume_unwind(Box::new("a request's work stopped unexpectedly")),
     }
 }
 
@@ -290,14 +292,18 @@ async fn diff(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Respons
             .into_response();
     };
     let patch = off(move || {
-        speccoder_runtime::git::Git::at(&root)
-            .run(&[
-                "show",
-                "--no-color",
-                "--patch",
-                "--format=%h %s%n%n%b",
-                &commit,
-            ])
+        let git = speccoder_runtime::git::Git::at(&root);
+        // Only a commit: a blob or a tree id from elsewhere in the
+        // repository is never shown (`^{commit}` peels or fails).
+        let Ok(id) = git.line(&[
+            "rev-parse",
+            "--verify",
+            "-q",
+            &format!("{commit}^{{commit}}"),
+        ]) else {
+            return String::new();
+        };
+        git.run(&["show", "--no-color", "--patch", "--format=%h %s%n%n%b", &id])
             .map(|b| String::from_utf8_lossy(&b).into_owned())
             .unwrap_or_default()
     })
@@ -347,14 +353,12 @@ async fn config_save(State(s): State<Shared>, Json(b): Json<ConfigBody>) -> Json
 /// Commits `speccoder.toml` alone — not while a job runs (an in-place run
 /// commits in the same checkout).
 async fn config_commit(State(s): State<Shared>) -> Json<Value> {
-    if s.hub.job().is_some_and(|j| j.running) {
-        return Json(
-            json!({ "status": "error", "message": "a job is running; commit when it ends" }),
-        );
+    let (root, hub) = (s.root.clone(), Arc::clone(&s.hub));
+    let r = off(move || hub.exclusive(|| speccoder_runtime::settings::commit(&root))).await;
+    match r {
+        Ok(result) => envelope(&result),
+        Err(e) => Json(json!({ "status": "error", "message": e })),
     }
-    let root = s.root.clone();
-    let r = off(move || speccoder_runtime::settings::commit(&root)).await;
-    envelope(&r)
 }
 
 async fn cost(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Json<Value> {
@@ -456,12 +460,17 @@ struct SetupCommit {
 
 /// Commits what `init` wrote — only files `init` commits.
 async fn setup_commit(State(s): State<Shared>, Json(b): Json<SetupCommit>) -> Json<Value> {
-    let root = s.root.clone();
+    let (root, hub) = (s.root.clone(), Arc::clone(&s.hub));
     let r = off(move || {
-        speccoder_runtime::init::commit_written(&speccoder_runtime::init::root_of(&root), &b.paths)
+        hub.exclusive(|| {
+            speccoder_runtime::init::commit_written(
+                &speccoder_runtime::init::root_of(&root),
+                &b.paths,
+            )
+        })
     })
     .await;
-    Json(match r {
+    Json(match r.and_then(|r| r) {
         Ok(id) => json!({ "status": "ok", "message": format!("committed as {id}") }),
         Err(e) => json!({ "status": "error", "message": e }),
     })
@@ -566,6 +575,8 @@ pub fn router(s: Shared) -> Router {
 
 /// The host's events as a shell in the same process reads them.
 pub type Events = tokio::sync::broadcast::Receiver<String>;
+/// Why reading [`Events`] failed: fell behind (`Lagged`) or the host ended.
+pub use tokio::sync::broadcast::error::RecvError;
 
 /// A started host.
 #[derive(Debug)]

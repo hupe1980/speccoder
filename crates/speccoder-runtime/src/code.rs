@@ -57,13 +57,23 @@ pub const PATCH_LIMIT: usize = 2 * 1024 * 1024;
 /// The largest file shown.
 pub const FILE_LIMIT: usize = 512 * 1024;
 
-/// The feature's branch, when it exists.
+/// The feature's branch, when it exists — by the branch convention, after a
+/// snapshot (not the whole report: this runs on every file opened).
 fn branch_of(root: &Path, feature: Option<&str>) -> Option<String> {
-    let report = crate::status::report(root, feature);
-    match report.data() {
-        Some(speccoder_core::CommandData::Report(r)) => r.branch.clone(),
-        _ => None,
-    }
+    let inspected = crate::inspect(root, feature);
+    let Some(speccoder_core::CommandData::Inspect(snapshot)) = inspected.data() else {
+        return None;
+    };
+    let branch = format!("speccoder/{}", snapshot.feature.as_ref()?.feature.name);
+    Git::at(root)
+        .succeeds(&[
+            "rev-parse",
+            "--verify",
+            "-q",
+            &format!("refs/heads/{branch}"),
+        ])
+        .unwrap_or(false)
+        .then_some(branch)
 }
 
 /// What the feature's branch changed since it forked from `HEAD`.
@@ -113,22 +123,11 @@ pub fn changes(root: &Path, feature: Option<&str>) -> Changes {
                 .collect()
         })
         .unwrap_or_default();
+    // `-z`: paths as they are (no quoting), and a rename as its new path —
+    // without it a rename reads `src/{a.rs => b.rs}`.
     let files = g
-        .run(&["diff", "--numstat", "-M", &base, &branch])
-        .map(|b| {
-            String::from_utf8_lossy(&b)
-                .lines()
-                .filter_map(|l| {
-                    let mut it = l.splitn(3, '\t');
-                    let (a, d, p) = (it.next()?, it.next()?, it.next()?);
-                    Some(File {
-                        path: p.to_owned(),
-                        add: a.parse().ok(),
-                        del: d.parse().ok(),
-                    })
-                })
-                .collect()
-        })
+        .run(&["diff", "--numstat", "-z", "-M", &base, &branch])
+        .map(|b| numstat(&b))
         .unwrap_or_default();
     let mut patch = g
         .run(&["diff", "--no-color", "-M", &base, &branch])
@@ -150,6 +149,33 @@ pub fn changes(root: &Path, feature: Option<&str>) -> Changes {
         patch,
         cut,
     }
+}
+
+/// `git diff --numstat -z`: `add\tdel\tpath\0`, or for a rename
+/// `add\tdel\t\0old\0new\0` (the new path is the file's).
+fn numstat(out: &[u8]) -> Vec<File> {
+    let text = String::from_utf8_lossy(out);
+    let mut fields = text.split('\0');
+    let mut files = Vec::new();
+    while let Some(head) = fields.next() {
+        let mut it = head.splitn(3, '\t');
+        let (Some(a), Some(d), Some(p)) = (it.next(), it.next(), it.next()) else {
+            continue;
+        };
+        let path = if p.is_empty() {
+            // A rename: the old path, then the new one.
+            let _old = fields.next();
+            fields.next().unwrap_or_default().to_owned()
+        } else {
+            p.to_owned()
+        };
+        files.push(File {
+            path,
+            add: a.parse().ok(),
+            del: d.parse().ok(),
+        });
+    }
+    files
 }
 
 /// The revision whose files are read: the feature's branch, else `HEAD`.
@@ -217,6 +243,19 @@ mod tests {
             .status()
             .is_ok_and(|s| s.success());
         assert!(ok, "git {args:?}");
+    }
+
+    #[test]
+    fn numstat_reads_renames_and_unusual_paths() {
+        let out = b"3\t1\tsrc/lib.rs\x002\t0\t\x00src/a.rs\x00src/b.rs\x00-\t-\tlogo.png\x001\t0\tdocs/\xc3\xbcber.md\x00";
+        let files = numstat(out);
+        let paths: Vec<&str> = files.iter().map(|f| f.path.as_str()).collect();
+        assert_eq!(
+            paths,
+            ["src/lib.rs", "src/b.rs", "logo.png", "docs/über.md"]
+        );
+        assert_eq!((files[2].add, files[2].del), (None, None));
+        assert_eq!(files[1].add, Some(2));
     }
 
     /// A project below the repository's top level reads its own files, by

@@ -33,7 +33,7 @@ class AppState {
   approvals = $state<PendingCall[]>([]);
   documents = $state<Document[]>([]);
   /** The doctor's warnings and failures: what would stop or spoil a run. */
-  preflight = $state<{ check: string; level: string; detail: string; fix: string[] }[]>([]);
+  preflight = $state<{ check: string; level: string; detail: string; fix: string[]; code?: string | null }[]>([]);
   connected = $state(false);
   loading = $state(true);
 
@@ -48,6 +48,7 @@ class AppState {
   /** The Code view: which mode, which file is open. */
   codeMode = $state<"changes" | "files">("changes");
   codeFile = $state<string | null>(null);
+  codeLine = $state<number | null>(null);
   input = $state<{ action: Action } | null>(null);
   palette = $state(false);
   view = $state<"overview" | "board" | "code" | "documents" | "report" | "settings" | "setup">("board");
@@ -79,7 +80,7 @@ class AppState {
         get<Envelope<{ pending: PendingCall[] }>>(`/api/approvals${q({ feature: f })}`),
         get<Document[]>(`/api/documents${q({ feature: f })}`),
       ]);
-      void get<Envelope<{ checks: { check: string; level: string; detail: string; fix: string[] }[] }>>(`/api/doctor${q({ feature: f })}`)
+      void get<Envelope<{ checks: { check: string; level: string; detail: string; fix: string[]; code?: string | null }[] }>>(`/api/doctor${q({ feature: f })}`)
         .then((d) => (this.preflight = (d.data?.checks ?? []).filter((c) => c.level !== "pass")))
         .catch(() => {});
       this.project = project;
@@ -236,6 +237,7 @@ class AppState {
     if (this.selected) s.set("task", this.selected);
     if (this.view === "code" && this.codeMode === "files") s.set("mode", "files");
     if (this.view === "code" && this.codeFile) s.set("file", this.codeFile);
+    if (this.view === "code" && this.codeFile && this.codeLine) s.set("line", String(this.codeLine));
     const t = s.toString();
     return location.pathname + (t ? `?${t}` : "");
   }
@@ -247,6 +249,8 @@ class AppState {
     this.feature = s.get("feature") ?? this.feature;
     this.selected = s.get("task");
     this.codeFile = s.get("file");
+    const line = Number(s.get("line"));
+    this.codeLine = Number.isInteger(line) && line > 0 ? line : null;
     this.codeMode = s.get("mode") === "files" || this.codeFile ? "files" : "changes";
     this.palette = s.has("palette");
   }

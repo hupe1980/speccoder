@@ -19,13 +19,13 @@ pub struct Document {
     pub html: String,
 }
 
-/// Renders Markdown; raw HTML becomes escaped text.
+/// Renders Markdown; raw HTML becomes escaped text. No heading attributes
+/// (`# x {style=…}`): a file the model wrote would set styles and ids on the
+/// page that shows it.
 #[must_use]
 pub fn render(markdown: &str) -> String {
-    let options = Options::ENABLE_TABLES
-        | Options::ENABLE_TASKLISTS
-        | Options::ENABLE_STRIKETHROUGH
-        | Options::ENABLE_HEADING_ATTRIBUTES;
+    let options =
+        Options::ENABLE_TABLES | Options::ENABLE_TASKLISTS | Options::ENABLE_STRIKETHROUGH;
     let events = Parser::new_ext(markdown, options).map(|e| match e {
         Event::Html(t) | Event::InlineHtml(t) => Event::Text(t),
         other => other,
@@ -71,6 +71,18 @@ pub fn of_feature(path: &Path, feature: Option<&str>) -> Vec<Document> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_file_cannot_style_or_script_the_page() {
+        let html = render(
+            "# Hi {style=position:fixed;inset:0 #top .x}\n\n<script>alert(1)</script>\n\n<b onclick=x>b</b>\n",
+        );
+        // The heading has no attributes; the braces stay text.
+        assert!(html.starts_with("<h1>Hi {style="), "{html}");
+        assert!(!html.contains("<h1 "), "{html}");
+        assert!(!html.contains("<script"), "{html}");
+        assert!(!html.contains("<b "), "{html}");
+    }
 
     #[test]
     fn markdown_renders_and_raw_html_is_text() {

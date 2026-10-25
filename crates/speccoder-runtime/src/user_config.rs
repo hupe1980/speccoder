@@ -283,7 +283,8 @@ pub fn parse(text: &str, file: &str) -> (Notify, Vec<String>) {
 }
 
 fn duration(text: &str) -> Option<Duration> {
-    let (number, unit) = text.split_at(text.len().checked_sub(1)?);
+    // The unit is the last character, which may be more than a byte.
+    let (number, unit) = text.split_at(text.char_indices().last()?.0);
     let n: u64 = number.parse().ok()?;
     match unit {
         "s" => Some(Duration::from_secs(n)),
@@ -296,6 +297,14 @@ fn duration(text: &str) -> Option<Duration> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_multibyte_unit_is_no_duration() {
+        for bad in ["15д", "€", "д"] {
+            assert_eq!(duration(bad), None, "{bad}");
+        }
+        assert_eq!(duration("15m"), Some(Duration::from_secs(900)));
+    }
 
     #[test]
     fn the_look_is_read_and_bad_values_warn() {

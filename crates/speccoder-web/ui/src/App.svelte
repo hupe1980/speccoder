@@ -66,7 +66,9 @@
   const needsSetup = $derived(
     app.view !== "settings" &&
       app.view !== "overview" &&
-      (app.report?.code === "NO-PROJECT" || app.preflight.some((c) => c.check === "config" && c.level === "fail")),
+      // Only a project with no configuration at all: an invalid file or an
+      // uncommitted change is Settings' to show, not a reason to start over.
+      (app.report?.code === "NO-PROJECT" || app.preflight.some((c) => c.code === "CONFIG-MISSING")),
   );
   const at = $derived(views.findIndex((x) => x.v === app.view));
 

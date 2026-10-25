@@ -46,6 +46,10 @@ ticks a task only on evidence the model cannot produce or edit.
   in on macOS (the system's WebView), on Linux with `--features
   app`; it loads the local page and navigates nowhere else, and asks for
   attention (Dock) when a run needs you.
+- Code: the tree is keyboard-navigable (the W3C tree pattern), ⌘P goes to
+  a file by fuzzy match, ⌘F finds in a file (the window has no find of its
+  own), line numbers link (`&line=42`), and links in a Markdown preview open
+  the linked file.
 - Files as a folder tree; Markdown previewed with Mermaid diagrams (in Code
   and in Spec & Plan), the source a switch away. Reading a file of a project
   nested in a larger repository works (it resolved from the repository's
