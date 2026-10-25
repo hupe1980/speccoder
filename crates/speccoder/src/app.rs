@@ -17,6 +17,20 @@ pub fn run(
     let page: tauri::Url = url.parse().map_err(|e| format!("{url}: {e}"))?;
     let port = page.port();
     tauri::Builder::default()
+        .menu(menu)
+        .on_menu_event(|app, event| {
+            let id = event.id().0.as_str();
+            if let Some(url) = HELP.iter().find(|(i, ..)| *i == id).map(|(_, _, u)| *u) {
+                open(url);
+            } else if COMMANDS.contains(&id)
+                && let Some(w) = app.get_webview_window("main")
+            {
+                // The id is one of ours, never text from elsewhere.
+                let _ = w.eval(format!(
+                    "window.dispatchEvent(new CustomEvent('speccoder:menu',{{detail:'{id}'}}))"
+                ));
+            }
+        })
         .setup(move |app| {
             WebviewWindowBuilder::new(app, "main", WebviewUrl::External(page.clone()))
                 .title("speccoder")
@@ -96,4 +110,264 @@ fn badge(w: &tauri::WebviewWindow, root: &std::path::Path) {
         _ => 0,
     };
     let _ = w.set_badge_count((n > 0).then(|| i64::try_from(n).unwrap_or(i64::MAX)));
+}
+
+/// The page's commands the menus send (the page does what the same button
+/// or key does; see `command` in App.svelte).
+const COMMANDS: &[&str] = &[
+    "app.settings",
+    "file.new",
+    "file.issues",
+    "file.commit",
+    "view.inbox",
+    "view.overview",
+    "view.board",
+    "view.code",
+    "view.documents",
+    "view.report",
+    "view.sidebar",
+    "view.statusbar",
+    "view.actions",
+    "theme.light",
+    "theme.dark",
+    "theme.auto",
+    "run.feature",
+    "run.task",
+    "run.converge",
+    "run.stop",
+    "task.nudge",
+    "task.skip",
+    "task.accept",
+    "task.evidence",
+    "review.spec",
+    "review.inbox",
+    "review.pr",
+    "review.report",
+];
+
+/// Help: the documentation, opened in the default browser.
+const HELP: &[(&str, &str, &str)] = &[
+    (
+        "help.docs",
+        "speccoder Documentation",
+        "https://hupe1980.github.io/speccoder/docs/",
+    ),
+    (
+        "help.quickstart",
+        "Quickstart",
+        "https://hupe1980.github.io/speccoder/docs/quickstart/",
+    ),
+    (
+        "help.app",
+        "The App",
+        "https://hupe1980.github.io/speccoder/docs/web/",
+    ),
+    (
+        "help.codes",
+        "Error Codes",
+        "https://hupe1980.github.io/speccoder/docs/codes/",
+    ),
+    (
+        "help.issue",
+        "Report an Issue…",
+        "https://github.com/hupe1980/speccoder/issues/new",
+    ),
+];
+
+/// Opens `url` in the default browser.
+fn open(url: &str) {
+    let opener = if cfg!(target_os = "macos") {
+        "open"
+    } else if cfg!(windows) {
+        "explorer"
+    } else {
+        "xdg-open"
+    };
+    let _ = std::process::Command::new(opener).arg(url).spawn();
+}
+
+/// The menu bar (F-088), as the HIG orders it: the app, File, Edit, View,
+/// the app's own (Run, Review), Window, Help. Edit's items are the system's
+/// own — they are what makes copy and paste work in the page on macOS.
+fn menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
+    use tauri::menu::{AboutMetadata, Menu, MenuItem, PredefinedMenuItem as P, Submenu};
+    let item =
+        |id: &str, text: &str, keys: Option<&str>| MenuItem::with_id(app, id, text, true, keys);
+    let sep = || P::separator(app);
+
+    let about = P::about(
+        app,
+        Some("About speccoder"),
+        Some(AboutMetadata {
+            name: Some("speccoder".to_owned()),
+            version: Some(env!("CARGO_PKG_VERSION").to_owned()),
+            comments: Some("Spec-driven coding, decided by evidence.".to_owned()),
+            website: Some("https://hupe1980.github.io/speccoder/".to_owned()),
+            ..AboutMetadata::default()
+        }),
+    )?;
+    let settings = item("app.settings", "Settings…", Some("CmdOrCtrl+,"))?;
+    let app_menu = Submenu::with_items(
+        app,
+        "speccoder",
+        true,
+        &[
+            &about,
+            &sep()?,
+            &settings,
+            &sep()?,
+            &P::services(app, None)?,
+            &sep()?,
+            &P::hide(app, None)?,
+            &P::hide_others(app, None)?,
+            &P::show_all(app, None)?,
+            &sep()?,
+            &P::quit(app, None)?,
+        ],
+    )?;
+    let file = Submenu::with_items(
+        app,
+        "File",
+        true,
+        &[
+            &item("file.new", "New Feature…", Some("CmdOrCtrl+N"))?,
+            &item("file.issues", "Start from a GitHub Issue…", None)?,
+            &sep()?,
+            &item("file.commit", "Commit the Planning Files", None)?,
+            &sep()?,
+            &P::close_window(app, None)?,
+        ],
+    )?;
+    let edit = Submenu::with_items(
+        app,
+        "Edit",
+        true,
+        &[
+            &P::undo(app, None)?,
+            &P::redo(app, None)?,
+            &sep()?,
+            &P::cut(app, None)?,
+            &P::copy(app, None)?,
+            &P::paste(app, None)?,
+            &P::select_all(app, None)?,
+        ],
+    )?;
+    let appearance = Submenu::with_items(
+        app,
+        "Appearance",
+        true,
+        &[
+            &item("theme.auto", "Automatic", None)?,
+            &item("theme.light", "Light", None)?,
+            &item("theme.dark", "Dark", None)?,
+        ],
+    )?;
+    let view = Submenu::with_items(
+        app,
+        "View",
+        true,
+        &[
+            &item("view.inbox", "Needs You", Some("CmdOrCtrl+1"))?,
+            &item("view.overview", "Overview", Some("CmdOrCtrl+2"))?,
+            &item("view.board", "Board", Some("CmdOrCtrl+3"))?,
+            &item("view.code", "Code", Some("CmdOrCtrl+4"))?,
+            &item("view.documents", "Spec & Plan", Some("CmdOrCtrl+5"))?,
+            &item("view.report", "Report", Some("CmdOrCtrl+6"))?,
+            &sep()?,
+            &item("view.sidebar", "Toggle Sidebar", Some("Alt+CmdOrCtrl+S"))?,
+            &item(
+                "view.statusbar",
+                "Toggle Status Bar",
+                Some("Alt+CmdOrCtrl+B"),
+            )?,
+            &item("view.actions", "Actions…", Some("CmdOrCtrl+K"))?,
+            &sep()?,
+            &appearance,
+            &sep()?,
+            &P::fullscreen(app, None)?,
+        ],
+    )?;
+    let run = Submenu::with_items(
+        app,
+        "Run",
+        true,
+        &[
+            &item("run.feature", "Run the Feature", Some("CmdOrCtrl+R"))?,
+            &item(
+                "run.task",
+                "Run the Selected Task",
+                Some("Shift+CmdOrCtrl+R"),
+            )?,
+            &item("run.converge", "Re-check Against the Spec", None)?,
+            &sep()?,
+            &item(
+                "task.evidence",
+                "Show the Selected Task's Evidence",
+                Some("CmdOrCtrl+I"),
+            )?,
+            &item("task.nudge", "Nudge the Selected Task…", None)?,
+            &item("task.skip", "Skip the Selected Task…", None)?,
+            &item("task.accept", "Accept the Selected Task…", None)?,
+            &sep()?,
+            &item("run.stop", "Stop", Some("CmdOrCtrl+."))?,
+        ],
+    )?;
+    let review = Submenu::with_items(
+        app,
+        "Review",
+        true,
+        &[
+            &item("review.inbox", "Needs You", Some("Shift+CmdOrCtrl+I"))?,
+            &item("review.spec", "Review the Spec", Some("Alt+CmdOrCtrl+R"))?,
+            &item("review.report", "Evidence Report", None)?,
+            &sep()?,
+            &item("review.pr", "Open Draft Pull Request…", None)?,
+        ],
+    )?;
+    let window = Submenu::with_items(
+        app,
+        "Window",
+        true,
+        &[
+            &P::minimize(app, None)?,
+            &P::maximize(app, None)?,
+            &sep()?,
+            &P::bring_all_to_front(app, None)?,
+        ],
+    )?;
+    let help_items: Vec<MenuItem<tauri::Wry>> = HELP
+        .iter()
+        .map(|(id, text, _)| item(id, text, None))
+        .collect::<tauri::Result<_>>()?;
+    let help_refs: Vec<&dyn tauri::menu::IsMenuItem<tauri::Wry>> = help_items
+        .iter()
+        .map(|i| i as &dyn tauri::menu::IsMenuItem<tauri::Wry>)
+        .collect();
+    let help = Submenu::with_items(app, "Help", true, &help_refs)?;
+    Menu::with_items(
+        app,
+        &[
+            &app_menu, &file, &edit, &view, &run, &review, &window, &help,
+        ],
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    /// Every command a menu sends is one the page handles: a view by its
+    /// id, everything else by name in App.svelte's `command`.
+    #[test]
+    fn every_menu_command_is_handled_by_the_page() {
+        let page = include_str!("../../speccoder-web/ui/src/App.svelte");
+        for id in super::COMMANDS {
+            let handled = match id.strip_prefix("view.") {
+                Some(view) if page.contains(&format!("v: \"{view}\"")) => true,
+                _ => page.contains(&format!("case \"{id}\"")),
+            };
+            assert!(
+                handled,
+                "the menu sends `{id}` and the page does not handle it"
+            );
+        }
+    }
 }

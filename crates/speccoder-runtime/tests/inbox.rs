@@ -122,7 +122,7 @@ fn finished_features_wait_to_be_handed_off() {
     // Two features: each command says which.
     assert_eq!(a.command, "speccoder pr --yes --feature 001-login");
     assert!(
-        message.starts_with("2 decision(s) waiting in 2 feature(s)"),
+        message.starts_with("2 decisions waiting in 2 features"),
         "{message}"
     );
 }

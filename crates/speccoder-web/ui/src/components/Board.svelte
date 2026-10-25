@@ -1,7 +1,8 @@
 <script lang="ts">
   import { app } from "../lib/app.svelte";
   import { symbol, word } from "../lib/marks";
-  import type { Task } from "../lib/types";
+  import { get, q } from "../lib/api";
+  import type { Action, Task } from "../lib/types";
   import Code from "./Code.svelte";
   import Icon from "./Icon.svelte";
   let expanded = $state<Record<string, boolean>>({});
@@ -33,6 +34,32 @@
   };
   const stage = $derived([...app.stages].reverse().find((x) => x.state === "started")?.stage ?? "starting");
 
+  // Right-click: the task's own commands, from the action model.
+  async function menu(t: Task, e: MouseEvent) {
+    e.preventDefault();
+    const x = e.clientX;
+    const y = e.clientY;
+    const actions = await get<Action[]>(`/api/actions${q({ feature: app.feature ?? undefined, task: t.id })}`).catch(() => [] as Action[]);
+    const mine = actions.filter((a) => (a.group === "task" || a.group === "work") && a.label.includes(t.id));
+    const verb = (a: Action) => a.label.replace(` ${t.id}`, "").replace(/^./, (c) => c.toUpperCase());
+    const icons: Record<string, string> = { run: "play", accept: "check", skip: "skip", nudge: "sparkle" };
+    const copy = (text: string, what: string) => () => {
+      void navigator.clipboard?.writeText(text);
+      app.toast({ tone: "ok", text: `Copied ${what}`, detail: text });
+    };
+    app.context = {
+      x,
+      y,
+      title: `${t.id} · ${word(laneOf(t))}`,
+      items: [
+        { label: "Show Evidence", icon: "shield", act: () => void app.selectTask(t.id) },
+        ...mine.map((a) => ({ label: verb(a) + (a.input ? "…" : ""), icon: icons[a.label.split(" ")[0] ?? ""], disabled: a.blocked ?? (app.job?.running ? "a job is running" : null), hint: `$ ${a.command}`, act: () => void app.perform(a) })),
+        { label: "Copy Task ID", icon: "copy", act: copy(t.id, "the task ID") },
+        { label: "Copy the Run Command", icon: "terminal", act: copy(`speccoder run --task ${t.id}`, "the command") },
+      ],
+    };
+  }
+
   function runTask(t: Task, e: MouseEvent) {
     e.stopPropagation();
     app.perform({ group: "work", label: `run ${t.id}`, why: t.title, command: `speccoder run --task ${t.id}`, run: { kind: "run", task: t.id }, blocked: null, input: null });
@@ -53,7 +80,7 @@
         {#each expanded[lane.key] ? lane.tasks : lane.tasks.slice(0, LIMIT) as t (t.id)}
           {@const s = strength(t.strength)}
           {@const live = running === t.id}
-          <article class="card" class:on={app.selected === t.id} class:live role="listitem">
+          <article class="card" class:on={app.selected === t.id} class:live role="listitem" oncontextmenu={(e) => menu(t, e)}>
             <button class="open" onclick={() => app.selectTask(t.id)} aria-label="{t.id} {t.title}, {word(laneOf(t))}">
               <span class="row"><span class="id mono">{t.id}</span>{#if t.phase}<span class="phase">{t.phase}</span>{/if}</span>
               <span class="t"><Code text={t.title} /></span>
