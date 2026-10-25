@@ -434,7 +434,34 @@ pub(crate) fn run_task(
             return fail(CommandStatus::ConfigError, format!("baseline: {e}"));
         }
     };
-    // Failing checks at the baseline are reported, not blamed: the stage held.
+    // A check that cannot run on the untouched code — it failed without
+    // running a test: not found, a build or configuration error, a file the
+    // worktree lacks because it was never committed — can never judge the
+    // task. Stop before any model call rather than spend attempts on it.
+    if !options.allow_failing_baseline
+        && let Some((c, why)) = baseline
+            .checks
+            .iter()
+            .find_map(|c| broken(c).map(|w| (c, w)))
+    {
+        stage(
+            &*live,
+            task,
+            Stage::Baseline,
+            StageState::Failed,
+            Some(format!("`{}` cannot run", c.name)),
+            Some(began),
+        );
+        return fail(
+            CommandStatus::ConfigError,
+            format!(
+                "check `{}` cannot run on the untouched code, so it could never judge {task}: {why} — fix the check (a file it needs may be uncommitted: `git status`), or run with --allow-failing-baseline",
+                c.name
+            ),
+        )
+        .with_code("CHECK-BROKEN");
+    }
+    // Failing tests at the baseline are reported, not blamed: the stage held.
     let failing = baseline
         .checks
         .iter()
@@ -1910,4 +1937,76 @@ pub(crate) fn run_task(
     ));
     CommandResult::new("run", status, &redact(&message, secret))
         .with_data(CommandData::Run(Box::new(report)))
+}
+
+/// Why a failing baseline check is broken rather than failing tests: it
+/// could not start, or it failed without any test result to show for it.
+/// `None`: it passed, or its tests ran and some failed.
+#[must_use]
+pub fn broken(c: &speccoder_core::verify::CheckResult) -> Option<String> {
+    use speccoder_core::verify::CheckStatus;
+    if !c.status.is_failure() || c.status == CheckStatus::TimedOut {
+        return None;
+    }
+    if let Some(note) = &c.note {
+        return Some(note.clone());
+    }
+    if c.tests.as_ref().is_some_and(|t| !t.is_empty()) {
+        return None;
+    }
+    let summary = crate::verify::summary::parse(&c.stdout_tail, &c.stderr_tail, c.exit_code);
+    // Only what is unambiguous: a command that cannot start, a build that
+    // fails, or a test runner that ran no test. A script or `grep` that
+    // fails until the task is done is a failing check, not a broken one.
+    let runner = c
+        .argv
+        .first()
+        .map(|a| a.rsplit('/').next().unwrap_or(a))
+        .is_some_and(|a| {
+            matches!(
+                a,
+                "cargo"
+                    | "pytest"
+                    | "python"
+                    | "python3"
+                    | "uv"
+                    | "npm"
+                    | "npx"
+                    | "pnpm"
+                    | "yarn"
+                    | "bun"
+                    | "go"
+                    | "jest"
+                    | "vitest"
+                    | "mvn"
+                    | "gradle"
+                    | "dotnet"
+                    | "mix"
+                    | "swift"
+            )
+        });
+    let cannot_start = matches!(c.exit_code, Some(126 | 127));
+    let is_broken = match &summary {
+        _ if cannot_start => true,
+        Some(s) if s.build_failed => true,
+        Some(s) => s.passed + s.failed + s.errors == 0,
+        None => runner,
+    };
+    match is_broken {
+        false => None,
+        true => {
+            let first = c
+                .stderr_tail
+                .lines()
+                .chain(c.stdout_tail.lines())
+                .map(str::trim)
+                .find(|l| l.to_lowercase().contains("error"))
+                .or_else(|| c.stderr_tail.lines().map(str::trim).find(|l| !l.is_empty()))
+                .unwrap_or("it failed without running a test")
+                .chars()
+                .take(160)
+                .collect::<String>();
+            Some(first)
+        }
+    }
 }

@@ -11,6 +11,7 @@ Every failure names a [code](@/docs/codes.md) and the command that fixes it — 
 
 | Symptom | Cause and fix |
 |---|---|
+| `error[CHECK-BROKEN]` before any model call | A check fails on the untouched worktree without running a test. Most often a file it needs was never committed — a worktree holds only commits (`speccoder doctor` lists untracked configuration such as `.config/`). Commit it, fix the check, or run with `--allow-failing-baseline`. |
 | No colour | Output is not a terminal, or `NO_COLOR` or `TERM=dumb` is set. `--color always` forces it. |
 | Odd symbols or boxes | The font lacks them: `--ascii`, or `[ui] ascii = true` in your settings. |
 | `error[CONFIG-MISSING]` — the worktree has no speccoder.toml (13) | speccoder reads committed files. Commit `speccoder.toml`. |

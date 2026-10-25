@@ -35,6 +35,7 @@ pub(crate) fn run_lanes(
                     cancel: None,
                     ignore_checklists: options.ignore_checklists,
                     fresh_acceptance: false,
+                    allow_failing_baseline: options.allow_failing_baseline,
                     run_grants: std::sync::Arc::clone(&options.run_grants),
                     in_place: false,
                     session: None,

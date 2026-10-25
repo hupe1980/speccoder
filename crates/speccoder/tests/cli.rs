@@ -689,7 +689,7 @@ fn init_runs_the_checks_and_names_the_commit_without_making_it() {
         .map(|s| s["command"].as_str().unwrap())
         .collect();
     assert_eq!(
-        next[0], "git add speccoder.toml && git commit -m \"speccoder: config\"",
+        next[0], "git add speccoder.toml && git commit -m \"speccoder: config\" -- speccoder.toml",
         "{next:?}"
     );
     assert!(
@@ -836,4 +836,79 @@ fn feature_lists_switches_and_validates_against_its_schema() {
         text.contains("current feature: 002-login (recorded in .specify/feature.json)"),
         "{text}"
     );
+}
+
+/// The first real run lost its nextest profile: `init` wrote
+/// `.config/nextest.toml` but committed only `speccoder.toml`, so the
+/// worktree's `test` check could not run. Everything init writes is committed.
+#[test]
+fn init_at_a_terminal_commits_the_nextest_profile_with_the_config() {
+    if std::process::Command::new("cargo")
+        .args(["nextest", "--version"])
+        .output()
+        .map_or(true, |o| !o.status.success())
+    {
+        eprintln!("skipped: no cargo-nextest");
+        return;
+    }
+    let dir = make_project();
+    std::fs::write(
+        dir.path().join("Cargo.toml"),
+        "[package]\nname = \"x\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+    )
+    .unwrap();
+    std::fs::create_dir_all(dir.path().join("src")).unwrap();
+    std::fs::write(dir.path().join("src/lib.rs"), "pub fn ok() {}\n").unwrap();
+    std::fs::remove_file(dir.path().join("Makefile")).unwrap();
+    let git = |args: &[&str]| {
+        std::process::Command::new("git")
+            .args([
+                "-c",
+                "user.name=t",
+                "-c",
+                "user.email=t@e",
+                "-c",
+                "commit.gpgsign=false",
+            ])
+            .args(args)
+            .current_dir(dir.path())
+            .output()
+            .unwrap()
+    };
+    git(&["add", "-A"]);
+    git(&["commit", "-qm", "crate"]);
+    let bin = assert_cmd::cargo::cargo_bin("speccoder");
+    let line = format!("{} init --no-verify", bin.display());
+    let mut cmd = std::process::Command::new("script");
+    if cfg!(target_os = "macos") {
+        cmd.args(["-q", "/dev/null"])
+            .arg(&bin)
+            .args(["init", "--no-verify"]);
+    } else {
+        cmd.args(["-qec", &line, "/dev/null"]);
+    }
+    let Ok(mut child) = cmd
+        .current_dir(dir.path())
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+    else {
+        eprintln!("skipped: no script(1)");
+        return;
+    };
+    use std::io::Write as _;
+    child.stdin.take().unwrap().write_all(b"y\n").unwrap();
+    let out = child.wait_with_output().unwrap();
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        text.contains("Commit speccoder.toml and .config/nextest.toml?"),
+        "{text}"
+    );
+    let files = git(&["show", "--name-only", "--format=", "HEAD"]);
+    let mut files: Vec<String> = String::from_utf8_lossy(&files.stdout)
+        .lines()
+        .map(str::to_owned)
+        .collect();
+    files.sort();
+    assert_eq!(files, [".config/nextest.toml", "speccoder.toml"], "{text}");
 }

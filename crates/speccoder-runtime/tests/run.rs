@@ -1260,6 +1260,37 @@ fn a_check_that_cannot_run_is_not_retried() {
     let (f, d) = fake();
     f.will_structure(done("nothing"));
     let res = run(r.path(), state.path(), "T005", d);
+    // It cannot run on the untouched code: stopped before any model call.
+    assert_eq!(
+        res.status(),
+        CommandStatus::ConfigError,
+        "{}",
+        res.message()
+    );
+    assert_eq!(res.code().map(|c| c.name), Some("CHECK-BROKEN"));
+    assert!(
+        res.message()
+            .contains("check `gone` cannot run on the untouched code"),
+        "{}",
+        res.message()
+    );
+    assert!(f.asked().is_empty(), "a model call was made");
+    // Asked to go on anyway, the attempt runs and is not retried.
+    let options = speccoder_runtime::RunOptions {
+        allow_failing_baseline: true,
+        ..speccoder_runtime::RunOptions::default()
+    };
+    let (f, d) = fake();
+    f.will_structure(done("nothing"));
+    let res = speccoder_runtime::run_with_options(
+        r.path(),
+        None,
+        "T005",
+        state.path(),
+        d,
+        None,
+        &options,
+    );
     let rep = report(&res);
     assert!(
         rep.retry_stop
@@ -1269,6 +1300,59 @@ fn a_check_that_cannot_run_is_not_retried() {
         "{:?} / {}",
         rep.retry_stop,
         res.message()
+    );
+}
+
+#[test]
+fn a_test_runner_that_ran_no_test_is_broken_a_failing_script_is_not() {
+    use speccoder_core::verify::{CheckResult, CheckStatus};
+    let check = |argv: &[&str], exit: i32, stderr: &str| CheckResult {
+        name: "test".to_owned(),
+        argv: argv.iter().map(|a| (*a).to_owned()).collect(),
+        status: CheckStatus::Failed,
+        exit_code: Some(exit),
+        duration_ms: 1,
+        junit: false,
+        tests: None,
+        stdout_tail: String::new(),
+        stderr_tail: stderr.to_owned(),
+        truncated: false,
+        note: None,
+        flaky: false,
+    };
+    // The reported first run: a nextest profile the worktree does not have.
+    let profile = check(
+        &["cargo", "nextest", "run", "--profile", "speccoder"],
+        101,
+        "error: profile `speccoder` not found (known profiles: default, default-miri)",
+    );
+    assert_eq!(
+        speccoder_runtime::pipeline::broken(&profile).as_deref(),
+        Some("error: profile `speccoder` not found (known profiles: default, default-miri)")
+    );
+    assert!(
+        speccoder_runtime::pipeline::broken(&check(
+            &["missing-tool"],
+            127,
+            "sh: missing-tool: not found"
+        ))
+        .is_some()
+    );
+    // Tests ran and failed: pre-existing failures, not a broken check.
+    let failing = check(
+        &["cargo", "test"],
+        101,
+        "test result: FAILED. 3 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out",
+    );
+    assert!(speccoder_runtime::pipeline::broken(&failing).is_none());
+    // A script that fails until the task is done.
+    assert!(
+        speccoder_runtime::pipeline::broken(&check(
+            &["grep", "-q", "x", "f"],
+            2,
+            "grep: f: No such file or directory"
+        ))
+        .is_none()
     );
 }
 

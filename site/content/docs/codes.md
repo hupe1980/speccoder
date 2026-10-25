@@ -20,6 +20,7 @@ Every result that is not plainly `ok` names a code — `error[CODE]`, `stopped[C
 | [`NO-PROJECT`](#no-project) | error | 10 | speccoder works on a Spec Kit or OpenSpec project, and found none here |
 | [`SPEC-DIAGNOSTICS`](#spec-diagnostics) | error | 11 | the spec artifacts have errors speccoder will not guess around |
 | [`FEATURE-SELECTION`](#feature-selection) | error | 12 | more than one feature could be meant |
+| [`CHECK-BROKEN`](#check-broken) | error | 13 | a check cannot run on the untouched code |
 | [`FEATURE-GONE`](#feature-gone) | error | 12 | the current feature no longer exists |
 | [`CONFIG`](#config) | error | 13 | the configuration or the environment is not usable |
 | [`NO-STATE-DIR`](#no-state-dir) | error | 13 | speccoder has nowhere to keep its state |
@@ -132,6 +133,16 @@ Several features exist and none is current: neither `--feature`, the format's va
 - `speccoder feature`
 - `speccoder feature <name>`
 - `speccoder <command> --feature <name>`
+
+### CHECK-BROKEN
+
+A check cannot run on the untouched code.
+
+Before any model call, speccoder runs your fast checks on the worktree as it is. One failed without running a test — a command or profile it names does not exist there, a file it needs was never committed (a worktree holds only commits), or it does not build. It could never judge the task, so nothing was attempted.
+
+- `speccoder doctor`
+- `git status`
+- `speccoder run --allow-failing-baseline`
 
 ### FEATURE-GONE
 

@@ -183,6 +183,9 @@ pub enum Command {
         /// With --task: set the task's held attempt aside and write its acceptance tests anew.
         #[arg(long, requires = "task")]
         fresh_acceptance: bool,
+        /// Attempt although a check cannot run on the untouched code (it can never judge the task).
+        #[arg(long)]
+        allow_failing_baseline: bool,
         /// Work in this checkout on branch `speccoder/<feature>` instead of a
         /// worktree (intent may be git-ignored); switches back at the end.
         #[arg(long)]

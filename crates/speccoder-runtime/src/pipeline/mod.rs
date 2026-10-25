@@ -157,6 +157,10 @@ pub struct RunOptions {
     /// Set a task's held or interrupted attempt aside and write its
     /// acceptance tests anew (`run --task T --fresh-acceptance`, F-060).
     pub fresh_acceptance: bool,
+    /// Attempt although a check cannot run on the untouched code
+    /// (`run --allow-failing-baseline`); otherwise the run stops before any
+    /// model call (`CHECK-BROKEN`).
+    pub allow_failing_baseline: bool,
     /// Classes a person approved "for this run": shared by every task (and
     /// lane) of one `speccoder run`, gone with it.
     pub run_grants: Arc<std::sync::Mutex<Vec<crate::tools::policy::Grant>>>,

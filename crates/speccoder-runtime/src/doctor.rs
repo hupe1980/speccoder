@@ -109,6 +109,9 @@ pub fn checks(
                 format!("{kind} at {}{feature}", o.snapshot.root),
             ));
             out.push(current_check(o.adapter, &o.snapshot));
+            if let Some(c) = untracked_check(Path::new(&o.snapshot.root)) {
+                out.push(c);
+            }
             if let Some((tool, install)) = o.adapter.tool() {
                 out.push(match version(tool) {
                     Some(v) => check("spec tool", DoctorLevel::Pass, v),
@@ -370,6 +373,44 @@ pub fn run(path: &Path, feature: Option<&str>, look: Option<&str>) -> CommandRes
         }
     };
     result.with_data(CommandData::Doctor(Box::new(report)))
+}
+
+/// Untracked configuration a worktree will not have: speccoder works on
+/// commits, so a check that reads `.config/nextest.toml` or an untracked
+/// `*.toml` passes here and cannot run there.
+fn untracked_check(root: &Path) -> Option<DoctorCheck> {
+    let out = Git::at(root)
+        .run(&["status", "--porcelain", "--untracked-files=normal", "."])
+        .ok()?;
+    let config = |p: &str| {
+        let name = p.trim_end_matches('/').rsplit('/').next().unwrap_or(p);
+        (name.starts_with('.') && name != ".DS_Store")
+            || [".toml", ".json", ".yaml", ".yml", ".cfg", ".ini"]
+                .iter()
+                .any(|e| name.ends_with(e))
+    };
+    let found: Vec<String> = String::from_utf8_lossy(&out)
+        .lines()
+        .filter_map(|l| l.strip_prefix("?? "))
+        .filter(|p| config(p))
+        .map(str::to_owned)
+        .collect();
+    if found.is_empty() {
+        return None;
+    }
+    let list = found.join(" ");
+    Some(DoctorCheck {
+        fix: vec![format!(
+            "→ git add {list} && git commit -m \"…\"   (if the checks need them)"
+        )],
+        ..check(
+            "untracked",
+            DoctorLevel::Warn,
+            format!(
+                "{list} — not committed, so a worktree does not have it; a check that needs it cannot run there"
+            ),
+        )
+    })
 }
 
 /// Which unit commands work on when none is named, and why — or what

@@ -136,6 +136,18 @@ pub const CATALOG: &[Entry] = &[
         ]
     ),
     entry!(
+        "CHECK-BROKEN",
+        E,
+        S::ConfigError,
+        "a check cannot run on the untouched code",
+        "Before any model call, speccoder runs your fast checks on the worktree as it is. One failed without running a test — a command or profile it names does not exist there, a file it needs was never committed (a worktree holds only commits), or it does not build. It could never judge the task, so nothing was attempted.",
+        [
+            "speccoder doctor",
+            "git status",
+            "speccoder run --allow-failing-baseline"
+        ]
+    ),
+    entry!(
         "FEATURE-GONE",
         E,
         S::SelectionNeeded,

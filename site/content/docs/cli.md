@@ -46,6 +46,7 @@ Every stop and finish ends with a `Next:` block — the commands that continue, 
 |---|---|
 | `speccoder run [--task T] [--max-tasks N] [--parallel N] [--converge] [--no-prompt] [--ignore-checklists]` | Work through the ready tasks, or one task; resumes where it stopped |
 | `speccoder run --task T --fresh-acceptance` | Set the task's held attempt aside and write its acceptance tests anew |
+| `speccoder run --allow-failing-baseline` | Attempt although a check cannot run on the untouched code (`CHECK-BROKEN`) — it can never judge the task |
 | `speccoder run --in-place …` | The same in your checkout on `speccoder/<feature>`, for git-ignored specs; switches back at the end. `--return` leaves an interrupted in-place run |
 | `speccoder task approve T [--call ID] [--all] [--scope once\|task\|run] [--note "…"]` | Approve a waiting call (its class for the task by default); no model needed; the next `run` continues the attempt from that call. `--all` without `T`: every waiting call of the feature |
 | `speccoder task reject T [--call ID] [--all] --reason R` | Reject it; the attempt continues and the model is told why |

@@ -158,6 +158,7 @@ struct RunJob {
     parallel: usize,
     ignore_checklists: bool,
     fresh_acceptance: bool,
+    allow_failing_baseline: bool,
     in_place: bool,
 }
 
@@ -177,6 +178,7 @@ impl RunJob {
             parallel: self.parallel,
             ignore_checklists: self.ignore_checklists,
             fresh_acceptance: self.fresh_acceptance,
+            allow_failing_baseline: self.allow_failing_baseline,
             in_place: self.in_place,
             ..speccoder_runtime::RunOptions::default()
         };
@@ -310,6 +312,7 @@ fn main() {
             parallel,
             ignore_checklists,
             fresh_acceptance,
+            allow_failing_baseline,
             in_place,
             return_: _,
         } => {
@@ -322,6 +325,7 @@ fn main() {
                 parallel: usize::from(*parallel),
                 ignore_checklists: *ignore_checklists,
                 fresh_acceptance: *fresh_acceptance,
+                allow_failing_baseline: *allow_failing_baseline,
                 in_place: *in_place,
             };
             if dashboard(&cli) {
@@ -768,7 +772,26 @@ fn init(
         .filter(|r| !r.passed)
         .map(|r| r.name.as_str())
         .collect();
-    let commit_line = "git add speccoder.toml && git commit -m \"speccoder: config\"".to_owned();
+    // Everything the checks need goes into the commit: a worktree holds only
+    // committed files (the nextest profile `--profile speccoder` names, too —
+    // also when an earlier init wrote it and it was never committed).
+    let mut to_commit: Vec<String> = report.wrote.clone();
+    let profile = ".config/nextest.toml";
+    if report
+        .checks
+        .iter()
+        .any(|c| c.argv.iter().any(|a| a == "nextest"))
+        && root.join(profile).exists()
+        && !to_commit.iter().any(|p| p == profile)
+        && speccoder_runtime::git::Git::at(&root)
+            .line(&["status", "--porcelain", "--", profile])
+            .is_ok_and(|l| !l.trim().is_empty())
+    {
+        to_commit.push(profile.to_owned());
+    }
+    let listed = to_commit.join(" ");
+    let commit_line =
+        format!("git add {listed} && git commit -m \"speccoder: config\" -- {listed}");
     let interactive = !yes
         && !cli.json
         && !cli.events
@@ -788,7 +811,8 @@ fn init(
             );
         }
         eprint!(
-            "Commit speccoder.toml? speccoder reads committed files only. [{}] ",
+            "Commit {}? speccoder reads committed files only. [{}] ",
+            to_commit.join(" and "),
             if default_yes { "Y/n" } else { "y/N" }
         );
         let mut line = String::new();
@@ -801,18 +825,14 @@ fn init(
         };
         if commit {
             let g = speccoder_runtime::git::Git::at(&root);
+            let paths: Vec<&str> = to_commit.iter().map(String::as_str).collect();
+            let mut add = vec!["add", "--"];
+            add.extend(&paths);
+            let mut commit = vec!["commit", "-q", "-m", "speccoder: config", "--"];
+            commit.extend(&paths);
             let ok = g
-                .run(&["add", "--", speccoder_runtime::verify::config::FILE])
-                .and_then(|_| {
-                    g.run(&[
-                        "commit",
-                        "-q",
-                        "-m",
-                        "speccoder: config",
-                        "--",
-                        speccoder_runtime::verify::config::FILE,
-                    ])
-                })
+                .run(&add)
+                .and_then(|_| g.run(&commit))
                 .and_then(|_| g.line(&["rev-parse", "--short", "HEAD"]));
             match ok {
                 Ok(id) => report.committed = Some(id),

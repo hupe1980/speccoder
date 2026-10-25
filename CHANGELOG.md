@@ -108,6 +108,18 @@ ticks a task only on evidence the model cannot produce or edit.
   `report`, bare `speccoder` and the dashboard — not as an error; a
   project with no features yet points to `spec specify`.
 
+**First-run fixes**
+
+- `init` commits everything it wrote — `speccoder.toml` and the nextest
+  profile in `.config/nextest.toml` — not only the config; a worktree holds
+  only commits, and its `test` check failed with "profile `speccoder` not
+  found".
+- A check that cannot run on the untouched code (it cannot start, does not
+  build, or a test runner ran no test) stops the run before any model call
+  (`CHECK-BROKEN`), instead of two attempts that could never pass;
+  `run --allow-failing-baseline` goes on anyway. `doctor` lists untracked
+  configuration a worktree will not have.
+
 **The next step, taken**
 
 - At a terminal, after a planning step, a task decision or the report, the
