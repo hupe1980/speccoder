@@ -187,6 +187,40 @@ pub enum CommandData {
     Ui(Box<UiReport>),
     /// `config`: every key of `speccoder.toml`, its value and its default.
     Config(Box<ConfigReport>),
+    /// `issue`: the repository's open issues.
+    Issues(Box<IssuesReport>),
+}
+
+/// Result of `speccoder issue`: the repository's open GitHub issues, read
+/// through the person's own `gh`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct IssuesReport {
+    /// `owner/name`.
+    pub repo: Option<String>,
+    /// Open issues: assigned to the person first, then the most recently
+    /// updated.
+    pub issues: Vec<IssueEntry>,
+}
+
+/// One open issue.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct IssueEntry {
+    /// `#n`.
+    pub number: u64,
+    /// Its title.
+    pub title: String,
+    /// Its address.
+    pub url: String,
+    /// Label names.
+    pub labels: Vec<String>,
+    /// Who it is assigned to (logins).
+    pub assignees: Vec<String>,
+    /// Assigned to the person `gh` is logged in as.
+    pub mine: bool,
+    /// Last update, ISO 8601.
+    pub updated: Option<String>,
+    /// The feature whose spec names this issue, when one does.
+    pub feature: Option<String>,
 }
 
 /// Result of `speccoder config`: the project's configuration as a catalogue
@@ -396,6 +430,7 @@ impl CommandData {
             Self::Features(_) => "features",
             Self::Ui(_) => "ui",
             Self::Config(_) => "config",
+            Self::Issues(_) => "issues",
         }
     }
 }
@@ -430,6 +465,7 @@ pub const PAYLOADS: &[&str] = &[
     "features",
     "ui",
     "config",
+    "issues",
 ];
 
 /// A repository instructions file given to an attempt.
@@ -1251,6 +1287,9 @@ pub struct StatusReport {
     pub trace: Vec<TraceRow>,
     /// Counts by evidence.
     pub totals: StatusTotals,
+    /// GitHub issue URLs the feature's spec names: where it came from, and
+    /// what its pull request closes.
+    pub issues: Vec<String>,
 }
 
 /// One task and its evidence.

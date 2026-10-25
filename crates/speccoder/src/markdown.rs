@@ -222,6 +222,7 @@ mod tests {
 
     fn report(n: usize) -> StatusReport {
         StatusReport {
+            issues: Vec::new(),
             feature: "001-x".to_owned(),
             branch: Some("speccoder/001-x".to_owned()),
             source: "branch".to_owned(),

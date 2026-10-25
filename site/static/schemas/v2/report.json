@@ -341,6 +341,13 @@
       "description": "Feature directory name.",
       "type": "string"
     },
+    "issues": {
+      "description": "GitHub issue URLs the feature's spec names: where it came from, and\nwhat its pull request closes.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
     "journey": {
       "default": [],
       "description": "Where the feature is: spec → plan → tasks → commit → run → review.",
@@ -408,7 +415,8 @@
     "tasks",
     "convergence",
     "trace",
-    "totals"
+    "totals",
+    "issues"
   ],
   "title": "report: every task and its evidence",
   "type": "object"

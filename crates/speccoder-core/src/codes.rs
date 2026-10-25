@@ -188,6 +188,32 @@ pub const CATALOG: &[Entry] = &[
         ]
     ),
     entry!(
+        "GH-MISSING",
+        E,
+        S::Error,
+        "the GitHub CLI (`gh`) is not installed",
+        "speccoder reads issues and opens pull requests through your own `gh`, with its login; it stores no token of its own.",
+        [
+            "→ install the GitHub CLI: https://cli.github.com (brew install gh, apt install gh, winget install GitHub.cli)"
+        ]
+    ),
+    entry!(
+        "GH-AUTH",
+        E,
+        S::Error,
+        "the GitHub CLI is not logged in",
+        "`gh` holds your GitHub login; speccoder uses it as it is and asks for nothing.",
+        ["gh auth login"]
+    ),
+    entry!(
+        "GH-FAILED",
+        E,
+        S::Error,
+        "the GitHub CLI could not do it",
+        "The message is `gh`'s own: no GitHub remote, no such issue, no access, or GitHub did not answer.",
+        ["gh repo view"]
+    ),
+    entry!(
         "CONFIG-MISSING",
         E,
         S::ConfigError,

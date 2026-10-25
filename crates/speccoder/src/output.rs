@@ -300,6 +300,23 @@ fn human_body(
             }
             writeln!(out, "{}", result.message())
         }
+        (_, Some(CommandData::Issues(r))) => {
+            for i in &r.issues {
+                let labels = if i.labels.is_empty() {
+                    String::new()
+                } else {
+                    format!("  [{}]", i.labels.join(", "))
+                };
+                let started = i
+                    .feature
+                    .as_deref()
+                    .map(|f| format!("  → {f}"))
+                    .unwrap_or_default();
+                let mine = if i.mine { "● " } else { "  " };
+                writeln!(out, "{mine}#{:<5} {}{labels}{started}", i.number, i.title)?;
+            }
+            writeln!(out, "{}", result.message())
+        }
         (_, Some(CommandData::Features(f))) => {
             for line in crate::human::features(f) {
                 writeln!(out, "{line}")?;
@@ -468,6 +485,7 @@ mod look_tests {
         .collect();
         let r = CommandResult::ok("report", "8 tasks").with_data(CommandData::Report(Box::new(
             StatusReport {
+                issues: Vec::new(),
                 feature: "001-x".to_owned(),
                 branch: Some("speccoder/001-x".to_owned()),
                 source: "branch".to_owned(),

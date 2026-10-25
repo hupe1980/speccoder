@@ -998,3 +998,48 @@ fn config_sets_checks_and_commits_the_configuration_alone() {
         "{v}"
     );
 }
+
+/// `speccoder issue` (F-083) through a scripted `gh`: the open issues as the
+/// documented payload; without a login, the fix.
+#[test]
+fn issue_lists_through_gh_and_says_how_to_log_in() {
+    let dir = committed_project(false);
+    let bin = tempfile::tempdir().unwrap();
+    let gh = bin.path().join("gh");
+    std::fs::write(
+        &gh,
+        "#!/bin/sh\ncase \"$1 $2\" in\n  \"issue list\") echo '[{\"number\":42,\"title\":\"Greet\",\"url\":\"https://github.com/o/r/issues/42\",\"labels\":[{\"name\":\"feature\"}],\"assignees\":[],\"updatedAt\":\"2026-10-20T00:00:00Z\"}]';;\n  \"repo view\") echo '{\"nameWithOwner\":\"o/r\"}';;\n  *) exit 1;;\nesac\n",
+    )
+    .unwrap();
+    assert!(
+        std::process::Command::new("chmod")
+            .arg("+x")
+            .arg(&gh)
+            .status()
+            .unwrap()
+            .success()
+    );
+    let out = speccoder()
+        .args(["--json", "issue", "-C"])
+        .arg(dir.path())
+        .env("SPECCODER_GH", &gh)
+        .output()
+        .unwrap();
+    let v = support::checked(support::result(&out.stdout));
+    assert_eq!(v["payload"], "issues", "{v}");
+    assert_eq!(v["data"]["repo"], "o/r");
+    assert_eq!(v["data"]["issues"][0]["number"], 42);
+    assert_eq!(v["data"]["issues"][0]["labels"][0], "feature");
+
+    // Not logged in: the reason and the fix.
+    std::fs::write(&gh, "#!/bin/sh\necho 'To get started with GitHub CLI, please run:  gh auth login' >&2\nexit 4\n").unwrap();
+    let out = speccoder()
+        .args(["--json", "issue", "start", "42", "-C"])
+        .arg(dir.path())
+        .env("SPECCODER_GH", &gh)
+        .output()
+        .unwrap();
+    let v = support::checked(support::result(&out.stdout));
+    assert_eq!(v["status"], "error", "{v}");
+    assert_eq!(v["fix"][0], "gh auth login", "{v}");
+}

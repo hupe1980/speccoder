@@ -70,6 +70,7 @@ const fn describe(payload: &str) -> &'static str {
         b"features" => "feature: the features and which one is current",
         b"ui" => "ui: where the web interface is served",
         b"config" => "config: every key of speccoder.toml, its value and its default",
+        b"issues" => "issue: the repository's open GitHub issues",
         _ => "",
     }
 }
@@ -109,6 +110,7 @@ pub fn get(name: &str) -> Option<Value> {
         "features" => generate::<core::FeaturesReport>(name, title),
         "ui" => generate::<core::UiReport>(name, title),
         "config" => generate::<core::ConfigReport>(name, title),
+        "issues" => generate::<core::IssuesReport>(name, title),
         _ => return None,
     })
 }

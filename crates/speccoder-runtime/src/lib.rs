@@ -23,6 +23,7 @@ pub mod evidence;
 pub mod external;
 pub mod format;
 pub mod git;
+pub mod github;
 pub mod handoff;
 pub mod held_out;
 pub mod hosting;

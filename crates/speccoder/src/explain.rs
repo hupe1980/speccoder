@@ -158,7 +158,14 @@ mod tests {
 
     #[test]
     fn every_fix_is_a_command_or_an_action() {
-        let programs = ["speccoder ", "git ", "specify ", "openspec ", "export "];
+        let programs = [
+            "speccoder ",
+            "git ",
+            "gh ",
+            "specify ",
+            "openspec ",
+            "export ",
+        ];
         for e in CATALOG {
             for f in e.fix {
                 assert!(

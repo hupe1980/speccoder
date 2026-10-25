@@ -170,6 +170,7 @@ mod tests {
 
     fn commit() -> Action {
         Action {
+            confirm: None,
             group: "next".to_owned(),
             label: "commit the planning files (2)".to_owned(),
             why: "speccoder runs from committed files".to_owned(),

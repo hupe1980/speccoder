@@ -34,6 +34,7 @@ fn snapshot() -> Snapshot {
     blocked.blocked_by = vec!["T002".to_owned()];
     Snapshot {
         report: Some(StatusReport {
+            issues: Vec::new(),
             feature: "001-x".to_owned(),
             branch: Some("speccoder/001-x".to_owned()),
             source: "branch".to_owned(),
@@ -722,6 +723,7 @@ fn a_feature_being_planned_shows_what_writes_its_tasks() {
 fn n_hands_the_next_step_to_the_terminal() {
     let mut snap = snapshot();
     snap.primary = Some(speccoder_core::actions::Action {
+        confirm: None,
         group: "next".to_owned(),
         label: "spec tasks".to_owned(),
         why: "break the plan into tasks".to_owned(),

@@ -515,6 +515,46 @@ fn main() {
             window,
         } => ui(path, *port, *no_open, *window, cli.json),
         Command::Config { action } => config(path, action.as_ref()),
+        Command::Issue {
+            action: None | Some(cli::IssueAction::List),
+        } => speccoder_runtime::github::list(&speccoder_runtime::github::gh(), path),
+        Command::Issue {
+            action: Some(cli::IssueAction::Start { issue, no_prompt }),
+        } => {
+            match speccoder_runtime::github::issue(&speccoder_runtime::github::gh(), path, issue) {
+                Err(e) => speccoder_runtime::github::refused(&e),
+                Ok(found) => {
+                    // The format's creating skill (Spec Kit's specify), as `spec` runs it.
+                    let planning = speccoder_runtime::format::at(path).planning();
+                    match planning.creates.first() {
+                        None => speccoder_core::CommandResult::new(
+                            "issue",
+                            speccoder_core::CommandStatus::UsageError,
+                            "this spec format has no skill that creates a feature",
+                        ),
+                        Some(skill) => {
+                            let (progress, _attention) =
+                                live_progress(&cli, &notify, events.as_ref());
+                            let options = speccoder_runtime::RunOptions {
+                                max_tasks: None,
+                                approver: interactive(*no_prompt)
+                                    .then(|| std::sync::Arc::new(prompt::Terminal) as _),
+                                progress,
+                                ..speccoder_runtime::RunOptions::default()
+                            };
+                            let name = format!("{}{skill}", planning.prefix);
+                            speccoder_runtime::hosting::run(
+                                path,
+                                feature,
+                                &name,
+                                &speccoder_runtime::github::description(&found),
+                                &options,
+                            )
+                        }
+                    }
+                }
+            }
+        }
         Command::Feature { query, clear } => match (query, clear) {
             (_, true) => speccoder_runtime::current::clear(path),
             (Some(q), false) => speccoder_runtime::current::switch(path, q),
@@ -622,13 +662,14 @@ fn main() {
             dry_run,
             force,
         } => {
+            let gh = speccoder_runtime::github::gh();
             let ask = |o: &speccoder_runtime::handoff::PrOptions<'_>| {
                 speccoder_runtime::handoff::pr(path, feature, o)
             };
             let mut options = speccoder_runtime::handoff::PrOptions {
                 remote,
                 base: base.as_deref(),
-                gh: "gh",
+                gh: &gh,
                 open: *yes,
                 force: *force,
             };
@@ -965,6 +1006,7 @@ fn command_name(command: Option<&Command>) -> &'static str {
             C::Feature { .. } => "feature",
             C::Ui { .. } => "ui",
             C::Config { .. } => "config",
+            C::Issue { .. } => "issue",
             C::Run { .. } => "run",
             C::Task { action } => match action {
                 cli::TaskAction::Approve { .. } => "task approve",

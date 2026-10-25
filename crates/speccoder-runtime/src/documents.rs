@@ -35,9 +35,10 @@ pub fn render(markdown: &str) -> String {
     out
 }
 
-/// The current feature's planning documents that exist, in reading order.
+/// The current feature's planning documents that exist, in reading order:
+/// (name, path relative to the project, text).
 #[must_use]
-pub fn of_feature(path: &Path, feature: Option<&str>) -> Vec<Document> {
+pub fn sources(path: &Path, feature: Option<&str>) -> Vec<(String, String, String)> {
     let format = crate::format::at(path);
     let Some(snap) = format.open(path, feature) else {
         return Vec::new();
@@ -59,13 +60,22 @@ pub fn of_feature(path: &Path, feature: Option<&str>) -> Vec<Document> {
         let rel = format!("{}/{name}.md", f.feature.dir);
         std::fs::read_to_string(root.join(&rel))
             .ok()
-            .map(|text| Document {
-                name: (*name).to_owned(),
-                path: rel,
-                html: render(&text),
-            })
+            .map(|text| ((*name).to_owned(), rel, text))
     })
     .collect()
+}
+
+/// The current feature's planning documents, rendered.
+#[must_use]
+pub fn of_feature(path: &Path, feature: Option<&str>) -> Vec<Document> {
+    sources(path, feature)
+        .into_iter()
+        .map(|(name, path, text)| Document {
+            name,
+            path,
+            html: render(&text),
+        })
+        .collect()
 }
 
 #[cfg(test)]

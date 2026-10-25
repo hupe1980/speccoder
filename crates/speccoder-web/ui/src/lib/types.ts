@@ -5,7 +5,8 @@ export type Runnable =
   | { kind: "run"; task: string | null }
   | { kind: "commit"; paths: string[] }
   | { kind: "approve" | "reject" | "accept" | "skip" | "nudge"; task: string }
-  | { kind: "feature" };
+  | { kind: "feature" }
+  | { kind: "pull_request" };
 
 export interface Action {
   group: "next" | "plan" | "work" | "task" | "feature" | "review" | string;
@@ -15,6 +16,8 @@ export interface Action {
   run: Runnable | null;
   blocked: string | null;
   input: string | null;
+  /** It leaves the machine: say this in a confirmation before running it. */
+  confirm?: string | null;
 }
 
 export interface JourneyStep {
@@ -50,6 +53,7 @@ export interface Report {
   trace: { requirement: string; task: string | null; verdict: string | null; scenario: string | null; test: string | null }[];
   convergence: { round: number; commit: string; tasks: string[] }[];
   totals: Record<string, number>;
+  issues?: string[];
 }
 
 export interface Envelope<T = unknown> {
@@ -175,4 +179,34 @@ export interface CostReport {
   convergence: Usage;
   total: Usage;
   priced_model: string | null;
+}
+
+export interface GitHubIssue {
+  number: number;
+  title: string;
+  url: string;
+  labels: string[];
+  assignees: string[];
+  mine: boolean;
+  updated: string | null;
+  feature: string | null;
+}
+
+export interface Pull {
+  number: number;
+  title: string;
+  url: string;
+  state: string;
+  draft: boolean;
+  review: string | null;
+  checks: [number, number, number];
+}
+
+export interface GitHubState {
+  status: { installed: boolean; ready: boolean; repo: string | null; url: string | null; reason: string | null };
+  issues?: { repo: string | null; issues: GitHubIssue[] } | null;
+  issues_error?: string | null;
+  branch?: string | null;
+  pull?: Pull | null;
+  pull_error?: string | null;
 }
