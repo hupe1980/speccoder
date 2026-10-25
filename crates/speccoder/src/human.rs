@@ -761,9 +761,14 @@ pub fn approvals(w: &mut impl Write, a: &ApprovalsReport, message: &str) -> io::
 pub fn status(w: &mut impl Write, r: &StatusReport, message: &str) -> io::Result<()> {
     writeln!(
         w,
-        "Feature    {} (from {})",
+        "Feature    {} (from {}){}",
         r.feature,
-        r.branch.as_deref().unwrap_or("the checkout")
+        r.branch.as_deref().unwrap_or("the checkout"),
+        if r.selected_by.is_empty() {
+            String::new()
+        } else {
+            format!(" · {}", r.selected_by)
+        }
     )?;
     let look = crate::style::out();
     let id_width = r
@@ -1182,4 +1187,79 @@ fn strength_lines(a: &speccoder_core::strength::AcceptanceStrength) -> Vec<Strin
         }
     }
     out
+}
+
+/// `speccoder feature`: one line per feature — the current one marked, its
+/// progress as a bar, its artifacts.
+#[must_use]
+pub fn features(r: &speccoder_core::FeaturesReport) -> Vec<String> {
+    use crate::style::Token;
+    let look = crate::style::out();
+    let width = r
+        .features
+        .iter()
+        .map(|f| f.name.chars().count())
+        .max()
+        .unwrap_or(0);
+    r.features
+        .iter()
+        .map(|f| {
+            let progress = if f.tasks == 0 {
+                "no tasks yet".to_owned()
+            } else {
+                format!("{}/{} tasks", f.done, f.tasks)
+            };
+            if look.screen_reader {
+                return format!(
+                    "{} {}: {}{} — {progress} — {}",
+                    r.unit,
+                    f.number,
+                    f.name,
+                    if f.current { " (current)" } else { "" },
+                    if f.artifacts.is_empty() {
+                        "nothing written".to_owned()
+                    } else {
+                        f.artifacts.join(", ")
+                    }
+                );
+            }
+            let filled = (f.done * 10).checked_div(f.tasks).unwrap_or(0);
+            let bar = format!("{}{}", "■".repeat(filled), "□".repeat(10 - filled));
+            let bar = if look.ascii {
+                crate::style::asciify(&bar)
+            } else {
+                bar
+            };
+            let mark = match (f.current, look.ascii) {
+                (true, true) => ">",
+                (true, false) => "▸",
+                (false, _) => " ",
+            };
+            let line = format!(
+                "{mark} {:>2}  {:<width$}  {}  {:<12} {}",
+                f.number,
+                f.name,
+                look.paint(
+                    if f.tasks > 0 && f.done == f.tasks {
+                        Token::Verified
+                    } else {
+                        Token::Accent
+                    },
+                    &bar
+                ),
+                progress,
+                look.paint(Token::Muted, &f.artifacts.join(" · "))
+            );
+            let line = if look.ascii {
+                crate::style::asciify(&line)
+            } else {
+                line
+            };
+            if f.current {
+                look.paint(Token::Accent, &line)
+            } else {
+                line
+            }
+        })
+        .collect()
 }

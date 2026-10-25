@@ -178,6 +178,7 @@ mod tests {
             feature: "001-x".to_owned(),
             branch: None,
             source: "branch".to_owned(),
+            selected_by: String::new(),
             unmerged_commits: 0,
             tasks,
             convergence: Vec::new(),

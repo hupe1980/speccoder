@@ -656,6 +656,10 @@
         {
           "$ref": "#/$defs/DoctorReport",
           "description": "`doctor`: every check of the machine and the project."
+        },
+        {
+          "$ref": "#/$defs/FeaturesReport",
+          "description": "`feature`: the project's features and which one is current."
         }
       ],
       "description": "Command-specific payload of a result."
@@ -1815,6 +1819,58 @@
       ],
       "type": "object"
     },
+    "FeatureEntry": {
+      "description": "One feature (or change) of the project, as `speccoder feature` lists it.",
+      "properties": {
+        "artifacts": {
+          "description": "Which planning artifacts exist: `spec`, `plan`, `tasks`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "current": {
+          "description": "The current one.",
+          "type": "boolean"
+        },
+        "dir": {
+          "description": "Repository-relative directory.",
+          "type": "string"
+        },
+        "done": {
+          "description": "Ticked tasks.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "name": {
+          "description": "Directory name, e.g. `001-greet`.",
+          "type": "string"
+        },
+        "number": {
+          "description": "1-based position, the number `speccoder feature <n>` takes.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "tasks": {
+          "description": "All tasks (0: no task list yet).",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "number",
+        "name",
+        "dir",
+        "current",
+        "done",
+        "tasks",
+        "artifacts"
+      ],
+      "type": "object"
+    },
     "FeatureRef": {
       "description": "A feature directory under `specs/`.",
       "properties": {
@@ -1938,6 +1994,50 @@
         "artifacts",
         "tasks",
         "schedule"
+      ],
+      "type": "object"
+    },
+    "FeaturesReport": {
+      "description": "Result of `speccoder feature`.",
+      "properties": {
+        "action": {
+          "description": "What this call did: `listed`, `switched` or `cleared`.",
+          "type": "string"
+        },
+        "current": {
+          "description": "The current one's name.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "features": {
+          "description": "Every feature, in order.",
+          "items": {
+            "$ref": "#/$defs/FeatureEntry"
+          },
+          "type": "array"
+        },
+        "reason": {
+          "description": "How it is current: `argument`, `environment`, `recorded`,\n`only_feature` or `none`.",
+          "type": "string"
+        },
+        "reason_text": {
+          "description": "The same in words (`recorded in .specify/feature.json`).",
+          "type": "string"
+        },
+        "unit": {
+          "description": "`feature` or `change`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "unit",
+        "current",
+        "reason",
+        "reason_text",
+        "action",
+        "features"
       ],
       "type": "object"
     },
@@ -3615,6 +3715,13 @@
           },
           "type": "array"
         },
+        "current": {
+          "description": "The unit the skill worked on, or created and made current, and how\nit is known (`001-x (recorded in .specify/feature.json)`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "hooks": {
           "description": "Extension hooks run, offered or skipped around it.",
           "items": {
@@ -3792,6 +3899,11 @@
           "description": "Feature directory name.",
           "type": "string"
         },
+        "selected_by": {
+          "default": "",
+          "description": "How the feature was chosen (`recorded in .specify/feature.json`,\n`the only feature`, `named with --feature`).",
+          "type": "string"
+        },
         "source": {
           "description": "Where `tasks.md` was read: `branch` or `checkout`.",
           "type": "string"
@@ -3825,6 +3937,7 @@
         "feature",
         "branch",
         "source",
+        "selected_by",
         "unmerged_commits",
         "tasks",
         "convergence",

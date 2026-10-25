@@ -240,6 +240,8 @@ pub struct WorkspaceTools {
     root: PathBuf,
     policy: Policy,
     runner: crate::sandbox::Runner,
+    /// Variables every command gets (a hosted skill's current unit).
+    env: Vec<(String, String)>,
 }
 
 fn failure(error: impl Into<String>) -> Value {
@@ -264,7 +266,15 @@ impl WorkspaceTools {
             root: fs::canonicalize(root)?,
             policy,
             runner: crate::sandbox::Runner::Plain,
+            env: Vec::new(),
         })
+    }
+
+    /// Commands also get `env` (the policy's own variables still win).
+    #[must_use]
+    pub fn with_env(mut self, env: Vec<(String, String)>) -> Self {
+        self.env = env;
+        self
     }
 
     /// Runs commands with `runner` (the sandbox).
@@ -488,6 +498,10 @@ impl WorkspaceTools {
         };
         let secs = a.timeout_secs.unwrap_or(120).clamp(1, MAX_COMMAND_SECS);
         let mut env = scrubbed_env(std::env::vars());
+        for (k, v) in &self.env {
+            env.retain(|(name, _)| name != k);
+            env.push((k.clone(), v.clone()));
+        }
         for (k, v) in self.policy.protected().rules().env {
             env.retain(|(name, _)| name != k);
             env.push(((*k).to_owned(), (*v).to_owned()));

@@ -225,6 +225,7 @@ mod tests {
             feature: "001-x".to_owned(),
             branch: Some("speccoder/001-x".to_owned()),
             source: "branch".to_owned(),
+            selected_by: String::new(),
             unmerged_commits: 0,
             tasks: (0..n)
                 .map(|i| {

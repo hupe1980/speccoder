@@ -135,6 +135,14 @@ pub enum Command {
         #[arg(long)]
         bug_report: bool,
     },
+    /// Which feature commands work on: list them, or make one current (`feature 2`, `feature greet`).
+    Feature {
+        /// A name, a number (`2` is `002-…`), or a part of the name only one feature has.
+        query: Option<String>,
+        /// Forget the current feature.
+        #[arg(long, conflicts_with = "query")]
+        clear: bool,
+    },
     /// The format's planning skills: `spec specify "…"`, `spec plan`, … (OpenSpec: propose, explore, archive).
     Spec {
         /// The skill, or `archive`; without it, list the installed skills.

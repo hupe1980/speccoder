@@ -13,6 +13,7 @@ pub mod commands;
 pub mod context;
 pub mod controls;
 pub mod convergence;
+pub mod current;
 pub mod doctor;
 pub mod eval;
 pub mod external;

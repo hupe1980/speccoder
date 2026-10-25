@@ -290,6 +290,12 @@ fn human_body(
         (_, Some(CommandData::Control(_))) => {
             writeln!(&mut *out, "{}", result.message())
         }
+        (_, Some(CommandData::Features(f))) => {
+            for line in crate::human::features(f) {
+                writeln!(out, "{line}")?;
+            }
+            writeln!(out, "{}", result.message())
+        }
         (_, Some(CommandData::Bench(b))) => {
             for i in &b.imported {
                 writeln!(out, "  + {i}")?;
@@ -455,6 +461,7 @@ mod look_tests {
                 feature: "001-x".to_owned(),
                 branch: Some("speccoder/001-x".to_owned()),
                 source: "branch".to_owned(),
+                selected_by: String::new(),
                 unmerged_commits: 0,
                 tasks,
                 convergence: Vec::new(),

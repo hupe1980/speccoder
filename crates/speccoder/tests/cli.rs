@@ -798,3 +798,42 @@ fn init_at_a_terminal_commits_only_the_config_on_yes() {
         "speccoder.toml"
     );
 }
+
+#[test]
+fn feature_lists_switches_and_validates_against_its_schema() {
+    let dir = make_project();
+    std::fs::create_dir_all(dir.path().join("specs/002-login")).unwrap();
+    std::fs::write(dir.path().join("specs/002-login/spec.md"), "# Spec\n").unwrap();
+    let json = |args: &[&str]| {
+        let out = speccoder()
+            .args(args)
+            .arg("-C")
+            .arg(dir.path())
+            .arg("--json")
+            .output()
+            .unwrap();
+        support::result(&out.stdout)
+    };
+    let v = json(&["feature"]);
+    assert_eq!(v["payload"], "features");
+    assert_eq!(v["data"]["current"], serde_json::Value::Null);
+    assert_eq!(v["data"]["features"][1]["name"], "002-login");
+    let v = json(&["feature", "login"]);
+    assert_eq!(v["data"]["current"], "002-login");
+    assert_eq!(v["data"]["action"], "switched");
+    // A miss is an error with a fix, still a valid envelope.
+    let v = json(&["feature", "nothing-like-it"]);
+    assert_eq!(v["code"], "NOT-FOUND");
+    // Human: the current one marked, the report says why.
+    let out = speccoder()
+        .args(["feature", "-C"])
+        .arg(dir.path())
+        .output()
+        .unwrap();
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(text.contains("▸  2  002-login"), "{text}");
+    assert!(
+        text.contains("current feature: 002-login (recorded in .specify/feature.json)"),
+        "{text}"
+    );
+}

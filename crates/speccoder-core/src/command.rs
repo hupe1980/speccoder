@@ -181,6 +181,45 @@ pub enum CommandData {
     Schema(Box<SchemaReport>),
     /// `doctor`: every check of the machine and the project.
     Doctor(Box<DoctorReport>),
+    /// `feature`: the project's features and which one is current.
+    Features(Box<FeaturesReport>),
+}
+
+/// One feature (or change) of the project, as `speccoder feature` lists it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct FeatureEntry {
+    /// 1-based position, the number `speccoder feature <n>` takes.
+    pub number: usize,
+    /// Directory name, e.g. `001-greet`.
+    pub name: String,
+    /// Repository-relative directory.
+    pub dir: String,
+    /// The current one.
+    pub current: bool,
+    /// Ticked tasks.
+    pub done: usize,
+    /// All tasks (0: no task list yet).
+    pub tasks: usize,
+    /// Which planning artifacts exist: `spec`, `plan`, `tasks`.
+    pub artifacts: Vec<String>,
+}
+
+/// Result of `speccoder feature`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct FeaturesReport {
+    /// `feature` or `change`.
+    pub unit: String,
+    /// The current one's name.
+    pub current: Option<String>,
+    /// How it is current: `argument`, `environment`, `recorded`,
+    /// `only_feature` or `none`.
+    pub reason: String,
+    /// The same in words (`recorded in .specify/feature.json`).
+    pub reason_text: String,
+    /// What this call did: `listed`, `switched` or `cleared`.
+    pub action: String,
+    /// Every feature, in order.
+    pub features: Vec<FeatureEntry>,
 }
 
 /// How a doctor check came out.
@@ -252,6 +291,7 @@ impl CommandData {
             Self::Explain(_) => "explain",
             Self::Schema(_) => "schema",
             Self::Doctor(_) => "doctor",
+            Self::Features(_) => "features",
         }
     }
 }
@@ -283,6 +323,7 @@ pub const PAYLOADS: &[&str] = &[
     "explain",
     "schema",
     "doctor",
+    "features",
 ];
 
 /// A repository instructions file given to an attempt.
@@ -712,6 +753,10 @@ pub struct SkillRunReport {
     pub usage: Option<serde_json::Value>,
     /// Extension hooks run, offered or skipped around it.
     pub hooks: Vec<String>,
+    /// The unit the skill worked on, or created and made current, and how
+    /// it is known (`001-x (recorded in .specify/feature.json)`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current: Option<String>,
 }
 
 /// Result of `speccoder init`.
@@ -1071,6 +1116,10 @@ pub struct StatusReport {
     pub branch: Option<String>,
     /// Where `tasks.md` was read: `branch` or `checkout`.
     pub source: String,
+    /// How the feature was chosen (`recorded in .specify/feature.json`,
+    /// `the only feature`, `named with --feature`).
+    #[serde(default)]
+    pub selected_by: String,
     /// Commits on the branch that the checkout's HEAD does not contain.
     pub unmerged_commits: usize,
     /// Every task, in document order.

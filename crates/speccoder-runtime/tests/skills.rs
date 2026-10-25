@@ -378,3 +378,187 @@ fn a_hook_that_leaves_artifacts_uncommitted_stops_the_run_with_the_reason() {
     );
     assert!(res.message().contains("not committed"), "{}", res.message());
 }
+
+/// A Spec Kit-shaped skill: `speckit-<name>`.
+fn speckit_skill(r: &Path, name: &str) {
+    let dir = r.join(format!(".claude/skills/speckit-{name}"));
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(
+        dir.join("SKILL.md"),
+        format!("---\nname: speckit-{name}\ndescription: {name}.\n---\n\n$ARGUMENTS\n"),
+    )
+    .unwrap();
+}
+
+#[test]
+fn a_planning_skill_is_told_the_feature_its_scripts_need() {
+    // The reported first run: one feature, no .specify/feature.json, and
+    // Spec Kit's setup script reads SPECIFY_FEATURE_DIRECTORY or that file.
+    let r = repo();
+    speckit_skill(r.path(), "plan");
+    let scripts = r.path().join(".specify/scripts/bash");
+    fs::create_dir_all(&scripts).unwrap();
+    fs::write(
+        scripts.join("setup-plan.sh"),
+        "#!/bin/sh\necho \"feature=$SPECIFY_FEATURE_DIRECTORY\"\n",
+    )
+    .unwrap();
+    use std::os::unix::fs::PermissionsExt;
+    fs::set_permissions(
+        scripts.join("setup-plan.sh"),
+        fs::Permissions::from_mode(0o755),
+    )
+    .unwrap();
+    git(r.path(), &["add", "-A"]);
+    git(r.path(), &["commit", "-qm", "plan skill"]);
+    assert!(!r.path().join(".specify/feature.json").exists());
+    let state = tempfile::tempdir().unwrap();
+    let f = FakeProvider::new();
+    let d: Arc<dyn ModelProvider> = f.clone();
+    f.will_call_tool(
+        "s",
+        "run_command",
+        json!({ "argv": [".specify/scripts/bash/setup-plan.sh"] }),
+    );
+    f.will_structure(
+        json!({ "summary": "planned", "status": "done", "files_written": [], "questions": [] }),
+    );
+    let res = run_with(
+        r.path(),
+        "plan",
+        "",
+        state.path(),
+        d,
+        None,
+        &RunOptions::default(),
+    );
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let asked = f.asked();
+    let seen =
+        serde_json::to_string(&asked[1].prompt).unwrap_or_default() + &format!("{:?}", asked[1]);
+    let canonical = fs::canonicalize(r.path()).unwrap();
+    assert!(
+        seen.contains(&format!(
+            "feature={}",
+            canonical.join("specs/001-graph").display()
+        )),
+        "the script did not see the feature: {seen}"
+    );
+    assert_eq!(
+        report(&res).current.as_deref(),
+        Some("001-graph (the only feature)")
+    );
+}
+
+#[test]
+fn a_feature_the_specify_skill_creates_becomes_current() {
+    let r = repo();
+    speckit_skill(r.path(), "specify");
+    git(r.path(), &["add", "-A"]);
+    git(r.path(), &["commit", "-qm", "specify skill"]);
+    let state = tempfile::tempdir().unwrap();
+    let f = FakeProvider::new();
+    let d: Arc<dyn ModelProvider> = f.clone();
+    // The model writes the spec but not .specify/feature.json.
+    f.will_call_tool(
+        "w",
+        "write_file",
+        json!({ "path": "specs/002-login/spec.md", "content": "# Spec\n\nLogin.\n" }),
+    );
+    f.will_structure(done());
+    let res = run_with(
+        r.path(),
+        "specify",
+        "Add a login page",
+        state.path(),
+        d,
+        None,
+        &RunOptions::default(),
+    );
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    assert_eq!(
+        report(&res).current.as_deref(),
+        Some("002-login (recorded in .specify/feature.json)")
+    );
+    let pointer: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(r.path().join(".specify/feature.json")).unwrap())
+            .unwrap();
+    assert_eq!(pointer["feature_directory"], "specs/002-login");
+    // Every tool now agrees: the report selects it from the pointer.
+    let rep = speccoder_runtime::current::list(r.path(), None);
+    assert!(
+        rep.message()
+            .contains("current feature: 002-login (recorded in .specify/feature.json)"),
+        "{}",
+        rep.message()
+    );
+}
+
+#[test]
+fn the_current_feature_is_listed_switched_and_cleared() {
+    let r = repo();
+    fs::create_dir_all(r.path().join("specs/002-login")).unwrap();
+    fs::write(r.path().join("specs/002-login/spec.md"), "# Spec\n").unwrap();
+    let ambiguous = speccoder_runtime::current::list(r.path(), None);
+    let Some(CommandData::Features(f)) = ambiguous.data() else {
+        panic!("{}", ambiguous.message())
+    };
+    assert_eq!(f.current, None);
+    assert_eq!(f.features.len(), 2);
+    assert_eq!(f.features[0].artifacts, ["tasks"]);
+    assert_eq!(f.features[1].artifacts, ["spec"]);
+    assert!(
+        ambiguous.message().contains("none current"),
+        "{}",
+        ambiguous.message()
+    );
+    // By number.
+    let s = speccoder_runtime::current::switch(r.path(), "2");
+    assert_eq!(s.status(), CommandStatus::Ok, "{}", s.message());
+    assert!(
+        s.message().starts_with("switched to 002-login"),
+        "{}",
+        s.message()
+    );
+    let Some(CommandData::Features(f)) = s.data() else {
+        panic!()
+    };
+    assert_eq!(
+        (f.current.as_deref(), f.reason.as_str()),
+        (Some("002-login"), "recorded")
+    );
+    // A typo is answered with a suggestion and the list.
+    let miss = speccoder_runtime::current::switch(r.path(), "grph");
+    assert_eq!(miss.status(), CommandStatus::NotFound);
+    assert!(
+        miss.message().contains("did you mean 001-graph?"),
+        "{}",
+        miss.message()
+    );
+    // Cleared: nothing current again.
+    let c = speccoder_runtime::current::clear(r.path());
+    assert!(
+        c.message().contains("no feature is current"),
+        "{}",
+        c.message()
+    );
+    assert!(!r.path().join(".specify/feature.json").exists());
+    // A pointer to a feature that is gone: doctor names the closest one.
+    fs::write(
+        r.path().join(".specify/feature.json"),
+        "{\"feature_directory\": \"specs/003-logn\"}",
+    )
+    .unwrap();
+    let d = speccoder_runtime::doctor::run(r.path(), None, None);
+    let Some(CommandData::Doctor(d)) = d.data() else {
+        panic!()
+    };
+    let check = d.checks.iter().find(|c| c.check == "feature").unwrap();
+    assert!(
+        check
+            .fix
+            .iter()
+            .any(|f| f.contains("did you mean 002-login?")),
+        "{check:?}"
+    );
+}

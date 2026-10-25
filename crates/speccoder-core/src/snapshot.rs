@@ -350,3 +350,41 @@ pub enum Severity {
     /// For information.
     Info,
 }
+
+/// The feature whose name is nearest to `name` (edit distance over the
+/// part after the numeric prefix), if any is reasonably near.
+#[must_use]
+pub fn closest<'f>(features: &'f [FeatureRef], name: &str) -> Option<&'f FeatureRef> {
+    let slug = |s: &str| {
+        s.rsplit('/')
+            .next()
+            .unwrap_or(s)
+            .trim_start_matches(|c: char| c.is_ascii_digit() || c == '-')
+            .to_lowercase()
+    };
+    let target = slug(name);
+    features
+        .iter()
+        .map(|f| (distance(&slug(&f.name), &target), f))
+        .filter(|(d, f)| *d <= slug(&f.name).len().max(target.len()) / 2)
+        .min_by_key(|(d, _)| *d)
+        .map(|(_, f)| f)
+}
+
+/// Levenshtein distance.
+fn distance(a: &str, b: &str) -> usize {
+    let b: Vec<char> = b.chars().collect();
+    let mut row: Vec<usize> = (0..=b.len()).collect();
+    for (i, ca) in a.chars().enumerate() {
+        let mut prev = row[0];
+        row[0] = i + 1;
+        for (j, cb) in b.iter().enumerate() {
+            let next = (prev + usize::from(ca != *cb))
+                .min(row[j] + 1)
+                .min(row[j + 1] + 1);
+            prev = row[j + 1];
+            row[j + 1] = next;
+        }
+    }
+    row[b.len()]
+}
