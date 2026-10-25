@@ -13,11 +13,13 @@ name: Release
 #   with repository permission contents: read and write;
 # - GitHub environment `release`, deployment rule: tags `v*`, holding
 #   HOMEBREW_APP_ID and HOMEBREW_APP_PRIVATE_KEY (the App's ID and a private
-#   key) and, as a fallback to trusted publishing, CARGO_REGISTRY_TOKEN
-#   (crates.io scope publish-update, limited to the five crates);
-# - crates.io trusted publishing for speccoder, speccoder-core,
-#   speccoder-speckit, speccoder-openspec and speccoder-runtime: workflow
-#   release.yml, environment release.
+#   key) and CARGO_REGISTRY_TOKEN: a crates.io API token with the scopes
+#   publish-new and publish-update, limited to the crates `speccoder` and
+#   `speccoder-*` (publish-new: of the six crates only `speccoder` exists
+#   before the first release), with an expiry.
+#
+# Trusted publishing can only be set up for crates that already exist; after
+# the first release it can replace the token.
 #
 # Third-party actions are pinned by commit: this workflow holds write tokens.
 on:
@@ -144,19 +146,18 @@ jobs:
     environment: release
     permissions:
       contents: read
-      id-token: write
+    env:
+      CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
     steps:
+      - name: The token is there
+        run: |
+          [ -n "$CARGO_REGISTRY_TOKEN" ] || { echo "CARGO_REGISTRY_TOKEN is not set in the environment release"; exit 1; }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: rustup toolchain install
       - uses: taiki-e/install-action@a4d3f3f761dcd95cce1b72cb61cb6d1963438177 # v2.87.30
         with:
           tool: just
-      - uses: rust-lang/crates-io-auth-action@3268eb413133e2960fa4ae0e963ca76380c54cd9 # v1.0.6
-        id: auth
-        continue-on-error: true
       - run: just publish-ci
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token || secrets.CARGO_REGISTRY_TOKEN }}
 
   tap:
     needs: [preflight, release]
