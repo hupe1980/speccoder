@@ -40,3 +40,22 @@ export function diffWords(before: string, after: string): Segment[] {
   while (j < b.length) push(b[j++], "new");
   return out;
 }
+
+/** The question marker a skill leaves where it could not decide. */
+export const QUESTION = /\[NEEDS CLARIFICATION:?\s*([^\]]*)\]/g;
+
+/** Text and open questions, for showing a question as a pill. */
+export function questions(text: string): { text: string; question: boolean }[] {
+  const out: { text: string; question: boolean }[] = [];
+  let at = 0;
+  for (const m of text.matchAll(QUESTION)) {
+    if ((m.index ?? 0) > at) out.push({ text: text.slice(at, m.index), question: false });
+    out.push({ text: (m[1] ?? "").trim(), question: true });
+    at = (m.index ?? 0) + m[0].length;
+  }
+  if (at < text.length) out.push({ text: text.slice(at), question: false });
+  return out;
+}
+
+/** A question marker as one token, so a diff shows it as one change. */
+export const tokenised = (text: string) => text.replace(QUESTION, "⟨question⟩");

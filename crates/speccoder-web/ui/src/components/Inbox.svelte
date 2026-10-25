@@ -12,6 +12,7 @@
     ruling: { title: "Rule on the Tests", icon: "shield", tone: "needs_approval", why: "The tests reject an alternative the spec may allow." },
     gaming: { title: "Suspected Shortcuts", icon: "exclaim", tone: "failed", why: "The monitor saw what looks like gaming the tests." },
     stale: { title: "The Spec Changed", icon: "exclaim", tone: "needs_approval", why: "Evidence proves an earlier wording." },
+    question: { title: "Open Questions", icon: "exclaim", tone: "needs_approval", why: "The spec leaves these undecided — answer before it is built on." },
     review: { title: "Review the Spec", icon: "doc", tone: "ready", why: "The result will be judged against these words." },
     revise: { title: "Change Requests", icon: "sparkle", tone: "needs_approval", why: "Revise the spec as you asked, then review it again." },
     stuck: { title: "Did Not Pass", icon: "xoctagon", tone: "failed", why: "Decide: run again, leave a note, skip or accept." },
@@ -39,7 +40,7 @@
   }
   async function open(i: InboxItem) {
     if (app.feature !== i.feature) await app.selectFeature(i.feature);
-    if (i.kind === "review" || i.kind === "revise") {
+    if (i.kind === "review" || i.kind === "revise" || i.kind === "question") {
       app.doc = "review";
       app.view = "documents";
       return;

@@ -529,6 +529,14 @@ fn main() {
                     review::decide(path, feature, ids, "request", Some(comment), "cli")
                 }
                 Some(R::Clear { ids }) => review::decide(path, feature, ids, "clear", None, "cli"),
+                Some(R::Answer { question, answer }) => {
+                    review::answer(path, feature, question, answer)
+                }
+                Some(R::Edit {
+                    id,
+                    wording,
+                    approve,
+                }) => review::edit(path, feature, id, wording, *approve, "cli"),
             }
         }
         Command::Issue {

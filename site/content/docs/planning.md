@@ -48,11 +48,21 @@ speccoder review approve               # every one not yet approved
 1/3 requirements approved; 1 to review, 1 with changes requested
 ```
 
+**A conversation, not a form.** A spec is rarely right the first time:
+
+```sh
+speccoder review answer Q1 "sessions end at once"       # an open question, answered in place
+speccoder review edit FR-003 "Users MUST log out of every device." --approve
+speccoder spec clarify                                  # or let the format's skill ask you
+```
+
+Every `[NEEDS CLARIFICATION: …]` a skill left in the feature's documents is an **open question** (`Q1`, `Q2`, … with where it is and the requirement it sits in); `answer` puts your words where the question stood, nothing else touched. `edit` rewords a requirement yourself — the line keeps its identifier, its approval lapses, `--approve` signs the new words as you write them. A wording that still asks a question cannot be approved; "approve the rest" passes it by and says so. `speccoder review` also shows what changed since the spec's last commit (what a commit would record) and its history — every version, what it added, reworded or removed — so you see the spec converge.
+
 Each decision is bound to the exact line it was made on and names who made it (git's `user.name`). Reword a requirement and its decision **lapses**: it shows again, with the wording you decided on beside the new one. Change requests go to the format's revising skill (Spec Kit: `clarify`) in one request — **Revise the Spec** in the app, or `speccoder spec clarify "…"` — and you review the result.
 
 The review is recorded in `review.json` beside the spec; commit it with the spec, and the team, the pull request and every later run see the same sign-off. The model never writes it: a planning skill may write the spec, but a change to the review — even through a command it was allowed to run — is undone and reported. The report and the pull request description say how many requirements are approved; [**Needs You**](@/docs/web.md#what-you-see) lists what waits for your review. With `[review] required = true` in `speccoder.toml`, a run waits (`REVIEW-PENDING`) until every requirement is approved in the committed review.
 
-In the [app](@/docs/web.md), **Spec & Plan › Review** shows each requirement as a card with **Approve**, **Request Changes** and **Clear**, a lapsed one word by word.
+In the [app](@/docs/web.md), **Spec & Plan › Review** is the conversation: open questions first, each with an answer field (**Write In**, or **Ask Me with clarify**); a card per requirement with **Approve**, **Edit** (word by word as you type; ⌘↩ saves and approves), **Request Changes** and **Clear**, a question inside a wording shown as a pill; what changed since the last commit with **Commit**; and how the spec evolved.
 
 ## The current feature
 

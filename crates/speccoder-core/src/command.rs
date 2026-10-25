@@ -227,6 +227,48 @@ pub struct ReviewReport {
     /// What that skill is asked, while changes are requested: every
     /// request with its requirement.
     pub revision: Option<String>,
+    /// The questions the documents leave open (`[NEEDS CLARIFICATION: …]`),
+    /// in reading order (F-093).
+    pub questions: Vec<OpenQuestion>,
+    /// Requirements changed in the checkout since the last commit of the
+    /// spec: what a commit would record.
+    pub changes: Vec<RequirementDrift>,
+    /// The spec's versions in git, newest first (the last twelve).
+    pub history: Vec<SpecVersion>,
+}
+
+/// A question a document leaves open, to answer in place (F-093).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct OpenQuestion {
+    /// `Q1`, `Q2`, … in reading order.
+    pub id: String,
+    /// The question.
+    pub text: String,
+    /// The document (project-relative).
+    pub file: String,
+    /// Its line (1-based).
+    pub line: usize,
+    /// The requirement or section it is in.
+    pub near: Option<String>,
+}
+
+/// One commit of the spec and what it changed in its requirements.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct SpecVersion {
+    /// The commit.
+    pub commit: String,
+    /// `YYYY-MM-DD`.
+    pub date: String,
+    /// Its author.
+    pub author: String,
+    /// Its subject line.
+    pub subject: String,
+    /// Requirements it added.
+    pub added: Vec<String>,
+    /// Requirements it reworded.
+    pub reworded: Vec<String>,
+    /// Requirements it removed.
+    pub removed: Vec<String>,
 }
 
 /// One requirement and its review.
@@ -261,13 +303,16 @@ pub struct ReviewTotals {
     pub open: usize,
     /// Decided on an earlier wording.
     pub lapsed: usize,
+    /// Questions the documents leave open (F-093).
+    #[serde(default)]
+    pub questions: usize,
 }
 
 impl ReviewTotals {
     /// Every requirement approved on its current wording.
     #[must_use]
     pub fn complete(&self) -> bool {
-        self.changes_requested == 0 && self.open == 0 && self.lapsed == 0
+        self.changes_requested == 0 && self.open == 0 && self.lapsed == 0 && self.questions == 0
     }
 }
 
@@ -288,7 +333,8 @@ pub struct InboxItem {
     /// What kind, in the order of urgency: `approval` (a run waits on it),
     /// `ruling` (a verified attempt is held: its tests reject an
     /// alternative the spec allows), `gaming` (the monitor suspects a
-    /// shortcut), `stale` (proven against an earlier wording), `review`
+    /// shortcut), `stale` (proven against an earlier wording), `question`
+    /// (the spec leaves questions open), `review`
     /// (requirements not approved on their current wording), `revise`
     /// (changes requested on the spec), `stuck` (the
     /// last attempt did not pass), `commit` (planning files a run cannot

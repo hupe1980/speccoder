@@ -1,5 +1,72 @@
 {
   "$defs": {
+    "OpenQuestion": {
+      "description": "A question a document leaves open, to answer in place (F-093).",
+      "properties": {
+        "file": {
+          "description": "The document (project-relative).",
+          "type": "string"
+        },
+        "id": {
+          "description": "`Q1`, `Q2`, … in reading order.",
+          "type": "string"
+        },
+        "line": {
+          "description": "Its line (1-based).",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "near": {
+          "description": "The requirement or section it is in.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text": {
+          "description": "The question.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "text",
+        "file",
+        "line",
+        "near"
+      ],
+      "type": "object"
+    },
+    "RequirementDrift": {
+      "description": "One cited requirement, as the tick saw it and as the spec has it now.",
+      "properties": {
+        "id": {
+          "description": "`FR-003`.",
+          "type": "string"
+        },
+        "now": {
+          "description": "Its line now; `None`: it was removed.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "then": {
+          "description": "Its line when the task was ticked; `None`: it did not exist yet.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "then",
+        "now"
+      ],
+      "type": "object"
+    },
     "ReviewItem": {
       "description": "One requirement and its review.",
       "properties": {
@@ -83,13 +150,73 @@
           "format": "uint",
           "minimum": 0,
           "type": "integer"
+        },
+        "questions": {
+          "default": 0,
+          "description": "Questions the documents leave open (F-093).",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
         }
       },
       "required": [
         "approved",
         "changes_requested",
         "open",
-        "lapsed"
+        "lapsed",
+        "questions"
+      ],
+      "type": "object"
+    },
+    "SpecVersion": {
+      "description": "One commit of the spec and what it changed in its requirements.",
+      "properties": {
+        "added": {
+          "description": "Requirements it added.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "author": {
+          "description": "Its author.",
+          "type": "string"
+        },
+        "commit": {
+          "description": "The commit.",
+          "type": "string"
+        },
+        "date": {
+          "description": "`YYYY-MM-DD`.",
+          "type": "string"
+        },
+        "removed": {
+          "description": "Requirements it removed.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "reworded": {
+          "description": "Requirements it reworded.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "subject": {
+          "description": "Its subject line.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "commit",
+        "date",
+        "author",
+        "subject",
+        "added",
+        "reworded",
+        "removed"
       ],
       "type": "object"
     }
@@ -98,6 +225,13 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "description": "Result of `speccoder review` (F-087): every requirement of the feature's\nspec as a card, with the person's decision on its exact wording.",
   "properties": {
+    "changes": {
+      "description": "Requirements changed in the checkout since the last commit of the\nspec: what a commit would record.",
+      "items": {
+        "$ref": "#/$defs/RequirementDrift"
+      },
+      "type": "array"
+    },
     "feature": {
       "description": "The feature.",
       "type": "string"
@@ -105,6 +239,20 @@
     "file": {
       "description": "Where the review is recorded (project-relative); commit it to share.",
       "type": "string"
+    },
+    "history": {
+      "description": "The spec's versions in git, newest first (the last twelve).",
+      "items": {
+        "$ref": "#/$defs/SpecVersion"
+      },
+      "type": "array"
+    },
+    "questions": {
+      "description": "The questions the documents leave open (`[NEEDS CLARIFICATION: …]`),\nin reading order (F-093).",
+      "items": {
+        "$ref": "#/$defs/OpenQuestion"
+      },
+      "type": "array"
     },
     "requirements": {
       "description": "One per requirement, in the spec's order.",
@@ -138,7 +286,10 @@
     "requirements",
     "totals",
     "revise_with",
-    "revision"
+    "revision",
+    "questions",
+    "changes",
+    "history"
   ],
   "title": "review: the spec's requirements and the person's decision on each",
   "type": "object"

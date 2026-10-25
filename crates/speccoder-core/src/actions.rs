@@ -64,7 +64,9 @@ pub enum Runnable {
     Review {
         /// The requirement identifiers; empty: every one not yet approved.
         ids: Vec<String>,
-        /// `approve`, `request` (changes) or `clear`.
+        /// `approve`, `request` (changes), `clear`; `answer` (ids: the
+        /// question) and `edit` / `edit-approve` (ids: the requirement) take
+        /// the input as the words.
         verdict: String,
     },
     /// Tell a GitHub issue it is being specified as the current feature.

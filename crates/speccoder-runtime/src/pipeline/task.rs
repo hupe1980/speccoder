@@ -321,8 +321,8 @@ pub(crate) fn run_task(
         return refuse(
             CommandStatus::NeedsHuman,
             format!(
-                "{feature_name}'s spec is not approved yet ({} approved; {} to review, {} with changes requested, {} changed since; committed review only) and [review] required is on",
-                t.approved, t.open, t.changes_requested, t.lapsed
+                "{feature_name}'s spec is not approved yet ({} approved; {} to review, {} with changes requested, {} changed since, {} open question(s); committed review only) and [review] required is on",
+                t.approved, t.open, t.changes_requested, t.lapsed, t.questions
             ),
         )
         .with_code("REVIEW-PENDING");

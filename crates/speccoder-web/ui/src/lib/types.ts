@@ -8,7 +8,7 @@ export type Runnable =
   | { kind: "feature" }
   | { kind: "converge" }
   | { kind: "rule"; task: string }
-  | { kind: "review"; ids: string[]; verdict: "approve" | "request" | "clear" }
+  | { kind: "review"; ids: string[]; verdict: "approve" | "request" | "clear" | "answer" | "edit" | "edit-approve" }
   | { kind: "issue_comment"; issue: number; assign: boolean }
   | { kind: "pull_request" };
 
@@ -264,6 +264,27 @@ export interface ReviewTotals {
   changes_requested: number;
   open: number;
   lapsed: number;
+  questions: number;
+}
+
+/** A question a document leaves open (F-093). */
+export interface OpenQuestion {
+  id: string;
+  text: string;
+  file: string;
+  line: number;
+  near: string | null;
+}
+
+/** One commit of the spec and what it changed. */
+export interface SpecVersion {
+  commit: string;
+  date: string;
+  author: string;
+  subject: string;
+  added: string[];
+  reworded: string[];
+  removed: string[];
 }
 
 export interface Review {
@@ -274,4 +295,7 @@ export interface Review {
   revise_with: string | null;
   /** What the revising skill is asked, while changes are requested. */
   revision: string | null;
+  questions: OpenQuestion[];
+  changes: RequirementDrift[];
+  history: SpecVersion[];
 }

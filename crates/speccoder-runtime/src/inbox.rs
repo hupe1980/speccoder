@@ -17,8 +17,9 @@ use crate::actions::action;
 
 /// The kinds, most urgent first: what blocks a run, what questions the
 /// evidence, what stops a task, what blocks a hand-off.
-pub const KINDS: [&str; 9] = [
-    "approval", "ruling", "gaming", "stale", "review", "revise", "stuck", "commit", "handoff",
+pub const KINDS: [&str; 10] = [
+    "approval", "ruling", "gaming", "stale", "question", "review", "revise", "stuck", "commit",
+    "handoff",
 ];
 
 /// `speccoder inbox [--feature]`: the decisions waiting in every feature of
@@ -321,8 +322,47 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
     }
 
     // The spec, reviewed requirement by requirement (F-087).
-    if let Some(CommandData::Review(rv)) = crate::review::report(path, Some(feature)).data() {
+    if let Some(rv) = crate::review::summary(path, Some(feature)).as_ref() {
         let t = rv.totals;
+        // The documents' open questions: answered before anything is built.
+        if !rv.questions.is_empty() {
+            let read = action(
+                "plan",
+                "answer the open questions",
+                "your words replace each question where it stands",
+                flag("speccoder review".to_owned()),
+            );
+            let mut actions = vec![read];
+            if let Some(skill) = &rv.revise_with {
+                let mut a = action(
+                    "plan",
+                    format!("clarify with {skill}"),
+                    "the format's skill asks you the questions and writes the answers in",
+                    flag(format!("speccoder spec {skill}")),
+                );
+                a.run = Some(Runnable::Skill {
+                    name: skill.clone(),
+                    arguments: String::new(),
+                });
+                actions.push(a);
+            }
+            out.push(item(
+                "question",
+                None,
+                count(
+                    rv.questions.len(),
+                    "open question in the spec",
+                    "open questions in the spec",
+                ),
+                rv.questions
+                    .iter()
+                    .take(3)
+                    .map(|q| format!("{}: {}", q.id, q.text))
+                    .collect::<Vec<_>>()
+                    .join("; "),
+                actions,
+            ));
+        }
         if t.open + t.lapsed > 0 {
             let pending: Vec<&str> = rv
                 .requirements

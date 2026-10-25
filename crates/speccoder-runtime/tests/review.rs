@@ -235,3 +235,132 @@ fn the_report_and_the_payload_carry_the_review() {
     let t = rep.review.expect("review totals");
     assert_eq!((t.approved, t.open), (1, 2));
 }
+
+const ASKING: &str = "# Spec\n\n## Requirements\n\n- **FR-001**: Users MUST log in.\n- **FR-002**: Users MUST log out [NEEDS CLARIFICATION: what happens to open sessions?].\n\n## Edge Cases\n\n- A locked account [NEEDS CLARIFICATION: unlock how?].\n";
+
+#[test]
+fn open_questions_are_answered_in_place() {
+    let r = repo();
+    fs::write(r.path().join("specs/001-login/spec.md"), ASKING).unwrap();
+    let rv = data(&review::report(r.path(), None));
+    let q: Vec<(&str, &str, Option<&str>)> = rv
+        .questions
+        .iter()
+        .map(|q| (q.id.as_str(), q.text.as_str(), q.near.as_deref()))
+        .collect();
+    assert_eq!(
+        q,
+        [
+            ("Q1", "what happens to open sessions?", Some("FR-002")),
+            ("Q2", "unlock how?", Some("Edge Cases"))
+        ]
+    );
+    assert_eq!(rv.totals.questions, 2);
+    assert!(!rv.totals.complete());
+    // A wording that still asks is not signed: refused by name, passed by in bulk.
+    let refused = review::decide(
+        r.path(),
+        None,
+        &["FR-002".to_owned()],
+        "approve",
+        None,
+        "cli",
+    );
+    assert_eq!(
+        refused.status(),
+        CommandStatus::UsageError,
+        "{}",
+        refused.message()
+    );
+    let bulk = review::decide(r.path(), None, &[], "approve", None, "cli");
+    assert!(bulk.message().contains("not FR-002"), "{}", bulk.message());
+    assert_eq!(
+        states(&data(&bulk)),
+        [("FR-001", "approved"), ("FR-002", "open")]
+    );
+    // The answer takes the question's place; nothing else changes.
+    let a = review::answer(r.path(), None, "q1", "they end at once");
+    assert_eq!(a.status(), CommandStatus::Ok, "{}", a.message());
+    let spec = fs::read_to_string(r.path().join("specs/001-login/spec.md")).unwrap();
+    assert!(
+        spec.contains("- **FR-002**: Users MUST log out they end at once."),
+        "{spec}"
+    );
+    assert!(spec.contains("unlock how?"), "{spec}");
+    assert_eq!(data(&review::report(r.path(), None)).questions.len(), 1);
+    assert_eq!(
+        review::answer(r.path(), None, "Q9", "x").status(),
+        CommandStatus::NotFound
+    );
+}
+
+#[test]
+fn the_person_rewords_a_requirement_and_its_history_shows() {
+    let r = repo();
+    let _ = review::decide(r.path(), None, &[], "approve", None, "cli");
+    let e = review::edit(
+        r.path(),
+        None,
+        "FR-002",
+        "Users MUST log out of every device.",
+        false,
+        "cli",
+    );
+    assert_eq!(e.status(), CommandStatus::Ok, "{}", e.message());
+    let rv = data(&e);
+    // The line keeps its identifier; the approval lapsed with the words.
+    let fr2 = rv.requirements.iter().find(|i| i.id == "FR-002").unwrap();
+    assert_eq!(
+        (fr2.text.as_str(), fr2.state.as_str()),
+        ("Users MUST log out of every device.", "lapsed")
+    );
+    // Since the last commit: what a commit would record.
+    assert_eq!(rv.changes.len(), 1);
+    assert_eq!(rv.changes[0].id, "FR-002");
+    // Reworded and approved in one step.
+    let e = review::edit(
+        r.path(),
+        None,
+        "FR-002",
+        "Users MUST log out everywhere.",
+        true,
+        "cli",
+    );
+    let rv = data(&e);
+    assert_eq!(
+        rv.requirements
+            .iter()
+            .find(|i| i.id == "FR-002")
+            .unwrap()
+            .state,
+        "approved"
+    );
+    // Committed: the history names what each version changed.
+    git(r.path(), &["commit", "-qam", "spec: log out everywhere"]);
+    let rv = data(&review::report(r.path(), None));
+    assert!(rv.changes.is_empty());
+    let v: Vec<(&str, Vec<String>, Vec<String>)> = rv
+        .history
+        .iter()
+        .map(|v| (v.subject.as_str(), v.added.clone(), v.reworded.clone()))
+        .collect();
+    assert_eq!(
+        v[0],
+        (
+            "spec: log out everywhere",
+            vec![],
+            vec!["FR-002".to_owned()]
+        )
+    );
+    assert_eq!(v[1].0, "init");
+    assert_eq!(v[1].1, ["FR-001", "FR-002", "SC-001"]);
+    // One line of words; an identifier the spec has.
+    assert_eq!(
+        review::edit(r.path(), None, "FR-002", "a\nb", false, "cli").status(),
+        CommandStatus::UsageError
+    );
+    assert_eq!(
+        review::edit(r.path(), None, "FR-099", "x", false, "cli").status(),
+        CommandStatus::NotFound
+    );
+}
