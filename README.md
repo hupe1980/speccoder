@@ -2,28 +2,28 @@
 
 [![CI](https://github.com/hupe1980/speccoder/actions/workflows/ci.yml/badge.svg)](https://github.com/hupe1980/speccoder/actions/workflows/ci.yml)
 [![Docs](https://img.shields.io/badge/docs-hupe1980.github.io%2Fspeccoder-5b4bff)](https://hupe1980.github.io/speccoder/)
-[![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue)](#license)
+[![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue)](#-license)
 
-**Spec-driven coding, decided by evidence.** speccoder implements [GitHub Spec Kit](https://github.com/github/spec-kit) features and [OpenSpec](https://github.com/Fission-AI/OpenSpec) changes task by task, and ticks a task only when tests derived from your spec go from red to green — never on the model's word.
+✅ **Spec-driven coding, decided by evidence.** speccoder implements [GitHub Spec Kit](https://github.com/github/spec-kit) features and [OpenSpec](https://github.com/Fission-AI/OpenSpec) changes task by task, and ticks a task only when tests derived from your spec go from red to green — never on the model's word.
 
-**[Documentation](https://hupe1980.github.io/speccoder/docs/)** · [Quickstart](https://hupe1980.github.io/speccoder/docs/quickstart/) · [How it works](https://hupe1980.github.io/speccoder/docs/how-it-works/) · [Configuration](https://hupe1980.github.io/speccoder/docs/configuration/) · [CLI](https://hupe1980.github.io/speccoder/docs/cli/)
+📖 **[Documentation](https://hupe1980.github.io/speccoder/docs/)** · [Quickstart](https://hupe1980.github.io/speccoder/docs/quickstart/) · [How it works](https://hupe1980.github.io/speccoder/docs/how-it-works/) · [Configuration](https://hupe1980.github.io/speccoder/docs/configuration/) · [CLI](https://hupe1980.github.io/speccoder/docs/cli/)
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/hupe1980/speccoder/main/site/static/screenshots/drawer-dark.webp">
   <img alt="speccoder's app: a feature's tasks by verdict, and one task's evidence — acceptance tests red to green, checks, diff audit, attestation" src="https://raw.githubusercontent.com/hupe1980/speccoder/main/site/static/screenshots/drawer-light.webp">
 </picture>
 
-## Why
+## 💡 Why
 
 Coding agents are good at writing code and too good at declaring victory. speccoder separates the two: a model proposes, and code decides.
 
-- **Evidence decides.** The spec's acceptance examples become tests that must fail before the attempt and pass after it; your checks must not regress; the diff is audited for weakened tests; and plausible wrong versions of the change must fail the tests (the acceptance strength on every tick).
-- **Isolated and sandboxed.** Work happens on `speccoder/<feature>` in a worktree of its own. Every command runs in an OS sandbox (Seatbelt on macOS, Landlock and seccomp on Linux): writes only to the worktree, no credentials, no network beyond loopback.
-- **Every call governed.** Each tool call is allowed, sent to a person, or denied before it runs. Decisions record who made them — at the terminal, in an editor over ACP, or later.
-- **Durable and replayable.** Every model and tool call is journaled. A killed run resumes without repeating finished calls; a recorded run replays offline.
-- **Your model, or your agent.** Anthropic, OpenAI, any OpenAI-compatible server (Ollama, vLLM, …), or Claude Code and Codex making the attempts under speccoder's judgement.
+- 🧪 **Evidence decides.** The spec's acceptance examples become tests that must fail before the attempt and pass after it; your checks must not regress; the diff is audited for weakened tests; and plausible wrong versions of the change must fail the tests (the acceptance strength on every tick).
+- 🔒 **Isolated and sandboxed.** Work happens on `speccoder/<feature>` in a worktree of its own. Every command runs in an OS sandbox (Seatbelt on macOS, Landlock and seccomp on Linux): writes only to the worktree, no credentials, no network beyond loopback.
+- 🚦 **Every call governed.** Each tool call is allowed, sent to a person, or denied before it runs. Decisions record who made them — at the terminal, in an editor over ACP, or later.
+- 💾 **Durable and replayable.** Every model and tool call is journaled. A killed run resumes without repeating finished calls; a recorded run replays offline.
+- 🤖 **Your model, or your agent.** Anthropic, OpenAI, any OpenAI-compatible server (Ollama, vLLM, …), or Claude Code and Codex making the attempts under speccoder's judgement.
 
-## Quickstart
+## 🚀 Quickstart
 
 You need git, a Spec Kit project (Spec Kit 0.13 to 1.2) or an OpenSpec project (1.0 or newer), and a model.
 
@@ -45,29 +45,29 @@ git merge speccoder/001-my-feature   # after reviewing the branch
 
 Then, as you need them:
 
-- **Watch and decide.** At a terminal, `run` shows a live dashboard and asks approvals with one key (`--plain` for lines). `speccoder ui --window` opens the same work as an app: **Needs You** first, then the board, each task's evidence, the code, the spec review and the report.
-- **Automate.** Every command takes `--json` or `--events`, both with [published schemas](https://hupe1980.github.io/speccoder/docs/cli/#json-output); every failure names a [code](https://hupe1980.github.io/speccoder/docs/codes/) and the command that fixes it.
-- **Work from GitHub.** `speccoder auth login` once; `speccoder issue start 42` specifies a feature from an issue, `speccoder pr` opens a draft whose description is the evidence. No `gh` needed.
-- **Plan with your spec tool.** `speccoder spec specify "…"`, then `plan` and `tasks`, runs Spec Kit's own skills (OpenSpec: `propose`).
+- 👀 **Watch and decide.** At a terminal, `run` shows a live dashboard and asks approvals with one key (`--plain` for lines). `speccoder ui --window` opens the same work as an app: **Needs You** first, then the board, each task's evidence, the code, the spec review and the report.
+- ⚙️ **Automate.** Every command takes `--json` or `--events`, both with [published schemas](https://hupe1980.github.io/speccoder/docs/cli/#json-output); every failure names a [code](https://hupe1980.github.io/speccoder/docs/codes/) and the command that fixes it.
+- 🐙 **Work from GitHub.** `speccoder auth login` once; `speccoder issue start 42` specifies a feature from an issue, `speccoder pr` opens a draft whose description is the evidence. No `gh` needed.
+- 📝 **Plan with your spec tool.** `speccoder spec specify "…"`, then `plan` and `tasks`, runs Spec Kit's own skills (OpenSpec: `propose`).
 
-## How a task is decided
+## ⚖️ How a task is decided
 
-1. **Ready** — its dependencies in `tasks.md` are ticked.
-2. **Baseline** — your checks run on the untouched worktree, so existing failures are not blamed on the change.
-3. **Red** — a separate model call with no tools writes acceptance tests from the spec. They must fail now, and the implementer cannot change them.
-4. **Attempt** — the model works in the worktree; every call is classified before it runs.
-5. **Judgement** — `verified` when the acceptance tests went red → green and nothing regressed; `regression_only` when nothing task-specific was shown; `failed` otherwise. A verified task's tests then meet wrong variants of the change: how many they reject is its acceptance strength.
-6. **Outcome** — a verified task is ticked and committed by speccoder. A failed one is retried once with the verifier's facts. Anything else is saved under `refs/speccoder/attempts/…`, undone, and handed to a person.
+1. 🟢 **Ready** — its dependencies in `tasks.md` are ticked.
+2. 📏 **Baseline** — your checks run on the untouched worktree, so existing failures are not blamed on the change.
+3. 🔴 **Red** — a separate model call with no tools writes acceptance tests from the spec. They must fail now, and the implementer cannot change them.
+4. 🛠️ **Attempt** — the model works in the worktree; every call is classified before it runs.
+5. ⚖️ **Judgement** — `verified` when the acceptance tests went red → green and nothing regressed; `regression_only` when nothing task-specific was shown; `failed` otherwise. A verified task's tests then meet wrong variants of the change: how many they reject is its acceptance strength.
+6. 🏁 **Outcome** — a verified task is ticked and committed by speccoder. A failed one is retried once with the verifier's facts. Anything else is saved under `refs/speccoder/attempts/…`, undone, and handed to a person.
 
-Change the spec later and the ticks that cite a changed requirement say they were proven against the earlier wording; `speccoder run --converge` checks the code against the spec as it is now.
+🔄 Change the spec later and the ticks that cite a changed requirement say they were proven against the earlier wording; `speccoder run --converge` checks the code against the spec as it is now.
 
-`verified` does not mean correct, complete or safe. It means the evidence held. Review the branch like any contribution.
+⚠️ `verified` does not mean correct, complete or safe. It means the evidence held. Review the branch like any contribution.
 
-## Status
+## 🚧 Status
 
 Pre-release (0.x): it works end to end on small projects with OpenAI, Anthropic and local models. **Your checks run code the model wrote** — read the [security model](https://hupe1980.github.io/speccoder/docs/security/) and [SECURITY.md](https://github.com/hupe1980/speccoder/blob/main/SECURITY.md) before pointing it at anything important.
 
-## Development
+## 🧑‍💻 Development
 
 | Crate | Role |
 |---|---|
@@ -78,8 +78,11 @@ Pre-release (0.x): it works end to end on small projects with OpenAI, Anthropic 
 | `speccoder-web` | The web interface's host: the embedded UI (Svelte, in `ui/`) and its API, on 127.0.0.1 |
 | `speccoder` | The CLI (and the desktop window, feature `app`) |
 
-`just ci` runs every gate CI runs: formatting, clippy, tests, cargo-deny, layering, docs, a package dry run, the `status` cold-start budget and the release scripts' tests. It needs `just`, `cargo-nextest` and `cargo-deny`; the toolchain is pinned in `rust-toolchain.toml`. `just site` serves the documentation site (needs [Zola](https://www.getzola.org/)). [`evals/`](https://github.com/hupe1980/speccoder/tree/main/evals) holds Spec Kit projects with hidden oracles and impossible tasks that measure whether completions are really correct.
+- ✅ `just ci` runs every gate CI runs: formatting, clippy, tests, cargo-deny, layering, docs, a package dry run, the cold-start budget and the release scripts' tests. It needs `just`, `cargo-nextest` and `cargo-deny`; the toolchain is pinned in `rust-toolchain.toml`.
+- 🎨 `just ui` rebuilds the web interface into its committed bundle (needs Node).
+- 🌐 `just site` serves the documentation site (needs [Zola](https://www.getzola.org/)).
+- 🎯 [`evals/`](https://github.com/hupe1980/speccoder/tree/main/evals) holds spec projects with hidden oracles and impossible tasks that measure whether completions are really correct.
 
-## License
+## 📜 License
 
 Licensed under either of [Apache License, Version 2.0](https://github.com/hupe1980/speccoder/blob/main/LICENSE-APACHE) or [MIT license](https://github.com/hupe1980/speccoder/blob/main/LICENSE-MIT) at your option.
