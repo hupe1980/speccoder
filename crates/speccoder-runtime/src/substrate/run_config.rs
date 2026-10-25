@@ -88,6 +88,12 @@ struct RawConverge {
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
+struct RawReview {
+    required: Option<bool>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct RawAttest {
     enabled: Option<bool>,
     signer: Option<String>,
@@ -198,6 +204,9 @@ pub struct RunConfig {
     pub max_converge_rounds: u32,
     /// Ask the gaming monitor about every passing task (`[monitor] enabled`).
     pub monitor: bool,
+    /// A run waits until every requirement is approved on its current
+    /// wording (`[review] required`, F-087).
+    pub review_required: bool,
     /// Test files that existed before an attempt may gain lines without
     /// approval (`[tests] frozen = "additions"`; default `"ask"`).
     pub frozen_additions: bool,
@@ -228,6 +237,7 @@ impl Default for RunConfig {
             strength: StrengthConfig::default(),
             max_converge_rounds: 3,
             monitor: false,
+            review_required: false,
             frozen_additions: false,
             format: None,
             approval_wait: std::time::Duration::from_secs(7 * 24 * 3600),
@@ -292,6 +302,10 @@ pub fn parse(text: &str) -> Result<RunConfig, String> {
             .try_into()
             .map_err(|e| format!("[converge]: {e}"))?,
         None => RawConverge::default(),
+    };
+    let review: RawReview = match table.get("review") {
+        Some(v) => v.clone().try_into().map_err(|e| format!("[review]: {e}"))?,
+        None => RawReview::default(),
     };
     let monitor: RawMonitor = match table.get("monitor") {
         Some(v) => v
@@ -419,6 +433,7 @@ pub fn parse(text: &str) -> Result<RunConfig, String> {
         strength,
         max_converge_rounds: converge.max_rounds.unwrap_or(d.max_converge_rounds),
         monitor: monitor.enabled.unwrap_or(false),
+        review_required: review.required.unwrap_or(false),
         frozen_additions,
         format: format.map(|f| f.argv),
         approval_wait,

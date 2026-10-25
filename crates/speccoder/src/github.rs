@@ -175,6 +175,7 @@ mod tests {
 
     fn report(tasks: Vec<TaskStatus>) -> CommandResult {
         CommandResult::ok("report", "x").with_data(CommandData::Report(Box::new(StatusReport {
+            review: None,
             issues: Vec::new(),
             feature: "001-x".to_owned(),
             branch: None,

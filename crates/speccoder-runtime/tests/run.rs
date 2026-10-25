@@ -3240,3 +3240,50 @@ fn the_inbox_lists_a_waiting_call_and_a_task_that_did_not_pass() {
         stuck.actions[0].blocked
     );
 }
+
+/// `[review] required` (F-087): a run waits, before any model call, until
+/// every requirement is approved in the committed review.
+#[test]
+fn a_required_review_stops_the_run_until_the_spec_is_approved() {
+    let r = repo_with(
+        "[review]\nrequired = true\n",
+        &[(
+            "specs/001-graph/spec.md",
+            "# Spec\n\n### User Story 1 - Login\n\n- **FR-001**: Users MUST log in.\n",
+        )],
+    );
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    let res = run(r.path(), state.path(), "T005", d);
+    assert_eq!(res.status(), CommandStatus::NeedsHuman, "{}", res.message());
+    assert_eq!(
+        res.code().map(|c| c.name),
+        Some("REVIEW-PENDING"),
+        "{}",
+        res.message()
+    );
+    assert_eq!(f.calls(), 0, "nothing was asked of the model");
+    // Approved but not committed: the review is intent, and a worktree
+    // holds commits only.
+    let ok = speccoder_runtime::review::decide(r.path(), None, &[], "approve", None, "cli");
+    assert_eq!(ok.status(), CommandStatus::Ok, "{}", ok.message());
+    let (_, d) = fake();
+    let res = run(r.path(), state.path(), "T005", d);
+    assert_eq!(
+        res.code().map(|c| c.name),
+        Some("UNCOMMITTED-INTENT"),
+        "{}",
+        res.message()
+    );
+    git(r.path(), &["add", "-A"]);
+    git(r.path(), &["commit", "-q", "-m", "review"]);
+    let (f, d) = fake();
+    f.will_structure(done("nothing to do"));
+    let res = run(r.path(), state.path(), "T005", d);
+    assert_ne!(
+        res.code().map(|c| c.name),
+        Some("REVIEW-PENDING"),
+        "{}",
+        res.message()
+    );
+}

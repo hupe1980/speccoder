@@ -228,6 +228,12 @@ async fn report(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Json<
     envelope(&r)
 }
 
+async fn review(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Json<Value> {
+    let root = s.root.clone();
+    let r = off(move || speccoder_runtime::review::report(&root, q.feature.as_deref())).await;
+    envelope(&r)
+}
+
 async fn inbox(State(s): State<Shared>) -> Json<Value> {
     let root = s.root.clone();
     let r = off(move || speccoder_runtime::inbox::inbox(&root, None)).await;
@@ -635,6 +641,7 @@ pub fn router(s: Shared) -> Router {
         .route("/api/report", get(report))
         .route("/api/actions", get(actions))
         .route("/api/inbox", get(inbox))
+        .route("/api/review", get(review))
         .route("/api/approvals", get(approvals))
         .route("/api/evidence", get(evidence))
         .route("/api/diff", get(diff))

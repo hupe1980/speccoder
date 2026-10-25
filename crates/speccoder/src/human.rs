@@ -915,6 +915,20 @@ pub fn status(w: &mut impl Write, r: &StatusReport, message: &str) -> io::Result
         }
         writeln!(w, "{line}")?;
     }
+    if let Some(t) = &r.review {
+        let n = t.approved + t.open + t.changes_requested + t.lapsed;
+        let mut line = format!("Review     {}/{n} requirement(s) approved", t.approved);
+        for (k, word) in [
+            (t.open, "to review"),
+            (t.changes_requested, "with changes requested"),
+            (t.lapsed, "changed since decided"),
+        ] {
+            if k > 0 {
+                line.push_str(&format!("; {k} {word}"));
+            }
+        }
+        writeln!(w, "{line}")?;
+    }
     for c in &r.convergence {
         writeln!(
             w,
@@ -1477,6 +1491,42 @@ pub fn inbox(r: &speccoder_core::InboxReport, look: &crate::style::Look) -> Vec<
             if !others.is_empty() {
                 out.push(format!("            or: {}", others.join(", ")));
             }
+        }
+    }
+    out
+}
+
+/// `review`: one card per requirement — its state, its wording, who
+/// decided and what they asked.
+#[must_use]
+pub fn review(r: &speccoder_core::ReviewReport, look: &crate::style::Look) -> Vec<String> {
+    use crate::style::{Glyph, Token};
+    let mut out = Vec::new();
+    for i in &r.requirements {
+        let (g, word) = match i.state.as_str() {
+            "approved" => (Glyph::Verified, "approved"),
+            "changes_requested" => (Glyph::Attention, "changes requested"),
+            "lapsed" => (Glyph::Attention, "changed since decided"),
+            _ => (Glyph::Ready, "to review"),
+        };
+        out.push(format!(
+            "{} {:<7} {}  {}",
+            look.cell(g),
+            i.id,
+            shorten(&i.text, 90),
+            look.paint(g.token(), word)
+        ));
+        if let Some(was) = &i.decided_on {
+            out.push(format!("            was: {}", shorten(was, 90)));
+        }
+        match (&i.by, &i.comment) {
+            (Some(by), Some(c)) => out.push(format!(
+                "            {} — {}",
+                look.paint(Token::Muted, by),
+                shorten(c, 90)
+            )),
+            (Some(by), None) => out.push(format!("            {}", look.paint(Token::Muted, by))),
+            _ => {}
         }
     }
     out

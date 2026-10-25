@@ -78,8 +78,40 @@ pub fn run_with(
 /// [`run_with`] for `feature` (`--feature`; else the format's own
 /// selection): the skill's commands are told which unit is meant, and a
 /// unit the creating skill makes becomes current.
+///
+/// The person's review records (`review.json`) are the person's: a skill
+/// that changed one — through a command it was allowed to run — has the
+/// change undone, and the result says so (F-087).
 #[allow(clippy::too_many_arguments)]
 pub fn run_in(
+    path: &Path,
+    feature: Option<&str>,
+    name: &str,
+    arguments: &str,
+    state: &Path,
+    provider: Arc<dyn ModelProvider>,
+    secret: Option<&str>,
+    options: &RunOptions,
+) -> CommandResult {
+    let reviews = crate::review::snapshot(path);
+    let result = run_unguarded(
+        path, feature, name, arguments, state, provider, secret, options,
+    );
+    let restored = crate::review::restore(&reviews);
+    if restored.is_empty() {
+        return result;
+    }
+    let message = format!(
+        "{}; undone: the skill changed the person's review ({}) — only `speccoder review` writes it",
+        result.message(),
+        restored.join(", ")
+    );
+    let status = result.status();
+    result.reworded(status, &message)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn run_unguarded(
     path: &Path,
     feature: Option<&str>,
     name: &str,

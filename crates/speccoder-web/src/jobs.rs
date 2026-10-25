@@ -344,6 +344,9 @@ fn execute(
                 CommandResult::new("job", CommandStatus::ConfigError, "no state directory")
             }
         },
+        Runnable::Review { ids, verdict } => {
+            speccoder_runtime::review::decide(root, feature, ids, verdict, text, "web")
+        }
         Runnable::Rule { task } => match (text, &state) {
             (Some(why), Some(s)) => {
                 speccoder_runtime::controls::rule(root, feature, task, why, None, s)

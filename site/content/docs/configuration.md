@@ -117,7 +117,7 @@ Keep the list narrow: an allowed command runs whatever the model passes after th
 |---|---|---|
 | `instructions` | `["AGENTS.md"]` | The file names read as the [repository's instructions](@/docs/running.md#repository-instructions), per directory the first that exists, e.g. `["AGENTS.md", "CLAUDE.md"]`; `[]` reads none |
 
-## `[acceptance]`, `[converge]`, `[monitor]`, `[git]`, `[format]`
+## `[acceptance]`, `[converge]`, `[review]`, `[monitor]`, `[git]`, `[format]`
 
 | Key | Default | Meaning |
 |---|---|---|
@@ -129,6 +129,7 @@ Keep the list narrow: an allowed command runs whatever the model passes after th
 | `[acceptance] permitted` | `1` | Spec-permitted alternatives to try (`0`–`2`); `0` turns off the [over-strict check](@/docs/evidence.md#over-strict-tests) |
 | `[acceptance] strength_timeout_secs` | `900` | Budget for the whole measurement; what ran by then is recorded as partial (a partial strength meets no `min_strength`) |
 | `[converge] max_rounds` | `3` | Convergence phases a feature may get |
+| `[review] required` | `false` | A run waits until every requirement is [approved](@/docs/planning.md#review-the-spec) on its current wording (`REVIEW-PENDING`) |
 | `[monitor] enabled` | `false` | Review every passing attempt with the [gaming monitor](@/docs/evidence.md#the-gaming-monitor) |
 | `[git] commit` | `"per-task"` | `per-task` commits each passed task; `none` leaves changes uncommitted |
 | `[format] argv` | — | A formatter speccoder runs after each attempt (e.g. `["cargo", "fmt"]`); its changes are part of the attempt and audited. Not the spec format: that is `[spec] format` |

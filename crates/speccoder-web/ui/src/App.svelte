@@ -75,6 +75,28 @@
       (app.report?.code === "NO-PROJECT" || app.preflight.some((c) => c.code === "CONFIG-MISSING")),
   );
   const at = $derived(views.findIndex((x) => x.v === app.view));
+  // The thumb sits under the selected tab, measured: tabs are as wide as
+  // their names, and lose the names when the window narrows.
+  let bar = $state<HTMLElement>();
+  const tabs: HTMLButtonElement[] = $state([]);
+  let thumb = $state({ x: 0, w: 0 });
+  const measure = () => {
+    const t = tabs[Math.max(at, 0)];
+    if (t) thumb = { x: t.offsetLeft, w: t.offsetWidth };
+  };
+  $effect(() => {
+    void at;
+    void app.inbox?.data?.items.length;
+    measure();
+    // Once the badge and the fonts have laid out.
+    requestAnimationFrame(measure);
+    void document.fonts?.ready.then(measure);
+    if (!bar) return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(bar);
+    for (const t of tabs) if (t) ro.observe(t);
+    return () => ro.disconnect();
+  });
 
   // The tab says when a run needs you, and what is running.
   $effect(() => {
@@ -109,11 +131,11 @@
       </div>
     </div>
 
-    <div class="segmented" class:none={at < 0} role="tablist" aria-label="Views" style="--at:{Math.max(at, 0)}; --n:{views.length}">
+    <div class="segmented" class:none={at < 0} role="tablist" aria-label="Views" bind:this={bar} style="--x:{thumb.x}px; --w:{thumb.w}px">
       <span class="thumb" aria-hidden="true"></span>
-      {#each views as x (x.v)}
-        <button role="tab" aria-selected={app.view === x.v} class:on={app.view === x.v} onclick={() => go(x.v)} title="{x.label} ({x.key})">
-          <Icon name={x.icon} size={15} />{x.label}{#if x.v === "inbox" && app.inbox?.data?.items.length}<span class="badge" aria-label="{app.inbox.data.items.length} waiting">{app.inbox.data.items.length}</span>{/if}
+      {#each views as x, i (x.v)}
+        <button bind:this={tabs[i]} role="tab" aria-selected={app.view === x.v} class:on={app.view === x.v} onclick={() => go(x.v)} title="{x.label} ({x.key})" aria-label={x.label}>
+          <Icon name={x.icon} size={15} /><span class="label">{x.label}</span>{#if x.v === "inbox" && app.inbox?.data?.items.length}<span class="badge" aria-label="{app.inbox.data.items.length} waiting">{app.inbox.data.items.length}</span>{/if}
         </button>
       {/each}
     </div>
@@ -172,7 +194,7 @@
   }
   .toolbar {
     grid-area: head; position: relative; z-index: 10;
-    display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 1rem; padding: 0 0.9rem 0 1rem;
+    display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 1rem; padding: 0 0.9rem 0 1rem;
     border-bottom: 0.5px solid var(--separator);
   }
   .brand { display: flex; align-items: center; gap: 0.6rem; min-width: 0; }
@@ -183,15 +205,16 @@
 
   /* A segmented control whose thumb slides to the selection. */
   .segmented {
-    position: relative; display: grid; grid-template-columns: repeat(var(--n), 1fr);
+    position: relative; display: flex; min-width: 0;
     padding: 2px; border-radius: 10px; background: var(--fill);
   }
   .thumb {
-    position: absolute; top: 2px; bottom: 2px; left: 2px; width: calc((100% - 4px) / var(--n));
-    transform: translateX(calc(var(--at) * 100%)); border-radius: 8px;
+    position: absolute; top: 2px; bottom: 2px; left: 0; width: var(--w);
+    transform: translateX(var(--x)); border-radius: 8px;
     background: var(--surface); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.04);
-    transition: transform 320ms var(--spring);
+    transition: transform 320ms var(--spring), width 320ms var(--spring);
   }
+  @media (prefers-reduced-motion: reduce) { .thumb { transition: none; } }
   :global(:root[data-theme="dark"]) .thumb { background: #636366; }
   @media (prefers-color-scheme: dark) { :global(:root:not([data-theme="light"])) .thumb { background: #636366; } }
   .segmented.none .thumb { opacity: 0; }
@@ -202,7 +225,7 @@
   }
   .segmented button.on { color: var(--text); font-weight: 600; }
 
-  .right { justify-self: end; display: flex; align-items: center; gap: 0.5rem; }
+  .right { justify-self: end; display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
   .search {
     display: inline-flex; align-items: center; gap: 0.45rem; height: 30px; width: 13rem; padding: 0 0.4rem 0 0.65rem;
     border: 0; border-radius: 8px; background: var(--fill); color: var(--muted); cursor: pointer; font-size: 0.88rem;
@@ -223,13 +246,20 @@
   .spinner { width: 22px; height: 22px; border-radius: 50%; border: 2.5px solid var(--fill-2); border-top-color: var(--muted); animation: spin 800ms linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  @media (max-width: 1100px) { .search { width: auto; } .search span, .search kbd { display: none; } }
+  /* The toolbar gives way as the window narrows, as a Mac toolbar does:
+     the search field becomes its icon, then the views their icons (the
+     names stay as tooltips and accessible names), then the appearance
+     switch and the project's name go. Nothing overflows or overlaps. */
+  @media (max-width: 1440px) { .search { width: auto; } .search span { display: none; } }
+  @media (max-width: 1180px) {
+    .segmented button { padding: 0 0.8rem; }
+    .segmented .label { display: none; }
+    .search kbd { display: none; }
+  }
+  @media (max-width: 1040px) { .themes, .names { display: none; } }
   @media (max-width: 900px) {
     .shell { grid-template-columns: 1fr; grid-template-areas: "head" "main"; }
-    .toolbar { grid-template-columns: auto 1fr auto; }
     .segmented button { padding: 0 0.6rem; }
-    .themes { display: none; }
     main { padding: 1.25rem 1rem 7rem; }
   }
-  @media (max-width: 640px) { .names, .segmented button :global(svg) { display: none; } }
 </style>

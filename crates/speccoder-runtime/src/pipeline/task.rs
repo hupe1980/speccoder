@@ -311,6 +311,22 @@ pub(crate) fn run_task(
                 .with_code("CONFIG-INVALID");
         }
     };
+    // `[review] required`: the spec as committed in the worktree must be
+    // approved, every requirement on its current wording (F-087).
+    if run_config.review_required
+        && let Some(f) = snap.feature.as_ref()
+        && let Some(t) = crate::review::totals_of(&project, format, &feature_name, &f.feature.dir)
+        && !t.complete()
+    {
+        return refuse(
+            CommandStatus::NeedsHuman,
+            format!(
+                "{feature_name}'s spec is not approved yet ({} approved; {} to review, {} with changes requested, {} changed since; committed review only) and [review] required is on",
+                t.approved, t.open, t.changes_requested, t.lapsed
+            ),
+        )
+        .with_code("REVIEW-PENDING");
+    }
     let executor = match external::parse(&config_text) {
         Ok(e) => e,
         Err(e) => {

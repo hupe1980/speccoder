@@ -1,0 +1,145 @@
+{
+  "$defs": {
+    "ReviewItem": {
+      "description": "One requirement and its review.",
+      "properties": {
+        "at": {
+          "description": "When (Unix seconds).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "by": {
+          "description": "Who decided (as for every decision: git's `user.name`, else the OS\nuser), when someone did.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "comment": {
+          "description": "The comment, for a change request (or a note on an approval).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "decided_on": {
+          "description": "For `lapsed`: the wording that was decided on.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "description": "`FR-001`.",
+          "type": "string"
+        },
+        "state": {
+          "description": "`open` (not reviewed), `approved`, `changes_requested`, or `lapsed`\n(decided on a wording that has changed since).",
+          "type": "string"
+        },
+        "text": {
+          "description": "Its wording now (the line, markup aside).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "text",
+        "state",
+        "by",
+        "at",
+        "comment",
+        "decided_on"
+      ],
+      "type": "object"
+    },
+    "ReviewTotals": {
+      "description": "Counts of [`ReviewItem::state`].",
+      "properties": {
+        "approved": {
+          "description": "Approved on their current wording.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "changes_requested": {
+          "description": "Changes requested.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "lapsed": {
+          "description": "Decided on an earlier wording.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "open": {
+          "description": "Never reviewed.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "approved",
+        "changes_requested",
+        "open",
+        "lapsed"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/review.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Result of `speccoder review` (F-087): every requirement of the feature's\nspec as a card, with the person's decision on its exact wording.",
+  "properties": {
+    "feature": {
+      "description": "The feature.",
+      "type": "string"
+    },
+    "file": {
+      "description": "Where the review is recorded (project-relative); commit it to share.",
+      "type": "string"
+    },
+    "requirements": {
+      "description": "One per requirement, in the spec's order.",
+      "items": {
+        "$ref": "#/$defs/ReviewItem"
+      },
+      "type": "array"
+    },
+    "revise_with": {
+      "description": "The format's skill that revises the spec from the comments\n(Spec Kit: `clarify`), when it has one.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "revision": {
+      "description": "What that skill is asked, while changes are requested: every\nrequest with its requirement.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "totals": {
+      "$ref": "#/$defs/ReviewTotals",
+      "description": "Counts by state."
+    }
+  },
+  "required": [
+    "feature",
+    "file",
+    "requirements",
+    "totals",
+    "revise_with",
+    "revision"
+  ],
+  "title": "review: the spec's requirements and the person's decision on each",
+  "type": "object"
+}

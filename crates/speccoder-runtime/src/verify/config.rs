@@ -71,6 +71,7 @@ pub const SECTIONS: &[&str] = &[
     "tests",
     "monitor",
     "converge",
+    "review",
     "format",
     "sandbox",
     "mutation",

@@ -130,6 +130,42 @@
       ],
       "type": "object"
     },
+    "ReviewTotals": {
+      "description": "Counts of [`ReviewItem::state`].",
+      "properties": {
+        "approved": {
+          "description": "Approved on their current wording.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "changes_requested": {
+          "description": "Changes requested.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "lapsed": {
+          "description": "Decided on an earlier wording.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "open": {
+          "description": "Never reviewed.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "approved",
+        "changes_requested",
+        "open",
+        "lapsed"
+      ],
+      "type": "object"
+    },
     "StatusTotals": {
       "description": "Counts of [`TaskStatus::state`].",
       "properties": {
@@ -435,6 +471,17 @@
         "type": "string"
       },
       "type": "array"
+    },
+    "review": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ReviewTotals"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "The person's review of the spec's requirements (F-087), when the\nformat has requirement identifiers."
     },
     "selected_by": {
       "default": "",

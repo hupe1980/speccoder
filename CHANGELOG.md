@@ -11,6 +11,24 @@ ticks a task only on evidence the model cannot produce or edit.
 
 ### Added
 
+**Review the spec** (requirement by requirement)
+
+- `speccoder review [approve|request|clear] [ID…]`: each requirement is a
+  card; a decision is bound to its exact wording and names who made it, and
+  lapses when the wording changes (shown word by word). Change requests go
+  to the format's revising skill (Spec Kit: `clarify`) in one request.
+- Recorded in `review.json` beside the spec, to commit and share. The model
+  never writes it: a planning skill's write is refused, and a change made
+  through a command is undone and reported.
+- The report, the pull request description and Needs You (`review`,
+  `revise`) carry it; **Spec & Plan › Review** in the app.
+- `[review] required = true`: a run waits until every requirement is
+  approved in the committed review (`REVIEW-PENDING`).
+
+**Fixed**: the toolbar overflowed and overlapped at common window widths
+(tabs were all as wide as the widest); tabs now take their own width, and
+the bar gives way to icons as the window narrows.
+
 **Needs You** (the decision inbox)
 
 - `speccoder inbox` lists every decision waiting for you across the

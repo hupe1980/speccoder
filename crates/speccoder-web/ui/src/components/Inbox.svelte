@@ -12,6 +12,8 @@
     ruling: { title: "Rule on the Tests", icon: "shield", tone: "needs_approval", why: "The tests reject an alternative the spec may allow." },
     gaming: { title: "Suspected Shortcuts", icon: "exclaim", tone: "failed", why: "The monitor saw what looks like gaming the tests." },
     stale: { title: "The Spec Changed", icon: "exclaim", tone: "needs_approval", why: "Evidence proves an earlier wording." },
+    review: { title: "Review the Spec", icon: "doc", tone: "ready", why: "The result will be judged against these words." },
+    revise: { title: "Change Requests", icon: "sparkle", tone: "needs_approval", why: "Revise the spec as you asked, then review it again." },
     stuck: { title: "Did Not Pass", icon: "xoctagon", tone: "failed", why: "Decide: run again, leave a note, skip or accept." },
     commit: { title: "Plans to Commit", icon: "doc", tone: "ready", why: "A run reads committed files only." },
     handoff: { title: "Ready to Hand Off", icon: "arrowup", tone: "verified", why: "Every task is done — review the branch." },
@@ -37,6 +39,11 @@
   }
   async function open(i: InboxItem) {
     if (app.feature !== i.feature) await app.selectFeature(i.feature);
+    if (i.kind === "review" || i.kind === "revise") {
+      app.doc = "review";
+      app.view = "documents";
+      return;
+    }
     app.view = i.kind === "handoff" || i.kind === "stale" ? "report" : "board";
     if (i.task) void app.selectTask(i.task);
   }

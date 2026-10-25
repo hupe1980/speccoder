@@ -28,7 +28,8 @@ pub use command::{
     FullTier, HeldOutGap, HeldOutOracle, InPlaceReport, InboxItem, InboxReport, InitCheck, InitKey,
     InitReport, InitRun, InstructionFile, IssueEntry, IssuesReport, LastAttempt, MonitorScore,
     ObjectVerification, OperatorView, PAYLOADS, PendingCall, PrReport, ProposeReport, RefusedPath,
-    ReplayReport, RequirementDrift, RunReport, SCHEMA_VERSION, SchemaName, SchemaReport,
-    SignerView, SkillEntry, SkillRunReport, SkillsReport, StatusReport, StatusTotals, TaskCost,
-    TaskStatus, TraceRow, UiReport, Usage, VerifyOutcome, VerifyReason, WorktreeReport,
+    ReplayReport, RequirementDrift, ReviewItem, ReviewReport, ReviewTotals, RunReport,
+    SCHEMA_VERSION, SchemaName, SchemaReport, SignerView, SkillEntry, SkillRunReport, SkillsReport,
+    StatusReport, StatusTotals, TaskCost, TaskStatus, TraceRow, UiReport, Usage, VerifyOutcome,
+    VerifyReason, WorktreeReport,
 };

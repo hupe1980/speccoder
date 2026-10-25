@@ -191,6 +191,70 @@ pub enum CommandData {
     Issues(Box<IssuesReport>),
     /// `inbox`: what waits for a person's decision, across features.
     Inbox(Box<InboxReport>),
+    /// `review`: the feature's requirements and the person's review of each.
+    Review(Box<ReviewReport>),
+}
+
+/// Result of `speccoder review` (F-087): every requirement of the feature's
+/// spec as a card, with the person's decision on its exact wording.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct ReviewReport {
+    /// The feature.
+    pub feature: String,
+    /// Where the review is recorded (project-relative); commit it to share.
+    pub file: String,
+    /// One per requirement, in the spec's order.
+    pub requirements: Vec<ReviewItem>,
+    /// Counts by state.
+    pub totals: ReviewTotals,
+    /// The format's skill that revises the spec from the comments
+    /// (Spec Kit: `clarify`), when it has one.
+    pub revise_with: Option<String>,
+    /// What that skill is asked, while changes are requested: every
+    /// request with its requirement.
+    pub revision: Option<String>,
+}
+
+/// One requirement and its review.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct ReviewItem {
+    /// `FR-001`.
+    pub id: String,
+    /// Its wording now (the line, markup aside).
+    pub text: String,
+    /// `open` (not reviewed), `approved`, `changes_requested`, or `lapsed`
+    /// (decided on a wording that has changed since).
+    pub state: String,
+    /// Who decided (as for every decision: git's `user.name`, else the OS
+    /// user), when someone did.
+    pub by: Option<String>,
+    /// When (Unix seconds).
+    pub at: Option<u64>,
+    /// The comment, for a change request (or a note on an approval).
+    pub comment: Option<String>,
+    /// For `lapsed`: the wording that was decided on.
+    pub decided_on: Option<String>,
+}
+
+/// Counts of [`ReviewItem::state`].
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct ReviewTotals {
+    /// Approved on their current wording.
+    pub approved: usize,
+    /// Changes requested.
+    pub changes_requested: usize,
+    /// Never reviewed.
+    pub open: usize,
+    /// Decided on an earlier wording.
+    pub lapsed: usize,
+}
+
+impl ReviewTotals {
+    /// Every requirement approved on its current wording.
+    #[must_use]
+    pub fn complete(&self) -> bool {
+        self.changes_requested == 0 && self.open == 0 && self.lapsed == 0
+    }
 }
 
 /// Result of `speccoder inbox` (F-086): every decision that waits for a
@@ -210,7 +274,9 @@ pub struct InboxItem {
     /// What kind, in the order of urgency: `approval` (a run waits on it),
     /// `ruling` (a verified attempt is held: its tests reject an
     /// alternative the spec allows), `gaming` (the monitor suspects a
-    /// shortcut), `stale` (proven against an earlier wording), `stuck` (the
+    /// shortcut), `stale` (proven against an earlier wording), `review`
+    /// (requirements not approved on their current wording), `revise`
+    /// (changes requested on the spec), `stuck` (the
     /// last attempt did not pass), `commit` (planning files a run cannot
     /// read yet), `handoff` (every task done: review and hand it off).
     pub kind: String,
@@ -472,6 +538,7 @@ impl CommandData {
             Self::Config(_) => "config",
             Self::Issues(_) => "issues",
             Self::Inbox(_) => "inbox",
+            Self::Review(_) => "review",
         }
     }
 }
@@ -508,6 +575,7 @@ pub const PAYLOADS: &[&str] = &[
     "config",
     "issues",
     "inbox",
+    "review",
 ];
 
 /// A repository instructions file given to an attempt.
@@ -1373,6 +1441,10 @@ pub struct StatusReport {
     /// GitHub issue URLs the feature's spec names: where it came from, and
     /// what its pull request closes.
     pub issues: Vec<String>,
+    /// The person's review of the spec's requirements (F-087), when the
+    /// format has requirement identifiers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub review: Option<ReviewTotals>,
 }
 
 /// One task and its evidence.

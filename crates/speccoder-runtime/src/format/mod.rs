@@ -285,6 +285,9 @@ pub struct Planning {
     /// The skills that lead from what exists to a task list, given whether
     /// a plan exists (Spec Kit: `plan`, `tasks`).
     pub toward_tasks: fn(bool) -> &'static [&'static str],
+    /// The skill that revises a written spec from a person's comments
+    /// (Spec Kit: `clarify`), if the format has one.
+    pub revises: Option<&'static str>,
 }
 
 /// What a worktree needs committed: a worktree contains only commits.
