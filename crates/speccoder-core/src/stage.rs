@@ -19,6 +19,8 @@ pub enum Stage {
     Audit,
     /// Mutation testing of the changed code.
     Mutation,
+    /// The acceptance set run against wrong and permitted candidates (F-060).
+    Strength,
     /// The gaming monitor.
     Monitor,
     /// The tick and its commit.
@@ -27,13 +29,14 @@ pub enum Stage {
 
 impl Stage {
     /// Every stage, in pipeline order.
-    pub const ALL: [Self; 8] = [
+    pub const ALL: [Self; 9] = [
         Self::Baseline,
         Self::Red,
         Self::Attempt,
         Self::Verify,
         Self::Audit,
         Self::Mutation,
+        Self::Strength,
         Self::Monitor,
         Self::Commit,
     ];
@@ -48,6 +51,7 @@ impl Stage {
             Self::Verify => "verify",
             Self::Audit => "audit",
             Self::Mutation => "mutation",
+            Self::Strength => "strength",
             Self::Monitor => "monitor",
             Self::Commit => "commit",
         }
@@ -78,7 +82,8 @@ mod tests {
         assert_eq!(
             names,
             [
-                "baseline", "red", "attempt", "verify", "audit", "mutation", "monitor", "commit"
+                "baseline", "red", "attempt", "verify", "audit", "mutation", "strength", "monitor",
+                "commit"
             ]
         );
         for s in Stage::ALL {

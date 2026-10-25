@@ -14,6 +14,7 @@ pub mod scope;
 pub mod snapshot;
 pub mod spec;
 pub mod stage;
+pub mod strength;
 pub mod verify;
 
 pub use command::{

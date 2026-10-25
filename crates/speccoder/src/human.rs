@@ -555,6 +555,11 @@ pub fn run(w: &mut impl Write, r: &RunReport, message: &str) -> io::Result<()> {
             writeln!(w, "Held-out   {line}")?;
         }
     }
+    if let Some(st) = &r.strength {
+        for line in strength_lines(st) {
+            writeln!(w, "{line}")?;
+        }
+    }
     for f in &r.integrity {
         writeln!(w, "  ! {f}")?;
     }
@@ -828,6 +833,9 @@ pub fn status(w: &mut impl Write, r: &StatusReport, message: &str) -> io::Result
         if let Some(a) = &t.attestation {
             writeln!(w, "      attestation: {a}")?;
         }
+        if let Some(st) = &t.strength {
+            writeln!(w, "      acceptance strength: {st}")?;
+        }
         if let Some(a) = &t.last_attempt {
             writeln!(
                 w,
@@ -1042,6 +1050,19 @@ pub fn eval(w: &mut impl Write, e: &EvalReport, message: &str) -> io::Result<()>
             o.agree, o.disagree
         )?;
     }
+    match e.summary.median_acceptance_strength {
+        Some(m) => writeln!(
+            w,
+            "Strength   median acceptance strength {m:.2} over verified cases · {} over-strict stop(s)",
+            e.summary.over_strict_stops
+        )?,
+        None if e.summary.over_strict_stops > 0 => writeln!(
+            w,
+            "Strength   not measured · {} over-strict stop(s)",
+            e.summary.over_strict_stops
+        )?,
+        None => {}
+    }
     if let Some(t) = e.summary.tokens_per_correct {
         writeln!(w, "Tokens     {t} per correct case")?;
     }
@@ -1124,4 +1145,41 @@ pub fn next(w: &mut dyn Write, steps: &[speccoder_core::next::NextStep]) -> std:
         )?;
     }
     Ok(())
+}
+
+/// The acceptance set's strength (F-060): the share with its parts, what
+/// got through, and any alternative the tests rejected.
+fn strength_lines(a: &speccoder_core::strength::AcceptanceStrength) -> Vec<String> {
+    use speccoder_core::strength::{PermittedOutcome, summary};
+    let why = a.notes.first().map(String::as_str);
+    let mut out = vec![format!("Strength   {}", summary(&a.combined, why))];
+    if a.held_out {
+        out.push(format!(
+            "  visible tests alone: {}",
+            summary(&a.visible, None)
+        ));
+    }
+    for s in a.combined.survivors.iter().take(6) {
+        out.push(format!("  survived: {s}"));
+    }
+    for p in &a.permitted {
+        match p.outcome {
+            PermittedOutcome::Rejected => out.push(format!(
+                "  rejected a permitted alternative: {} — {} ({}){}",
+                p.scenario,
+                p.rationale,
+                p.id,
+                p.patch
+                    .as_deref()
+                    .map(|x| format!(", {x}"))
+                    .unwrap_or_default()
+            )),
+            PermittedOutcome::Ruled => out.push(format!(
+                "  ruled: the tests are right about {} ({})",
+                p.scenario, p.id
+            )),
+            _ => {}
+        }
+    }
+    out
 }

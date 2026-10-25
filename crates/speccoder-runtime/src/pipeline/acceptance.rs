@@ -595,6 +595,149 @@ pub(crate) fn judge_held_out(
     Ok(HeldOutJudged { held_out, failed })
 }
 
+/// Added acceptance tests that strengthen a weak set (F-060).
+pub(crate) struct Strengthened {
+    /// The new test files, written into the worktree.
+    pub(crate) files: Vec<String>,
+    /// The command that runs them.
+    pub(crate) argv: Vec<String>,
+    /// The author's run and tokens.
+    pub(crate) report: serde_json::Value,
+}
+
+/// Asks the test author once more, telling it what got through (`weak`),
+/// and keeps its new tests only if they fail on the attempt's starting tree
+/// (`before`) and pass on its final tree (`after`), where they are left.
+/// `Err`: why the set could not be strengthened (no worktree change stays).
+pub(crate) fn strengthen(
+    a: &AcceptanceSetup<'_>,
+    visible: &[(String, String)],
+    weak: serde_json::Value,
+    before: &worktree::Checkpoint,
+    after: &worktree::Checkpoint,
+) -> Result<Strengthened, String> {
+    use serde_json::json;
+    let files: Vec<String> = worktree::files(a.worktree, after)
+        .unwrap_or_default()
+        .into_iter()
+        .take(400)
+        .collect();
+    let manifest = MANIFESTS
+        .iter()
+        .find_map(|m| {
+            std::fs::read_to_string(a.project.join(m))
+                .ok()
+                .map(|t| format!("{m}:\n{t}"))
+        })
+        .map(|t| t.chars().take(8192).collect::<String>())
+        .unwrap_or_default();
+    let input = substrate::acceptance::strengthen_input(
+        a.bundle.clone(),
+        a.scenarios,
+        &files,
+        &manifest,
+        visible,
+        weak,
+        a.instructions,
+    );
+    let outcome =
+        a.rt.block_on(a.plane.acceptance(a.feature, a.task, input))
+            .map_err(|e| format!("the test author failed: {}", e.0))?;
+    let output = outcome
+        .output
+        .as_ref()
+        .map(|o| o.peek().clone())
+        .unwrap_or_default();
+    let report = json!({ "run_id": outcome.run_id.to_string(), "usage": output["usage"] });
+    let answer = &output["answer"];
+    if !matches!(outcome.status, agentplane::prelude::RunStatus::Succeeded) || answer.is_null() {
+        return Err(format!(
+            "the test author did not answer ({})",
+            outcome.status.as_str()
+        ));
+    }
+    let protected = a.policy.protected();
+    let mut planned = Vec::new();
+    for f in answer["files"].as_array().into_iter().flatten() {
+        let (Some(path), Some(content)) = (f["path"].as_str(), f["content"].as_str()) else {
+            continue;
+        };
+        let rel = tools::paths::normalise(path).map_err(|e| format!("`{path}`: {}", e.0))?;
+        if !tools::paths::is_test_path(&rel)
+            || protected.write_class(&rel).is_some()
+            || a.project.join(&rel).exists()
+        {
+            return Err(format!("`{rel}` is not a new test file"));
+        }
+        planned.push((rel, content.to_owned()));
+    }
+    if planned.is_empty() {
+        return Err("the test author added no tests".to_owned());
+    }
+    let argv: Vec<String> = answer["argv"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|v| v.as_str().map(str::to_owned))
+        .collect();
+    if a.policy.classify("run_command", &json!({ "argv": argv })) != tools::policy::Decision::Allow
+    {
+        return Err(format!("`{}` is not an allowed command", argv.join(" ")));
+    }
+    let write = || -> Result<(), String> {
+        for (rel, content) in &planned {
+            let full = a.project.join(rel);
+            if let Some(parent) = full.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            std::fs::write(&full, content).map_err(|e| format!("`{rel}`: {e}"))?;
+        }
+        Ok(())
+    };
+    let back =
+        |to: &worktree::Checkpoint| worktree::restore(a.worktree, a.tmp, to).map_err(|e| e.0);
+    // Red on the starting tree: they fail without the task's work.
+    back(before)?;
+    let red = write().map(|()| {
+        let (r, summary) = execute(a.project, &argv, a.runner);
+        classify_red(&r, summary.as_ref())
+    });
+    back(after)?;
+    let red = red?;
+    if !red.is_red() {
+        return Err(format!(
+            "the added tests do not fail without the change ({})",
+            class_word(red)
+        ));
+    }
+    // Green on the final tree: the implementation passes them.
+    write()?;
+    let (green, _) = execute(a.project, &argv, a.runner);
+    if green.status != speccoder_core::verify::CheckStatus::Passed {
+        back(after)?;
+        let cited: Vec<String> = answer["files"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .flat_map(|f| f["scenarios"].as_array().cloned().unwrap_or_default())
+            .filter_map(|v| v.as_str().map(str::to_owned))
+            .collect();
+        return Err(format!(
+            "the added tests fail the implementation{}",
+            if cited.is_empty() {
+                String::new()
+            } else {
+                format!(" (scenarios {})", cited.join(", "))
+            }
+        ));
+    }
+    Ok(Strengthened {
+        files: planned.into_iter().map(|(p, _)| p).collect(),
+        argv,
+        report,
+    })
+}
+
 /// Whether `task` completes its story: the last task carrying its story
 /// label, in a story with at least two scenarios (F-059, US4).
 pub(crate) fn story_checkpoint(

@@ -68,6 +68,61 @@ If no such test can be written, return no files.",
     )
 }
 
+/// What the author is told when the set was too weak (F-060): the same
+/// task, the tests so far, and the wrong implementations they let through.
+#[must_use]
+pub fn strengthen_policy(w: &Wording) -> String {
+    format!(
+        "{} The task is now implemented, and acceptance tests exist (shown below). Some WRONG \
+implementations passed them (listed below). Write ADDITIONAL acceptance tests, in new files, that \
+fail for each listed wrong behaviour and pass for an implementation that does what the spec says. \
+Do not change or repeat the existing tests; never assert a behaviour the spec does not state.",
+        policy(w)
+    )
+}
+
+/// The input for strengthening a weak set: the visible run's, plus the
+/// tests so far and what got through (described by the judge, never shown
+/// to the implementer).
+#[must_use]
+pub fn strengthen_input(
+    bundle: Value,
+    scenarios: &[speccoder_core::spec::ScenarioRef],
+    files: &[String],
+    manifest: &str,
+    visible: &[(String, String)],
+    weak: Value,
+    instructions: &[crate::instructions::Instruction],
+) -> Tainted<Value> {
+    Tainted::object([
+        ("instructions", instructions_part(instructions)),
+        ("set", Tainted::trusted(json!("strengthen"))),
+        ("bundle", Tainted::trusted(bundle)),
+        ("scenarios", Tainted::trusted(json!(scenarios))),
+        (
+            "project",
+            Tainted::with_label(
+                json!({ "files": files, "manifest": manifest }),
+                super::provenance::from(super::provenance::WORKTREE),
+            ),
+        ),
+        (
+            "visible",
+            Tainted::trusted(json!(
+                visible
+                    .iter()
+                    .map(|(p, c)| json!({ "path": p, "content": c }))
+                    .collect::<Vec<_>>()
+            )),
+        ),
+        // Written by the near-miss author and the mutation tool from the change.
+        (
+            "weak",
+            Tainted::with_label(weak, super::provenance::from(super::provenance::WORKTREE)),
+        ),
+    ])
+}
+
 /// The held-out answer's schema: per file its scenarios and command.
 #[must_use]
 pub fn held_out_schema() -> Value {
@@ -222,6 +277,7 @@ impl Skill for Acceptance {
     ) -> Result<Outcome, SkillError> {
         let (ttl, style) = (self.cache_ttl, self.style);
         let held_out = input.peek()["set"] == "held_out";
+        let strengthen = input.peek()["set"] == "strengthen";
         let prompt = super::provenance::labelled_prompt(
             {
                 let input = input.peek();
@@ -230,6 +286,8 @@ impl Skill for Acceptance {
                         self.format.wording(),
                         input["composition"].as_bool().unwrap_or(false),
                     )
+                } else if strengthen {
+                    strengthen_policy(self.format.wording())
                 } else {
                     policy(self.format.wording())
                 };
@@ -261,6 +319,27 @@ impl Skill for Acceptance {
                             "\n- {}: {}",
                             s["id"].as_str().unwrap_or_default(),
                             s["text"].as_str().unwrap_or_default()
+                        ));
+                    }
+                }
+                if strengthen {
+                    text.push_str("\n\n# The acceptance tests so far\n");
+                    for f in input["visible"].as_array().into_iter().flatten() {
+                        text.push_str(&format!(
+                            "\n## {}\n\n```\n{}\n```\n",
+                            f["path"].as_str().unwrap_or_default(),
+                            f["content"].as_str().unwrap_or_default()
+                        ));
+                    }
+                    text.push_str("\n# Wrong implementations these tests let through\n");
+                    for w in input["weak"].as_array().into_iter().flatten() {
+                        text.push_str(&format!(
+                            "\n- {}{}",
+                            w["scenario"]
+                                .as_str()
+                                .map(|s| format!("{s}: "))
+                                .unwrap_or_default(),
+                            w["wrong"].as_str().unwrap_or_default()
                         ));
                     }
                 }

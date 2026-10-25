@@ -106,6 +106,11 @@ Keep the list narrow: an allowed command runs whatever the model passes after th
 |---|---|---|
 | `[acceptance] generate` | `true` | Derive acceptance tests from the spec before each attempt |
 | `[acceptance] held_out` | `true` | Also write [held-out tests](@/docs/evidence.md#held-out-tests) the implementer never sees; `verified` needs them to pass. No effect without `generate`. Costs one more author call per task and one run per held-out file |
+| `[acceptance] strength` | `true` | Measure the [acceptance strength](@/docs/evidence.md#acceptance-strength) of every `verified` task: one more model call and one test run per variant |
+| `[acceptance] min_strength` | — | `0.0`–`1.0`: below it the set is strengthened once, then the task stops for you; unset, strength never changes a verdict |
+| `[acceptance] near_miss` | `2` | Wrong variants to try (`0`–`3`) |
+| `[acceptance] permitted` | `1` | Spec-permitted alternatives to try (`0`–`2`); `0` turns off the [over-strict check](@/docs/evidence.md#over-strict-tests) |
+| `[acceptance] strength_timeout_secs` | `900` | Budget for the whole measurement; what ran by then is recorded as partial (a partial strength meets no `min_strength`) |
 | `[converge] max_rounds` | `3` | Convergence phases a feature may get |
 | `[monitor] enabled` | `false` | Review every passing attempt with the [gaming monitor](@/docs/evidence.md#the-gaming-monitor) |
 | `[git] commit` | `"per-task"` | `per-task` commits each passed task; `none` leaves changes uncommitted |
@@ -144,6 +149,8 @@ The signer is part of the judge configuration the statements' policy hash covers
 | `report` | — | For `command`: the report file (relative to the project, or under `{out}`) |
 | `mode` | `"report"` | `report` records the result; `require` fails the verdict when mutants survive |
 | `timeout_secs` | `900` | Limit for the whole mutation run |
+| `suite` | `true` | Run the mutants against the whole suite after a passing verdict; `false` uses the tool for [acceptance strength](@/docs/evidence.md#acceptance-strength) only |
+| `acceptance_argv` | — | For `command`: the program that runs the mutants against the acceptance tests alone; `{tests}` is the acceptance command (cargo-mutants needs none: it runs `cargo test` with the acceptance command's arguments) |
 
 ## `[executor]`
 

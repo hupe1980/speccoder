@@ -90,6 +90,27 @@ ticks a task only on evidence the model cannot produce or edit.
   (`price_cache_write_per_mtok`, `price_cache_write_1h_per_mtok`; by default
   Anthropic's 1.25× and 2× input), no longer as plain input.
 
+**Acceptance strength**
+
+- After every `verified` verdict the acceptance tests are tested: near-miss
+  variants of the change (a test-blind model call: plausible, wrong about one
+  scenario) and, with `[mutation]`, mutants judged by the acceptance command
+  alone. The share they reject is recorded on the tick
+  (`Acceptance-Strength:`, with held-out tests also `-Visible:`), in
+  `report`, the attestation, `--json` and the dashboard; survivors are named.
+- An alternative the spec permits that the tests reject stops the task
+  (`TESTS-OVER-STRICT`) and holds its attempt; `task rule T --tests-right`
+  records a ruling and the next run ticks it without a model call;
+  `run --fresh-acceptance` starts the tests over.
+- `[acceptance] min_strength` strengthens a weak set once (the author is told
+  what got through; the new tests must be red before and green after), then
+  stops (`ACCEPTANCE-WEAK`). `strength`, `near_miss`, `permitted`,
+  `strength_timeout_secs`; `[mutation] suite` and `acceptance_argv`.
+- `eval` reports the median acceptance strength and over-strict stops.
+- The variant author and the gaming monitor are admitted once per input:
+  judging the same change again reads their answer back. A resumed attempt
+  continues at its own number instead of starting over at attempt 1.
+
 **Safety**
 
 - Every tool call is allowed, sent to a person, or denied before it runs. The

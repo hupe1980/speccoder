@@ -51,6 +51,17 @@ pub enum Outcome {
         /// The task.
         task: String,
     },
+    /// An acceptance test rejects an implementation the spec appears to
+    /// allow; the attempt is held for a ruling (F-060).
+    TestsOverStrict {
+        /// The task.
+        task: String,
+    },
+    /// The acceptance set stayed below `min_strength` (F-060).
+    AcceptanceWeak {
+        /// The task.
+        task: String,
+    },
     /// A convergence gap no failing test shows, or unfinished checklists.
     NotDemonstrated {
         /// The task.
@@ -163,6 +174,34 @@ pub fn next(outcome: &Outcome, feature: Option<&str>) -> Vec<NextStep> {
             (
                 format!("speccoder task skip {task} --reason \"…\""),
                 "pass it by; its dependents stay blocked",
+            ),
+        ],
+        O::TestsOverStrict { task } => vec![
+            (
+                format!("speccoder task rule {task} --tests-right --reason \"…\""),
+                "the tests are right: the spec does not allow that alternative; the next run ticks the held attempt",
+            ),
+            (
+                format!("speccoder run --task {task} --fresh-acceptance"),
+                "the tests are too strict: write them again and attempt anew",
+            ),
+            (
+                format!("speccoder task accept {task} --reason \"…\""),
+                "tick it on your word (attested, not verified)",
+            ),
+        ],
+        O::AcceptanceWeak { task } => vec![
+            (
+                "speccoder report".to_owned(),
+                "see which wrong implementations the tests let through",
+            ),
+            (
+                format!("speccoder run --task {task}"),
+                "try the task again with fresh acceptance tests",
+            ),
+            (
+                format!("speccoder task accept {task} --reason \"…\""),
+                "tick it on your word (attested, not verified)",
             ),
         ],
         O::NotDemonstrated { task } => vec![

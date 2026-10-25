@@ -216,6 +216,7 @@ mod tests {
             last_attempt: None,
             note: None,
             attestation: Some("signed ssh SHA256:x".to_owned()),
+            strength: None,
         }
     }
 

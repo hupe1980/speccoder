@@ -172,6 +172,9 @@ pub enum Command {
         /// Run although the feature's checklists have unchecked items (recorded on every commit).
         #[arg(long)]
         ignore_checklists: bool,
+        /// With --task: set the task's held attempt aside and write its acceptance tests anew.
+        #[arg(long, requires = "task")]
+        fresh_acceptance: bool,
         /// Work in this checkout on branch `speccoder/<feature>` instead of a
         /// worktree (intent may be git-ignored); switches back at the end.
         #[arg(long)]
@@ -181,7 +184,7 @@ pub enum Command {
         #[arg(long = "return", requires = "in_place", conflicts_with_all = ["task", "converge", "max_tasks"])]
         return_: bool,
     },
-    /// Act on one task: approve, reject, accept, skip, nudge or show it.
+    /// Act on one task: approve, reject, accept, skip, nudge, rule or show it.
     Task {
         #[command(subcommand)]
         action: TaskAction,
@@ -394,6 +397,20 @@ pub enum TaskAction {
         /// Remove the task's notes.
         #[arg(long, conflicts_with = "note")]
         clear: bool,
+    },
+    /// Rule on a held attempt whose tests reject an alternative: the tests are right.
+    Rule {
+        /// The task, e.g. T005.
+        task: String,
+        /// The tests are right: the flagged alternative is not what the spec allows.
+        #[arg(long, required = true)]
+        tests_right: bool,
+        /// Why (recorded with the tick).
+        #[arg(long)]
+        reason: String,
+        /// One finding by its id (`permitted-1`); default: every finding held.
+        #[arg(long, value_name = "ID")]
+        variant: Option<String>,
     },
     /// The task's state and the evidence behind it.
     Show {

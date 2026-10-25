@@ -34,6 +34,7 @@ pub mod resume;
 pub mod sandbox;
 pub mod skills;
 pub mod status;
+pub mod strength;
 pub mod substrate;
 pub mod tools;
 pub mod user_config;

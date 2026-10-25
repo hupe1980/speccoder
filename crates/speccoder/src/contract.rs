@@ -306,6 +306,8 @@ fn every_next_step_and_fix_is_a_command_that_parses() {
         Outcome::BudgetExhausted { task: t() },
         Outcome::VerificationFailed { task: t() },
         Outcome::SuspectedGaming { task: t() },
+        Outcome::TestsOverStrict { task: t() },
+        Outcome::AcceptanceWeak { task: t() },
         Outcome::NotDemonstrated { task: t() },
         Outcome::RunFailed { task: Some(t()) },
         Outcome::RunFailed { task: None },
