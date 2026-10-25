@@ -7,17 +7,28 @@
   import Icon from "./Icon.svelte";
   let filter = $state("");
   let at = $state(0);
-  const groups: Record<string, string> = { next: "Up Next", plan: "Plan", work: "Work", task: "Tasks", feature: "Features", review: "Review" };
+  const groups: Record<string, string> = { page: "View", next: "Up Next", plan: "Plan", work: "Work", task: "Tasks", feature: "Features", review: "Review" };
   const icons: Record<string, string> = { next: "sparkle", plan: "doc", work: "play", task: "list", feature: "grid", review: "chart" };
+  // The page's own commands, as the menu bar has them (`menu:` + its id).
+  const page: Action[] = ([
+    ["theme.light", "appearance: light"],
+    ["theme.dark", "appearance: dark"],
+    ["theme.auto", "appearance: automatic", "follow the system"],
+    ["view.sidebar", "toggle the sidebar"],
+    ["view.statusbar", "toggle the status bar"],
+  ] as [string, string, string?][]).map(([id, label, why]) => ({ group: "page", label, why: why ?? "", command: `menu:${id}`, run: null, blocked: null, input: null }));
+  const isMenu = (a?: Action) => !!a?.command.startsWith("menu:");
   const matched = $derived(
-    app.actions.filter((a) => {
+    [...app.actions, ...page].filter((a) => {
       const f = filter.toLowerCase().trim();
+      // The page's commands only when asked for: they would crowd the work.
+      if (isMenu(a)) return f.length >= 2 && a.label.includes(f);
       return !f || a.label.toLowerCase().includes(f) || a.command.toLowerCase().includes(f) || a.why.toLowerCase().includes(f);
     }),
   );
   const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
   // Typed words are also a change to make: offered last, as Spotlight
-  // offers a search of the web (F-094).
+  // offers a search of the web.
   const quick = $derived.by((): Action | null => {
     const f = filter.trim();
     if (f.length < 6) return null;
@@ -26,6 +37,11 @@
   const items = $derived(quick ? [...matched, quick] : matched);
   const pick = (a?: Action) => {
     if (!a || a.blocked) return;
+    if (isMenu(a)) {
+      app.palette = false;
+      window.dispatchEvent(new CustomEvent("speccoder:menu", { detail: a.command.slice(5) }));
+      return;
+    }
     if (a === quick) {
       app.quickDraft = filter.trim();
       app.palette = false;
@@ -57,16 +73,16 @@
         {#if i === 0 || items[i - 1]?.group !== a.group}<li class="group" role="presentation">{groups[a.group] ?? cap(a.group)}</li>{/if}
         <li role="option" id="pal-{i}" aria-selected={i === at} aria-disabled={!!a.blocked} data-i={i}>
           <button class:on={i === at} disabled={!!a.blocked} tabindex="-1" onmouseenter={() => (at = i)} onclick={() => pick(a)}>
-            <span class="ic"><Icon name={a.run ? (icons[a.group] ?? "play") : "terminal"} size={14} weight={2} /></span>
+            <span class="ic"><Icon name={isMenu(a) ? "halfcircle" : a.run ? (icons[a.group] ?? "play") : "terminal"} size={14} weight={2} /></span>
             <span class="label">{cap(a.label)}{#if a.input}…{/if}</span>
             <span class="why">{a.blocked ?? a.why}</span>
-            <span class="tag">{a.run ? (a.blocked ? "Blocked" : "Run") : "Copy"}</span>
+            <span class="tag">{isMenu(a) ? "Apply" : a.run ? (a.blocked ? "Blocked" : "Run") : "Copy"}</span>
           </button>
         </li>
       {:else}<li class="none">No action matches “{filter}”.</li>{/each}
     </ul>
     <footer>
-      <span class="mono cmd"><Icon name="terminal" size={12} />{items[at]?.command ?? ""}</span>
+      <span class="mono cmd"><Icon name="terminal" size={12} />{isMenu(items[at]) ? "" : (items[at]?.command ?? "")}</span>
       <span class="keys"><kbd>↑</kbd><kbd>↓</kbd> move <kbd>↵</kbd> run <kbd>esc</kbd> close</span>
     </footer>
   </div>

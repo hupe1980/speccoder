@@ -1,4 +1,4 @@
-//! The fixed stages of one task's pipeline (F-053): one vocabulary for the
+//! The fixed stages of one task's pipeline: one vocabulary for the
 //! plain progress lines, the TUI, ACP updates and `status`.
 
 use serde::{Deserialize, Serialize};
@@ -19,7 +19,7 @@ pub enum Stage {
     Audit,
     /// Mutation testing of the changed code.
     Mutation,
-    /// The acceptance set run against wrong and permitted candidates (F-060).
+    /// The acceptance set run against wrong and permitted candidates.
     Strength,
     /// The gaming monitor.
     Monitor,

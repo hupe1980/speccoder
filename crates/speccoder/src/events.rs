@@ -1,4 +1,4 @@
-//! `--events`: the run as JSON Lines on stdout (F-056). Every line is one
+//! `--events`: the run as JSON Lines on stdout. Every line is one
 //! [`Line`] — `{v, seq, ts, type, …}` — rendered from the same
 //! [`progress::Event`]s the plain lines and the dashboard show; the first
 //! is `session.started`, the last `result`, holding what `--json` prints.
@@ -201,7 +201,7 @@ pub enum Body {
         /// USD, when priced.
         usd: Option<f64>,
     },
-    /// What the model said in a turn: its account, a claim (F-095).
+    /// What the model said in a turn: its account, a claim.
     #[serde(rename = "said")]
     Said {
         /// Task ID.

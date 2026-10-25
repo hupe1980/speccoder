@@ -1,4 +1,4 @@
-//! `speccoder review` (F-087): the person's review of the spec, one
+//! `speccoder review`: the person's review of the spec, one
 //! requirement at a time. A decision — approved, or changes requested with a
 //! comment — is bound to the exact line it was made on, and names who made
 //! it; when the line changes, the decision lapses. It is recorded in

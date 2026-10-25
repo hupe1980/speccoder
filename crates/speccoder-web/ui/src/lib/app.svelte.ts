@@ -33,20 +33,20 @@ class AppState {
   approvals = $state<PendingCall[]>([]);
   /** Which document the Spec & Plan view shows (`review`: the review cards). */
   doc = $state("spec");
-  /** The section of the shown document, by its outline id (F-090). */
+  /** The section of the shown document, by its outline id. */
   section = $state<string | null>(null);
-  /** Every decision waiting for the person, across features (F-086). */
+  /** Every decision waiting for the person, across features. */
   inbox = $state<Envelope<Inbox> | null>(null);
   documents = $state<Document[]>([]);
   /** The doctor's warnings and failures: what would stop or spoil a run. */
   preflight = $state<{ check: string; level: string; detail: string; fix: string[]; code?: string | null }[]>([]);
   /** Every doctor check (the status bar reads the model and the sandbox). */
   doctor = $state<{ check: string; level: string; detail: string }[]>([]);
-  /** The quick-change sheet is open (F-094). */
+  /** The quick-change sheet is open. */
   quick = $state(false);
   /** What the quick-change sheet opens with (typed in the palette). */
   quickDraft = $state("");
-  /** An open context menu: where, and its items (F-088). */
+  /** An open context menu: where, and its items. */
   context = $state<{ x: number; y: number; title: string; items: { label: string; icon?: string; disabled?: string | null; hint?: string; act: () => void }[] } | null>(null);
   /** Whether the sidebar and the status bar are shown (View menu). */
   sidebar = $state(true);
@@ -58,7 +58,7 @@ class AppState {
   task = $state<{ id: string; title: string } | null>(null);
   stages = $state<StageView[]>([]);
   calls = $state<string[]>([]);
-  /** What the model said last, its first line (F-095): a claim. */
+  /** What the model said last, its first line: a claim. */
   said = $state<string | null>(null);
   usage = $state<{ in: number; out: number; usd: number | null }>({ in: 0, out: 0, usd: null });
   waiting = $state<Waiting | null>(null);
@@ -270,6 +270,12 @@ class AppState {
         this.calls = [...this.calls, ev.text];
         break;
     }
+  }
+
+  /** A feature's title: its spec's own, else its directory name in words. */
+  titleOf(name: string): string {
+    const f = this.project?.features?.features.find((x) => x.name === name);
+    return f?.title ?? name.replace(/^\d+-/, "").replaceAll("-", " ");
   }
 
   /** Where the page is, in its address: `?feature=…&view=…&task=…`, so a

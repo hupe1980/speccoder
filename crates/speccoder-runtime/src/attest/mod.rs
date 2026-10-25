@@ -1,4 +1,4 @@
-//! Signed, portable evidence per ticked task (F-061).
+//! Signed, portable evidence per ticked task.
 //!
 //! After a tick commit, the engine writes an in-toto Bundle as the commit's
 //! git note (`refs/notes/speccoder`): a `test-result` statement per test
@@ -262,7 +262,7 @@ pub fn phases(report: &RunReport) -> Vec<PhaseResult> {
     out
 }
 
-/// The decisions people made on the attempt's calls (D-057).
+/// The decisions people made on the attempt's calls.
 fn decisions(tool_calls: &[Value]) -> Vec<Value> {
     tool_calls
         .iter()
@@ -282,7 +282,7 @@ fn decisions(tool_calls: &[Value]) -> Vec<Value> {
         .collect()
 }
 
-/// The acceptance set's strength (F-060) as evidence: shares, counts,
+/// The acceptance set's strength as evidence: shares, counts,
 /// what got through, the permitted alternatives and the rulings — never the
 /// local patch paths or the variants' code.
 fn strength(report: &RunReport) -> Value {

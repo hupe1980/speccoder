@@ -2,6 +2,7 @@
   import { app } from "../lib/app.svelte";
   import { symbol, word } from "../lib/marks";
   import Icon from "./Icon.svelte";
+  import Code from "./Code.svelte";
   import Spend from "./Spend.svelte";
   import PullCard from "./PullCard.svelte";
   const r = $derived(app.report?.data);
@@ -36,7 +37,7 @@
       <ul class="legend">
         {#each segments as s (s.k)}<li><span class="chip s-{s.k}"><Icon name={symbol(s.k)} size={11} weight={2.4} /> {s.n}</span> {word(s.k)}</li>{/each}
       </ul>
-      <p class="muted small">{total} tasks · branch <code>{r.branch ?? "—"}</code>{#if r.unmerged_commits} · {r.unmerged_commits} commit(s) not merged{/if}</p>
+      <p class="muted small">{total} tasks · branch <code>{r.branch ?? "—"}</code>{#if r.unmerged_commits}{" · "}{r.unmerged_commits} {r.unmerged_commits === 1 ? "commit" : "commits"} not merged{/if}</p>
     </section>
     {#if stale.length}
       <section class="card wide stale">
@@ -53,7 +54,7 @@
         {@const yes = app.actions.find((a) => a.run?.kind === "approve" && "task" in a.run && a.run.task === p.task)}
         {@const no = app.actions.find((a) => a.run?.kind === "reject" && "task" in a.run && a.run.task === p.task)}
         <div class="pending">
-          <p><span class="chip s-needs_approval"><Icon name="hand" size={11} weight={2.2} /> {p.task}</span> <strong>{p.presentation?.title ?? p.tool}</strong> <code>{p.covers}</code></p>
+          <p><span class="chip s-needs_approval"><Icon name="hand" size={11} weight={2.2} /> {p.task}</span> <strong>{p.presentation?.title ?? p.tool}</strong> <Code text={p.covers} /></p>
           <p class="muted small">{p.reason}</p>
           <div class="acts">
             {#if yes}<button class="btn small primary" disabled={!!app.job?.running} title={yes.command} onclick={() => app.perform(yes)}>Approve</button>{/if}

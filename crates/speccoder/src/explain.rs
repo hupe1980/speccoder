@@ -1,4 +1,4 @@
-//! `speccoder explain CODE`: a code's full entry, offline (F-056), and the
+//! `speccoder explain CODE`: a code's full entry, offline, and the
 //! codes page of the documentation, generated from the same catalog.
 
 use speccoder_core::codes::{self, CATALOG};

@@ -7,6 +7,7 @@
   import { language } from "../lib/highlight";
   import Diff from "./Diff.svelte";
   import Icon from "./Icon.svelte";
+  import Code from "./Code.svelte";
   import Source from "./Source.svelte";
   import FileTree from "./FileTree.svelte";
   import { diagrams } from "../lib/mermaid";
@@ -201,7 +202,7 @@
                     {#if taskOf(c.task)}<span class="mono task">{taskOf(c.task)}</span>{/if}
                     <span class="when">{when(c.date)}</span>
                   </span>
-                  <span class="subj">{c.subject.replace(/^speccoder: T\d+ /, "")}</span>
+                  <span class="subj"><Code text={c.subject.replace(/^speccoder: T\d+ /, "")} /></span>
                 </button>
               </li>
             {/each}

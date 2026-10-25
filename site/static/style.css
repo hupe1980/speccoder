@@ -304,3 +304,24 @@ body.docs .docs-layout:not(:has(.toc)) { grid-template-columns: 230px minmax(0, 
   .docs-menu[open] > summary::after { content: "▴"; }
   .docs-sidebar { border-bottom: 0; padding-bottom: 0; }
 }
+
+/* Screenshots of the app, in the reader's theme. */
+.shot { margin: 1.75rem 0; }
+.shot img { display: block; width: 100%; height: auto; border-radius: 12px; border: 1px solid var(--border); box-shadow: 0 12px 40px rgba(0,0,0,.12); }
+.shot figcaption { margin-top: .6rem; font-size: .88rem; color: var(--fg-muted); text-align: center; }
+.shot .shot-dark { display: none; }
+:root[data-theme="dark"] .shot .shot-light { display: none; }
+:root[data-theme="dark"] .shot .shot-dark { display: block; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .shot .shot-light { display: none; }
+  :root:not([data-theme="light"]) .shot .shot-dark { display: block; }
+}
+.app-shot { margin: 2.25rem 0 1.5rem; }
+.app-shot img { display: block; width: 100%; height: auto; border-radius: 16px; border: 1px solid var(--border); box-shadow: 0 30px 60px -24px rgb(20 20 60 / 35%); }
+.app-shot .shot-dark { display: none; }
+:root[data-theme="dark"] .app-shot .shot-light { display: none; }
+:root[data-theme="dark"] .app-shot .shot-dark { display: block; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .app-shot .shot-light { display: none; }
+  :root:not([data-theme="light"]) .app-shot .shot-dark { display: block; }
+}

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { app } from "../lib/app.svelte";
-  import { symbol, word } from "../lib/marks";
+  import { phaseLabel as short, symbol, word } from "../lib/marks";
   import { get, q } from "../lib/api";
   import type { Action, Task } from "../lib/types";
   import Code from "./Code.svelte";
@@ -82,7 +82,7 @@
           {@const live = running === t.id}
           <article class="card" class:on={app.selected === t.id} class:live role="listitem" oncontextmenu={(e) => menu(t, e)}>
             <button class="open" onclick={() => app.selectTask(t.id)} aria-label="{t.id} {t.title}, {word(laneOf(t))}">
-              <span class="row"><span class="id mono">{t.id}</span>{#if t.phase}<span class="phase">{t.phase}</span>{/if}</span>
+              <span class="row"><span class="id mono">{t.id}</span>{#if t.phase}<span class="phase" title={t.phase}>{short(t.phase)}</span>{/if}</span>
               <span class="t"><Code text={t.title} /></span>
               {#if t.drift?.requirements.length}
                 <span class="foot changed" title="The spec changed since this tick: its evidence is for the earlier wording"><Icon name="exclaim" size={12} weight={2.2} />Spec changed: {t.drift.requirements.map((r) => r.id).join(", ")}</span>
@@ -117,7 +117,7 @@
 
 <style>
   .board { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 1.25rem; align-items: start; max-width: 1180px; margin: 0 auto; }
-  .lane { display: grid; gap: 0.55rem; }
+  .lane { display: grid; gap: 0.55rem; min-width: 0; }
   h3 { display: flex; align-items: center; gap: 0.4rem; margin: 0 0.25rem 0.15rem; font-size: 0.82rem; font-weight: 650; background: none; }
   h3 .title { color: var(--text); }
   .count { margin-left: auto; min-width: 1.5rem; height: 1.25rem; padding: 0 0.4rem; border-radius: 999px; display: grid; place-items: center; background: var(--fill); color: var(--muted); font: 600 0.72rem/1 var(--rounded); }
@@ -129,9 +129,9 @@
   .card.on { box-shadow: 0 0 0 2px var(--accent), var(--shadow-md); }
   .open { all: unset; display: grid; gap: 0.35rem; padding: 0.8rem 0.9rem 0.85rem; cursor: pointer; width: 100%; box-sizing: border-box; border-radius: var(--radius); }
   .open:focus-visible { box-shadow: 0 0 0 3.5px var(--focus); }
-  .row { display: flex; align-items: center; gap: 0.4rem; }
+  .row { display: flex; align-items: center; gap: 0.4rem; min-width: 0; }
   .id { font-size: 0.74rem; color: var(--muted); }
-  .phase { font-size: 0.7rem; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .phase { min-width: 0; font-size: 0.7rem; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .t { font-weight: 500; line-height: 1.38; display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
   .foot { display: flex; align-items: center; gap: 0.35rem; font-size: 0.76rem; }
   .fail { color: var(--danger); }

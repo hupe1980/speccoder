@@ -1,4 +1,4 @@
-//! What a person can do now (D-087): one list, computed by the runtime and
+//! What a person can do now: one list, computed by the runtime and
 //! rendered by every interface — the dashboard's `n`, `c` and `:` today, a
 //! desktop app or another workbench later. Every action is a CLI command
 //! too, so nothing an interface offers is out of reach of a script.
@@ -76,7 +76,7 @@ pub enum Runnable {
         /// Also assign it to the person.
         assign: bool,
     },
-    /// Record a quick change and, when `run`, run it (F-094).
+    /// Record a quick change and, when `run`, run it.
     QuickChange {
         /// The change, in the person's words.
         request: String,

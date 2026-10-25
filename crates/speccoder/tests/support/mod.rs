@@ -1,6 +1,6 @@
 #![allow(dead_code)] // shared by several test binaries; each uses part of it
 //! Every `--json` the CLI tests read is checked against the published
-//! schemas (F-056, SC-001): the envelope against `result`, `data` against
+//! schemas (SC-001): the envelope against `result`, `data` against
 //! the schema its `payload` names, and a non-ok result has a code, a fix
 //! and a docs link.
 

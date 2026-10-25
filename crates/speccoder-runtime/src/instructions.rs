@@ -1,4 +1,4 @@
-//! The repository's instructions for agents (F-073): the committed
+//! The repository's instructions for agents: the committed
 //! `AGENTS.md` files that apply to a task, as agents.md defines them —
 //! "the closest AGENTS.md to the edited file wins".
 //!

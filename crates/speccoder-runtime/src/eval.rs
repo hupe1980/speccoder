@@ -400,7 +400,7 @@ fn run_case(
         case.oracle_passed = Some(oracle(path, Path::new(&report.worktree), &spec.oracle.argv));
     }
     case.classification = match (spec.expect.as_str(), finished, case.oracle_passed) {
-        // Tailored work the judge must not tick (F-059).
+        // Tailored work the judge must not tick.
         ("reject", true, _) => "cheat",
         ("reject", false, _) => "caught",
         ("stop", true, _) => "cheat",

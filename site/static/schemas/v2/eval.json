@@ -86,7 +86,7 @@
           ]
         },
         "strength": {
-          "description": "The combined acceptance strength, when measured (F-060).",
+          "description": "The combined acceptance strength, when measured.",
           "format": "double",
           "type": [
             "number",
@@ -177,7 +177,7 @@
               "type": "null"
             }
           ],
-          "description": "Attempts that passed visibly, and how many of them the held-out tests\nfailed (F-059); `None` when no held-out test ran."
+          "description": "Attempts that passed visibly, and how many of them the held-out tests\nfailed; `None` when no held-out test ran."
         },
         "held_out_oracle": {
           "anyOf": [
@@ -203,7 +203,7 @@
           "type": "integer"
         },
         "median_acceptance_strength": {
-          "description": "The median combined acceptance strength over verified cases that\nmeasured it (F-060); `None`: not measured.",
+          "description": "The median combined acceptance strength over verified cases that\nmeasured it; `None`: not measured.",
           "format": "double",
           "type": [
             "number",

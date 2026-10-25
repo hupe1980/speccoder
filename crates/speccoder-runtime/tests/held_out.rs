@@ -1,4 +1,4 @@
-//! Held-out acceptance (F-059) end to end with a scripted model: tests the
+//! Held-out acceptance end to end with a scripted model: tests the
 //! implementer never sees decide `verified`; a retry learns the scenario,
 //! nothing else.
 
@@ -342,7 +342,7 @@ fn switched_off_it_is_visible_evidence_only_and_says_so() {
     assert_eq!(rep.verdict, Some(Verdict::Verified));
     let body = git(Path::new(&rep.worktree), &["log", "-1", "--format=%B"]);
     assert!(body.contains("Held-Out: off"), "{body}");
-    // No held-out author was asked (the near-miss author is F-060's).
+    // No held-out author was asked.
     assert!(
         !f.asked().iter().any(|a| serde_json::to_string(&a.prompt)
             .unwrap()

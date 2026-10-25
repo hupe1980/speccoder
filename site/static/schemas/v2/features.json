@@ -39,6 +39,13 @@
           "format": "uint",
           "minimum": 0,
           "type": "integer"
+        },
+        "title": {
+          "description": "The title its spec (or proposal) gives, when it has one.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [

@@ -1,4 +1,4 @@
-//! Evidence attestations (F-061): every tick leaves signed in-toto
+//! Evidence attestations: every tick leaves signed in-toto
 //! statements in a git note, and `attest verify` catches every tampering.
 
 // Test code: panicking on unexpected input is the failure report.

@@ -1,4 +1,4 @@
-//! Quick changes in Spec Kit's layout (F-094): one standing feature,
+//! Quick changes in Spec Kit's layout: one standing feature,
 //! `NNN-quick-changes`, where each request becomes a user story with its
 //! acceptance scenarios, a requirement and a task — so it is specified,
 //! reviewed, run and judged like any other.

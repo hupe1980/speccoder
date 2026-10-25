@@ -146,7 +146,7 @@ fn escapes_and_secrets_are_refused_for_reading() {
 // ── US2: writing ────────────────────────────────────────────────────────────
 
 /// Every optional argument the schema declares nullable is readable as
-/// `null`: the schema never promises what the tool would refuse (D-076).
+/// `null`: the schema never promises what the tool would refuse.
 #[test]
 fn every_optional_argument_accepts_null() {
     let w = worktree();
@@ -220,7 +220,7 @@ fn edit_file_reads_a_null_replace_all_as_one_occurrence() {
 
 #[test]
 fn closing_a_foreign_schema_only_narrows_it() {
-    // What MCP servers' schemas go through (agentplane's pass, AP-19).
+    // What MCP servers' schemas go through (agentplane's pass).
     let close_objects = |v: serde_json::Value| agentplane::tools::closed_schema(&v);
     let required_only = close_objects(
         json!({"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}),

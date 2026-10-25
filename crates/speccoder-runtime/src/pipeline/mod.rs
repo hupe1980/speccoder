@@ -155,7 +155,7 @@ pub struct RunOptions {
     /// override is recorded on every commit of the run.
     pub ignore_checklists: bool,
     /// Set a task's held or interrupted attempt aside and write its
-    /// acceptance tests anew (`run --task T --fresh-acceptance`, F-060).
+    /// acceptance tests anew (`run --task T --fresh-acceptance`).
     pub fresh_acceptance: bool,
     /// Attempt although a check cannot run on the untouched code
     /// (`run --allow-failing-baseline`); otherwise the run stops before any
@@ -165,7 +165,7 @@ pub struct RunOptions {
     /// lane) of one `speccoder run`, gone with it.
     pub run_grants: Arc<std::sync::Mutex<Vec<crate::tools::policy::Grant>>>,
     /// Run in the person's checkout on `speccoder/<feature>` instead of a
-    /// worktree (`run --in-place`, F-048).
+    /// worktree (`run --in-place`).
     pub in_place: bool,
     /// The in-place session the runtime opened for this run.
     pub session: Option<Arc<std::sync::Mutex<crate::in_place::Session>>>,

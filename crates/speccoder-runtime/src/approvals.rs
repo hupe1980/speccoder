@@ -260,7 +260,7 @@ pub use present::{PresentContext, Presentation, present};
 
 /// A call that needs a person: the identity of the journaled question, so
 /// only what the journal already holds goes in (the presentation — the diff,
-/// the sandbox line — is built live from it, F-054).
+/// the sandbox line — is built live from it).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Request {
     /// `feature/task`.
@@ -685,7 +685,7 @@ fn decided(feature: &str, decisions: &Decisions) -> Vec<DecidedCall> {
     out
 }
 
-/// Calls of `feature` waiting for a person on a human task (F-072), oldest
+/// Calls of `feature` waiting for a person on a human task, oldest
 /// first: the attempt is suspended and resumes once they are decided.
 fn waiting_tasks(
     root: &Path,
@@ -1000,7 +1000,7 @@ pub fn decide_with(
             );
         }
     }
-    // Before F-072, and in lanes, a stopped attempt was saved with its call:
+    // In a parallel lane, a stopped attempt is saved with its call:
     // deciding it records a grant the task's next attempt starts with.
     let verb = match verb {
         Verb::Decide(c) => match (c.task, c.approve, c.note) {

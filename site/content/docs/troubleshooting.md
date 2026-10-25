@@ -12,8 +12,8 @@ Every failure names a [code](@/docs/codes.md) and the command that fixes it — 
 | Symptom | Cause and fix |
 |---|---|
 | `error[CHECK-BROKEN]` before any model call | A check fails on the untouched worktree without running a test. Most often a file it needs was never committed — a worktree holds only commits (`speccoder doctor` lists untracked configuration such as `.config/`). Commit it, fix the check, or run with `--allow-failing-baseline`. |
-| No colour | Output is not a terminal, or `NO_COLOR` or `TERM=dumb` is set. `--color always` forces it. |
-| Odd symbols or boxes | The font lacks them: `--ascii`, or `[ui] ascii = true` in your settings. |
+| No colour | Output is not a terminal, `NO_COLOR` or `TERM=dumb` is set, or screen-reader mode is on. `--color always` forces it. |
+| Odd symbols or boxes | The font lacks them: `--ascii`, or `[ui] ascii = true` in [your settings](@/docs/configuration.md#your-settings). |
 | `error[CONFIG-MISSING]` — the worktree has no speccoder.toml (13) | speccoder reads committed files. Commit `speccoder.toml`. |
 | `error[UNCOMMITTED-INTENT]` — … are not committed (14) | Commit the feature's Spec Kit files and `.specify/`. |
 | `error[KEY-MISSING]` — OPENAI_API_KEY is not set (13) | Export the key in this shell, e.g. `set -a; . ./.env; set +a`. |
@@ -26,7 +26,7 @@ Every failure names a [code](@/docs/codes.md) and the command that fixes it — 
 | `error[TASK-NOT-READY]`, `TASK-BLOCKED` — no task can run (16) | `speccoder inspect` shows what blocks what; a skipped task blocks its dependents. |
 | `stopped[BUDGET-EXHAUSTED]` | Raise `[budget] max_turns` or split the task in `tasks.md`. |
 | `acceptance skipped: … is not an allowed command` | The acceptance tests' command must be allowed: add its prefix to `[commands] allow`. |
-| `stopped[ACCEPTANCE-UNWRITTEN]` or `PROVIDER-REFUSED` — refused the request: insufficient_quota … / credit_balance_exhausted | The provider account has no credit; nothing is retried. Top it up and run again. |
+| `stopped[ACCEPTANCE-UNWRITTEN]` or `PROVIDER-REFUSED` — refused the request: … credit_balance_exhausted (or quota, billing, an API key) | The provider refuses the account, not the request; nothing is retried. Top it up or fix the key, and run again. |
 | `another speccoder is working on this project` | A second process found the journal in use. Wait for the first, or check `speccoder report --live`. |
 | `MCP tool … changed since it was allowed` | The server changed a tool you allowed. Read it again; approving one call records it as it is now. |
 | A run seems stuck | `speccoder report --live` from another terminal shows the step and the last tool call. |

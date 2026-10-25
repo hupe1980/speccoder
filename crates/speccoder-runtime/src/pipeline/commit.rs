@@ -233,7 +233,7 @@ pub(crate) fn tick_message(f: &TickFacts<'_>) -> String {
 }
 
 /// `Held-Out: passed=<k>/<k> manifest=sha256:<hex>`, `absent=<reason>` or
-/// `off` (F-059); nothing for a task without acceptance tests.
+/// `off`; nothing for a task without acceptance tests.
 fn held_out_trailer(acceptance: Option<&serde_json::Value>) -> String {
     let Some(h) = acceptance.and_then(|a| a.get("held_out")) else {
         return String::new();

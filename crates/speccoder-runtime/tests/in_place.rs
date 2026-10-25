@@ -1,4 +1,4 @@
-//! In-place runs (F-048) end to end with a scripted model: the person's
+//! In-place runs end to end with a scripted model: the person's
 //! checkout, intent git-ignored, switched to `speccoder/<feature>` and back.
 
 // Test code: panicking on unexpected input is the failure report.

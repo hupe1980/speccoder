@@ -20,7 +20,7 @@ pub const VERIFIER: &str = "speccoder://verifier";
 /// Worktree content speccoder inlines into a prompt (a patch, files, a manifest).
 pub const WORKTREE: &str = "speccoder://worktree";
 
-/// A person's answer to a question (F-072): their input, not speccoder's;
+/// A person's answer to a question: their input, not speccoder's;
 /// who they were is on the decision's record, not in the label.
 pub const PERSON: &str = "speccoder://person";
 

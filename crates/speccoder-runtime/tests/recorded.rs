@@ -1,7 +1,7 @@
 //! Journals of real-model runs, recorded with `just record-journals`, still
 //! replay strictly with this build. An agentplane upgrade that cannot read
 //! them or reproduces a different run fails here — before a user's journal
-//! meets it (F-049, the F-006 gap).
+//! meets it.
 
 // Test code: panicking on unexpected input is the failure report.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]

@@ -1,4 +1,4 @@
-//! `speccoder do "…"` (F-094): a small change without a planning ceremony,
+//! `speccoder do "…"`: a small change without a planning ceremony,
 //! and without skipping the evidence. The request becomes a story, a
 //! requirement (approved: the person wrote it) and a task in the format's
 //! standing unit for quick changes; those planning files are committed;

@@ -1,13 +1,13 @@
 """speccoder as a Spec Kit workflow step type.
 
 Written by `speccoder workflow install`. Runs `speccoder --json run` (or
-`speccoder skill <name>`) in the project and maps speccoder's exit code onto
+`speccoder spec <skill>`) in the project and maps speccoder's exit code onto
 the step's status:
 
 - 0  -> completed
 - 23 -> paused: speccoder stopped for a person (an approval, a blocked or
         undemonstrated task, a suspected shortcut). Decide with
-        `speccoder approvals` / `approve` / `nudge` / `accept`, then
+        `speccoder inbox`, `speccoder task approve|nudge|accept`, then
         `specify workflow resume <run>` runs this step again.
 - anything else -> failed, with speccoder's message.
 
@@ -52,11 +52,11 @@ class SpeccoderStep(StepBase):
         skill = config.get("skill")
         if skill:
             args = _value(config.get("args", ""), context)
-            argv = [exe, "--json", "skill", str(skill), "--path", root, "--no-prompt"]
+            argv = [exe, "-C", root, "--json", "spec", str(skill), "--no-prompt"]
             if args:
                 argv.append(str(args))
             return argv
-        argv = [exe, "--json", "run", "--no-prompt"]
+        argv = [exe, "-C", root, "--json", "run", "--no-prompt"]
         if config.get("converge") is True:
             argv.append("--converge")
         feature = _value(config.get("feature"), context)
@@ -64,7 +64,6 @@ class SpeccoderStep(StepBase):
             argv += ["--feature", str(feature)]
         if config.get("max_tasks"):
             argv += ["--max-tasks", str(int(config["max_tasks"]))]
-        argv.append(root)
         return argv
 
     def execute(self, config: dict[str, Any], context: StepContext) -> StepResult:
@@ -115,7 +114,7 @@ class SpeccoderStep(StepBase):
                 status=StepStatus.PAUSED,
                 output=output,
                 error=f"speccoder needs a person: {result.get('message')} -- "
-                "decide (speccoder approvals / approve / nudge / accept), "
+                "decide (speccoder inbox; speccoder task approve / nudge / accept), "
                 "then `specify workflow resume`",
             )
         return StepResult(

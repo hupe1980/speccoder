@@ -30,7 +30,7 @@ pub(crate) struct PreparedAcceptance {
     /// The command, when the tests were written.
     pub(crate) argv: Option<Vec<String>>,
     /// They failed before the attempt, on an assertion or for an absent
-    /// symbol (D-064).
+    /// symbol.
     pub(crate) red: bool,
     /// What the red run showed.
     #[serde(default)]
@@ -174,7 +174,7 @@ pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance 
 
     // Red: they must fail before the task is done — on an assertion, or
     // because what the task introduces does not exist yet; confirmed by a
-    // second run (D-064).
+    // second run.
     let (first, summary) = execute(a.project, &argv, a.runner);
     let mut class = classify_red(&first, summary.as_ref());
     if class.is_red() {
@@ -314,7 +314,7 @@ fn execute(
     (result, summary)
 }
 
-/// The held-out set's author, store and red check (F-059): after a visible
+/// The held-out set's author, store and red check: after a visible
 /// set that was red. Returns the report part (`acceptance.held_out`) and
 /// the stored manifest's hash when files were kept.
 pub(crate) fn prepare_held_out(
@@ -381,7 +381,7 @@ pub(crate) fn prepare_held_out(
         return absent("generation_failed", base);
     }
 
-    // Validate (research R4): new test paths, known scenarios, an allowed
+    // Validate: new test paths, known scenarios, an allowed
     // command each, at most `LIMIT`.
     let known: std::collections::BTreeSet<&str> = scenarios.iter().map(|s| s.id.as_str()).collect();
     let protected = a.policy.protected();
@@ -595,7 +595,7 @@ pub(crate) fn judge_held_out(
     Ok(HeldOutJudged { held_out, failed })
 }
 
-/// Added acceptance tests that strengthen a weak set (F-060).
+/// Added acceptance tests that strengthen a weak set.
 pub(crate) struct Strengthened {
     /// The new test files, written into the worktree.
     pub(crate) files: Vec<String>,
@@ -739,7 +739,7 @@ pub(crate) fn strengthen(
 }
 
 /// Whether `task` completes its story: the last task carrying its story
-/// label, in a story with at least two scenarios (F-059, US4).
+/// label, in a story with at least two scenarios (US4).
 pub(crate) fn story_checkpoint(
     tasks: Option<&speccoder_core::snapshot::ParsedTasks>,
     task: &str,

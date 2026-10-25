@@ -1,4 +1,4 @@
-//! The spec review (F-087): each requirement approved, or changes
+//! The spec review: each requirement approved, or changes
 //! requested, on its exact wording; a reworded requirement's decision
 //! lapses; the model never writes the record.
 

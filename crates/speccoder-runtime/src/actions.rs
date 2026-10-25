@@ -1,4 +1,4 @@
-//! What a person can do now (D-087), from the project as it stands: the
+//! What a person can do now, from the project as it stands: the
 //! report, what waits for a decision, the planning files not yet committed
 //! and the installed planning skills. Interfaces render the list; the
 //! dashboard runs what it can and shows the command for the rest.

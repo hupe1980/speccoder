@@ -1,4 +1,4 @@
-//! Who speccoder is on GitHub (F-089): a token from the environment (CI:
+//! Who speccoder is on GitHub: a token from the environment (CI:
 //! `GH_TOKEN`, `GITHUB_TOKEN`; an Enterprise host: `GH_ENTERPRISE_TOKEN`),
 //! else the one `speccoder auth login` kept in the operating system's
 //! credential store (service `speccoder`, account `github:<host>`). Never a
@@ -123,7 +123,7 @@ pub fn forget(host: &str) -> Result<bool, String> {
     }
 }
 
-/// speccoder's GitHub App (F-092): its Client ID (public by design — it
+/// speccoder's GitHub App: its Client ID (public by design — it
 /// names the app, it proves nothing) and its slug. Repository permissions:
 /// Contents, Checks, Commit statuses, Metadata read; Issues and Pull requests
 /// read and write; user tokens that do not expire; the device flow.

@@ -25,7 +25,7 @@
             {/if}
           </svg>
           <span class="text">
-            <span class="name">{f.name.replace(/^\d+-/, "").replaceAll("-", " ")}</span>
+            <span class="name">{app.titleOf(f.name)}</span>
             <span class="meta">
               <span class="mono">{String(f.number).padStart(3, "0")}</span>
               {#if all}· {f.done} of {all}{:else if f.artifacts.length}· {f.artifacts.join(", ")}{:else}· empty{/if}

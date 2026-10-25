@@ -49,7 +49,6 @@
     app.view = "board";
   }
   const tokens = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}k` : String(n));
-  const pretty = (n: string) => n.replace(/^\d+-/, "").replaceAll("-", " ");
 </script>
 
 <section class="overview">
@@ -74,8 +73,8 @@
             {#if r && f.tasks}<Ring totals={r.totals} size={64} width={7} />{:else}<span class="blank"><Icon name="doc" size={22} /></span>{/if}
           </div>
           <div class="body">
-            <span class="num mono">{String(f.number).padStart(3, "0")}{#if f.current} · current{/if}</span>
-            <strong class="name">{pretty(f.name)}</strong>
+            <span class="num mono">{String(f.number).padStart(3, "0")}{#if f.current}{" · "}current{/if}</span>
+            <strong class="name">{app.titleOf(f.name)}</strong>
             <span class="stage"><Icon name="sparkle" size={12} weight={2} />{stage(r)}</span>
             <span class="facts">
               {#if f.tasks}<span><b>{f.done}</b>/{f.tasks} tasks</span>{/if}

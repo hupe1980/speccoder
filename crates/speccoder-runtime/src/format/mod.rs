@@ -1,9 +1,9 @@
-//! The spec-format seam (F-050, D-059): everything the runtime knows about
+//! The spec-format seam: everything the runtime knows about
 //! a spec format comes from an [`Adapter`] — where the intent lives, what a
 //! planning skill may write, what the model is told, how a task is ticked.
 //! The judge (verification, evidence, commits) is the same for every format.
 //!
-//! Spec Kit is the reference format; OpenSpec runs too (F-051). Kiro is
+//! Spec Kit is the reference format; OpenSpec runs too. Kiro is
 //! detected, so a project in it gets a clear answer instead of "not a
 //! project".
 
@@ -125,7 +125,7 @@ pub trait Adapter: Send + Sync + std::fmt::Debug {
         Vec::new()
     }
 
-    /// Records a quick change (F-094): `request` (with acceptance `checks`)
+    /// Records a quick change: `request` (with acceptance `checks`)
     /// becomes a story, a requirement and a task in the format's standing
     /// unit for such changes. `Err`: the format has none.
     fn record_change(
@@ -523,12 +523,9 @@ fn resolve(
 fn not_yet(kind: FormatKind) -> String {
     match kind {
         FormatKind::Kiro => {
-            "Kiro specs are not yet supported by this version of speccoder".to_owned()
+            "speccoder runs Spec Kit and OpenSpec projects, not Kiro specs".to_owned()
         }
-        k => format!(
-            "{} is not yet supported by this version of speccoder",
-            k.title()
-        ),
+        k => format!("speccoder does not run {} projects", k.title()),
     }
 }
 
@@ -637,14 +634,11 @@ mod tests {
             .err()
             .unwrap();
         assert_eq!(r.status, CommandStatus::NotAProject);
-        assert_eq!(
-            r.message,
-            "OpenSpec is not yet supported by this version of speccoder"
-        );
+        assert_eq!(r.message, "speccoder does not run OpenSpec projects");
         let r = resolve(p, Some(FormatKind::Kiro), &[&SK, &KIRO])
             .err()
             .unwrap();
-        assert!(r.message.starts_with("Kiro specs are not yet supported"));
+        assert!(r.message.ends_with("not Kiro specs"));
     }
 
     #[test]
@@ -657,7 +651,7 @@ mod tests {
         let r = resolve(p, None, &[&OS]).err().unwrap();
         assert_eq!(
             r.message,
-            "found an OpenSpec project at /p; OpenSpec is not yet supported by this version of speccoder"
+            "found an OpenSpec project at /p; speccoder does not run OpenSpec projects"
         );
         let r = resolve(p, None, &[&SK, &OS_RUNS]).err().unwrap();
         assert_eq!(r.status, CommandStatus::DiagnosticsError);

@@ -1,4 +1,4 @@
-//! Acceptance strength (F-060, D-063, D-085): how well a task's acceptance
+//! Acceptance strength: how well a task's acceptance
 //! set tells right from wrong.
 //!
 //! A red → green acceptance test shows the task's work made it pass; it does
@@ -167,7 +167,7 @@ pub enum Gate {
 }
 
 /// A person's ruling that an over-strict finding was wrong: the tests were
-/// right, the alternative is not what the spec allows (D-074).
+/// right, the alternative is not what the spec allows.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct Ruling {
     /// The alternative's digest.

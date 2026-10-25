@@ -1,4 +1,4 @@
-//! A person's decision as an agentplane human task (F-072).
+//! A person's decision as an agentplane human task.
 //!
 //! Where a call needs a person, the attempt waits on a task whose
 //! justification is the call exactly as the prompt shows it. Whoever answers

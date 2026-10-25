@@ -36,7 +36,7 @@
 <section class="hero">
   <div class="wrap hero-grid">
     <div class="hero-copy">
-      <p class="eyebrow">For GitHub Spec Kit projects</p>
+      <p class="eyebrow">For Spec Kit and OpenSpec projects</p>
       <h1>Spec-driven coding,<br><span class="accent-text">decided by evidence.</span></h1>
       <p class="lead">speccoder implements your feature task by task. Before each attempt it turns the spec's acceptance examples into tests that must fail; after it, it runs your checks and audits the diff. A task is ticked only when the evidence holds — never on the model's word.</p>
       <div class="cta-row">
@@ -44,22 +44,25 @@
         <a class="btn btn-ghost" href="{{ get_url(path='@/docs/how-it-works.md') }}">How it works</a>
       </div>
       <div class="install" aria-label="Install">
-        <code>cargo install --git {{ config.extra.repo }} speccoder</code>
-        <button class="copy" type="button" data-copy="cargo install --git {{ config.extra.repo }} speccoder" aria-label="Copy the install command">Copy</button>
+        <code>brew install hupe1980/tap/speccoder</code>
+        <button class="copy" type="button" data-copy="brew install hupe1980/tap/speccoder" aria-label="Copy the install command">Copy</button>
       </div>
     </div>
     <figure class="terminal" aria-label="A speccoder run">
       <div class="terminal-bar"><span></span><span></span><span></span><p>speccoder run</p></div>
-<pre><code><span class="t-run">▶ T002</span> Implement <span class="t-code">slugify(text)</span> in src/lib.rs
-  <span class="t-dim">· baseline checks</span>
-  <span class="t-dim">· acceptance tests</span>   <span class="t-red">2 failing</span> <span class="t-dim">— as they must</span>
-  <span class="t-dim">· attempt 1</span>
-    turn 1  read_file    src/lib.rs        <span class="t-ok">allow</span>
-    turn 3  write_file   src/lib.rs        <span class="t-ok">allow</span>
-    turn 4  run_command  cargo test        <span class="t-ok">allow</span>
-  <span class="t-dim">· verifying</span>          acceptance <span class="t-ok">red → green</span>
-<span class="t-ok">✓ T002 verified</span> <span class="t-dim">· 10.2k in / 798 out · $0.0031 · 9s</span>
-<span class="t-dim">  committed on speccoder/001-slugify</span></code></pre>
+<pre><code><span class="t-run">▶ T002</span> Collapse every run of other characters into one <span class="t-code">-</span>
+  <span class="t-ok">✓</span> baseline
+  <span class="t-ok">✓</span> red <span class="t-red">assertion</span>
+  <span class="t-dim">·</span> attempt 1/2
+    <span class="t-dim">“I'll track the last character pushed.”</span>
+    turn 1  read_file    src/lib.rs   <span class="t-ok">allow</span>
+    turn 2  write_file   src/lib.rs   <span class="t-ok">allow</span>
+    turn 3  run_command  cargo test   <span class="t-ok">allow</span>
+  <span class="t-ok">✓</span> attempt 1/2
+  <span class="t-ok">✓</span> verify
+  <span class="t-ok">✓</span> audit
+  <span class="t-ok">✓</span> commit 4be81c2
+<span class="t-ok">✓ T002 verified</span> <span class="t-dim">· 42.5k in / 2170 out · 3s — verdict: verified</span></code></pre>
     </figure>
   </div>
 </section>
@@ -78,6 +81,18 @@
   </div>
 </section>
 
+<section aria-labelledby="app">
+  <div class="wrap">
+    <h2 id="app" class="section-title">Your decisions, not the agent's chores</h2>
+    <p class="section-lead">The agents do the coding; you decide what only a person can. <code>speccoder ui</code> opens the project as an app on your machine: what waits for you across every feature, each task's evidence, the spec to sign off requirement by requirement, the code and the report.</p>
+    <figure class="app-shot">
+      <img class="shot-light" src="{{ get_url(path='screenshots/inbox-light.webp') }}" alt="Needs You: a call waiting for approval, an open question in the spec and requirements to review, across two features" width="1440" height="900">
+      <img class="shot-dark" src="{{ get_url(path='screenshots/inbox-dark.webp') }}" alt="Needs You: a call waiting for approval, an open question in the spec and requirements to review, across two features" width="1440" height="900">
+    </figure>
+    <div class="cta-row center"><a class="btn btn-ghost" href="{{ get_url(path='@/docs/web.md') }}">Tour the app</a></div>
+  </div>
+</section>
+
 <section aria-labelledby="features">
   <div class="wrap">
     <h2 id="features" class="section-title">Everything around the model, done properly</h2>
@@ -87,12 +102,12 @@
         <p><code>verified</code> means spec-derived tests went red → green and nothing regressed. Optional mutation testing and a reasoning-blind gaming monitor catch tests written to pass.</p>
       </article>
       <article class="card">
-        <h3>Spec Kit native</h3>
-        <p>Reads <code>spec.md</code>, <code>plan.md</code> and <code>tasks.md</code> as Spec Kit 0.13–1.2 write them, runs Spec Kit's planning skills, its extension hooks and its workflow engine.</p>
+        <h3>Spec Kit and OpenSpec</h3>
+        <p>Reads your specs as Spec Kit 0.13–1.2 and OpenSpec 1.0+ write them, and runs their planning skills, Spec Kit's hooks and workflows, and OpenSpec's archive checks.</p>
       </article>
       <article class="card">
         <h3>Isolated and sandboxed</h3>
-        <p>Work happens on <code>speccoder/&lt;feature&gt;</code> in its own worktree. Commands run in an OS sandbox: no writes outside, no credentials, no network.</p>
+        <p>Work happens on <code>speccoder/&lt;feature&gt;</code> in its own worktree. Commands run in an OS sandbox: no writes outside, no credentials, no network, no daemon sockets.</p>
       </article>
       <article class="card">
         <h3>Every call governed</h3>
@@ -107,12 +122,12 @@
         <p>Anthropic, OpenAI or a local OpenAI-compatible server — or let Claude Code or Codex make the attempts and keep speccoder's judgement.</p>
       </article>
       <article class="card">
-        <h3>Built to scale out</h3>
-        <p>Run independent <code>[P]</code> tasks in parallel worktrees, verified together after merging; keep the best of several attempts by evidence.</p>
+        <h3>The spec stays the truth</h3>
+        <p>Sign off each requirement's wording. Change it later and the ticks proven against the old words say so; one command re-checks the code against the spec as it is.</p>
       </article>
       <article class="card">
         <h3>Ready for review</h3>
-        <p>Hand off a draft pull request whose description is the evidence behind every tick. speccoder never merges.</p>
+        <p>Start from a GitHub issue, hand off a draft pull request whose description is the evidence behind every tick — no <code>gh</code> needed. speccoder never merges.</p>
       </article>
     </div>
   </div>
@@ -122,18 +137,18 @@
   <div class="wrap split">
     <div>
       <h2 id="quickstart" class="section-title">From spec to verified branch in minutes</h2>
-      <p class="section-lead">You need git, a Spec Kit project and a model. speccoder reads committed files only, so your configuration is reviewed like code.</p>
+      <p class="section-lead">You need git, a Spec Kit or OpenSpec project and a model. speccoder reads committed files only, so your configuration is reviewed like code.</p>
       <a class="btn btn-primary" href="{{ get_url(path='@/docs/quickstart.md') }}">Read the quickstart</a>
     </div>
-<pre class="code-panel"><code><span class="t-dim"># detect your checks, review, commit</span>
-speccoder init &amp;&amp; speccoder verify
-git add -A &amp;&amp; git commit -m "speccoder config"
+<pre class="code-panel"><code><span class="t-dim"># detects your checks, runs them, offers to commit the config</span>
+speccoder init
 
-<span class="t-dim"># key from the environment only</span>
-export OPENAI_API_KEY=…
+<span class="t-dim"># the key from the environment only</span>
+export ANTHROPIC_API_KEY=…
 
 speccoder run      <span class="t-dim"># task by task, with evidence</span>
-speccoder report   <span class="t-dim"># the evidence behind every tick</span>
+speccoder inbox    <span class="t-dim"># what waits for you</span>
+speccoder ui       <span class="t-dim"># the same, as an app</span>
 git merge speccoder/001-my-feature</code></pre>
   </div>
 </section>

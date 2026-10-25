@@ -18,24 +18,22 @@ speccoder run --converge         # afterwards: converge, run what it appends, re
 speccoder run --no-prompt        # never ask inline; stop instead (unattended runs, CI)
 ```
 
-The feature is selected the way Spec Kit selects it: `--feature`, then `SPECIFY_FEATURE_DIRECTORY`, then `.specify/feature.json`, then the only feature. Run `speccoder run` again after any stop: it continues where it stopped and never repeats a passed task.
-
-Progress streams to stderr; the run report — tool calls with their decisions, changes, acceptance tests, checks, tokens and the commit — goes to stdout.
+It works on the [current feature](@/docs/planning.md#the-current-feature). Run it again after any stop: it continues where it stopped and never repeats a passed task. Progress goes to stderr; the run report (tool calls and their decisions, changes, acceptance tests, checks, tokens, the commit) goes to stdout.
 
 ## The model's account
 
-What the model says beside its calls — "I'll add `login()` next to `ok()`, the smallest change the test needs" — is shown as it works, quoted and muted, apart from the calls and never as evidence: in the terminal (the first line of each turn; `-v` all of it), in the dashboard's calls, in the app's live panel (the latest line in the capsule), and in an editor as the agent's thoughts (ACP `agent_thought_chunk`). The approval sheet shows what it said in the turn that asked. Afterwards it is read from the journal: `speccoder task show T005 --account`, and **The Model's Account** in a task's inspector. A verdict never rests on it — that is the evidence's job.
+What the model says beside its calls is shown quoted and muted, apart from the calls: in the terminal (the first line of each turn; all of it with `-v`), in the dashboard, in the [app](@/docs/web.md), and in an editor as the agent's thoughts. Afterwards, `speccoder task show T005 --account` reads it from the journal. It is a claim; a verdict never rests on it.
 
 ## Quick changes
 
-Not everything needs a spec, a plan and a task list — but nothing should skip the evidence:
+A small change without a planning round, judged like any other:
 
 ```sh
 speccoder do "Show the version number in the footer" --check "every page's footer shows the version"
 speccoder do "Make the login button blue" --no-run      # record it, run later
 ```
 
-`do` writes the change into a standing feature, `NNN-quick-changes`, the way a spec would have it: a user story (your words, and each `--check` as an acceptance scenario), a requirement (approved — you wrote it) and a task citing it. Those files are committed, exactly them (`spec(NNN-quick-changes): quick change: …`). Then the task runs like any other: in its worktree, tests written from your words that must fail first, the checks, a verdict, a commit with its evidence — and it can be reviewed, reported and handed off as a pull request with the rest. Quick changes do not wait for each other. In the [app](@/docs/web.md): **Quick Change** in Needs You, `q`, File › Quick Change… (⇧⌘N), or type the change into the palette (⌘K).
+`do` records the change in a standing feature, `NNN-quick-changes`: a user story (your words, each `--check` as an acceptance scenario), a requirement (approved — you wrote it) and a task citing it. It commits exactly those files (`spec(NNN-quick-changes): quick change: …`), then runs the task like any other — acceptance tests that must fail first, the checks, a verdict, a commit with its evidence. Each quick change is its own user story, so they do not wait for each other. `--no-run` prints the `run --task` command for later. In the [app](@/docs/web.md): **Quick Change** in Needs You, or `q`.
 
 ## Outcomes
 
@@ -44,6 +42,7 @@ speccoder do "Make the login button blue" --no-run      # record it, run later
 | `verified`, `regression_only` | 0 | Passed: ticked and committed | Review and merge eventually |
 | `failed` | 20 | Checks or acceptance tests failed after the retries | `speccoder report`; inspect the saved attempt; `task nudge`, or fix the spec |
 | `failed` (judge input changed) | 20 | A command changed `speccoder.toml`, CI, test-runner or agent configuration; the attempt ended at once, not retried | Read the finding; the task must not need that change |
+| `stopped[ACCEPTANCE-WEAK]`, `stopped[TESTS-OVER-STRICT]` | 23 | The checks passed, but the acceptance tests are too weak or stricter than the spec; not ticked | See [acceptance strength](@/docs/evidence.md#acceptance-strength) and [over-strict tests](@/docs/evidence.md#over-strict-tests) |
 | feature done, full tier failed | 20 | Every task is ticked, but a `full` check failed | Fix it, or `speccoder pr --force` |
 | unfinished checklists | 23 | `checklists/*.md` has unchecked items; nothing ran | Finish them, or `speccoder run --ignore-checklists` (recorded on the commits) |
 | `blocked` | 23 | The model says the task cannot be done as written | Read the reason; fix the spec or a wrong test, or `task skip` |
@@ -71,12 +70,13 @@ A failed verdict is retried (`[budget] max_attempts`, default 2). The retry star
 speccoder run --in-place
 ```
 
-By default speccoder works in a worktree, and a worktree holds only what is committed. If you keep your specs out of git — `specs/` and `.specify/` in `.gitignore` — a worktree cannot see them. `--in-place` works in your checkout instead:
+A worktree holds only what is committed, so it cannot see specs you keep out of git (`specs/` and `.specify/` in `.gitignore`). `--in-place` works in your checkout instead:
 
 - It needs a clean checkout: no modified, staged or untracked files git does not ignore (`error[DIRTY-CHECKOUT]`, exit 14, with the paths and the fix), at least one commit, and `speccoder.toml` committed.
 - It switches the checkout to `speccoder/<feature>` (created from your current commit, or reused), works through the tasks with the same judge as in worktree mode, and **switches back** to the branch you were on when the run ends — finished, stopped or failed. Your branch is never committed to.
-- Each passed task is committed with its evidence first and ticked second. When `tasks.md` is ignored, the tick lives only in your checkout: the commit says so (`Tick: local specs/<feature>/tasks.md`) and names the task line it judged (`Task-Line:`) and the intent it judged against (`Intent-Digest:`). `speccoder report` reads the local ticks against those commits: a tick without such a commit, or a ticked line reworded since, counts as without evidence; a commit whose local tick is missing shows as `evidence_without_tick`; and evidence committed before the spec, plan or constitution changed is marked as [judged against an earlier spec](@/docs/evidence.md#when-the-spec-changes).
-- Do not use the checkout while it runs. Before every task speccoder checks that HEAD, the branch and the tree are as it left them, and that the spec, plan, tasks, constitution and the judge's inputs are byte for byte what the run started with; before every tick it checks HEAD and those files again. A change stops the run (`stopped[CHECKOUT-CHANGED]`, `stopped[INTENT-CHANGED]`, `stopped[JUDGE-CHANGED]`, exit 23) and leaves your change where it is.
+- Each passed task is committed with its evidence first and ticked second. When `tasks.md` is ignored, the tick lives only in your checkout; the commit says so (`Tick: local specs/<feature>/tasks.md`) and records the judged task line (`Task-Line:`) and intent (`Intent-Digest:`).
+- `speccoder report` reads local ticks against those commits: a tick without such a commit, or a line reworded since, counts as without evidence; a commit whose tick is missing shows as `evidence_without_tick`; evidence from before the spec, plan or constitution changed is marked [judged against an earlier spec](@/docs/evidence.md#when-the-spec-changes).
+- Do not use the checkout while it runs. Before every task and every tick, speccoder checks HEAD, the branch, the tree, and that the spec, plan, tasks, constitution and the judge's inputs are byte for byte what the run started with. A change stops the run (`stopped[CHECKOUT-CHANGED]`, `stopped[INTENT-CHANGED]`, `stopped[JUDGE-CHANGED]`, exit 23) and leaves your change where it is.
 - `--parallel` needs worktrees and is refused with `--in-place` (`error[IN-PLACE-PARALLEL]`, exit 2).
 
 `task accept --in-place` and `converge --in-place` (and `run --in-place --converge`) work the same way: an attestation is committed before its local tick; a convergence round appends to your `tasks.md` and its commit says so (`Tasks: local`). In place the model sees only what a worktree would hold, and commands cannot write `.git`; see [security](@/docs/security.md#in-place-mode).
@@ -85,7 +85,7 @@ While a feature has an in-place run (or an interrupted one), a worktree-mode `ru
 
 ## Best of n
 
-With `[budget] best_of = 3`, each task gets three independent attempts from the same starting point, and speccoder keeps the best by evidence: a passing verdict first (`verified` over `regression_only`), then fewer surviving mutants, the smaller diff, fewer tokens. It costs n times as much; it pays off on tasks a model gets right only sometimes.
+With `[budget] best_of = 3` (default 1), each task gets three independent attempts from the same starting point, and speccoder keeps the best by evidence: a passing verdict first (`verified` over `regression_only`), then fewer surviving mutants, the smaller diff, fewer tokens. It costs n times as much and pays off on tasks a model gets right only sometimes.
 
 ## Convergence
 
@@ -93,17 +93,21 @@ With `[budget] best_of = 3`, each task gets three independent attempts from the 
 speccoder converge
 ```
 
-Once every task is ticked, a read-only model call compares the code with `spec.md`, `plan.md`, `tasks.md` and the constitution and lists gaps: `missing`, `partial`, `contradicts`, `unrequested`. Actionable gaps are appended as a new `## Phase N: Convergence` in `tasks.md`, gravest first, and committed; `run --converge` then works through them and assesses again. It stops for you when only unrequested findings remain, when findings repeat earlier convergence tasks, or after `[converge] max_rounds`.
+Once every task is ticked, a read-only model call compares the code with `spec.md`, `plan.md`, `tasks.md` and the constitution and lists gaps: `missing`, `partial`, `contradicts`, `unrequested`. Actionable gaps are appended as a new `## Phase N: Convergence` in `tasks.md`, gravest first, and committed; `run --converge` then works through them and assesses again. It stops for you when only unrequested findings remain, when findings repeat earlier convergence tasks, or after `[converge] max_rounds` (default 3).
 
 ## Repository instructions
 
-speccoder gives its model the repository's own conventions for agents — [`AGENTS.md`](https://agents.md) — with every task: from the repository root down to the directories the task names, one file per directory, root first and the nearest last, so a nearer file has the last word (in a monorepo, `services/api/AGENTS.md` refines the root's). The acceptance test author gets them too; the gaming monitor does not.
+speccoder gives its model the repository's [`AGENTS.md`](https://agents.md) files with every task: from the repository root down to the directories the task names, one per directory, root first and nearest last, so a nearer file has the last word. The acceptance test author gets them too; the gaming monitor does not.
 
-They are the repository's text, not your orders: the model is told the task, the spec, the checks and speccoder's rules come first. At most 32 KiB are given — the nearest files whole, farther ones cut, and the report says so. The run summary names the files (`Guided by  AGENTS.md, services/api/AGENTS.md`), and so does the task's attestation, with each file's hash. They are read from the commit the attempt starts from and journaled with it, so a replay needs no file. Changing an `AGENTS.md` during an attempt needs your approval, as before. External agents (Claude Code, Codex) read their own files; speccoder does not add them twice. Other names, such as `CLAUDE.md`, are a [setting](@/docs/configuration.md#context).
+- They are the repository's text, not your orders: the task, the spec, the checks and speccoder's rules come first.
+- At most 32 KiB: the nearest files whole, farther ones cut, and the report says so.
+- They are read from the commit the attempt starts from and journaled with it. The run summary (`Guided by  AGENTS.md, services/api/AGENTS.md`) and the attestation name them, with each file's hash.
+- Changing an `AGENTS.md` during an attempt needs your approval.
+- External agents (Claude Code, Codex) read their own files; speccoder does not add them twice. Other file names, such as `CLAUDE.md`, are a [setting](@/docs/configuration.md#context).
 
 ## The dashboard
 
-At a terminal, `speccoder run` opens the dashboard and runs inside it: the task list fills in as tasks pass, the running task's pipeline moves stage by stage with its timings, tool calls stream in with the policy's decision, and tokens and money tick. When a call needs you, it appears over the screen — the same question, scope and keys as the [inline prompt](@/docs/approvals.md#inline) — and the run goes on once you answer. When you leave, the run's summary is printed as the plain `run` prints it, and the exit status is the run's.
+At a terminal, `speccoder run` runs inside the dashboard: tasks, the running task's pipeline stage by stage, tool calls with the policy's decision, tokens and money. A call that needs you appears over the screen with the same question, scope and keys as the [inline prompt](@/docs/approvals.md#inline). When you leave, the run's summary is printed as plain `run` prints it, and the exit status is the run's.
 
 ```text
  speccoder 001-slugify    1 Run   2 Evidence   3 Report     ? keys  q quit
@@ -118,14 +122,23 @@ At a terminal, `speccoder run` opens the dashboard and runs inside it: the task 
 | Screen | Shows |
 |---|---|
 | `1` Run | Tasks, the running task's pipeline, tool calls, usage, the approval queue and `Next:` |
-| `2` Evidence (`enter` on a task) | The verdict in words that never blur — `✓ VERIFIED`, `~ REGRESSION ONLY — nothing task-specific was shown`, `A ATTESTED — a person's word, not evidence` — and what established it: acceptance red → green, held-out tests, the checks, the diff audit, the gaming monitor, mutation, every approval and who decided it, the repository instructions, the attestation, earlier attempts, and last, muted, what the model says (a claim) |
+| `2` Evidence (`enter` on a task) | The verdict in words (`✓ VERIFIED`, `~ REGRESSION ONLY — nothing task-specific was shown`, `A ATTESTED — a person's word, not evidence`) and what established it: acceptance red → green, held-out tests, checks, diff audit, gaming monitor, mutation, approvals and who decided them, repository instructions, the attestation, earlier attempts; last, muted, what the model said |
 | `3` Report | A verdict bar (`[###~A..]` in ASCII), the totals, what waits for a person, requirements no task cites, convergence rounds, `Next:` |
 
-The evidence rows are read from the task commit's [attestation](@/docs/attestations.md) — never re-derived — so what the screen shows is what `speccoder attest verify` checks. `d` opens the task commit's diff: `]` `[` next and previous hunk, `n` `p` next and previous file.
+The evidence rows are read from the task commit's [attestation](@/docs/attestations.md), never re-derived, so the screen shows what `speccoder attest verify` checks.
 
-`n` leaves the dashboard and offers its next step at the terminal (the footer says which). `f` picks which feature the dashboard shows (and makes it [current](@/docs/planning.md#the-current-feature) for every tool); with several features and none current, the dashboard opens on that picker. `?` lists every key. `esc` goes back — out of an overlay, then to the Run screen — and never quits. `q` (or `ctrl-c`) while the run works asks first: **finish this task, then stop**; **stop now** (the attempt is kept, and the next `speccoder run` resumes it without repeating finished calls); or keep watching.
+| Key | Does |
+|---|---|
+| `1` `2` `3`, `enter` | Switch screens; `enter` opens the selected task's evidence (or a waiting call) |
+| `d` | The task commit's diff: `]` `[` next and previous hunk, `n` `p` next and previous file |
+| `tab` | Switch between the task list and the approval queue; there `a` approves, `r` rejects with a reason |
+| `n` | Leave and take the next step at the terminal (once the run has ended) |
+| `f` | Pick the feature shown, making it [current](@/docs/planning.md#the-current-feature) (once the run has ended); with several features and none current, the dashboard opens on this picker |
+| `esc` | Back: out of an overlay, then to the Run screen; never quits |
+| `q`, `ctrl-c` | Quit; while the run works it asks: **finish this task, then stop**, **stop now** (the attempt is kept and the next `run` resumes it), or keep watching |
+| `?` | Every key |
 
-The dashboard needs a terminal of at least 60×15. `--plain` (or not being at a terminal, `--json`, `--events`, screen-reader mode) keeps the line output below. Quitting stops a hosted run; to watch from elsewhere, use another terminal:
+The dashboard needs a terminal of at least 60×15. `--plain` (or no terminal, `--json`, `--events`, screen-reader mode) keeps the line output below. Quitting stops the run the dashboard hosts; to watch a run from elsewhere:
 
 ```sh
 speccoder report --live   # running (pid …): 001-x T002 — attempt 1/2 for 33s; last: read_file … (allow)
@@ -134,7 +147,7 @@ speccoder                 # at a terminal: the same dashboard, watching (it does
 
 ## Watching a run
 
-Every task goes through the same stages, named the same in the progress lines, `report --live`, the dashboard and editors: `baseline · red · attempt · verify · audit · mutation · strength · monitor · commit`. A stage that does not apply (no acceptance examples, mutation or the monitor not configured, strength switched off) is shown only with `-v`.
+Every task goes through the same stages, named the same in the progress lines, `report --live`, the dashboard and editors: `baseline · red · attempt · verify · audit · mutation · strength · monitor · commit`. A stage that does not apply (no acceptance examples, mutation or the monitor not configured, strength switched off) is shown only with `-v`. With `--plain` (abridged):
 
 ```text
 ▶ T004 Handle Unicode input  (001-slugify)
@@ -149,8 +162,6 @@ Every task goes through the same stages, named the same in the progress lines, `
 ✓ T004 verified · 40.2k in / 3.4k out · 171s — verdict: verified
 ```
 
-Watching another run's dashboard, `tab` switches to the approval queue, where `a` approves the selected waiting call and `r` rejects it with a reason.
-
 A run that is picked up after a kill starts with `Resuming — T004 was interrupted during attempt (run_command cargo test); finished calls will not repeat.`
 
 ### Look and accessibility
@@ -160,16 +171,16 @@ Each state has its own colour and its own mark — `✓` verified, `~` regressio
 `--screen-reader` (or `SPECCODER_SCREEN_READER=1`, or `[ui] screen_reader = true`) gives labelled plain lines a screen reader reads well, choices as a numbered list, and the report instead of the dashboard:
 
 ```text
-task: T004 Handle Unicode input - started
-stage: T004 attempt - started (1/2)
-tool: run_command cargo test - allow, ok
-approval required: T004 - run_command cargo add unicode-normalization
+task: T004 Handle Unicode input — started
+stage: T004 attempt — started (1/2)
+tool: run_command cargo test — allow, ok
+approval required: T004 — run_command cargo add unicode-normalization
 choice 1: Yes, once (or type y)
 ```
 
 ### Getting your attention
 
-When a call waits for you, a task fails, the feature ends or nothing happens for 15 minutes, speccoder notifies you — a desktop notification in terminals that show one (iTerm2, WezTerm, Ghostty, Kitty, Warp, foot, Konsole), a bell elsewhere — and the terminal title follows the run (`speccoder ▸ T004`, `speccoder △ approval T004`, `speccoder ✓ done`). Nothing of this happens with `--json` or in an editor. It is your setting, not the project's; see [your settings](@/docs/configuration.md#your-settings).
+When a call waits for you, a task fails, the feature ends or nothing happens for 15 minutes, speccoder notifies you: a desktop notification in terminals that show one (iTerm2, WezTerm, Ghostty, Kitty, Warp, foot, Konsole), a bell elsewhere. The terminal title follows the run (`speccoder ▸ T004`, `speccoder △ approval T004`, `speccoder ✓ done`). Neither happens with `--json` or `--events`. Configure it in [your settings](@/docs/configuration.md#your-settings).
 
 ## Cost
 
@@ -177,4 +188,4 @@ When a call waits for you, a task fails, the feature ends or nothing happens for
 speccoder report --cost     # tokens per task — every attempt — convergence, and the total
 ```
 
-`report --cost` reads the usage speccoder records on its commits and saved attempts. For money, add your prices in USD per million tokens to `[model]` (`price_input_per_mtok`, `price_output_per_mtok`, `price_cache_read_per_mtok`, and optionally the cache-write rates); they then also appear in the progress lines. Tokens written to the cache are priced at their own rate — by default Anthropic's 1.25× input for the five-minute cache and 2× for the hour, the input rate elsewhere. speccoder ships no price list — prices change and depend on your contract. With Claude Code as the agent, its own reported cost is used.
+`report --cost` reads the usage recorded on commits and saved attempts. For money, add your prices in USD per million tokens to `[model]`: `price_input_per_mtok`, `price_output_per_mtok`, `price_cache_read_per_mtok`, and optionally `price_cache_write_per_mtok` and `price_cache_write_1h_per_mtok` (by default Anthropic's 1.25× and 2× the input rate, elsewhere the input rate). Prices then also appear in the progress lines. speccoder ships no price list. With Claude Code as the agent, its own reported cost is used.

@@ -1,4 +1,4 @@
-//! `speccoder doctor` (F-057): everything a run depends on, checked
+//! `speccoder doctor`: everything a run depends on, checked
 //! without writing anything — git, the repository, the spec project and
 //! its tool, the configuration, the model key, the sandbox, the state
 //! directory, the attestation signing key and the repository's

@@ -1,4 +1,4 @@
-//! In-place runs (F-048, D-070): `speccoder run --in-place` works on
+//! In-place runs: `speccoder run --in-place` works on
 //! `speccoder/<feature>` in the person's own checkout instead of a separate
 //! worktree — the way to run features whose spec git ignores (a worktree
 //! holds only commits).

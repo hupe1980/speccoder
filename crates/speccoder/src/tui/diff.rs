@@ -1,4 +1,4 @@
-//! The diff viewer (F-058): a task commit's patch as files and hunks,
+//! The diff viewer: a task commit's patch as files and hunks,
 //! with `]`/`[` between hunks and `n`/`p` between files.
 
 /// A unified diff, split for navigation.

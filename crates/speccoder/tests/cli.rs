@@ -416,22 +416,8 @@ fn without_a_command_and_a_terminal_it_is_the_report() {
     assert_eq!(v["command"], "report", "{v}");
 }
 
-#[test]
-fn a_former_command_names_its_new_form() {
-    let out = speccoder()
-        .args(["--json", "approve", "--task", "T004"])
-        .output()
-        .unwrap();
-    assert_eq!(out.status.code(), Some(2));
-    let v = support::result(&out.stdout);
-    assert_eq!(v["fix"][0], "speccoder task approve <TASK>", "{v}");
-    let out = speccoder().args(["run", "T004"]).output().unwrap();
-    let err = String::from_utf8(out.stderr).unwrap();
-    assert!(err.contains("--task T004"), "{err}");
-}
-
 /// `--json` keeps stdout one object and writes no terminal escapes, even
-/// when the person's settings ask for notifications (F-053).
+/// when the person's settings ask for notifications.
 #[test]
 fn json_output_carries_no_bell_or_escape() {
     let project = committed_project(false);
@@ -521,10 +507,7 @@ fn a_format_is_chosen_by_flag_or_environment() {
         let v: serde_json::Value = support::result(&out.stdout);
         assert_eq!(v["status"], "not_a_project", "{v}");
         assert!(
-            v["message"]
-                .as_str()
-                .unwrap()
-                .contains("not yet supported by this version of speccoder"),
+            v["message"].as_str().unwrap().contains("not Kiro specs"),
             "{v}"
         );
     }
@@ -556,7 +539,7 @@ fn a_format_is_chosen_by_flag_or_environment() {
 }
 
 /// Colour follows the flag, then the environment; machine output never has
-/// it (F-055, SC-002).
+/// it (SC-002).
 #[test]
 fn escape_codes_appear_only_when_colour_is_wanted() {
     let esc = |args: &[&str], env: &[(&str, &str)]| {
@@ -915,7 +898,7 @@ fn init_at_a_terminal_commits_the_nextest_profile_with_the_config() {
     assert_eq!(files, [".config/nextest.toml", "speccoder.toml"], "{text}");
 }
 
-/// `speccoder config` (F-079): a key set from words keeps the file's
+/// `speccoder config`: a key set from words keeps the file's
 /// comments, an invalid value never reaches the file, unset brings the
 /// default back, and `commit` commits `speccoder.toml` alone.
 #[test]
@@ -1001,7 +984,7 @@ fn config_sets_checks_and_commits_the_configuration_alone() {
     );
 }
 
-/// `speccoder issue` (F-083, F-089) through GitHub's API, stood in: the
+/// `speccoder issue` through GitHub's API, stood in: the
 /// open issues as the documented payload; signed out, the fix; `auth status`
 /// names the account and where the token came from, never the token.
 #[test]

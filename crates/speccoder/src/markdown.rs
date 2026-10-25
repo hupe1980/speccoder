@@ -1,5 +1,5 @@
 //! `report --markdown`: the report as GitHub-flavoured Markdown, for pull
-//! requests, chats and CI step summaries (F-056).
+//! requests, chats and CI step summaries.
 //!
 //! Only facts speccoder established appear — never the model's words
 //! (a last attempt's reason can be its claim) — and every cell is escaped,

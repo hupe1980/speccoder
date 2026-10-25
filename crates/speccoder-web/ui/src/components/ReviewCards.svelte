@@ -1,9 +1,9 @@
 <script lang="ts">
-  // The spec, reviewed requirement by requirement (F-087): each card is one
+  // The spec, reviewed requirement by requirement: each card is one
   // requirement's wording and the person's decision on exactly that wording.
   // A wording changed since its decision shows what was decided, word by
   // word. Change requests go to the format's revising skill as one request.
-  // It is a conversation (F-093): the documents' open questions come first,
+  // It is a conversation: the documents' open questions come first,
   // answered in place; a requirement is reworded here; what changed since
   // the last commit and how the spec evolved are beside it.
   import { app } from "../lib/app.svelte";
@@ -11,6 +11,7 @@
   import type { Action, Envelope, Review, ReviewItem } from "../lib/types";
   import { diffWords, questions as asks, tokenised } from "../lib/words";
   import Icon from "./Icon.svelte";
+  import Code from "./Code.svelte";
 
   let review = $state<Envelope<Review> | null>(null);
   const fetchOf = latest();
@@ -109,7 +110,7 @@
     </div>
     {#if r.questions.length}
       <section class="questions" aria-label="Open questions">
-        <h3><Icon name="exclaim" size={14} weight={2.2} /> {r.questions.length === 1 ? "One question is open" : `${r.questions.length} questions are open`} <span class="muted">— answer them before the spec is built on</span>
+        <h3><Icon name="exclaim" size={14} weight={2.2} /> {r.questions.length === 1 ? "One question is open" : `${r.questions.length} questions are open`} <span class="muted">— answer {r.questions.length === 1 ? "it" : "them"} before the spec is built on</span>
           {#if r.revise_with}<button class="btn small ghost" disabled={!!app.job?.running} onclick={clarify}><Icon name="sparkle" size={10} weight={2.2} /> Ask Me with {r.revise_with}</button>{/if}
         </h3>
         {#each r.questions as q (q.id)}
@@ -146,11 +147,11 @@
             <p class="text">
               {#if i.state === "lapsed" && i.decided_on}
                 {#each diffWords(tokenised(i.decided_on), tokenised(i.text)) as s, n (n)}<span class={s.kind}>{s.text}</span>{/each}
-              {:else}{#each asks(i.text) as part, n (n)}{#if part.question}<span class="ask" title="An open question — answer it above">? {part.text}</span>{:else}{part.text}{/if}{/each}{/if}
+              {:else}{#each asks(i.text) as part, n (n)}{#if part.question}<span class="ask" title="An open question — answer it above">? {part.text}</span>{:else}<Code text={part.text} />{/if}{/each}{/if}
             </p>
           {/if}
           {#if i.by}
-            <p class="who muted">{i.state === "lapsed" ? "Decided on the earlier wording by" : i.state === "approved" ? "Approved by" : "Requested by"} {i.by}{#if i.at} · {when(i.at)}{/if}{#if i.comment}<span class="comment">“{i.comment}”</span>{/if}</p>
+            <p class="who muted">{i.state === "lapsed" ? "Decided on the earlier wording by" : i.state === "approved" ? "Approved by" : "Requested by"} {i.by}{#if i.at}{" · "}{when(i.at)}{/if}{#if i.comment}<span class="comment">“{i.comment}”</span>{/if}</p>
           {/if}
           <div class="acts">
             {#if i.state !== "approved"}

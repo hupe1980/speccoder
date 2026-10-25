@@ -1,4 +1,4 @@
-//! OpenSpec (D-060): a change in `openspec/changes/<id>/` is the unit of
+//! OpenSpec: a change in `openspec/changes/<id>/` is the unit of
 //! work, its spec deltas' scenarios are the acceptance examples, its
 //! `tasks.md` is a chain. Parsing and preflight are the `speccoder-openspec`
 //! crate's; this adapter is the only runtime code that knows OpenSpec.
@@ -54,7 +54,7 @@ fn plan_text(c: &speccoder_openspec::Change) -> String {
 }
 
 /// Every spec delta of the change, whole, as the intent of every task: the
-/// format does not link a task to a requirement (D-060).
+/// format does not link a task to a requirement.
 fn deltas_text(c: &speccoder_openspec::Change) -> String {
     c.deltas
         .iter()
@@ -153,7 +153,7 @@ impl Adapter for OpenSpec {
     }
 
     /// Every scenario of the change's ADDED and MODIFIED requirements: the
-    /// format does not link a task to a requirement (D-060).
+    /// format does not link a task to a requirement.
     fn scenarios(&self, snapshot: &ProjectSnapshot, _task: &str) -> Vec<ScenarioRef> {
         let Some(f) = snapshot.feature.as_ref() else {
             return Vec::new();

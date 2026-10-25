@@ -1,4 +1,4 @@
-//! `speccoder.toml` as settings (F-079): a catalogue of every key — its
+//! `speccoder.toml` as settings: a catalogue of every key — its
 //! type, default and meaning — the values a project sets, and edits that
 //! keep the file's comments and are checked by every parser before they are
 //! written. speccoder reads committed configuration only, so a change is
@@ -569,7 +569,7 @@ pub const CATALOGUE: &[Section] = &[
             Key {
                 key: "kind",
                 kind: Kind::Choice(&["native", "claude", "codex", "command"]),
-                default: Some("\"native\""),
+                default: None,
                 // Without [executor] speccoder's own loop runs; with it, the
                 // section must say which.
                 required: true,

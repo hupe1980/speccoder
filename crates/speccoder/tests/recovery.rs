@@ -409,7 +409,7 @@ fn a_finished_attempt_killed_before_its_tick_is_judged_and_ticked_on_the_next_ru
     assert_eq!(requests.lines().count(), 2, "{requests}");
 }
 
-// ── In place (F-048) ───────────────────────────────────────────────────────
+// ── In place ───────────────────────────────────────────────────────
 
 /// A model mock that runs `./note.sh`, then hangs once before answering.
 fn hanging_mock() -> (tempfile::TempDir, Killed, String) {
@@ -641,7 +641,7 @@ fn return_leaves_a_killed_in_place_run_without_running_anything() {
     assert_eq!(bare.status.code(), Some(2));
 }
 
-// ── Waiting for a person (F-072) ───────────────────────────────────────────
+// ── Waiting for a person ───────────────────────────────────────────
 
 #[test]
 fn an_approved_call_is_never_run_or_asked_again_after_a_kill() {

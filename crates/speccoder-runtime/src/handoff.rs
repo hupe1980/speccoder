@@ -99,7 +99,7 @@ pub fn body(status: &StatusReport, trailers: &[(String, String, String)]) -> Str
     let mut out = String::new();
     let _ = writeln!(
         out,
-        "Spec Kit feature `{}`, implemented by speccoder. **{ticked} of {} tasks ticked**: {} verified (spec-derived acceptance tests went from red to green), {} regression only (the checks stayed green), {} attested by a person, {} ticked without evidence; {} skipped, {} open.\n",
+        "`{}`, implemented by speccoder. **{ticked} of {} tasks ticked**: {} verified (spec-derived acceptance tests went from red to green), {} regression only (the checks stayed green), {} attested by a person, {} ticked without evidence; {} skipped, {} open.\n",
         status.feature,
         status.tasks.len(),
         t.verified,

@@ -67,7 +67,7 @@
     if (e.key === "Escape") app.selectTask(null);
   }
 
-  // The menu bar (F-088): the window's native menus send a command id to
+  // The menu bar: the window's native menus send a command id to
   // the page; the page does what the same button or key would.
   function command(id: string) {
     const find = (f: (a: (typeof app.actions)[number]) => boolean) => app.actions.find(f);
@@ -81,7 +81,15 @@
       case "view.actions": app.palette = true; return;
       case "theme.light": case "theme.dark": case "theme.auto": theme = id.slice(6); return;
       case "file.new": return run(find((a) => a.run?.kind === "skill" && !!a.input), "No skill writes a new feature here — set up the spec tool first");
-      case "file.issues": return go("overview");
+      case "file.issues": {
+        go("overview");
+        // The issues panel: in view and focused, so the list is where the keys are.
+        return void requestAnimationFrame(() => {
+          const gh = document.getElementById("github");
+          gh?.scrollIntoView({ behavior: "smooth", block: "start" });
+          gh?.focus({ preventScroll: true });
+        });
+      }
       case "file.quick": app.quick = true; return;
       case "file.commit": return run(find((a) => a.run?.kind === "commit"), "Nothing to commit: the planning files are committed");
       case "run.feature": return run(find((a) => a.run?.kind === "run" && a.run.task === null), "No task is ready to run");
@@ -94,7 +102,8 @@
       }
       case "task.evidence":
         if (!app.selected) return app.toast({ tone: "warn", text: "Select a task first (click its card on the board)" });
-        return go("board");
+        go("board");
+        return void app.selectTask(app.selected);
       case "run.stop": return app.job?.running ? void app.stop() : app.toast({ tone: "warn", text: "Nothing is running" });
       case "review.spec": app.doc = "review"; return go("documents");
       case "review.inbox": return go("inbox");

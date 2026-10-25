@@ -200,7 +200,7 @@ The OS sandbox is not available and the project requires it.
 
 `[sandbox] mode = "required"` refuses to run commands unsandboxed, and this OS offers no sandbox (Linux without Landlock, a container without user namespaces, another OS).
 
-- Run on macOS or a Linux with Landlock (5.13+)
+- Run on macOS or Linux 6.2+ (Landlock ABI 3)
 - Or set [sandbox] mode = "auto" to run unsandboxed and be told
 
 ### GITHUB-AUTH

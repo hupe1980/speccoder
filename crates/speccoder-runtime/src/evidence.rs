@@ -1,5 +1,5 @@
-//! A task's evidence as rows (F-058, D-087): its verdict and what
-//! established it, read from the signed statements on its commit (F-061)
+//! A task's evidence as rows: its verdict and what
+//! established it, read from the signed statements on its commit
 //! and the report — never re-derived, so what an interface shows is what a
 //! reviewer can verify with `attest verify`. Every interface renders these
 //! rows; none computes its own.
@@ -228,7 +228,7 @@ pub fn rows(task: &TaskStatus, statements: &[Value], run: Option<&RunReport>) ->
             ));
         }
     }
-    // Acceptance strength (F-060): how well the set tells right from wrong.
+    // Acceptance strength: how well the set tells right from wrong.
     if let Some(st) = tv
         .and_then(|tv| tv.get("strength"))
         .filter(|v| !v.is_null())
@@ -294,7 +294,7 @@ pub fn rows(task: &TaskStatus, statements: &[Value], run: Option<&RunReport>) ->
     out
 }
 
-/// What the model said in each turn of `run` (F-095), read from the
+/// What the model said in each turn of `run`, read from the
 /// project's journal: its account of the attempt — a claim, shown beside
 /// the evidence, never as it.
 ///

@@ -1,6 +1,6 @@
 //! Task scope as a reported finding: which changed paths a task's line did
 //! not name. Never a gate — a task line is prose, and a list of paths in
-//! it is a hint, not a contract (D-058; architecture §6.3).
+//! it is a hint, not a contract.
 
 use serde::{Deserialize, Serialize};
 

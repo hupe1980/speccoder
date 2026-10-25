@@ -1,4 +1,4 @@
-//! A feature's planning documents, rendered for an interface (F-076): the
+//! A feature's planning documents, rendered for an interface: the
 //! spec, the plan and the task list as HTML. Raw HTML in them is shown as
 //! text, never passed through: the documents are the repository's, and an
 //! interface that holds a token must not run what they contain.

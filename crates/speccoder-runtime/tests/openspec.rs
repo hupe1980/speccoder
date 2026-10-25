@@ -1,4 +1,4 @@
-//! An OpenSpec change run end to end with a scripted model (F-051).
+//! An OpenSpec change run end to end with a scripted model.
 
 // Test code: panicking on unexpected input is the failure report.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]

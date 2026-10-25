@@ -143,7 +143,7 @@ pub enum Command {
         /// Print the address instead of opening the browser.
         #[arg(long)]
         no_open: bool,
-        /// Open it in speccoder's own window (needs a build with `--features app`).
+        /// Open it in speccoder's own window (on Linux, a build with `--features app`).
         #[arg(long)]
         window: bool,
     },
@@ -163,7 +163,7 @@ pub enum Command {
     },
     /// What waits for your decision in every feature, the most urgent first, with the command for each.
     Inbox,
-    /// GitHub: sign in (a token, kept in the keychain), see who speccoder is there, sign out.
+    /// GitHub: sign in with a short code in your browser, see who speccoder is there, sign out.
     Auth {
         #[command(subcommand)]
         action: Option<AuthAction>,
@@ -514,7 +514,7 @@ pub enum AttestAction {
 
 #[derive(Debug, Subcommand)]
 pub enum BenchAction {
-    /// Turn SWE-bench-format instances (JSON Lines) into cases for `speccoder eval`.
+    /// Turn SWE-bench-format instances into cases for `speccoder eval`.
     Import {
         /// The instances (JSON Lines or a JSON array).
         instances: PathBuf,
@@ -536,7 +536,7 @@ pub enum BenchAction {
 /// `speccoder auth` actions; without one, `status`.
 #[derive(Debug, Subcommand)]
 pub enum AuthAction {
-    /// Sign in: `--with-token` reads a token from stdin; without it, the device flow (needs an OAuth App).
+    /// Sign in with a short code in your browser; `--with-token` reads a token from stdin.
     Login {
         /// The GitHub host (default: the repository's remote's, else github.com).
         #[arg(long)]

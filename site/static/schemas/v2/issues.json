@@ -65,7 +65,7 @@
   },
   "$id": "https://hupe1980.github.io/speccoder/schemas/v2/issues.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Result of `speccoder issue`: the repository's open GitHub issues, read\nthrough GitHub's API as the person (F-089).",
+  "description": "Result of `speccoder issue`: the repository's open GitHub issues, read\nthrough GitHub's API as the person.",
   "properties": {
     "issues": {
       "description": "Open issues: assigned to the person first, then the most recently\nupdated.",

@@ -25,7 +25,7 @@ const GREP: &str = "[commands]\nallow = [[\"grep\"], [\"./accept.sh\"]]\n";
 
 /// A stand-in test runner for scripted acceptance tests: one test, "the
 /// pattern is in src/lib.rs", reported with libtest's summary line so its
-/// red is an assertion failure (D-064).
+/// red is an assertion failure.
 const ACCEPT_SH: &str = "#!/bin/sh\nif [ \"$2\" = flaky ] && grep -q \"$1\" src/lib.rs && [ ! -e .flaky-seen ]; then\n  touch .flaky-seen\n  echo 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out'\n  exit 101\nelif grep -q \"$1\" src/lib.rs; then\n  echo 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out'\nelif [ \"$2\" = absent ]; then\n  echo 'error[E0425]: cannot find function `login` in this scope' >&2\n  echo 'error: could not compile `demo` (test \"acceptance\") due to 1 previous error' >&2\n  exit 101\nelif [ \"$2\" = syntax ]; then\n  echo 'error: expected one of `,`, `:`, or `}`, found `=`' >&2\n  echo 'error: could not compile `demo` (test \"acceptance\") due to 1 previous error' >&2\n  exit 101\nelse\n  echo 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out'\n  exit 101\nfi\n";
 
 fn write_accept_sh(root: &Path) {
@@ -2627,7 +2627,7 @@ fn pr_is_a_dry_run_until_confirmed_then_a_draft_with_the_evidence() {
         p.body
     );
     assert!(p.body.contains("speccoder never merges"));
-    // Each tick's attestation, and how to check it (F-061).
+    // Each tick's attestation, and how to check it.
     assert!(p.body.contains("| Attestation |"), "{}", p.body);
     assert!(
         p.body
@@ -2684,7 +2684,7 @@ fn pr_is_a_dry_run_until_confirmed_then_a_draft_with_the_evidence() {
     );
 }
 
-/// F-083: the issues a feature's spec names are closed by its pull request,
+/// the issues a feature's spec names are closed by its pull request,
 /// and a branch whose pull request is open is updated, never opened twice.
 #[test]
 fn pr_closes_the_spec_s_issues_and_updates_an_open_pull_request() {
@@ -2927,7 +2927,7 @@ fn a_person_who_takes_their_time_keeps_the_run() {
     assert!(rep.earlier.is_empty(), "the run was not taken over");
 }
 
-// ── Approval experience (F-054): notes, stop, task and run scope ────────────
+// ── Approval experience: notes, stop, task and run scope ────────────
 
 use speccoder_runtime::approvals::Scope;
 
@@ -3127,7 +3127,7 @@ fn a_waiting_call_is_listed_as_it_was_asked_and_a_note_reaches_the_attempt() {
     );
 }
 
-// ── repository instructions (AGENTS.md, F-073) ────────────────────
+// ── repository instructions (AGENTS.md) ────────────────────
 
 const AGENTS_MD: (&str, &str) = ("AGENTS.md", "Errors use thiserror. MARKER-AGENTS-7731\n");
 
@@ -3200,7 +3200,7 @@ fn no_instructions_when_turned_off() {
     }));
 }
 
-/// The inbox (F-086): a call waiting for approval is the first decision,
+/// The inbox: a call waiting for approval is the first decision,
 /// with approve and reject; a task whose attempt did not pass is one too.
 #[test]
 fn the_inbox_lists_a_waiting_call_and_a_task_that_did_not_pass() {
@@ -3270,7 +3270,7 @@ fn the_inbox_lists_a_waiting_call_and_a_task_that_did_not_pass() {
     );
 }
 
-/// `[review] required` (F-087): a run waits, before any model call, until
+/// `[review] required`: a run waits, before any model call, until
 /// every requirement is approved in the committed review.
 #[test]
 fn a_required_review_stops_the_run_until_the_spec_is_approved() {
@@ -3317,7 +3317,7 @@ fn a_required_review_stops_the_run_until_the_spec_is_approved() {
     );
 }
 
-/// F-095: what the model says beside its calls is shown live as its own
+/// what the model says beside its calls is shown live as its own
 /// words (`Said`), and read back from the journal afterwards — a claim,
 /// apart from the evidence.
 #[test]

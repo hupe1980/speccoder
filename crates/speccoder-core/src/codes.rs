@@ -1,4 +1,4 @@
-//! Stable codes for every result that is not plainly `ok` (F-056, D-062):
+//! Stable codes for every result that is not plainly `ok`:
 //! what went wrong, why it matters, how to fix it and where it is
 //! documented. A script branches on the code, a person reads the fix.
 //!
@@ -199,7 +199,7 @@ pub const CATALOG: &[Entry] = &[
         "the OS sandbox is not available and the project requires it",
         "`[sandbox] mode = \"required\"` refuses to run commands unsandboxed, and this OS offers no sandbox (Linux without Landlock, a container without user namespaces, another OS).",
         [
-            "→ run on macOS or a Linux with Landlock (5.13+)",
+            "→ run on macOS or Linux 6.2+ (Landlock ABI 3)",
             "→ or set [sandbox] mode = \"auto\" to run unsandboxed and be told"
         ]
     ),
@@ -316,7 +316,7 @@ pub const CATALOG: &[Entry] = &[
         "`pr` hands off work on `speccoder/<feature>`; there is none yet, or it is already merged.",
         ["speccoder run --feature {feature}"]
     ),
-    // in place (F-048)
+    // in place
     entry!(
         "DIRTY-CHECKOUT",
         E,

@@ -1,4 +1,4 @@
-//! How speccoder's output looks (F-055): one place that decides colour,
+//! How speccoder's output looks: one place that decides colour,
 //! theme, glyphs, width and screen-reader mode, and that every renderer —
 //! the reports, the progress lines, the code blocks, the prompts and the
 //! dashboard — asks.

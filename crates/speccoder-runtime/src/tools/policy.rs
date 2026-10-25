@@ -318,7 +318,7 @@ impl Policy {
 
     /// The rule that decides `tool` with `args` when no person does: what a
     /// call's record names, so a rule's decision is never read as a
-    /// person's (F-072).
+    /// person's.
     #[must_use]
     pub fn rule(&self, tool: &str, args: &Value) -> String {
         if let Some(grant) = Grant::of(tool, args)
@@ -508,7 +508,7 @@ impl Policy {
                     "`git {sub}` talks to a remote; speccoder never does"
                 ));
             }
-            // Attestations are git notes only speccoder writes (F-061).
+            // Attestations are git notes only speccoder writes.
             let notes_action = argv[2..]
                 .iter()
                 .find(|a| !a.starts_with('-'))
@@ -584,10 +584,7 @@ impl Policy {
         {
             return Decision::Allow;
         }
-        Decision::Approval(format!(
-            "`{}` is not a configured check or allowed command",
-            argv.join(" ")
-        ))
+        Decision::Approval("not a configured check or allowed command".to_owned())
     }
 }
 

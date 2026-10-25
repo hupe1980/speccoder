@@ -1,4 +1,4 @@
-//! Parallel lanes for `[P]` tasks (D-053).
+//! Parallel lanes for `[P]` tasks.
 
 use std::path::Path;
 
@@ -144,7 +144,7 @@ pub(crate) fn merge_lanes(
         _ => false,
     };
     if together {
-        // The attestation follows the work onto the feature branch (F-061).
+        // The attestation follows the work onto the feature branch.
         let attest = crate::verify::find_config(project)
             .and_then(|d| std::fs::read_to_string(d.join(verify::config::FILE)).ok())
             .and_then(|c| crate::substrate::run_config::parse(&c).ok())

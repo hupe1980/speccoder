@@ -1,4 +1,4 @@
-//! A GitHub that answers from a table (F-089): a plain HTTP server on
+//! A GitHub that answers from a table: a plain HTTP server on
 //! 127.0.0.1 standing in for `api.github.com`, recording every request.
 
 #![allow(dead_code)]

@@ -23,7 +23,7 @@ const GREP: &str = "[commands]\nallow = [[\"grep\"], [\"./accept.sh\"]]\n";
 
 /// A stand-in test runner for scripted acceptance tests: one test, "the
 /// pattern is in src/lib.rs", reported with libtest's summary line so its
-/// red is an assertion failure (D-064).
+/// red is an assertion failure.
 const ACCEPT_SH: &str = "#!/bin/sh\nif grep -q \"$1\" src/lib.rs; then\n  echo 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out'\nelse\n  echo 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out'\n  exit 101\nfi\n";
 
 fn write_accept_sh(root: &Path) {

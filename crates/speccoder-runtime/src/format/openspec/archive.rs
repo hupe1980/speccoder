@@ -1,5 +1,5 @@
 //! `speccoder spec archive`: an OpenSpec change merged into the main specs,
-//! by the person, diff first (D-060, research R7). Never called by the
+//! by the person, diff first. Never called by the
 //! engine, the model or a hosted skill.
 //!
 //! OpenSpec's `archive --yes` also skips its incomplete-task check, so the
@@ -129,7 +129,7 @@ pub fn archive(path: &Path, opts: &Options<'_>) -> CommandResult {
             .with_code("UNCOMMITTED-INTENT");
     }
 
-    // Ticks without evidence are the person's to own, task by task (D-074).
+    // Ticks without evidence are the person's to own, task by task.
     let done: Vec<String> = f
         .tasks
         .iter()

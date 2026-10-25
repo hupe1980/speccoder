@@ -1,4 +1,4 @@
-//! The machine contract checked against what is published (F-056): the
+//! The machine contract checked against what is published: the
 //! schemas under `site/static/schemas/v2/` and the codes page are what the
 //! code generates (`SPECCODER_BLESS=1` writes them), the CLI reference
 //! lists every exit status, and results and events validate.
@@ -254,7 +254,7 @@ fn words(line: &str) -> Vec<String> {
     out
 }
 
-/// Every speccoder command a person is told to run parses (F-057, SC-002).
+/// Every speccoder command a person is told to run parses (SC-002).
 fn parses(line: &str) {
     // `<task>`-style blanks a person fills in.
     let filled = line
@@ -343,7 +343,57 @@ fn every_next_step_and_fix_is_a_command_that_parses() {
             parses(&f);
         }
     }
-    for (_, new) in crate::help::FORMER {
-        parses(new);
+}
+
+/// The Spec Kit workflow step `speccoder workflow install` writes builds
+/// speccoder commands that parse: its own `argv()`, run against stand-ins
+/// for Spec Kit's modules.
+#[test]
+fn the_workflow_step_builds_commands_that_parse() {
+    let Ok(dir) = tempfile::tempdir() else { return };
+    let pkg = dir.path().join("specify_cli/workflows");
+    std::fs::create_dir_all(&pkg).unwrap();
+    std::fs::write(dir.path().join("specify_cli/__init__.py"), "").unwrap();
+    std::fs::write(pkg.join("__init__.py"), "").unwrap();
+    std::fs::write(
+        pkg.join("base.py"),
+        "class StepBase: pass\nclass StepContext:\n    def __init__(self, root): self.project_root = root\nclass StepResult: pass\nclass StepStatus: pass\n",
+    )
+    .unwrap();
+    std::fs::write(
+        pkg.join("expressions.py"),
+        "def evaluate_expression(raw, context): return raw\n",
+    )
+    .unwrap();
+    let step = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../speccoder-runtime/assets/workflow/__init__.py");
+    let script = format!(
+        "import importlib.util, json, sys\nsys.path.insert(0, {dir:?})\nspec = importlib.util.spec_from_file_location('step', {step:?})\nm = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)\nfrom specify_cli.workflows.base import StepContext\nc = StepContext('/p')\ns = m.SpeccoderStep()\nprint(json.dumps([s.argv(cfg, c) for cfg in [{{'skill': 'plan', 'args': 'more detail'}}, {{}}, {{'converge': True, 'feature': '001-x', 'max_tasks': 2}}]]))\n",
+        dir = dir.path(),
+        step = step,
+    );
+    let Ok(out) = std::process::Command::new("python3")
+        .args(["-I", "-B", "-c", &script])
+        .output()
+    else {
+        return; // no Python here: Spec Kit cannot run either
+    };
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let argvs: Vec<Vec<String>> = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(argvs.len(), 3);
+    for mut argv in argvs {
+        argv[0] = "speccoder".to_owned();
+        let parsed = crate::help::command()
+            .try_get_matches_from(&argv)
+            .and_then(|m| <crate::cli::Cli as clap::FromArgMatches>::from_arg_matches(&m));
+        assert!(
+            parsed.is_ok(),
+            "{argv:?}: {}",
+            parsed.err().map(|e| e.to_string()).unwrap_or_default()
+        );
     }
 }

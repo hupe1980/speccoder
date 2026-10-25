@@ -1,5 +1,5 @@
 //! Where the OpenSpec project is, how it is configured, and which change is
-//! selected — without OpenSpec's CLI (D-060): the nearest `openspec/` with
+//! selected — without OpenSpec's CLI: the nearest `openspec/` with
 //! `config.yaml`, `specs/` or `changes/`, as OpenSpec's "nearest" root.
 
 use std::fs;

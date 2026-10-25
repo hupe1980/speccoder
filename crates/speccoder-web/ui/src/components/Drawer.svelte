@@ -5,7 +5,7 @@
   import { get, latest, q } from "../lib/api";
   const evidenceOf = latest();
   const patchOf = latest();
-  import { symbol, word } from "../lib/marks";
+  import { phaseLabel, symbol, word } from "../lib/marks";
   import type { Row, Task } from "../lib/types";
   import Diff from "./Diff.svelte";
   import Drift from "./Drift.svelte";
@@ -83,7 +83,7 @@
 <aside class="inspector glass" aria-label="Task {app.selected}">
   <header>
     <div class="title">
-      <span class="id mono">{app.selected}{#if data?.task.phase}{" · "}{data.task.phase}{/if}</span>
+      <span class="id mono">{app.selected}{#if data?.task.phase}{" · "}{phaseLabel(data.task.phase)}{/if}</span>
       <h2><Code text={data?.task.title ?? ""} /></h2>
     </div>
     <button class="close" onclick={() => app.selectTask(null)} aria-label="Close" title="Close (Esc)"><Icon name="xmark" size={12} weight={2.6} /></button>
@@ -108,7 +108,7 @@
         {/each}
       </dl>
       {#if data.task.commit}
-        <p class="note"><Icon name="shield" size={13} /> Every row comes from the commit's attestation — <code>speccoder attest verify</code> checks it.</p>
+        <p class="note"><Icon name="shield" size={13} /><span>Every row comes from the commit's attestation — <code>speccoder attest verify</code> checks it.</span></p>
       {/if}
     {:else}
       {#if source?.label === "Last Attempt"}<p class="note"><Icon name="info" size={13} /> The attempt did not pass; its code is kept for you to read, never merged.</p>{/if}

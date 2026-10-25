@@ -12,7 +12,7 @@
 //! `mode = "report"` (default) records the result as evidence; `"require"`
 //! fails the verdict when mutants survive, and the retry digest names them.
 //!
-//! The same tool measures the acceptance set's strength (F-060): the
+//! The same tool measures the acceptance set's strength: the
 //! mutants run against the acceptance command only ([`run_against`]).
 //! `suite = false` keeps the tool for that alone; `acceptance_argv` is the
 //! command tool's invocation then, with `{tests}` for the acceptance
@@ -58,7 +58,7 @@ pub struct Config {
     pub mode: Mode,
     /// The whole run's limit.
     pub timeout: Duration,
-    /// Run against the whole suite after a passing verdict (D-052); `false`:
+    /// Run against the whole suite after a passing verdict; `false`:
     /// the tool serves acceptance strength only.
     pub suite: bool,
     /// The command tool's argv against the acceptance tests (`{tests}`).
@@ -294,7 +294,7 @@ pub fn run(
     run_with(config, project, patch, tmp, runner, None)
 }
 
-/// [`run`] with the mutants judged by `acceptance` alone (F-060): the
+/// [`run`] with the mutants judged by `acceptance` alone: the
 /// result as [`run`]'s, or `{"error"}` when it cannot be measured.
 pub fn run_against(
     config: &Config,

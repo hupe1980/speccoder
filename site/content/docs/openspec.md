@@ -18,7 +18,7 @@ speccoder runs [OpenSpec](https://github.com/Fission-AI/OpenSpec) changes the wa
 | Order | phases, `[P]` runs, `depends on` | a chain: groups in order, tasks in order |
 | Intent the model cannot edit | `.specify/`, `specs/` | all of `openspec/` |
 
-speccoder supports OpenSpec 1.0 and newer with the default `spec-driven` schema, in the repository's own `openspec/` directory. A weekly job checks the newest release.
+speccoder supports OpenSpec 1.0 and newer with the default `spec-driven` schema, in the repository's own `openspec/` directory.
 
 ## Running a change
 
@@ -48,16 +48,27 @@ Each attempt sees `config.yaml`'s `context` (as the project's rules), `proposal.
 | `no_deltas` | the change has no spec delta: nothing to derive tests from |
 | `unsupported_schema`, `store_root`, `legacy_root` | a custom schema, a shared store, or the pre-1.0 layout |
 | `textless`, `duplicate_id`, `no_tasks` | `tasks.md` cannot be run as written |
+| `config_unreadable` | `openspec/config.yaml` is not valid YAML |
 
-Warnings do not stop a run: `removed_without_reason`, `purpose_missing` (archive would write a TBD placeholder), `marker_not_space` (`[~]` and `[]` cannot be ticked), `misplaced_id`, `in_fence`, `unnumbered_section` and `extension_dependency` (`depends on 1.2` in a task is speccoder's extension; OpenSpec ignores it).
+Warnings do not stop a run:
 
-When `openspec` is on your PATH, `speccoder run` also asks it — `validate --strict --json` and `instructions apply --json`, read-only, sandboxed, telemetry off — and stops on its errors and on any disagreement with speccoder's own parse (`crosscheck_error`, `crosscheck_mismatch`). Without it, the cross-check is skipped.
+| Code | Meaning |
+|---|---|
+| `removed_without_reason` | a REMOVED requirement has no **Reason** or **Migration** |
+| `purpose_missing` | archive would write a TBD placeholder for the purpose |
+| `marker_not_space`, `empty_brackets` | `[~]` or `[]`: speccoder cannot tick it |
+| `misplaced_id` | a task's number does not match its group (`3.1` under `## 2.`) |
+| `in_fence` | a checkbox inside a code block, which OpenSpec counts as a task |
+| `unnumbered_section` | a group heading without a number; its tasks run after everything before them |
+| `extension_dependency` | `depends on 1.2` is speccoder's extension; OpenSpec ignores it |
+
+When `openspec` is on your PATH, `speccoder run` also asks it — `validate --strict --json` and `instructions apply --json`, read-only, sandboxed, telemetry off. Its validation errors (`crosscheck_error`) and a different task count (`crosscheck_mismatch`) stop the run. Without `openspec`, the cross-check is skipped.
 
 ## What the model may run
 
 | `openspec …` | in an attempt | in a hosted planning skill |
 |---|---|---|
-| `list`, `show`, `status`, `instructions`, `validate`, `schemas`, `templates`, `context`, `--version` | allowed | allowed |
+| `list`, `show`, `view`, `status`, `instructions`, `validate`, `schemas`, `templates`, `context`, `--version`, `--help` | allowed | allowed |
 | `new change` | refused | allowed |
 | `archive`, `sync`, `init`, `update`, `config`, `store`, `schema` | refused | refused |
 
@@ -90,6 +101,6 @@ speccoder spec archive add-x
 
 Run it in your checkout, typically after merging `speccoder/<id>`.
 
-## Not supported (yet)
+## Not supported
 
 Shared stores, custom schemas, running tasks in parallel (a change is a chain: `--parallel` has nothing to do), and absence checks for REMOVED requirements.

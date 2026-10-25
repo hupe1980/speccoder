@@ -7,7 +7,7 @@ weight = 95
 group = "Trust"
 +++
 
-A tick's commit says what happened in its trailers, but anyone who can write the branch can write those trailers too. So every tick also leaves **signed statements**: what was checked, against which tree, under which judge configuration, with which verdict. They are signed with your git signing key and kept in git, where any reviewer can re-check them, offline and without trusting speccoder's word.
+Anyone who can write the branch can write a commit's trailers. So every tick also leaves **signed statements** — what was checked, against which tree, under which judge configuration, with which verdict — signed with your git signing key and kept in git, where any reviewer can re-check them offline.
 
 ## What a tick leaves
 
@@ -25,7 +25,7 @@ The statements never hold an absolute local path, a remote URL's credentials or 
 
 ## Signing
 
-By default speccoder signs with **the key git signs your commits with**: `gpg.format = ssh` and `user.signingKey` (SSH, with `ssh-keygen -Y sign -n in-toto`), or OpenPGP (`gpg --detach-sign`). The `in-toto` namespace keeps a statement signature from ever passing as a commit signature. Nothing to set up if you already sign commits:
+By default speccoder signs with **the key git signs your commits with**: SSH (`gpg.format = ssh` and `user.signingKey`, signed with `ssh-keygen -Y sign -n in-toto`) or OpenPGP (`gpg --detach-sign`). The `in-toto` namespace keeps a statement signature from passing as a commit signature. If you already sign commits, there is nothing to set up:
 
 ```sh
 git config --global gpg.format ssh
@@ -60,7 +60,7 @@ Feature    001-demo
   T002   3f1c0a9e2b  ok               ssh SHA256:Uq3… (ada@example.com)
   T003   9b7d41c0aa  mismatch         ssh SHA256:Uq3… (ada@example.com)
       bundle inputAttestations: expected 4 lines, found 3 lines
-2 task object(s): 1 ok, 1 mismatch
+2 task object(s): 1 mismatch, 1 ok
 ```
 
 Without an argument it checks every task commit on `speccoder/<feature>` and the feature's skips; `attest verify <commit>` or `attest verify main..speccoder/001-demo` picks commits. Per object it checks that:
@@ -82,7 +82,7 @@ Without an argument it checks every task commit on `speccoder/<feature>` and the
 | `malformed` | A line is not a DSSE envelope with a statement |
 | `missing` | The commit has no attestation. If another attested commit has the same tree (a rebase drops notes), it is named |
 
-When several outcomes apply, the worst is reported (`malformed`, then `bad_signature`, `mismatch`, `untrusted_signer`, `unsigned`). Exit code 26 (`attestation_failed`) means at least one object is not `ok` — `unsigned` counts only with `--require-signed`. `--json` gives every object with its reasons.
+When several apply, the worst is reported: `missing`, then `malformed`, `bad_signature`, `mismatch`, `untrusted_signer`, `unsigned`. Exit code 26 (`attestation_failed`) means at least one object is not `ok` — `unsigned` counts only with `--require-signed`. `--json` gives every object with its reasons.
 
 **Whom you trust** comes from you, not from the repository:
 
@@ -109,7 +109,7 @@ For OpenPGP the decoded signature is an armored detached signature (`gpg --verif
 
 ## In the report and the pull request
 
-`speccoder report` shows each tick's attestation as the note says it — `signed ssh SHA256:…`, `unsigned`, `missing` — without checking signatures (that is `attest verify`'s job), and counts ticks without one. It also traces the spec's requirements (`FR-001`, `SC-002`) to the tasks that cite them and their verdicts, and names the requirements no task cites.
+`speccoder report` shows each tick's attestation as the note says it — `signed ssh SHA256:…`, `unsigned`, `missing` — without checking signatures (that is `attest verify`'s job), and counts ticks without one.
 
 `speccoder pr` adds an Attestation column to the evidence table and the commands to check it, and pushes `refs/notes/speccoder` after the branch — never with `--force`. When the remote's notes have diverged, it says how to merge them (`git notes --ref=speccoder merge`) and opens the pull request anyway.
 
@@ -117,7 +117,7 @@ Parallel lanes re-issue a task's statements for the commit that lands on the fea
 
 ## What a signature proves
 
-A valid signature by a key you trust shows that **whoever holds that key** recorded these statements about this commit, and that nobody changed them since. Because the key is yours and speccoder signs at the tick, it means your machine, running speccoder, judged the commit this way.
+A valid signature by a key you trust shows that **whoever holds that key** recorded these statements about this commit, and that nobody changed them since. Because the key is yours and speccoder signs at the tick, your machine, running speccoder, judged the commit this way.
 
 It does not show that the judging was honest if the machine was not: anyone with your key can sign anything. speccoder keeps the key away from what the model runs — `~/.ssh` and `~/.gnupg` are hidden by the [sandbox](@/docs/security.md#the-os-sandbox) and commands get no `SSH_AUTH_SOCK` — but with `[sandbox] mode = "off"`, a command the model runs could reach a key file or agent you can reach. Use `sign_at = "later"` or a touch-to-sign key if that matters to you.
 

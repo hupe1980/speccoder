@@ -188,7 +188,7 @@
     <div class="what">
       <span class="name">{label(k.key)}{#if k.required}<span class="req">required</span>{/if}</span>
       <span class="about">{k.about}</span>
-      <span class="meta mono">{path}{#if k.default !== null && k.default !== undefined} · default {JSON.stringify(k.default)}{/if}</span>
+      <span class="meta mono">{path}{#if k.default !== null && k.default !== undefined}{" · "}default {JSON.stringify(k.default)}{/if}</span>
     </div>
     <div class="ctl">
       {@render control(path, k)}

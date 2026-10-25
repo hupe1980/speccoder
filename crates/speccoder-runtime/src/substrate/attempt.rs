@@ -99,7 +99,7 @@ pub fn ask_person() -> ToolDeclaration {
     )
 }
 
-/// How an attempt waits for a person when a call needs one (F-072): on an
+/// How an attempt waits for a person when a call needs one: on an
 /// agentplane human task the person decides — inline, from an editor, or
 /// later with `speccoder task approve` — while the run is suspended.
 #[derive(Debug, Clone)]
@@ -803,8 +803,15 @@ pub(crate) async fn tool_loop(
             });
         }
 
-        // The model's own words this turn, live: its account, a claim.
-        if let Some((task, p)) = &observer {
+        if completion.peek().truncated {
+            return Ok(Outcome::fail(
+                "the model ran out of output budget mid-turn; nothing it was still writing was executed — raise [model] max_output_tokens",
+            ));
+        }
+        let asked_calls = transcript.asked(&completion);
+        // The model's own words beside its calls, live: its account, a
+        // claim. A turn without calls is its final answer, reported as such.
+        if let Some((task, p)) = observer.as_ref().filter(|_| !asked_calls.is_empty()) {
             let said = completion.peek().text.trim();
             if !said.is_empty() {
                 let text: String = crate::approvals::present::escape(said)
@@ -818,12 +825,6 @@ pub(crate) async fn tool_loop(
                 });
             }
         }
-        if completion.peek().truncated {
-            return Ok(Outcome::fail(
-                "the model ran out of output budget mid-turn; nothing it was still writing was executed — raise [model] max_output_tokens",
-            ));
-        }
-        let asked_calls = transcript.asked(&completion);
         if asked_calls.is_empty() {
             let report = completion
                 .peek()
@@ -1186,7 +1187,7 @@ pub(crate) async fn tool_loop(
                     emit_with_tail(observer.as_ref(), turn + 1, &entry, tail);
                     log.push(entry);
                     // A command that changed a judge input ends the attempt
-                    // before the model sees another turn (D-065).
+                    // before the model sees another turn.
                     if let Some(drift) = output["integrity"].as_array().filter(|d| !d.is_empty()) {
                         let paths: Vec<&str> =
                             drift.iter().filter_map(|d| d["path"].as_str()).collect();

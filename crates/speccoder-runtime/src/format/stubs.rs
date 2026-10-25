@@ -1,5 +1,5 @@
 //! A format this version detects but does not run, so a project in one gets
-//! "not yet supported" instead of "not a project".
+//! "not supported" instead of "not a project".
 
 use std::path::{Path, PathBuf};
 

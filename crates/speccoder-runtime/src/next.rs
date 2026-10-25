@@ -1,4 +1,4 @@
-//! What to do next, from a command's result (F-053): its status and payload
+//! What to do next, from a command's result: its status and payload
 //! classified into an [`Outcome`], whose steps every renderer shows — the
 //! human `Next:` block, `data.next`, the TUI footer.
 
@@ -8,7 +8,7 @@ use speccoder_core::{CommandData, CommandResult, CommandStatus, RunReport};
 /// `result` with its next steps and its code attached; `feature` is the
 /// `--feature` the command was given, carried to speccoder's own commands.
 /// A code the result already names is kept; otherwise the outcome's, or
-/// the status's default — every non-ok result leaves with one (F-056).
+/// the status's default — every non-ok result leaves with one.
 #[must_use]
 pub fn attach(result: CommandResult, feature: Option<&str>) -> CommandResult {
     // A code that says exactly what is wrong decides what comes next; the

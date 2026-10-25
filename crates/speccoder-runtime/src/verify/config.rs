@@ -89,7 +89,7 @@ pub fn parse(text: &str) -> Result<Vec<Check>, String> {
     // A misspelled section would otherwise be silently ignored by every
     // command; the other sections are read (and their keys checked) by the
     // modules that own them.
-    // A person's UI settings are not the project's policy (D-069).
+    // A person's UI settings are not the project's policy.
     if table.contains_key("ui") {
         return Err(format!(
             "[ui] is a person's setting, not project policy; move it to {}",

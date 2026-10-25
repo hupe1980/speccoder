@@ -12,10 +12,10 @@ group = "Start"
 | You need | Why |
 |---|---|
 | **git** | speccoder works in a git worktree and records every attempt in git. |
-| **A spec project** | A GitHub Spec Kit project (`specify init --here --integration claude`; Spec Kit **0.13 to 1.2**, each release tested against what it generates) or an [OpenSpec](@/docs/openspec.md) project (OpenSpec 1.0 or newer). |
+| **A spec project** | A GitHub Spec Kit project (`specify init --here --integration claude`; Spec Kit **0.13 to 1.2**) or an [OpenSpec](@/docs/openspec.md) project (OpenSpec 1.0 or newer). Kiro specs are recognised and refused. |
 | **A model** | An Anthropic or OpenAI API key in the environment, or a local OpenAI-compatible server such as Ollama or vLLM. |
 | **Your toolchain** | Whatever your checks run — for a Rust project `cargo` (and ideally `cargo-nextest`), for Python `pytest`, and so on. |
-| **macOS or Linux** | The OS sandbox uses Seatbelt on macOS and Landlock (kernel 5.13+) on Linux. |
+| **macOS or Linux** | The OS sandbox uses Seatbelt on macOS and Landlock on Linux 6.2 or newer (Landlock ABI 3). |
 
 ## Install
 
@@ -33,7 +33,7 @@ brew install hupe1980/tap/speccoder
 curl -LsSf https://github.com/hupe1980/speccoder/releases/latest/download/speccoder-installer.sh | sh
 ```
 
-`--version 0.1.0` installs a given release, `--to DIR` another directory, and `--verify-attestation` also checks the build provenance with the GitHub CLI.
+`--version 0.1.0` (or `SPECCODER_VERSION`) installs a given release, `--to DIR` (or `SPECCODER_INSTALL_DIR`) another directory, and `--verify-attestation` also checks the build provenance with the GitHub CLI.
 
 **Cargo** (Rust 1.99 or newer):
 
@@ -78,7 +78,7 @@ The attestation names the repository, `.github/workflows/release.yml`, the tag a
 
 ## API keys
 
-speccoder reads keys **only from the environment** — `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` — and never from files, never into its journal or output. To keep a key in a gitignored `.env` file, load it into the shell first:
+speccoder reads keys **only from the environment** — `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` — never from files, and never writes them to its journal or output. To keep a key in a gitignored `.env` file, load it into the shell first:
 
 ```sh
 set -a; . ./.env; set +a
@@ -92,6 +92,6 @@ Use a key with a spending limit. A local model needs no key; see [`[model]`](@/d
 |---|---|
 | `cargo-nextest` | Per-test results and regression detection for Rust (`speccoder init` configures it). |
 | `cargo-mutants` | [Mutation evidence](@/docs/evidence.md#mutation-testing). |
-| `gh` | [Draft pull requests](@/docs/integrations.md#pull-requests). |
+| `gh` | `--verify-attestation` and `gh attestation verify` (pull requests do not need it; see [GitHub](@/docs/github.md#sign-in)). |
 | `specify` (Spec Kit CLI) | Creating projects and running [Spec Kit workflows](@/docs/planning.md#spec-kit-workflows). |
 | `claude`, `codex` | Using Claude Code or Codex as [external agents](@/docs/integrations.md#external-agents). |

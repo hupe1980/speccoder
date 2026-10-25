@@ -42,7 +42,7 @@ export interface Task {
   attestation: string | null;
   strength?: string | null;
   last_attempt?: { outcome: string; reason: string; reference: string; run_id?: string | null } | null;
-  /** The intent changed since the tick (F-085). */
+  /** The intent changed since the tick. */
   drift?: Drift | null;
 }
 
@@ -91,6 +91,7 @@ export interface Envelope<T = unknown> {
 export interface FeatureEntry {
   number: number;
   name: string;
+  title?: string;
   dir: string;
   current: boolean;
   done: number;
@@ -233,7 +234,7 @@ export interface GitHubState {
   pull_error?: string | null;
 }
 
-/** One decision waiting for the person (F-086). */
+/** One decision waiting for the person. */
 export interface InboxItem {
   kind: "approval" | "ruling" | "gaming" | "stale" | "stuck" | "commit" | "handoff" | string;
   feature: string;
@@ -249,7 +250,7 @@ export interface Inbox {
   features: number;
 }
 
-/** One requirement and the person's review of its wording (F-087). */
+/** One requirement and the person's review of its wording. */
 export interface ReviewItem {
   id: string;
   text: string;
@@ -268,7 +269,7 @@ export interface ReviewTotals {
   questions: number;
 }
 
-/** A question a document leaves open (F-093). */
+/** A question a document leaves open. */
 export interface OpenQuestion {
   id: string;
   text: string;

@@ -1,7 +1,7 @@
 # speccoder — landing page and documentation, built with Zola.
 base_url = "https://hupe1980.github.io/speccoder"
 title = "speccoder — spec-driven coding with evidence"
-description = "speccoder implements GitHub Spec Kit features task by task, in an isolated git worktree and an OS sandbox, and ticks a task only when tests derived from your spec go from red to green."
+description = "speccoder implements Spec Kit features and OpenSpec changes task by task, in an isolated git worktree and an OS sandbox, and ticks a task only when tests derived from your spec go from red to green."
 default_language = "en"
 compile_sass = false
 minify_html = true

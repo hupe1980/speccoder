@@ -81,7 +81,7 @@ const JUDGE: &[&str] = &[
     // Agent configuration: hooks, settings, skills, commands and MCP servers
     // an agent runs or loads. Spec Kit's runtime events render extension
     // hooks into these files; a change here runs code in a later session,
-    // outside speccoder's sandbox (D-065).
+    // outside speccoder's sandbox.
     ".claude/**",
     ".agents/**",
     ".codex/**",
@@ -104,7 +104,7 @@ const JUDGE: &[&str] = &[
 ];
 
 /// Agent context files: instructions every agent session reads. Editing them
-/// changes what later attempts are told, so it needs a person (D-065).
+/// changes what later attempts are told, so it needs a person.
 const CONTEXT: &[&str] = &[
     "AGENTS.md",
     "**/AGENTS.md",
@@ -150,7 +150,7 @@ pub fn is_test_path(rel: &str) -> bool {
 }
 
 /// The file a person's spec review is recorded in, in a unit's directory
-/// (F-087). The model never writes it — not while implementing, not while
+///. The model never writes it — not while implementing, not while
 /// running a planning skill: an agent must not approve its own spec.
 pub const REVIEW_FILE: &str = "review.json";
 
