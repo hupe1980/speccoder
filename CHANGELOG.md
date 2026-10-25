@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-25
+
 The first release. speccoder implements GitHub Spec Kit features and
 OpenSpec changes task by task, and ticks a task only on evidence the model
 cannot produce or edit.
@@ -101,5 +103,6 @@ cannot produce or edit.
 
 - Name reservation placeholder for `speccoder` on crates.io.
 
-[Unreleased]: https://github.com/hupe1980/speccoder/compare/v0.0.1...HEAD
+[Unreleased]: https://github.com/hupe1980/speccoder/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/hupe1980/speccoder/compare/v0.0.1...v0.1.0
 [0.0.1]: https://github.com/hupe1980/speccoder/releases/tag/v0.0.1
