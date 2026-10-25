@@ -121,7 +121,7 @@ fn ui(
             });
         });
         return match rx.recv() {
-            Ok((url, events)) => match app::run(&url, events) {
+            Ok((url, events)) => match app::run(&url, events, root.clone()) {
                 Ok(()) => CommandResult::new("ui", CommandStatus::Ok, "the window was closed"),
                 Err(e) => CommandResult::new(
                     "ui",
@@ -515,6 +515,7 @@ fn main() {
             window,
         } => ui(path, *port, *no_open, *window, cli.json),
         Command::Config { action } => config(path, action.as_ref()),
+        Command::Inbox => speccoder_runtime::inbox::inbox(path, feature),
         Command::Issue {
             action: None | Some(cli::IssueAction::List),
         } => speccoder_runtime::github::list(&speccoder_runtime::github::gh(), path),
@@ -1007,6 +1008,7 @@ fn command_name(command: Option<&Command>) -> &'static str {
             C::Ui { .. } => "ui",
             C::Config { .. } => "config",
             C::Issue { .. } => "issue",
+            C::Inbox => "inbox",
             C::Run { .. } => "run",
             C::Task { action } => match action {
                 cli::TaskAction::Approve { .. } => "task approve",

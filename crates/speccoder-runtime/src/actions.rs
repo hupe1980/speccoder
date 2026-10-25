@@ -8,7 +8,7 @@ use std::path::Path;
 use speccoder_core::actions::{Action, Runnable};
 use speccoder_core::{ApprovalsReport, CommandData, StatusReport};
 
-fn action(
+pub(crate) fn action(
     group: &str,
     label: impl Into<String>,
     why: impl Into<String>,

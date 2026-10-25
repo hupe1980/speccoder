@@ -312,6 +312,13 @@ fn human_body(
             }
             writeln!(out, "{}", result.message())
         }
+        (_, Some(CommandData::Inbox(r))) => {
+            let look = crate::style::out();
+            for line in crate::human::inbox(r, &look) {
+                writeln!(out, "{line}")?;
+            }
+            writeln!(out, "{}", result.message())
+        }
         (_, Some(CommandData::Issues(r))) => {
             for i in &r.issues {
                 let labels = if i.labels.is_empty() {

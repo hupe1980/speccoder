@@ -1436,3 +1436,48 @@ pub fn config(c: &speccoder_core::ConfigReport) -> Vec<String> {
     }
     out
 }
+
+/// `inbox`: one block per decision — the kind, where, what to decide, what
+/// it rests on, and the command that decides it (the first action's; the
+/// others after it).
+#[must_use]
+pub fn inbox(r: &speccoder_core::InboxReport, look: &crate::style::Look) -> Vec<String> {
+    use crate::style::{Glyph, Token};
+    let mut out = Vec::new();
+    for i in &r.items {
+        let g = match i.kind.as_str() {
+            "approval" | "ruling" | "gaming" | "stale" => Glyph::Attention,
+            "stuck" => Glyph::Failed,
+            "handoff" => Glyph::Verified,
+            _ => Glyph::Ready,
+        };
+        let place = match &i.task {
+            Some(t) => format!("{} {t}", i.feature),
+            None => i.feature.clone(),
+        };
+        out.push(format!(
+            "{} {:<9} {}  {}",
+            look.cell(g),
+            i.kind,
+            look.paint(Token::Muted, &place),
+            i.title
+        ));
+        if !i.detail.is_empty() {
+            out.push(format!("            {}", shorten(&i.detail, 100)));
+        }
+        if let Some((first, rest)) = i.actions.split_first() {
+            out.push(format!(
+                "            {}",
+                look.paint(Token::Accent, &format!("→ {}", first.command))
+            ));
+            let others: Vec<&str> = rest
+                .iter()
+                .map(|a| a.label.split(' ').next().unwrap_or_default())
+                .collect();
+            if !others.is_empty() {
+                out.push(format!("            or: {}", others.join(", ")));
+            }
+        }
+    }
+    out
+}

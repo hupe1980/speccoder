@@ -34,6 +34,11 @@ const COMMANDS: &[(&str, &str, Option<&str>)] = &[
         "Assess the finished feature against its spec and append what remains",
         None,
     ),
+    (
+        "inbox",
+        "What waits for your decision, in every feature",
+        None,
+    ),
     ("report", "Each task's evidence", None),
     ("status", "The current or last run", None),
     ("cost", "Tokens and money per task", None),
@@ -491,6 +496,7 @@ fn prompt(
             }
         }
         "converge" => speccoder_runtime::converge(cwd, None),
+        "inbox" => speccoder_runtime::inbox::inbox(cwd, None),
         "report" => speccoder_runtime::status::report(cwd, None),
         "status" => speccoder_runtime::progress::status(cwd),
         "cost" => speccoder_runtime::controls::cost(cwd, None),

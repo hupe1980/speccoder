@@ -7,6 +7,7 @@ export type Runnable =
   | { kind: "approve" | "reject" | "accept" | "skip" | "nudge"; task: string }
   | { kind: "feature" }
   | { kind: "converge" }
+  | { kind: "rule"; task: string }
   | { kind: "pull_request" };
 
 export interface Action {
@@ -226,4 +227,20 @@ export interface GitHubState {
   branch?: string | null;
   pull?: Pull | null;
   pull_error?: string | null;
+}
+
+/** One decision waiting for the person (F-086). */
+export interface InboxItem {
+  kind: "approval" | "ruling" | "gaming" | "stale" | "stuck" | "commit" | "handoff" | string;
+  feature: string;
+  task: string | null;
+  title: string;
+  detail: string;
+  since: number | null;
+  actions: Action[];
+}
+
+export interface Inbox {
+  items: InboxItem[];
+  features: number;
 }

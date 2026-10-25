@@ -236,7 +236,12 @@ pub fn report(path: &Path, feature: Option<&str>) -> CommandResult {
                     None => d.message.clone(),
                 },
             )
-            .with_code("FEATURE-GONE");
+            // Named here, or remembered by the format's pointer.
+            .with_code(if feature.is_some() {
+                "FEATURE-UNKNOWN"
+            } else {
+                "FEATURE-GONE"
+            });
         }
         return CommandResult::new(
             "report",

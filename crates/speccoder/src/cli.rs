@@ -147,6 +147,8 @@ pub enum Command {
         #[arg(long)]
         window: bool,
     },
+    /// What waits for your decision in every feature, the most urgent first, with the command for each.
+    Inbox,
     /// GitHub issues through your `gh`: list the open ones; `start 42` specifies a feature from one.
     Issue {
         #[command(subcommand)]
