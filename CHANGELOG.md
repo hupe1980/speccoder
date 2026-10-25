@@ -23,6 +23,15 @@ ticks a task only on evidence the model cannot produce or edit.
 - A call that needs a person opens as a sheet with the same scopes and keys
   as the terminal (`y t r n s`), recorded `via web`; the tab title and an
   optional desktop notification call you back when you look elsewhere.
+- An overview of every feature (rings of verdicts, journey stage,
+  requirements proven); a task's inspector shows the code of its ticking
+  commit or, after a failed attempt, that attempt's code (never merged), with
+  line numbers; a running job floats as a live capsule that turns orange
+  when it needs you. The interface follows Apple's system design: system
+  colours with increased-contrast text, glass only for navigation and
+  controls, symbols for every verdict, a sliding segmented control,
+  Spotlight-style actions, permission wording ("Allow Once", "Don't
+  Allow…"), and the OS's contrast and motion settings.
 - `speccoder ui --window`: the same page in a desktop window (Tauri, build
   with `--features app`), which loads the local page and navigates nowhere
   else.

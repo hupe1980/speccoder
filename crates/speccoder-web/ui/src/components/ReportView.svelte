@@ -1,6 +1,7 @@
 <script lang="ts">
   import { app } from "../lib/app.svelte";
-  import { mark, word } from "../lib/marks";
+  import { symbol, word } from "../lib/marks";
+  import Icon from "./Icon.svelte";
   const r = $derived(app.report?.data);
   const order = ["verified", "regression_only", "attested", "ticked_without_evidence", "skipped", "ready", "blocked"];
   const segments = $derived(order.map((k) => ({ k, n: r?.totals?.[k] ?? 0 })).filter((s) => s.n > 0));
@@ -28,7 +29,7 @@
         {#each segments as s (s.k)}<span class="s-{s.k}" style="flex:{s.n}" title="{s.n} {word(s.k)}"></span>{/each}
       </div>
       <ul class="legend">
-        {#each segments as s (s.k)}<li><span class="chip s-{s.k}">{mark(s.k)} {s.n}</span> {word(s.k)}</li>{/each}
+        {#each segments as s (s.k)}<li><span class="chip s-{s.k}"><Icon name={symbol(s.k)} size={11} weight={2.4} /> {s.n}</span> {word(s.k)}</li>{/each}
       </ul>
       <p class="muted small">{total} tasks · branch <code>{r.branch ?? "—"}</code>{#if r.unmerged_commits} · {r.unmerged_commits} commit(s) not merged{/if}</p>
     </section>
@@ -38,7 +39,7 @@
         {@const yes = app.actions.find((a) => a.run?.kind === "approve" && "task" in a.run && a.run.task === p.task)}
         {@const no = app.actions.find((a) => a.run?.kind === "reject" && "task" in a.run && a.run.task === p.task)}
         <div class="pending">
-          <p><span class="chip s-needs_approval">△ {p.task}</span> <strong>{p.presentation?.title ?? p.tool}</strong> <code>{p.covers}</code></p>
+          <p><span class="chip s-needs_approval"><Icon name="hand" size={11} weight={2.2} /> {p.task}</span> <strong>{p.presentation?.title ?? p.tool}</strong> <code>{p.covers}</code></p>
           <p class="muted small">{p.reason}</p>
           <div class="acts">
             {#if yes}<button class="btn small primary" disabled={!!app.job?.running} title={yes.command} onclick={() => app.perform(yes)}>Approve</button>{/if}
@@ -67,7 +68,7 @@
               <span class="req mono">{m.requirement}</span>
               <span class="tasks">
                 {#each m.tasks as t (t.task)}
-                  <button class="chip s-{t.verdict ?? 'blocked'}" title="{word(t.verdict ?? 'blocked')}{t.test ? ` · ${t.test}` : ''}" onclick={() => { app.view = 'board'; void app.selectTask(t.task); }}>{mark(t.verdict ?? "blocked")} {t.task}</button>
+                  <button class="chip s-{t.verdict ?? 'blocked'}" title="{word(t.verdict ?? 'blocked')}{t.test ? ` · ${t.test}` : ''}" onclick={() => { app.view = 'board'; void app.selectTask(t.task); }}><Icon name={symbol(t.verdict ?? "blocked")} size={11} weight={2.4} /> {t.task}</button>
                 {:else}<span class="muted small">no task cites it</span>{/each}
               </span>
             </li>
@@ -85,22 +86,28 @@
 {/if}
 
 <style>
-  .pending { display: grid; gap: 0.3rem; padding: 0.5rem 0; border-bottom: 1px solid var(--border); }
+  .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; max-width: 1180px; margin: 0 auto; }
+  .card { background: var(--surface); border-radius: var(--radius-lg); box-shadow: var(--shadow); padding: 1.15rem 1.35rem 1.25rem; min-width: 0; }
+  .wide { grid-column: 1 / -1; }
+  h3 { margin: 0 0 0.85rem; font: 650 1.02rem/1.3 var(--display); letter-spacing: -0.01em; display: flex; align-items: baseline; gap: 0.5rem; }
+  h3 :global(.muted) { font: 500 0.85rem var(--font); }
+  .bar { display: flex; height: 12px; border-radius: 6px; overflow: hidden; gap: 2px; background: var(--fill); }
+  .bar span { background: var(--fill-c); }
+  .legend { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: 0.5rem 1.1rem; margin: 0.85rem 0 0.4rem; font-size: 0.86rem; color: var(--text-2); }
+  .legend li { display: inline-flex; align-items: center; gap: 0.4rem; }
+  .small { font-size: 0.82rem; }
+  .pending { display: grid; gap: 0.35rem; padding: 0.7rem 0; border-top: 0.5px solid var(--separator); }
+  .pending:first-of-type { border-top: 0; padding-top: 0; }
   .pending p { margin: 0; }
-  .acts { display: flex; gap: 0.4rem; }
+  .acts { display: flex; gap: 0.4rem; margin-top: 0.15rem; }
   .matrix { list-style: none; margin: 0; padding: 0; display: grid; }
-  .matrix li { display: grid; grid-template-columns: 7rem 1fr; gap: 0.75rem; align-items: center; padding: 0.4rem 0; border-bottom: 1px solid var(--border); }
+  .matrix li { display: grid; grid-template-columns: 7rem 1fr; gap: 0.75rem; align-items: center; padding: 0.5rem 0; border-top: 0.5px solid var(--separator); }
+  .matrix li:first-child { border-top: 0; }
+  .req { font-size: 0.84rem; font-weight: 600; }
   .matrix li.open .req { color: var(--regression); }
   .tasks { display: flex; flex-wrap: wrap; gap: 0.3rem; }
   .tasks button { border: 0; cursor: pointer; font-family: var(--mono); }
-  .empty { display: grid; gap: 0.6rem; justify-items: start; padding: 0.75rem 1rem; border-radius: 8px; background: var(--regression-bg); }
-  .empty p { margin: 0; }
-  .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
-  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem 1.25rem; }
-  .wide { grid-column: 1 / -1; }
-  h3 { margin: 0 0 0.75rem; font-size: 0.95rem; }
-  .bar { display: flex; height: 14px; border-radius: 7px; overflow: hidden; gap: 2px; background: var(--surface-2); }
-  .bar span { background: currentColor; }
-  .legend { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 0.75rem 0 0.25rem; }
-  .small { font-size: 0.85rem; }
+  .empty { display: grid; gap: 0.7rem; justify-items: start; padding: 0.9rem 1.1rem; border-radius: var(--radius); background: var(--regression-bg); }
+  .empty p { margin: 0; color: var(--text-2); }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
 </style>

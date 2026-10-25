@@ -55,5 +55,5 @@ jobs:
       - run: npm run check
       - run: npm run build
       - run: git diff --exit-code -- dist
-      # The whole interface stays small: under 50 KB gzipped.
-      - run: test "$(cat dist/* | gzip -9 | wc -c)" -lt 51200
+      # The whole interface stays small: under 64 KB gzipped.
+      - run: test "$(cat dist/* | gzip -9 | wc -c)" -lt 65536

@@ -2,7 +2,9 @@
   import { app } from "../lib/app.svelte";
   import type { JourneyStep } from "../lib/types";
   import Preflight from "./Preflight.svelte";
-  import { mark, word } from "../lib/marks";
+  import Ring from "./Ring.svelte";
+  import Icon from "./Icon.svelte";
+  import { ORDER, symbol, word } from "../lib/marks";
 
   /** Off the board: the title and the next step only, in one strip. */
   let { compact = false }: { compact?: boolean } = $props();
@@ -19,75 +21,103 @@
   const labels: Record<string, string> = { spec: "Spec", plan: "Plan", tasks: "Tasks", commit: "Commit", run: "Run", review: "Review" };
   const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
   const totals = $derived(report?.totals ?? {});
-  const pulse = $derived(
-    ["verified", "regression_only", "attested", "ticked_without_evidence", "skipped", "ready", "blocked"]
-      .map((k) => ({ k, n: totals[k] ?? 0 }))
-      .filter((s) => s.n > 0),
-  );
-  const count = $derived(pulse.reduce((a, s) => a + s.n, 0));
+  const legend = $derived(ORDER.map((k) => ({ k, n: totals[k] ?? 0 })).filter((s) => s.n > 0));
   const headline = $derived(primary ? (primary.run?.kind === "skill" ? cap(primary.why) : cap(primary.label)) : "");
+  const verb = $derived(
+    busy ? "Working…" : primary?.run?.kind === "commit" ? "Commit" : primary?.input ? "Start…" : stops.length ? "Run Anyway" : "Run",
+  );
+  let copied = $state(false);
+  function copy() {
+    if (!primary) return;
+    navigator.clipboard?.writeText(primary.command);
+    copied = true;
+    setTimeout(() => (copied = false), 1600);
+  }
+  const title = $derived((report?.feature ?? "").replace(/^\d+-/, "").replaceAll("-", " "));
+  const number = $derived(report?.feature.match(/^\d+/)?.[0]);
 </script>
 
-<section class="hero" aria-label="Where the feature is">
-  <div class="title">
-    <div>
-      <h1>{report?.feature ?? app.report?.message ?? "speccoder"}</h1>
-      {#if report?.selected_by}<span class="muted why">{report.selected_by}{#if report.branch}{" · "}<code>{report.branch}</code>{/if}</span>{/if}
+<section class="hero" class:compact aria-label="Where the {app.project?.unit ?? 'feature'} is">
+  <div class="top">
+    <div class="heading">
+      {#if report}
+        <p class="eyebrow"><span class="mono">{number ?? ""}</span>{#if report.branch}<Icon name="branch" size={13} /><span class="mono">{report.branch}</span>{/if}</p>
+        <h1>{title}</h1>
+        <p class="sub">{cap(report.selected_by)}</p>
+      {:else}
+        <h1>{app.report?.message ?? "speccoder"}</h1>
+      {/if}
     </div>
-    {#if count}
-      <div class="pulse" aria-label={pulse.map((s) => `${s.n} ${word(s.k)}`).join(", ")}>
-        <div class="seg" aria-hidden="true">{#each pulse as s (s.k)}<span class="s-{s.k}" style="flex:{s.n}"></span>{/each}</div>
-        <div class="counts">{#each pulse as s (s.k)}<span class="c s-{s.k}" title={word(s.k)}>{mark(s.k)} {s.n}</span>{/each}</div>
+    {#if legend.length && !compact}
+      <div class="stats">
+        <ul class="legend" aria-hidden="true">
+          {#each legend as s (s.k)}
+            <li class="s-{s.k}"><Icon name={symbol(s.k)} size={13} weight={2} /><span class="n">{s.n}</span><span class="w">{word(s.k)}</span></li>
+          {/each}
+        </ul>
+        <Ring {totals} size={88} width={9} />
       </div>
+    {:else if legend.length}
+      <Ring {totals} size={40} width={5} label={false} />
     {/if}
   </div>
-  {#if !compact}
-  <Preflight />
 
-  <ol class="journey" aria-label="Journey">
-    {#each journey as s, i (s.name)}
-      <li class={s.state} aria-current={s.state === "now" ? "step" : undefined}>
-        <span class="dot" aria-hidden="true">{#if s.state === "done"}✓{:else if s.state === "skipped"}–{:else}{i + 1}{/if}</span>
-        <span class="name">{labels[s.name] ?? s.name}</span>
-        <span class="sr-only">{s.state === "done" ? "done" : s.state === "now" ? "next" : s.state === "skipped" ? "skipped" : "to do"}</span>
-      </li>
-    {/each}
-  </ol>
+  {#if !compact}
+    <ol class="journey" aria-label="Journey">
+      {#each journey as s, i (s.name)}
+        <li class={s.state} aria-current={s.state === "now" ? "step" : undefined}>
+          <span class="dot" aria-hidden="true">
+            {#if s.state === "done"}<Icon name="check" size={13} weight={2.6} />{:else if s.state === "skipped"}–{:else}{i + 1}{/if}
+          </span>
+          <span class="name">{labels[s.name] ?? s.name}</span>
+          <span class="sr-only">{s.state === "done" ? "done" : s.state === "now" ? "next" : s.state === "skipped" ? "skipped" : "to do"}</span>
+        </li>
+      {/each}
+    </ol>
+    <Preflight />
   {/if}
 
   {#if primary}
-    <div class="next" class:busy class:slim={compact}>
+    <div class="next" class:busy class:warned={stops.length > 0}>
       <div class="text">
-        <span class="eyebrow">Next</span>
+        <span class="kicker"><Icon name="sparkle" size={13} weight={2} /> Up next</span>
         <h2>{headline}</h2>
-        {#if primary.run?.kind !== "skill"}<p class="muted">{primary.why}</p>{/if}
-        {#if commitPaths.length}
-          <ul class="files">
-            {#each commitPaths as p}<li class="mono"><span class="plus">+</span>{p}</li>{/each}
-          </ul>
-          <p class="muted small">Only these are committed — nothing else you have staged.</p>
+        {#if !compact}
+          {#if primary.run?.kind !== "skill"}<p class="why">{cap(primary.why)}</p>{/if}
+          {#if commitPaths.length}
+            <ul class="files">
+              {#each commitPaths as p}<li class="mono"><span class="plus">+</span>{p}</li>{/each}
+            </ul>
+            <p class="why small">Only these are committed — nothing else you have staged.</p>
+          {/if}
         {/if}
         {#if stops.length}
-          <p class="stop">✗ This run will stop: {stops.map((s) => s.check).join(", ")} —
-            {#if compact}<button class="link" onclick={() => (app.view = "board")}>see how to fix it</button>{:else}fix it above first.{/if}</p>
+          <p class="stop"><Icon name="exclaim" size={14} weight={2} /> This run would stop: {stops.map((s) => s.check).join(", ")}.
+            {#if compact}<button class="link" onclick={() => (app.view = "board")}>How to fix it</button>{/if}</p>
         {/if}
-        <button class="cmd mono" title="Copy the command" onclick={() => navigator.clipboard?.writeText(primary.command)}>
-          <span class="muted">$</span> {primary.command}
-        </button>
+        {#if !compact}
+          <button class="cmd" title="Copy the command" onclick={copy}>
+            <Icon name="terminal" size={13} /><span class="mono">{primary.command}</span>
+            <span class="c">{#if copied}<Icon name="check" size={13} />{:else}<Icon name="copy" size={13} />{/if}</span>
+          </button>
+        {/if}
       </div>
       <div class="go">
-        <button class="btn big" class:primary={!stops.length} disabled={busy} onclick={() => app.perform(primary)}>
-          {#if busy}Working…{:else}{primary.run?.kind === "commit" ? "Commit" : primary.input ? "Start…" : stops.length ? "Run anyway" : "Run"} <kbd>N</kbd>{/if}
+        <button class="btn large" class:primary={!stops.length} disabled={busy} onclick={() => app.perform(primary)}>
+          {#if busy}<span class="spin" aria-hidden="true"></span>{:else if primary.run?.kind !== "commit"}<Icon name="play" size={13} />{/if}
+          {verb}<kbd>N</kbd>
         </button>
-        {#each others.slice(0, 2) as o (o.label)}
-          <button class="btn small ghost" disabled={busy || !!o.blocked} title={o.blocked ?? o.why} onclick={() => app.perform(o)}>{o.label}</button>
-        {/each}
+        {#if !compact}
+          {#each others.slice(0, 2) as o (o.label)}
+            <button class="btn small ghost" disabled={busy || !!o.blocked} title={o.blocked ?? o.why} onclick={() => app.perform(o)}>{cap(o.label)}</button>
+          {/each}
+        {/if}
       </div>
     </div>
   {:else if app.report && app.report.status !== "ok"}
     <div class="next problem">
       <div class="text">
-        <span class="eyebrow">{app.report.code ?? "Needs you"}</span>
+        <span class="kicker"><Icon name="exclaim" size={13} weight={2} /> {app.report.code ?? "Needs you"}</span>
         <h2>{app.report.message}</h2>
         {#each app.report.fix ?? [] as f}<p class="mono small">{f}</p>{/each}
       </div>
@@ -96,59 +126,85 @@
 </section>
 
 <style>
-  .hero { display: grid; gap: 1.25rem; margin-bottom: 1.75rem; container-type: inline-size; }
-  @container (max-width: 640px) { .next { flex-direction: column; align-items: stretch; } .go { justify-items: start; } .journey .name { display: none; } }
-  .title { display: flex; align-items: flex-end; justify-content: space-between; gap: 1.5rem; flex-wrap: wrap; }
-  .why code { font-size: 0.85em; }
-  .pulse { display: grid; gap: 0.4rem; min-width: 260px; }
-  .seg { display: flex; height: 8px; border-radius: 4px; overflow: hidden; gap: 2px; }
-  .seg span { background: currentColor; }
-  .counts { display: flex; gap: 0.35rem; justify-content: flex-end; }
-  .c { font-size: 0.78rem; font-weight: 700; padding: 0 0.45rem; border-radius: 999px; }
-  h1 { margin: 0; font-size: 1.6rem; letter-spacing: -0.02em; }
-  .why { font-size: 0.9rem; }
+  .hero { display: grid; gap: 1.5rem; margin: 0 auto 2.25rem; max-width: 1180px; container-type: inline-size; }
+  .hero.compact { gap: 1rem; margin-bottom: 1.5rem; }
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 2rem; }
+  .heading { min-width: 0; }
+  .eyebrow { display: flex; align-items: center; gap: 0.4rem; margin: 0 0 0.15rem; color: var(--muted); font-size: 0.8rem; }
+  .eyebrow .mono:first-child { margin-right: 0.35rem; }
+  h1 { margin: 0; font: 700 2.15rem/1.12 var(--display); letter-spacing: -0.028em; }
+  h1::first-letter { text-transform: uppercase; }
+  .compact h1 { font-size: 1.5rem; letter-spacing: -0.02em; }
+  .sub { margin: 0.3rem 0 0; color: var(--muted); font-size: 0.9rem; }
+  .compact .sub { display: none; }
+  .stats { display: flex; align-items: center; gap: 1.25rem; }
+  .legend { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.2rem; }
+  .legend li { display: grid; grid-template-columns: 16px 2ch auto; align-items: center; gap: 0.35rem; background: none; font-size: 0.82rem; }
+  .legend .n { font: 650 0.85rem var(--rounded); text-align: right; font-variant-numeric: tabular-nums; }
+  .legend .w { color: var(--text-2); }
+
+  /* The journey: numbered nodes on one rule, done in green, now in blue. */
   .journey { list-style: none; margin: 0; padding: 0; display: flex; align-items: center; }
-  .journey li { display: flex; align-items: center; gap: 0.5rem; color: var(--muted); flex: 1; }
-  .journey li:not(:last-child)::after { content: ""; flex: 1; height: 2px; margin: 0 0.6rem; background: var(--border); border-radius: 2px; }
-  .journey li.done:not(:last-child)::after, .journey li.skipped:not(:last-child)::after { background: var(--verified); }
-  .skipped { color: var(--muted); }
-  .skipped .name { text-decoration: line-through; text-decoration-color: var(--border-strong); }
-  .skipped .dot { border-style: dashed; }
+  .journey li { display: flex; align-items: center; gap: 0.5rem; color: var(--muted); flex: 1; font-size: 0.88rem; font-weight: 500; }
+  .journey li:last-child { flex: none; }
+  .journey li:not(:last-child)::after { content: ""; flex: 1; height: 2px; margin: 0 0.75rem; background: var(--fill-2); border-radius: 2px; }
+  .journey li.done:not(:last-child)::after, .journey li.skipped:not(:last-child)::after { background: var(--verified-fill); }
   .dot {
-    width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-size: 0.8rem; font-weight: 700;
-    border: 2px solid var(--border-strong); background: var(--surface); flex: none;
+    width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; flex: none;
+    font: 650 0.75rem/1 var(--rounded); background: var(--fill); color: var(--muted);
   }
   .done { color: var(--text-2); }
-  .done .dot { border-color: var(--verified); background: var(--verified); color: var(--surface); }
-  .now { color: var(--accent); font-weight: 600; }
-  .now .dot { border-color: var(--accent); color: var(--accent); box-shadow: 0 0 0 5px var(--accent-soft); animation: pulse 2.4s infinite; }
-  @keyframes pulse { 50% { box-shadow: 0 0 0 9px transparent; } }
+  .done .dot { background: var(--verified-fill); color: #fff; }
+  .skipped .dot { background: transparent; box-shadow: inset 0 0 0 1.5px var(--fill-2); }
+  .skipped .name { text-decoration: line-through; text-decoration-color: var(--faint); }
+  .now { color: var(--accent-ink); font-weight: 650; }
+  .now .dot { background: var(--accent); color: #fff; box-shadow: 0 0 0 4px var(--accent-soft); animation: breathe 2.6s var(--ease) infinite; }
+  @keyframes breathe { 50% { box-shadow: 0 0 0 7px transparent; } }
   .name { white-space: nowrap; }
+
+  /* The next step: the one card that asks for action. */
   .next {
-    display: flex; gap: 1.5rem; justify-content: space-between; align-items: center; padding: 1.25rem 1.5rem;
-    background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--accent);
-    border-radius: var(--radius); box-shadow: var(--shadow);
+    position: relative; display: flex; gap: 2rem; justify-content: space-between; align-items: center;
+    padding: 1.4rem 1.6rem; border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow-md); overflow: hidden;
   }
-  .slim { padding: 0.7rem 1.1rem; }
-  .slim h2 { font-size: 1rem; margin: 0; }
-  .slim .text { display: flex; align-items: baseline; gap: 0.75rem; flex-wrap: wrap; }
-  .slim .text > :global(:not(h2, .eyebrow, .stop)) { display: none; }
-  .slim .stop { margin: 0; font-size: 0.85rem; }
-  .slim .big { padding: 0.4rem 0.9rem; font-size: 0.9rem; }
-  .link { all: unset; cursor: pointer; text-decoration: underline; }
-  .link:focus-visible { outline: 2px solid var(--focus); }
-  .stop { color: var(--danger); font-weight: 600; margin: 0.4rem 0; }
-  .next.problem { border-left-color: var(--attention); }
-  .eyebrow { text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.08em; color: var(--accent); font-weight: 700; }
-  .problem .eyebrow { color: var(--attention); }
-  h2 { margin: 0.2rem 0 0.35rem; font-size: 1.2rem; letter-spacing: -0.01em; }
-  .text p { margin: 0 0 0.4rem; }
+  .next::before {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 55%);
+  }
+  .next.warned::before { background: radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, var(--danger-fill) 8%, transparent), transparent 55%); }
+  .compact .next { padding: 0.8rem 0.9rem 0.8rem 1.25rem; border-radius: var(--radius); box-shadow: var(--shadow); }
+  .compact .text { display: flex; align-items: center; gap: 0.9rem; flex-wrap: wrap; }
+  .text { position: relative; min-width: 0; display: grid; gap: 0.3rem; justify-items: start; }
+  .kicker { display: inline-flex; align-items: center; gap: 0.3rem; color: var(--accent-ink); font-size: 0.78rem; font-weight: 650; }
+  .warned .kicker { color: var(--danger); }
+  h2 { margin: 0; font: 650 1.35rem/1.25 var(--display); letter-spacing: -0.018em; }
+  .compact h2 { font-size: 1rem; }
+  .why { margin: 0; color: var(--text-2); }
   .small { font-size: 0.85rem; }
-  .files { list-style: none; padding: 0; margin: 0.4rem 0; }
+  .files { list-style: none; padding: 0.5rem 0.75rem; margin: 0.25rem 0; border-radius: var(--radius-sm); background: var(--add-bg); font-size: 0.84rem; }
   .files li { color: var(--add); }
-  .plus { display: inline-block; width: 1.2em; }
-  .cmd { margin-top: 0.4rem; border: 1px dashed var(--border-strong); background: var(--surface-2); border-radius: 6px; padding: 0.3rem 0.6rem; cursor: copy; color: var(--text-2); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .go { display: grid; gap: 0.4rem; justify-items: end; }
-  .big { padding: 0.65rem 1.3rem; font-size: 1rem; }
-  .big kbd { background: transparent; color: inherit; border-color: currentColor; opacity: 0.7; }
+  .plus { display: inline-block; width: 1.2em; font-weight: 700; }
+  .stop { display: inline-flex; align-items: center; gap: 0.35rem; margin: 0.1rem 0; color: var(--danger); font-weight: 600; font-size: 0.9rem; }
+  .compact .stop { font-size: 0.85rem; }
+  .link { border: 0; background: none; padding: 0; color: var(--accent-ink); font-weight: 600; cursor: pointer; margin-left: 0.25rem; }
+  .cmd {
+    display: inline-flex; align-items: center; gap: 0.5rem; max-width: 100%; margin-top: 0.45rem; height: 28px; padding: 0 0.3rem 0 0.6rem;
+    border: 0; border-radius: 7px; background: var(--fill); color: var(--text-2); cursor: copy; font-size: 0.82rem;
+  }
+  .cmd:hover { background: var(--fill-2); }
+  .cmd .mono { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .c { display: grid; place-items: center; width: 20px; color: var(--muted); }
+  .go { position: relative; display: grid; gap: 0.45rem; justify-items: end; flex: none; }
+  .compact .go .btn { height: 32px; font-size: 0.92rem; }
+  .spin { width: 13px; height: 13px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; animation: spin 700ms linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .problem .kicker { color: var(--attention); }
+
+  @container (max-width: 760px) {
+    .top { flex-direction: column; align-items: flex-start; gap: 1rem; }
+    .next { flex-direction: column; align-items: stretch; gap: 1rem; }
+    .go { justify-items: start; }
+    .journey .name { display: none; }
+    .journey li.now .name { display: inline; }
+  }
 </style>

@@ -12,6 +12,10 @@ export default defineConfig({
     emptyOutDir: true,
     sourcemap: false,
     cssCodeSplit: false,
+    // The browsers the page is for: the build adds the prefixes they need
+    // (Safari's backdrop-filter) and nothing older.
+    cssTarget: ["chrome111", "edge111", "firefox128", "safari16.4"],
+    target: ["chrome111", "edge111", "firefox128", "safari16.4"],
     rollupOptions: {
       output: {
         entryFileNames: "app.js",

@@ -162,6 +162,26 @@ struct FeatureQuery {
     feature: Option<String>,
     task: Option<String>,
     commit: Option<String>,
+    /// An attempt ref (`refs/speccoder/attempts/…`): a failed or held
+    /// attempt's code, kept for a person to read.
+    #[serde(rename = "ref")]
+    reference: Option<String>,
+}
+
+/// A commit id, or a ref in speccoder's attempt namespace — nothing else
+/// reaches `git show` (no options, no other refs, no `..`).
+fn revision(q: &FeatureQuery) -> Option<String> {
+    if let Some(c) = q.commit.as_deref() {
+        return (c.len() >= 7 && c.chars().all(|ch| ch.is_ascii_hexdigit())).then(|| c.to_owned());
+    }
+    let r = q.reference.as_deref()?;
+    let rest = r.strip_prefix("refs/speccoder/attempts/")?;
+    let ok = !rest.is_empty()
+        && !r.contains("..")
+        && rest
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '/' | '-' | '_' | '.'));
+    ok.then(|| r.to_owned())
 }
 
 fn envelope(r: &CommandResult) -> Json<Value> {
@@ -262,13 +282,10 @@ async fn evidence(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Jso
 
 async fn diff(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Response {
     let root = s.root.clone();
-    let Some(commit) = q
-        .commit
-        .filter(|c| c.chars().all(|ch| ch.is_ascii_hexdigit()) && c.len() >= 7)
-    else {
+    let Some(commit) = revision(&q) else {
         return (
             StatusCode::BAD_REQUEST,
-            Json(json!({ "error": "a commit id is needed" })),
+            Json(json!({ "error": "a commit id or an attempt ref is needed" })),
         )
             .into_response();
     };
@@ -451,4 +468,37 @@ pub fn serve(root: &Path, port: u16, ready: impl FnOnce(&Started) + Send) -> Res
             () = signal => Ok(()),
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn q(commit: Option<&str>, reference: Option<&str>) -> FeatureQuery {
+        FeatureQuery {
+            feature: None,
+            task: None,
+            commit: commit.map(str::to_owned),
+            reference: reference.map(str::to_owned),
+        }
+    }
+
+    #[test]
+    fn only_commits_and_attempt_refs_reach_git_show() {
+        assert!(revision(&q(Some("e23d4197bb"), None)).is_some());
+        assert!(revision(&q(Some("e23d"), None)).is_none());
+        assert!(revision(&q(Some("--output=/tmp/x"), None)).is_none());
+        let attempt = "refs/speccoder/attempts/001-greet/T001/run_01M5S5VJ";
+        assert_eq!(revision(&q(None, Some(attempt))).as_deref(), Some(attempt));
+        for bad in [
+            "refs/heads/main",
+            "refs/speccoder/attempts/",
+            "refs/speccoder/attempts/../../heads/main",
+            "refs/speccoder/attempts/a b",
+            "--all",
+            "HEAD",
+        ] {
+            assert!(revision(&q(None, Some(bad))).is_none(), "{bad}");
+        }
+    }
 }
