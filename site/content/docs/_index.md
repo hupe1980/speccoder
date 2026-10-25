@@ -9,7 +9,7 @@ page_template = "doc.html"
 seo_title = "Documentation · speccoder"
 +++
 
-speccoder is a command-line coding agent for [GitHub Spec Kit](https://github.com/github/spec-kit) projects, and for [OpenSpec](@/docs/openspec.md) changes. You write the specification — or let Spec Kit's planning skills draft it — and speccoder implements the feature task by task. What makes it different is who decides when a task is done: not the model, but evidence.
+speccoder is a coding agent for [GitHub Spec Kit](https://github.com/github/spec-kit) features and [OpenSpec](@/docs/openspec.md) changes, on the command line, in a [browser or desktop window](@/docs/web.md) and in [editors](@/docs/integrations.md#editors-acp). You write the specification — or let the planning skills draft it — and speccoder implements it task by task. Who decides when a task is done is not the model, but evidence.
 
 ## The idea in one paragraph
 
@@ -17,7 +17,7 @@ A language model that writes code also tends to report success, and a test it wr
 
 ## Core concepts
 
-- **The spec is the judge.** `spec.md` says what is wanted, `plan.md` how, `tasks.md` in which steps. The model may never edit them; speccoder only ticks a passed task or appends convergence tasks.
+- **The spec is the judge.** `spec.md` says what is wanted, `plan.md` how, `tasks.md` in which steps. While implementing, the model may never edit them; speccoder ticks a task only when it passed.
 - **The worktree.** All work happens on the branch `speccoder/<feature>`, in a worktree under speccoder's state directory. Your checkout is never touched. You merge the branch when you are satisfied.
 - **Committed files only.** The worktree is built from commits, so commit `speccoder.toml` and your Spec Kit artifacts before a run. Configuration is reviewed like code.
 - **Evidence, not claims.** The model's report is shown to you and ignored for the verdict.

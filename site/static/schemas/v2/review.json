@@ -1,7 +1,7 @@
 {
   "$defs": {
     "OpenQuestion": {
-      "description": "A question a document leaves open, to answer in place (F-093).",
+      "description": "A question a document leaves open, to answer in place.",
       "properties": {
         "file": {
           "description": "The document (project-relative).",
@@ -153,7 +153,7 @@
         },
         "questions": {
           "default": 0,
-          "description": "Questions the documents leave open (F-093).",
+          "description": "Questions the documents leave open.",
           "format": "uint",
           "minimum": 0,
           "type": "integer"
@@ -223,7 +223,7 @@
   },
   "$id": "https://hupe1980.github.io/speccoder/schemas/v2/review.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Result of `speccoder review` (F-087): every requirement of the feature's\nspec as a card, with the person's decision on its exact wording.",
+  "description": "Result of `speccoder review`: every requirement of the feature's\nspec as a card, with the person's decision on its exact wording.",
   "properties": {
     "changes": {
       "description": "Requirements changed in the checkout since the last commit of the\nspec: what a commit would record.",
@@ -248,7 +248,7 @@
       "type": "array"
     },
     "questions": {
-      "description": "The questions the documents leave open (`[NEEDS CLARIFICATION: …]`),\nin reading order (F-093).",
+      "description": "The questions the documents leave open (`[NEEDS CLARIFICATION: …]`),\nin reading order.",
       "items": {
         "$ref": "#/$defs/OpenQuestion"
       },

@@ -1,4 +1,4 @@
-//! The command surface as a person meets it (F-057): the daily commands
+//! The command surface as a person meets it: the daily commands
 //! grouped by what they are for, the rest behind `help advanced`, and
 //! shell completion. The descriptions are the commands' own (clap's
 //! `about`), so the help cannot drift from the commands.
@@ -114,19 +114,6 @@ pub fn completion(shell: clap_complete::Shell) {
     let mut cmd = command();
     clap_complete::generate(shell, &mut cmd, "speccoder", &mut std::io::stdout());
 }
-
-/// Former commands and what replaced them (hard cut: no aliases).
-pub const FORMER: &[(&str, &str)] = &[
-    ("approve", "speccoder task approve <TASK>"),
-    ("reject", "speccoder task reject <TASK> --reason \"…\""),
-    ("accept", "speccoder task accept <TASK> --reason \"…\""),
-    ("skip", "speccoder task skip <TASK> --reason \"…\""),
-    ("nudge", "speccoder task nudge <TASK> --note \"…\""),
-    ("approvals", "speccoder report --approvals"),
-    ("status", "speccoder report --live"),
-    ("cost", "speccoder report --cost"),
-    ("skill", "speccoder spec <SKILL>"),
-];
 
 #[cfg(test)]
 mod tests {

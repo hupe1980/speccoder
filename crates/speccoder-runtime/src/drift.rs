@@ -1,4 +1,4 @@
-//! Drift (F-085): a tick is judged against the intent its commit holds; the
+//! Drift: a tick is judged against the intent its commit holds; the
 //! spec may have changed since. What changed, per task, from git alone: the
 //! tick commit's tree then, the checkout's `HEAD` now — committed files
 //! only, as every run reads them. Two batched `git cat-file` calls however

@@ -1,4 +1,4 @@
-//! speccoder's parse against OpenSpec's own answer (research R6): the JSON
+//! speccoder's parse against OpenSpec's own answer: the JSON
 //! of `openspec validate <id> --strict --json` and
 //! `openspec instructions apply --change <id> --json`, which the runtime may
 //! run. A disagreement is evidence of a parser gap: shown, never resolved

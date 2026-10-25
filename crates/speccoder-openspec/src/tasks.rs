@@ -4,7 +4,7 @@
 //! indent, checkboxes inside code fences included), so progress agrees with
 //! `openspec list`. A task's ID is the number it starts with (`1.2`,
 //! `2.3a`, `1.4.1`), else `#<ordinal>`; groups are `## N.` headings; the
-//! order is a chain (D-060): nested tasks come before their parent.
+//! order is a chain: nested tasks come before their parent.
 
 use speccoder_core::snapshot::{
     DependencyMode, Diagnostic, ParsedTasks, Phase, Severity, Task, Totals,

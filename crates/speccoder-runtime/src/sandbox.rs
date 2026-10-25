@@ -690,7 +690,11 @@ mod linux {
             .iter()
             .filter(|h| inside(h) && h.exists())
             .collect();
-        if profile.read_only.is_empty() && hidden.is_empty() {
+        let sockets: Vec<PathBuf> = daemon_sockets()
+            .into_iter()
+            .filter(|p| !inside(p))
+            .collect();
+        if profile.read_only.is_empty() && hidden.is_empty() && sockets.is_empty() {
             return Ok(());
         }
         private_namespace()?;
@@ -721,7 +725,56 @@ mod linux {
             }
             .map_err(|e| format!("hide {}: {e}", h.display()))?;
         }
+        // Landlock does not govern connecting to a Unix socket and seccomp
+        // cannot see its path: a daemon's socket (Docker's is root on the
+        // host) is covered instead, so connecting to it fails.
+        for p in &sockets {
+            mount(Some("/dev/null"), p, none, MsFlags::MS_BIND, none)
+                .map_err(|e| format!("cover {}: {e}", p.display()))?;
+        }
         Ok(())
+    }
+
+    /// The Unix sockets in the places daemons keep them (`/run`, `/var/run`,
+    /// `/tmp`, `$XDG_RUNTIME_DIR`, three levels deep), each once.
+    fn daemon_sockets() -> Vec<PathBuf> {
+        use std::os::unix::fs::FileTypeExt as _;
+        fn walk(dir: &Path, depth: u8, out: &mut Vec<PathBuf>) {
+            let Ok(entries) = std::fs::read_dir(dir) else {
+                return;
+            };
+            for e in entries.flatten() {
+                let Ok(t) = e.file_type() else { continue };
+                if t.is_socket() {
+                    out.push(e.path());
+                } else if t.is_dir() && depth > 0 {
+                    walk(&e.path(), depth - 1, out);
+                }
+            }
+        }
+        let mut roots = vec![
+            PathBuf::from("/run"),
+            PathBuf::from("/var/run"),
+            PathBuf::from("/tmp"),
+        ];
+        if let Some(x) = std::env::var_os("XDG_RUNTIME_DIR") {
+            roots.push(PathBuf::from(x));
+        }
+        let mut seen = std::collections::BTreeSet::new();
+        let mut out = Vec::new();
+        for root in roots {
+            // `/var/run` is usually a link to `/run`: walk each tree once.
+            let Ok(real) = root.canonicalize() else {
+                continue;
+            };
+            if !seen.insert(real.clone()) {
+                continue;
+            }
+            walk(&real, 3, &mut out);
+        }
+        out.sort();
+        out.dedup();
+        out
     }
 
     /// A user and mount namespace for this process, mapped to its own ids,

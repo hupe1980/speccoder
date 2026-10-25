@@ -1,4 +1,4 @@
-//! Approvals as agentplane human tasks (F-072): every decision names who
+//! Approvals as agentplane human tasks: every decision names who
 //! made it and how that is known, binds to what was shown, waits durably,
 //! and expires as nobody's decision.
 

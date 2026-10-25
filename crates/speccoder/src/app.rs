@@ -1,10 +1,10 @@
-//! speccoder's window (`speccoder ui --window`, F-076): the web interface
+//! speccoder's window (`speccoder ui --window`): the web interface
 //! in a window of its own. It loads the loopback host's page and nothing
 //! else — no IPC on the data path, no other origin, no new windows. The
 //! host runs in this process, so the window follows its jobs directly: when
 //! a run needs the person, the Dock icon asks for attention and the title
 //! says so; after every job the Dock badge counts the decisions waiting in
-//! the inbox (F-086).
+//! the inbox.
 
 /// Opens the window on `url` (the host's page with its token) and runs
 /// until it is closed. Must run on the main thread.
@@ -21,7 +21,7 @@ pub fn run(
         .on_menu_event(|app, event| {
             let id = event.id().0.as_str();
             if let Some(url) = HELP.iter().find(|(i, ..)| *i == id).map(|(_, _, u)| *u) {
-                open(url);
+                crate::open_in_browser(url);
             } else if COMMANDS.contains(&id)
                 && let Some(w) = app.get_webview_window("main")
             {
@@ -190,19 +190,7 @@ const HELP: &[(&str, &str, &str)] = &[
     ),
 ];
 
-/// Opens `url` in the default browser.
-fn open(url: &str) {
-    let opener = if cfg!(target_os = "macos") {
-        "open"
-    } else if cfg!(windows) {
-        "explorer"
-    } else {
-        "xdg-open"
-    };
-    let _ = std::process::Command::new(opener).arg(url).spawn();
-}
-
-/// The menu bar (F-088), as the HIG orders it: the app, File, Edit, View,
+/// The menu bar, as the HIG orders it: the app, File, Edit, View,
 /// the app's own (Run, Review), Window, Help. Edit's items are the system's
 /// own — they are what makes copy and paste work in the page on macOS.
 fn menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {

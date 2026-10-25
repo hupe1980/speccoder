@@ -1,4 +1,4 @@
-//! Acceptance strength (F-060) end to end with a scripted model: wrong and
+//! Acceptance strength end to end with a scripted model: wrong and
 //! permitted variants of a verified change are run against its acceptance
 //! tests; what gets through is named, an over-strict test holds the attempt
 //! for a person's ruling, and `min_strength` strengthens the set once.
@@ -495,7 +495,7 @@ fn mutants_are_judged_by_the_acceptance_command_alone() {
     let res = run(r.path(), state.path(), d);
     assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
     let rep = report(&res);
-    // suite = false: no whole-suite run (D-052), only acceptance strength.
+    // suite = false: no whole-suite run, only acceptance strength.
     assert!(rep.mutation.is_none());
     let st = rep.strength.as_ref().unwrap();
     let m = st.mutants.as_ref().unwrap();

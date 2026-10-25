@@ -32,7 +32,7 @@ fn person(root: &Path) -> String {
     format!("{} (asserted)", crate::approvals::who_in(root))
 }
 
-/// A person's decision on a task as an attestation (F-061): one
+/// A person's decision on a task as an attestation: one
 /// `task-verification`, verdict `attested` or `skipped`, no summary. A
 /// line for the message; empty when `[attest]` is off.
 fn attest_decision(
@@ -401,7 +401,7 @@ pub fn skip(path: &Path, feature: Option<&str>, task: &str, reason: Option<&str>
 
 // ── nudge ──────────────────────────────────────────────────────────────────
 
-/// `speccoder task rule <task> --tests-right --reason …` (F-060, D-085): a
+/// `speccoder task rule <task> --tests-right --reason …`: a
 /// person rules that the tests of a held attempt are right — the flagged
 /// alternative is not what the spec allows. The ruling is bound to the
 /// alternative's digest; the next `run` of the task judges the held attempt

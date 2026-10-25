@@ -97,7 +97,7 @@
       "type": "object"
     },
     "VerifyOutcome": {
-      "description": "What `attest verify` found for one task object (F-061).",
+      "description": "What `attest verify` found for one task object.",
       "oneOf": [
         {
           "const": "ok",

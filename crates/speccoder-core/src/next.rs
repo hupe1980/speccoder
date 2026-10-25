@@ -1,4 +1,4 @@
-//! What to do next after a stop or a finish (F-053): a closed set of
+//! What to do next after a stop or a finish: a closed set of
 //! outcomes and, for each, the commands that continue — deterministic, never
 //! model text. The human `Next:` block, the TUI footer and `data.next` are
 //! all this list.
@@ -52,12 +52,12 @@ pub enum Outcome {
         task: String,
     },
     /// An acceptance test rejects an implementation the spec appears to
-    /// allow; the attempt is held for a ruling (F-060).
+    /// allow; the attempt is held for a ruling.
     TestsOverStrict {
         /// The task.
         task: String,
     },
-    /// The acceptance set stayed below `min_strength` (F-060).
+    /// The acceptance set stayed below `min_strength`.
     AcceptanceWeak {
         /// The task.
         task: String,

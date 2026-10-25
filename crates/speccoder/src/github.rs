@@ -1,4 +1,4 @@
-//! GitHub Actions (F-056): under `GITHUB_ACTIONS=true`, `run` and
+//! GitHub Actions: under `GITHUB_ACTIONS=true`, `run` and
 //! `report` append the Markdown report to `$GITHUB_STEP_SUMMARY` and
 //! annotate tasks that need a look. GitHub shows at most 10 annotations
 //! of a kind per step and caps a step summary at 1 MiB; speccoder stays

@@ -1,5 +1,5 @@
 <script lang="ts">
-  // A context menu (F-088), as the system draws one: a material panel at
+  // A context menu, as the system draws one: a material panel at
   // the pointer, kept on screen, with the item's own commands — each of
   // which also lives elsewhere (the inspector, the menu bar), as the HIG
   // asks. ↑ ↓ move, Return chooses, Esc closes.

@@ -196,7 +196,7 @@
               "type": "null"
             }
           ],
-          "description": "The call as the inline prompt shows it (F-054)."
+          "description": "The call as the inline prompt shows it."
         },
         "question": {
           "description": "A question's text.",
@@ -214,7 +214,7 @@
           "type": "string"
         },
         "source": {
-          "description": "`task` (the attempt waits and resumes) or `attempt` (stopped and saved:\na lane, or before F-072).",
+          "description": "`task` (the attempt waits and resumes) or `attempt` (stopped and saved\nin a parallel lane).",
           "type": "string"
         },
         "task": {

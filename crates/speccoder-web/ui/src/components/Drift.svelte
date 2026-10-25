@@ -1,5 +1,5 @@
 <script lang="ts">
-  // The spec changed under a tick (F-085): which requirement, word by word,
+  // The spec changed under a tick: which requirement, word by word,
   // what the evidence was for and what the spec asks now — and the step
   // that checks the code against it again.
   import { app } from "../lib/app.svelte";

@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Needs You (F-086): every decision waiting for the person, across the
+  // Needs You: every decision waiting for the person, across the
   // project's features, the most urgent first — the person's work once the
   // agents write the code. Each row decides in place; Open shows the task.
   import { app } from "../lib/app.svelte";

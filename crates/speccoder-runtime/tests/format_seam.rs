@@ -1,4 +1,4 @@
-//! The format seam (F-050) changes no byte a Spec Kit user or the model
+//! The format seam changes no byte a Spec Kit user or the model
 //! sees: `inspect` of every supported Spec Kit version, the context bundle,
 //! the acceptance input, the model-facing policies, the external-agent
 //! prompt and the refusal texts are compared with captures made before the
@@ -246,7 +246,7 @@ fn formats_are_detected_chosen_or_refused() {
                 .all(|d| !d.code.starts_with("format."))
         );
     }
-    // Two formats this version runs: the person chooses (D-059).
+    // Two formats this version runs: the person chooses.
     let r = open_with(both.path(), None, None).err().unwrap();
     assert_eq!(r.status, CommandStatus::DiagnosticsError);
     assert!(r.message.contains("speckit, openspec"), "{}", r.message);
@@ -282,7 +282,7 @@ fn formats_are_detected_chosen_or_refused() {
         (r.status, r.message.as_str()),
         (
             CommandStatus::NotAProject,
-            "Kiro specs are not yet supported by this version of speccoder"
+            "speccoder runs Spec Kit and OpenSpec projects, not Kiro specs"
         )
     );
     let r = open_with(only_kiro.path(), None, None).err().unwrap();
@@ -292,10 +292,7 @@ fn formats_are_detected_chosen_or_refused() {
         "{}",
         r.message
     );
-    assert!(
-        r.message
-            .ends_with("not yet supported by this version of speccoder")
-    );
+    assert!(r.message.ends_with("not Kiro specs"));
     // Kiro beside Spec Kit: Spec Kit, with a warning.
     let with_kiro = project(kiro);
     let o = open_with(with_kiro.path(), None, None).ok().unwrap();
@@ -307,7 +304,7 @@ fn formats_are_detected_chosen_or_refused() {
         .filter(|d| d.code == "format.unsupported-marker")
         .collect();
     assert_eq!(w.len(), 1, "{:?}", o.snapshot.diagnostics);
-    assert!(w[0].message.contains("Kiro specs are not yet supported"));
+    assert!(w[0].message.ends_with("not Kiro specs"));
     // Nothing: today's message.
     let r = speccoder_runtime::inspect(nothing.path(), None);
     assert_eq!(r.status(), CommandStatus::NotAProject);
@@ -323,7 +320,7 @@ fn formats_are_detected_chosen_or_refused() {
     )
     .unwrap();
     let r = open_with(speckit.path(), None, None).err().unwrap();
-    assert!(r.message.starts_with("Kiro specs are not yet supported"));
+    assert!(r.message.ends_with("not Kiro specs"));
     assert!(open_with(speckit.path(), None, Some(FormatKind::Speckit)).is_ok());
     fs::write(
         speckit.path().join("speccoder.toml"),

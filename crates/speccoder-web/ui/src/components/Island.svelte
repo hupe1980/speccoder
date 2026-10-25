@@ -82,7 +82,7 @@
           {#each app.calls as c}<div class:said={c.startsWith("“")} class:deny={c.includes(" deny")} class:ask={c.includes(" approval")}>{c}</div>{:else}<div class="dim">No tool calls yet.</div>{/each}
         </div>
         <div class="foot">
-          {#if app.usage.in || app.usage.out}<span class="usage mono">{app.usage.in.toLocaleString()} in · {app.usage.out.toLocaleString()} out{#if app.usage.usd != null} · ${app.usage.usd.toFixed(4)}{/if}</span>{/if}
+          {#if app.usage.in || app.usage.out}<span class="usage mono">{app.usage.in.toLocaleString()} in · {app.usage.out.toLocaleString()} out{#if app.usage.usd != null}{" · "}${app.usage.usd.toFixed(4)}{/if}</span>{/if}
           {#if running}
             <button class="btn small danger" onclick={() => app.stop()} title="Stops before the next task; the attempt stays resumable"><Icon name="stop" size={10} />Stop</button>
           {:else}

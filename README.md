@@ -8,11 +8,16 @@
 
 **[Documentation](https://hupe1980.github.io/speccoder/docs/)** · [Quickstart](https://hupe1980.github.io/speccoder/docs/quickstart/) · [How it works](https://hupe1980.github.io/speccoder/docs/how-it-works/) · [Configuration](https://hupe1980.github.io/speccoder/docs/configuration/) · [CLI](https://hupe1980.github.io/speccoder/docs/cli/)
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/hupe1980/speccoder/main/site/static/screenshots/drawer-dark.webp">
+  <img alt="speccoder's app: a feature's tasks by verdict, and one task's evidence — acceptance tests red to green, checks, diff audit, attestation" src="https://raw.githubusercontent.com/hupe1980/speccoder/main/site/static/screenshots/drawer-light.webp">
+</picture>
+
 ## Why
 
 Coding agents are good at writing code and too good at declaring victory. speccoder separates the two: a model proposes, and code decides.
 
-- **Evidence decides.** Before each attempt, the spec's acceptance examples become tests that must fail. After it, your checks run again and the diff is audited for deleted or weakened tests. Then the tests themselves are tested: plausible wrong implementations must fail them (the acceptance strength on every tick), and a test that rejects what the spec allows goes to you. Optional mutation testing and a gaming monitor catch tests written to pass.
+- **Evidence decides.** The spec's acceptance examples become tests that must fail before the attempt and pass after it; your checks must not regress; the diff is audited for weakened tests; and plausible wrong versions of the change must fail the tests (the acceptance strength on every tick).
 - **Isolated and sandboxed.** Work happens on `speccoder/<feature>` in a worktree of its own. Every command runs in an OS sandbox (Seatbelt on macOS, Landlock and seccomp on Linux): writes only to the worktree, no credentials, no network beyond loopback.
 - **Every call governed.** Each tool call is allowed, sent to a person, or denied before it runs. Decisions record who made them — at the terminal, in an editor over ACP, or later.
 - **Durable and replayable.** Every model and tool call is journaled. A killed run resumes without repeating finished calls; a recorded run replays offline.
@@ -38,7 +43,12 @@ speccoder report                     # every task and the evidence behind its ti
 git merge speccoder/001-my-feature   # after reviewing the branch
 ```
 
-At a terminal, `run` works inside a dashboard — the pipeline stage by stage, tool calls, approvals answered with one key, and per task the evidence behind its verdict and its diff; `--plain` keeps lines. `speccoder` alone opens the dashboard on a run elsewhere, `speccoder report --live` shows one as it happens, and `speccoder doctor` checks the setup. For CI and tools, every command takes `--json` (one result object) or `--events` (JSON Lines as it works), both with [published JSON Schemas](https://hupe1980.github.io/speccoder/docs/cli/#json-output), and every failure names a [code](https://hupe1980.github.io/speccoder/docs/codes/) with the command that fixes it; in GitHub Actions the report lands in the job summary. Prefer a window? `speccoder ui --window` (or `speccoder ui` for the browser) shows the project as an app on your machine — opening on **Needs You**, every decision the agents wait on across features, each settled in place, with a real menu bar, a status bar and context menus; a setup assistant for a new project, every feature at a glance, the journey with one button for the next step, a board of tasks by verdict, each task's evidence, the feature's code and diff, settings, spend, and approvals in a sheet. Working from GitHub issues? `speccoder issue start 42` specifies a feature from one, and `speccoder pr` opens its draft — evidence in the description, `Closes #42` included — through GitHub's API as you (`speccoder auth login`; nothing else to install). No spec yet? `speccoder spec specify "…"`, then `plan` and `tasks`, runs Spec Kit's own planning skills.
+Then, as you need them:
+
+- **Watch and decide.** At a terminal, `run` shows a live dashboard and asks approvals with one key (`--plain` for lines). `speccoder ui --window` opens the same work as an app: **Needs You** first, then the board, each task's evidence, the code, the spec review and the report.
+- **Automate.** Every command takes `--json` or `--events`, both with [published schemas](https://hupe1980.github.io/speccoder/docs/cli/#json-output); every failure names a [code](https://hupe1980.github.io/speccoder/docs/codes/) and the command that fixes it.
+- **Work from GitHub.** `speccoder auth login` once; `speccoder issue start 42` specifies a feature from an issue, `speccoder pr` opens a draft whose description is the evidence. No `gh` needed.
+- **Plan with your spec tool.** `speccoder spec specify "…"`, then `plan` and `tasks`, runs Spec Kit's own skills (OpenSpec: `propose`).
 
 ## How a task is decided
 

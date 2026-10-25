@@ -631,3 +631,29 @@ fn nothing_planned_is_a_beginning_and_a_gone_pointer_names_the_closest() {
         res.message()
     );
 }
+
+/// A feature is listed by its spec's title, and its progress counts the
+/// ticks on its branch, where speccoder makes them.
+#[test]
+fn a_feature_is_listed_by_its_title_with_its_branch_ticks() {
+    let r = repo();
+    fs::create_dir_all(r.path().join("specs/002-login")).unwrap();
+    fs::write(
+        r.path().join("specs/002-login/spec.md"),
+        "# Feature Specification: Log in with GitHub\n",
+    )
+    .unwrap();
+    let tasks = r.path().join("specs/001-graph/tasks.md");
+    git(r.path(), &["checkout", "-q", "-b", "speccoder/001-graph"]);
+    let text = fs::read_to_string(&tasks).unwrap();
+    fs::write(&tasks, text.replacen("- [ ] T005", "- [x] T005", 1)).unwrap();
+    git(r.path(), &["commit", "-q", "-am", "tick T005"]);
+    git(r.path(), &["checkout", "-q", "-"]);
+    let rep = speccoder_runtime::current::list(r.path(), None);
+    let Some(CommandData::Features(f)) = rep.data() else {
+        panic!("{}", rep.message())
+    };
+    assert_eq!(f.features[1].title.as_deref(), Some("Log in with GitHub"));
+    assert_eq!(f.features[0].title, None, "the fixture's spec has no title");
+    assert_eq!(f.features[0].done, 5, "4 in the checkout, 5 on the branch");
+}

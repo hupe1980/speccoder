@@ -117,7 +117,7 @@ pub fn input(
             Tainted::trusted(json!({ "max_turns": max_turns, "max_tool_calls": max_tool_calls })),
         ),
     ];
-    // Requirements reworded since the ticks that cite them (F-085): the
+    // Requirements reworded since the ticks that cite them: the
     // spec's own lines, then and now. Absent when nothing changed, so an
     // assessment without drift is the one it always was.
     if !changed.is_empty() {

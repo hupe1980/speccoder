@@ -2,7 +2,7 @@
 //! and the requirement names of the main specs (`openspec/specs/**/spec.md`).
 //!
 //! OpenSpec returns scenarios only as raw text; speccoder parses them itself
-//! because they are the acceptance examples (D-060).
+//! because they are the acceptance examples.
 
 use std::collections::{BTreeMap, BTreeSet};
 

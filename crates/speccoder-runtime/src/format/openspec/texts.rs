@@ -1,4 +1,4 @@
-//! OpenSpec's paths, rules and words (D-060): intent is all of `openspec/`;
+//! OpenSpec's paths, rules and words: intent is all of `openspec/`;
 //! planning writes active changes only; archiving is the person's.
 
 use std::path::Path;

@@ -23,7 +23,7 @@ struct RawAcceptance {
     strength_timeout_secs: Option<u64>,
 }
 
-/// How the acceptance set's strength is measured (F-060): `[acceptance]`
+/// How the acceptance set's strength is measured: `[acceptance]`
 /// `strength`, `min_strength`, `near_miss`, `permitted`,
 /// `strength_timeout_secs`.
 #[derive(Debug, Clone, PartialEq)]
@@ -131,7 +131,7 @@ impl Signer {
     }
 }
 
-/// `[attest]`: signed evidence per ticked task (F-061).
+/// `[attest]`: signed evidence per ticked task.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AttestConfig {
     /// Write attestations on ticks.
@@ -198,14 +198,14 @@ pub struct RunConfig {
     /// Also author held-out acceptance tests the implementer never sees
     /// (`[acceptance] held_out`, default on; nothing without `generate`).
     pub held_out: bool,
-    /// Acceptance strength (F-060).
+    /// Acceptance strength.
     pub strength: StrengthConfig,
     /// Convergence phases a feature may get (`[converge] max_rounds`).
     pub max_converge_rounds: u32,
     /// Ask the gaming monitor about every passing task (`[monitor] enabled`).
     pub monitor: bool,
     /// A run waits until every requirement is approved on its current
-    /// wording (`[review] required`, F-087).
+    /// wording (`[review] required`).
     pub review_required: bool,
     /// Test files that existed before an attempt may gain lines without
     /// approval (`[tests] frozen = "additions"`; default `"ask"`).
@@ -219,7 +219,7 @@ pub struct RunConfig {
     /// `[attest]`.
     pub attest: AttestConfig,
     /// `[context] instructions`: the file names read per directory as the
-    /// repository's instructions for agents (F-073); empty: none.
+    /// repository's instructions for agents; empty: none.
     pub instructions: Vec<String>,
 }
 

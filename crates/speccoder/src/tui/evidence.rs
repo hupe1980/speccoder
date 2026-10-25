@@ -1,4 +1,4 @@
-//! The Evidence screen's rows: the runtime's (D-087), drawn with the
+//! The Evidence screen's rows: the runtime's, drawn with the
 //! look's glyphs.
 
 pub use speccoder_runtime::evidence::{Row, banner, rows, statements};

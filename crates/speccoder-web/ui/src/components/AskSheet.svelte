@@ -66,7 +66,7 @@
       <header>
         <span class="badge" aria-hidden="true"><Icon name="hand" size={22} weight={2} /></span>
         <div class="heads">
-          <span class="eyebrow">{p.request.task}{p.request.turn ? ` · turn ${p.request.turn}` : ""}{#if p.request.task_title} · <Code text={p.request.task_title} />{/if}</span>
+          <span class="eyebrow">{p.request.task}{p.request.turn ? ` · turn ${p.request.turn}` : ""}{#if p.request.task_title}{" · "}<Code text={p.request.task_title} />{/if}</span>
           <h2 id="ask-title">{p.title} <span class="mono subject">{p.subject}</span></h2>
         </div>
         <span class="risk r-{p.request.risk}">{p.request.risk} risk</span>

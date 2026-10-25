@@ -2,7 +2,7 @@
 //! attempt waits. Used only when stdin and stderr are terminals and `--json`
 //! is off; otherwise the attempt stops and `speccoder task approve` decides.
 //!
-//! One question, its full scope (F-054): what the call does (a diff, the
+//! One question, its full scope: what the call does (a diff, the
 //! whole command), why it stopped, what it can reach, what the model
 //! claimed, and what each answer covers.
 

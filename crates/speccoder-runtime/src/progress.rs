@@ -159,7 +159,7 @@ pub enum Event {
         /// USD, when priced.
         usd: Option<f64>,
     },
-    /// What the model said in a turn, beside its tool calls (F-095): its
+    /// What the model said in a turn, beside its tool calls: its
     /// account of what it is doing — a claim, never evidence. Control
     /// characters escaped; at most 2000 characters.
     Said {
@@ -202,7 +202,7 @@ pub struct LiveState {
     pub stage_detail: Option<String>,
     /// The last tool call, e.g. `edit_file src/lib.rs (allow)`.
     pub last_call: Option<String>,
-    /// What the model last said, its first line (a claim; F-095).
+    /// What the model last said, its first line (a claim).
     #[serde(default)]
     pub said: Option<String>,
     /// The latest tool calls, oldest first (at most [`RECENT`]).
@@ -582,7 +582,7 @@ fn status_live(plane_dir: &Path) -> CommandResult {
                 .unwrap_or_default(),
         ),
         (None, false) => format!(
-            "interrupted: {} {} stopped during {} {ago}s ago (pid {} is gone); the next `speccoder run` sets its leftovers aside",
+            "interrupted: {} {} stopped during {} {ago}s ago (pid {} is gone); the next `speccoder run` resumes it from its journal",
             live.feature,
             live.task,
             stage_word(&live),

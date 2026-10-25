@@ -68,7 +68,7 @@ If no such test can be written, return no files.",
     )
 }
 
-/// What the author is told when the set was too weak (F-060): the same
+/// What the author is told when the set was too weak: the same
 /// task, the tests so far, and the wrong implementations they let through.
 #[must_use]
 pub fn strengthen_policy(w: &Wording) -> String {

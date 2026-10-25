@@ -1,8 +1,8 @@
-//! A scripted run end to end: `--events` (F-056) streams JSON Lines that a
+//! A scripted run end to end: `--events` streams JSON Lines that a
 //! consumer reads with nothing but the published schemas — `seq` without
 //! gaps, the lifecycle in order, the result last — and a reader that goes
 //! away does not break the run; at a terminal the dashboard hosts it
-//! (F-058), driven through a pseudo-terminal.
+//!, driven through a pseudo-terminal.
 
 // Test code: panicking on unexpected input is the failure report.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
@@ -225,7 +225,7 @@ fn a_reader_that_goes_away_does_not_break_the_run() {
     );
 }
 
-/// `run` at a terminal hosts the run in the dashboard (F-058): the call that
+/// `run` at a terminal hosts the run in the dashboard: the call that
 /// needs the person is answered in the overlay with one key, the run ends,
 /// and leaving prints the run's result as the plain `run` prints it.
 #[test]
@@ -305,7 +305,7 @@ fn plain_keeps_lines_at_a_terminal() {
     assert!(text.contains("T005"), "{text}");
 }
 
-/// The next step, taken at the terminal (F-075): after `spec tasks` the CLI
+/// The next step, taken at the terminal: after `spec tasks` the CLI
 /// offers to commit exactly the planning file it wrote, then the run.
 #[test]
 fn after_planning_the_cli_offers_the_commit_and_then_the_run() {
@@ -401,7 +401,7 @@ fn request(port: u16, method: &str, path: &str, extra: &str, body: &str) -> Stri
     )
 }
 
-/// `speccoder ui` (F-076): the host refuses a request without the token,
+/// `speccoder ui`: the host refuses a request without the token,
 /// with a foreign `Host` (DNS rebinding) and a cross-origin write; with the
 /// token, a run started over the API stops at the call that needs a person,
 /// the page's answer lets it finish, and the decision is recorded `via web`.

@@ -197,7 +197,7 @@ pub enum CommandData {
     Auth(Box<AuthReport>),
 }
 
-/// Result of `speccoder auth` (F-089): who speccoder acts as on a GitHub
+/// Result of `speccoder auth`: who speccoder acts as on a GitHub
 /// host, and where its token comes from. The token itself is never shown.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct AuthReport {
@@ -209,7 +209,7 @@ pub struct AuthReport {
     pub source: Option<String>,
 }
 
-/// Result of `speccoder review` (F-087): every requirement of the feature's
+/// Result of `speccoder review`: every requirement of the feature's
 /// spec as a card, with the person's decision on its exact wording.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct ReviewReport {
@@ -228,7 +228,7 @@ pub struct ReviewReport {
     /// request with its requirement.
     pub revision: Option<String>,
     /// The questions the documents leave open (`[NEEDS CLARIFICATION: …]`),
-    /// in reading order (F-093).
+    /// in reading order.
     pub questions: Vec<OpenQuestion>,
     /// Requirements changed in the checkout since the last commit of the
     /// spec: what a commit would record.
@@ -237,7 +237,7 @@ pub struct ReviewReport {
     pub history: Vec<SpecVersion>,
 }
 
-/// A question a document leaves open, to answer in place (F-093).
+/// A question a document leaves open, to answer in place.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct OpenQuestion {
     /// `Q1`, `Q2`, … in reading order.
@@ -303,7 +303,7 @@ pub struct ReviewTotals {
     pub open: usize,
     /// Decided on an earlier wording.
     pub lapsed: usize,
-    /// Questions the documents leave open (F-093).
+    /// Questions the documents leave open.
     #[serde(default)]
     pub questions: usize,
 }
@@ -316,7 +316,7 @@ impl ReviewTotals {
     }
 }
 
-/// Result of `speccoder inbox` (F-086): every decision that waits for a
+/// Result of `speccoder inbox`: every decision that waits for a
 /// person, across the project's features, the most urgent first — the
 /// person's work once the agents write the code.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
@@ -356,7 +356,7 @@ pub struct InboxItem {
 }
 
 /// Result of `speccoder issue`: the repository's open GitHub issues, read
-/// through GitHub's API as the person (F-089).
+/// through GitHub's API as the person.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct IssuesReport {
     /// `owner/name`.
@@ -492,6 +492,9 @@ pub struct FeatureEntry {
     pub number: usize,
     /// Directory name, e.g. `001-greet`.
     pub name: String,
+    /// The title its spec (or proposal) gives, when it has one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
     /// Repository-relative directory.
     pub dir: String,
     /// The current one.
@@ -812,7 +815,7 @@ pub struct EvalCase {
     pub held_out: Option<serde_json::Value>,
     /// An attempt passed the visible checks and failed the held-out tests.
     pub gap: bool,
-    /// The combined acceptance strength, when measured (F-060).
+    /// The combined acceptance strength, when measured.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub strength: Option<f64>,
     /// Stopped because a test rejected a permitted alternative.
@@ -850,12 +853,12 @@ pub struct EvalSummary {
     /// `expect = "reject"` cases that were not ticked.
     pub caught: usize,
     /// Attempts that passed visibly, and how many of them the held-out tests
-    /// failed (F-059); `None` when no held-out test ran.
+    /// failed; `None` when no held-out test ran.
     pub held_out_gap: Option<HeldOutGap>,
     /// Ticked cases whose held-out tests passed, against the oracle.
     pub held_out_oracle: Option<HeldOutOracle>,
     /// The median combined acceptance strength over verified cases that
-    /// measured it (F-060); `None`: not measured.
+    /// measured it; `None`: not measured.
     pub median_acceptance_strength: Option<f64>,
     /// Cases stopped for a person because a test rejected a permitted
     /// alternative.
@@ -960,14 +963,14 @@ pub struct RunReport {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scope: Option<crate::scope::ScopeFinding>,
     /// What the tick's attestation came to: `{ state: signed | unsigned |
-    /// missing, signer, reason }` (F-061).
+    /// missing, signer, reason }`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub attestation: Option<serde_json::Value>,
     /// The repository's instructions the attempt was given (`AGENTS.md`,
-    /// F-073), root first.
+    /// `CLAUDE.md`, …), root first.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub instructions: Vec<InstructionFile>,
-    /// The acceptance set's strength (F-060): after a `verified` verdict.
+    /// The acceptance set's strength: after a `verified` verdict.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub strength: Option<crate::strength::AcceptanceStrength>,
 }
@@ -1215,12 +1218,12 @@ pub struct PendingCall {
     pub reason: String,
     /// The saved attempt.
     pub reference: String,
-    /// The call as the inline prompt shows it (F-054).
+    /// The call as the inline prompt shows it.
     pub presentation: Option<ApprovalView>,
     /// The waiting call's id (`approve --call`); empty for a stopped attempt.
     pub call: String,
-    /// `task` (the attempt waits and resumes) or `attempt` (stopped and saved:
-    /// a lane, or before F-072).
+    /// `task` (the attempt waits and resumes) or `attempt` (stopped and saved
+    /// in a parallel lane).
     pub source: String,
     /// `approval` or `question`.
     pub kind: String,
@@ -1291,7 +1294,7 @@ pub struct DecidedCall {
     pub expired: bool,
 }
 
-/// What `attest verify` found for one task object (F-061).
+/// What `attest verify` found for one task object.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum VerifyOutcome {
@@ -1428,7 +1431,7 @@ pub struct TraceRow {
     pub changed: bool,
 }
 
-/// What changed since a tick (F-085): the tick's commit holds the intent
+/// What changed since a tick: the tick's commit holds the intent
 /// it was judged against; the checkout's `HEAD` holds the intent now.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct Drift {
@@ -1503,7 +1506,7 @@ pub struct StatusReport {
     /// GitHub issue URLs the feature's spec names: where it came from, and
     /// what its pull request closes.
     pub issues: Vec<String>,
-    /// The person's review of the spec's requirements (F-087), when the
+    /// The person's review of the spec's requirements, when the
     /// format has requirement identifiers.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub review: Option<ReviewTotals>,
@@ -1531,7 +1534,7 @@ pub struct TaskStatus {
     pub drift: Option<Drift>,
     /// For a task speccoder committed: its attestation as the note says,
     /// signatures unchecked — `signed <kind> <keyid>`, `unsigned` or
-    /// `missing` (F-061; `attest verify` checks them).
+    /// `missing` (`attest verify` checks them).
     pub attestation: Option<String>,
     /// Open dependencies of a blocked task.
     pub blocked_by: Vec<String>,
@@ -1544,7 +1547,7 @@ pub struct TaskStatus {
     /// The reason a person gave for `accept` or `skip`.
     pub note: Option<String>,
     /// A verified tick's acceptance strength as its trailer says
-    /// (`0.83 mutants=9/11 near-miss=1/2`, `not measured (…)`; F-060).
+    /// (`0.83 mutants=9/11 near-miss=1/2`, `not measured (…)`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub strength: Option<String>,
 }
@@ -1594,7 +1597,7 @@ pub struct StatusTotals {
     pub ready: usize,
     /// Open and blocked.
     pub blocked: usize,
-    /// Ticks whose cited requirements changed since (F-085).
+    /// Ticks whose cited requirements changed since.
     #[serde(default)]
     pub stale: usize,
 }

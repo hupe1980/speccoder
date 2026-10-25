@@ -111,7 +111,7 @@ impl CheckResult {
 
     /// Whether this check, as a task-specific check, is evidence for the
     /// task: it passed, and either declares no report (a command check) or
-    /// its report has at least one passing test (research R4).
+    /// its report has at least one passing test.
     #[must_use]
     pub fn is_evidence(&self) -> bool {
         !self.flaky
@@ -262,7 +262,7 @@ pub fn passes(checks: &[CheckResult], cmp: Option<&Comparison>) -> bool {
     failures(checks, cmp).is_empty() && cmp.is_none_or(|c| c.regressions.is_empty())
 }
 
-/// What a red run of acceptance tests showed (D-064 as amended).
+/// What a red run of acceptance tests showed.
 ///
 /// Only [`RedClass::Assertion`] and [`RedClass::Absent`] are red: a test was
 /// collected and failed on an assertion, or the tests could not build only
@@ -406,7 +406,7 @@ pub fn verdict(task_checks: &[&str], checks: &[CheckResult], cmp: Option<&Compar
 }
 
 /// What the held-out acceptance tests said about an attempt that passed
-/// visibly (F-059, D-061): the judge's own tests, never shown to the model.
+/// visibly: the judge's own tests, never shown to the model.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case", tag = "outcome")]
 pub enum HeldOut {

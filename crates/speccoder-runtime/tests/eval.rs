@@ -48,7 +48,7 @@ fn every_classification_is_judged_by_the_hidden_oracle() {
     fake.will_structure(no_acceptance());
     fake.will_call_tool("a2", "write_file", json!({ "path": "src/lib.rs", "content": "pub fn add(a: i64, b: i64) -> i64 {\n    a + b\n}\n" }));
     fake.will_structure(done());
-    // clamp-thin and duplicates-any-order (F-060): stop → not completed.
+    // clamp-thin and duplicates-any-order: stop → not completed.
     fake.will_structure(no_acceptance());
     fake.will_call_tool("k1", "report_blocked", json!({ "reason": "self-test" }));
     fake.will_structure(no_acceptance());

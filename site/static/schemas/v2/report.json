@@ -29,7 +29,7 @@
       "type": "object"
     },
     "Drift": {
-      "description": "What changed since a tick (F-085): the tick's commit holds the intent\nit was judged against; the checkout's `HEAD` holds the intent now.",
+      "description": "What changed since a tick: the tick's commit holds the intent\nit was judged against; the checkout's `HEAD` holds the intent now.",
       "properties": {
         "files": {
           "description": "The intent files that differ (project-relative), task lists aside.\nEmpty when the intent is not in git (in place, ignored): it changed,\nwhich file is not known.",
@@ -159,7 +159,7 @@
         },
         "questions": {
           "default": 0,
-          "description": "Questions the documents leave open (F-093).",
+          "description": "Questions the documents leave open.",
           "format": "uint",
           "minimum": 0,
           "type": "integer"
@@ -215,7 +215,7 @@
         },
         "stale": {
           "default": 0,
-          "description": "Ticks whose cited requirements changed since (F-085).",
+          "description": "Ticks whose cited requirements changed since.",
           "format": "uint",
           "minimum": 0,
           "type": "integer"
@@ -282,7 +282,7 @@
       "description": "One task and its evidence.",
       "properties": {
         "attestation": {
-          "description": "For a task speccoder committed: its attestation as the note says,\nsignatures unchecked — `signed <kind> <keyid>`, `unsigned` or\n`missing` (F-061; `attest verify` checks them).",
+          "description": "For a task speccoder committed: its attestation as the note says,\nsignatures unchecked — `signed <kind> <keyid>`, `unsigned` or\n`missing` (`attest verify` checks them).",
           "type": [
             "string",
             "null"
@@ -351,7 +351,7 @@
           "type": "string"
         },
         "strength": {
-          "description": "A verified tick's acceptance strength as its trailer says\n(`0.83 mutants=9/11 near-miss=1/2`, `not measured (…)`; F-060).",
+          "description": "A verified tick's acceptance strength as its trailer says\n(`0.83 mutants=9/11 near-miss=1/2`, `not measured (…)`).",
           "type": [
             "string",
             "null"
@@ -489,7 +489,7 @@
           "type": "null"
         }
       ],
-      "description": "The person's review of the spec's requirements (F-087), when the\nformat has requirement identifiers."
+      "description": "The person's review of the spec's requirements, when the\nformat has requirement identifiers."
     },
     "selected_by": {
       "default": "",

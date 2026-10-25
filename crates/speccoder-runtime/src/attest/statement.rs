@@ -73,7 +73,7 @@ pub enum Phase {
     Red,
     /// The acceptance tests and the checks after the attempt.
     Green,
-    /// The tests the implementer never saw (F-059).
+    /// The tests the implementer never saw.
     HeldOut,
 }
 

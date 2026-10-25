@@ -1,4 +1,4 @@
-//! What a person sees when a call needs them (F-054): built live from the
+//! What a person sees when a call needs them: built live from the
 //! journaled [`Request`] and what only the live run knows — the file as it
 //! is now, the sandbox — and never journaled itself, so replay does not
 //! depend on the worktree. The terminal prompt, editors (ACP), the

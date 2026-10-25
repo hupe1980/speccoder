@@ -147,7 +147,7 @@ pub struct ToolSpec {
 
 /// The schema of a tool's arguments, made strict-ready by agentplane: only
 /// what serde enforces is declared — an optional argument is an `Option`,
-/// so `null` is both allowed and readable (D-076).
+/// so `null` is both allowed and readable.
 fn schema<T: JsonSchema>() -> Value {
     agentplane::tools::strict_schema::<T>()
 }
@@ -517,7 +517,7 @@ impl WorkspaceTools {
             output_cap: OUTPUT_CAP,
         };
         // Tests run model-written code: what a command changes among the
-        // judge's inputs is found now, not at the end of the attempt (D-065).
+        // judge's inputs is found now, not at the end of the attempt.
         let judged_before = crate::integrity::JudgeSnapshot::take(&self.root, &self.policy);
         let runner = self.runner.clone();
         let network = a.network == Some(true);

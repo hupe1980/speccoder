@@ -4,6 +4,7 @@
   import Preflight from "./Preflight.svelte";
   import Ring from "./Ring.svelte";
   import Icon from "./Icon.svelte";
+  import Code from "./Code.svelte";
   import { ORDER, symbol, word } from "../lib/marks";
 
   /** Off the board: the title and the next step only, in one strip. */
@@ -33,7 +34,7 @@
     copied = true;
     setTimeout(() => (copied = false), 1600);
   }
-  const title = $derived((report?.feature ?? "").replace(/^\d+-/, "").replaceAll("-", " "));
+  const title = $derived(report ? app.titleOf(report.feature) : "");
   const number = $derived(report?.feature.match(/^\d+/)?.[0]);
 </script>
 
@@ -43,7 +44,6 @@
       {#if report}
         <p class="eyebrow"><span class="mono">{number ?? ""}</span>{#if report.branch}<Icon name="branch" size={13} /><span class="mono">{report.branch}</span>{/if}</p>
         <h1>{title}</h1>
-        <p class="sub">{cap(report.selected_by)}</p>
       {:else}
         <h1>{app.report?.message ?? "speccoder"}</h1>
       {/if}
@@ -81,9 +81,9 @@
     <div class="next" class:busy class:warned={stops.length > 0}>
       <div class="text">
         <span class="kicker"><Icon name="sparkle" size={13} weight={2} /> Up next</span>
-        <h2>{headline}</h2>
+        <h2><Code text={headline} /></h2>
         {#if !compact}
-          {#if primary.run?.kind !== "skill"}<p class="why">{cap(primary.why)}</p>{/if}
+          {#if primary.run?.kind !== "skill"}<p class="why"><Code text={cap(primary.why)} /></p>{/if}
           {#if commitPaths.length}
             <ul class="files">
               {#each commitPaths as p}<li class="mono"><span class="plus">+</span>{p}</li>{/each}
@@ -135,8 +135,6 @@
   h1 { margin: 0; font: 700 2.15rem/1.12 var(--display); letter-spacing: -0.028em; }
   h1::first-letter { text-transform: uppercase; }
   .compact h1 { font-size: 1.5rem; letter-spacing: -0.02em; }
-  .sub { margin: 0.3rem 0 0; color: var(--muted); font-size: 0.9rem; }
-  .compact .sub { display: none; }
   .stats { display: flex; align-items: center; gap: 1.25rem; }
   .legend { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.2rem; }
   .legend li { display: grid; grid-template-columns: 16px 2ch auto; align-items: center; gap: 0.35rem; background: none; font-size: 0.82rem; }

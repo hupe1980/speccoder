@@ -1,4 +1,4 @@
-//! Recovery at every crash point (F-071, the M3 exit criterion): a recorded
+//! Recovery at every crash point (the M3 exit criterion): a recorded
 //! attempt is cut after each of its records, and each prefix is resumed as
 //! a restarted process would; agentplane's testkit checks every resume
 //! against the journal — finished effects read back, a quarantine only with
@@ -152,7 +152,7 @@ fn every_crash_point_of_an_attempt_resumes_honestly() {
         }
     }
     // A crash while the write or the command was running is a person's to
-    // decide (D-054); every other point resumes to the end.
+    // decide; every other point resumes to the end.
     assert!(
         quarantined >= 1,
         "no crash point fell inside a mutating call"

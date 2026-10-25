@@ -1,5 +1,5 @@
 //! `speccoder report --live` starts fast: the median of 20 runs of the release
-//! binary is under 100 ms (D-068, F-049), with no run recorded and with a
+//! binary is under 100 ms, with no run recorded and with a
 //! finished run's live state. Ignored in the debug suite; `just cold-start`
 //! runs it on a release build (`cargo test --release … -- --ignored`).
 

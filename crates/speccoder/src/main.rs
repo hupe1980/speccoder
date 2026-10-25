@@ -107,7 +107,7 @@ fn ui(
         return CommandResult::new(
             "ui",
             CommandStatus::UsageError,
-            "this speccoder was built without its window: `cargo install speccoder --features app`, or use the browser (`speccoder ui`)",
+            "this build has no window (on Linux, build with `--features app`); `speccoder ui` opens the browser",
         );
     }
     // The window must own the main thread: the host serves from another.
@@ -153,16 +153,7 @@ fn ui(
             "  (127.0.0.1 only; the address holds this session's key — do not share it; ctrl-c stops)"
         );
         if !no_open {
-            let opener = if cfg!(target_os = "macos") {
-                "open"
-            } else {
-                "xdg-open"
-            };
-            let _ = std::process::Command::new(opener)
-                .arg(&s.url)
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .spawn();
+            open_in_browser(&s.url);
         }
     });
     if announced.load(std::sync::atomic::Ordering::SeqCst) && served.is_ok() {
@@ -716,8 +707,8 @@ fn main() {
             *no_verify,
             *yes,
         ),
-        // A screen reader gets the report, not a redrawn screen (F-055).
-        // Not at a terminal, `--plain` or a screen reader: the report (F-055).
+        // A screen reader gets the report, not a redrawn screen.
+        // Not at a terminal, `--plain` or a screen reader: the report.
         Command::Tui if !dashboard(&cli) => {
             if !machine {
                 eprintln!("notice: no dashboard here; this is the report");
@@ -935,15 +926,12 @@ fn usage_error(args: &[String], e: &clap::Error) -> ! {
     if text_only {
         e.exit();
     }
-    // The command the line names: a known subcommand, or a former one.
+    // The command the line names, when it is a known subcommand.
     let known: Vec<String> = help::command()
         .get_subcommands()
         .map(|c| c.get_name().to_owned())
         .collect();
-    let named = args
-        .iter()
-        .skip(1)
-        .find(|a| known.iter().any(|k| k == *a) || help::FORMER.iter().any(|(old, _)| old == a));
+    let named = args.iter().skip(1).find(|a| known.iter().any(|k| k == *a));
     let command = named.map_or("speccoder", String::as_str);
     let conflict = e.kind() == ErrorKind::ArgumentConflict && json && stream;
     let message = e
@@ -953,9 +941,6 @@ fn usage_error(args: &[String], e: &clap::Error) -> ! {
         .unwrap_or_default()
         .trim_start_matches("error: ")
         .to_owned();
-    let former = help::FORMER
-        .iter()
-        .find(|(old, _)| Some(*old) == named.map(String::as_str));
     // A path or a task id where none is taken: say where it goes.
     let stray = (e.kind() == ErrorKind::UnknownArgument)
         .then(|| {
@@ -965,16 +950,12 @@ fn usage_error(args: &[String], e: &clap::Error) -> ! {
                 .cloned()
         })
         .flatten();
-    let (message, fix): (String, Vec<String>) = match (former, &stray) {
-        (Some((old, new)), _) => (
-            format!("`speccoder {old}` is now `{new}`"),
-            vec![(*new).to_owned()],
-        ),
-        (None, Some(a)) if std::path::Path::new(a).is_dir() => (
+    let (message, fix): (String, Vec<String>) = match &stray {
+        Some(a) if std::path::Path::new(a).is_dir() => (
             format!("{message}; a project path is given with -C"),
             vec![format!("speccoder -C {a} {command}")],
         ),
-        (None, Some(a)) if a.starts_with('T') && a[1..].chars().all(|c| c.is_ascii_digit()) => (
+        Some(a) if a.starts_with('T') && a[1..].chars().all(|c| c.is_ascii_digit()) => (
             format!("{message}; a task is given with --task, or as `task <verb> {a}`"),
             vec![
                 format!("speccoder {command} --task {a}"),
@@ -989,13 +970,13 @@ fn usage_error(args: &[String], e: &clap::Error) -> ! {
         &message,
     )
     .with_code(if conflict { "USAGE-CONFLICT" } else { "USAGE" })
-    .with_fix(if command == "speccoder" && former.is_none() {
+    .with_fix(if command == "speccoder" {
         vec!["speccoder help".to_owned()]
     } else {
         fix
     });
     let result = speccoder_runtime::next::attach(result, None);
-    if !(json || stream) && former.is_none() && stray.is_none() {
+    if !(json || stream) && stray.is_none() {
         // clap's own message, with its usage line and suggestions.
         e.exit();
     }
@@ -1026,7 +1007,7 @@ fn look_line() -> String {
 }
 
 /// `speccoder init`: write the configuration, run its checks on the
-/// untouched code, and at a terminal offer to commit it (F-057). Without a
+/// untouched code, and at a terminal offer to commit it. Without a
 /// terminal, with `--json` or `--yes`, nothing is committed; the fix line
 /// says what to commit.
 fn init(
@@ -1271,6 +1252,22 @@ fn verbosity(cli: &cli::Cli) -> progress::Verbosity {
     }
 }
 
+/// Opens `url` in the default browser; quietly does nothing without one.
+pub(crate) fn open_in_browser(url: &str) {
+    let mut cmd = if cfg!(target_os = "macos") {
+        std::process::Command::new("open")
+    } else if cfg!(windows) {
+        std::process::Command::new("explorer")
+    } else {
+        std::process::Command::new("xdg-open")
+    };
+    let _ = cmd
+        .arg(url)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn();
+}
+
 /// Live progress for a run: the printer, and around it the attention layer
 /// (notifications, title) — neither under `--json`.
 fn live_progress(
@@ -1302,7 +1299,7 @@ fn live_progress(
     (Some(layer.clone() as _), Some(layer))
 }
 
-/// The looks of stdout and stderr (F-055): `--color`, then `[ui] color`,
+/// The looks of stdout and stderr: `--color`, then `[ui] color`,
 /// then the environment and whether each is a terminal; never colour in
 /// machine output. Also what turned screen-reader mode on, if anything.
 fn resolve_looks(
@@ -1363,7 +1360,7 @@ fn resolve_looks(
 }
 
 /// `speccoder auth`: sign in to GitHub (a token from stdin, or the device
-/// flow when an OAuth App is configured), see who speccoder is, sign out.
+/// flow through speccoder's GitHub App), see who speccoder is, sign out.
 fn auth(path: &std::path::Path, action: Option<&cli::AuthAction>) -> speccoder_core::CommandResult {
     use speccoder_runtime::github;
     let ctx = github::Ctx::from_env();
@@ -1418,16 +1415,7 @@ fn auth(path: &std::path::Path, action: Option<&cli::AuthAction>) -> speccoder_c
                 if copied { "   (copied)" } else { "" },
                 pending.verification_uri
             );
-            let opener = if cfg!(target_os = "macos") {
-                "open"
-            } else {
-                "xdg-open"
-            };
-            let _ = std::process::Command::new(opener)
-                .arg(&pending.verification_uri)
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .spawn();
+            open_in_browser(&pending.verification_uri);
             match github::auth::wait(&oauth, &client, &pending) {
                 Ok(token) => {
                     let signed = github::login_with_token(&ctx, &host, token.expose());

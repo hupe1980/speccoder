@@ -1,4 +1,4 @@
-//! Measuring the acceptance set's strength (F-060, D-085): wrong and
+//! Measuring the acceptance set's strength: wrong and
 //! permitted candidates of a verified task's change, run against its
 //! acceptance tests.
 //!

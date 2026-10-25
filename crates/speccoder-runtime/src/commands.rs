@@ -371,14 +371,6 @@ pub fn replay_with(path: &Path, run: &str, state: &Path) -> CommandResult {
         result: result.to_owned(),
         detail,
     };
-    if let Ok(Some(kind)) = rt.block_on(substrate::earlier_ask(&s.plane_dir, run)) {
-        let message = format!(
-            "this build cannot re-derive the run: it asked a person through `{kind}`, the mechanism before decisions were recorded as tasks (F-072)"
-        );
-        return CommandResult::new("replay", CommandStatus::NotReplayable, &message).with_data(
-            CommandData::Replay(report("not_replayable", message.clone())),
-        );
-    }
     let result = rt.block_on(substrate::replay_strict(
         &s.plane_dir,
         &s.model,

@@ -1,4 +1,4 @@
-//! Quick changes (F-094): a small change becomes a story, an approved
+//! Quick changes: a small change becomes a story, an approved
 //! requirement and a ready task in the standing unit, committed — then it
 //! runs like any other task.
 

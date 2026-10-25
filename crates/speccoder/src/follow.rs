@@ -1,4 +1,4 @@
-//! The next step, taken (F-075, D-087): at a terminal, after a planning
+//! The next step, taken: at a terminal, after a planning
 //! step, a decision or the report, speccoder offers what comes next — commit
 //! the planning files, the next planning skill, the run — one yes at a time.
 //! Each offer shows where the feature is on its journey and the command the

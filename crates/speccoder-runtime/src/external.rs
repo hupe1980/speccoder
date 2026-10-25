@@ -141,7 +141,7 @@ pub struct Outcome {
 /// The argv for an executor; `allow` are the commands speccoder allows
 /// (checks and `[commands] allow`), passed to agents with a permission system;
 /// `withheld` is a directory the agent is told not to read (the held-out
-/// tests, F-059) — withheld, not sealed: only Claude Code takes such a rule.
+/// tests) — withheld, not sealed: only Claude Code takes such a rule.
 #[must_use]
 pub fn argv(
     exec: &Executor,

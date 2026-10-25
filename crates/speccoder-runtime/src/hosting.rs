@@ -81,7 +81,7 @@ pub fn run_with(
 ///
 /// The person's review records (`review.json`) are the person's: a skill
 /// that changed one — through a command it was allowed to run — has the
-/// change undone, and the result says so (F-087).
+/// change undone, and the result says so.
 #[allow(clippy::too_many_arguments)]
 pub fn run_in(
     path: &Path,

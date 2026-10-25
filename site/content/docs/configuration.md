@@ -7,7 +7,7 @@ weight = 120
 group = "Reference"
 +++
 
-speccoder is configured by `speccoder.toml` at the project root. It must be **committed** — speccoder reads committed files only — so a change to it is reviewed like code. `speccoder init` writes a commented one; unknown sections and keys are errors, so a typo never goes unnoticed.
+speccoder is configured by `speccoder.toml` at the project root. speccoder reads only the **committed** file, so a change is reviewed like code. `speccoder init` writes a commented one. Unknown sections and keys are errors.
 
 ```toml
 [checks.test]
@@ -31,7 +31,7 @@ network_allow = [["cargo", "fetch"]]
 
 ## Changing it
 
-Edit the file, or let speccoder do it — the result is checked by every parser before it is written, and the file's comments, order and layout are kept:
+Edit the file, or use `speccoder config`. Its edits are checked by every parser before they are written, and keep the file's comments, order and layout:
 
 ```sh
 speccoder config                                   # every key: its value, or its default
@@ -44,7 +44,7 @@ speccoder config unset budget.max_turns            # back to the default
 speccoder config commit                            # commits speccoder.toml, and nothing else
 ```
 
-The same is **Settings** in the [web interface](@/docs/web.md#settings): every section and key as a control that fits it, with its default and what it does. Either way a change is in force once committed — speccoder reads committed configuration only.
+**Settings** in the [web interface](@/docs/web.md#settings) does the same. Either way, a change takes effect once committed.
 
 ## `[checks.<name>]`
 
@@ -54,8 +54,8 @@ The commands that decide whether nothing regressed. A check's command up to its 
 |---|---|---|
 | `argv` | required | Program and arguments, run without a shell |
 | `cwd` | `"."` | Working directory, relative to the project root |
-| `when_exists` | — | Run only if this path exists; otherwise the check is skipped, never "passed" |
-| `tier` | `"fast"` | `fast` checks judge every task; `full` checks (slow linters, audits) run once after a run ticks the feature's last task, and with `speccoder verify` |
+| `when_exists` | — | Run only if this path exists; otherwise the check is skipped, never passed |
+| `tier` | `"fast"` | `fast` judges every task; `full` (slow linters, audits) runs once after a run ticks the feature's last task, and with `speccoder verify` |
 | `timeout_secs` | `600` | Deadline for the whole process group |
 | `junit` | — | A JUnit XML report the check writes, for per-test results and regression detection |
 
@@ -69,12 +69,12 @@ The commands that decide whether nothing regressed. A check's command up to its 
 | `max_run_tokens` | `200000` | Per attempt |
 | `cache_ttl` | `"5m"` | Anthropic prompt-cache lifetime: `5m` or `1h` |
 | `base_url` | — | Required for `openai-compatible` (e.g. `http://localhost:11434/v1`); for `openai`, a gateway in front of the Responses API |
-| `api_key_env` | — | `openai-compatible` only: the variable holding the server's key, if it wants one |
-| `structured` | `"native"` | `openai-compatible` only: `native` structured output, or `tool` (a forced tool call; for steps without tools) |
+| `api_key_env` | — | `openai-compatible` only: the variable holding the server's key, if it needs one |
+| `structured` | `"native"` | `openai-compatible` only: `native` structured output, or `tool` (a forced tool call) |
 | `price_input_per_mtok`, `price_output_per_mtok`, `price_cache_read_per_mtok` | — | USD per million tokens, for `speccoder report --cost` and live cost |
-| `price_cache_write_per_mtok`, `price_cache_write_1h_per_mtok` | Anthropic: 1.25× and 2× input; others: input | USD per million tokens written to the five-minute and the one-hour cache (`cache_ttl` decides which) |
+| `price_cache_write_per_mtok`, `price_cache_write_1h_per_mtok` | Anthropic: 1.25× and 2× input; others: input | USD per million tokens written to the five-minute and the one-hour cache |
 
-The key comes from `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` — never from this file. A local model must support tool calls and structured output; whether it is good enough is a question for the [evaluation suite](@/docs/evaluation.md).
+The API key comes from `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`, never from this file. A local model must support tool calls and structured output; the [evaluation suite](@/docs/evaluation.md) tells whether it is good enough.
 
 ## `[budget]`
 
@@ -85,31 +85,14 @@ The key comes from `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` — never from this f
 | `max_attempts` | `2` | Attempts per task run; a failed verdict is retried with the verifier's facts |
 | `best_of` | `1` | Independent samples per task, the best by evidence kept (at most 10) |
 
-## `[commands]`
+## `[commands]`, `[approvals]`, `[tests]`, `[spec]`
 
 | Key | Default | Meaning |
 |---|---|---|
-| `allow` | `[]` | Argv prefixes the model may run without approval, besides the checks, e.g. `[["cargo", "check"]]` |
-
-Keep the list narrow: an allowed command runs whatever the model passes after the prefix.
-
-## `[approvals]`
-
-| Key | Default | Meaning |
-|---|---|---|
-| `wait` | `"7d"` | How long a call waits for a person (`m`, `h` or `d`) before it is denied as expired — recorded as an expiry, not as anyone's decision |
-
-## `[tests]`
-
-| Key | Default | Meaning |
-|---|---|---|
-| `frozen` | `"ask"` | Tests that existed before an attempt: `ask` before any change, or `additions` — new lines may be added without asking; changing or removing lines still asks |
-
-## `[spec]`
-
-| Key | Default | Meaning |
-|---|---|---|
-| `[spec] format` | detected | The spec format: `speckit`, `openspec` or `kiro`. `--format` and `SPECCODER_FORMAT` override it. This version runs Spec Kit; OpenSpec and Kiro are recognised and refused as not yet supported |
+| `[commands] allow` | `[]` | Argv prefixes the model may run without approval, besides the checks, e.g. `[["cargo", "check"]]`. Keep it narrow: a prefix allows whatever follows it |
+| `[approvals] wait` | `"7d"` | How long a call waits for a person (`m`, `h` or `d`) before it is denied as expired; recorded as an expiry, not as anyone's decision |
+| `[tests] frozen` | `"ask"` | Tests that existed before an attempt: `ask` before any change, or `additions` (new lines need no approval; changing or removing lines does) |
+| `[spec] format` | detected | `speckit`, `openspec` or `kiro`; `--format` and `SPECCODER_FORMAT` override it. Kiro is recognised and refused as unsupported |
 
 ## `[context]`
 
@@ -122,17 +105,17 @@ Keep the list narrow: an allowed command runs whatever the model passes after th
 | Key | Default | Meaning |
 |---|---|---|
 | `[acceptance] generate` | `true` | Derive acceptance tests from the spec before each attempt |
-| `[acceptance] held_out` | `true` | Also write [held-out tests](@/docs/evidence.md#held-out-tests) the implementer never sees; `verified` needs them to pass. No effect without `generate`. Costs one more author call per task and one run per held-out file |
-| `[acceptance] strength` | `true` | Measure the [acceptance strength](@/docs/evidence.md#acceptance-strength) of every `verified` task: one more model call and one test run per variant |
+| `[acceptance] held_out` | `true` | Also write [held-out tests](@/docs/evidence.md#held-out-tests) the implementer never sees; `verified` needs them to pass. Needs `generate`. Costs one author call per task and one run per held-out file |
+| `[acceptance] strength` | `true` | Measure the [acceptance strength](@/docs/evidence.md#acceptance-strength) of every `verified` task: one model call and one test run per variant |
 | `[acceptance] min_strength` | — | `0.0`–`1.0`: below it the set is strengthened once, then the task stops for you; unset, strength never changes a verdict |
 | `[acceptance] near_miss` | `2` | Wrong variants to try (`0`–`3`) |
 | `[acceptance] permitted` | `1` | Spec-permitted alternatives to try (`0`–`2`); `0` turns off the [over-strict check](@/docs/evidence.md#over-strict-tests) |
-| `[acceptance] strength_timeout_secs` | `900` | Budget for the whole measurement; what ran by then is recorded as partial (a partial strength meets no `min_strength`) |
+| `[acceptance] strength_timeout_secs` | `900` | Budget for the whole measurement; a measurement cut off is recorded as partial and meets no `min_strength` |
 | `[converge] max_rounds` | `3` | Convergence phases a feature may get |
 | `[review] required` | `false` | A run waits until every requirement is [approved](@/docs/planning.md#review-the-spec) on its current wording (`REVIEW-PENDING`) |
 | `[monitor] enabled` | `false` | Review every passing attempt with the [gaming monitor](@/docs/evidence.md#the-gaming-monitor) |
 | `[git] commit` | `"per-task"` | `per-task` commits each passed task; `none` leaves changes uncommitted |
-| `[format] argv` | — | A formatter speccoder runs after each attempt (e.g. `["cargo", "fmt"]`); its changes are part of the attempt and audited. Not the spec format: that is `[spec] format` |
+| `[format] argv` | — | A formatter run after each attempt (e.g. `["cargo", "fmt"]`); its changes are part of the attempt and audited. The spec format is `[spec] format` |
 
 ## `[sandbox]`
 
@@ -143,43 +126,41 @@ Keep the list narrow: an allowed command runs whatever the model passes after th
 | `network_allow` | `[]` | Command prefixes that get the network, e.g. `[["cargo", "fetch"]]` |
 | `writable` | `[]` | Extra writable paths (`~` is your home directory), e.g. `["~/.m2"]` for Maven |
 
-See [security and the sandbox](@/docs/security.md#the-os-sandbox) for what the sandbox allows.
+What the sandbox allows: [the OS sandbox](@/docs/security.md#the-os-sandbox).
 
 ## `[attest]`
 
-Signed [attestations](@/docs/attestations.md) of every tick.
+Signed [attestations](@/docs/attestations.md) of every tick. The signer is part of the judge configuration the statements' policy hash covers.
 
 | Key | Default | Meaning |
 |---|---|---|
 | `enabled` | `true` | Write the statements as a git note on each tick commit |
 | `signer` | `"git"` | `git` signs with your git signing key (SSH or OpenPGP), `sigstore` keyless with `cosign`, `none` leaves them unsigned |
-| `sign_at` | `"tick"` | `tick` signs as each task is ticked; `later` leaves that to `speccoder attest sign` (keys that need a touch or a passphrase) |
-| `[attest.sigstore] identity`, `issuer` | — | The identity and OIDC issuer you sign with: `speccoder pr` prints them in its verify command. A suggestion for the reviewer, never trust: `attest verify` trusts only its own flags |
-
-The signer is part of the judge configuration the statements' policy hash covers.
+| `sign_at` | `"tick"` | `tick` signs as each task is ticked; `later` leaves it to `speccoder attest sign` (for keys that need a touch or a passphrase) |
+| `[attest.sigstore] identity`, `issuer` | — | The identity and OIDC issuer you sign with, printed in `speccoder pr`'s verify command. A suggestion for the reviewer: `attest verify` trusts only its own flags |
 
 ## `[mutation]`
 
 | Key | Default | Meaning |
 |---|---|---|
-| `tool` | — | `cargo-mutants`, or `command` for any tool writing the mutation-testing JSON report |
+| `tool` | required | `cargo-mutants`, or `command` for any tool writing the mutation-testing JSON report |
 | `argv` | — | For `command`: the program; may use `{diff}`, `{out}`, `{files}` and `{files_csv}` |
 | `report` | — | For `command`: the report file (relative to the project, or under `{out}`) |
 | `mode` | `"report"` | `report` records the result; `require` fails the verdict when mutants survive |
 | `timeout_secs` | `900` | Limit for the whole mutation run |
 | `suite` | `true` | Run the mutants against the whole suite after a passing verdict; `false` uses the tool for [acceptance strength](@/docs/evidence.md#acceptance-strength) only |
-| `acceptance_argv` | — | For `command`: the program that runs the mutants against the acceptance tests alone; `{tests}` is the acceptance command (cargo-mutants needs none: it runs `cargo test` with the acceptance command's arguments) |
+| `acceptance_argv` | — | For `command`: the program that runs the mutants against the acceptance tests alone; `{tests}` is the acceptance command. cargo-mutants needs none |
 
 ## `[executor]`
 
+Who makes the attempts; see [external agents](@/docs/integrations.md#external-agents). Without the section, speccoder's own loop.
+
 | Key | Default | Meaning |
 |---|---|---|
-| `kind` | `"native"` | Who makes the attempts: `native`, `claude` (Claude Code), `codex`, or `command` |
+| `kind` | required | `native`, `claude` (Claude Code), `codex`, or `command` |
 | `model` | — | The agent's model |
 | `timeout_secs` | `1800` | How long one attempt may take |
 | `argv` | — | For `command`: the program, which reads the task on stdin |
-
-See [external agents](@/docs/integrations.md#external-agents).
 
 ## `[mcp.<name>]`
 
@@ -189,42 +170,41 @@ See [external agents](@/docs/integrations.md#external-agents).
 | `allow` | `[]` | Tools called without approval |
 | `deny` | `[]` | Tools never offered |
 
-Server names are lowercase letters, digits and `-` (not `fs`, `proc` or `git`). Their tools appear to the model as `mcp__<server>__<tool>`.
+Server names are lowercase letters, digits and `-`, and not `fs`, `proc` or `git`. Their tools appear to the model as `mcp__<server>__<tool>`.
 
 ## Your settings
 
-How speccoder looks and how it gets *your* attention is yours, not the project's: it lives in `$XDG_CONFIG_HOME/speccoder/config.toml` (else `~/.config/speccoder/config.toml`), never in `speccoder.toml` — a `[ui]` table there is refused (exit 13), naming where it belongs.
-
-```toml
-[ui.notify]
-on = ["approval", "task_failed", "feature_done", "stalled"]   # the default: all four
-when = "unfocused"     # or "always"
-method = "auto"        # auto | osc9 | osc777 | bel | command | off
-command = []           # with method = "command": the program and arguments; the message is appended
-stall_after = "15m"    # Ns | Nm | Nh, at least 30s
-```
+How speccoder looks and notifies you is your setting, not the project's. It lives in `$XDG_CONFIG_HOME/speccoder/config.toml` (else `~/.config/speccoder/config.toml`); a `[ui]` table in `speccoder.toml` is refused (exit 13).
 
 ```toml
 [ui]
 theme = "auto"         # auto | dark | light | high-contrast | daltonized | mono
-color = "auto"         # auto | always | never — under --color, over NO_COLOR
+color = "auto"         # auto | always | never; --color wins, this wins over NO_COLOR
 ascii = false          # [ok] [~] [A] … instead of ✓ ~ A …, plain box borders
-screen_reader = false  # labelled plain lines, numbered choices, no dashboard
+screen_reader = false  # labelled plain lines, no dashboard
+
+[ui.notify]
+on = ["approval", "task_failed", "feature_done", "stalled"]   # the default: all four
+when = "unfocused"     # or "always"
+method = "auto"        # auto | osc9 | osc777 | bel | command | off
+command = []           # with method = "command": program and arguments; the message is appended
+stall_after = "15m"    # Ns | Nm | Nh, at least 30s
 ```
 
-`auto` uses your terminal's 16 colours, so it follows your terminal's palette, dark or light; `dark` and `light` are fixed 24-bit palettes, `daltonized` tells states apart by blue and orange instead of green and red, `mono` uses only bold, dim, underline and reverse. Every state keeps its word or mark, so nothing is told by colour alone.
-
-In `[ui.notify]`, `auto` uses a desktop notification where the terminal shows one and a bell elsewhere. `command` runs the program without a shell, at most five seconds (for example `["terminal-notifier", "-title", "speccoder", "-message"]`). A value speccoder does not understand is a warning, and the default is used.
+- **Themes:** `auto` uses the terminal's 16 colours and so follows its palette; `dark` and `light` are fixed 24-bit palettes; `daltonized` uses blue and orange instead of green and red; `mono` uses only bold, dim, underline and reverse. Every state also has a word or mark.
+- **Notifications:** `auto` sends a desktop notification where the terminal shows one, a bell elsewhere. `command` runs without a shell, for at most five seconds (e.g. `["terminal-notifier", "-title", "speccoder", "-message"]`).
+- A value speccoder does not understand is a warning; the default applies.
 
 ## Environment
 
 | Variable | Meaning |
 |---|---|
 | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` | Model credentials |
-| `SPECCODER_STATE_DIR` | Where speccoder keeps worktrees, journals and decisions (default `$XDG_STATE_HOME/speccoder`, else `~/.local/state/speccoder`) |
+| `GH_TOKEN`, `GITHUB_TOKEN` | A GitHub token, instead of `speccoder auth login` ([GitHub](@/docs/github.md)) |
+| `SPECCODER_STATE_DIR` | Where worktrees, journals and decisions live (default `$XDG_STATE_HOME/speccoder`, else `~/.local/state/speccoder`) |
 | `SPECIFY_FEATURE_DIRECTORY` | Spec Kit's feature selection, honoured by every command |
 | `SPECCODER_FORMAT` | The spec format, like `--format` |
-| `NO_COLOR`, `FORCE_COLOR`, `CLICOLOR_FORCE`, `CLICOLOR`, `TERM` | Colour: `--color` decides first, then `[ui] color`, then `NO_COLOR` (any non-empty value: off), `FORCE_COLOR`/`CLICOLOR_FORCE` (on, also when piped), `CLICOLOR=0` and `TERM=dumb` (off); otherwise a terminal gets colour |
+| `NO_COLOR`, `FORCE_COLOR`, `CLICOLOR_FORCE`, `CLICOLOR`, `TERM` | Colour, after `--color` and `[ui] color`: `NO_COLOR` (non-empty) turns it off; `FORCE_COLOR` or `CLICOLOR_FORCE` turns it on, also when piped; `CLICOLOR=0` or `TERM=dumb` turns it off; otherwise a terminal gets colour |
 | `COLUMNS` | The width when the output is not a terminal (default 100) |
 | `LC_ALL`, `LC_CTYPE`, `LANG` | A locale that is set and not UTF-8 means ASCII marks |
 | `SPECCODER_SCREEN_READER` | Screen-reader mode, like `--screen-reader` |

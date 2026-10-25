@@ -1,5 +1,5 @@
 //! Test runners' own summaries → counts, for runs without a JUnit report
-//! (D-064). Each runner's summary lines are stable, documented output:
+//!. Each runner's summary lines are stable, documented output:
 //! libtest and nextest, pytest, jest and vitest, `go test`.
 //!
 //! `unresolved_only` is set when the code under test did not build or

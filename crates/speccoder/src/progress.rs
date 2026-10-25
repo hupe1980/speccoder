@@ -293,7 +293,7 @@ fn token_of(event: &Event) -> Option<crate::style::Token> {
     })
 }
 
-/// The event as labelled plain lines for a screen reader (F-055): a word
+/// The event as labelled plain lines for a screen reader: a word
 /// first, no symbols.
 #[must_use]
 pub fn reader_lines(event: &Event, verbosity: Verbosity) -> Vec<String> {

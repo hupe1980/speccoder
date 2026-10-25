@@ -1,4 +1,4 @@
-//! Hosting a run in the dashboard (F-058): the run works on a thread of its
+//! Hosting a run in the dashboard: the run works on a thread of its
 //! own; its progress events and its questions to the person come to the
 //! dashboard over one channel, and the person's answers go back to the
 //! waiting call. Nothing about the run changes — it is journaled, decided

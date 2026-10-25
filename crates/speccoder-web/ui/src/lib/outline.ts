@@ -1,4 +1,4 @@
-// A document's outline (F-090): its H2 and H3 headings with stable ids, and
+// A document's outline: its H2 and H3 headings with stable ids, and
 // the requirement IDs each section names — read from the host's rendered
 // HTML (which carries no ids of its own).
 

@@ -1,4 +1,4 @@
-//! The inbox (F-086): every decision waiting for a person, across features,
+//! The inbox: every decision waiting for a person, across features,
 //! the most urgent first, each with the actions that decide it.
 
 // Test code: panicking on unexpected input is the failure report.
@@ -59,7 +59,7 @@ fn repo() -> tempfile::TempDir {
     git(r, &["init", "-q", "-b", "main"]);
     git(r, &["add", "-A"]);
     git(r, &["commit", "-q", "-m", "init"]);
-    // The person approved both specs (F-087) and committed the review.
+    // The person approved both specs and committed the review.
     for f in ["001-login", "002-logout"] {
         let res = speccoder_runtime::review::decide(r, Some(f), &[], "approve", None, "cli");
         assert_eq!(

@@ -659,7 +659,7 @@
       "type": "object"
     },
     "Ruling": {
-      "description": "A person's ruling that an over-strict finding was wrong: the tests were\nright, the alternative is not what the spec allows (D-074).",
+      "description": "A person's ruling that an over-strict finding was wrong: the tests were\nright, the alternative is not what the spec allows.",
       "properties": {
         "by": {
           "description": "Who ruled.",
@@ -945,7 +945,7 @@
       "type": "string"
     },
     "attestation": {
-      "description": "What the tick's attestation came to: `{ state: signed | unsigned |\nmissing, signer, reason }` (F-061)."
+      "description": "What the tick's attestation came to: `{ state: signed | unsigned |\nmissing, signer, reason }`."
     },
     "changes": {
       "description": "Paths changed between the checkpoints: `added` / `modified` / `deleted`.",
@@ -983,7 +983,7 @@
       "type": "string"
     },
     "instructions": {
-      "description": "The repository's instructions the attempt was given (`AGENTS.md`,\nF-073), root first.",
+      "description": "The repository's instructions the attempt was given (`AGENTS.md`,\n`CLAUDE.md`, …), root first.",
       "items": {
         "$ref": "#/$defs/InstructionFile"
       },
@@ -1072,7 +1072,7 @@
           "type": "null"
         }
       ],
-      "description": "The acceptance set's strength (F-060): after a `verified` verdict."
+      "description": "The acceptance set's strength: after a `verified` verdict."
     },
     "task": {
       "description": "Task ID.",

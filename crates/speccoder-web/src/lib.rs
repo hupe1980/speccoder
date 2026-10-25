@@ -1,4 +1,4 @@
-//! speccoder's web interface (F-076, D-087): a host on 127.0.0.1 that
+//! speccoder's web interface: a host on 127.0.0.1 that
 //! serves the interface — embedded in the binary — and an API over
 //! speccoder's own payloads. The page, a browser tab or the desktop window,
 //! holds no logic of its own: what it shows and offers comes from the
@@ -39,7 +39,7 @@ pub struct Shared {
     pub hub: Arc<jobs::Hub>,
     /// Turns true when the host stops: open event streams end with it.
     pub closing: tokio::sync::watch::Receiver<bool>,
-    /// A GitHub sign-in waiting for the person to enter its code (F-092):
+    /// A GitHub sign-in waiting for the person to enter its code:
     /// the host, the app and the pending device code — never sent to the page.
     pub device:
         Arc<std::sync::Mutex<Option<(String, String, speccoder_runtime::github::auth::Pending)>>>,

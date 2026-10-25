@@ -649,6 +649,7 @@ fn f_picks_the_feature_and_a_working_run_keeps_its_own() {
         action: "listed".to_owned(),
         features: vec![
             speccoder_core::FeatureEntry {
+                title: None,
                 number: 1,
                 name: "001-x".to_owned(),
                 dir: "specs/001-x".to_owned(),
@@ -658,6 +659,7 @@ fn f_picks_the_feature_and_a_working_run_keeps_its_own() {
                 artifacts: vec!["spec".to_owned(), "plan".to_owned(), "tasks".to_owned()],
             },
             speccoder_core::FeatureEntry {
+                title: None,
                 number: 2,
                 name: "002-y".to_owned(),
                 dir: "specs/002-y".to_owned(),

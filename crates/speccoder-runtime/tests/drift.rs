@@ -1,4 +1,4 @@
-//! Drift (F-085): a tick judged against an earlier spec says so, and says
+//! Drift: a tick judged against an earlier spec says so, and says
 //! which of its requirements changed.
 
 // Test code: panicking on unexpected input is the failure report.

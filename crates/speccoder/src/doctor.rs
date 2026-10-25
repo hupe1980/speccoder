@@ -1,4 +1,4 @@
-//! `speccoder doctor` as text, and `doctor --bug-report` (F-057): the
+//! `speccoder doctor` as text, and `doctor --bug-report`: the
 //! checks in Markdown, ready for an issue, with secrets and home
 //! directories taken out.
 

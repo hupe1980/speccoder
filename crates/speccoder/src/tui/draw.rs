@@ -1,4 +1,4 @@
-//! Drawing the dashboard (F-058): the Run, Evidence and Report screens and
+//! Drawing the dashboard: the Run, Evidence and Report screens and
 //! the approval, diff, help and quit overlays. Styles come only from the
 //! person's look (`style::tui_style`), marks from its glyph table, and every
 //! text passes through it, so ASCII mode is ASCII throughout.
@@ -509,7 +509,7 @@ fn queue(f: &mut Frame<'_>, app: &App, area: Rect) {
     if items.is_empty() {
         items.push(ListItem::new("nothing waits for a decision"));
     }
-    // The selected call in detail, as the inline prompt shows it (F-054).
+    // The selected call in detail, as the inline prompt shows it.
     if let Some(v) = pending
         .get(app.approval.min(pending.len().saturating_sub(1)))
         .and_then(|p| p.presentation.as_ref())

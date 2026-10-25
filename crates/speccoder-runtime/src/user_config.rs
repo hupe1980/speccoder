@@ -1,4 +1,4 @@
-//! The person's own settings, `~/.config/speccoder/config.toml` (D-069):
+//! The person's own settings, `~/.config/speccoder/config.toml`:
 //! how speccoder gets their attention. Never read from the committed
 //! `speccoder.toml`, which is the project's policy.
 
@@ -97,7 +97,7 @@ pub fn path() -> Option<PathBuf> {
     .map(|base| base.join("speccoder").join("config.toml"))
 }
 
-/// How output looks (`[ui]`, F-055): values as written, checked here;
+/// How output looks (`[ui]`): values as written, checked here;
 /// unset is `None` (the renderer's default).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Ui {

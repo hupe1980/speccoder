@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Sign in to GitHub (F-089, F-092): through speccoder's GitHub App with a
+  // Sign in to GitHub: through speccoder's GitHub App with a
   // code — shown big, copied, GitHub's page a click away, the sheet waiting
   // until it is entered — or with a token pasted once. Either way the token
   // goes to the system keychain, never into the page, a file or a log.

@@ -20,3 +20,9 @@ export const word = (state: string) => marks[state]?.[1] ?? state.replaceAll("_"
 export const symbol = (state: string) => marks[state]?.[2] ?? "circle";
 /** The order work flows in, for bars and rings. */
 export const ORDER = ["verified", "regression_only", "attested", "ticked_without_evidence", "skipped", "ready", "blocked"];
+
+// "Phase 3: User Story 1 - Login (Priority: P1) 🎯 MVP" → "US1 · Login".
+export const phaseLabel = (phase: string): string => {
+  const m = phase.match(/User Story (\d+)\s*[-–—:]\s*(.*?)\s*(?:\(Priority[^)]*\))?\s*(?:🎯\s*MVP)?\s*$/);
+  return m ? `US${m[1]} · ${m[2]}` : phase.replace(/^Phase \d+:\s*/, "");
+};

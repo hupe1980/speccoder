@@ -1,4 +1,4 @@
-//! The dashboard (F-058): one terminal app with three screens — Run,
+//! The dashboard: one terminal app with three screens — Run,
 //! Evidence, Report — and overlays for an approval, a diff, help and
 //! quitting.
 //!
@@ -767,7 +767,7 @@ impl App {
 }
 
 /// Set when the person pressed `n`: leave the dashboard and take the next
-/// step at the terminal (D-087: the dashboard is a live view; steps are
+/// step at the terminal (the dashboard is a live view; steps are
 /// taken by the CLI, and by the web UI later).
 static HANDOFF: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 

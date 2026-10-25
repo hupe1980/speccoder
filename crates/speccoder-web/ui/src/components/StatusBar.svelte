@@ -1,5 +1,5 @@
 <script lang="ts">
-  // The status bar (F-088), as VS Code's: the project on the left — the
+  // The status bar, as VS Code's: the project on the left — the
   // feature, its branch, its verdicts, the spec's review, drift — and what
   // is happening on the right — the run, spend, the model, the sandbox, the
   // decisions waiting, the host. Each item is a button to where it leads.
@@ -45,7 +45,7 @@
     {#if r}
       <button onclick={() => (app.palette = true)} title="The current feature — switch in the palette (⌘K)"><Icon name="list" size={12} />{r.feature}</button>
       {#if r.branch}
-        <button onclick={() => go("code")} title="The feature's branch{r.unmerged_commits ? `: ${r.unmerged_commits} commit(s) not merged` : ''}"><Icon name="branch" size={12} />{r.branch.replace(/^speccoder\//, "")}{#if r.unmerged_commits}<span class="dim">↑{r.unmerged_commits}</span>{/if}</button>
+        <button onclick={() => go("code")} title="The feature's branch{r.unmerged_commits ? `: ${r.unmerged_commits} ${r.unmerged_commits === 1 ? 'commit' : 'commits'} not merged` : ''}"><Icon name="branch" size={12} />{r.branch.replace(/^speccoder\//, "")}{#if r.unmerged_commits}<span class="dim">↑{r.unmerged_commits}</span>{/if}</button>
       {/if}
       <button onclick={() => go("board")} title="Verified · regression only · ready · blocked">
         <span class="v">✓ {t.verified ?? 0}</span>{#if t.regression_only}<span class="r">~ {t.regression_only}</span>{/if}<span class="dim">· {t.ready ?? 0} ready</span>{#if t.blocked}<span class="dim">· {t.blocked} blocked</span>{/if}

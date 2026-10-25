@@ -585,7 +585,7 @@ impl Plane {
             .await
     }
 
-    /// Runs `speccoder.task.near_miss` (F-060), admitted once per input like
+    /// Runs `speccoder.task.near_miss`, admitted once per input like
     /// [`monitor`](Self::monitor): a held attempt judged again after a
     /// person's ruling meets the same variants, not new ones.
     pub async fn near_miss(
@@ -825,32 +825,7 @@ pub async fn replay_strict(
         .map_err(|e| PlaneError(e.to_string()))
 }
 
-/// The effects speccoder recorded a person's answer with before F-072.
-pub const EARLIER_ASKS: [&str; 2] = ["speccoder.approval.ask", "speccoder.person.answer"];
-
-/// The earlier ask effect `run` recorded, if any: such a run asked a person
-/// through a mechanism this build no longer has, so it cannot be
-/// re-derived and replay says so rather than reporting a divergence.
-pub async fn earlier_ask(dir: &Path, run: &str) -> Result<Option<String>, PlaneError> {
-    let Ok(id) = agentplane::core::RunId::parse(run) else {
-        return Ok(None);
-    };
-    let store = open_store(dir)?;
-    let history = store
-        .read(id, 1)
-        .await
-        .map_err(|e| PlaneError(e.to_string()))?;
-    Ok(history.iter().find_map(|r| match &r.body.kind {
-        agentplane::journal::RecordKind::EffectStarted { descriptor, .. }
-            if EARLIER_ASKS.contains(&descriptor.kind.as_str()) =>
-        {
-            Some(descriptor.kind.clone())
-        }
-        _ => None,
-    }))
-}
-
-/// What the model said in each turn of `run`, in order (F-095): the text
+/// What the model said in each turn of `run`, in order: the text
 /// of every `model.complete` effect the journal holds — its account, a
 /// claim. Empty turns are left out.
 ///
@@ -875,8 +850,13 @@ pub async fn narration(dir: &Path, run: &str) -> Result<Vec<String>, PlaneError>
             }
             agentplane::journal::RecordKind::EffectDone { output, .. } if model => {
                 model = false;
-                if let Some(text) = output["text"]
-                    .as_str()
+                // A turn without calls is the final answer, not narration.
+                let calls = output["tool_calls"]
+                    .as_array()
+                    .is_some_and(|c| !c.is_empty());
+                if let Some(text) = calls
+                    .then(|| output["text"].as_str())
+                    .flatten()
                     .map(str::trim)
                     .filter(|t| !t.is_empty())
                 {

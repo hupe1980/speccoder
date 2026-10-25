@@ -1,4 +1,4 @@
-//! A task's evidence, as rows every interface renders (D-087).
+//! A task's evidence, as rows every interface renders.
 
 use serde::Serialize;
 

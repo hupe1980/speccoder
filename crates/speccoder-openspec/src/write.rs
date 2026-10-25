@@ -1,5 +1,5 @@
 //! The engine's two writes to a change's `tasks.md`: a one-byte tick and the
-//! convergence append (D-060). Both re-read the file and refuse when it
+//! convergence append. Both re-read the file and refuse when it
 //! changed since speccoder read it.
 
 use std::path::Path;

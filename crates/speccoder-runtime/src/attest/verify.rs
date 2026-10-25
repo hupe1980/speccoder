@@ -747,18 +747,17 @@ pub fn report(cx: &Context<'_>, targets: &[Target], require_signed: bool) -> Com
             })
         })
         .collect();
-    let mut totals: BTreeMap<String, usize> = [
+    // In the order the summary reads: ok first, then the worst first.
+    const KINDS: [&str; 7] = [
         "ok",
-        "unsigned",
         "missing",
-        "bad_signature",
-        "untrusted_signer",
-        "mismatch",
         "malformed",
-    ]
-    .iter()
-    .map(|k| ((*k).to_owned(), 0))
-    .collect();
+        "bad_signature",
+        "mismatch",
+        "untrusted_signer",
+        "unsigned",
+    ];
+    let mut totals: BTreeMap<String, usize> = KINDS.iter().map(|k| ((*k).to_owned(), 0)).collect();
     for o in &objects {
         *totals.entry(o.outcome.word().to_owned()).or_default() += 1;
     }
@@ -767,10 +766,14 @@ pub fn report(cx: &Context<'_>, targets: &[Target], require_signed: bool) -> Com
         VerifyOutcome::Unsigned => require_signed,
         _ => true,
     });
-    let summary: Vec<String> = totals
+    let summary: Vec<String> = KINDS
         .iter()
-        .filter(|(_, n)| **n > 0)
-        .map(|(k, n)| format!("{n} {k}"))
+        .filter_map(|k| {
+            totals
+                .get(*k)
+                .filter(|n| **n > 0)
+                .map(|n| format!("{n} {k}"))
+        })
         .collect();
     let message = format!(
         "{} task object(s): {}",

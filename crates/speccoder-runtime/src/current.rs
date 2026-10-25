@@ -126,9 +126,10 @@ fn report(format: &dyn Adapter, snap: &ProjectSnapshot, action: &str) -> Feature
             FeatureEntry {
                 number: i + 1,
                 name: f.name.clone(),
+                title: title(format, &root.join(&f.dir)),
                 dir: f.dir.clone(),
                 current: current.as_deref() == Some(f.name.as_str()),
-                done,
+                done: done.max(branch_ticks(format, root, &f.name, &f.dir)),
                 tasks,
                 artifacts,
             }
@@ -146,6 +147,27 @@ fn report(format: &dyn Adapter, snap: &ProjectSnapshot, action: &str) -> Feature
         action: action.to_owned(),
         features,
     }
+}
+
+/// The title its requirements document gives (`# Feature Specification:
+/// URL slugs` → `URL slugs`).
+fn title(format: &dyn Adapter, dir: &Path) -> Option<String> {
+    let text = std::fs::read_to_string(dir.join(format.requirements_file()?)).ok()?;
+    let h1 = text.lines().find_map(|l| l.strip_prefix("# "))?.trim();
+    let t = h1.split_once(": ").map_or(h1, |(_, t)| t).trim();
+    (!t.is_empty()).then(|| t.to_owned())
+}
+
+/// Ticked tasks on the feature's branch: speccoder ticks there, so the
+/// checkout lags until the branch is merged.
+fn branch_ticks(format: &dyn Adapter, root: &Path, name: &str, dir: &str) -> usize {
+    let file = format!("{dir}/{}", format.messages().tasks_file);
+    crate::git::Git::at(root)
+        .run(&["show", &format!("speccoder/{name}:{file}")])
+        .map_or(0, |out| {
+            let (parsed, _) = format.parse_tasks(&file, &String::from_utf8_lossy(&out));
+            parsed.tasks.iter().filter(|t| t.done).count()
+        })
 }
 
 /// `speccoder feature`: every feature, the current one marked.

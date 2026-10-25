@@ -1,4 +1,4 @@
-//! A feature's code as a person reads it (F-081): what its branch changed
+//! A feature's code as a person reads it: what its branch changed
 //! since it forked — by commit, by file — and its files. The revision is
 //! never the caller's: it is the feature's branch, or `HEAD` before
 //! speccoder worked on it; a file is read only when the tree lists it.

@@ -359,7 +359,7 @@
           "type": "object"
         },
         {
-          "description": "Record a quick change and, when `run`, run it (F-094).",
+          "description": "Record a quick change and, when `run`, run it.",
           "properties": {
             "checks": {
               "description": "When it is done: its acceptance scenarios.",
@@ -420,7 +420,7 @@
   },
   "$id": "https://hupe1980.github.io/speccoder/schemas/v2/inbox.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Result of `speccoder inbox` (F-086): every decision that waits for a\nperson, across the project's features, the most urgent first — the\nperson's work once the agents write the code.",
+  "description": "Result of `speccoder inbox`: every decision that waits for a\nperson, across the project's features, the most urgent first — the\nperson's work once the agents write the code.",
   "properties": {
     "features": {
       "description": "Features looked at.",

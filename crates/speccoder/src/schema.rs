@@ -1,4 +1,4 @@
-//! The JSON Schemas of everything speccoder prints (F-056), generated from
+//! The JSON Schemas of everything speccoder prints, generated from
 //! the very types that print it: the result envelope, one schema per
 //! payload (`payload` in the envelope names it) and the event line.
 //! Published under `site/static/schemas/v2/`; a test keeps them in step.

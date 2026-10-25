@@ -511,7 +511,7 @@ pub fn init_with(
         &provider,
         &model,
     );
-    // The repository's instructions for agents (F-073): AGENTS.md is read by
+    // The repository's instructions for agents: AGENTS.md is read by
     // default; a repository that only has CLAUDE.md gets it named too.
     let instructions: Vec<String> = ["AGENTS.md", "CLAUDE.md"]
         .iter()
@@ -626,7 +626,7 @@ pub fn init_with(
 }
 
 /// Runs the fast-tier checks of the configuration `init` just wrote on the
-/// untouched code, confined like in a run (F-057).
+/// untouched code, confined like in a run.
 #[must_use]
 pub fn verify_written(root: &Path) -> Vec<speccoder_core::InitRun> {
     use speccoder_core::verify::CheckStatus;

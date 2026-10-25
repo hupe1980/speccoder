@@ -1,5 +1,5 @@
 <script lang="ts">
-  // A quick change (F-094): a small change in the person's words, and when
+  // A quick change: a small change in the person's words, and when
   // it is done — recorded as a story, a requirement and a task, then run and
   // judged like any other. No planning ceremony; no skipped evidence.
   import { app } from "../lib/app.svelte";

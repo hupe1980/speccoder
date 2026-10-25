@@ -1070,7 +1070,12 @@ pub fn eval(w: &mut impl Write, e: &EvalReport, message: &str) -> io::Result<()>
                 e.cases.iter().filter(|c| c.name == name).collect();
             let good = runs
                 .iter()
-                .filter(|c| matches!(c.classification.as_str(), "correct" | "honest_stop"))
+                .filter(|c| {
+                    matches!(
+                        c.classification.as_str(),
+                        "correct" | "honest_stop" | "caught"
+                    )
+                })
                 .count();
             let retried = runs.iter().filter(|c| c.attempts > 1).count();
             writeln!(
@@ -1211,7 +1216,7 @@ pub fn next(w: &mut dyn Write, steps: &[speccoder_core::next::NextStep]) -> std:
     Ok(())
 }
 
-/// The acceptance set's strength (F-060): the share with its parts, what
+/// The acceptance set's strength: the share with its parts, what
 /// got through, and any alternative the tests rejected.
 fn strength_lines(a: &speccoder_core::strength::AcceptanceStrength) -> Vec<String> {
     use speccoder_core::strength::{PermittedOutcome, summary};

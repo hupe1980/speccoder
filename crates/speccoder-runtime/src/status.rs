@@ -29,7 +29,7 @@ struct Evidence {
     task_line: String,
     /// The intent it was judged against, when made in place.
     intent: String,
-    /// `Acceptance-Strength:` (F-060).
+    /// `Acceptance-Strength:`.
     strength: String,
 }
 

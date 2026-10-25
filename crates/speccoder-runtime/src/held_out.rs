@@ -1,4 +1,4 @@
-//! Held-out acceptance tests (F-059, D-061): written by a second author call
+//! Held-out acceptance tests: written by a second author call
 //! after the visible ones, kept in the state directory — never in the
 //! worktree, never in an implementer's input — red-checked on the
 //! checkpoint, and run over the final tree after an attempt that passed
@@ -229,7 +229,7 @@ pub fn literals(text: &str) -> BTreeSet<String> {
 
 /// Held-out literals in the attempt's added lines that it could only have
 /// copied: not in the spec, the visible tests or the tree it started from
-/// (research R8). For a native attempt this never fires; for an external
+///. For a native attempt this never fires; for an external
 /// agent, which can read the state directory, it is the mechanical check.
 #[must_use]
 pub fn leaked(
@@ -261,7 +261,7 @@ pub fn leaked(
 /// Where a finished feature's held-out sets are published.
 pub const REF_PREFIX: &str = "refs/speccoder/held-out";
 
-/// Publishes a finished feature's held-out sets (research R5): one commit,
+/// Publishes a finished feature's held-out sets: one commit,
 /// parented on the feature branch's tip, with `<task>/manifest.json` and
 /// `<task>/files/…` of every task, under `refs/speccoder/held-out/<feature>`.
 /// Only once the feature is done — earlier, a later task could read them.

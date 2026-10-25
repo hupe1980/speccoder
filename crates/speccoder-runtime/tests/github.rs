@@ -1,4 +1,4 @@
-//! GitHub, built in (F-089), against a stand-in API: readiness and its
+//! GitHub, built in, against a stand-in API: readiness and its
 //! reasons, issues (assigned first, then the freshest), one issue read in
 //! full, a pull request's state and checks — no `gh` anywhere.
 

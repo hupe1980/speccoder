@@ -453,7 +453,7 @@ fn prompt(
     let Some(command) = line.strip_prefix('/') else {
         let names: Vec<String> = COMMANDS.iter().map(|(n, ..)| format!("/{n}")).collect();
         say(&format!(
-            "speccoder runs Spec Kit features with evidence. Use a command: {}. Start a feature with `/specify <what to build>`.",
+            "speccoder implements spec-driven work and decides each task by evidence. Use a command: {}.",
             names.join(", ")
         ));
         return;

@@ -174,7 +174,7 @@ pub(crate) fn run_task(
             ),
         );
     }
-    // 2a'. So does an attempt held for a ruling on its tests (F-060).
+    // 2a'. So does an attempt held for a ruling on its tests.
     if options.lane.is_none()
         && let Some(other) = crate::strength::held_elsewhere(&plane_dir, &feature_name, task)
     {
@@ -312,7 +312,7 @@ pub(crate) fn run_task(
         }
     };
     // `[review] required`: the spec as committed in the worktree must be
-    // approved, every requirement on its current wording (F-087).
+    // approved, every requirement on its current wording.
     if run_config.review_required
         && let Some(f) = snap.feature.as_ref()
         && let Some(t) = crate::review::totals_of(&project, format, &feature_name, &f.feature.dir)
@@ -493,7 +493,7 @@ pub(crate) fn run_task(
         Ok(v) => v,
         Err(e) => return fail(CommandStatus::Error, e.to_string()),
     };
-    // The repository's instructions for agents (F-073), from the tree the
+    // The repository's instructions for agents, from the tree the
     // attempt starts in: for speccoder's own calls (the attempt, the test
     // authors); an external agent reads its own files.
     let instructions = crate::instructions::collect(
@@ -652,7 +652,7 @@ pub(crate) fn run_task(
     } else {
         None
     };
-    // 4c. The held-out set (F-059): written after a red visible set, kept in
+    // 4c. The held-out set: written after a red visible set, kept in
     //     the state directory, never shown to the implementer.
     let held_out_store = crate::held_out::dir(&s.plane_dir, &feature_name, task);
     if let Some(a) = acceptance
@@ -963,7 +963,7 @@ pub(crate) fn run_task(
                     }
                     Err(e) => return fail(CommandStatus::RunFailed, e.0),
                 };
-                // A call waits for a person (F-072). With one here they
+                // A call waits for a person. With one here they
                 // decide now, recorded with who they are, and the attempt
                 // continues; "later" or nobody leaves it waiting.
                 let context = crate::approvals::PresentContext {
@@ -1451,7 +1451,7 @@ pub(crate) fn run_task(
     // Scope: what the attempt changed beyond the paths its task names.
     report.scope = parsed_task.as_ref().map(|t| scope_of(&report, &t.title));
 
-    // 7c. Acceptance strength (F-060, D-085): the set a verified verdict
+    // 7c. Acceptance strength: the set a verified verdict
     //     rests on, run against wrong and permitted candidates. Judge-side;
     //     the implementer never sees a variant, a survivor or a finding.
     let strength_dir = crate::strength::dir(&s.plane_dir, &feature_name, task);
@@ -1832,7 +1832,7 @@ pub(crate) fn run_task(
                 cut: i.cut,
             })
             .collect();
-        // Signed, portable evidence of the tick (F-061): never undoes it.
+        // Signed, portable evidence of the tick: never undoes it.
         if let Some(commit) = report
             .commit
             .clone()
@@ -1899,7 +1899,7 @@ pub(crate) fn run_task(
     // 9. An attempt whose tests reject what the spec appears to allow is
     //    held for a person, as a waiting call is: its tree and resume marker
     //    stay, and after a ruling the next run judges it again from the
-    //    journal, repeating no model call (D-085).
+    //    journal, repeating no model call.
     if attempt_status == "over_strict" {
         let findings = report
             .strength

@@ -1,6 +1,6 @@
 <script lang="ts">
   // The feature's documents: each rendered from Markdown, with its outline
-  // in the side nav (F-090) — the headings, the section being read, the
+  // in the side nav — the headings, the section being read, the
   // requirements each section names (cited or not), a phase's progress in
   // the task list; [ and ] step through the sections.
   import { app } from "../lib/app.svelte";

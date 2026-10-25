@@ -154,6 +154,30 @@ fn the_outside_network_is_off_and_loopback_works() {
     assert!(!ok, "reached the Docker socket");
 }
 
+/// A daemon's Unix socket outside the workspace (Docker's is root on the
+/// host) is out of reach; the same connect works unsandboxed.
+#[test]
+fn a_daemon_socket_outside_the_workspace_is_unreachable() {
+    let w = world();
+    let Some(s) = sandboxed(w.root.path(), w.home.path(), Network::Loopback) else {
+        return;
+    };
+    let path = w.outside.path().join("d.sock");
+    let listener = std::os::unix::net::UnixListener::bind(&path).unwrap();
+    let connect = format!(
+        "python3 -I -c \"import socket; c=socket.socket(socket.AF_UNIX); c.connect('{}')\"",
+        path.display()
+    );
+    let free = std::process::Command::new("sh")
+        .args(["-c", &connect])
+        .status()
+        .unwrap();
+    assert!(free.success(), "the socket works unsandboxed");
+    let (ok, out) = sh(&s, w.root.path(), &connect);
+    assert!(!ok, "reached a daemon socket: {out}");
+    drop(listener);
+}
+
 #[test]
 fn git_push_from_a_test_fails() {
     let w = world();

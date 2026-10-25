@@ -1,4 +1,4 @@
-//! JUnit XML → per-test results (research R2): the common report format of
+//! JUnit XML → per-test results: the common report format of
 //! nextest, pytest `--junitxml`, jest-junit and Surefire.
 
 use quick_xml::events::{BytesStart, Event};

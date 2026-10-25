@@ -1,4 +1,4 @@
-//! `speccoder inbox` (F-086): every decision that waits for a person,
+//! `speccoder inbox`: every decision that waits for a person,
 //! across the project's features, the most urgent first. When agents write
 //! the code, this is the person's work: approve or refuse a call, rule on
 //! tests, look at a suspected shortcut, settle a changed spec, decide what
@@ -321,7 +321,7 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
         ));
     }
 
-    // The spec, reviewed requirement by requirement (F-087).
+    // The spec, reviewed requirement by requirement.
     if let Some(rv) = crate::review::summary(path, Some(feature)).as_ref() {
         let t = rv.totals;
         // The documents' open questions: answered before anything is built.

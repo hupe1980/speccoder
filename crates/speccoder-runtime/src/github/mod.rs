@@ -1,4 +1,4 @@
-//! GitHub, built in (F-089): its REST and GraphQL APIs, over TLS, as the
+//! GitHub, built in: its REST and GraphQL APIs, over TLS, as the
 //! person — a token from the environment or the one `speccoder auth login`
 //! kept in the credential store. No `gh` needed. Reading is free (issues, a
 //! branch's pull request); writing is `pr`, which a person confirms.

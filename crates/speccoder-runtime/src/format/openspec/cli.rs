@@ -1,4 +1,4 @@
-//! OpenSpec's own CLI as a second opinion (research R6): when `openspec` is
+//! OpenSpec's own CLI as a second opinion: when `openspec` is
 //! on PATH, `validate --strict --json` and `instructions apply --json` run
 //! read-only, sandboxed, telemetry off, and speccoder's parse is compared
 //! with theirs. Absent or unusable, the cross-check is skipped and says why.

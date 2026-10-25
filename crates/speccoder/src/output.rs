@@ -31,7 +31,7 @@ pub fn render_into(
         return writeln!(out);
     }
     // Rendered whole, then written: ASCII mode translates every symbol of
-    // every renderer in one place (F-055).
+    // every renderer in one place.
     let (mut body, mut block) = (Vec::new(), Vec::new());
     human_body(result, &mut body, &mut block)?;
     let shown = code_block(result, &mut block)?;

@@ -217,7 +217,7 @@ fn rules_reject_forbidden_edges() {
 
 /// Spec Kit's paths, files and commands, as string contents: only the Spec
 /// Kit adapter (`speccoder-runtime/src/format/speckit/`) may name them
-/// (F-050). `specs` matches a whole string only.
+///. `specs` matches a whole string only.
 const SPECKIT_LITERALS: &[&str] = &[
     ".specify",
     "specs/",

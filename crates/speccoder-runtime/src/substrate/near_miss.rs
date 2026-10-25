@@ -1,5 +1,5 @@
 //! `speccoder.task.near_miss`: wrong and permitted variants of a task's
-//! change, to test its acceptance tests (F-060, D-063, D-085).
+//! change, to test its acceptance tests.
 //!
 //! A judge-side call after a task was verified. It sees the task's spec and
 //! the final contents of the changed source files — never an acceptance

@@ -1,4 +1,4 @@
-//! Getting a person's attention during a long run (F-053, D-069): a
+//! Getting a person's attention during a long run: a
 //! notification when a call waits for them, a task fails, the feature ends or
 //! nothing happens for a while, and the terminal title following the run.
 //! Settings are the person's (`~/.config/speccoder/config.toml`), never the

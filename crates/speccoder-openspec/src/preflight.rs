@@ -1,5 +1,5 @@
 //! What `openspec archive` would refuse, found before any model call
-//! (research R5): `validate --strict` passes a MODIFIED requirement that does
+//!: `validate --strict` passes a MODIFIED requirement that does
 //! not exist, and only `archive` fails on it — after the work is done.
 
 use std::collections::{BTreeMap, BTreeSet};
