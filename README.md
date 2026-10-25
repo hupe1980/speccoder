@@ -46,6 +46,8 @@ At a terminal, `run` works inside a dashboard — the pipeline stage by stage, t
 5. **Judgement** — `verified` when the acceptance tests went red → green and nothing regressed; `regression_only` when nothing task-specific was shown; `failed` otherwise. A verified task's tests then meet wrong variants of the change: how many they reject is its acceptance strength.
 6. **Outcome** — a verified task is ticked and committed by speccoder. A failed one is retried once with the verifier's facts. Anything else is saved under `refs/speccoder/attempts/…`, undone, and handed to a person.
 
+Change the spec later and the ticks that cite a changed requirement say they were proven against the earlier wording; `speccoder run --converge` checks the code against the spec as it is now.
+
 `verified` does not mean correct, complete or safe. It means the evidence held. Review the branch like any contribution.
 
 ## Status

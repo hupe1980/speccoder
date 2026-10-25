@@ -458,7 +458,7 @@ mod look_tests {
             title: title.to_owned(),
             phase: "Phase 2: User Story 1 - Login".to_owned(),
             state: state.to_owned(),
-            intent_changed: false,
+            drift: None,
             blocked_by: if state == "blocked" {
                 vec!["T001".to_owned()]
             } else {

@@ -6,6 +6,7 @@ export type Runnable =
   | { kind: "commit"; paths: string[] }
   | { kind: "approve" | "reject" | "accept" | "skip" | "nudge"; task: string }
   | { kind: "feature" }
+  | { kind: "converge" }
   | { kind: "pull_request" };
 
 export interface Action {
@@ -37,6 +38,22 @@ export interface Task {
   attestation: string | null;
   strength?: string | null;
   last_attempt?: { outcome: string; reason: string; reference: string } | null;
+  /** The intent changed since the tick (F-085). */
+  drift?: Drift | null;
+}
+
+/** A cited requirement as the tick saw it (`then`) and as the spec has it now. */
+export interface RequirementDrift {
+  id: string;
+  then: string | null;
+  now: string | null;
+}
+
+export interface Drift {
+  /** Cited requirements that changed: the evidence is for the earlier wording. */
+  requirements: RequirementDrift[];
+  /** The intent files that differ; empty when they are not in git. */
+  files: string[];
 }
 
 export interface Report {
@@ -50,7 +67,7 @@ export interface Report {
   journey: JourneyStep[];
   unmerged_commits: number;
   tasks: Task[];
-  trace: { requirement: string; task: string | null; verdict: string | null; scenario: string | null; test: string | null }[];
+  trace: { requirement: string; task: string | null; verdict: string | null; scenario: string | null; test: string | null; changed?: boolean }[];
   convergence: { round: number; commit: string; tasks: string[] }[];
   totals: Record<string, number>;
   issues?: string[];

@@ -157,7 +157,7 @@ mod tests {
             title: "Parse: a, b\nc %".to_owned(),
             phase: "P".to_owned(),
             state: state.to_owned(),
-            intent_changed: false,
+            drift: None,
             blocked_by: Vec::new(),
             commit: None,
             run_id: None,

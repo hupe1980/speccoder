@@ -33,7 +33,24 @@ Phase 3: Convergence
 | `·` | `ready` | Can run now |
 | `⧗` | `blocked` | Waits for the tasks listed |
 
-`report` reads only git, so it works on any machine with the repository. Below the tasks it traces the spec's requirements (`FR-001`, `SC-002`) to the tasks that cite them — `Trace 9/11 requirement(s) cited by a task; not cited: FR-007, SC-003` — and it counts ticks whose commit carries no [attestation](@/docs/attestations.md).
+`report` reads only git, so it works on any machine with the repository. Below the tasks it traces the spec's requirements (`FR-001`, `SC-002`) to the tasks that cite them — `Trace 9/11 requirement(s) cited by a task; not cited: FR-007, SC-003` — it counts ticks whose commit carries no [attestation](@/docs/attestations.md), and it marks ticks [proven against an earlier spec](#when-the-spec-changes).
+
+## When the spec changes
+
+Your spec is what the work is judged against, and you will change it. A tick is proven against the spec as it was when the task was committed — so when a requirement it cites is reworded, added or removed afterwards, the tick no longer proves what the spec asks:
+
+```text
+  ✓ T004 Contract test for login per FR-001       verified
+      spec changed: FR-001 reworded since the tick — its evidence is for the earlier spec
+1/2 done: 1 verified; 1 ready; 1 tick(s) proven against an earlier wording of their requirements
+```
+
+speccoder compares each tick's commit with your checkout's committed `HEAD`: the feature's documents (the task list aside) and the shared ones such as the constitution. Uncommitted edits, other features and the current-feature pointer do not count. A requirement counts as cited when its ID (`FR-001`) is a word in the task's title, as in the trace.
+
+- **Stale** — a cited requirement changed. The verdict stays what the evidence showed; the report, the board, the inspector (word by word: what it said, what it says) and the pull request description say it is for the earlier wording, and the requirements matrix no longer counts it as proven.
+- **Changed elsewhere** — the plan, the constitution or an uncited part of the spec changed: shown, not counted.
+
+The next step is **re-check what the spec changed** — `speccoder run --converge`. Convergence assesses the code against the spec as it is now, is told which requirements changed since their ticks (then and now), and adds tasks for what no longer holds; those run and are judged like any other. speccoder never unticks a task on its own. In place with an ignored `specs/`, the intent is not in git: the commits' `Intent-Digest` still tells that it changed, not where.
 
 ## What counts as red
 

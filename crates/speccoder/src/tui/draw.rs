@@ -259,6 +259,15 @@ fn task_list(f: &mut Frame<'_>, app: &App, area: Rect, focused: bool) {
             ListItem::new(Line::from(vec![
                 Span::styled(format!("{} {} ", mark(g), t.id), st(g.token())),
                 Span::raw(a(&t.title)),
+                // Proven against an earlier wording of what it cites.
+                Span::styled(
+                    if t.drift.as_ref().is_some_and(speccoder_core::Drift::stale) {
+                        "  spec changed"
+                    } else {
+                        ""
+                    },
+                    st(Token::Attention),
+                ),
             ]))
         })
         .collect();
@@ -579,6 +588,27 @@ fn evidence_screen(f: &mut Frame<'_>, app: &App, area: Rect) {
             mark(Glyph::Attested),
             "Note"
         ))));
+    }
+    if let Some(d) = t.drift.as_ref().filter(|d| d.stale()) {
+        for r in &d.requirements {
+            lines.push(Line::styled(
+                a(&format!(
+                    "  ! {:<15} {} changed since the tick: its evidence is for the earlier wording",
+                    "Spec changed", r.id
+                )),
+                st(Token::Attention),
+            ));
+            for (word, line) in [("was", &r.then), ("now", &r.now)] {
+                lines.push(Line::raw(a(&format!(
+                    "    {word}  {}",
+                    line.as_deref().map_or("(absent)", str::trim)
+                ))));
+            }
+        }
+        lines.push(Line::styled(
+            "    n  re-check against the spec: speccoder run --converge",
+            st(Token::Accent),
+        ));
     }
     let rows = app
         .evidence

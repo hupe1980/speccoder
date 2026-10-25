@@ -16,7 +16,7 @@ fn task(id: &str, state: &str) -> TaskStatus {
         title: format!("title of {id}"),
         phase: "Phase 2".to_owned(),
         state: state.to_owned(),
-        intent_changed: false,
+        drift: None,
         blocked_by: Vec::new(),
         commit: None,
         run_id: None,
@@ -52,6 +52,7 @@ fn snapshot() -> Snapshot {
                 test: None,
                 task: None,
                 verdict: None,
+                changed: false,
             }],
             totals: StatusTotals {
                 verified: 1,

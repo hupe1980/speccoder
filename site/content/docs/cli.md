@@ -60,7 +60,7 @@ Every stop and finish ends with a `Next:` block — the commands that continue, 
 
 | Command | What it does |
 |---|---|
-| `speccoder report` | Every task and the evidence behind its tick, the requirement trace, and what is open |
+| `speccoder report` | Every task and the evidence behind its tick, the requirement trace, ticks proven against an earlier spec, and what is open |
 | `speccoder report --live` | What the current or last run is doing, from another terminal |
 | `speccoder report --approvals` | Calls waiting for a decision, and the decisions made, with who made them |
 | `speccoder report --cost` | Tokens, and money with prices configured, per task |

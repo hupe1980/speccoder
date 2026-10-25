@@ -96,7 +96,6 @@ fn statuses(
     parsed: &ParsedTasks,
     evidence: &BTreeMap<String, Evidence>,
     lines: &BTreeMap<String, String>,
-    intent_now: Option<&str>,
     saved: &[crate::attempts::Saved],
     skipped: &BTreeMap<String, String>,
 ) -> Vec<TaskStatus> {
@@ -141,9 +140,7 @@ fn statuses(
                 strength: found
                     .filter(|e| t.done && !e.strength.is_empty())
                     .map(|e| e.strength.clone()),
-                intent_changed: found.is_some_and(|e| {
-                    !e.intent.is_empty() && intent_now.is_some_and(|now| now != e.intent)
-                }),
+                drift: None,
                 run_id: found
                     .filter(|e| t.done && !e.run.is_empty())
                     .map(|e| e.run.clone()),
@@ -182,6 +179,10 @@ fn totals(tasks: &[TaskStatus]) -> StatusTotals {
         skipped: n("skipped"),
         ready: n("ready"),
         blocked: n("blocked"),
+        stale: tasks
+            .iter()
+            .filter(|t| t.drift.as_ref().is_some_and(speccoder_core::Drift::stale))
+            .count(),
     }
 }
 
@@ -308,6 +309,7 @@ pub fn report(path: &Path, feature: Option<&str>) -> CommandResult {
         ])
         .unwrap_or(false);
 
+    let mut prefix = String::new();
     let (parsed, source, log, unmerged) = if has_branch {
         // tasks.md as committed at the branch tip, by its repository path.
         let top = git.toplevel().ok().flatten();
@@ -321,6 +323,10 @@ pub fn report(path: &Path, feature: Option<&str>) -> CommandResult {
                     .map(Path::to_path_buf)
             })
             .unwrap_or_default();
+        prefix = rel.to_string_lossy().replace('\\', "/");
+        if !prefix.is_empty() {
+            prefix.push('/');
+        }
         let repo_path = rel
             .join(&checkout_tasks.path)
             .to_string_lossy()
@@ -372,29 +378,32 @@ pub fn report(path: &Path, feature: Option<&str>) -> CommandResult {
     } else {
         BTreeMap::new()
     };
-    let intent_now = local_ticks.then(|| {
-        crate::in_place::intent_digest(
-            root,
-            &crate::tools::policy::Policy::new(&[], &[]).rules(format.rules()),
-            format.messages().tasks_file,
-        )
-    });
-
     let (evidence, convergence) = read_log(&log, &name);
     let saved = crate::attempts::list(root, &name);
     let skipped = crate::controls::skipped(root, &name);
-    let mut tasks = statuses(
-        &parsed,
-        &evidence,
-        &lines,
-        intent_now.as_deref(),
-        &saved,
-        &skipped,
-    );
+    let mut tasks = statuses(&parsed, &evidence, &lines, &saved, &skipped);
     // What each committed tick's note says (signatures are `attest verify`'s).
     for t in tasks.iter_mut() {
         if let Some(commit) = t.commit.as_deref() {
             t.attestation = Some(crate::attest::note_state(root, commit));
+        }
+    }
+    if !crate::drift::mark(root, format, &f.feature.dir, &prefix, &mut tasks) && local_ticks {
+        // The intent is not in git (in place, ignored): the commits'
+        // `Intent-Digest` says whether it changed, not where.
+        let now = crate::in_place::intent_digest(
+            root,
+            &crate::tools::policy::Policy::new(&[], &[]).rules(format.rules()),
+            format.messages().tasks_file,
+        );
+        for t in &mut tasks {
+            let judged = evidence.get(&t.id).map(|e| e.intent.as_str());
+            if t.commit.is_some() && judged.is_some_and(|i| !i.is_empty() && i != now) {
+                t.drift = Some(speccoder_core::Drift {
+                    requirements: Vec::new(),
+                    files: Vec::new(),
+                });
+            }
         }
     }
     let trace = trace(&format.requirement_ids(root, &f.feature.dir), &tasks);
@@ -457,10 +466,17 @@ pub fn report(path: &Path, feature: Option<&str>) -> CommandResult {
             totals.evidence_without_tick
         ));
     }
-    let changed = tasks.iter().filter(|t| t.intent_changed).count();
-    if changed > 0 {
+    if totals.stale > 0 {
         message.push_str(&format!(
-            "; {changed} judged against an earlier spec (it changed since)"
+            "; {} tick(s) proven against an earlier wording of their requirements",
+            totals.stale
+        ));
+    }
+    let drifted = tasks.iter().filter(|t| t.drift.is_some()).count() - totals.stale;
+    if drifted > 0 {
+        message.push_str(&format!(
+            "; the spec changed since {drifted}{} tick(s), not in what they cite",
+            if totals.stale > 0 { " other" } else { "" }
         ));
     }
     if local_ticks {
@@ -536,6 +552,10 @@ fn trace(requirements: &[(String, String)], tasks: &[TaskStatus]) -> Vec<TraceRo
                     test: None,
                     task: Some(t.id.clone()),
                     verdict: Some(t.state.clone()),
+                    changed: t
+                        .drift
+                        .as_ref()
+                        .is_some_and(|d| d.requirements.iter().any(|r| r.id == *id)),
                 })
                 .collect();
             if rows.is_empty() {
@@ -545,6 +565,7 @@ fn trace(requirements: &[(String, String)], tasks: &[TaskStatus]) -> Vec<TraceRo
                     test: None,
                     task: None,
                     verdict: None,
+                    changed: false,
                 }]
             } else {
                 rows
@@ -610,7 +631,7 @@ mod tests {
             title: title.to_owned(),
             phase: "Phase 3".to_owned(),
             state: state.to_owned(),
-            intent_changed: false,
+            drift: None,
             blocked_by: Vec::new(),
             commit: None,
             run_id: None,

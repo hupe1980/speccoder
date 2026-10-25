@@ -311,6 +311,7 @@ fn execute(
         Runnable::Run { task: None } => {
             speccoder_runtime::run_feature(root, feature, &options, false)
         }
+        Runnable::Converge => speccoder_runtime::run_feature(root, feature, &options, true),
         Runnable::Commit { paths } => {
             speccoder_runtime::hosting::commit_planning(root, feature, paths)
         }

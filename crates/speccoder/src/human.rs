@@ -839,8 +839,33 @@ pub fn status(w: &mut impl Write, r: &StatusReport, message: &str) -> io::Result
         if let Some(n) = &t.note {
             writeln!(w, "      reason: {}", shorten(n, 90))?;
         }
-        if t.intent_changed {
-            writeln!(w, "      judged against an earlier spec: it changed since")?;
+        if let Some(d) = &t.drift {
+            if d.stale() {
+                for r in &d.requirements {
+                    let how = match (&r.then, &r.now) {
+                        (Some(_), Some(_)) => "reworded",
+                        (Some(_), None) => "removed",
+                        _ => "added",
+                    };
+                    writeln!(
+                        w,
+                        "      {}: {} {how} since the tick — its evidence is for the earlier spec",
+                        look.paint(crate::style::Token::Attention, "spec changed"),
+                        r.id
+                    )?;
+                }
+            } else if d.files.is_empty() {
+                writeln!(
+                    w,
+                    "      the spec, plan or constitution changed since the tick"
+                )?;
+            } else {
+                writeln!(
+                    w,
+                    "      the spec changed since the tick ({}), not in what it cites",
+                    d.files.join(", ")
+                )?;
+            }
         }
         if let Some(a) = &t.attestation {
             writeln!(w, "      attestation: {a}")?;
@@ -874,6 +899,19 @@ pub fn status(w: &mut impl Write, r: &StatusReport, message: &str) -> io::Result
         );
         if !uncited.is_empty() {
             line.push_str(&format!("; not cited: {}", uncited.join(", ")));
+        }
+        let mut changed: Vec<&str> = r
+            .trace
+            .iter()
+            .filter(|t| t.changed)
+            .map(|t| t.requirement.as_str())
+            .collect();
+        changed.dedup();
+        if !changed.is_empty() {
+            line.push_str(&format!(
+                "; changed since their tick: {}",
+                changed.join(", ")
+            ));
         }
         writeln!(w, "{line}")?;
     }

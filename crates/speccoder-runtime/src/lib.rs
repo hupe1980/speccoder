@@ -18,6 +18,7 @@ pub mod convergence;
 pub mod current;
 pub mod doctor;
 pub mod documents;
+mod drift;
 pub mod eval;
 pub mod evidence;
 pub mod external;

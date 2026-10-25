@@ -82,7 +82,7 @@ pub fn sections(r: &StatusReport) -> Vec<Section> {
         text: headline,
     }];
 
-    let waiting: Vec<String> = r
+    let mut waiting: Vec<String> = r
         .tasks
         .iter()
         .filter_map(|task| {
@@ -101,6 +101,37 @@ pub fn sections(r: &StatusReport) -> Vec<Section> {
             ))
         })
         .collect();
+    // The spec changed under these ticks: a reviewer reads the requirement
+    // as it is now, the evidence was for what it said then.
+    let stale: Vec<String> = r
+        .tasks
+        .iter()
+        .filter_map(|task| {
+            let d = task.drift.as_ref().filter(|d| d.stale())?;
+            let lines: Vec<String> = d
+                .requirements
+                .iter()
+                .map(|q| {
+                    let quote = |l: &Option<String>| {
+                        l.as_deref().map_or_else(
+                            || "*(absent)*".to_owned(),
+                            |l| format!("“{}”", escape(l.trim().trim_start_matches("- "))),
+                        )
+                    };
+                    format!("  - was {} — now {}", quote(&q.then), quote(&q.now))
+                })
+                .collect();
+            Some(format!(
+                "- **{}** {} — proven against an earlier wording\n{}",
+                escape(&task.id),
+                escape(&task.title),
+                lines.join("\n")
+            ))
+        })
+        .collect();
+    if !stale.is_empty() {
+        waiting.extend(stale);
+    }
     if !waiting.is_empty() {
         out.push(Section {
             name: "needs you",
@@ -120,6 +151,20 @@ pub fn sections(r: &StatusReport) -> Vec<Section> {
             )
         } else {
             verdict(&task.state).to_owned()
+        };
+        // A verdict for an earlier wording says so in its own cell.
+        let state = match task.drift.as_ref().filter(|d| d.stale()) {
+            Some(d) => format!(
+                "{state} (for an earlier {})",
+                escape(
+                    &d.requirements
+                        .iter()
+                        .map(|q| q.id.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            ),
+            None => state,
         };
         let _ = writeln!(
             table,
@@ -209,7 +254,7 @@ mod tests {
             title: title.to_owned(),
             phase: "Phase 2".to_owned(),
             state: state.to_owned(),
-            intent_changed: false,
+            drift: None,
             blocked_by: Vec::new(),
             commit: None,
             run_id: None,
@@ -248,6 +293,23 @@ mod tests {
                 ..StatusTotals::default()
             },
         }
+    }
+
+    #[test]
+    fn a_tick_for_an_earlier_wording_says_so_to_the_reviewer() {
+        let mut r = report(1);
+        r.tasks[0].drift = Some(speccoder_core::Drift {
+            requirements: vec![speccoder_core::RequirementDrift {
+                id: "FR-001".to_owned(),
+                then: Some("- **FR-001**: log in with a password".to_owned()),
+                now: Some("- **FR-001**: log in with a passkey".to_owned()),
+            }],
+            files: vec!["specs/001-x/spec.md".to_owned()],
+        });
+        let md = within(&r, &[], usize::MAX);
+        assert!(md.contains("verified (for an earlier FR-001)"), "{md}");
+        assert!(md.contains("proven against an earlier wording"), "{md}");
+        assert!(md.contains("password") && md.contains("passkey"), "{md}");
     }
 
     #[test]

@@ -28,6 +28,30 @@
       ],
       "type": "object"
     },
+    "Drift": {
+      "description": "What changed since a tick (F-085): the tick's commit holds the intent\nit was judged against; the checkout's `HEAD` holds the intent now.",
+      "properties": {
+        "files": {
+          "description": "The intent files that differ (project-relative), task lists aside.\nEmpty when the intent is not in git (in place, ignored): it changed,\nwhich file is not known.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "requirements": {
+          "description": "The requirements the task cites whose line changed, appeared or went\naway: the evidence no longer speaks for them. Empty: what changed is\nelsewhere in the intent.",
+          "items": {
+            "$ref": "#/$defs/RequirementDrift"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "requirements",
+        "files"
+      ],
+      "type": "object"
+    },
     "JourneyStep": {
       "description": "One step of a feature's journey: `spec`, `plan`, `tasks`, `commit`,\n`run`, `review`.",
       "properties": {
@@ -77,6 +101,35 @@
       ],
       "type": "object"
     },
+    "RequirementDrift": {
+      "description": "One cited requirement, as the tick saw it and as the spec has it now.",
+      "properties": {
+        "id": {
+          "description": "`FR-003`.",
+          "type": "string"
+        },
+        "now": {
+          "description": "Its line now; `None`: it was removed.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "then": {
+          "description": "Its line when the task was ticked; `None`: it did not exist yet.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "then",
+        "now"
+      ],
+      "type": "object"
+    },
     "StatusTotals": {
       "description": "Counts of [`TaskStatus::state`].",
       "properties": {
@@ -116,6 +169,13 @@
           "minimum": 0,
           "type": "integer"
         },
+        "stale": {
+          "default": 0,
+          "description": "Ticks whose cited requirements changed since (F-085).",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
         "ticked_without_evidence": {
           "description": "Ticked without a speccoder commit (by a person, or before speccoder).",
           "format": "uint",
@@ -144,7 +204,8 @@
         "attested",
         "skipped",
         "ready",
-        "blocked"
+        "blocked",
+        "stale"
       ],
       "type": "object"
     },
@@ -197,13 +258,20 @@
             "null"
           ]
         },
+        "drift": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Drift"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What changed in the intent (spec, plan, constitution) since this\ntask's evidence was committed: its tick was judged against an earlier\nversion. `None`: nothing changed, or the task has no commit."
+        },
         "id": {
           "description": "Task ID.",
           "type": "string"
-        },
-        "intent_changed": {
-          "description": "In place: the spec, plan or constitution changed since this task's\nevidence was committed (its `Intent-Digest` differs from now).",
-          "type": "boolean"
         },
         "last_attempt": {
           "anyOf": [
@@ -255,7 +323,6 @@
         "title",
         "phase",
         "state",
-        "intent_changed",
         "attestation",
         "blocked_by",
         "commit",
@@ -268,6 +335,11 @@
     "TraceRow": {
       "description": "One row of the requirement → scenario → test → verdict matrix.",
       "properties": {
+        "changed": {
+          "default": false,
+          "description": "The requirement changed since that task's tick: the verdict is for\nits earlier wording.",
+          "type": "boolean"
+        },
         "requirement": {
           "description": "`FR-001`, `SC-002`.",
           "type": "string"
@@ -306,7 +378,8 @@
         "scenario",
         "test",
         "task",
-        "verdict"
+        "verdict",
+        "changed"
       ],
       "type": "object"
     }

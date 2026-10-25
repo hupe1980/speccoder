@@ -93,12 +93,13 @@ pub fn input(
     feature: &str,
     artifacts: [&str; 4], // constitution, spec, plan, tasks
     files: &[String],
+    changed: &[String],
     max_turns: u32,
     max_tool_calls: u32,
 ) -> Tainted<Value> {
     let [constitution, spec, plan, tasks] = artifacts;
     // The artifacts are the person's; the file list is the worktree's.
-    Tainted::object([
+    let mut fields = vec![
         ("feature", Tainted::trusted(json!(feature))),
         ("constitution", Tainted::trusted(json!(constitution))),
         ("spec", Tainted::trusted(json!(spec))),
@@ -115,7 +116,14 @@ pub fn input(
             "settings",
             Tainted::trusted(json!({ "max_turns": max_turns, "max_tool_calls": max_tool_calls })),
         ),
-    ])
+    ];
+    // Requirements reworded since the ticks that cite them (F-085): the
+    // spec's own lines, then and now. Absent when nothing changed, so an
+    // assessment without drift is the one it always was.
+    if !changed.is_empty() {
+        fields.push(("changed", Tainted::trusted(json!(changed))));
+    }
+    Tainted::object(fields)
 }
 
 fn prompt_raw(input: &Value, ttl: CacheTtl, style: PromptStyle, w: &Wording) -> Value {
@@ -138,12 +146,19 @@ fn prompt_raw(input: &Value, ttl: CacheTtl, style: PromptStyle, w: &Wording) -> 
         })
         .unwrap_or_default();
     let feature = input["feature"].as_str().unwrap_or_default();
-    let parts = [
+    let mut parts = vec![
         format!("# {} ({feature})\n\n{}", w.files[0], text("spec")),
         format!("# {}\n\n{}", w.files[1], text("plan")),
         format!("# {}\n\n{}", w.files[2], text("tasks")),
         format!("# Project files\n\n{files}"),
     ];
+    if let Some(changed) = input["changed"].as_array().filter(|c| !c.is_empty()) {
+        let lines: Vec<&str> = changed.iter().filter_map(Value::as_str).collect();
+        parts.push(format!(
+            "# Changed since their tasks were verified\n\nThese requirements were reworded, added or removed after the tasks citing them were ticked: the code was judged against the earlier wording. Assess each against the wording now; a gap is `partial` or `contradicts`.\n\n{}",
+            lines.join("\n")
+        ));
+    }
     let system = format!(
         "{system_policy}\n\n# {}\n\n{}",
         w.constitution,
@@ -242,5 +257,35 @@ impl Skill for Converge {
             },
         )
         .await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn text(input: &Tainted<Value>) -> String {
+        use crate::format::Adapter as _;
+        let w = crate::format::speckit::SpecKit.wording();
+        prompt(
+            input.peek(),
+            CacheTtl::FiveMinutes,
+            PromptStyle::Anthropic,
+            w,
+        )
+        .to_string()
+    }
+
+    #[test]
+    fn changed_requirements_reach_the_assessment_only_when_there_are_some() {
+        let artifacts = ["c", "spec", "plan", "tasks"];
+        let none = input("001-x", artifacts, &[], &[], 10, 20);
+        assert!(none.peek().get("changed").is_none());
+        assert!(!text(&none).contains("Changed since their tasks were verified"));
+        let changed = vec!["- T004 FR-001: was \"password\"; now \"passkey\"".to_owned()];
+        let some = input("001-x", artifacts, &[], &changed, 10, 20);
+        let t = text(&some);
+        assert!(t.contains("Changed since their tasks were verified"), "{t}");
+        assert!(t.contains("T004 FR-001"), "{t}");
     }
 }

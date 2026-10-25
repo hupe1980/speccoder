@@ -57,6 +57,9 @@
             <button class="open" onclick={() => app.selectTask(t.id)} aria-label="{t.id} {t.title}, {word(laneOf(t))}">
               <span class="row"><span class="id mono">{t.id}</span>{#if t.phase}<span class="phase">{t.phase}</span>{/if}</span>
               <span class="t"><Code text={t.title} /></span>
+              {#if t.drift?.requirements.length}
+                <span class="foot changed" title="The spec changed since this tick: its evidence is for the earlier wording"><Icon name="exclaim" size={12} weight={2.2} />Spec changed: {t.drift.requirements.map((r) => r.id).join(", ")}</span>
+              {/if}
               {#if live}
                 <span class="stage" aria-live="polite"><span class="pulse" aria-hidden="true"></span>{stage}…</span>
               {:else if s !== null}
@@ -105,6 +108,7 @@
   .t { font-weight: 500; line-height: 1.38; display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
   .foot { display: flex; align-items: center; gap: 0.35rem; font-size: 0.76rem; }
   .fail { color: var(--danger); }
+  .changed { color: var(--attention); font-weight: 600; }
   .meter { flex: 1; height: 4px; background: var(--fill); border-radius: 4px; overflow: hidden; }
   .meter span { display: block; height: 100%; background: var(--verified-fill); border-radius: 4px; }
   .meter span.low { background: var(--regression-fill); }

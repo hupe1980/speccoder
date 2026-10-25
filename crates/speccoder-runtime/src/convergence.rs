@@ -131,6 +131,35 @@ pub fn converge_with_options(
         .with_data(CommandData::Converge(Box::new(report)))
 }
 
+/// Each requirement reworded, added or removed since a tick that cites it
+/// (F-085), as `T004 FR-001: was "…"; now "…"`: what the assessment must
+/// look at again.
+fn changed_requirements(project: &Path, feature: &str) -> Vec<String> {
+    let report = crate::status::report(project, Some(feature));
+    let Some(CommandData::Report(r)) = report.data() else {
+        return Vec::new();
+    };
+    r.tasks
+        .iter()
+        .filter_map(|t| t.drift.as_ref().map(|d| (t, d)))
+        .flat_map(|(t, d)| {
+            d.requirements.iter().map(move |q| {
+                let quote = |l: &Option<String>| {
+                    l.as_deref()
+                        .map_or_else(|| "(absent)".to_owned(), |l| format!("\"{}\"", l.trim()))
+                };
+                format!(
+                    "- {} {}: was {}; now {}",
+                    t.id,
+                    q.id,
+                    quote(&q.then),
+                    quote(&q.now)
+                )
+            })
+        })
+        .collect()
+}
+
 /// The assessment itself.
 fn assess(
     path: &Path,
@@ -290,10 +319,12 @@ fn assess(
         .take(400)
         .collect();
     let [constitution, spec, plan, _] = format.convergence_texts(&project, &feature_dir);
+    let changed = changed_requirements(&project, &feature_name);
     let input = substrate::converge::input(
         &feature_name,
         [&constitution, &spec, &plan, &tasks_text],
         &files,
+        &changed,
         run_config.max_turns,
         run_config.max_tool_calls,
     );
