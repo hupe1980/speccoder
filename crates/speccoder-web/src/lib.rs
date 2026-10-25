@@ -388,8 +388,13 @@ struct FileQuery {
 /// One file at the feature's revision, when the tree lists it.
 async fn file(State(s): State<Shared>, Query(q): Query<FileQuery>) -> Json<Value> {
     let root = s.root.clone();
+    let markdown = q.path.to_ascii_lowercase().ends_with(".md");
     let r = off(move || speccoder_runtime::code::file(&root, q.feature.as_deref(), &q.path)).await;
     Json(match r {
+        // Markdown also rendered (raw HTML shown as text), for the preview.
+        Ok(text) if markdown => {
+            json!({ "text": text, "html": speccoder_runtime::documents::render(&text) })
+        }
         Ok(text) => json!({ "text": text }),
         Err(e) => json!({ "error": e }),
     })

@@ -56,5 +56,6 @@ jobs:
       - run: npm run build
       - run: git diff --exit-code -- dist
       # The interface ships inside the binary, so its size hardly matters;
-      # this only catches an accidental giant dependency (1 MB gzipped).
-      - run: test "$(cat dist/* | gzip -9 | wc -c)" -lt 1048576
+      # this only catches an accidental giant dependency (4 MB gzipped;
+      # Mermaid, loaded only for a diagram, is most of it).
+      - run: test "$(cat dist/* | gzip -9 | wc -c)" -lt 4194304

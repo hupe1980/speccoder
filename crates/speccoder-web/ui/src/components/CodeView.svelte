@@ -8,6 +8,8 @@
   import Diff from "./Diff.svelte";
   import Icon from "./Icon.svelte";
   import Source from "./Source.svelte";
+  import FileTree from "./FileTree.svelte";
+  import { diagrams } from "../lib/mermaid";
 
   interface Changes {
     branch: string | null;
@@ -18,15 +20,19 @@
     cut: boolean;
   }
 
-  let mode = $state<"changes" | "files">("changes");
+  // Mode and open file live in the app's state, so the address keeps them
+  // (`?view=code&mode=files&file=src/lib.rs`).
+  const mode = $derived(app.codeMode);
   let changes = $state<Changes | null>(null);
   let commit = $state<string | null>(null);
   let commitPatch = $state("");
   let focus = $state<string | null>(null);
   let tree = $state<{ rev: string; files: string[] } | null>(null);
   let filter = $state("");
-  let open = $state<string | null>(null);
-  let text = $state<{ text?: string; error?: string } | null>(null);
+  const open = $derived(app.codeFile);
+  let text = $state<{ text?: string; html?: string; error?: string } | null>(null);
+  // Markdown opens as its preview; the switch shows the source.
+  let preview = $state(true);
   let loading = $state(false);
 
   $effect(() => {
@@ -49,11 +55,15 @@
   $effect(() => {
     const p = open;
     text = null;
-    if (p) void get<{ text?: string; error?: string }>(`/api/file${q({ feature: app.feature ?? undefined, path: p })}`).then((t) => (text = t));
+    if (p) void get<{ text?: string; html?: string; error?: string }>(`/api/file${q({ feature: app.feature ?? undefined, path: p })}`).then((t) => (text = t));
   });
 
   const total = $derived((changes?.files ?? []).reduce((a, f) => ({ add: a.add + (f.add ?? 0), del: a.del + (f.del ?? 0) }), { add: 0, del: 0 }));
-  const shown = $derived((tree?.files ?? []).filter((f) => !filter || f.toLowerCase().includes(filter.toLowerCase())).slice(0, 400));
+  // The whole tree (folders keep it navigable); a filter narrows it to the
+  // matching paths, at most 400.
+  const matching = $derived((tree?.files ?? []).filter((f) => !filter || f.toLowerCase().includes(filter.toLowerCase())));
+  const matches = $derived(matching.length);
+  const shown = $derived(filter ? matching.slice(0, 400) : matching);
   const changed = $derived(new Set((changes?.files ?? []).map((f) => f.path)));
   const taskOf = (t: string | null) => t?.split("/").pop() ?? null;
   const lines = $derived(text?.text?.split("\n") ?? []);
@@ -63,8 +73,8 @@
 <section class="code">
   <header>
     <div class="seg" role="tablist" aria-label="Code">
-      <button role="tab" aria-selected={mode === "changes"} class:on={mode === "changes"} onclick={() => (mode = "changes")}>Changes</button>
-      <button role="tab" aria-selected={mode === "files"} class:on={mode === "files"} onclick={() => (mode = "files")}>Files</button>
+      <button role="tab" aria-selected={mode === "changes"} class:on={mode === "changes"} onclick={() => (app.codeMode = "changes")}>Changes</button>
+      <button role="tab" aria-selected={mode === "files"} class:on={mode === "files"} onclick={() => (app.codeMode = "files")}>Files</button>
     </div>
     {#if changes?.branch}
       <span class="ref"><Icon name="branch" size={13} /><span class="mono">{changes.branch}</span>{#if changes.base}<span class="muted">from <span class="mono">{changes.base.slice(0, 8)}</span></span>{/if}</span>
@@ -97,17 +107,13 @@
             {/each}
           </ul>
           {#if !commit}
-            <h3 class="section-title">Files</h3>
-            <ul class="files">
-              {#each changes.files as f (f.path)}
-                <li>
-                  <button class:on={focus === f.path} onclick={() => (focus = focus === f.path ? null : f.path)} title={f.path}>
-                    <span class="fname mono">{f.path.split("/").pop()}<span class="dir">{f.path.includes("/") ? " " + f.path.slice(0, f.path.lastIndexOf("/")) : ""}</span></span>
-                    <span class="a">{f.add == null ? "bin" : `+${f.add}`}</span><span class="d">{f.del == null ? "" : `−${f.del}`}</span>
-                  </button>
-                </li>
-              {/each}
-            </ul>
+            <h3 class="section-title">Files {#if focus}<button class="clear" onclick={() => (focus = null)}>Show all</button>{/if}</h3>
+            <FileTree
+              paths={changes.files.map((f) => f.path)}
+              selected={focus}
+              counts={Object.fromEntries(changes.files.map((f) => [f.path, { add: f.add, del: f.del }]))}
+              onpick={(p) => (focus = focus === p ? null : p)}
+            />
           {/if}
         </aside>
         <div class="main">
@@ -126,17 +132,10 @@
     <div class="split">
       <aside class="side">
         <input class="search" placeholder="Filter files" bind:value={filter} aria-label="Filter files" />
-        <ul class="files tree">
-          {#each shown as f (f)}
-            <li>
-              <button class:on={open === f} onclick={() => (open = f)} title={f}>
-                <span class="fname mono">{f.split("/").pop()}<span class="dir">{f.includes("/") ? " " + f.slice(0, f.lastIndexOf("/")) : ""}</span></span>
-                {#if changed.has(f)}<span class="dot" title="Changed by this feature"></span>{/if}
-              </button>
-            </li>
-          {/each}
-        </ul>
-        {#if tree && tree.files.length > shown.length}<p class="muted small">{tree.files.length - shown.length} more — filter to find them.</p>{/if}
+        {#key filter}
+          <FileTree paths={shown} selected={open} {changed} onpick={(p) => (app.codeFile = p)} />
+        {/key}
+        {#if tree && filter && matches > shown.length}<p class="muted small">{matches - shown.length} more match — type more to narrow.</p>{/if}
       </aside>
       <div class="main">
         {#if !open}
@@ -147,7 +146,20 @@
           <div class="state"><p class="muted">{text.error}</p></div>
         {:else}
           <div class="viewer">
-            <div class="vhead"><span class="mono">{open}</span><span class="muted">{lines.length} lines</span></div>
+            <div class="vhead">
+              <span class="mono">{open}</span>
+              {#if text.html !== undefined}
+                <div class="seg small" role="tablist" aria-label="Show">
+                  <button role="tab" aria-selected={preview} class:on={preview} onclick={() => (preview = true)}>Preview</button>
+                  <button role="tab" aria-selected={!preview} class:on={!preview} onclick={() => (preview = false)}>Source</button>
+                </div>
+              {/if}
+              <span class="muted">{lines.length} lines</span>
+            </div>
+            {#if text.html !== undefined && preview}
+              <!-- Rendered by the host from Markdown; raw HTML in the file is shown as text. -->
+              <article class="md" use:diagrams={text.html}>{@html text.html}</article>
+            {:else}
             <div class="vbody">
               <table>
                 <tbody>
@@ -157,6 +169,7 @@
                 </tbody>
               </table>
             </div>
+            {/if}
           </div>
         {/if}
       </div>
@@ -188,11 +201,11 @@
   .task { font-weight: 600; }
   .when { margin-left: auto; color: var(--muted); }
   .subj { font-size: 0.84rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .files button { grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; display: grid; }
-  .tree button { grid-template-columns: minmax(0, 1fr) auto; }
   .fname { font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .dir { color: var(--muted); font-size: 0.92em; }
   .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--attention-fill); }
+  .clear { border: 0; background: none; color: var(--accent-ink); font-weight: 600; cursor: pointer; font-size: 0.78rem; padding: 0; }
+  .section-title { display: flex; justify-content: space-between; align-items: center; }
   .search { height: 30px; border: 0; border-radius: 8px; background: var(--fill); padding: 0 0.7rem; outline: none; }
   .search:focus { box-shadow: 0 0 0 3.5px var(--focus); }
   .main { min-width: 0; }
@@ -202,7 +215,22 @@
   .spinner { width: 20px; height: 20px; border-radius: 50%; border: 2.5px solid var(--fill-2); border-top-color: var(--muted); animation: spin 800ms linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
   .viewer { border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); overflow: hidden; }
-  .vhead { display: flex; justify-content: space-between; padding: 0.5rem 0.8rem; background: var(--surface-2); border-bottom: 0.5px solid var(--separator); font-size: 0.82rem; }
+  .seg.small button { height: 22px; padding: 0 0.7rem; font-size: 0.8rem; }
+  .md { padding: 1.5rem 2rem 2rem; max-width: 80ch; line-height: 1.65; font-size: 15px; max-height: calc(100vh - 12rem); overflow: auto; }
+  .md :global(h1) { font: 700 1.7rem/1.2 var(--display); letter-spacing: -0.024em; margin: 0 0 1rem; }
+  .md :global(h2) { font: 650 1.25rem/1.25 var(--display); margin: 2rem 0 0.6rem; }
+  .md :global(h3) { font: 650 1.05rem/1.3 var(--display); margin: 1.5rem 0 0.5rem; }
+  .md :global(p), .md :global(li) { color: var(--text-2); }
+  .md :global(code) { background: var(--fill); padding: 0.1em 0.35em; border-radius: 5px; font-size: 0.86em; }
+  .md :global(pre) { background: var(--surface-2); padding: 0.85rem 1rem; border-radius: var(--radius); overflow-x: auto; font-size: 0.85em; }
+  .md :global(pre code) { background: none; padding: 0; }
+  .md :global(table) { border-collapse: collapse; width: 100%; font-size: 0.88rem; }
+  .md :global(th), .md :global(td) { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 0.5px solid var(--separator); }
+  .md :global(blockquote) { margin: 1rem 0; padding: 0.25rem 1rem; border-left: 3px solid var(--fill-2); color: var(--muted); }
+  .md :global(figure.diagram) { margin: 1.25rem 0; padding: 1rem; border-radius: var(--radius); background: var(--surface-2); overflow-x: auto; text-align: center; }
+  .md :global(figure.diagram svg) { max-width: 100%; height: auto; }
+  .md :global(.diagram-error) { color: var(--danger); font-size: 0.82rem; text-align: left; }
+  .vhead { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 0.5rem 0.8rem; background: var(--surface-2); border-bottom: 0.5px solid var(--separator); font-size: 0.82rem; }
   .vbody { overflow: auto; max-height: calc(100vh - 12rem); font: 0.8rem/1.6 var(--mono); }
   table { border-collapse: collapse; width: 100%; }
   td { padding: 0; vertical-align: top; }

@@ -185,7 +185,9 @@ pub fn file(root: &Path, feature: Option<&str>, path: &str) -> Result<String, St
         return Err(format!("{path} is not in {rev}"));
     }
     let bytes = Git::at(root)
-        .run(&["show", &format!("{rev}:{path}")])
+        // `./`: relative to this directory — a project may sit below the
+        // repository's top level, and the tree's paths are relative to it.
+        .run(&["show", &format!("{rev}:./{path}")])
         .map_err(|e| e.0)?;
     if bytes.len() > FILE_LIMIT {
         return Err(format!("{path} is larger than {} KB", FILE_LIMIT / 1024));
@@ -194,4 +196,57 @@ pub fn file(root: &Path, feature: Option<&str>, path: &str) -> Result<String, St
         return Err(format!("{path} is binary"));
     }
     Ok(String::from_utf8_lossy(&bytes).into_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn git(dir: &Path, args: &[&str]) {
+        let ok = std::process::Command::new("git")
+            .args([
+                "-c",
+                "user.name=t",
+                "-c",
+                "user.email=t@e",
+                "-c",
+                "commit.gpgsign=false",
+            ])
+            .args(args)
+            .current_dir(dir)
+            .status()
+            .is_ok_and(|s| s.success());
+        assert!(ok, "git {args:?}");
+    }
+
+    /// A project below the repository's top level reads its own files, by
+    /// its own paths; anything its tree does not list is refused.
+    #[test]
+    fn a_nested_project_reads_its_files_and_nothing_else() {
+        let repo = tempfile::tempdir().unwrap_or_else(|e| panic!("{e}"));
+        let project = repo.path().join("apps/web");
+        std::fs::create_dir_all(project.join("src")).unwrap_or_else(|e| panic!("{e}"));
+        std::fs::write(project.join("src/lib.rs"), "pub fn ok() {}\n")
+            .unwrap_or_else(|e| panic!("{e}"));
+        std::fs::write(repo.path().join("secret.txt"), "outside\n")
+            .unwrap_or_else(|e| panic!("{e}"));
+        git(repo.path(), &["init", "-q"]);
+        git(repo.path(), &["add", "-A"]);
+        git(repo.path(), &["commit", "-qm", "init"]);
+        let (rev, files) = tree(&project, None);
+        assert_eq!(rev, "HEAD");
+        assert_eq!(files, ["src/lib.rs"]);
+        assert_eq!(
+            file(&project, None, "src/lib.rs").as_deref(),
+            Ok("pub fn ok() {}\n")
+        );
+        for bad in [
+            "../../secret.txt",
+            "secret.txt",
+            "src/../../../secret.txt",
+            "src",
+        ] {
+            assert!(file(&project, None, bad).is_err(), "{bad}");
+        }
+    }
 }

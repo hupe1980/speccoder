@@ -1,5 +1,6 @@
 <script lang="ts">
   import { app } from "../lib/app.svelte";
+  import { diagrams } from "../lib/mermaid";
   let pick = $state("spec");
   const docs = $derived(app.documents);
   const shown = $derived(docs.find((d) => d.name === pick) ?? docs[0]);
@@ -23,7 +24,7 @@
         <button class:on={shown?.name === d.name} onclick={() => (pick = d.name)}>{names[d.name] ?? d.name}</button>
       {/each}
     </nav>
-    <article class="prose">
+    <article class="prose" use:diagrams={html}>
       <p class="path mono muted">{shown?.path}</p>
       <!-- Rendered by the host from Markdown; raw HTML in the file is shown as text. -->
       {@html html}
@@ -61,6 +62,9 @@
   .prose :global(li input[type="checkbox"]) { margin-right: 0.45rem; accent-color: var(--verified-fill); }
   .prose :global(.req) { font-family: var(--mono); font-size: 0.78em; padding: 0.1em 0.5em; border-radius: 999px; font-weight: 600; white-space: nowrap; }
   .prose :global(.req.cited) { background: var(--verified-bg); color: var(--verified); }
+  .prose :global(figure.diagram) { margin: 1.25rem 0; padding: 1rem; border-radius: var(--radius); background: var(--surface-2); overflow-x: auto; text-align: center; }
+  .prose :global(figure.diagram svg) { max-width: 100%; height: auto; }
+  .prose :global(.diagram-error) { color: var(--danger); font-size: 0.82rem; text-align: left; margin: 0.5rem 0 0; }
   .prose :global(.req.uncited) { background: var(--regression-bg); color: var(--regression); }
   .empty { padding: 3rem; text-align: center; }
   @media (max-width: 900px) { .docs { grid-template-columns: 1fr; } nav { grid-auto-flow: column; overflow-x: auto; position: static; } .prose { padding: 1.5rem 1.25rem; } }

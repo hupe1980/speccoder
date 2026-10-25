@@ -343,5 +343,8 @@ fn formats_are_detected_chosen_or_refused() {
         .map(|d| files(d.path()))
         .collect();
     assert_eq!(before, after, "nothing is written");
-    assert!(started.elapsed() < std::time::Duration::from_secs(1));
+    // Detection waits on no network or model: a hang shows here. Speed is
+    // the cold-start gate's (a second-scale bound flaked under a loaded,
+    // parallel suite: 1.4 s on Linux in Docker).
+    assert!(started.elapsed() < std::time::Duration::from_secs(15));
 }
