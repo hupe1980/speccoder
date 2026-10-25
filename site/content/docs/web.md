@@ -11,10 +11,11 @@ group = "Use"
 speccoder ui
 ```
 
-opens the project in your browser. `speccoder ui --window` opens the same page in a desktop window of its own — built in on macOS (it uses the system's WebView), and on Linux with `cargo install speccoder --features app` (WebKitGTK). The window follows the run itself: when a call needs you, its Dock icon asks for attention and its title says so. The terminal keeps the line CLI; the page is where you look at a feature and take its next step with a click.
+opens the project in your browser. `speccoder ui --window` opens the same page in a desktop window of its own — built in on macOS (it uses the system's WebView), and on Linux with `cargo install speccoder --features app` (WebKitGTK). The window follows the run itself: when a call needs you, its Dock icon asks for attention and its title says so; after every job its Dock badge counts the decisions waiting for you. The terminal keeps the line CLI; the page is where you look at a feature and take its next step with a click.
 
 ## What you see
 
+- **Needs You.** The page opens here: every decision the agents wait on, in every feature, the most urgent first — calls waiting for approval, tests held for your ruling, suspected shortcuts, ticks the spec changed under, tasks whose attempt did not pass, plans to commit, finished branches to hand off. Each row decides in place (**Approve**, **Reject**, **Rule**, **Run Again**, **Nudge**, **Skip**, **Accept**, **Re-check**, **Commit**, **Open Draft PR**) in its own feature, or **Open** shows it with its evidence. An action that cannot run now says why. The tab carries the count, and so does the page's title. Nothing waiting: the next step instead. The same list is `speccoder inbox` in the terminal and `/inbox` in an editor.
 - **Setting up.** A project without `speccoder.toml` opens in the setup assistant: what was found (git, the spec project, the spec tool, the sandbox), the model (with whether its key is set), the checks speccoder proposes for your project, then **Set Up** — it writes the file, runs the checks on the untouched code and shows each result — and **Commit**, and finally your first feature in your own words. Each step names its `speccoder init` command.
 - **Overview.** Every feature at a glance — the spec of the specs: each one's ring of verdicts, where it is on the journey, how many of its requirements are proven by evidence, and calls waiting for you. A card opens its board. Below, your repository's open [GitHub issues](@/docs/github.md), each with **Start Feature**.
 - **Before you run.** What `speccoder doctor` would warn about, above everything else: a missing model key, configuration a worktree would not have because it is not committed, an unsigned attestation. Each comes with the command that fixes it, ready to copy. When a failure would stop the run, the Run button says so and steps back to "Run anyway".
@@ -46,7 +47,7 @@ Looking at another window? The tab's title changes to *● Needs you*, and with 
 | Key | Does |
 |---|---|
 | `n` | The next step |
-| `1` `2` `3` `4` `5` | Overview, Board, Code, Spec & Plan, Report |
+| `1` `2` `3` `4` `5` `6` | Needs You, Overview, Board, Code, Spec & Plan, Report |
 | `,` | Settings |
 | ⌘P / Ctrl+P | Go to a file (in Code) |
 | ⌘F / Ctrl+F | Find in the open file (in Code) |

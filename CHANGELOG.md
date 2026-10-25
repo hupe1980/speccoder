@@ -11,6 +11,25 @@ ticks a task only on evidence the model cannot produce or edit.
 
 ### Added
 
+**Needs You** (the decision inbox)
+
+- `speccoder inbox` lists every decision waiting for you across the
+  project's features, the most urgent first: calls waiting for approval,
+  tests held for a ruling, suspected shortcuts, ticks the spec changed
+  under, tasks whose last attempt did not pass, plans to commit, finished
+  branches to hand off — each with the commands that settle it (naming the
+  feature when there are several). `--feature` narrows it; `--json` payload
+  `inbox`; `/inbox` in an editor.
+- The app opens on **Needs You**: each row decides in place in its own
+  feature (approve, reject, rule, run again, nudge, skip, accept, re-check,
+  commit, open the draft PR), or opens the task with its evidence; the tab
+  and the page title carry the count, the window's Dock badge too.
+- An action that cannot run now says why: running a task while another's
+  waiting call holds the worktree.
+- Rulings on held tests run from the app (`Runnable::Rule`).
+- `--feature` naming no feature says `FEATURE-UNKNOWN` ("no feature has
+  that name or number"); `FEATURE-GONE` is for a stale pointer only.
+
 **When the spec changes** (drift)
 
 - A tick is proven against the spec its commit holds. When a requirement it

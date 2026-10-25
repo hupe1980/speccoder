@@ -159,6 +159,14 @@ pub const CATALOG: &[Entry] = &[
             "speccoder feature --clear"
         ]
     ),
+    entry!(
+        "FEATURE-UNKNOWN",
+        E,
+        S::SelectionNeeded,
+        "no feature has that name or number",
+        "`--feature` (or `--change`) names a feature by its directory name, a part of it, or its number in `speccoder feature`'s list; none matches what was given.",
+        ["speccoder feature", "speccoder report --feature <name>"]
+    ),
     // ── configuration ─────────────────────────────────────────────────
     entry!(
         "CONFIG",

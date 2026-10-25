@@ -29,6 +29,7 @@ pub mod handoff;
 pub mod held_out;
 pub mod hosting;
 pub mod in_place;
+pub mod inbox;
 pub mod init;
 pub mod instructions;
 pub mod integrity;

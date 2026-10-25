@@ -105,6 +105,7 @@ speccoder pr
 
 ## Next steps
 
+- What needs you, in every feature: `speccoder inbox` — waiting calls, tests to rule on, tasks that did not pass, plans to commit, branches to hand off — or **Needs You** in the app.
 - Close the gaps between spec and code: `speccoder run --converge`.
 - Watch a run from a second terminal: `speccoder report --live`, or `speccoder` for the dashboard.
 - Tighten or relax what the model may do: [configuration](@/docs/configuration.md).

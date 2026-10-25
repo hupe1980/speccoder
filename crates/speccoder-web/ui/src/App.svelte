@@ -14,6 +14,7 @@
   import Toasts from "./components/Toasts.svelte";
   import Icon from "./components/Icon.svelte";
   import Overview from "./components/Overview.svelte";
+  import Inbox from "./components/Inbox.svelte";
   import Settings from "./components/Settings.svelte";
   import CodeView from "./components/CodeView.svelte";
   import Setup from "./components/Setup.svelte";
@@ -30,11 +31,12 @@
   let canAsk = $state(typeof Notification !== "undefined" && Notification.permission === "default");
 
   const views = [
-    { v: "overview", label: "Overview", icon: "list", key: "1" },
-    { v: "board", label: "Board", icon: "grid", key: "2" },
-    { v: "code", label: "Code", icon: "terminal", key: "3" },
-    { v: "documents", label: "Spec & Plan", icon: "doc", key: "4" },
-    { v: "report", label: "Report", icon: "chart", key: "5" },
+    { v: "inbox", label: "Needs You", icon: "tray", key: "1" },
+    { v: "overview", label: "Overview", icon: "list", key: "2" },
+    { v: "board", label: "Board", icon: "grid", key: "3" },
+    { v: "code", label: "Code", icon: "terminal", key: "4" },
+    { v: "documents", label: "Spec & Plan", icon: "doc", key: "5" },
+    { v: "report", label: "Report", icon: "chart", key: "6" },
   ] as const;
 
   /** Changes the view with a cross-fade where the browser can. */
@@ -67,6 +69,7 @@
   const needsSetup = $derived(
     app.view !== "settings" &&
       app.view !== "overview" &&
+      app.view !== "inbox" &&
       // Only a project with no configuration at all: an invalid file or an
       // uncommitted change is Settings' to show, not a reason to start over.
       (app.report?.code === "NO-PROJECT" || app.preflight.some((c) => c.code === "CONFIG-MISSING")),
@@ -76,7 +79,8 @@
   // The tab says when a run needs you, and what is running.
   $effect(() => {
     const name = app.report?.data?.feature ?? app.project?.name ?? "speccoder";
-    document.title = app.waiting ? `● Needs you · ${name}` : app.job?.running ? `▶ ${app.task?.id ?? "Working"} · ${name}` : `${name} · speccoder`;
+    const waiting = app.inbox?.data?.items.length ?? 0;
+    document.title = app.waiting ? `● Needs you · ${name}` : waiting && !app.job?.running ? `(${waiting}) ${name} · speccoder` : app.job?.running ? `▶ ${app.task?.id ?? "Working"} · ${name}` : `${name} · speccoder`;
   });
 
   // The address follows the page: a new entry per view or task, so Back works.
@@ -109,7 +113,7 @@
       <span class="thumb" aria-hidden="true"></span>
       {#each views as x (x.v)}
         <button role="tab" aria-selected={app.view === x.v} class:on={app.view === x.v} onclick={() => go(x.v)} title="{x.label} ({x.key})">
-          <Icon name={x.icon} size={15} />{x.label}
+          <Icon name={x.icon} size={15} />{x.label}{#if x.v === "inbox" && app.inbox?.data?.items.length}<span class="badge" aria-label="{app.inbox.data.items.length} waiting">{app.inbox.data.items.length}</span>{/if}
         </button>
       {/each}
     </div>
@@ -137,8 +141,8 @@
     {#if app.loading}
       <div class="loading" aria-busy="true"><span class="spinner"></span></div>
     {:else}
-      {#if app.view === "setup" || needsSetup}<Setup />{:else if app.view === "overview"}<Overview />{:else if app.view === "settings"}<Settings />{:else}<Hero compact={app.view !== "board"} />{/if}
-      {#if report && !needsSetup && app.view !== "setup" && app.view !== "overview" && app.view !== "settings"}
+      {#if app.view === "setup" || needsSetup}<Setup />{:else if app.view === "inbox"}<Inbox />{:else if app.view === "overview"}<Overview />{:else if app.view === "settings"}<Settings />{:else}<Hero compact={app.view !== "board"} />{/if}
+      {#if report && !needsSetup && app.view !== "setup" && app.view !== "overview" && app.view !== "inbox" && app.view !== "settings"}
         {#if app.view === "board"}<Board />{/if}
         {#if app.view === "code"}<CodeView />{/if}
         {#if app.view === "documents"}<Documents />{/if}
@@ -158,6 +162,7 @@
 <Toasts />
 
 <style>
+  .badge { min-width: 1.15rem; height: 1.15rem; padding: 0 0.32rem; margin-left: 0.15rem; border-radius: 999px; display: inline-grid; place-items: center; background: var(--attention-fill); color: #fff; font: 700 0.68rem/1 var(--rounded); }
   .shell {
     display: grid;
     grid-template-columns: 260px 1fr;

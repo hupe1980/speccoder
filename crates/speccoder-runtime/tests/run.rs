@@ -3170,3 +3170,73 @@ fn no_instructions_when_turned_off() {
             .contains("MARKER-AGENTS")
     }));
 }
+
+/// The inbox (F-086): a call waiting for approval is the first decision,
+/// with approve and reject; a task whose attempt did not pass is one too.
+#[test]
+fn the_inbox_lists_a_waiting_call_and_a_task_that_did_not_pass() {
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    // A waiting call holds the worktree: the attempt that did not pass first.
+    let (f, d) = fake();
+    f.will_call_tool("c1", "read_file", json!({ "path": "src/lib.rs" }));
+    f.will_structure(json!({ "summary": "not finished", "status": "incomplete", "files_changed": [], "checks_run": [], "notes": [] }));
+    let res = run(r.path(), state.path(), "T009", d);
+    assert_eq!(res.status(), CommandStatus::NeedsHuman, "{}", res.message());
+    let (f, d) = fake();
+    f.will_call_tool(
+        "c1",
+        "run_command",
+        json!({ "argv": ["touch", "approved-only"] }),
+    );
+    let res = run(r.path(), state.path(), "T005", d);
+    assert_eq!(res.status(), CommandStatus::NeedsHuman, "{}", res.message());
+
+    let res = speccoder_runtime::inbox::inbox_with(r.path(), None, Some(state.path()));
+    let Some(CommandData::Inbox(i)) = res.data() else {
+        panic!("{}", res.message())
+    };
+    let kinds: Vec<(&str, Option<&str>)> = i
+        .items
+        .iter()
+        .map(|x| (x.kind.as_str(), x.task.as_deref()))
+        .collect();
+    assert_eq!(
+        kinds,
+        [("approval", Some("T005")), ("stuck", Some("T009"))],
+        "{}",
+        res.message()
+    );
+    let approval = &i.items[0];
+    assert!(approval.detail.contains("touch"), "{}", approval.detail);
+    assert!(approval.since.is_some());
+    let runs: Vec<_> = approval.actions.iter().map(|a| a.run.clone()).collect();
+    assert_eq!(
+        runs,
+        [
+            Some(speccoder_core::actions::Runnable::Approve {
+                task: "T005".to_owned()
+            }),
+            Some(speccoder_core::actions::Runnable::Reject {
+                task: "T005".to_owned()
+            }),
+        ]
+    );
+    let stuck = &i.items[1];
+    assert!(stuck.title.contains("incomplete"), "{}", stuck.title);
+    let verbs: Vec<&str> = stuck
+        .actions
+        .iter()
+        .map(|a| a.label.split(' ').next().unwrap())
+        .collect();
+    assert_eq!(verbs, ["run", "nudge", "skip", "accept"]);
+    // T005's attempt holds the worktree: running T009 is not offered as if it could.
+    assert!(
+        stuck.actions[0]
+            .blocked
+            .as_deref()
+            .is_some_and(|b| b.contains("T005")),
+        "{:?}",
+        stuck.actions[0].blocked
+    );
+}

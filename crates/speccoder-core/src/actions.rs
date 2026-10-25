@@ -54,6 +54,11 @@ pub enum Runnable {
         /// The task.
         task: String,
     },
+    /// Rule that a held attempt's tests are right (the input is the reason).
+    Rule {
+        /// The task.
+        task: String,
+    },
     /// Pick the current feature.
     Feature,
     /// Push the feature's branch and open (or update) its draft pull request.

@@ -22,6 +22,7 @@ Every result that is not plainly `ok` names a code — `error[CODE]`, `stopped[C
 | [`FEATURE-SELECTION`](#feature-selection) | error | 12 | more than one feature could be meant |
 | [`CHECK-BROKEN`](#check-broken) | error | 13 | a check cannot run on the untouched code |
 | [`FEATURE-GONE`](#feature-gone) | error | 12 | the current feature no longer exists |
+| [`FEATURE-UNKNOWN`](#feature-unknown) | error | 12 | no feature has that name or number |
 | [`CONFIG`](#config) | error | 13 | the configuration or the environment is not usable |
 | [`NO-STATE-DIR`](#no-state-dir) | error | 13 | speccoder has nowhere to keep its state |
 | [`SANDBOX-UNAVAILABLE`](#sandbox-unavailable) | error | 13 | the OS sandbox is not available and the project requires it |
@@ -157,6 +158,15 @@ The format's pointer (Spec Kit: `.specify/feature.json`) or its variable names a
 - `speccoder feature`
 - `speccoder feature <name>`
 - `speccoder feature --clear`
+
+### FEATURE-UNKNOWN
+
+No feature has that name or number.
+
+`--feature` (or `--change`) names a feature by its directory name, a part of it, or its number in `speccoder feature`'s list; none matches what was given.
+
+- `speccoder feature`
+- `speccoder report --feature <name>`
 
 ### CONFIG
 

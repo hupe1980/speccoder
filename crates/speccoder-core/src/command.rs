@@ -189,6 +189,44 @@ pub enum CommandData {
     Config(Box<ConfigReport>),
     /// `issue`: the repository's open issues.
     Issues(Box<IssuesReport>),
+    /// `inbox`: what waits for a person's decision, across features.
+    Inbox(Box<InboxReport>),
+}
+
+/// Result of `speccoder inbox` (F-086): every decision that waits for a
+/// person, across the project's features, the most urgent first — the
+/// person's work once the agents write the code.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct InboxReport {
+    /// The items, the most urgent first (see [`InboxItem::kind`]).
+    pub items: Vec<InboxItem>,
+    /// Features looked at.
+    pub features: usize,
+}
+
+/// One decision waiting for a person.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct InboxItem {
+    /// What kind, in the order of urgency: `approval` (a run waits on it),
+    /// `ruling` (a verified attempt is held: its tests reject an
+    /// alternative the spec allows), `gaming` (the monitor suspects a
+    /// shortcut), `stale` (proven against an earlier wording), `stuck` (the
+    /// last attempt did not pass), `commit` (planning files a run cannot
+    /// read yet), `handoff` (every task done: review and hand it off).
+    pub kind: String,
+    /// The feature.
+    pub feature: String,
+    /// The task, when it is about one.
+    pub task: Option<String>,
+    /// What to decide, in a line.
+    pub title: String,
+    /// What it rests on: the call, the reason, the changed requirement.
+    pub detail: String,
+    /// Waiting since (Unix seconds), when known.
+    pub since: Option<u64>,
+    /// The decisions, the one that moves the work forward first; each runs
+    /// in the item's feature.
+    pub actions: Vec<crate::actions::Action>,
 }
 
 /// Result of `speccoder issue`: the repository's open GitHub issues, read
@@ -433,6 +471,7 @@ impl CommandData {
             Self::Ui(_) => "ui",
             Self::Config(_) => "config",
             Self::Issues(_) => "issues",
+            Self::Inbox(_) => "inbox",
         }
     }
 }
@@ -468,6 +507,7 @@ pub const PAYLOADS: &[&str] = &[
     "ui",
     "config",
     "issues",
+    "inbox",
 ];
 
 /// A repository instructions file given to an attempt.

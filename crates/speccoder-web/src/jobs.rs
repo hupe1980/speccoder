@@ -344,6 +344,15 @@ fn execute(
                 CommandResult::new("job", CommandStatus::ConfigError, "no state directory")
             }
         },
+        Runnable::Rule { task } => match (text, &state) {
+            (Some(why), Some(s)) => {
+                speccoder_runtime::controls::rule(root, feature, task, why, None, s)
+            }
+            (None, _) => needs("a reason"),
+            (_, None) => {
+                CommandResult::new("job", CommandStatus::ConfigError, "no state directory")
+            }
+        },
         Runnable::Feature => match text {
             Some(name) => speccoder_runtime::current::switch(root, name),
             None => needs("a feature"),

@@ -2,7 +2,7 @@
 // feature changes, and what the running job is doing, from its events.
 
 import { get, post, q, listen } from "./api";
-import type { Action, Envelope, Project, Report, PendingCall, Presentation, Runnable, Document } from "./types";
+import type { Action, Envelope, Inbox, Project, Report, PendingCall, Presentation, Runnable, Document } from "./types";
 
 export interface StageView {
   stage: string;
@@ -31,6 +31,8 @@ class AppState {
   report = $state<Envelope<Report> | null>(null);
   actions = $state<Action[]>([]);
   approvals = $state<PendingCall[]>([]);
+  /** Every decision waiting for the person, across features (F-086). */
+  inbox = $state<Envelope<Inbox> | null>(null);
   documents = $state<Document[]>([]);
   /** The doctor's warnings and failures: what would stop or spoil a run. */
   preflight = $state<{ check: string; level: string; detail: string; fix: string[]; code?: string | null }[]>([]);
@@ -51,7 +53,7 @@ class AppState {
   codeLine = $state<number | null>(null);
   input = $state<{ action: Action } | null>(null);
   palette = $state(false);
-  view = $state<"overview" | "board" | "code" | "documents" | "report" | "settings" | "setup">("board");
+  view = $state<"inbox" | "overview" | "board" | "code" | "documents" | "report" | "settings" | "setup">("inbox");
 
   #toast = 1;
 
@@ -80,6 +82,9 @@ class AppState {
         get<Envelope<{ pending: PendingCall[] }>>(`/api/approvals${q({ feature: f })}`),
         get<Document[]>(`/api/documents${q({ feature: f })}`),
       ]);
+      void get<Envelope<Inbox>>("/api/inbox")
+        .then((i) => (this.inbox = i))
+        .catch(() => {});
       void get<Envelope<{ checks: { check: string; level: string; detail: string; fix: string[]; code?: string | null }[] }>>(`/api/doctor${q({ feature: f })}`)
         .then((d) => (this.preflight = (d.data?.checks ?? []).filter((c) => c.level === "warn" || c.level === "fail")))
         .catch(() => {});
@@ -242,7 +247,7 @@ class AppState {
   get location(): string {
     const s = new URLSearchParams();
     if (this.feature) s.set("feature", this.feature);
-    if (this.view !== "board") s.set("view", this.view);
+    if (this.view !== "inbox") s.set("view", this.view);
     if (this.selected) s.set("task", this.selected);
     if (this.view === "code" && this.codeMode === "files") s.set("mode", "files");
     if (this.view === "code" && this.codeFile) s.set("file", this.codeFile);
@@ -254,7 +259,7 @@ class AppState {
   #restore() {
     const s = new URLSearchParams(location.search);
     const view = s.get("view");
-    if (view === "overview" || view === "board" || view === "code" || view === "documents" || view === "report" || view === "settings" || view === "setup") this.view = view;
+    if (view === "inbox" || view === "overview" || view === "board" || view === "code" || view === "documents" || view === "report" || view === "settings" || view === "setup") this.view = view;
     this.feature = s.get("feature") ?? this.feature;
     this.selected = s.get("task");
     this.codeFile = s.get("file");

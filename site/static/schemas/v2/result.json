@@ -86,6 +86,70 @@
       ],
       "type": "object"
     },
+    "Action": {
+      "description": "One thing a person can do now.",
+      "properties": {
+        "blocked": {
+          "description": "Why it cannot run now; `None`: it can.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "command": {
+          "description": "The equivalent command; `\"…\"` marks the input.",
+          "type": "string"
+        },
+        "confirm": {
+          "description": "It leaves the machine (a push, a pull request): what an interface\nsays in a confirmation before it runs it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "group": {
+          "description": "`next`, `plan`, `work`, `task`, `feature` or `review`.",
+          "type": "string"
+        },
+        "input": {
+          "description": "What to ask for before it runs (`Describe the feature`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "label": {
+          "description": "What it does, in a few words.",
+          "type": "string"
+        },
+        "run": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Runnable"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "How an interface runs it; `None`: run the command yourself (it leaves\nthe machine, or it is not something an interface hosts)."
+        },
+        "why": {
+          "description": "Why, or what follows (shown beside it).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "group",
+        "label",
+        "why",
+        "command",
+        "run",
+        "blocked",
+        "input",
+        "confirm"
+      ],
+      "type": "object"
+    },
     "ApprovalView": {
       "description": "A pending call as a person sees it: what, why, what it can reach, what\nthe model claimed, and what approving it grants.",
       "properties": {
@@ -672,6 +736,10 @@
         {
           "$ref": "#/$defs/IssuesReport",
           "description": "`issue`: the repository's open issues."
+        },
+        {
+          "$ref": "#/$defs/InboxReport",
+          "description": "`inbox`: what waits for a person's decision, across features."
         }
       ],
       "description": "Command-specific payload of a result."
@@ -2409,6 +2477,83 @@
       ],
       "type": "object"
     },
+    "InboxItem": {
+      "description": "One decision waiting for a person.",
+      "properties": {
+        "actions": {
+          "description": "The decisions, the one that moves the work forward first; each runs\nin the item's feature.",
+          "items": {
+            "$ref": "#/$defs/Action"
+          },
+          "type": "array"
+        },
+        "detail": {
+          "description": "What it rests on: the call, the reason, the changed requirement.",
+          "type": "string"
+        },
+        "feature": {
+          "description": "The feature.",
+          "type": "string"
+        },
+        "kind": {
+          "description": "What kind, in the order of urgency: `approval` (a run waits on it),\n`ruling` (a verified attempt is held: its tests reject an\nalternative the spec allows), `gaming` (the monitor suspects a\nshortcut), `stale` (proven against an earlier wording), `stuck` (the\nlast attempt did not pass), `commit` (planning files a run cannot\nread yet), `handoff` (every task done: review and hand it off).",
+          "type": "string"
+        },
+        "since": {
+          "description": "Waiting since (Unix seconds), when known.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "task": {
+          "description": "The task, when it is about one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "description": "What to decide, in a line.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "feature",
+        "task",
+        "title",
+        "detail",
+        "since",
+        "actions"
+      ],
+      "type": "object"
+    },
+    "InboxReport": {
+      "description": "Result of `speccoder inbox` (F-086): every decision that waits for a\nperson, across the project's features, the most urgent first — the\nperson's work once the agents write the code.",
+      "properties": {
+        "features": {
+          "description": "Features looked at.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "items": {
+          "description": "The items, the most urgent first (see [`InboxItem::kind`]).",
+          "items": {
+            "$ref": "#/$defs/InboxItem"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "items",
+        "features"
+      ],
+      "type": "object"
+    },
     "InitCheck": {
       "description": "One detected check.",
       "properties": {
@@ -3772,6 +3917,223 @@
         "samples"
       ],
       "type": "object"
+    },
+    "Runnable": {
+      "description": "How an interface runs an action itself.",
+      "oneOf": [
+        {
+          "description": "A planning skill (`speccoder spec <name> <arguments>`).",
+          "properties": {
+            "arguments": {
+              "description": "Its arguments (the input, when one is asked for).",
+              "type": "string"
+            },
+            "kind": {
+              "const": "skill",
+              "type": "string"
+            },
+            "name": {
+              "description": "The skill.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "name",
+            "arguments"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "`speccoder run`, the feature or one task.",
+          "properties": {
+            "kind": {
+              "const": "run",
+              "type": "string"
+            },
+            "task": {
+              "description": "One task, or the feature's ready tasks.",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "task"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "`speccoder run --converge`: the ready tasks, then the assessment of\nthe code against the spec as it is now, appending what remains.",
+          "properties": {
+            "kind": {
+              "const": "converge",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Commit exactly these planning files.",
+          "properties": {
+            "kind": {
+              "const": "commit",
+              "type": "string"
+            },
+            "paths": {
+              "description": "Repository-relative paths.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "kind",
+            "paths"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Approve the task's waiting call.",
+          "properties": {
+            "kind": {
+              "const": "approve",
+              "type": "string"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Reject it (the input is the reason).",
+          "properties": {
+            "kind": {
+              "const": "reject",
+              "type": "string"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Tick the task on the person's word (the input is the reason).",
+          "properties": {
+            "kind": {
+              "const": "accept",
+              "type": "string"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Skip the task (the input is the reason).",
+          "properties": {
+            "kind": {
+              "const": "skip",
+              "type": "string"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Leave a note for the task's next attempts (the input is the note).",
+          "properties": {
+            "kind": {
+              "const": "nudge",
+              "type": "string"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Rule that a held attempt's tests are right (the input is the reason).",
+          "properties": {
+            "kind": {
+              "const": "rule",
+              "type": "string"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Pick the current feature.",
+          "properties": {
+            "kind": {
+              "const": "feature",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Push the feature's branch and open (or update) its draft pull request.",
+          "properties": {
+            "kind": {
+              "const": "pull_request",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        }
+      ]
     },
     "Schedule": {
       "description": "Which tasks can start now, and what blocks the rest.",

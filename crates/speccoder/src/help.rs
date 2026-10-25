@@ -12,7 +12,7 @@ pub const GROUPS: &[(&str, &[&str])] = &[
     ("Start", &["init", "doctor", "config"]),
     ("Plan", &["feature", "spec", "issue"]),
     ("Work", &["run", "task"]),
-    ("Review", &["report", "ui", "pr", "attest"]),
+    ("Review", &["inbox", "report", "ui", "pr", "attest"]),
 ];
 
 /// The commands `help advanced` lists.
