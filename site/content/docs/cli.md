@@ -61,6 +61,7 @@ Every stop and finish ends with a `Next:` block — the commands that continue, 
 | Command | What it does |
 |---|---|
 | `speccoder review [approve\|request\|clear\|answer\|edit]` | The spec as a conversation: approve each wording, request changes, answer its open questions in place, reword a requirement; what changed since the last commit and the spec's history ([review](@/docs/planning.md#review-the-spec)) |
+| `speccoder do "…" [--check "…"]… [--no-run]` | A small change, judged like any other: a story, an approved requirement and a task in `NNN-quick-changes`, committed, then run ([quick changes](@/docs/running.md#quick-changes)) |
 | `speccoder inbox` | Every decision waiting for you, in every feature (or `--feature`), the most urgent first, each with the command that settles it |
 | `speccoder report` | Every task and the evidence behind its tick, the requirement trace, ticks proven against an earlier spec, and what is open |
 | `speccoder report --live` | What the current or last run is doing, from another terminal |
@@ -72,8 +73,6 @@ Every stop and finish ends with a `Next:` block — the commands that continue, 
 | `speccoder ui [--port N] [--no-open] [--window]` | The [web interface](@/docs/web.md): the feature, its evidence, its code and the next step in the browser — or in a desktop window (`--window`; built in on macOS) |
 | `speccoder report --markdown` | The report as Markdown, for pull requests and CI summaries |
 | `speccoder pr [--remote R] [--base B] [--yes] [--dry-run] [--force]` | Push the branch and its attestation notes and open a draft pull request with the evidence; `--force` hands off although the full-tier checks failed |
-| `speccoder attest verify [REV\|RANGE] [--allowed-signers FILE] [--certificate-identity I --certificate-oidc-issuer O] [--require-signed]` | Re-check every tick's [attestation](@/docs/attestations.md) against its commit, and its signatures against your trust |
-| `speccoder attest sign [REV\|RANGE]` | Sign the statements ticks left unsigned (`[attest] sign_at = "later"`, or no key yet) |
 
 ## Advanced
 
@@ -81,6 +80,8 @@ Listed by `speccoder help advanced`.
 
 | Command | What it does |
 |---|---|
+| `speccoder attest verify [REV\|RANGE] [--allowed-signers FILE] [--certificate-identity I --certificate-oidc-issuer O] [--require-signed]` | Re-check every tick's [attestation](@/docs/attestations.md) against its commit, and its signatures against your trust |
+| `speccoder attest sign [REV\|RANGE]` | Sign the statements ticks left unsigned (`[attest] sign_at = "later"`, or no key yet) |
 | `speccoder verify [--tier fast\|full] [--against FILE]` | Run the configured checks; compare with a saved result |
 | `speccoder converge [--in-place]` | Assess a finished feature against its spec and append what remains |
 | `speccoder inspect` | The features, artifacts and tasks speccoder sees, with what blocks what |

@@ -11,12 +11,13 @@ use crate::cli::Cli;
 pub const GROUPS: &[(&str, &[&str])] = &[
     ("Start", &["init", "doctor", "config", "auth"]),
     ("Plan", &["feature", "spec", "review", "issue"]),
-    ("Work", &["run", "task"]),
-    ("Review", &["inbox", "report", "ui", "pr", "attest"]),
+    ("Work", &["run", "do", "task"]),
+    ("Review", &["inbox", "report", "ui", "pr"]),
 ];
 
 /// The commands `help advanced` lists.
 pub const ADVANCED: &[&str] = &[
+    "attest",
     "verify",
     "converge",
     "inspect",

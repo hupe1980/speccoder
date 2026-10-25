@@ -359,6 +359,37 @@
           "type": "object"
         },
         {
+          "description": "Record a quick change and, when `run`, run it (F-094).",
+          "properties": {
+            "checks": {
+              "description": "When it is done: its acceptance scenarios.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "kind": {
+              "const": "quick_change",
+              "type": "string"
+            },
+            "request": {
+              "description": "The change, in the person's words.",
+              "type": "string"
+            },
+            "run": {
+              "description": "Run it once recorded.",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "kind",
+            "request",
+            "checks",
+            "run"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Pick the current feature.",
           "properties": {
             "kind": {

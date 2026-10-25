@@ -147,6 +147,20 @@ pub enum Command {
         #[arg(long)]
         window: bool,
     },
+    /// A small change, judged like any other: `do "make the login button blue"` records and runs it.
+    Do {
+        /// The change, in your words.
+        request: String,
+        /// When it is done (repeatable): the acceptance scenarios its tests are written from.
+        #[arg(long = "check", value_name = "WHEN")]
+        checks: Vec<String>,
+        /// Record it (a story, a requirement, a task — committed) without running it.
+        #[arg(long)]
+        no_run: bool,
+        /// Never ask inline: approvals stop the run.
+        #[arg(long)]
+        no_prompt: bool,
+    },
     /// What waits for your decision in every feature, the most urgent first, with the command for each.
     Inbox,
     /// GitHub: sign in (a token, kept in the keychain), see who speccoder is there, sign out.
@@ -269,6 +283,7 @@ pub enum Command {
         force: bool,
     },
     /// Verify the signed evidence of the feature's ticks, or sign what is unsigned.
+    #[command(hide = true)]
     Attest {
         #[command(subcommand)]
         action: AttestAction,

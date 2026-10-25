@@ -38,6 +38,7 @@ pub mod mutation;
 pub mod next;
 pub mod pipeline;
 pub mod progress;
+pub mod quick;
 pub mod resume;
 pub mod review;
 pub mod sandbox;

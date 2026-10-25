@@ -5,6 +5,7 @@
 
 pub mod bench;
 pub mod hooks;
+mod quick;
 mod texts;
 pub mod workflow;
 
@@ -230,6 +231,15 @@ impl Adapter for SpecKit {
 
     fn requirements_file(&self) -> Option<&'static str> {
         Some("spec.md")
+    }
+
+    fn record_change(
+        &self,
+        root: &Path,
+        request: &str,
+        checks: &[String],
+    ) -> Result<super::Recorded, String> {
+        quick::record(root, request, checks)
     }
 
     fn requirements_in(&self, text: &str) -> Vec<(String, String)> {

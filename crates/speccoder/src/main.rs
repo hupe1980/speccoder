@@ -515,6 +515,27 @@ fn main() {
             window,
         } => ui(path, *port, *no_open, *window, cli.json),
         Command::Config { action } => config(path, action.as_ref()),
+        Command::Do {
+            request,
+            checks,
+            no_run,
+            no_prompt,
+        } => {
+            let approver: Option<std::sync::Arc<dyn speccoder_runtime::approvals::Approver>> =
+                interactive(*no_prompt).then(|| std::sync::Arc::new(prompt::Terminal) as _);
+            let (progress, attention) = live_progress(&cli, &notify, events.as_ref());
+            let options = speccoder_runtime::RunOptions {
+                approver,
+                progress,
+                ..speccoder_runtime::RunOptions::default()
+            };
+            let result =
+                speccoder_runtime::quick::change(path, request, checks, !*no_run, "cli", &options);
+            if let Some(a) = &attention {
+                a.finish(&result);
+            }
+            result
+        }
         Command::Inbox => speccoder_runtime::inbox::inbox(path, feature),
         Command::Auth { action } => auth(path, action.as_ref()),
         Command::Review { action } => {
@@ -1080,6 +1101,7 @@ fn command_name(command: Option<&Command>) -> &'static str {
             C::Ui { .. } => "ui",
             C::Config { .. } => "config",
             C::Issue { .. } => "issue",
+            C::Do { .. } => "do",
             C::Inbox => "inbox",
             C::Auth { .. } => "auth",
             C::Review { .. } => "review",

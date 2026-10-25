@@ -76,6 +76,15 @@ pub enum Runnable {
         /// Also assign it to the person.
         assign: bool,
     },
+    /// Record a quick change and, when `run`, run it (F-094).
+    QuickChange {
+        /// The change, in the person's words.
+        request: String,
+        /// When it is done: its acceptance scenarios.
+        checks: Vec<String>,
+        /// Run it once recorded.
+        run: bool,
+    },
     /// Pick the current feature.
     Feature,
     /// Push the feature's branch and open (or update) its draft pull request.

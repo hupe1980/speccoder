@@ -11,6 +11,17 @@ ticks a task only on evidence the model cannot produce or edit.
 
 ### Added
 
+**Quick changes**
+
+- `speccoder do "…" [--check "…"]… [--no-run]`: a small change without the
+  planning ceremony and without skipping the evidence — a story, an
+  approved requirement and a task in a standing `NNN-quick-changes`
+  feature, committed (exactly those files), then run like any task. Quick
+  changes do not wait for each other.
+- The app: a Quick Change sheet (what should change; done when …; Record,
+  Record and Run, ⌘↩), from Needs You, `q`, File › Quick Change… (⇧⌘N), or
+  by typing the change into the palette.
+
 **The spec as a conversation**
 
 - Open questions: every `[NEEDS CLARIFICATION: …]` in the feature's
