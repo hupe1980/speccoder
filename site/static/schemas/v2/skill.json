@@ -20,6 +20,13 @@
       },
       "type": "array"
     },
+    "current": {
+      "description": "The unit the skill worked on, or created and made current, and how\nit is known (`001-x (recorded in .specify/feature.json)`).",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "hooks": {
       "description": "Extension hooks run, offered or skipped around it.",
       "items": {

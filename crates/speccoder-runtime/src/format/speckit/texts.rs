@@ -7,6 +7,8 @@ use crate::format::{Assess, Messages, Planning, Rules, Wording};
 
 /// The marker directory of a Spec Kit project.
 pub const MARKER: &str = ".specify";
+/// Spec Kit's pointer to the current feature (per checkout, git-ignored).
+pub const POINTER: &str = ".specify/feature.json";
 
 /// Spec Kit's selection override, read by the caller of the parser.
 pub const FEATURE_ENV: &str = "SPECIFY_FEATURE_DIRECTORY";
@@ -98,8 +100,11 @@ pub static MESSAGES: Messages = Messages {
     no_project: "not a Spec Kit project (no .specify/ found)",
     no_project_in_worktree: "the worktree has no Spec Kit project",
     not_in_git: "the Spec Kit project is not inside a git repository",
-    no_skills: "no skills installed (Spec Kit installs them with `specify init --ai claude`, under .claude/skills/)",
+    no_skills: "no skills installed (Spec Kit installs them with `specify init --here --integration claude`, under .claude/skills/)",
     checklists,
+    unit: "feature",
+    no_current: "",
+    current_shared: "Spec Kit's scripts and the /speckit-* commands in your editor read it too",
 };
 
 fn not_a_project(path: &Path) -> String {
@@ -130,6 +135,8 @@ pub static PLANNING: Planning = Planning {
         "constitution",
     ],
     refused,
+    creates: &["specify"],
+    current_env: Some(FEATURE_ENV),
 };
 
 /// Skills speccoder does not host, and what to use instead.

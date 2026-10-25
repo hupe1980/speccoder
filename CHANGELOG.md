@@ -90,6 +90,19 @@ ticks a task only on evidence the model cannot produce or edit.
   (`price_cache_write_per_mtok`, `price_cache_write_1h_per_mtok`; by default
   Anthropic's 1.25× and 2× input), no longer as plain input.
 
+**The current feature**
+
+- `speccoder feature` lists the features with their progress and the
+  current one, and switches it (`feature 2`, `feature greet`); `--clear`.
+  The current feature lives in Spec Kit's own `.specify/feature.json`, so
+  speccoder, Spec Kit's scripts and editor agents agree.
+- Planning skills are told the feature (`SPECIFY_FEATURE_DIRECTORY`): `spec
+  plan` no longer stops because the model did not record the feature
+  `spec specify` created — that feature becomes current by itself.
+- With several features and none current, `run` and `spec` ask at a
+  terminal; the dashboard opens on a picker (`f`); a stale pointer gets a
+  "did you mean"; `report` and `doctor` say which feature and why.
+
 **Acceptance strength**
 
 - After every `verified` verdict the acceptance tests are tested: near-miss

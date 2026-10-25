@@ -29,6 +29,25 @@ Results are left **uncommitted**: review them with `git diff`, then commit, beca
 
 `speckit-implement` and `speckit-converge` are not hosted — `speccoder run` and `speccoder converge` do that work, with evidence. `speckit-taskstoissues` is not hosted either, because it writes to GitHub.
 
+## The current feature
+
+Every command works on one feature. Which one is the **current feature**, and speccoder keeps it where Spec Kit does — `.specify/feature.json`, a per-checkout file git ignores — so `speccoder`, Spec Kit's scripts and the `/speckit-*` commands in your editor always agree.
+
+```text
+$ speccoder feature
+▸  1  001-greet-function  ■■■■■■■□□□  7/10 tasks    spec · plan · tasks
+   2  002-farewell        □□□□□□□□□□  no tasks yet spec
+current feature: 001-greet-function (recorded in .specify/feature.json)
+
+$ speccoder feature 2          # or: speccoder feature farewell, speccoder feature 002-farewell
+switched to 002-farewell (recorded in .specify/feature.json: Spec Kit's scripts and the /speckit-* commands in your editor read it too)
+```
+
+- `speccoder spec specify` makes the feature it creates current — whether or not the model remembered to write the file — and says so. Every other planning skill's commands are told the feature (`SPECIFY_FEATURE_DIRECTORY`), so Spec Kit's scripts never lose it.
+- `--feature NAME` (and `SPECIFY_FEATURE_DIRECTORY`) choose for one command without changing the current one. With a single feature, it is current by itself.
+- With several features and none current, `run` and `spec` ask you at a terminal and remember the answer; elsewhere they stop with the list and the command that picks one. A pointer to a feature that no longer exists gets a "did you mean …" and shows up in `speccoder doctor`.
+- `report` and `doctor` say which feature and why (`recorded in .specify/feature.json`, `the only feature`, `named with --feature`); in the [dashboard](@/docs/running.md#the-dashboard), `f` opens a picker. `speccoder feature --clear` forgets the current feature.
+
 ## Extension hooks
 
 Spec Kit extensions register hooks in `.specify/extensions.yml` — the git extension, for example, creates a feature branch before `specify`. speccoder runs them around what it runs:

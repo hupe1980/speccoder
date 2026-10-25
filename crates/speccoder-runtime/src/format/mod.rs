@@ -104,6 +104,19 @@ pub trait Adapter: Send + Sync + std::fmt::Debug {
         Vec::new()
     }
 
+    /// The format's per-checkout pointer to the current unit
+    /// (repository-relative), if it has one.
+    fn current_pointer(&self) -> Option<&'static str> {
+        None
+    }
+
+    /// Records `unit_dir` (repository-relative) as the current unit in the
+    /// format's own per-checkout pointer, or clears it (`None`); returns the
+    /// pointer's path. `Err`: the format has no current unit.
+    fn set_current(&self, _root: &Path, _unit_dir: Option<&str>) -> Result<String, String> {
+        Err(self.messages().no_current.to_owned())
+    }
+
     /// Ticks `task` (one byte, under the line-hash guard).
     fn tick(&self, tasks_file: &Path, task: &str, line_hash: &str) -> Result<(), String>;
 
@@ -224,6 +237,12 @@ pub struct Messages {
     pub no_skills: &'static str,
     /// Unchecked checklists stop a run (the list given).
     pub checklists: fn(&str) -> String,
+    /// What a unit is called: `feature`, `change`.
+    pub unit: &'static str,
+    /// Why there is no current unit to set.
+    pub no_current: &'static str,
+    /// Who else reads the pointer, said when it changes.
+    pub current_shared: &'static str,
 }
 
 /// Hosted planning skills.
@@ -235,6 +254,12 @@ pub struct Planning {
     pub core: &'static [&'static str],
     /// Why a skill is not hosted, and what to use instead.
     pub refused: fn(&str) -> Option<String>,
+    /// Core skills that create a new unit (Spec Kit: `specify`): they get
+    /// no current-unit variable, and the unit they create becomes current.
+    pub creates: &'static [&'static str],
+    /// The variable the format's own scripts read the current unit from
+    /// (Spec Kit: `SPECIFY_FEATURE_DIRECTORY`), passed to planning commands.
+    pub current_env: Option<&'static str>,
 }
 
 /// What a worktree needs committed: a worktree contains only commits.

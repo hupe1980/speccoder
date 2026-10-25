@@ -120,6 +120,9 @@ pub static MESSAGES: Messages = Messages {
     not_in_git: "the OpenSpec project is not inside a git repository",
     no_skills: "no skills installed (OpenSpec installs them with `openspec init`, under .claude/skills/)",
     checklists,
+    unit: "change",
+    no_current: "OpenSpec has no current change: name one with --change",
+    current_shared: "",
 };
 
 fn not_a_project(path: &Path) -> String {
@@ -138,6 +141,8 @@ pub static PLANNING: Planning = Planning {
     prefix: "openspec-",
     core: &[],
     refused,
+    creates: &[],
+    current_env: None,
 };
 
 /// Skills speccoder does not host, and what to use instead.

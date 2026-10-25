@@ -105,7 +105,10 @@ pub fn select(
                         "select.not-found",
                         format!("no feature matches `{arg}`"),
                     )
-                    .hint(format!("available: {}", available())),
+                    .hint(format!(
+                        "available: {}; `speccoder feature` lists them",
+                        available()
+                    )),
                 );
                 none
             }
@@ -135,7 +138,10 @@ pub fn select(
                     "select.not-found",
                     format!("{source} names `{value}`, which is not a feature directory inside the project"),
                 )
-                .hint(format!("pass --feature; available: {}", available()));
+                .hint(match speccoder_core::snapshot::closest(features, dir) {
+                    Some(c) => format!("did you mean {}? `speccoder feature {}` makes it current", c.name, c.name),
+                    None => format!("`speccoder feature <name>` picks another (available: {})", available()),
+                });
                 if reason == SelectionReason::Recorded {
                     d = d.at(source);
                 }
@@ -168,7 +174,10 @@ pub fn select(
                     "select.ambiguous",
                     "several features and none recorded as current",
                 )
-                .hint(format!("pass --feature; available: {}", available())),
+                .hint(format!(
+                    "`speccoder feature <name or number>` picks one (available: {})",
+                    available()
+                )),
             );
             none
         }

@@ -371,6 +371,7 @@ pub fn report(path: &Path, feature: Option<&str>) -> CommandResult {
             feature: name,
             branch: has_branch.then_some(branch),
             source: source.to_owned(),
+            selected_by: crate::current::reason_text(snapshot.selection.reason, format),
             unmerged_commits: unmerged,
             tasks,
             convergence,

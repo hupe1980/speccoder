@@ -69,6 +69,8 @@ pub enum Overlay {
     Diff,
     /// Stop the run, or keep watching?
     Quit,
+    /// Which feature to show (`f`).
+    Features,
 }
 
 /// Which list the arrow keys move in on the Run screen.
@@ -157,6 +159,10 @@ pub enum Action {
     StopAfterTask,
     /// Stop the run now (it resumes on the next `run`).
     StopNow,
+    /// List the features for the picker.
+    Features,
+    /// Make this feature current and show it.
+    Switch(String),
 }
 
 /// The dashboard's state.
@@ -192,6 +198,10 @@ pub struct App {
     pub evidence: Option<(String, Vec<evidence::Row>)>,
     /// The open diff.
     pub diff: Option<diff::Diff>,
+    /// The features, for the picker.
+    pub features: Option<speccoder_core::FeaturesReport>,
+    /// The picker's selected row.
+    pub pick: usize,
 }
 
 impl App {
@@ -214,6 +224,8 @@ impl App {
             who: None,
             evidence: None,
             diff: None,
+            features: None,
+            pick: 0,
         }
     }
 
@@ -378,6 +390,7 @@ impl App {
                 return Action::None;
             }
             Overlay::Diff => return self.diff_key(code),
+            Overlay::Features => return self.features_key(code),
             Overlay::None => {}
         }
         self.screen_key(code)
@@ -543,6 +556,49 @@ impl App {
         }
     }
 
+    /// The picker opened with `features`, on the current one.
+    pub fn show_features(&mut self, features: speccoder_core::FeaturesReport) {
+        self.pick = features
+            .features
+            .iter()
+            .position(|f| f.current)
+            .unwrap_or(0);
+        self.features = Some(features);
+        self.overlay = Overlay::Features;
+    }
+
+    fn features_key(&mut self, code: KeyCode) -> Action {
+        let n = self.features.as_ref().map_or(0, |f| f.features.len());
+        match code {
+            KeyCode::Esc | KeyCode::Char('q' | 'f') => self.overlay = Overlay::None,
+            KeyCode::Down | KeyCode::Char('j') => {
+                self.pick = (self.pick + 1).min(n.saturating_sub(1))
+            }
+            KeyCode::Up | KeyCode::Char('k') => self.pick = self.pick.saturating_sub(1),
+            KeyCode::Char(c) if c.is_ascii_digit() => {
+                let i = c.to_digit(10).map_or(0, |d| d as usize);
+                if (1..=n).contains(&i) {
+                    self.pick = i - 1;
+                }
+            }
+            KeyCode::Enter => {
+                if let Some(f) = self
+                    .features
+                    .as_ref()
+                    .and_then(|f| f.features.get(self.pick))
+                {
+                    let name = f.name.clone();
+                    self.overlay = Overlay::None;
+                    self.task = 0;
+                    self.evidence = None;
+                    return Action::Switch(name);
+                }
+            }
+            _ => {}
+        }
+        Action::None
+    }
+
     fn diff_key(&mut self, code: KeyCode) -> Action {
         let Some(d) = self.diff.as_mut() else {
             self.overlay = Overlay::None;
@@ -584,6 +640,15 @@ impl App {
             KeyCode::Char('?') => {
                 self.overlay = Overlay::Help;
                 Action::None
+            }
+            KeyCode::Char('f') => {
+                if self.active() {
+                    self.flash =
+                        Some("the run works on this feature; switch once it has ended".to_owned());
+                    Action::None
+                } else {
+                    Action::Features
+                }
             }
             KeyCode::Char('1') => {
                 self.screen = Screen::Run;
@@ -747,8 +812,25 @@ fn no_state(command: &str) -> CommandResult {
 }
 
 /// What the loop does with an action that is not the model's.
-fn perform(app: &mut App, action: Action, path: &Path, feature: Option<&str>, state: &Path) {
+fn perform(app: &mut App, action: Action, path: &Path, chosen: &mut Option<String>, state: &Path) {
+    let feature = chosen.clone();
+    let feature = feature.as_deref();
     match action {
+        Action::Features => {
+            let r = speccoder_runtime::current::list(path, feature);
+            match r.data() {
+                Some(CommandData::Features(f)) => app.show_features((**f).clone()),
+                _ => app.flash = Some(r.message().to_owned()),
+            }
+        }
+        Action::Switch(name) => {
+            let r = speccoder_runtime::current::switch(path, &name);
+            app.flash = Some(r.message().to_owned());
+            if r.status() == CommandStatus::Ok {
+                *chosen = Some(name);
+                app.snap = load(path, chosen.as_deref(), state);
+            }
+        }
         Action::Approve(task) => {
             let r = decide_with(path, feature, Verb::Approve(&task), state);
             app.flash = Some(r.message().to_owned());
@@ -790,13 +872,24 @@ pub fn run(path: &Path, feature: Option<&str>) -> CommandResult {
         return no_state("tui");
     };
     let path: PathBuf = path.to_path_buf();
+    let mut chosen: Option<String> = feature.map(str::to_owned);
     let mut app = App::new(load(&path, feature, &state));
-    if app.snap.report.is_none() {
-        return CommandResult::new(
-            "tui",
-            CommandStatus::NotAProject,
-            app.snap.problem.as_deref().unwrap_or("no feature"),
-        );
+    // Several features and none current: open on the picker.
+    let features = speccoder_runtime::current::list(&path, feature);
+    let listed = match features.data() {
+        Some(CommandData::Features(f)) if !f.features.is_empty() => Some((**f).clone()),
+        _ => None,
+    };
+    match (&app.snap.report, listed) {
+        (None, Some(f)) if f.current.is_none() => app.show_features(f),
+        (None, _) => {
+            return CommandResult::new(
+                "tui",
+                CommandStatus::NotAProject,
+                app.snap.problem.as_deref().unwrap_or("no feature"),
+            );
+        }
+        _ => {}
     }
     let mut terminal = ratatui::init();
     let mut loaded = Instant::now();
@@ -812,7 +905,7 @@ pub fn run(path: &Path, feature: Option<&str>) -> CommandResult {
                 if let Some(code) = event::read().ok().as_ref().and_then(key_of) {
                     match app.key(code) {
                         Action::Quit => break Ok(()),
-                        a => perform(&mut app, a, &path, feature, &state),
+                        a => perform(&mut app, a, &path, &mut chosen, &state),
                     }
                 }
             }
@@ -820,7 +913,7 @@ pub fn run(path: &Path, feature: Option<&str>) -> CommandResult {
             Err(e) => break Err(e.to_string()),
         }
         if loaded.elapsed() >= Duration::from_secs(1) {
-            app.snap = load(&path, feature, &state);
+            app.snap = load(&path, chosen.as_deref(), &state);
             loaded = Instant::now();
         }
     };
@@ -867,6 +960,7 @@ pub fn host_run(
     };
     let path: PathBuf = path.to_path_buf();
     let (rx, cancel) = host::start(&path, work);
+    let mut chosen: Option<String> = feature.map(str::to_owned);
     let mut app = App::hosting(load(&path, feature, &state), host::person(&path));
     let mut call: Option<Sender<Answer>> = None;
     let mut question: Option<Sender<Option<String>>> = None;
@@ -906,7 +1000,7 @@ pub fn host_run(
                                 let _ = tx.send(text);
                             }
                         }
-                        a => perform(&mut app, a, &path, feature, &state),
+                        a => perform(&mut app, a, &path, &mut chosen, &state),
                     }
                 }
             }

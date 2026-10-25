@@ -290,6 +290,11 @@
       "description": "Feature directory name.",
       "type": "string"
     },
+    "selected_by": {
+      "default": "",
+      "description": "How the feature was chosen (`recorded in .specify/feature.json`,\n`the only feature`, `named with --feature`).",
+      "type": "string"
+    },
     "source": {
       "description": "Where `tasks.md` was read: `branch` or `checkout`.",
       "type": "string"
@@ -323,6 +328,7 @@
     "feature",
     "branch",
     "source",
+    "selected_by",
     "unmerged_commits",
     "tasks",
     "convergence",

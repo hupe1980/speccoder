@@ -70,8 +70,27 @@ pub fn run_with(
     secret: Option<&str>,
     options: &RunOptions,
 ) -> CommandResult {
+    run_in(
+        path, None, name, arguments, state, provider, secret, options,
+    )
+}
+
+/// [`run_with`] for `feature` (`--feature`; else the format's own
+/// selection): the skill's commands are told which unit is meant, and a
+/// unit the creating skill makes becomes current.
+#[allow(clippy::too_many_arguments)]
+pub fn run_in(
+    path: &Path,
+    feature: Option<&str>,
+    name: &str,
+    arguments: &str,
+    state: &Path,
+    provider: Arc<dyn ModelProvider>,
+    secret: Option<&str>,
+    options: &RunOptions,
+) -> CommandResult {
     let refuse = |status, m: String| CommandResult::new("skill", status, &redact(&m, secret));
-    let s = match crate::setup(path, None, state, "skill") {
+    let s = match crate::setup(path, feature, state, "skill") {
         Ok(s) => s,
         Err(r) => return *r,
     };
@@ -103,10 +122,11 @@ pub fn run_with(
     let event = core_event(planning, &skill.name).map(str::to_owned);
     let mut hook_lines = Vec::new();
     if let Some(e) = &event {
-        match run_hooks(
+        match run_hooks_in(
             &format!("before_{e}"),
             arguments,
             path,
+            feature,
             state,
             &provider,
             secret,
@@ -163,16 +183,32 @@ pub fn run_with(
         Ok((r, _)) => r,
         Err(e) => return refuse(CommandStatus::ConfigError, e),
     };
+    let canonical = std::fs::canonicalize(&root).unwrap_or_else(|_| root.clone());
+    // Which unit the skill works on. The format's scripts are told
+    // (Spec Kit: SPECIFY_FEATURE_DIRECTORY), so they never depend on a
+    // pointer file the model may not have written — except the skill that
+    // creates a unit, which a variable would redirect into an old one.
+    let short = skill
+        .name
+        .strip_prefix(planning.prefix)
+        .unwrap_or(&skill.name);
+    let creates = planning.creates.contains(&short);
+    let selected = s.snapshot.feature.as_ref().map(|f| f.feature.dir.clone());
+    let env: Vec<(String, String)> = match (planning.current_env, &selected) {
+        (Some(var), Some(dir)) if !creates => {
+            vec![(var.to_owned(), canonical.join(dir).display().to_string())]
+        }
+        _ => Vec::new(),
+    };
     let server = match tools::WorkspaceTools::new(
         &root,
         tools::policy::Policy::new(&[], &[])
             .rules(s.format.rules())
             .authoring(),
     ) {
-        Ok(t) => Arc::new(t.with_runner(runner)),
+        Ok(t) => Arc::new(t.with_runner(runner).with_env(env)),
         Err(e) => return refuse(CommandStatus::Error, e.to_string()),
     };
-    let canonical = std::fs::canonicalize(&root).unwrap_or_else(|_| root.clone());
     let input = substrate::host::input(
         &skill.name,
         &instruction,
@@ -257,7 +293,35 @@ pub fn run_with(
         usage: output.get("usage").cloned(),
         status: status.clone(),
         hooks: Vec::new(),
+        current: None,
     };
+    // A unit the creating skill made becomes current, in the format's own
+    // pointer, whether or not the model recorded it.
+    let mut report = report;
+    if creates && succeeded {
+        let known: Vec<&str> = s.snapshot.features.iter().map(|f| f.dir.as_str()).collect();
+        let made = s
+            .format
+            .inspect(&root, None)
+            .map(|after| after.features)
+            .unwrap_or_default()
+            .into_iter()
+            .rfind(|f| !known.contains(&f.dir.as_str()));
+        if let Some(f) = made {
+            match s.format.set_current(&root, Some(&f.dir)) {
+                Ok(pointer) => {
+                    report.current = Some(format!("{} (recorded in {pointer})", f.name));
+                }
+                Err(e) => report.current = Some(format!("{} (not recorded: {e})", f.name)),
+            }
+        }
+    } else if let Some(f) = s.snapshot.feature.as_ref() {
+        report.current = Some(format!(
+            "{} ({})",
+            f.feature.name,
+            crate::current::reason_text(s.snapshot.selection.reason, s.format)
+        ));
+    }
     let tokens = |k: &str| {
         report
             .usage
@@ -314,14 +378,14 @@ pub fn run_with(
         cache_write_tokens: tokens("cache_write_tokens"),
         usd: None,
     });
-    let mut report = report;
     if code == CommandStatus::Ok
         && let Some(e) = &event
     {
-        match run_hooks(
+        match run_hooks_in(
             &format!("after_{e}"),
             arguments,
             path,
+            feature,
             state,
             &provider,
             secret,
@@ -340,12 +404,19 @@ pub fn run_with(
         .with_data(CommandData::Skill(Box::new(report)))
 }
 
-/// `speccoder spec <name>` with the configured model.
+/// `speccoder spec <name>` with the configured model, for `feature`.
 #[must_use]
-pub fn run(path: &Path, name: &str, arguments: &str, options: &RunOptions) -> CommandResult {
+pub fn run(
+    path: &Path,
+    feature: Option<&str>,
+    name: &str,
+    arguments: &str,
+    options: &RunOptions,
+) -> CommandResult {
     crate::with_driver("skill", path, None, |state, provider, key| {
-        run_with(
+        run_in(
             path,
+            feature,
             name,
             arguments,
             state,
@@ -368,6 +439,23 @@ pub fn run_hooks(
     secret: Option<&str>,
     options: &RunOptions,
 ) -> Result<Vec<String>, Box<CommandResult>> {
+    run_hooks_in(
+        event, arguments, path, None, state, provider, secret, options,
+    )
+}
+
+/// [`run_hooks`] for `feature`, which the hook skills work on.
+#[allow(clippy::too_many_arguments)]
+pub fn run_hooks_in(
+    event: &str,
+    arguments: &str,
+    path: &Path,
+    feature: Option<&str>,
+    state: &Path,
+    provider: &Arc<dyn ModelProvider>,
+    secret: Option<&str>,
+    options: &RunOptions,
+) -> Result<Vec<String>, Box<CommandResult>> {
     let root = root_of(path)?;
     let plan = crate::hooks::plan(&root, event)
         .map_err(|e| Box::new(CommandResult::new("hooks", CommandStatus::ConfigError, &e)))?;
@@ -382,8 +470,9 @@ pub fn run_hooks(
             "{event} hook ({}): {}",
             hook.extension, hook.command
         ));
-        let res = run_with(
+        let res = run_in(
             path,
+            feature,
             &hook.skill(),
             arguments,
             state,

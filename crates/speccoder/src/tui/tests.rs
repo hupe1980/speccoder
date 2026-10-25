@@ -37,6 +37,7 @@ fn snapshot() -> Snapshot {
             feature: "001-x".to_owned(),
             branch: Some("speccoder/001-x".to_owned()),
             source: "branch".to_owned(),
+            selected_by: String::new(),
             unmerged_commits: 1,
             tasks: vec![verified, task("T002", "ready"), blocked],
             convergence: Vec::new(),
@@ -628,4 +629,67 @@ fn an_approval_takes_precedence_over_help_and_the_diff() {
         assert_eq!(app.overlay, Overlay::Ask);
         assert!(screen(&app).contains("Approval needed"));
     }
+}
+
+#[test]
+fn f_picks_the_feature_and_a_working_run_keeps_its_own() {
+    let report = speccoder_core::FeaturesReport {
+        unit: "feature".to_owned(),
+        current: Some("001-x".to_owned()),
+        reason: "recorded".to_owned(),
+        reason_text: "recorded in .specify/feature.json".to_owned(),
+        action: "listed".to_owned(),
+        features: vec![
+            speccoder_core::FeatureEntry {
+                number: 1,
+                name: "001-x".to_owned(),
+                dir: "specs/001-x".to_owned(),
+                current: true,
+                done: 1,
+                tasks: 3,
+                artifacts: vec!["spec".to_owned(), "plan".to_owned(), "tasks".to_owned()],
+            },
+            speccoder_core::FeatureEntry {
+                number: 2,
+                name: "002-y".to_owned(),
+                dir: "specs/002-y".to_owned(),
+                current: false,
+                done: 0,
+                tasks: 0,
+                artifacts: vec!["spec".to_owned()],
+            },
+        ],
+    };
+    let mut app = App::new(snapshot());
+    assert_eq!(app.key(KeyCode::Char('f')), Action::Features);
+    app.show_features(report.clone());
+    let s = screen(&app);
+    for needle in [
+        "Features · recorded in .specify/feature.json",
+        "▸  1  001-x",
+        "1/3 tasks",
+        "2  002-y",
+        "no tasks yet",
+    ] {
+        assert!(s.contains(needle), "missing {needle:?} in\n{s}");
+    }
+    assert_eq!(app.pick, 0);
+    app.key(KeyCode::Down);
+    assert_eq!(app.key(KeyCode::Enter), Action::Switch("002-y".to_owned()));
+    assert_eq!(app.overlay, Overlay::None);
+    // Digits pick by number; esc closes.
+    app.show_features(report);
+    app.key(KeyCode::Char('2'));
+    assert_eq!(app.pick, 1);
+    app.key(KeyCode::Esc);
+    assert_eq!(app.overlay, Overlay::None);
+    // While a hosted run works, its feature stays.
+    let mut busy = hosted();
+    assert_eq!(busy.key(KeyCode::Char('f')), Action::None);
+    assert!(
+        busy.flash
+            .as_deref()
+            .unwrap_or_default()
+            .contains("switch once it has ended")
+    );
 }

@@ -89,6 +89,50 @@ fn archive(
     )
 }
 
+/// Whether the planning skill `name` creates a feature (it needs none).
+fn creates(path: &std::path::Path, name: &str) -> bool {
+    let planning = speccoder_runtime::format::at(path).planning();
+    let short = name.strip_prefix(planning.prefix).unwrap_or(name);
+    planning.creates.contains(&short)
+}
+
+/// Asks which feature to work on when several exist and none is current,
+/// and makes the answer current. Nothing happens otherwise; an empty answer
+/// leaves the command to say what is missing.
+fn pick_feature(path: &std::path::Path) {
+    use std::io::Write as _;
+    let format = speccoder_runtime::format::at(path);
+    let Some(snap) = format.open(path, None) else {
+        return;
+    };
+    if snap.feature.is_some() || snap.features.len() < 2 {
+        return;
+    }
+    let listed = speccoder_runtime::current::list(path, None);
+    let Some(speccoder_core::CommandData::Features(f)) = listed.data() else {
+        return;
+    };
+    let unit = &f.unit;
+    let mut err = std::io::stderr().lock();
+    let _ = writeln!(err, "Which {unit}? None is current.");
+    for line in human::features(f) {
+        let _ = writeln!(err, "{line}");
+    }
+    loop {
+        let _ = write!(err, "Number or name (enter: none) > ");
+        let _ = err.flush();
+        let mut line = String::new();
+        if std::io::stdin().read_line(&mut line).unwrap_or(0) == 0 || line.trim().is_empty() {
+            return;
+        }
+        let r = speccoder_runtime::current::switch(path, line.trim());
+        let _ = writeln!(err, "{}", r.message());
+        if r.status() == speccoder_core::CommandStatus::Ok {
+            return;
+        }
+    }
+}
+
 /// The dashboard is for a person at a terminal: stdin, stdout and stderr
 /// are terminals, and no machine output, `--plain` or screen reader.
 fn dashboard(cli: &Cli) -> bool {
@@ -221,6 +265,17 @@ fn main() {
         };
         finish(&cli, result, events.as_ref());
     };
+    // Several features and none current: at a terminal, ask rather than fail.
+    if feature.is_none() && !machine && interactive(false) {
+        let needs = match command {
+            Command::Run { return_: false, .. } => true,
+            Command::Spec { name: Some(n), .. } => n != "archive" && !creates(path, n),
+            _ => false,
+        };
+        if needs {
+            pick_feature(path);
+        }
+    }
     let result = match command {
         Command::Help { topic } => {
             help::print(topic);
@@ -299,6 +354,11 @@ fn main() {
             }
         }
         Command::Task { action } => task_action(action, path, feature),
+        Command::Feature { query, clear } => match (query, clear) {
+            (_, true) => speccoder_runtime::current::clear(path),
+            (Some(q), false) => speccoder_runtime::current::switch(path, q),
+            (None, false) => speccoder_runtime::current::list(path, feature),
+        },
         Command::Workflow {
             action: cli::WorkflowAction::Install { force },
         } => speccoder_runtime::workflow::install(path, *force),
@@ -343,7 +403,7 @@ fn main() {
                     progress,
                     ..speccoder_runtime::RunOptions::default()
                 };
-                speccoder_runtime::hosting::run(path, name, &arguments.join(" "), &options)
+                speccoder_runtime::hosting::run(path, feature, name, &arguments.join(" "), &options)
             }
         },
         Command::Init {
@@ -771,6 +831,7 @@ fn command_name(command: Option<&Command>) -> &'static str {
             C::Init { .. } => "init",
             C::Doctor { .. } => "doctor",
             C::Spec { .. } => "spec",
+            C::Feature { .. } => "feature",
             C::Run { .. } => "run",
             C::Task { action } => match action {
                 cli::TaskAction::Approve { .. } => "task approve",

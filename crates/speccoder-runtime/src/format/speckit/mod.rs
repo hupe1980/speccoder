@@ -89,6 +89,30 @@ impl Adapter for SpecKit {
         &PLANNING
     }
 
+    fn current_pointer(&self) -> Option<&'static str> {
+        Some(texts::POINTER)
+    }
+
+    fn set_current(&self, root: &Path, unit_dir: Option<&str>) -> Result<String, String> {
+        // Spec Kit's own per-checkout pointer (git-ignored by `.specify/.gitignore`).
+        let file = root.join(texts::POINTER);
+        match unit_dir {
+            Some(dir) => {
+                let text =
+                    serde_json::to_string_pretty(&serde_json::json!({ "feature_directory": dir }))
+                        .map_err(|e| e.to_string())?;
+                std::fs::write(&file, format!("{text}\n"))
+                    .map_err(|e| format!("{}: {e}", file.display()))?;
+            }
+            None => match std::fs::remove_file(&file) {
+                Ok(()) => {}
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(e) => return Err(format!("{}: {e}", file.display())),
+            },
+        }
+        Ok(texts::POINTER.to_owned())
+    }
+
     fn bundle(&self, snapshot: &ProjectSnapshot, task_id: &str) -> Result<Bundle, BundleError> {
         let feature: &FeatureSnapshot = snapshot.feature.as_ref().ok_or(BundleError::NoFeature)?;
         let tasks = feature.tasks.as_ref().ok_or(BundleError::NoTasks)?;

@@ -36,6 +36,7 @@ Every stop and finish ends with a `Next:` block — the commands that continue, 
 
 | Command | What it does |
 |---|---|
+| `speccoder feature [NAME \| NUMBER] [--clear]` | List the features with their progress, or make one [current](@/docs/planning.md#the-current-feature) — what commands work on when no `--feature` is given |
 | `speccoder spec [SKILL] [ARGS…] [--no-prompt]` | List the format's planning skills, or run one (Spec Kit: `specify`, `clarify`, `plan`, `tasks`, …; OpenSpec: `propose`, `explore`, `update-change`) |
 | `speccoder spec archive [CHANGE] [--yes] [--allow-unverified TASK]…` | Archive an OpenSpec change: OpenSpec's checks first, then the diff, then your yes, then one commit |
 

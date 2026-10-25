@@ -108,6 +108,7 @@ pub fn checks(
                 DoctorLevel::Pass,
                 format!("{kind} at {}{feature}", o.snapshot.root),
             ));
+            out.push(current_check(o.adapter, &o.snapshot));
             if let Some((tool, install)) = o.adapter.tool() {
                 out.push(match version(tool) {
                     Some(v) => check("spec tool", DoctorLevel::Pass, v),
@@ -369,6 +370,46 @@ pub fn run(path: &Path, feature: Option<&str>, look: Option<&str>) -> CommandRes
         }
     };
     result.with_data(CommandData::Doctor(Box::new(report)))
+}
+
+/// Which unit commands work on when none is named, and why — or what
+/// stops them from knowing (several units, a pointer to a gone one).
+fn current_check(
+    format: &'static dyn crate::format::Adapter,
+    snap: &speccoder_core::snapshot::ProjectSnapshot,
+) -> DoctorCheck {
+    let unit = format.messages().unit;
+    let problem = snap
+        .diagnostics
+        .iter()
+        .find(|d| d.code == "select.ambiguous" || d.code == "select.not-found");
+    match (&snap.feature, problem) {
+        (Some(f), _) => check(
+            "feature",
+            DoctorLevel::Pass,
+            format!(
+                "{} ({})",
+                f.feature.name,
+                crate::current::reason_text(snap.selection.reason, format)
+            ),
+        ),
+        (None, Some(d)) => DoctorCheck {
+            fix: vec!["→ speccoder feature".to_owned()]
+                .into_iter()
+                .chain(d.hint.iter().map(|h| format!("→ {h}")))
+                .collect(),
+            ..check("feature", DoctorLevel::Warn, d.message.clone())
+        },
+        (None, None) if snap.features.is_empty() => check(
+            "feature",
+            DoctorLevel::Pass,
+            format!("no {unit}s yet — `speccoder spec specify \"…\"` creates one"),
+        ),
+        (None, None) => DoctorCheck {
+            fix: vec!["→ speccoder feature".to_owned()],
+            ..check("feature", DoctorLevel::Warn, format!("no current {unit}"))
+        },
+    }
 }
 
 #[cfg(test)]

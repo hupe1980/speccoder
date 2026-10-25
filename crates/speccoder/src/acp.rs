@@ -495,7 +495,7 @@ fn prompt(
         "status" => speccoder_runtime::progress::status(cwd),
         "cost" => speccoder_runtime::controls::cost(cwd, None),
         skill if COMMANDS.iter().any(|(n, ..)| *n == skill) => {
-            speccoder_runtime::hosting::run(cwd, skill, args, &options)
+            speccoder_runtime::hosting::run(cwd, None, skill, args, &options)
         }
         other => {
             say(&format!("`/{other}` is not a speccoder command."));

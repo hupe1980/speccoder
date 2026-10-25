@@ -107,6 +107,7 @@ pub fn draw(f: &mut Frame<'_>, app: &App) {
         Overlay::Ask => ask(f, app, rows[1]),
         Overlay::Diff => diff(f, app, rows[1]),
         Overlay::Quit => quit(f, rows[1]),
+        Overlay::Features => features(f, app, rows[1]),
     }
 }
 
@@ -132,7 +133,10 @@ fn header(f: &mut Frame<'_>, app: &App, area: Rect) {
         spans.push(Span::styled(format!(" {n} {name} "), s));
         spans.push(Span::raw(" "));
     }
-    spans.push(Span::styled("  ? keys  q quit", st(Token::Muted)));
+    spans.push(Span::styled(
+        "  f feature  ? keys  q quit",
+        st(Token::Muted),
+    ));
     f.render_widget(Paragraph::new(Line::from(spans)), area);
 }
 
@@ -717,6 +721,10 @@ pub fn keys(screen: Screen) -> Vec<(&'static str, &'static str)> {
             "enter",
             "answer a waiting call; else the selected task's evidence",
         ),
+        (
+            "f",
+            "pick the feature to show (made current for every tool)",
+        ),
     ];
     match screen {
         Screen::Run => out.extend([
@@ -767,6 +775,73 @@ fn help(f: &mut Frame<'_>, app: &App, area: Rect) {
     f.render_widget(
         Paragraph::new(lines).block(bordered(" Keys (esc closes) ", true)),
         box_,
+    );
+}
+
+fn features(f: &mut Frame<'_>, app: &App, area: Rect) {
+    let Some(r) = &app.features else {
+        return;
+    };
+    let box_ = centred(area, 80, 70);
+    f.render_widget(Clear, box_);
+    let width = r
+        .features
+        .iter()
+        .map(|e| e.name.chars().count())
+        .max()
+        .unwrap_or(0);
+    let mut items: Vec<ListItem<'_>> = r
+        .features
+        .iter()
+        .map(|e| {
+            let filled = (e.done * 10).checked_div(e.tasks).unwrap_or(0);
+            let bar = a(&format!(
+                "{}{}",
+                "■".repeat(filled),
+                "□".repeat(10 - filled)
+            ));
+            let progress = if e.tasks == 0 {
+                "no tasks yet".to_owned()
+            } else {
+                format!("{}/{} tasks", e.done, e.tasks)
+            };
+            let mark = match (e.current, look().ascii) {
+                (true, true) => ">",
+                (true, false) => "▸",
+                (false, _) => " ",
+            };
+            let done = e.tasks > 0 && e.done == e.tasks;
+            ListItem::new(Line::from(vec![
+                Span::styled(
+                    format!("{mark} {:>2}  {:<width$}  ", e.number, e.name),
+                    if e.current { bold() } else { Style::default() },
+                ),
+                Span::styled(bar, st(if done { Token::Verified } else { Token::Accent })),
+                Span::raw(format!("  {progress:<12} ")),
+                Span::styled(a(&e.artifacts.join(" · ")), st(Token::Muted)),
+            ]))
+        })
+        .collect();
+    if items.is_empty() {
+        items.push(ListItem::new(format!("no {}s yet", r.unit)));
+    }
+    let mut state = ListState::default().with_selected(Some(app.pick));
+    let title = format!(
+        " {} · {} · {} move · enter show · esc back ",
+        if r.unit == "change" {
+            "Changes"
+        } else {
+            "Features"
+        },
+        a(&r.reason_text),
+        arrows()
+    );
+    f.render_stateful_widget(
+        List::new(items)
+            .block(bordered(&title, true))
+            .highlight_style(Style::default().add_modifier(Modifier::REVERSED)),
+        box_,
+        &mut state,
     );
 }
 
