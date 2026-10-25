@@ -6,6 +6,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+homepage.workspace = true
 readme = "README.md"
 # The window's build (`--features app`) reads these.
 include = ["/src", "/build.rs", "/tauri.conf.json", "/icons", "/README.md", "/LICENSE-APACHE", "/LICENSE-MIT"]
