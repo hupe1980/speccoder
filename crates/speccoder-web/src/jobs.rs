@@ -361,19 +361,16 @@ fn execute(
             None => needs("a feature"),
         },
         // The page has confirmed it (the action's `confirm`): push and open.
-        Runnable::PullRequest => {
-            let gh = speccoder_runtime::github::gh();
-            speccoder_runtime::handoff::pr(
-                root,
-                feature,
-                &speccoder_runtime::handoff::PrOptions {
-                    remote: "origin",
-                    base: None,
-                    gh: &gh,
-                    open: true,
-                    force: false,
-                },
-            )
-        }
+        Runnable::PullRequest => speccoder_runtime::handoff::pr(
+            root,
+            feature,
+            &speccoder_runtime::handoff::PrOptions {
+                remote: "origin",
+                base: None,
+                open: true,
+                force: false,
+                github: &speccoder_runtime::github::Ctx::from_env(),
+            },
+        ),
     }
 }

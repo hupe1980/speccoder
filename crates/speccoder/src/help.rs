@@ -9,7 +9,7 @@ use crate::cli::Cli;
 
 /// The daily commands, by group, in the order shown.
 pub const GROUPS: &[(&str, &[&str])] = &[
-    ("Start", &["init", "doctor", "config"]),
+    ("Start", &["init", "doctor", "config", "auth"]),
     ("Plan", &["feature", "spec", "review", "issue"]),
     ("Work", &["run", "task"]),
     ("Review", &["inbox", "report", "ui", "pr", "attest"]),

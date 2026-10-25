@@ -59,7 +59,7 @@ speccoder pr                    # shows that, then asks before pushing
 speccoder pr --yes --base main  # without asking
 ```
 
-`speccoder pr` pushes `speccoder/<feature>` to `--remote` (default `origin`) and opens a **draft** pull request with the GitHub CLI against your checkout's branch or `--base`. The description is the evidence: every task with its verdict, mutation results and commit, what is still open, tokens, and what `verified` does not mean. It is the only command that talks to a git remote; it asks first, is a dry run without a terminal unless you pass `--yes`, and never merges or marks a pull request ready.
+`speccoder pr` pushes `speccoder/<feature>` to `--remote` (default `origin`) and opens a **draft** pull request through GitHub's API, as you ([sign in](@/docs/github.md#sign-in)), against your checkout's branch or `--base`. The description is the evidence: every task with its verdict, mutation results and commit, what is still open, tokens, and what `verified` does not mean. It is the only command that talks to a git remote; it asks first, is a dry run without a terminal unless you pass `--yes`, and never merges or marks a pull request ready.
 
 ## CI and scripting
 

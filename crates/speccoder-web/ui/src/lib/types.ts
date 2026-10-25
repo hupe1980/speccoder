@@ -223,7 +223,7 @@ export interface Pull {
 }
 
 export interface GitHubState {
-  status: { installed: boolean; ready: boolean; repo: string | null; url: string | null; reason: string | null };
+  status: { ready: boolean; host: string | null; login: string | null; source: string | null; repo: string | null; url: string | null; reason: string | null; fix: string | null };
   issues?: { repo: string | null; issues: GitHubIssue[] } | null;
   issues_error?: string | null;
   branch?: string | null;

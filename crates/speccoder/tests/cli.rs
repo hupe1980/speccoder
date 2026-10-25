@@ -3,6 +3,8 @@
 // Test code: panicking on unexpected input is the failure report.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
+#[path = "../../speccoder-runtime/tests/fake_github/mod.rs"]
+mod fake_github;
 mod support;
 
 use assert_cmd::Command;
@@ -999,51 +1001,64 @@ fn config_sets_checks_and_commits_the_configuration_alone() {
     );
 }
 
-/// `speccoder issue` (F-083) through a scripted `gh`: the open issues as the
-/// documented payload; without a login, the fix.
+/// `speccoder issue` (F-083, F-089) through GitHub's API, stood in: the
+/// open issues as the documented payload; signed out, the fix; `auth status`
+/// names the account and where the token came from, never the token.
 #[test]
-fn issue_lists_through_gh_and_says_how_to_log_in() {
+fn issue_lists_through_the_api_and_says_how_to_sign_in() {
     let dir = committed_project(false);
     git(
         dir.path(),
         &["remote", "add", "origin", "https://github.com/o/r.git"],
     );
-    let bin = tempfile::tempdir().unwrap();
-    let gh = bin.path().join("gh");
-    std::fs::write(
-        &gh,
-        "#!/bin/sh\ncase \"$1 $2\" in\n  \"issue list\") echo '[{\"number\":42,\"title\":\"Greet\",\"url\":\"https://github.com/o/r/issues/42\",\"labels\":[{\"name\":\"feature\"}],\"assignees\":[],\"updatedAt\":\"2026-10-20T00:00:00Z\"}]';;\n  \"repo view\") echo '{\"nameWithOwner\":\"o/r\"}';;\n  *) exit 1;;\nesac\n",
-    )
-    .unwrap();
-    assert!(
-        std::process::Command::new("chmod")
-            .arg("+x")
-            .arg(&gh)
-            .status()
-            .unwrap()
-            .success()
-    );
-    let out = speccoder()
-        .args(["--json", "issue", "-C"])
-        .arg(dir.path())
-        .env("SPECCODER_GH", &gh)
-        .output()
-        .unwrap();
+    let api = fake_github::serve(vec![
+        ("GET /user", 200, r#"{"login":"me"}"#.to_owned()),
+        (
+            "GET /repos/o/r/issues",
+            200,
+            r#"[{"number":42,"title":"Greet","html_url":"https://github.com/o/r/issues/42","labels":[{"name":"feature"}],"assignees":[],"updated_at":"2026-10-20T00:00:00Z"}]"#.to_owned(),
+        ),
+    ]);
+    let with = |c: &mut Command, token: Option<&str>| {
+        c.env("SPECCODER_GITHUB_API", &api.url)
+            .env("SPECCODER_NO_KEYCHAIN", "1")
+            .env_remove("GITHUB_TOKEN");
+        match token {
+            Some(t) => c.env("GH_TOKEN", t),
+            None => c.env_remove("GH_TOKEN"),
+        };
+    };
+    let mut c = speccoder();
+    c.args(["--json", "issue", "-C"]).arg(dir.path());
+    with(&mut c, Some("t0ken"));
+    let out = c.output().unwrap();
     let v = support::checked(support::result(&out.stdout));
     assert_eq!(v["payload"], "issues", "{v}");
     assert_eq!(v["data"]["repo"], "o/r");
     assert_eq!(v["data"]["issues"][0]["number"], 42);
     assert_eq!(v["data"]["issues"][0]["labels"][0], "feature");
 
-    // Not logged in: the reason and the fix.
-    std::fs::write(&gh, "#!/bin/sh\necho 'To get started with GitHub CLI, please run:  gh auth login' >&2\nexit 4\n").unwrap();
-    let out = speccoder()
-        .args(["--json", "issue", "start", "42", "-C"])
-        .arg(dir.path())
-        .env("SPECCODER_GH", &gh)
-        .output()
-        .unwrap();
+    let mut c = speccoder();
+    c.args(["--json", "auth", "status", "-C"]).arg(dir.path());
+    with(&mut c, Some("t0ken"));
+    let out = c.output().unwrap();
+    let v = support::checked(support::result(&out.stdout));
+    assert_eq!(v["payload"], "auth", "{v}");
+    assert_eq!(v["data"]["login"], "me");
+    assert_eq!(v["data"]["source"], "GH_TOKEN");
+    assert!(
+        !String::from_utf8_lossy(&out.stdout).contains("t0ken"),
+        "the token was printed"
+    );
+
+    // Signed out: the reason and the fix.
+    let mut c = speccoder();
+    c.args(["--json", "issue", "start", "42", "-C"])
+        .arg(dir.path());
+    with(&mut c, None);
+    let out = c.output().unwrap();
     let v = support::checked(support::result(&out.stdout));
     assert_eq!(v["status"], "error", "{v}");
-    assert_eq!(v["fix"][0], "gh auth login", "{v}");
+    assert_eq!(v["code"], "GITHUB-AUTH", "{v}");
+    assert_eq!(v["fix"][0], "speccoder auth login --with-token", "{v}");
 }

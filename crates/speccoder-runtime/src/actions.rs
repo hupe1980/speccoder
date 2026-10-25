@@ -300,7 +300,7 @@ pub fn available_with(
     );
     pr.run = Some(Runnable::PullRequest);
     pr.confirm = Some(
-        "Push the feature's speccoder branch and its attestation notes to `origin`, and open (or update) its draft pull request on GitHub through your `gh` login.".to_owned(),
+        "Push the feature's speccoder branch and its attestation notes to `origin`, and open (or update) its draft pull request on GitHub, as you (your token).".to_owned(),
     );
     out.push(pr);
     out.push(action(

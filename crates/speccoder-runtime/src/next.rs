@@ -76,7 +76,11 @@ fn by_code(code: &str) -> Option<Vec<speccoder_core::next::NextStep>> {
             "speccoder config commit",
             "speccoder reads committed configuration only",
         )],
-        "GH-MISSING" | "GH-AUTH" | "GH-FAILED" | "NO-REMOTE" => {
+        "GITHUB-AUTH" => vec![step(
+            "speccoder auth login --with-token",
+            "sign in to GitHub (the token goes to the keychain)",
+        )],
+        "GITHUB-FAILED" | "NO-REMOTE" => {
             vec![step("speccoder doctor", "check the rest of the setup")]
         }
         _ => return None,

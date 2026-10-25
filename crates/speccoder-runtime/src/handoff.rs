@@ -21,12 +21,12 @@ pub struct PrOptions<'a> {
     pub remote: &'a str,
     /// The target branch; default: the branch the checkout is on.
     pub base: Option<&'a str>,
-    /// The GitHub CLI (`gh`).
-    pub gh: &'a str,
     /// Push and open (`false`: a dry run).
     pub open: bool,
     /// Hand off although the branch's full-tier checks failed (said in the body).
     pub force: bool,
+    /// How GitHub is reached ([`crate::github::Ctx::from_env`]).
+    pub github: &'a crate::github::Ctx,
 }
 
 /// Commit trailers on the branch: (task, `Mutation:` value, `Usage:` value).
@@ -297,10 +297,15 @@ pub fn pr(path: &Path, feature: Option<&str>, options: &PrOptions<'_>) -> Comman
     if push_notes {
         commands.push(format!("git push {} {notes}", options.remote));
     }
-    commands.extend([format!(
-        "{} pr create --draft --base {base} --head {branch} --title {title:?} --body-file <body>",
-        options.gh
-    )]);
+    // The repository the remote names on GitHub: where the draft opens.
+    let github = crate::github::repo(&repo_root, Some(options.remote));
+    commands.push(match &github {
+        Ok(r) => format!(
+            "open (or update) a draft pull request on {}: {branch} → {base} (GitHub API, as you)",
+            r.slug()
+        ),
+        Err(e) => format!("no pull request can be opened: {e}"),
+    });
     let mut out = PrReport {
         feature: report.feature.clone(),
         branch: branch.clone(),
@@ -317,6 +322,25 @@ pub fn pr(path: &Path, feature: Option<&str>, options: &PrOptions<'_>) -> Comman
             "pr",
             CommandStatus::Ok,
             "dry run: nothing was pushed (confirm, or pass --yes, to push and open the draft)",
+        )
+        .with_data(CommandData::Pr(Box::new(out)));
+    }
+    // Nothing leaves the machine unless the pull request can be opened:
+    // a GitHub repository the remote names, and someone signed in there.
+    let github = match github {
+        Ok(r) => r,
+        Err(e) => {
+            return crate::github::refused("pr", &format!("{e}; nothing was pushed"))
+                .with_data(CommandData::Pr(Box::new(out)));
+        }
+    };
+    if options.github.token(&github.host).is_none() {
+        return crate::github::refused(
+            "pr",
+            &format!(
+                "not signed in to {}: `speccoder auth login` (or set GH_TOKEN); nothing was pushed",
+                github.host
+            ),
         )
         .with_data(CommandData::Pr(Box::new(out)));
     }
@@ -341,78 +365,49 @@ pub fn pr(path: &Path, feature: Option<&str>, options: &PrOptions<'_>) -> Comman
             )
         })
         .unwrap_or_default();
-    // A pull request for this branch already: the push updated it; a
-    // second one is never opened.
-    if let Ok(Some(existing)) = crate::github::pr_for(options.gh, &repo_root, &branch)
-        && existing.state == "OPEN"
-    {
-        out.opened = true;
-        out.url = Some(existing.url.clone());
-        return CommandResult::new(
-            "pr",
-            CommandStatus::Ok,
-            &format!(
-                "pushed {branch}: updated pull request #{} ({}){notes_warning}",
-                existing.number, existing.url
-            ),
-        )
-        .with_data(CommandData::Pr(Box::new(out)));
-    }
-    let body_file = std::env::temp_dir().join(format!("speccoder-pr-{}.md", std::process::id()));
-    if let Err(e) = std::fs::write(&body_file, &body) {
-        return refuse(CommandStatus::Error, &e.to_string());
-    }
-    let created = std::process::Command::new(options.gh)
-        .args([
-            "pr",
-            "create",
-            "--draft",
-            "--base",
-            &base,
-            "--head",
-            &branch,
-            "--title",
-            &title,
-            "--body-file",
-        ])
-        .arg(&body_file)
-        .current_dir(&repo_root)
-        .stdin(std::process::Stdio::null())
-        .output();
-    let _ = std::fs::remove_file(&body_file);
-    match created {
-        Ok(o) if o.status.success() => {
+    let failed = |e: &str, out: PrReport| {
+        let r = crate::github::refused("pr", e);
+        let status = r.status();
+        r.reworded(status, &format!("pushed {branch}, but {e}"))
+            .with_data(CommandData::Pr(Box::new(out)))
+    };
+    // A pull request for this branch already: the push updated its code;
+    // its title and description are brought up to date with the evidence.
+    // A second one is never opened.
+    // The pull request in the repository this remote names (not `origin`'s).
+    match crate::github::pr_in(options.github, &github, &branch) {
+        Ok(Some(existing)) if existing.state == "OPEN" => {
             out.opened = true;
-            out.url = String::from_utf8_lossy(&o.stdout)
-                .lines()
-                .rev()
-                .find(|l| l.starts_with("http"))
-                .map(str::to_owned);
-            let msg = format!(
-                "draft pull request opened{}{notes_warning}",
-                out.url
-                    .as_deref()
-                    .map(|u| format!(": {u}"))
-                    .unwrap_or_default()
-            );
-            CommandResult::new("pr", CommandStatus::Ok, &msg)
-                .with_data(CommandData::Pr(Box::new(out)))
+            out.url = Some(existing.url.clone());
+            if let Err(e) =
+                crate::github::update(options.github, &github, existing.number, &title, &body)
+            {
+                return failed(&e, out);
+            }
+            return CommandResult::new(
+                "pr",
+                CommandStatus::Ok,
+                &format!(
+                    "pushed {branch}: updated pull request #{} and its evidence ({}){notes_warning}",
+                    existing.number, existing.url
+                ),
+            )
+            .with_data(CommandData::Pr(Box::new(out)));
         }
-        Ok(o) => CommandResult::new(
-            "pr",
-            CommandStatus::Error,
-            &format!(
-                "pushed {branch}, but `{} pr create` failed: {}",
-                options.gh,
-                String::from_utf8_lossy(&o.stderr).trim()
-            ),
-        )
-        .with_data(CommandData::Pr(Box::new(out))),
-        Err(e) => CommandResult::new(
-            "pr",
-            CommandStatus::Error,
-            &format!("pushed {branch}, but `{}` could not run: {e}", options.gh),
-        )
-        .with_data(CommandData::Pr(Box::new(out))),
+        Ok(_) => {}
+        Err(e) => return failed(&e, out),
+    }
+    match crate::github::open_draft(options.github, &github, &base, &branch, &title, &body) {
+        Ok((number, url)) => {
+            out.opened = true;
+            out.url = Some(url.clone());
+            CommandResult::new(
+                "pr",
+                CommandStatus::Ok,
+                &format!("draft pull request #{number} opened: {url}{notes_warning}"),
+            )
+            .with_data(CommandData::Pr(Box::new(out)))
+        }
+        Err(e) => failed(&e, out),
     }
 }

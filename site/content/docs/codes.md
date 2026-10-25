@@ -27,9 +27,8 @@ Every result that is not plainly `ok` names a code — `error[CODE]`, `stopped[C
 | [`CONFIG`](#config) | error | 13 | the configuration or the environment is not usable |
 | [`NO-STATE-DIR`](#no-state-dir) | error | 13 | speccoder has nowhere to keep its state |
 | [`SANDBOX-UNAVAILABLE`](#sandbox-unavailable) | error | 13 | the OS sandbox is not available and the project requires it |
-| [`GH-MISSING`](#gh-missing) | error | 1 | the GitHub CLI (`gh`) is not installed |
-| [`GH-AUTH`](#gh-auth) | error | 1 | the GitHub CLI is not logged in |
-| [`GH-FAILED`](#gh-failed) | error | 1 | the GitHub CLI could not do it |
+| [`GITHUB-AUTH`](#github-auth) | error | 1 | not signed in to GitHub |
+| [`GITHUB-FAILED`](#github-failed) | error | 1 | the GitHub API could not do it |
 | [`CONFIG-EXISTS`](#config-exists) | error | 13 | the project has a speccoder.toml already |
 | [`CONFIG-MISSING`](#config-missing) | error | 13 | the project has no speccoder.toml |
 | [`CONFIG-INVALID`](#config-invalid) | error | 13 | speccoder.toml has an error |
@@ -204,29 +203,24 @@ The OS sandbox is not available and the project requires it.
 - Run on macOS or a Linux with Landlock (5.13+)
 - Or set [sandbox] mode = "auto" to run unsandboxed and be told
 
-### GH-MISSING
+### GITHUB-AUTH
 
-The GitHub CLI (`gh`) is not installed.
+Not signed in to GitHub.
 
-speccoder reads issues and opens pull requests through your own `gh`, with its login; it stores no token of its own.
+speccoder reads issues and opens pull requests through GitHub's API as you: with GH_TOKEN (or GITHUB_TOKEN) from the environment, else the token `speccoder auth login` keeps in your system keychain. None was found, or GitHub refused it (expired or revoked).
 
-- Install the GitHub CLI: https://cli.github.com (brew install gh, apt install gh, winget install GitHub.cli)
+- `speccoder auth login --with-token`
+- `speccoder auth status`
+- Or set GH_TOKEN (a fine-grained token: Issues read; Pull requests read and write; Contents and Metadata read)
 
-### GH-AUTH
+### GITHUB-FAILED
 
-The GitHub CLI is not logged in.
+The GitHub API could not do it.
 
-`gh` holds your GitHub login; speccoder uses it as it is and asks for nothing.
+GitHub answered, and not as asked: no such issue, no access for the token, a rate limit used up, or GitHub did not answer in time. The message is GitHub's, in words.
 
-- `gh auth login`
-
-### GH-FAILED
-
-The GitHub CLI could not do it.
-
-The message is `gh`'s own: no GitHub remote, no such issue, no access, or GitHub did not answer.
-
-- `gh repo view`
+- `speccoder auth status`
+- `git remote -v`
 
 ### CONFIG-EXISTS
 

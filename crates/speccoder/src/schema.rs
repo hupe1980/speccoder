@@ -73,6 +73,7 @@ const fn describe(payload: &str) -> &'static str {
         b"issues" => "issue: the repository's open GitHub issues",
         b"inbox" => "inbox: every decision waiting for a person, across features",
         b"review" => "review: the spec's requirements and the person's decision on each",
+        b"auth" => "auth: who speccoder is on a GitHub host, and where its token comes from",
         _ => "",
     }
 }
@@ -115,6 +116,7 @@ pub fn get(name: &str) -> Option<Value> {
         "issues" => generate::<core::IssuesReport>(name, title),
         "inbox" => generate::<core::InboxReport>(name, title),
         "review" => generate::<core::ReviewReport>(name, title),
+        "auth" => generate::<core::AuthReport>(name, title),
         _ => return None,
     })
 }

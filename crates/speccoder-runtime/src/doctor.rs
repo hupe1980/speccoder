@@ -305,6 +305,29 @@ pub fn checks(
             }
         });
     }
+    // GitHub (issues, pull requests): offline — the host the remote names
+    // and where a token would come from; optional either way.
+    if let Ok(r) = crate::github::repo(&root, None) {
+        let ctx = crate::github::Ctx::from_env();
+        out.push(match ctx.token(&r.host) {
+            Some((_, source)) => check(
+                "github",
+                DoctorLevel::Pass,
+                format!("{} on {} (token from {})", r.slug(), r.host, source.word()),
+            ),
+            None => DoctorCheck {
+                fix: vec!["speccoder auth login --with-token".to_owned()],
+                ..check(
+                    "github",
+                    DoctorLevel::Info,
+                    format!(
+                        "not signed in to {} (optional: for issues and pull requests)",
+                        r.host
+                    ),
+                )
+            },
+        });
+    }
     // The repository's instructions for agents.
     let names = run_config
         .as_ref()
