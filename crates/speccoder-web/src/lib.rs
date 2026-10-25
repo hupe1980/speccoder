@@ -37,7 +37,12 @@ pub struct Shared {
     pub port: u16,
     /// Jobs and events.
     pub hub: Arc<jobs::Hub>,
+    /// Turns true when the host stops: open event streams end with it.
+    pub closing: tokio::sync::watch::Receiver<bool>,
 }
+
+/// How long open requests get to finish after ctrl-c.
+const GRACE: std::time::Duration = std::time::Duration::from_secs(2);
 
 /// Runs `f` on a thread of its own: the runtime's calls block and start
 /// runtimes of their own, which the host's workers must not.
@@ -359,6 +364,12 @@ async fn events(State(s): State<Shared>) -> Response {
             Ok::<_, std::convert::Infallible>(axum::response::sse::Event::default().data(text))
         })
     });
+    // An event stream never ends on its own: it ends when the host stops,
+    // or a graceful shutdown would wait for it forever.
+    let mut closing = s.closing.clone();
+    let stream = stream.take_until(async move {
+        let _ = closing.wait_for(|c| *c).await;
+    });
     axum::response::sse::Sse::new(hello.chain(stream))
         .keep_alive(axum::response::sse::KeepAlive::default())
         .into_response()
@@ -407,6 +418,7 @@ pub fn serve(root: &Path, port: u16, ready: impl FnOnce(&Started) + Send) -> Res
             .await
             .map_err(|e| format!("127.0.0.1:{port}: {e}"))?;
         let port = listener.local_addr().map_err(|e| e.to_string())?.port();
+        let (close, closed) = tokio::sync::watch::channel(false);
         let token = security::token();
         if token.is_empty() {
             return Err("no random source for the token".to_owned());
@@ -416,16 +428,27 @@ pub fn serve(root: &Path, port: u16, ready: impl FnOnce(&Started) + Send) -> Res
             token: token.clone(),
             port,
             hub: jobs::Hub::new(root),
+            closing: closed,
         };
         ready(&Started {
             url: format!("http://127.0.0.1:{port}/#token={token}"),
             port,
         });
-        axum::serve(listener, router(shared))
-            .with_graceful_shutdown(async {
-                let _ = tokio::signal::ctrl_c().await;
-            })
-            .await
-            .map_err(|e| e.to_string())
+        // ctrl-c: end the event streams, give open requests a moment, then
+        // stop whatever still holds on.
+        let (stop, stopping) = tokio::sync::oneshot::channel::<()>();
+        let server = axum::serve(listener, router(shared)).with_graceful_shutdown(async move {
+            let _ = stopping.await;
+        });
+        let signal = async move {
+            let _ = tokio::signal::ctrl_c().await;
+            let _ = close.send(true);
+            let _ = stop.send(());
+            tokio::time::sleep(GRACE).await;
+        };
+        tokio::select! {
+            served = server => served.map_err(|e| e.to_string()),
+            () = signal => Ok(()),
+        }
     })
 }

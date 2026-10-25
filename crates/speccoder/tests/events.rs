@@ -564,3 +564,72 @@ fn a_window_without_the_app_feature_says_how_to_build_it() {
         "{v}"
     );
 }
+
+/// ctrl-c stops the web host even while a page holds its event stream open
+/// (a graceful shutdown alone would wait for that stream forever).
+#[cfg(unix)]
+#[test]
+fn ctrl_c_stops_the_web_host_with_a_page_listening() {
+    use std::io::Write;
+    let graph =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../speccoder-speckit/tests/fixtures/graph");
+    let mut child = Command::new(env!("CARGO_BIN_EXE_speccoder"))
+        .args(["--json", "ui", "--no-open", "-C"])
+        .arg(&graph)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    let mut first = String::new();
+    BufReader::new(child.stdout.take().unwrap())
+        .read_line(&mut first)
+        .unwrap();
+    let ready: Value = serde_json::from_str(&first).unwrap();
+    let port = u16::try_from(ready["data"]["port"].as_u64().unwrap()).unwrap();
+    let token = ready["data"]["url"]
+        .as_str()
+        .unwrap()
+        .split_once("#token=")
+        .unwrap()
+        .1
+        .to_owned();
+    // A page listening: the stream stays open.
+    let mut page = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+    page.write_all(
+        request(
+            port,
+            "GET",
+            "/api/events",
+            &format!("Authorization: Bearer {token}\r\n"),
+            "",
+        )
+        .as_bytes(),
+    )
+    .unwrap();
+    let mut hello = String::new();
+    BufReader::new(page.try_clone().unwrap())
+        .read_line(&mut hello)
+        .unwrap();
+    assert!(hello.contains("200"), "{hello}");
+    let pid = child.id().to_string();
+    assert!(
+        Command::new("kill")
+            .args(["-INT", &pid])
+            .status()
+            .unwrap()
+            .success()
+    );
+    let until = Instant::now() + Duration::from_secs(10);
+    loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            assert!(status.success(), "{status}");
+            break;
+        }
+        assert!(
+            Instant::now() < until,
+            "the host did not stop on ctrl-c with a page listening"
+        );
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    drop(page);
+}
