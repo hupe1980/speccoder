@@ -39,6 +39,10 @@ pub struct Shared {
     pub hub: Arc<jobs::Hub>,
     /// Turns true when the host stops: open event streams end with it.
     pub closing: tokio::sync::watch::Receiver<bool>,
+    /// A GitHub sign-in waiting for the person to enter its code (F-092):
+    /// the host, the app and the pending device code — never sent to the page.
+    pub device:
+        Arc<std::sync::Mutex<Option<(String, String, speccoder_runtime::github::auth::Pending)>>>,
 }
 
 /// How long open requests get to finish after ctrl-c.
@@ -526,6 +530,66 @@ struct IssueQuery {
     number: String,
 }
 
+/// Starts GitHub's device sign-in for the repository's host: the code for
+/// the person to enter, and where.
+async fn github_device(State(s): State<Shared>) -> Json<Value> {
+    let root = s.root.clone();
+    let slot = Arc::clone(&s.device);
+    Json(
+        off(move || {
+            use speccoder_runtime::github;
+            let host = github::repo(&root, None).map_or_else(|_| "github.com".to_owned(), |r| r.host);
+            let Some(client) = github::auth::client_id(&host) else {
+                return json!({ "error": format!("{host} has no speccoder app: sign in with a token instead") });
+            };
+            match github::auth::start(&github::http::oauth(&host), &client) {
+                Ok(p) => {
+                    let shown = json!({ "user_code": p.user_code, "verification_uri": p.verification_uri, "host": host });
+                    if let Ok(mut d) = slot.lock() {
+                        *d = Some((host, client, p));
+                    }
+                    shown
+                }
+                Err(e) => json!({ "error": e }),
+            }
+        })
+        .await,
+    )
+}
+
+/// Waits for the person to enter the code, then keeps the token in the
+/// keychain; says whether the app can reach this repository.
+async fn github_device_wait(State(s): State<Shared>) -> Json<Value> {
+    let root = s.root.clone();
+    let slot = Arc::clone(&s.device);
+    let r = off(move || {
+        use speccoder_runtime::github;
+        let Some((host, client, pending)) = slot.lock().ok().and_then(|mut d| d.take()) else {
+            return speccoder_core::CommandResult::new(
+                "auth",
+                speccoder_core::CommandStatus::UsageError,
+                "no sign-in is waiting: start it again",
+            );
+        };
+        let ctx = github::Ctx::from_env();
+        match github::auth::wait(&github::http::oauth(&host), &client, &pending) {
+            Ok(token) => {
+                let signed = github::login_with_token(&ctx, &host, token.expose());
+                match (signed.status(), github::reach(&ctx, &root)) {
+                    (speccoder_core::CommandStatus::Ok, Some(todo)) => {
+                        let message = format!("{}; {todo}", signed.message());
+                        signed.reworded(speccoder_core::CommandStatus::Ok, &message)
+                    }
+                    _ => signed,
+                }
+            }
+            Err(e) => github::refused("auth", &e),
+        }
+    })
+    .await;
+    envelope(&r)
+}
+
 #[derive(Debug, Deserialize)]
 struct TokenBody {
     token: String,
@@ -680,6 +744,8 @@ pub fn router(s: Shared) -> Router {
         .route("/api/github", get(github))
         .route("/api/github/issue", get(github_issue))
         .route("/api/github/login", post(github_login))
+        .route("/api/github/device", post(github_device))
+        .route("/api/github/device/wait", post(github_device_wait))
         .route("/api/pr/preview", get(pr_preview))
         .route("/api/setup/commit", post(setup_commit))
         .route("/api/events", get(events))
@@ -732,6 +798,7 @@ pub fn serve(root: &Path, port: u16, ready: impl FnOnce(Started) + Send) -> Resu
             port,
             hub: jobs::Hub::new(root),
             closing: closed,
+            device: Arc::default(),
         };
         ready(Started {
             url: format!("http://127.0.0.1:{port}/#token={token}"),

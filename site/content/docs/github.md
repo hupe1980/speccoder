@@ -12,12 +12,14 @@ speccoder talks to GitHub through its API, as you — github.com and GitHub Ente
 ## Sign in
 
 ```sh
-speccoder auth login --with-token < token.txt   # once; the token goes to your keychain
-speccoder auth status                           # who speccoder is there, and where its token comes from
-speccoder auth logout                           # forget it
+speccoder auth login      # a short code, approved on GitHub — no token to copy
+speccoder auth status     # who speccoder is there, and where its token comes from
+speccoder auth logout     # forget it
 ```
 
-[Create a fine-grained token](https://github.com/settings/personal-access-tokens/new) for your repository with **Issues: read**, **Pull requests: read and write**, **Contents** and **Metadata: read** (a classic token: `repo`, `read:org`). Already use the GitHub CLI? `gh auth token | speccoder auth login --with-token` signs in with its token — speccoder does not need `gh` afterwards. In the [app](@/docs/web.md), the GitHub card's **Sign In** takes the token in a password field.
+`auth login` signs you in through **speccoder's GitHub App** ([speccoder-app](https://github.com/apps/speccoder-app)): it shows a code (already on your clipboard) and opens GitHub's device page; you enter the code and approve. The app can do only what speccoder needs — **Issues** and **Pull requests**: read and write; **Contents**, **Metadata**, **Checks**, **Commit statuses**: read — and only in the repositories it is installed on. After signing in, speccoder checks it can see this repository; if not, it gives you the [install link](https://github.com/apps/speccoder-app/installations/new) — install it on your account or organisation, for all repositories or the ones you pick. In the [app](@/docs/web.md), the GitHub card's **Sign In** does the same: **Continue with GitHub** shows the code large, with a button to open GitHub, and waits for you.
+
+Prefer a token? `speccoder auth login --with-token < token.txt` takes a [fine-grained token](https://github.com/settings/personal-access-tokens/new) with the permissions above; `gh auth token | speccoder auth login --with-token` signs in with the GitHub CLI's.
 
 Where the token comes from, in order:
 
@@ -26,7 +28,7 @@ Where the token comes from, in order:
 
 speccoder never writes a token to a file, never prints it, and sends it only to its own host. Without a credential store, sign-in says so — set `GH_TOKEN` instead. `doctor` shows whether a token is there and where from, without calling GitHub.
 
-**Device flow.** With an OAuth App's client ID in `SPECCODER_GITHUB_CLIENT_ID` (your Enterprise server's own app, for example), `speccoder auth login` opens GitHub's device page and signs in with a code — no token to copy.
+**GitHub Enterprise.** speccoder's app lives on github.com. On your own server, register a GitHub App with the permissions above and **Enable Device Flow** on (**Expire user authorization tokens** off — a command-line tool cannot keep the secret that renewing them needs), and set its Client ID in `SPECCODER_GITHUB_CLIENT_ID`; or sign in with a token.
 
 ## A feature from an issue
 
@@ -37,7 +39,9 @@ speccoder issue start 42        # specify a feature from #42
 
 `issue start` runs your spec tool's own skill (Spec Kit's specify) with the issue's title, text and address as the description. The skill writes it into the spec, so the link lives where the feature does — no state of speccoder's own. `42`, `#42` and the issue's address all work.
 
-In the [web interface](@/docs/web.md), the overview lists the open issues with **Start Feature**; an issue a feature's spec already names shows that feature instead.
+Once the feature exists, speccoder offers to tell the issue — "Comment on #42 that it is being specified? [Y/n]" — with a comment naming the feature, its spec and its branch, so your team sees the work has started before there is a pull request. It is said once per feature (a second time changes nothing); `--assign` also assigns the issue to you; `--comment` and `--no-comment` decide without asking; `speccoder issue comment 42` says it later.
+
+In the [web interface](@/docs/web.md), the overview lists the open issues with **Start Feature**; an issue a feature's spec already names shows that feature, and **Comment** (confirmed first).
 
 ## Its pull request
 

@@ -581,6 +581,23 @@ pub enum IssueAction {
         /// Never ask inline: questions are left as [NEEDS CLARIFICATION].
         #[arg(long)]
         no_prompt: bool,
+        /// Comment on the issue that it is being specified (asked at a terminal otherwise).
+        #[arg(long, conflicts_with = "no_comment")]
+        comment: bool,
+        /// Do not comment on the issue.
+        #[arg(long)]
+        no_comment: bool,
+        /// Also assign the issue to you.
+        #[arg(long)]
+        assign: bool,
+    },
+    /// Comment on an issue that the current feature is being specified from it (once per feature).
+    Comment {
+        /// The issue: `42`, `#42` or its address.
+        issue: String,
+        /// Also assign the issue to you.
+        #[arg(long)]
+        assign: bool,
     },
 }
 

@@ -344,6 +344,13 @@ fn execute(
                 CommandResult::new("job", CommandStatus::ConfigError, "no state directory")
             }
         },
+        Runnable::IssueComment { issue, assign } => speccoder_runtime::github::comment(
+            &speccoder_runtime::github::Ctx::from_env(),
+            root,
+            feature,
+            &issue.to_string(),
+            *assign,
+        ),
         Runnable::Review { ids, verdict } => {
             speccoder_runtime::review::decide(root, feature, ids, verdict, text, "web")
         }

@@ -535,7 +535,23 @@ fn main() {
             action: None | Some(cli::IssueAction::List),
         } => speccoder_runtime::github::list(&speccoder_runtime::github::Ctx::from_env(), path),
         Command::Issue {
-            action: Some(cli::IssueAction::Start { issue, no_prompt }),
+            action: Some(cli::IssueAction::Comment { issue, assign }),
+        } => speccoder_runtime::github::comment(
+            &speccoder_runtime::github::Ctx::from_env(),
+            path,
+            feature,
+            issue,
+            *assign,
+        ),
+        Command::Issue {
+            action:
+                Some(cli::IssueAction::Start {
+                    issue,
+                    no_prompt,
+                    comment,
+                    no_comment,
+                    assign,
+                }),
         } => {
             match speccoder_runtime::github::issue(
                 &speccoder_runtime::github::Ctx::from_env(),
@@ -563,13 +579,42 @@ fn main() {
                                 ..speccoder_runtime::RunOptions::default()
                             };
                             let name = format!("{}{skill}", planning.prefix);
-                            speccoder_runtime::hosting::run(
+                            let made = speccoder_runtime::hosting::run(
                                 path,
                                 feature,
                                 &name,
                                 &speccoder_runtime::github::description(&found),
                                 &options,
-                            )
+                            );
+                            // The feature exists: tell the issue, when the
+                            // person wants that (it leaves the machine).
+                            let say = made.status() == speccoder_core::CommandStatus::Ok
+                                && !*no_comment
+                                && (*comment
+                                    || (interactive(*no_prompt)
+                                        && yes(&format!(
+                                            "Comment on #{} that it is being specified{}? [Y/n] ",
+                                            found.number,
+                                            if *assign {
+                                                ", and assign it to you"
+                                            } else {
+                                                ""
+                                            }
+                                        ))));
+                            if !say {
+                                made
+                            } else {
+                                let said = speccoder_runtime::github::comment(
+                                    &speccoder_runtime::github::Ctx::from_env(),
+                                    path,
+                                    None,
+                                    &found.number.to_string(),
+                                    *assign,
+                                );
+                                let status = made.status();
+                                let message = format!("{}; {}", made.message(), said.message());
+                                made.reworded(status, &message)
+                            }
                         }
                     }
                 }
@@ -1285,12 +1330,12 @@ fn auth(path: &std::path::Path, action: Option<&cli::AuthAction>) -> speccoder_c
                 }
                 return github::login_with_token(&ctx, &host, &token);
             }
-            let Some(client) = github::auth::client_id() else {
+            let Some(client) = github::auth::client_id(&host) else {
                 return speccoder_core::CommandResult::new(
                     "auth",
                     speccoder_core::CommandStatus::UsageError,
                     &format!(
-                        "sign in with a token: create one at https://{host}/settings/personal-access-tokens/new (Issues: read; Pull requests: read and write; Contents and Metadata: read), then `speccoder auth login --with-token < token.txt` — or pipe an existing one: `gh auth token | speccoder auth login --with-token`. In CI, set GH_TOKEN."
+                        "{host} has no speccoder app: set SPECCODER_GITHUB_CLIENT_ID to your server's own GitHub App (with the device flow on), or sign in with a token — create one at https://{host}/settings/personal-access-tokens/new (Issues and Pull requests: read and write; Contents, Metadata, Checks, Commit statuses: read), then `speccoder auth login --with-token < token.txt`. In CI, set GH_ENTERPRISE_TOKEN."
                     ),
                 )
                 .with_code("GITHUB-AUTH");
@@ -1300,9 +1345,14 @@ fn auth(path: &std::path::Path, action: Option<&cli::AuthAction>) -> speccoder_c
                 Ok(p) => p,
                 Err(e) => return github::refused("auth", &e),
             };
+            // The code, big enough to read, already on the clipboard; the
+            // page already open.
+            let copied = copy(&pending.user_code);
             eprintln!(
-                "Open {} and enter the code {} — waiting…",
-                pending.verification_uri, pending.user_code
+                "\n  Your code:  {}{}\n  Enter it at {} — opened in your browser.\n  Waiting for GitHub… (ctrl-c cancels)\n",
+                pending.user_code,
+                if copied { "   (copied)" } else { "" },
+                pending.verification_uri
             );
             let opener = if cfg!(target_os = "macos") {
                 "open"
@@ -1315,9 +1365,59 @@ fn auth(path: &std::path::Path, action: Option<&cli::AuthAction>) -> speccoder_c
                 .stderr(std::process::Stdio::null())
                 .spawn();
             match github::auth::wait(&oauth, &client, &pending) {
-                Ok(token) => github::login_with_token(&ctx, &host, token.expose()),
+                Ok(token) => {
+                    let signed = github::login_with_token(&ctx, &host, token.expose());
+                    // Through the app: is it installed where this repository is?
+                    match (signed.status(), github::reach(&ctx, path)) {
+                        (speccoder_core::CommandStatus::Ok, Some(todo)) => {
+                            let message = format!("{}; {todo}", signed.message());
+                            signed.reworded(speccoder_core::CommandStatus::Ok, &message)
+                        }
+                        _ => signed,
+                    }
+                }
                 Err(e) => github::refused("auth", &e),
             }
         }
     }
+}
+
+/// Asks a yes/no question at the terminal; Return is yes.
+fn yes(question: &str) -> bool {
+    use std::io::Write;
+    eprint!("{question}");
+    let _ = std::io::stderr().flush();
+    let mut line = String::new();
+    if std::io::stdin().read_line(&mut line).is_err() {
+        return false;
+    }
+    matches!(line.trim().to_ascii_lowercase().as_str(), "" | "y" | "yes")
+}
+
+/// Puts `text` on the clipboard, where the system has one; whether it did.
+fn copy(text: &str) -> bool {
+    use std::io::Write;
+    let tools: &[(&str, &[&str])] = if cfg!(target_os = "macos") {
+        &[("pbcopy", &[])]
+    } else {
+        &[
+            ("wl-copy", &[]),
+            ("xclip", &["-selection", "clipboard"]),
+            ("xsel", &["--clipboard", "--input"]),
+        ]
+    };
+    tools.iter().any(|(tool, args)| {
+        std::process::Command::new(tool)
+            .args(*args)
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .ok()
+            .and_then(|mut c| {
+                c.stdin.take()?.write_all(text.as_bytes()).ok()?;
+                c.wait().ok()
+            })
+            .is_some_and(|s| s.success())
+    })
 }

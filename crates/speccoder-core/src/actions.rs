@@ -67,6 +67,13 @@ pub enum Runnable {
         /// `approve`, `request` (changes) or `clear`.
         verdict: String,
     },
+    /// Tell a GitHub issue it is being specified as the current feature.
+    IssueComment {
+        /// The issue's number.
+        issue: u64,
+        /// Also assign it to the person.
+        assign: bool,
+    },
     /// Pick the current feature.
     Feature,
     /// Push the feature's branch and open (or update) its draft pull request.

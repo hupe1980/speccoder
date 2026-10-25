@@ -9,6 +9,7 @@ export type Runnable =
   | { kind: "converge" }
   | { kind: "rule"; task: string }
   | { kind: "review"; ids: string[]; verdict: "approve" | "request" | "clear" }
+  | { kind: "issue_comment"; issue: number; assign: boolean }
   | { kind: "pull_request" };
 
 export interface Action {

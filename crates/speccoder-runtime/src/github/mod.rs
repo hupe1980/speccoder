@@ -503,6 +503,158 @@ pub fn open_draft(
     ))
 }
 
+/// The comment that tells an issue a feature is being specified from it;
+/// the hidden marker keeps it said once per feature.
+#[must_use]
+pub fn announcement(feature: &str, spec: &str, branch: &str) -> String {
+    format!(
+        "<!-- speccoder:feature {feature} -->\nBeing specified as **`{feature}`** with [speccoder](https://hupe1980.github.io/speccoder/): the spec is `{spec}`, the work goes to `{branch}`, and its draft pull request will close this issue — every task with the evidence behind it."
+    )
+}
+
+/// What [`announce`] did.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Announced {
+    /// The comment's address.
+    Commented(String),
+    /// The feature had said so already.
+    Already,
+}
+
+/// Comments on issue `number` that `feature` is being specified from it
+/// (once per feature), and assigns it to the person when `assign`.
+///
+/// # Errors
+///
+/// No GitHub remote, not signed in, or GitHub's refusal.
+pub fn announce(
+    ctx: &Ctx,
+    root: &Path,
+    number: u64,
+    feature: &str,
+    spec: &str,
+    assign: bool,
+) -> Result<Announced, String> {
+    let r = repo(root, None)?;
+    let api = ctx.signed_in(&r.host)?;
+    let marker = format!("<!-- speccoder:feature {feature} -->");
+    let comments = api.get(&format!(
+        "/repos/{}/issues/{number}/comments?per_page=100",
+        r.slug()
+    ))?;
+    let said = comments
+        .as_array()
+        .into_iter()
+        .flatten()
+        .any(|c| c["body"].as_str().is_some_and(|b| b.contains(&marker)));
+    let out = if said {
+        Announced::Already
+    } else {
+        let branch = format!("speccoder/{feature}");
+        let c = api.rest(
+            reqwest::Method::POST,
+            &format!("/repos/{}/issues/{number}/comments", r.slug()),
+            Some(&json!({ "body": announcement(feature, spec, &branch) })),
+        )?;
+        Announced::Commented(c["html_url"].as_str().unwrap_or_default().to_owned())
+    };
+    if assign {
+        let me = api.get("/user")?;
+        let login = me["login"].as_str().unwrap_or_default();
+        api.rest(
+            reqwest::Method::POST,
+            &format!("/repos/{}/issues/{number}/assignees", r.slug()),
+            Some(&json!({ "assignees": [login] })),
+        )?;
+    }
+    Ok(out)
+}
+
+/// The issue number in `reference` (`42`, `#42`, its address).
+#[must_use]
+pub fn issue_number(reference: &str) -> Option<u64> {
+    reference
+        .trim()
+        .trim_end_matches('/')
+        .trim_start_matches('#')
+        .rsplit('/')
+        .next()
+        .and_then(|n| n.parse::<u64>().ok())
+}
+
+/// `speccoder issue comment N [--assign]`: tells issue `reference` that the
+/// current feature (or `feature`) is being specified from it.
+#[must_use]
+pub fn comment(
+    ctx: &Ctx,
+    root: &Path,
+    feature: Option<&str>,
+    reference: &str,
+    assign: bool,
+) -> CommandResult {
+    let Some(number) = issue_number(reference) else {
+        return CommandResult::new(
+            "issue",
+            CommandStatus::UsageError,
+            &format!("`{reference}` is no issue: a number (42, #42) or its address"),
+        )
+        .with_code("USAGE");
+    };
+    let inspected = crate::inspect(root, feature);
+    let Some(CommandData::Inspect(snapshot)) = inspected.data() else {
+        return CommandResult::carried("issue", &inspected);
+    };
+    let Some(f) = snapshot.feature.as_ref() else {
+        return CommandResult::new("issue", CommandStatus::SelectionNeeded, inspected.message());
+    };
+    let format = crate::format::of(snapshot);
+    let spec = format.requirements_file().map_or_else(
+        || f.feature.dir.clone(),
+        |file| format!("{}/{file}", f.feature.dir.trim_end_matches('/')),
+    );
+    let assigned = if assign {
+        ", and assigned it to you"
+    } else {
+        ""
+    };
+    match announce(ctx, root, number, &f.feature.name, &spec, assign) {
+        Ok(Announced::Commented(url)) => CommandResult::ok(
+            "issue",
+            &format!(
+                "commented on #{number} that it is being specified as {}{assigned}: {url}",
+                f.feature.name
+            ),
+        ),
+        Ok(Announced::Already) => CommandResult::ok(
+            "issue",
+            &format!(
+                "#{number} already says it is being specified as {}{assigned}",
+                f.feature.name
+            ),
+        ),
+        Err(e) => refused("issue", &e),
+    }
+}
+
+/// Whether the signed-in account can see the repository at `root` — after a
+/// sign-in through the app, whether the app is installed there. `None`: it
+/// can; else what to do.
+#[must_use]
+pub fn reach(ctx: &Ctx, root: &Path) -> Option<String> {
+    let r = repo(root, None).ok()?;
+    let api = ctx.signed_in(&r.host).ok()?;
+    match api.get(&format!("/repos/{}", r.slug())) {
+        Ok(_) => None,
+        Err(e) if e.contains("was not found") && r.host == "github.com" => Some(format!(
+            "{} cannot be reached yet: install the {} app on it — {}",
+            r.slug(),
+            auth::APP_SLUG,
+            auth::install_url()
+        )),
+        Err(e) => Some(e),
+    }
+}
+
 /// Brings pull request `number`'s title and description up to date.
 ///
 /// # Errors
