@@ -363,6 +363,105 @@ async fn cost(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Json<Va
     envelope(&r)
 }
 
+/// What the feature's branch changed: commits, files, the patch.
+async fn changes(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Json<Value> {
+    let root = s.root.clone();
+    Json(json!(
+        off(move || speccoder_runtime::code::changes(&root, q.feature.as_deref())).await
+    ))
+}
+
+/// The files at the feature's revision.
+async fn tree(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Json<Value> {
+    let root = s.root.clone();
+    let (rev, files) =
+        off(move || speccoder_runtime::code::tree(&root, q.feature.as_deref())).await;
+    Json(json!({ "rev": rev, "files": files }))
+}
+
+#[derive(Debug, Deserialize)]
+struct FileQuery {
+    feature: Option<String>,
+    path: String,
+}
+
+/// One file at the feature's revision, when the tree lists it.
+async fn file(State(s): State<Shared>, Query(q): Query<FileQuery>) -> Json<Value> {
+    let root = s.root.clone();
+    let r = off(move || speccoder_runtime::code::file(&root, q.feature.as_deref(), &q.path)).await;
+    Json(match r {
+        Ok(text) => json!({ "text": text }),
+        Err(e) => json!({ "error": e }),
+    })
+}
+
+/// The setup assistant's view: what `doctor` sees, and what `init` would
+/// write.
+async fn setup(State(s): State<Shared>) -> Json<Value> {
+    let root = s.root.clone();
+    let (doctor, preview) = off(move || {
+        (
+            speccoder_runtime::doctor::run(&root, None, None),
+            speccoder_runtime::init::preview(&root),
+        )
+    })
+    .await;
+    Json(json!({ "doctor": doctor, "preview": preview }))
+}
+
+#[derive(Debug, Deserialize)]
+struct SetupBody {
+    provider: Option<String>,
+    model: Option<String>,
+}
+
+/// Writes `speccoder.toml` and runs its checks on the untouched code; the
+/// commit is the person's next click.
+async fn setup_init(State(s): State<Shared>, Json(b): Json<SetupBody>) -> Json<Value> {
+    if s.hub.job().is_some_and(|j| j.running) {
+        return Json(json!({ "status": "error", "message": "a job is running" }));
+    }
+    let root = s.root.clone();
+    let r = off(move || {
+        speccoder_runtime::init::prepare(
+            &root,
+            b.provider.as_deref(),
+            b.model.as_deref(),
+            false,
+            false,
+        )
+    })
+    .await;
+    match r {
+        Err(refused) => envelope(&refused),
+        Ok(p) => {
+            let (to_commit, failed) = (p.to_commit.clone(), p.failed.clone());
+            let Json(mut v) = envelope(&speccoder_runtime::init::finish(p));
+            v["to_commit"] = json!(to_commit);
+            v["failed"] = json!(failed);
+            Json(v)
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct SetupCommit {
+    paths: Vec<String>,
+}
+
+/// Commits what `init` wrote — only files `init` commits.
+async fn setup_commit(State(s): State<Shared>, Json(b): Json<SetupCommit>) -> Json<Value> {
+    let root = s.root.clone();
+    let r = off(move || {
+        speccoder_runtime::init::commit_written(&speccoder_runtime::init::root_of(&root), &b.paths)
+    })
+    .await;
+    Json(match r {
+        Ok(id) => json!({ "status": "ok", "message": format!("committed as {id}") }),
+        Err(e) => json!({ "status": "error", "message": e }),
+    })
+}
+
 async fn job(State(s): State<Shared>) -> Json<Value> {
     Json(json!({ "job": s.hub.job(), "waiting": s.hub.waiting() }))
 }
@@ -446,6 +545,11 @@ pub fn router(s: Shared) -> Router {
         .route("/api/config", get(config).post(config_save))
         .route("/api/config/commit", post(config_commit))
         .route("/api/cost", get(cost))
+        .route("/api/changes", get(changes))
+        .route("/api/tree", get(tree))
+        .route("/api/file", get(file))
+        .route("/api/setup", get(setup).post(setup_init))
+        .route("/api/setup/commit", post(setup_commit))
         .route("/api/events", get(events))
         .route("/api/run", post(start))
         .route("/api/answer", post(answer))
@@ -455,6 +559,9 @@ pub fn router(s: Shared) -> Router {
         .with_state(s)
 }
 
+/// The host's events as a shell in the same process reads them.
+pub type Events = tokio::sync::broadcast::Receiver<String>;
+
 /// A started host.
 #[derive(Debug)]
 pub struct Started {
@@ -462,11 +569,14 @@ pub struct Started {
     pub url: String,
     /// The port.
     pub port: u16,
+    /// What the host's jobs do, as the page's events (JSON lines): for a
+    /// shell in the same process (the window) to follow without a bridge.
+    pub events: Option<Events>,
 }
 
 /// Serves the project at `root` on `port` (0: any free one) until the
 /// process ends; `ready` is told the address once it listens.
-pub fn serve(root: &Path, port: u16, ready: impl FnOnce(&Started) + Send) -> Result<(), String> {
+pub fn serve(root: &Path, port: u16, ready: impl FnOnce(Started) + Send) -> Result<(), String> {
     let rt = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
         .enable_all()
@@ -489,9 +599,10 @@ pub fn serve(root: &Path, port: u16, ready: impl FnOnce(&Started) + Send) -> Res
             hub: jobs::Hub::new(root),
             closing: closed,
         };
-        ready(&Started {
+        ready(Started {
             url: format!("http://127.0.0.1:{port}/#token={token}"),
             port,
+            events: Some(shared.hub.subscribe()),
         });
         // ctrl-c: end the event streams, give open requests a moment, then
         // stop whatever still holds on.

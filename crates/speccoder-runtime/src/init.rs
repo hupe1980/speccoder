@@ -12,6 +12,7 @@ use std::path::{Path, PathBuf};
 use serde::Serialize;
 use speccoder_core::{CommandData, CommandResult, CommandStatus};
 
+use crate::git::Git;
 use crate::verify::config::FILE;
 
 /// What `init` saw at the project root.
@@ -583,6 +584,198 @@ pub fn init(
     init_with(path, provider, model, force, None, &|v| {
         std::env::var_os(v).is_some_and(|x| !x.is_empty())
     })
+}
+
+/// `init` written and its checks run on the untouched code: what a person
+/// then decides to commit.
+#[derive(Debug, Clone)]
+pub struct Prepared {
+    /// `init`'s own result.
+    pub written: CommandResult,
+    /// Its report, with the checks' runs.
+    pub report: speccoder_core::InitReport,
+    /// The project root the file was written in.
+    pub root: PathBuf,
+    /// Everything the checks need committed: the file, and the nextest
+    /// profile it names when that is not committed yet.
+    pub to_commit: Vec<String>,
+    /// Checks that fail on the untouched code.
+    pub failed: Vec<String>,
+}
+
+/// The files `init` may commit: nothing else, whatever a caller asks.
+pub const COMMITTABLE: &[&str] = &[FILE, ".config/nextest.toml"];
+
+/// Writes the configuration and (unless `no_verify`) runs its checks on the
+/// untouched code. A refusal comes back as `Err`.
+///
+/// # Errors
+///
+/// `init`'s refusal (a file exists, no project, …).
+pub fn prepare(
+    path: &Path,
+    provider: Option<&str>,
+    model: Option<&str>,
+    force: bool,
+    no_verify: bool,
+) -> Result<Prepared, Box<CommandResult>> {
+    let written = init(path, provider, model, force);
+    let Some(CommandData::Init(report)) = written.data() else {
+        return Err(Box::new(written));
+    };
+    let mut report = (**report).clone();
+    let root = PathBuf::from(&report.path)
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_default();
+    if !no_verify && !report.checks.is_empty() {
+        report.ran = verify_written(&root);
+    }
+    let failed = report
+        .ran
+        .iter()
+        .filter(|r| !r.passed)
+        .map(|r| r.name.clone())
+        .collect();
+    let mut to_commit: Vec<String> = report.wrote.clone();
+    let profile = ".config/nextest.toml";
+    if report
+        .checks
+        .iter()
+        .any(|c| c.argv.iter().any(|a| a == "nextest"))
+        && root.join(profile).exists()
+        && !to_commit.iter().any(|p| p == profile)
+        && Git::at(&root)
+            .line(&["status", "--porcelain", "--", profile])
+            .is_ok_and(|l| !l.trim().is_empty())
+    {
+        to_commit.push(profile.to_owned());
+    }
+    Ok(Prepared {
+        written,
+        report,
+        root,
+        to_commit,
+        failed,
+    })
+}
+
+/// Commits exactly `paths` — each one of [`COMMITTABLE`] — as
+/// `speccoder: config`; the short id.
+///
+/// # Errors
+///
+/// A path `init` does not commit, or git's complaint.
+pub fn commit_written(root: &Path, paths: &[String]) -> Result<String, String> {
+    if paths.is_empty() {
+        return Err("nothing to commit".to_owned());
+    }
+    if let Some(p) = paths.iter().find(|p| !COMMITTABLE.contains(&p.as_str())) {
+        return Err(format!("`{p}` is not a file init commits"));
+    }
+    let g = Git::at(root);
+    let names: Vec<&str> = paths.iter().map(String::as_str).collect();
+    let mut add = vec!["add", "--"];
+    add.extend(&names);
+    let mut commit = vec!["commit", "-q", "-m", "speccoder: config", "--"];
+    commit.extend(&names);
+    g.run(&add)
+        .and_then(|_| g.run(&commit))
+        .and_then(|_| g.line(&["rev-parse", "--short", "HEAD"]))
+        .map_err(|e| e.0)
+}
+
+/// The result of an `init` the person has decided about: the message, the
+/// report, and what comes next.
+#[must_use]
+pub fn finish(p: Prepared) -> CommandResult {
+    let Prepared {
+        written,
+        report,
+        to_commit,
+        failed,
+        ..
+    } = p;
+    let mut message = match &report.committed {
+        Some(id) => written.message().replace(
+            "; review it, then commit it",
+            &format!(" and committed it ({id})"),
+        ),
+        None => written.message().to_owned(),
+    };
+    if !failed.is_empty() {
+        message = format!(
+            "{message}; the check(s) {} fail on the untouched code: every task would be judged against a red baseline",
+            failed.join(", ")
+        );
+    }
+    let step = |command: String, why: &str| speccoder_core::next::NextStep {
+        command,
+        why: why.to_owned(),
+    };
+    let mut next = Vec::new();
+    if report.committed.is_none() {
+        let listed = to_commit.join(" ");
+        next.push(step(
+            format!("git add {listed} && git commit -m \"speccoder: config\" -- {listed}"),
+            "speccoder reads committed files only",
+        ));
+    }
+    if !report.key.set {
+        next.push(step(
+            format!("export {}=…", report.key.variable),
+            "the model key, from the environment only",
+        ));
+    }
+    next.push(step(
+        "speccoder run".to_owned(),
+        "work through the ready tasks",
+    ));
+    CommandResult::new("init", CommandStatus::Ok, &message)
+        .with_data(CommandData::Init(Box::new(report)))
+        .with_next(next)
+}
+
+/// What `init` would write here, without writing: for the setup assistant.
+#[derive(Debug, Clone, Serialize)]
+pub struct Preview {
+    /// Whether the project already has a `speccoder.toml`.
+    pub configured: bool,
+    /// The checks it would declare.
+    pub checks: Vec<Proposed>,
+    /// Commands the model could run without asking.
+    pub allow: Vec<Vec<String>>,
+    /// The formatter it would configure.
+    pub formatter: Option<Vec<String>>,
+    /// The model key variables, and whether each is set.
+    pub keys: Vec<(String, bool)>,
+}
+
+/// Where `init` writes for `path`: the spec project's root, else `path`.
+#[must_use]
+pub fn root_of(path: &Path) -> PathBuf {
+    match crate::inspect(path, None).data() {
+        Some(CommandData::Inspect(s)) => PathBuf::from(&s.root),
+        _ => path.to_path_buf(),
+    }
+}
+
+/// [`Preview`] of `path`.
+#[must_use]
+pub fn preview(path: &Path) -> Preview {
+    let root = root_of(path);
+    let found = detect(&root);
+    let set = |v: &str| std::env::var_os(v).is_some_and(|x| !x.is_empty());
+    Preview {
+        configured: root.join(FILE).is_file(),
+        checks: propose(&found),
+        allow: allow(&found),
+        formatter: formatter(&found),
+        keys: ["ANTHROPIC_API_KEY", "OPENAI_API_KEY"]
+            .iter()
+            .map(|v| ((*v).to_owned(), set(v)))
+            .collect(),
+    }
 }
 
 #[cfg(test)]

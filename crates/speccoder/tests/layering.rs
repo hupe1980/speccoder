@@ -58,16 +58,34 @@ fn graph() -> Graph {
     );
     let meta: Value = serde_json::from_slice(&out.stdout).unwrap();
 
-    let names: BTreeMap<&str, &str> = meta["packages"]
+    // Workspace crates by name; every other package by name and version, so
+    // two versions of one crate (Tauri's older schemars beside core's) are
+    // two nodes, and one's dependencies are not blamed on the other.
+    let members: BTreeSet<&str> = meta["workspace_members"]
         .as_array()
         .unwrap()
         .iter()
-        .map(|p| (p["id"].as_str().unwrap(), p["name"].as_str().unwrap()))
+        .map(|m| m.as_str().unwrap())
+        .collect();
+    let names: BTreeMap<&str, String> = meta["packages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| {
+            let id = p["id"].as_str().unwrap();
+            let name = p["name"].as_str().unwrap();
+            let key = if members.contains(id) {
+                name.to_owned()
+            } else {
+                format!("{name}@{}", p["version"].as_str().unwrap())
+            };
+            (id, key)
+        })
         .collect();
 
     let mut graph = Graph::new();
     for node in meta["resolve"]["nodes"].as_array().unwrap() {
-        let from = names[node["id"].as_str().unwrap()].to_owned();
+        let from = names[node["id"].as_str().unwrap()].clone();
         let deps = node["deps"]
             .as_array()
             .unwrap()
@@ -79,7 +97,7 @@ fn graph() -> Graph {
                     .iter()
                     .any(|k| k["kind"].is_null())
             })
-            .map(|d| names[d["pkg"].as_str().unwrap()].to_owned())
+            .map(|d| names[d["pkg"].as_str().unwrap()].clone())
             .collect();
         graph
             .entry(from)
@@ -87,6 +105,11 @@ fn graph() -> Graph {
             .extend::<BTreeSet<String>>(deps);
     }
     graph
+}
+
+/// A node's crate name, without its version.
+fn base(node: &str) -> &str {
+    node.split('@').next().unwrap_or(node)
 }
 
 fn direct<'g>(g: &'g Graph, krate: &str) -> &'g BTreeSet<String> {
@@ -143,7 +166,7 @@ fn violations(g: &Graph) -> Vec<String> {
     }
 
     for dep in closure(g, CORE) {
-        if CORE_DENY.contains(&dep.as_str()) {
+        if CORE_DENY.contains(&base(&dep)) {
             errors.push(format!(
                 "layering: {CORE} must not depend on {dep} (rule 5: the core stays free of IO and async crates)"
             ));
@@ -151,7 +174,7 @@ fn violations(g: &Graph) -> Vec<String> {
     }
 
     for (krate, deps) in g {
-        if krate != RUNTIME && deps.contains("agentplane") {
+        if krate != RUNTIME && deps.iter().any(|d| base(d) == "agentplane") {
             errors.push(format!(
                 "layering: {krate} must not depend on agentplane (rule 6: only {RUNTIME} embeds the substrate)"
             ));

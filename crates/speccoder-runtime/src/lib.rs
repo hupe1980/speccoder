@@ -10,6 +10,7 @@ pub mod approvals;
 pub mod attempts;
 pub mod attest;
 pub mod bench;
+pub mod code;
 pub mod commands;
 pub mod context;
 pub mod controls;

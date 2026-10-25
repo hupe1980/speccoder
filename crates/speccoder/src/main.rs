@@ -1,7 +1,7 @@
 //! The `speccoder` binary: parse, delegate to the runtime, render.
 
 mod acp;
-#[cfg(feature = "app")]
+#[cfg(window)]
 mod app;
 mod attention;
 mod cli;
@@ -103,7 +103,7 @@ fn ui(
 ) -> speccoder_core::CommandResult {
     use speccoder_core::{CommandData, CommandResult, CommandStatus, UiReport};
     let root = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-    if window && !cfg!(feature = "app") {
+    if window && !cfg!(window) {
         return CommandResult::new(
             "ui",
             CommandStatus::UsageError,
@@ -111,17 +111,17 @@ fn ui(
         );
     }
     // The window must own the main thread: the host serves from another.
-    #[cfg(feature = "app")]
+    #[cfg(window)]
     if window {
         let (tx, rx) = std::sync::mpsc::channel();
         let served_root = root.clone();
         std::thread::spawn(move || {
             let _ = speccoder_web::serve(&served_root, port, |s| {
-                let _ = tx.send(s.url.clone());
+                let _ = tx.send((s.url, s.events));
             });
         });
         return match rx.recv() {
-            Ok(url) => match app::run(&url) {
+            Ok((url, events)) => match app::run(&url, events) {
                 Ok(()) => CommandResult::new("ui", CommandStatus::Ok, "the window was closed"),
                 Err(e) => CommandResult::new(
                     "ui",
@@ -135,7 +135,7 @@ fn ui(
     // Under `--json` the result is printed once the host listens — the
     // address a tool needs — and is the only one: the host serves on.
     let announced = std::sync::atomic::AtomicBool::new(false);
-    let served = speccoder_web::serve(&root, port, |s| {
+    let served = speccoder_web::serve(&root, port, |s: speccoder_web::Started| {
         if json {
             let ready = CommandResult::new("ui", CommandStatus::Ok, "serving the web interface")
                 .with_data(CommandData::Ui(Box::new(UiReport {
@@ -903,63 +903,27 @@ fn init(
     no_verify: bool,
     yes: bool,
 ) -> speccoder_core::CommandResult {
-    use speccoder_core::{CommandData, CommandStatus};
     use std::io::IsTerminal;
-    let written = speccoder_runtime::init::init(path, provider, model, force);
-    let Some(CommandData::Init(report)) = written.data() else {
-        return written;
-    };
-    let mut report = (**report).clone();
-    let file = std::path::PathBuf::from(&report.path);
-    let root = file
-        .parent()
-        .map(std::path::Path::to_path_buf)
-        .unwrap_or_default();
-    if !no_verify && !report.checks.is_empty() {
-        if !cli.json && !cli.events {
-            eprintln!("Running the checks on the untouched code…");
-        }
-        report.ran = speccoder_runtime::init::verify_written(&root);
+    if !no_verify && !cli.json && !cli.events {
+        eprintln!("Writing speccoder.toml, then running its checks on the untouched code…");
     }
-    let all_passed = report.ran.iter().all(|r| r.passed);
-    let failed: Vec<&str> = report
-        .ran
-        .iter()
-        .filter(|r| !r.passed)
-        .map(|r| r.name.as_str())
-        .collect();
-    // Everything the checks need goes into the commit: a worktree holds only
-    // committed files (the nextest profile `--profile speccoder` names, too —
-    // also when an earlier init wrote it and it was never committed).
-    let mut to_commit: Vec<String> = report.wrote.clone();
-    let profile = ".config/nextest.toml";
-    if report
-        .checks
-        .iter()
-        .any(|c| c.argv.iter().any(|a| a == "nextest"))
-        && root.join(profile).exists()
-        && !to_commit.iter().any(|p| p == profile)
-        && speccoder_runtime::git::Git::at(&root)
-            .line(&["status", "--porcelain", "--", profile])
-            .is_ok_and(|l| !l.trim().is_empty())
-    {
-        to_commit.push(profile.to_owned());
-    }
-    let listed = to_commit.join(" ");
-    let commit_line =
-        format!("git add {listed} && git commit -m \"speccoder: config\" -- {listed}");
+    let mut prepared =
+        match speccoder_runtime::init::prepare(path, provider, model, force, no_verify) {
+            Ok(p) => p,
+            Err(refused) => return *refused,
+        };
     let interactive = !yes
         && !cli.json
         && !cli.events
         && std::io::stdin().is_terminal()
         && std::io::stderr().is_terminal();
     if interactive {
-        let default_yes = all_passed;
+        let default_yes = prepared.failed.is_empty();
         // What the answer rests on, before the question.
-        for c in &report.checks {
+        for c in &prepared.report.checks {
             eprintln!("  check  {:<10} {}", c.name, c.argv.join(" "));
         }
-        for r in &report.ran {
+        for r in &prepared.report.ran {
             eprintln!(
                 "  {}  {} on the untouched code",
                 r.name,
@@ -968,7 +932,7 @@ fn init(
         }
         eprint!(
             "Commit {}? speccoder reads committed files only. [{}] ",
-            to_commit.join(" and "),
+            prepared.to_commit.join(" and "),
             if default_yes { "Y/n" } else { "y/N" }
         );
         let mut line = String::new();
@@ -980,56 +944,13 @@ fn init(
             answer.starts_with('y')
         };
         if commit {
-            let g = speccoder_runtime::git::Git::at(&root);
-            let paths: Vec<&str> = to_commit.iter().map(String::as_str).collect();
-            let mut add = vec!["add", "--"];
-            add.extend(&paths);
-            let mut commit = vec!["commit", "-q", "-m", "speccoder: config", "--"];
-            commit.extend(&paths);
-            let ok = g
-                .run(&add)
-                .and_then(|_| g.run(&commit))
-                .and_then(|_| g.line(&["rev-parse", "--short", "HEAD"]));
-            match ok {
-                Ok(id) => report.committed = Some(id),
-                Err(e) => eprintln!("the commit failed: {}", e.0),
+            match speccoder_runtime::init::commit_written(&prepared.root, &prepared.to_commit) {
+                Ok(id) => prepared.report.committed = Some(id),
+                Err(e) => eprintln!("the commit failed: {e}"),
             }
         }
     }
-    let mut message = match &report.committed {
-        Some(id) => written.message().replace(
-            "; review it, then commit it",
-            &format!(" and committed it ({id})"),
-        ),
-        None => written.message().to_owned(),
-    };
-    if !failed.is_empty() {
-        message = format!(
-            "{message}; the check(s) {} fail on the untouched code: every task would be judged against a red baseline",
-            failed.join(", ")
-        );
-    }
-    let step = |command: String, why: &str| speccoder_core::next::NextStep {
-        command,
-        why: why.to_owned(),
-    };
-    let mut next = Vec::new();
-    if report.committed.is_none() {
-        next.push(step(commit_line, "speccoder reads committed files only"));
-    }
-    if !report.key.set {
-        next.push(step(
-            format!("export {}=…", report.key.variable),
-            "the model key, from the environment only",
-        ));
-    }
-    next.push(step(
-        "speccoder run".to_owned(),
-        "work through the ready tasks",
-    ));
-    speccoder_core::CommandResult::new("init", CommandStatus::Ok, &message)
-        .with_data(CommandData::Init(Box::new(report)))
-        .with_next(next)
+    speccoder_runtime::init::finish(prepared)
 }
 
 /// The subcommand's name, as the envelope's `command` names it.

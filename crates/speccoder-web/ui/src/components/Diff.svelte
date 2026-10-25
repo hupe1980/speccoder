@@ -3,7 +3,10 @@
   // its additions and removals, old and new line numbers in the gutter, and
   // hunks as dividers. Long lines scroll; wrapping is a toggle.
   import Icon from "./Icon.svelte";
-  let { patch, loading = false }: { patch: string; loading?: boolean } = $props();
+  import Source from "./Source.svelte";
+  import { language } from "../lib/highlight";
+  /** `only`: show this file alone (the Code view picks one). */
+  let { patch, loading = false, only = null, header = true }: { patch: string; loading?: boolean; only?: string | null; header?: boolean } = $props();
 
   interface Line { kind: "add" | "del" | "ctx" | "hunk" | "note"; text: string; old: number | null; new: number | null }
   interface File { name: string; status: string; lines: Line[]; add: number; del: number }
@@ -58,7 +61,7 @@
   <div class="state muted"><Icon name="doc" size={22} /><span>No change to show.</span></div>
 {:else}
   <div class="change">
-    {#if parsed.subject}
+    {#if parsed.subject && header}
       <header class="commit">
         <span class="hash mono">{parsed.hash}</span>
         <strong>{parsed.subject}</strong>
@@ -77,7 +80,7 @@
       <span class="a">+{totals.add}</span><span class="d">−{totals.del}</span>
       <label class="wrap"><input type="checkbox" bind:checked={wrap} /> Wrap lines</label>
     </div>
-    {#each parsed.files as f (f.name)}
+    {#each only ? parsed.files.filter((f) => f.name === only) : parsed.files as f (f.name)}
       <section class="file">
         <button class="fhead" onclick={() => (folded = { ...folded, [f.name]: !folded[f.name] })} aria-expanded={!folded[f.name]}>
           <Icon name={folded[f.name] ? "chevron" : "down"} size={12} weight={2.2} />
@@ -93,14 +96,14 @@
               <tbody>
                 {#each f.lines as l}
                   {#if l.kind === "hunk"}
-                    <tr class="hunk"><td colspan="3"><span>{l.text || "⋯"}</span></td></tr>
+                    <tr class="hunk"><td colspan="3"><span class:named={!!l.text}>{l.text}</span></td></tr>
                   {:else if l.kind === "note"}
                     <tr class="note"><td colspan="3">{l.text}</td></tr>
                   {:else}
                     <tr class={l.kind}>
                       <td class="ln">{l.old ?? ""}</td>
                       <td class="ln">{l.new ?? ""}</td>
-                      <td class="src"><span class="sign">{l.kind === "add" ? "+" : l.kind === "del" ? "−" : " "}</span>{l.text}</td>
+                      <td class="src"><span class="sign">{l.kind === "add" ? "+" : l.kind === "del" ? "−" : " "}</span><Source line={l.text} lang={language(f.name)} /></td>
                     </tr>
                   {/if}
                 {/each}
@@ -156,6 +159,7 @@
   tr.del { background: var(--del-bg); }
   tr.del .sign, tr.del .ln { color: var(--del); }
   tr.hunk td { padding: 0.25rem 0.75rem; background: var(--accent-soft); color: var(--accent-ink); font-size: 0.74rem; }
-  tr.hunk span::before { content: "⋯  "; opacity: 0.6; }
+  tr.hunk span::before { content: "⋯"; opacity: 0.6; }
+  tr.hunk span.named::before { content: "⋯  "; }
   tr.note td { padding: 0 0.75rem; color: var(--muted); font-style: italic; }
 </style>
