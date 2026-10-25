@@ -593,6 +593,17 @@ pub fn uncommitted(path: &Path, feature: Option<&str>) -> Vec<String> {
 /// Nothing else that is staged or changed goes into the commit.
 #[must_use]
 pub fn commit_planning(path: &Path, feature: Option<&str>, paths: &[String]) -> CommandResult {
+    commit_planning_as(path, feature, paths, None)
+}
+
+/// [`commit_planning`] with the commit's subject (default: the files).
+#[must_use]
+pub fn commit_planning_as(
+    path: &Path,
+    feature: Option<&str>,
+    paths: &[String],
+    subject: Option<&str>,
+) -> CommandResult {
     let refuse = |status, m: &str| CommandResult::new("commit", status, m);
     let format = crate::format::at(path);
     let Some(snap) = format.open(path, feature) else {
@@ -626,7 +637,10 @@ pub fn commit_planning(path: &Path, feature: Option<&str>, paths: &[String]) -> 
         .iter()
         .map(|p| p.rsplit('/').next().unwrap_or(p))
         .collect();
-    let message = format!("spec({}): {}", f.feature.name, names.join(", "));
+    let message = subject.map_or_else(
+        || format!("spec({}): {}", f.feature.name, names.join(", ")),
+        |t| format!("spec({}): {t}", f.feature.name),
+    );
     let mut add = vec!["add", "--"];
     add.extend(paths.iter().map(String::as_str));
     let mut commit = vec!["commit", "-q", "-m", &message, "--"];

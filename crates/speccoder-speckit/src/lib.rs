@@ -5,7 +5,7 @@
 //! never runs project scripts, and never reads outside the project root.
 
 pub mod checklists;
-mod features;
+pub mod features;
 mod hash;
 mod metadata;
 pub mod stories;

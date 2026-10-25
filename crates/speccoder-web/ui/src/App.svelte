@@ -17,6 +17,7 @@
   import Inbox from "./components/Inbox.svelte";
   import StatusBar from "./components/StatusBar.svelte";
   import ContextMenu from "./components/ContextMenu.svelte";
+  import QuickSheet from "./components/QuickSheet.svelte";
   import Settings from "./components/Settings.svelte";
   import CodeView from "./components/CodeView.svelte";
   import Setup from "./components/Setup.svelte";
@@ -59,6 +60,7 @@
     }
     if (typing || app.waiting || app.input || app.palette) return;
     if (e.key === ",") go("settings");
+    if (e.key === "q") app.quick = true;
     const v = views.find((x) => x.key === e.key);
     if (v) go(v.v);
     if (e.key === "n" && app.primary) app.perform(app.primary);
@@ -80,6 +82,7 @@
       case "theme.light": case "theme.dark": case "theme.auto": theme = id.slice(6); return;
       case "file.new": return run(find((a) => a.run?.kind === "skill" && !!a.input), "No skill writes a new feature here — set up the spec tool first");
       case "file.issues": return go("overview");
+      case "file.quick": app.quick = true; return;
       case "file.commit": return run(find((a) => a.run?.kind === "commit"), "Nothing to commit: the planning files are committed");
       case "run.feature": return run(find((a) => a.run?.kind === "run" && a.run.task === null), "No task is ready to run");
       case "run.task": return run(find((a) => a.run?.kind === "run" && a.run.task !== null), "Select a ready task first");
@@ -234,6 +237,7 @@
 {#if app.confirming}<ConfirmSheet />{/if}
 {#if app.palette}<Palette />{/if}
 {#if app.context}<ContextMenu />{/if}
+{#if app.quick}<QuickSheet />{/if}
 <Toasts />
 
 <style>

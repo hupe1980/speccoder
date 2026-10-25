@@ -9,14 +9,31 @@
   let at = $state(0);
   const groups: Record<string, string> = { next: "Up Next", plan: "Plan", work: "Work", task: "Tasks", feature: "Features", review: "Review" };
   const icons: Record<string, string> = { next: "sparkle", plan: "doc", work: "play", task: "list", feature: "grid", review: "chart" };
-  const items = $derived(
+  const matched = $derived(
     app.actions.filter((a) => {
       const f = filter.toLowerCase().trim();
       return !f || a.label.toLowerCase().includes(f) || a.command.toLowerCase().includes(f) || a.why.toLowerCase().includes(f);
     }),
   );
   const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-  const pick = (a?: Action) => a && !a.blocked && app.perform(a);
+  // Typed words are also a change to make: offered last, as Spotlight
+  // offers a search of the web (F-094).
+  const quick = $derived.by((): Action | null => {
+    const f = filter.trim();
+    if (f.length < 6) return null;
+    return { group: "work", label: `quick change: "${f}"`, why: "recorded as a story, a requirement and a task; judged on evidence", command: `speccoder do "${f.replaceAll('"', '\\"')}"`, run: null, blocked: null, input: null };
+  });
+  const items = $derived(quick ? [...matched, quick] : matched);
+  const pick = (a?: Action) => {
+    if (!a || a.blocked) return;
+    if (a === quick) {
+      app.quickDraft = filter.trim();
+      app.palette = false;
+      app.quick = true;
+      return;
+    }
+    void app.perform(a);
+  };
   let list: HTMLElement | undefined = $state();
   function key(e: KeyboardEvent) {
     if (e.key === "ArrowDown") { at = Math.min(at + 1, items.length - 1); e.preventDefault(); }

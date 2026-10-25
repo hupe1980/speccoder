@@ -42,6 +42,10 @@ class AppState {
   preflight = $state<{ check: string; level: string; detail: string; fix: string[]; code?: string | null }[]>([]);
   /** Every doctor check (the status bar reads the model and the sandbox). */
   doctor = $state<{ check: string; level: string; detail: string }[]>([]);
+  /** The quick-change sheet is open (F-094). */
+  quick = $state(false);
+  /** What the quick-change sheet opens with (typed in the palette). */
+  quickDraft = $state("");
   /** An open context menu: where, and its items (F-088). */
   context = $state<{ x: number; y: number; title: string; items: { label: string; icon?: string; disabled?: string | null; hint?: string; act: () => void }[] } | null>(null);
   /** Whether the sidebar and the status bar are shown (View menu). */

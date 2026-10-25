@@ -22,6 +22,21 @@ use crate::context::{Bundle, BundleError};
 
 pub use speckit::Workspace;
 
+/// Where a quick change was recorded.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Recorded {
+    /// The unit's name (`004-quick-changes`).
+    pub feature: String,
+    /// Its directory, project-relative.
+    pub dir: String,
+    /// The task (`T003`).
+    pub task: String,
+    /// The requirement (`FR-003`).
+    pub requirement: String,
+    /// The change's title.
+    pub title: String,
+}
+
 /// One spec format the runtime can run.
 pub trait Adapter: Send + Sync + std::fmt::Debug {
     /// Which format.
@@ -108,6 +123,18 @@ pub trait Adapter: Send + Sync + std::fmt::Debug {
     /// the line that defines it, in the document's order.
     fn requirements_in(&self, _text: &str) -> Vec<(String, String)> {
         Vec::new()
+    }
+
+    /// Records a quick change (F-094): `request` (with acceptance `checks`)
+    /// becomes a story, a requirement and a task in the format's standing
+    /// unit for such changes. `Err`: the format has none.
+    fn record_change(
+        &self,
+        _root: &Path,
+        _request: &str,
+        _checks: &[String],
+    ) -> Result<Recorded, String> {
+        Err("this spec format has no place for quick changes: write a spec for it".to_owned())
     }
 
     /// The unit's requirement identifiers, each with the hash of the line

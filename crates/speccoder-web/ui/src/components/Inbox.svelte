@@ -52,7 +52,7 @@
 
 <section class="inbox" aria-labelledby="inbox-title">
   <header>
-    <h1 id="inbox-title">Needs You</h1>
+    <div class="titlebar"><h1 id="inbox-title">Needs You</h1><button class="btn small tinted" onclick={() => (app.quick = true)} title="A small change, judged like any other (q)"><Icon name="sparkle" size={11} weight={2.2} /> Quick Change</button></div>
     <p class="sub">
       {#if items.length}{items.length} {items.length === 1 ? "decision" : "decisions"}{#if features > 1}{" "}across {features} features{/if} — the most urgent first.{:else}Every decision the agents wait on lands here.{/if}
     </p>
@@ -99,6 +99,7 @@
 
 <style>
   .inbox { max-width: 920px; margin: 0 auto; display: grid; gap: 1.4rem; }
+  .titlebar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
   h1 { margin: 0; font: 700 1.9rem/1.15 var(--display); letter-spacing: -0.022em; }
   .sub { margin: 0.25rem 0 0; color: var(--text-2); }
   .group { display: grid; gap: 0.45rem; }

@@ -10,6 +10,7 @@ export type Runnable =
   | { kind: "rule"; task: string }
   | { kind: "review"; ids: string[]; verdict: "approve" | "request" | "clear" | "answer" | "edit" | "edit-approve" }
   | { kind: "issue_comment"; issue: number; assign: boolean }
+  | { kind: "quick_change"; request: string; checks: string[]; run: boolean }
   | { kind: "pull_request" };
 
 export interface Action {

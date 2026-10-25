@@ -22,6 +22,17 @@ The feature is selected the way Spec Kit selects it: `--feature`, then `SPECIFY_
 
 Progress streams to stderr; the run report — tool calls with their decisions, changes, acceptance tests, checks, tokens and the commit — goes to stdout.
 
+## Quick changes
+
+Not everything needs a spec, a plan and a task list — but nothing should skip the evidence:
+
+```sh
+speccoder do "Show the version number in the footer" --check "every page's footer shows the version"
+speccoder do "Make the login button blue" --no-run      # record it, run later
+```
+
+`do` writes the change into a standing feature, `NNN-quick-changes`, the way a spec would have it: a user story (your words, and each `--check` as an acceptance scenario), a requirement (approved — you wrote it) and a task citing it. Those files are committed, exactly them (`spec(NNN-quick-changes): quick change: …`). Then the task runs like any other: in its worktree, tests written from your words that must fail first, the checks, a verdict, a commit with its evidence — and it can be reviewed, reported and handed off as a pull request with the rest. Quick changes do not wait for each other. In the [app](@/docs/web.md): **Quick Change** in Needs You, `q`, File › Quick Change… (⇧⌘N), or type the change into the palette (⌘K).
+
 ## Outcomes
 
 | Outcome | Exit | Meaning | What to do |
