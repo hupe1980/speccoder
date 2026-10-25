@@ -882,11 +882,12 @@ pub fn run(path: &Path, feature: Option<&str>) -> CommandResult {
     };
     match (&app.snap.report, listed) {
         (None, Some(f)) if f.current.is_none() => app.show_features(f),
+        // Nothing to show: the report's own answer, with its code and fix
+        // (no project, no feature yet, several and none chosen).
         (None, _) => {
-            return CommandResult::new(
-                "tui",
-                CommandStatus::NotAProject,
-                app.snap.problem.as_deref().unwrap_or("no feature"),
+            return speccoder_runtime::next::attach(
+                speccoder_runtime::status::report(&path, feature),
+                feature,
             );
         }
         _ => {}

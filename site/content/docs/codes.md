@@ -20,6 +20,7 @@ Every result that is not plainly `ok` names a code — `error[CODE]`, `stopped[C
 | [`NO-PROJECT`](#no-project) | error | 10 | speccoder works on a Spec Kit or OpenSpec project, and found none here |
 | [`SPEC-DIAGNOSTICS`](#spec-diagnostics) | error | 11 | the spec artifacts have errors speccoder will not guess around |
 | [`FEATURE-SELECTION`](#feature-selection) | error | 12 | more than one feature could be meant |
+| [`FEATURE-GONE`](#feature-gone) | error | 12 | the current feature no longer exists |
 | [`CONFIG`](#config) | error | 13 | the configuration or the environment is not usable |
 | [`NO-STATE-DIR`](#no-state-dir) | error | 13 | speccoder has nowhere to keep its state |
 | [`SANDBOX-UNAVAILABLE`](#sandbox-unavailable) | error | 13 | the OS sandbox is not available and the project requires it |
@@ -126,10 +127,21 @@ The task list or spec could not be read as written: a dependency on a task that 
 
 More than one feature could be meant.
 
-Several features exist and none is selected by `--feature`, the branch or the format's own pointer.
+Several features exist and none is current: neither `--feature`, the format's variable nor its pointer (Spec Kit: `.specify/feature.json`) names one. Make one current, or name it for this command.
 
-- `speccoder inspect`
+- `speccoder feature`
+- `speccoder feature <name>`
 - `speccoder <command> --feature <name>`
+
+### FEATURE-GONE
+
+The current feature no longer exists.
+
+The format's pointer (Spec Kit: `.specify/feature.json`) or its variable names a feature directory that is not there — renamed, deleted, or from another checkout.
+
+- `speccoder feature`
+- `speccoder feature <name>`
+- `speccoder feature --clear`
 
 ### CONFIG
 

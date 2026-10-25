@@ -81,6 +81,12 @@ pub enum Outcome {
     Running,
     /// No task can run.
     NothingReady,
+    /// The feature is being planned: it has no task list yet; these
+    /// planning skills come next.
+    Planning {
+        /// The skills, in order (`plan`, `tasks`).
+        skills: Vec<String>,
+    },
     /// `report` shown.
     ReportShown {
         /// Tasks ready to run.
@@ -258,6 +264,25 @@ pub fn next(outcome: &Outcome, feature: Option<&str>) -> Vec<NextStep> {
                 "calls waiting for a person",
             ),
         ],
+        O::Planning { skills } => {
+            let mut steps: Vec<(String, &str)> = skills
+                .iter()
+                .map(|s| {
+                    let why = match s.as_str() {
+                        "plan" => "write the plan from the spec",
+                        "tasks" => "break the plan into tasks",
+                        "clarify" => "settle what the spec leaves open",
+                        _ => "the next planning step",
+                    };
+                    (format!("speccoder spec {s}"), why)
+                })
+                .collect();
+            steps.push((
+                "speccoder run".to_owned(),
+                "after you review and commit what they write",
+            ));
+            steps
+        }
         O::ReportShown { open_approvals, .. } if *open_approvals > 0 => vec![
             (
                 "speccoder report --approvals".to_owned(),

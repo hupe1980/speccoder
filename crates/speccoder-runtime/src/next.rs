@@ -140,6 +140,11 @@ fn classify(result: &CommandResult) -> Option<Outcome> {
             (_, Some(last)) => Some(of_run(status, last)),
             (_, None) => of_status(status),
         },
+        ("report", CommandStatus::Ok, Some(CommandData::Report(r))) if !r.planning.is_empty() => {
+            Some(Outcome::Planning {
+                skills: r.planning.clone(),
+            })
+        }
         ("report", CommandStatus::Ok, Some(CommandData::Report(r))) => Some(Outcome::ReportShown {
             ready: r.totals.ready,
             open_approvals: r

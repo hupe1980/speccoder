@@ -95,7 +95,7 @@ pub static WORDING: Wording = Wording {
 /// What a person is told about a Spec Kit project.
 pub static MESSAGES: Messages = Messages {
     tasks_file: "tasks.md",
-    make_tasks: "run /speckit-tasks first",
+    make_tasks: "`speccoder spec tasks` writes it",
     not_a_project,
     no_project: "not a Spec Kit project (no .specify/ found)",
     no_project_in_worktree: "the worktree has no Spec Kit project",
@@ -137,7 +137,16 @@ pub static PLANNING: Planning = Planning {
     refused,
     creates: &["specify"],
     current_env: Some(FEATURE_ENV),
+    toward_tasks,
 };
+
+fn toward_tasks(has_plan: bool) -> &'static [&'static str] {
+    if has_plan {
+        &["tasks"]
+    } else {
+        &["plan", "tasks"]
+    }
+}
 
 /// Skills speccoder does not host, and what to use instead.
 fn refused(name: &str) -> Option<String> {

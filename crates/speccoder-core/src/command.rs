@@ -1120,6 +1120,13 @@ pub struct StatusReport {
     /// `the only feature`, `named with --feature`).
     #[serde(default)]
     pub selected_by: String,
+    /// The planning artifacts that exist (`spec`, `plan`, `tasks`).
+    #[serde(default)]
+    pub artifacts: Vec<String>,
+    /// While the feature has no task list: the planning skills that come
+    /// next (`plan`, `tasks`); empty once it has one.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub planning: Vec<String>,
     /// Commits on the branch that the checkout's HEAD does not contain.
     pub unmerged_commits: usize,
     /// Every task, in document order.

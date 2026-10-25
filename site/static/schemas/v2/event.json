@@ -4066,6 +4066,14 @@
     "StatusReport": {
       "description": "Result of `speccoder report`: what the branch's history shows.",
       "properties": {
+        "artifacts": {
+          "default": [],
+          "description": "The planning artifacts that exist (`spec`, `plan`, `tasks`).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "branch": {
           "description": "`speccoder/<feature>`, if speccoder has worked on the feature.",
           "type": [
@@ -4083,6 +4091,13 @@
         "feature": {
           "description": "Feature directory name.",
           "type": "string"
+        },
+        "planning": {
+          "description": "While the feature has no task list: the planning skills that come\nnext (`plan`, `tasks`); empty once it has one.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         },
         "selected_by": {
           "default": "",
@@ -4123,6 +4138,7 @@
         "branch",
         "source",
         "selected_by",
+        "artifacts",
         "unmerged_commits",
         "tasks",
         "convergence",

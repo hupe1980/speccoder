@@ -215,6 +215,37 @@ fn task_list(f: &mut Frame<'_>, app: &App, area: Rect, focused: bool) {
         );
         return;
     };
+    // Being planned: what exists and what writes the task list.
+    if report.tasks.is_empty() && !report.planning.is_empty() {
+        let have = |x: &str| report.artifacts.iter().any(|y| y == x);
+        let mut lines = vec![
+            Line::styled("being planned: no task list yet", bold()),
+            Line::raw(""),
+        ];
+        for x in ["spec", "plan", "tasks"] {
+            let g = if have(x) {
+                Glyph::Verified
+            } else {
+                Glyph::Ready
+            };
+            lines.push(Line::from(vec![
+                Span::styled(format!("  {} ", mark(g)), st(g.token())),
+                Span::raw(x),
+            ]));
+        }
+        lines.push(Line::raw(""));
+        for s in &report.planning {
+            lines.push(Line::styled(
+                format!("  next: speccoder spec {s}"),
+                st(Token::Accent),
+            ));
+        }
+        f.render_widget(
+            Paragraph::new(lines).block(bordered(" Tasks ", focused)),
+            area,
+        );
+        return;
+    }
     let items: Vec<ListItem<'_>> = report
         .tasks
         .iter()
