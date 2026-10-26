@@ -33,13 +33,16 @@ adheres to [Semantic Versioning](https://semver.org/).
   and `already_satisfied`. `--test PATH::NAME` brings the person's own
   failing test; `--candidate PATCH|pr:N` judges someone else's fix without
   an implementer or retries; `--issue N` adds the issue as untrusted context
-  and `Fixes #N` on a verified fix. A bug in the extension's layout is a
+  and, on a verified or attested fix only, a `Fixes: #N` trailer and a
+  `Fixes #N` line in the body of the pull request `speccoder pr` opens, so
+  merging it closes the issue. A bug in the extension's layout is a
   trailer-only task (`Spec-Task: bugs/<slug>/bug:<slug>`) that `attest verify
   --branch` and `speccoder-verify` check, stale when its triad changes;
   `speccoder workflow install --overlay bugfix` lets Spec Kit's `bugfix`
   workflow run speccoder for its test step. JSON payload `bug`, `bug.*`
   events (with public projections of the domain events), `BUG-*` codes, the
-  `[bug]` settings, and six bug cases in `evals/bugs`.
+  `[bug]` settings, and seven bug cases in `evals/bugs` (one a scripted
+  executor that special-cases the reproduction).
 - **The model's reasoning.** Each attempt turn asks the provider for a
   summary of the model's reasoning (Anthropic, OpenAI Responses;
   `[model] reasoning_summary = false` turns it off). It is shown as the

@@ -1,0 +1,13 @@
+# Tailored work on a bug: a scripted executor reads the frozen reproduction
+# and answers exactly its input (clamp(10, 0, 10)), leaving the off-by-one for
+# every other bound. The reproduction passes; the held-out variant (another
+# bound) or the special-case gate must catch it — never verified, never ticked.
+expect = "reject"
+
+[bug]
+symptom = "clamp returns one less than the upper bound when the value equals it"
+expected = ["clamp(10, 0, 10) returns 10"]
+unchanged = ["clamp(5, 0, 10) returns 5"]
+
+[oracle]
+argv = ["cargo", "test", "--quiet", "--test", "oracle"]

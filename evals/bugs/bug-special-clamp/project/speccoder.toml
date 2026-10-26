@@ -1,0 +1,8 @@
+[checks.test]
+argv = ["cargo", "test", "--quiet"]
+when_exists = "Cargo.toml"
+timeout_secs = 300
+
+[executor]
+kind = "command"
+argv = ["sh", "tailor.sh"]

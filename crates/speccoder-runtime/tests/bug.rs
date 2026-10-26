@@ -344,7 +344,7 @@ fn a_bug_is_recorded_reproduced_confirmed_once_and_fixed_with_its_revert_rejecte
         message.contains("Acceptance: bug_confirmation manifest=sha256:"),
         "{message}"
     );
-    assert!(!message.contains("Fixes #"), "{message}");
+    assert!(!message.contains("Fixes: #"), "{message}");
     let shown = git(
         r.path(),
         &["show", &format!("{commit}:specs/001-bugfixes/tasks.md")],
@@ -751,6 +751,164 @@ fn someone_elses_patch_is_judged_without_an_implementer_and_a_judge_touching_one
     );
 }
 
+/// The fix `seeded` wants, as a patch.
+const GOOD_PATCH: &str = "--- a/src/lib.rs\n+++ b/src/lib.rs\n@@ -1,4 +1,5 @@\n // saves_title\n-pub fn save(title: &str) -> char {\n-    title.chars().next().unwrap_or_else(|| panic!(\"empty title\"))\n+// refuses_empty refuses_blank\n+pub fn save(title: &str) -> Result<char, String> {\n+    title.chars().next().ok_or_else(|| \"a title is needed\".to_owned())\n }\n";
+
+/// Records, reproduces and confirms `seeded`'s bug with `candidate` as its
+/// fix: the confirmation's result (the candidate judged as the attempt).
+fn judge_candidate(
+    r: &Path,
+    state: &Path,
+    f: &FakeProvider,
+    d: &Arc<dyn ModelProvider>,
+    candidate: &str,
+    github: Option<speccoder_runtime::github::Ctx>,
+) -> CommandResult {
+    f.will_structure(reproductions());
+    f.will_structure(held_out("refuses_blank"));
+    let mut req = request(
+        &["an empty title is refused with a message"],
+        &["a title is saved"],
+        true,
+    );
+    req.candidate = Some(candidate.to_owned());
+    req.github = github;
+    let first = bug::bug_with(
+        r,
+        &req,
+        Via::Terminal,
+        state,
+        Some(Arc::clone(d)),
+        None,
+        &RunOptions::default(),
+    );
+    let b = the_bug(&first).clone();
+    assert_eq!(
+        b.outcome,
+        Outcome::AwaitingConfirmation,
+        "{}",
+        first.message()
+    );
+    bug::confirm_with(
+        r,
+        &b.key(),
+        b.confirm_digest.as_deref().unwrap(),
+        None,
+        Via::Terminal,
+        state,
+        Some(Arc::clone(d)),
+        None,
+        &RunOptions::default(),
+    )
+}
+
+/// The statements in the attestation note on `commit`.
+fn attested(r: &Path, commit: &str) -> Vec<Value> {
+    use base64::Engine as _;
+    let note = speccoder_runtime::attest::notes::read(r, commit).unwrap_or_default();
+    note.lines()
+        .filter_map(|l| serde_json::from_str::<Value>(l).ok())
+        .filter_map(|e| {
+            base64::engine::general_purpose::STANDARD
+                .decode(e["payload"].as_str()?)
+                .ok()
+        })
+        .filter_map(|p| serde_json::from_slice(&p).ok())
+        .collect()
+}
+
+#[test]
+fn a_pull_request_is_judged_from_its_diff_and_its_head_is_recorded() {
+    let r = repo("seeded");
+    git(
+        r.path(),
+        &["remote", "add", "origin", "https://github.com/o/r.git"],
+    );
+    let api = fake_github::serve(vec![
+        (
+            "GET /repos/o/r/pulls/7",
+            200,
+            r#"{"number":7,"head":{"sha":"0123456789abcdef0123456789abcdef01234567"}}"#.to_owned(),
+        ),
+        ("GET /repos/o/r/pulls/7 diff", 200, GOOD_PATCH.to_owned()),
+    ]);
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    let github = speccoder_runtime::github::Ctx::fixed(&api.url, Some("t0ken"));
+    // The special-case author is the only model call after confirmation.
+    special_case(&f);
+    let res = judge_candidate(r.path(), state.path(), &f, &d, "pr:7", Some(github));
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let b = the_bug(&res);
+    assert_eq!(b.verdict, Some(Verdict::Verified));
+    let c = b.candidate.as_ref().unwrap();
+    assert!(c.applied);
+    assert_eq!(c.number, Some(7));
+    assert_eq!(
+        c.head_sha.as_deref(),
+        Some("0123456789abcdef0123456789abcdef01234567")
+    );
+    // Read only: nothing was written to GitHub.
+    assert!(
+        api.calls().iter().all(|c| c.starts_with("GET ")),
+        "{:?}",
+        api.calls()
+    );
+    // The evidence names the candidate as the executor, with its head.
+    let statements = attested(r.path(), b.commit.as_deref().unwrap());
+    let executor = statements
+        .iter()
+        .map(|s| &s["predicate"]["executor"])
+        .find(|e| e.is_object())
+        .unwrap_or_else(|| panic!("{statements:#?}"));
+    assert_eq!(executor["kind"], "candidate", "{executor}");
+    assert_eq!(
+        executor["candidate"]["head_sha"],
+        "0123456789abcdef0123456789abcdef01234567"
+    );
+}
+
+#[test]
+fn a_patch_that_does_not_apply_is_refused_and_a_failing_one_is_not_retried() {
+    // Context the baseline does not have: refused before anything runs.
+    let r = repo("seeded");
+    let stale = "--- a/src/lib.rs\n+++ b/src/lib.rs\n@@ -1,3 +1,3 @@\n // saves_title\n-pub fn store(title: &str) -> char {\n+pub fn store(title: &str) -> Option<char> {\n     title.chars().next()\n";
+    fs::write(r.path().join("stale.patch"), stale).unwrap();
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    let res = judge_candidate(r.path(), state.path(), &f, &d, "stale.patch", None);
+    assert_eq!(
+        res.code().map(|c| c.name),
+        Some("BUG-CANDIDATE-APPLY"),
+        "{}",
+        res.message()
+    );
+    assert_eq!(res.status(), CommandStatus::GitPrecondition);
+    assert_eq!(
+        fs::read_to_string(r.path().join("src/lib.rs")).unwrap(),
+        "// saves_title\npub fn save(title: &str) -> char {\n    title.chars().next().unwrap_or_else(|| panic!(\"empty title\"))\n}\n"
+    );
+
+    // A patch that applies but leaves the reproduction red fails once:
+    // nobody writes another attempt.
+    let r = repo("seeded");
+    let wrong = "--- a/src/lib.rs\n+++ b/src/lib.rs\n@@ -1,4 +1,4 @@\n // saves_title\n pub fn save(title: &str) -> char {\n-    title.chars().next().unwrap_or_else(|| panic!(\"empty title\"))\n+    title.chars().next().unwrap_or('?')\n }\n";
+    fs::write(r.path().join("wrong.patch"), wrong).unwrap();
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    let res = judge_candidate(r.path(), state.path(), &f, &d, "wrong.patch", None);
+    let b = the_bug(&res);
+    assert_eq!(b.outcome, Outcome::Failed, "{}", res.message());
+    assert_ne!(b.verdict, Some(Verdict::Verified));
+    assert!(b.candidate.as_ref().is_some_and(|c| c.applied));
+    assert!(b.commit.is_none());
+    assert_eq!(
+        f.calls(),
+        2,
+        "the reproduction and held-out authors only: no implementer, no retry"
+    );
+}
+
 #[test]
 fn a_fix_that_only_recognises_the_reproductions_input_is_never_verified() {
     let r = repo("special-case");
@@ -796,6 +954,47 @@ fn a_fix_that_only_recognises_the_reproductions_input_is_never_verified() {
         b.special_case.iter().any(|s| !s.rejected && s.regenerated),
         "{:?}",
         b.special_case
+    );
+    let b = b.clone();
+
+    // The person rules the reproduction right: the next run judges the
+    // held attempt again from the journal, with no model call, and ticks.
+    let calls = f.calls();
+    let ruled = speccoder_runtime::controls::rule(
+        r.path(),
+        Some(&b.unit),
+        &b.task,
+        "the empty title is the only input the bug is about",
+        None,
+        state.path(),
+    );
+    assert_eq!(ruled.status(), CommandStatus::Ok, "{}", ruled.message());
+    let (_, nothing) = fake();
+    let res = bug::run_with(
+        r.path(),
+        None,
+        Some(&b.key()),
+        state.path(),
+        nothing,
+        None,
+        &RunOptions::default(),
+    );
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let b = the_bug(&res);
+    assert_eq!(b.outcome, Outcome::Fixed);
+    assert!(
+        b.special_case.iter().all(|s| s.rejected || s.ruled),
+        "{:?}",
+        b.special_case
+    );
+    assert_eq!(f.calls(), calls, "a model call was repeated");
+    let message = git(
+        r.path(),
+        &["log", "-1", "--format=%B", b.commit.as_deref().unwrap()],
+    );
+    assert!(
+        message.contains("Ruling: tests-right E1 sha256:"),
+        "{message}"
     );
 }
 
@@ -852,7 +1051,27 @@ fn the_issue_is_context_and_its_number_closes_it_only_on_a_verified_fix() {
         r.path(),
         &["log", "-1", "--format=%B", b.commit.as_deref().unwrap()],
     );
-    assert!(message.contains("Fixes #42"), "{message}");
+    assert!(message.contains("\nFixes: #42\n"), "{message}");
+    // The pull request's body names it too, so merging closes the issue.
+    let o = speccoder_runtime::handoff::PrOptions {
+        remote: "origin",
+        base: Some("main"),
+        open: false,
+        force: false,
+        github: req.github.as_ref().unwrap(),
+    };
+    let worktrees = git(r.path(), &["worktree", "list", "--porcelain"]);
+    let wt = worktrees
+        .split("\n\n")
+        .find(|w| w.contains("branch refs/heads/speccoder/001-bugfixes"))
+        .and_then(|w| w.lines().next()?.strip_prefix("worktree "))
+        .unwrap_or_else(|| panic!("{worktrees}"));
+    let dry = speccoder_runtime::handoff::pr(Path::new(wt), Some("001-bugfixes"), &o);
+    let Some(CommandData::Pr(p)) = dry.data() else {
+        panic!("{}", dry.message())
+    };
+    assert!(p.body.contains("\nFixes #42\n"), "{}", p.body);
+    assert_eq!(p.body.matches("Fixes #42").count(), 1, "{}", p.body);
     let plane = speccoder_runtime::worktree::project_state_dir(state.path(), r.path());
     let origins = speccoder_runtime::ladder::of(&plane, "001-bugfixes/FR-001");
     assert!(
