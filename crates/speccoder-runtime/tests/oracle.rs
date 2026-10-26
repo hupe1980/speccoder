@@ -331,6 +331,24 @@ fn us1_reject_edit_and_again_shape_the_set() {
     let v = us1(&res);
     assert_eq!(v.tests.len(), 1);
     assert_eq!(v.tests[0].content, "checks fn login(\n");
+    // What reached the calls is recorded, each person's note once, by digest.
+    let plane = speccoder_runtime::worktree::project_state_dir(state.path(), r.path());
+    let (draft, _) = speccoder_runtime::oracle::load(&plane, "001-graph", "US1")
+        .unwrap()
+        .unwrap();
+    let rejected = "Rejected `tests/acceptance_us1_passes.txt`: asserts the wrong rounding";
+    let want = speccoder_runtime::integrity::sha256_hex(rejected.as_bytes());
+    let kinds = |k: speccoder_core::context::ContextKind| {
+        draft.context.iter().filter(|e| e.kind == k).count()
+    };
+    assert_eq!(
+        draft.context.iter().filter(|e| e.sha256 == want).count(),
+        1,
+        "{:?}",
+        draft.context
+    );
+    assert_eq!(kinds(speccoder_core::context::ContextKind::Comment), 1);
+    assert!(kinds(speccoder_core::context::ContextKind::Scenario) >= 3);
     assert!(v.tests[0].red);
 }
 
