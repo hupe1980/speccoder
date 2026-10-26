@@ -1,12 +1,13 @@
 <script lang="ts">
   import { app } from "../lib/app.svelte";
-  import { symbol, word } from "../lib/marks";
+  import { byKind, byRole } from "../lib/actions";
+  import { ORDER, symbol, word } from "../lib/marks";
   import Icon from "./Icon.svelte";
   import Code from "./Code.svelte";
   import Spend from "./Spend.svelte";
   import PullCard from "./PullCard.svelte";
   const r = $derived(app.report?.data);
-  const order = ["verified", "regression_only", "attested", "ticked_without_evidence", "skipped", "ready", "blocked"];
+  const order = ORDER;
   const segments = $derived(order.map((k) => ({ k, n: r?.totals?.[k] ?? 0 })).filter((s) => s.n > 0));
   const total = $derived(segments.reduce((a, s) => a + s.n, 0));
   const uncited = $derived((r?.trace ?? []).filter((t) => !t.task));
@@ -23,8 +24,9 @@
   // Proven: evidence for the wording the spec has now, not an earlier one.
   const proven = $derived(matrix.filter((m) => m.tasks.some((t) => !t.changed && (t.verdict === "verified" || t.verdict === "regression_only"))).length);
   const stale = $derived((r?.tasks ?? []).filter((t) => t.drift?.requirements.length));
-  const recheck = $derived(app.actions.find((a) => a.run?.kind === "converge"));
-  const analyze = $derived(app.actions.find((a) => a.run?.kind === "skill" && a.label.endsWith("analyze")));
+  const recheck = $derived(byKind(app.actions, "converge")[0]);
+  // The format's consistency check, by its role: whatever it is named.
+  const analyze = $derived(byRole(app.actions, "check")[0]);
 </script>
 
 {#if r}
@@ -51,8 +53,8 @@
     <section class="card" class:wide={!matrix.length}>
       <h3>Waiting for you <span class="muted">{app.approvals.length}</span></h3>
       {#each app.approvals as p (p.task + p.covers)}
-        {@const yes = app.actions.find((a) => a.run?.kind === "approve" && "task" in a.run && a.run.task === p.task)}
-        {@const no = app.actions.find((a) => a.run?.kind === "reject" && "task" in a.run && a.run.task === p.task)}
+        {@const yes = byKind(app.actions, "approve", p.task)[0]}
+        {@const no = byKind(app.actions, "reject", p.task)[0]}
         <div class="pending">
           <p><span class="chip s-needs_approval"><Icon name="hand" size={11} weight={2.2} /> {p.task}</span> <strong>{p.presentation?.title ?? p.tool}</strong> <Code text={p.covers} /></p>
           <p class="muted small">{p.reason}</p>

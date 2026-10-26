@@ -91,7 +91,7 @@ fn decisions_name_who_and_bind_to_the_wording() {
         &["FR-001".to_owned()],
         "approve",
         None,
-        "cli",
+        speccoder_core::actions::Via::Terminal,
     );
     assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
     assert!(
@@ -106,7 +106,7 @@ fn decisions_name_who_and_bind_to_the_wording() {
         &["FR-002".to_owned()],
         "request",
         None,
-        "cli",
+        speccoder_core::actions::Via::Terminal,
     );
     assert_eq!(bare.status(), CommandStatus::UsageError);
     let asked = review::decide(
@@ -115,7 +115,7 @@ fn decisions_name_who_and_bind_to_the_wording() {
         &["FR-002".to_owned()],
         "request",
         Some("say what happens to open sessions"),
-        "web",
+        speccoder_core::actions::Via::Web,
     );
     let rv = data(&asked);
     assert_eq!(
@@ -147,7 +147,14 @@ fn decisions_name_who_and_bind_to_the_wording() {
     assert_eq!(rv.totals.lapsed, 1);
 
     // Approving "the rest" takes what is not approved on its wording now.
-    let all = data(&review::decide(r.path(), None, &[], "approve", None, "cli"));
+    let all = data(&review::decide(
+        r.path(),
+        None,
+        &[],
+        "approve",
+        None,
+        speccoder_core::actions::Via::Terminal,
+    ));
     assert!(all.totals.complete(), "{:?}", all.totals);
     assert!(all.revision.is_none());
 }
@@ -161,7 +168,7 @@ fn an_unknown_requirement_is_refused_and_a_removed_one_forgotten() {
         &["FR-009".to_owned()],
         "approve",
         None,
-        "cli",
+        speccoder_core::actions::Via::Terminal,
     );
     assert_eq!(res.status(), CommandStatus::NotFound);
     assert!(
@@ -169,13 +176,27 @@ fn an_unknown_requirement_is_refused_and_a_removed_one_forgotten() {
         "{}",
         res.message()
     );
-    let _ = review::decide(r.path(), None, &[], "approve", None, "cli");
+    let _ = review::decide(
+        r.path(),
+        None,
+        &[],
+        "approve",
+        None,
+        speccoder_core::actions::Via::Terminal,
+    );
     fs::write(
         r.path().join("specs/001-login/spec.md"),
         "# Spec\n\n## Requirements\n\n- **FR-001**: Users MUST log in.\n",
     )
     .unwrap();
-    let _ = review::decide(r.path(), None, &["FR-001".to_owned()], "clear", None, "cli");
+    let _ = review::decide(
+        r.path(),
+        None,
+        &["FR-001".to_owned()],
+        "clear",
+        None,
+        speccoder_core::actions::Via::Terminal,
+    );
     let text = fs::read_to_string(r.path().join("specs/001-login/review.json")).unwrap();
     assert!(
         !text.contains("FR-002") && !text.contains("FR-001"),
@@ -186,7 +207,14 @@ fn an_unknown_requirement_is_refused_and_a_removed_one_forgotten() {
 #[test]
 fn a_skill_cannot_change_the_review() {
     let r = repo();
-    let _ = review::decide(r.path(), None, &[], "approve", None, "cli");
+    let _ = review::decide(
+        r.path(),
+        None,
+        &[],
+        "approve",
+        None,
+        speccoder_core::actions::Via::Terminal,
+    );
     let file = r.path().join("specs/001-login/review.json");
     let approved = fs::read(&file).unwrap();
     let before = review::snapshot(r.path());
@@ -226,7 +254,7 @@ fn the_report_and_the_payload_carry_the_review() {
         &["FR-001".to_owned()],
         "approve",
         None,
-        "cli",
+        speccoder_core::actions::Via::Terminal,
     );
     let res = speccoder_runtime::status::report(r.path(), None);
     let Some(CommandData::Report(rep)) = res.data() else {
@@ -264,7 +292,7 @@ fn open_questions_are_answered_in_place() {
         &["FR-002".to_owned()],
         "approve",
         None,
-        "cli",
+        speccoder_core::actions::Via::Terminal,
     );
     assert_eq!(
         refused.status(),
@@ -272,7 +300,14 @@ fn open_questions_are_answered_in_place() {
         "{}",
         refused.message()
     );
-    let bulk = review::decide(r.path(), None, &[], "approve", None, "cli");
+    let bulk = review::decide(
+        r.path(),
+        None,
+        &[],
+        "approve",
+        None,
+        speccoder_core::actions::Via::Terminal,
+    );
     assert!(bulk.message().contains("not FR-002"), "{}", bulk.message());
     assert_eq!(
         states(&data(&bulk)),
@@ -297,14 +332,21 @@ fn open_questions_are_answered_in_place() {
 #[test]
 fn the_person_rewords_a_requirement_and_its_history_shows() {
     let r = repo();
-    let _ = review::decide(r.path(), None, &[], "approve", None, "cli");
+    let _ = review::decide(
+        r.path(),
+        None,
+        &[],
+        "approve",
+        None,
+        speccoder_core::actions::Via::Terminal,
+    );
     let e = review::edit(
         r.path(),
         None,
         "FR-002",
         "Users MUST log out of every device.",
         false,
-        "cli",
+        speccoder_core::actions::Via::Terminal,
     );
     assert_eq!(e.status(), CommandStatus::Ok, "{}", e.message());
     let rv = data(&e);
@@ -324,7 +366,7 @@ fn the_person_rewords_a_requirement_and_its_history_shows() {
         "FR-002",
         "Users MUST log out everywhere.",
         true,
-        "cli",
+        speccoder_core::actions::Via::Terminal,
     );
     let rv = data(&e);
     assert_eq!(
@@ -356,11 +398,27 @@ fn the_person_rewords_a_requirement_and_its_history_shows() {
     assert_eq!(v[1].1, ["FR-001", "FR-002", "SC-001"]);
     // One line of words; an identifier the spec has.
     assert_eq!(
-        review::edit(r.path(), None, "FR-002", "a\nb", false, "cli").status(),
+        review::edit(
+            r.path(),
+            None,
+            "FR-002",
+            "a\nb",
+            false,
+            speccoder_core::actions::Via::Terminal
+        )
+        .status(),
         CommandStatus::UsageError
     );
     assert_eq!(
-        review::edit(r.path(), None, "FR-099", "x", false, "cli").status(),
+        review::edit(
+            r.path(),
+            None,
+            "FR-099",
+            "x",
+            false,
+            speccoder_core::actions::Via::Terminal
+        )
+        .status(),
         CommandStatus::NotFound
     );
 }

@@ -1,0 +1,19 @@
+{
+  "head": "init",
+  "result": {
+    "command": "reject",
+    "data": {
+      "decided": [],
+      "feature": "001-graph",
+      "pending": [],
+      "unreadable": null
+    },
+    "exit_code": 0,
+    "message": "rejected: write `package.json` for T005 — by Dana Example (asserted); the model will be told: no new files; `speccoder run` continues each attempt where it stopped",
+    "payload": "approvals",
+    "schema_version": 2,
+    "status": "ok"
+  },
+  "review": null,
+  "status": ""
+}

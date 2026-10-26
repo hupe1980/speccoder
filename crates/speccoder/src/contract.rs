@@ -77,6 +77,118 @@ fn the_published_schemas_are_what_the_code_generates() {
     );
 }
 
+/// Names given more than once.
+fn duplicates<'a>(names: impl IntoIterator<Item = &'a str>) -> Vec<&'a str> {
+    let mut seen = std::collections::BTreeSet::new();
+    let mut twice: Vec<&str> = names.into_iter().filter(|n| !seen.insert(*n)).collect();
+    twice.dedup();
+    twice
+}
+
+/// The names `CommandData::kind` gives, read from its source: one per
+/// variant, as the compiler keeps the match exhaustive.
+fn payload_kinds() -> Vec<String> {
+    let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../speccoder-core/src/command.rs");
+    let text = std::fs::read_to_string(file).unwrap();
+    let body = text
+        .split("pub const fn kind(&self) -> &'static str {")
+        .nth(1)
+        .and_then(|b| b.split("\n    }\n").next())
+        .unwrap();
+    body.lines()
+        .filter_map(|l| l.split("=> \"").nth(1))
+        .filter_map(|r| r.split('"').next())
+        .map(str::to_owned)
+        .collect()
+}
+
+#[test]
+fn every_payload_has_its_own_name() {
+    let kinds = payload_kinds();
+    assert!(!kinds.is_empty());
+    assert_eq!(
+        duplicates(speccoder_core::PAYLOADS.iter().copied()),
+        Vec::<&str>::new()
+    );
+    assert_eq!(
+        duplicates(kinds.iter().map(String::as_str)),
+        Vec::<&str>::new()
+    );
+    let mut a: Vec<&str> = kinds.iter().map(String::as_str).collect();
+    let mut b = speccoder_core::PAYLOADS.to_vec();
+    a.sort_unstable();
+    b.sort_unstable();
+    assert_eq!(
+        a, b,
+        "CommandData::kind and PAYLOADS name different payloads"
+    );
+    // A second `verify` is caught as a name.
+    assert_eq!(duplicates(["verify", "run", "verify"]), ["verify"]);
+}
+
+fn ui_lib() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../speccoder-web/ui/src/lib")
+}
+
+/// The UI's types, generated from the published schemas (not the code:
+/// the page is held to what is published).
+fn ui_types() -> String {
+    let schemas: Vec<(&str, &str, Value)> = crate::schema::ROOTS
+        .iter()
+        .map(|(name, root)| (*name, *root, published(name)))
+        .collect();
+    crate::typescript::render(&schemas).unwrap_or_else(|e| panic!("{e}"))
+}
+
+#[test]
+fn the_ui_types_are_what_the_schemas_generate() {
+    let file = ui_lib().join("schema.gen.ts");
+    let text = ui_types();
+    if bless() {
+        std::fs::write(&file, text).unwrap();
+    } else {
+        assert!(
+            std::fs::read_to_string(&file).ok().as_deref() == Some(text.as_str()),
+            "UI types differ from the schemas: crates/speccoder-web/ui/src/lib/schema.gen.ts; run SPECCODER_BLESS=1 cargo test -p speccoder ui_types"
+        );
+    }
+}
+
+/// Names `text` declares (`interface X`, `type X =`).
+fn declared(text: &str) -> Vec<String> {
+    text.lines()
+        .filter_map(|l| {
+            let l = l.trim_start().trim_start_matches("export ");
+            l.strip_prefix("interface ")
+                .or_else(|| l.strip_prefix("type "))
+                .map(|r| {
+                    r.chars()
+                        .take_while(|c| c.is_alphanumeric() || *c == '_')
+                        .collect::<String>()
+                })
+        })
+        .filter(|n| !n.is_empty())
+        .collect()
+}
+
+#[test]
+fn the_hand_written_ui_types_declare_nothing_the_schemas_generate() {
+    let generated = declared(&ui_types());
+    let hand = std::fs::read_to_string(ui_lib().join("types.ts")).unwrap();
+    let twice: Vec<String> = declared(&hand)
+        .into_iter()
+        .filter(|n| generated.contains(n))
+        .collect();
+    assert!(
+        twice.is_empty(),
+        "types.ts declares what schema.gen.ts generates: {twice:?}; import it from ./schema.gen instead"
+    );
+    assert_eq!(
+        declared("export interface A {\n}\ntype B = string;\n// type C\n"),
+        ["A", "B"]
+    );
+}
+
 #[test]
 fn the_published_predicate_schema_is_what_the_code_generates() {
     let schema = crate::schema::predicate();
@@ -359,6 +471,79 @@ fn every_next_step_and_fix_is_a_command_that_parses() {
             parses(&f);
         }
     }
+}
+
+/// Every action an interface lists stands for a command that parses: on
+/// a project with no feature yet, one with planning to commit, and one
+/// mid-run with a task selected — the list and Needs You's.
+#[test]
+fn every_listed_action_is_a_command_that_parses() {
+    let git = |dir: &std::path::Path, args: &[&str]| {
+        let ok = std::process::Command::new("git")
+            .args([
+                "-c",
+                "user.name=t",
+                "-c",
+                "user.email=t@e",
+                "-c",
+                "commit.gpgsign=false",
+            ])
+            .args(args)
+            .current_dir(dir)
+            .status()
+            .is_ok_and(|s| s.success());
+        assert!(ok, "git {args:?}");
+    };
+    let none = speccoder_core::ApprovalsReport {
+        feature: "001-graph".to_owned(),
+        pending: Vec::new(),
+        decided: Vec::new(),
+        unreadable: None,
+    };
+    let graph = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../speccoder-speckit/tests/fixtures/graph/specs");
+    let mut seen = 0;
+    for step in ["no feature", "uncommitted", "committed"] {
+        let dir = tempfile::tempdir().unwrap();
+        let r = dir.path();
+        std::fs::create_dir_all(r.join(".specify/memory")).unwrap();
+        std::fs::write(r.join(".specify/memory/constitution.md"), "# C\n").unwrap();
+        git(r, &["init", "-q"]);
+        git(r, &["add", "-A"]);
+        git(r, &["commit", "-q", "-m", "init"]);
+        if step != "no feature" {
+            let ok = std::process::Command::new("cp")
+                .arg("-R")
+                .arg(&graph)
+                .arg(r)
+                .status()
+                .is_ok_and(|s| s.success());
+            assert!(ok);
+        }
+        if step == "committed" {
+            git(r, &["add", "-A"]);
+            git(r, &["commit", "-q", "-m", "plan"]);
+        }
+        let mut commands: Vec<String> =
+            speccoder_runtime::actions::available_with(r, None, Some("T005"), Some(&none))
+                .into_iter()
+                .map(|a| a.command)
+                .collect();
+        if let Some(CommandData::Inbox(i)) =
+            speccoder_runtime::inbox::inbox_with(r, None, None).data()
+        {
+            commands.extend(
+                i.items
+                    .iter()
+                    .flat_map(|i| i.actions.iter().map(|a| a.command.clone())),
+            );
+        }
+        for c in &commands {
+            parses(c);
+        }
+        seen += commands.len();
+    }
+    assert!(seen > 10, "{seen} actions listed");
 }
 
 /// The Spec Kit workflow step `speccoder workflow install` writes builds

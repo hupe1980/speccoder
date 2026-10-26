@@ -3,13 +3,14 @@
   // the work's order, round-capped, on a faint track. The centre may hold a
   // number. Its label reads the counts aloud.
   import { ORDER, word } from "../lib/marks";
+  import type { StatusTotals } from "../lib/types";
 
   let {
     totals,
     size = 96,
     width = 10,
     label = true,
-  }: { totals: Record<string, number>; size?: number; width?: number; label?: boolean } = $props();
+  }: { totals: Partial<StatusTotals>; size?: number; width?: number; label?: boolean } = $props();
 
   const parts = $derived(ORDER.map((k) => ({ k, n: totals[k] ?? 0 })).filter((p) => p.n > 0));
   const total = $derived(parts.reduce((a, p) => a + p.n, 0));

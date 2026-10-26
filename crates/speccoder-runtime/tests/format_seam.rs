@@ -345,3 +345,31 @@ fn formats_are_detected_chosen_or_refused() {
     // parallel suite: 1.4 s on Linux in Docker).
     assert!(started.elapsed() < std::time::Duration::from_secs(15));
 }
+
+/// Each adapter says which part its skills play, so an interface finds the
+/// create step or the analysis step without naming a skill.
+#[test]
+fn every_adapter_states_its_skills_roles() {
+    use speccoder_core::actions::SkillRole;
+    let speckit = tempfile::tempdir().unwrap();
+    fs::create_dir_all(speckit.path().join(".specify/memory")).unwrap();
+    let p = speccoder_runtime::format::at(speckit.path()).planning();
+    for (skill, role) in [
+        ("specify", SkillRole::Create),
+        ("plan", SkillRole::TowardTasks),
+        ("tasks", SkillRole::TowardTasks),
+        ("clarify", SkillRole::Revise),
+        ("analyze", SkillRole::Check),
+        ("checklist", SkillRole::Other),
+    ] {
+        assert_eq!(p.role_of(skill), role, "Spec Kit {skill}");
+    }
+    let openspec = tempfile::tempdir().unwrap();
+    fs::create_dir_all(openspec.path().join("openspec/changes")).unwrap();
+    fs::create_dir_all(openspec.path().join("openspec/specs")).unwrap();
+    let p = speccoder_runtime::format::at(openspec.path()).planning();
+    assert_eq!(p.prefix, "openspec-", "not detected as OpenSpec");
+    // OpenSpec states no skill that creates a unit or checks the planning.
+    assert_eq!(p.role_of("propose"), SkillRole::TowardTasks);
+    assert!(p.creates.is_empty() && p.checks.is_none());
+}

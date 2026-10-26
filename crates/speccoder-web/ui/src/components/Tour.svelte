@@ -4,7 +4,7 @@
   // from. The same steps and labels as the check run's tour: the runtime
   // builds them, this only lays them out.
   import { get, latest, q } from "../lib/api";
-  import type { EvidenceTour } from "../lib/types";
+  import type { EvidenceTour } from "../lib/schema.gen";
   import Code from "./Code.svelte";
 
   let { feature, task }: { feature: string | undefined; task: string } = $props();

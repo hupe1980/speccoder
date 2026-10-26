@@ -1,0 +1,2643 @@
+// Generated from site/static/schemas/v2 by `SPECCODER_BLESS=1 cargo test -p speccoder ui_types`. Do not edit.
+
+/** The acceptance set's strength, as recorded with a verdict. */
+export interface AcceptanceStrength {
+  /**
+   * Visible and held-out together: what the verdict rests on (equal to
+   * `visible` without held-out tests). Mutants run with the visible
+   * command only, so its mutant counts are a lower bound.
+   */
+  combined: Strength;
+  /** How long the stage took. */
+  duration_ms: number;
+  /** The gate. */
+  gate: Gate;
+  /** A held-out set was overlaid. */
+  held_out: boolean;
+  /** The mutants. */
+  mutants?: Mutants | null;
+  /** The near misses. */
+  near_misses: NearMiss[];
+  /** Why not (fully) measured, or what was dropped. */
+  notes?: string[];
+  /** The permitted alternatives. */
+  permitted: Permitted[];
+  /** Rulings that applied. */
+  rulings?: Ruling[];
+  /** The near-miss call's run. */
+  run_id?: string | null;
+  /** The near-miss call's tokens. */
+  usage?: unknown;
+  /** The visible set alone. */
+  visible: Strength;
+}
+
+/** One thing a person can do now. */
+export interface Action {
+  /** Why it cannot run now; `None`: it can. */
+  blocked: string | null;
+  /** The equivalent command; `"…"` marks the input. */
+  command: string;
+  /**
+   * It leaves the machine (a push, a pull request) or cannot be undone
+   * (a discard): what an interface says in a confirmation before it runs it.
+   */
+  confirm: string | null;
+  /** `next`, `plan`, `work`, `task`, `feature` or `review`. */
+  group: string;
+  /** What it is, independent of its wording ([`identity`]). */
+  id: ActionId;
+  /** What to ask for before it runs (`Describe the feature`). */
+  input: string | null;
+  /** What it does, in a few words. */
+  label: string;
+  /**
+   * A planning skill's part in its format's planning; `None` for
+   * everything else.
+   */
+  role: SkillRole | null;
+  /**
+   * How an interface runs it; `None`: run the command yourself (it leaves
+   * the machine, or it is not something an interface hosts).
+   */
+  run: Runnable | null;
+  /** Why, or what follows (shown beside it). */
+  why: string;
+}
+
+/**
+ * What an action is, independent of its wording: its kind and what it
+ * is about (the task, the skill, the issue). An interface finds an action
+ * by this, never by its label.
+ */
+export interface ActionId {
+  /** Its kind. */
+  kind: ActionKind;
+  /**
+   * What it is about: a task's id, a skill's name, an issue's number,
+   * a review's `verdict` (`verdict:first id`), a command's words.
+   */
+  subject: string | null;
+}
+
+/**
+ * What kind of action it is: one per [`Runnable`] kind (a run split by
+ * whether it names a task), plus [`ActionKind::Command`] for an action an
+ * interface does not run itself. Exhaustive at any one version; a new
+ * kind arrives with its `Runnable` variant (the *adding a kind* contract
+ * of `speccoder_runtime::actions::perform`).
+ */
+export type ActionKind = "skill" | "run_task" | "run_feature" | "converge" | "commit" | "approve" | "reject" | "accept" | "skip" | "nudge" | "rule" | "review" | "issue_comment" | "quick_change" | "keep_set_aside" | "drop_set_aside" | "fix_setup" | "feature" | "pull_request" | "command";
+
+/**
+ * Result of `speccoder actions`: what a person can do now in the
+ * project — the list every interface renders — and where the feature is
+ * on its journey.
+ */
+export interface ActionsReport {
+  /** Every action, by group, the most urgent first. */
+  actions: Action[];
+  /** The feature's journey (spec → plan → tasks → commit → run → review). */
+  journey: JourneyStep[];
+}
+
+/** Where an annotation lands: a file and a 1-based line, at the head. */
+export interface Anchor {
+  /** 1-based line. */
+  line: number;
+  /** Repository-relative path. */
+  path: string;
+}
+
+/**
+ * A pending call as a person sees it: what, why, what it can reach, what
+ * the model claimed, and what approving it grants.
+ */
+export interface ApprovalView {
+  /** The diff, the file's head, the command or the arguments. */
+  body_lines: string[];
+  /** What the model said when it asked (a claim). */
+  claim: string | null;
+  /** `write`, `edit`, `run`, `network` or `mcp`. */
+  kind: string;
+  /** `low`, `medium` or `high`. */
+  risk: string;
+  /** What the call can reach. */
+  sandbox: string;
+  /** What `approve` grants: `for the rest of T004: this path, any content`. */
+  scope: string;
+  /** The path, the whole command, or the MCP tool. */
+  subject: string;
+  /** `Edit this file?`, `Run this command?`, …. */
+  title: string;
+}
+
+/** Result of `speccoder report --approvals`, `approve` and `reject`. */
+export interface ApprovalsReport {
+  /** Decisions recorded for the feature's tasks. */
+  decided: DecidedCall[];
+  /** Feature directory name. */
+  feature: string;
+  /** Calls that stopped an open task and await a decision. */
+  pending: PendingCall[];
+  /**
+   * Why the calls waiting in the journal could not be read (another
+   * speccoder holds it, …): `pending` may then be incomplete — unknown,
+   * never "nothing waiting".
+   */
+  unreadable: string | null;
+}
+
+/** Result of `speccoder spec archive` (an OpenSpec change). */
+export interface ArchiveReport {
+  /** Where OpenSpec moved the change. */
+  archived_as: string | null;
+  /** The change. */
+  change: string;
+  /** The commit `archive <id>`. */
+  commit: string | null;
+  /** Who confirmed. */
+  confirmed_by: string | null;
+  /** What archiving changes (`openspec show <id> --diff`), when shown. */
+  diff: string | null;
+  /** OpenSpec's own `{severity, code, message, fix}` from its last answer. */
+  openspec_status: unknown;
+  /**
+   * `probe`, `incomplete`, `unverified`, `awaiting_confirmation`,
+   * `declined`, `archived` or `failed`.
+   */
+  stage: string;
+  /** OpenSpec's counts of added, modified, removed and renamed requirements. */
+  totals: unknown;
+  /** Tasks ticked without a speccoder verdict commit. */
+  unverified_tasks: string[];
+}
+
+/** Presence of a feature's artifacts. */
+export interface Artifacts {
+  /** `checklists/` */
+  checklists: boolean;
+  /** `contracts/` */
+  contracts: boolean;
+  /** `data-model.md` */
+  data_model: boolean;
+  /** `plan.md` */
+  plan: boolean;
+  /** `quickstart.md` */
+  quickstart: boolean;
+  /** `research.md` */
+  research: boolean;
+  /** `spec.md` */
+  spec: boolean;
+  /** `tasks.md` */
+  tasks: boolean;
+}
+
+/** Result of `speccoder attest verify` and `attest sign`. */
+export interface AttestReport {
+  /** Feature directory name. */
+  feature: string;
+  /** One per object. */
+  objects: ObjectVerification[];
+  /** Count per outcome word. */
+  totals: Record<string, number>;
+  /**
+   * Where trust came from: the allowed-signers file, whether GPG's keyring
+   * was used, the expected Sigstore identity.
+   */
+  trust: unknown;
+}
+
+/**
+ * Result of `speccoder auth`: who speccoder acts as on a GitHub
+ * host, and where its token comes from. The token itself is never shown.
+ */
+export interface AuthReport {
+  /** `github.com` or an Enterprise host. */
+  host: string;
+  /** The account, when signed in. */
+  login: string | null;
+  /** `GH_TOKEN`, `GITHUB_TOKEN`, `the keychain`, when signed in. */
+  source: string | null;
+}
+
+/** Result of `speccoder bench import`. */
+export interface BenchReport {
+  /** Instances turned into cases. */
+  imported: string[];
+  /** The suite directory written. */
+  out: string;
+  /** Instances not imported, with why. */
+  skipped: string[];
+}
+
+/** Result of `speccoder-verify check` / `speccoder attest verify --branch`. */
+export interface BranchReport {
+  /** Unsigned evidence was accepted (`--require-signed=false`). */
+  accepted_unsigned: boolean;
+  /** The merge base with the given base, when one was given. */
+  base: string | null;
+  /** The conclusion. */
+  conclusion: Conclusion;
+  /** The units checked, in order. */
+  features: string[];
+  /** The commit checked. */
+  head: string;
+  /** Which units were covered. */
+  mode: Mode;
+  /** Predicate fields or revisions seen but unknown here (tolerated). */
+  newer_fields: string[];
+  /** Rules this verifier version does not evaluate yet. */
+  not_evaluated: string[];
+  /** Bug homes touched without a verdict commit (informational). */
+  open_no_claim: string[];
+  /** `regression_only` and `attested` fail too. */
+  require_verified: boolean;
+  /** Evidenced (not stale) over all ticks; `None` without ticks. */
+  share: number | null;
+  /** Tasks skipped by a person's decision (informational). */
+  skipped: SkippedTask[];
+  /** Every tick (and trailer-only task), in document order per unit. */
+  ticks: TickReport[];
+  /** Counts by outcome. */
+  totals: BranchTotals;
+  /**
+   * Requirement → task → test → verdict, from the signed `trace[]`,
+   * with a row (no task) for each requirement no tick cites.
+   */
+  trace: TraceRow[];
+  /**
+   * The trust used: the allowed-signers file and the revision it was
+   * read at, the Sigstore identity and issuer.
+   */
+  trust: unknown;
+}
+
+/** Counts by outcome, in the verdict bar's order. */
+export interface BranchTotals {
+  /** Evidenced `attested`. */
+  attested: number;
+  /** Regressed (reserved). */
+  regressed: number;
+  /** Evidenced `regression_only`. */
+  regression_only: number;
+  /** Skipped by a person (not ticks). */
+  skipped: number;
+  /** Stale. */
+  stale: number;
+  /** Unverifiable. */
+  unverifiable: number;
+  /** Evidenced `verified`. */
+  verified: number;
+}
+
+/** One check run. */
+export interface CheckResult {
+  /** The command, as run. */
+  argv: string[];
+  /** Wall-clock duration. */
+  duration_ms: number;
+  /** Process exit code, if it exited. */
+  exit_code: number | null;
+  /**
+   * It failed once and passed when run again: named, never trusted as
+   * task evidence.
+   */
+  flaky: boolean;
+  /** Whether the check declares a JUnit report. */
+  junit: boolean;
+  /** Name from `speccoder.toml`. */
+  name: string;
+  /** Why the check was skipped, errored, or has no tests. */
+  note: string | null;
+  /** What happened. */
+  status: CheckStatus;
+  /** Last part of stderr (lossy UTF-8). */
+  stderr_tail: string;
+  /** Last part of stdout (lossy UTF-8). */
+  stdout_tail: string;
+  /** Tests from the JUnit report, if one was declared and freshly written. */
+  tests: TestResult[] | null;
+  /** Output exceeded the capture cap. */
+  truncated: boolean;
+}
+
+/** Outcome of one check. */
+export type CheckStatus = "passed" | "failed" | "timed_out" | "skipped" | "error";
+
+/** One Spec Kit checklist (`specs/<feature>/checklists/*.md`). */
+export interface ChecklistStatus {
+  /** Items checked. */
+  done: number;
+  /** Path relative to the project root. */
+  file: string;
+  /** Items not checked. */
+  open: number;
+  /** Checklist items. */
+  total: number;
+}
+
+export type Checklists = ChecklistStatus[];
+
+/** One code, as `explain` shows it. */
+export interface CodeInfo {
+  /** `NEEDS-APPROVAL`. */
+  code: string;
+  /** Its section on the codes page. */
+  docs: string;
+  /** Its exit code. */
+  exit_code: number;
+  /** What it means and why it happens. */
+  explain: string;
+  /** How to resolve it (templates: `<task>`, `<feature>` are blanks). */
+  fix: string[];
+  /** Error, stop or warning. */
+  kind: Kind;
+  /** The status results with this code have. */
+  status: CommandStatus;
+  /** One line. */
+  title: string;
+}
+
+/** Command-specific payload of a result. */
+export type CommandData = ProjectSnapshot | VerifyReport | WorktreeReport | ProposeReport | ReplayReport | RunReport | EvalReport | FeatureReport | ConvergeReport | StatusReport | ApprovalsReport | ControlReport | CostReport | PrReport | BenchReport | InitReport | SkillsReport | SkillRunReport | ChecklistStatus[] | ArchiveReport | InPlaceReport | AttestReport | ExplainReport | SchemaReport | DoctorReport | FeaturesReport | UiReport | ConfigReport | IssuesReport | InboxReport | ReviewReport | AuthReport | BranchReport | EvidenceTour | ActionsReport;
+
+/**
+ * The envelope as it is serialised — the schema of [`CommandResult`]
+ * (whose fields are private and whose serialisation is written by hand).
+ */
+export interface CommandResult {
+  /**
+   * The catalog code: present for every non-ok result and for a
+   * degraded success.
+   */
+  code?: string | null;
+  /** The command. */
+  command: string;
+  /** The command's payload. */
+  data?: CommandData | null;
+  /** The code's section on the codes page. */
+  docs?: string | null;
+  /** The process exit status (always the status's). */
+  exit_code: ExitCode;
+  /** How to resolve it: commands, or `→ ` lines for a person. */
+  fix?: string[] | null;
+  /** One line, for a person. */
+  message: string;
+  /** The steps that continue. */
+  next?: NextStep[] | null;
+  /** The name of `data`'s schema (`schemas/v2/<payload>.json`). */
+  payload?: string | null;
+  /** The fix speccoder can apply itself, on the person's yes. */
+  remedy?: Remedy | null;
+  /** The envelope's version. */
+  schema_version: number;
+  /** The outcome class. */
+  status: CommandStatus;
+}
+
+/** Outcome class of a command. */
+export type CommandStatus = "ok" | "usage_error" | "error" | "not_a_project" | "diagnostics_error" | "selection_needed" | "config_error" | "verification_failed" | "git_precondition" | "not_found" | "run_failed" | "replay_diverged" | "task_not_ready" | "needs_human" | "eval_failed" | "not_replayable" | "attestation_failed";
+
+/** What changed relative to a baseline (pass-to-pass). */
+export interface Comparison {
+  /** Tests collected now. */
+  count_after: number;
+  /** Tests collected in the baseline. */
+  count_before: number;
+  /** Checks failing now only because of tests that already failed in the baseline. */
+  failing_as_before: string[];
+  /** Tests not in the baseline. */
+  new_tests: string[];
+  /** Tests failing in both runs. */
+  pre_existing: string[];
+  /** Tests that passed in the baseline and now fail or are missing. */
+  regressions: Regression[];
+}
+
+/** The branch's conclusion. */
+export type Conclusion = "success" | "failure" | "neutral";
+
+/** One key: what it is, what it is set to, and what it is otherwise. */
+export interface ConfigKey {
+  /** What it does. */
+  about: string;
+  /** For `choice`: the allowed values. */
+  choices: string[];
+  /**
+   * The value speccoder uses when the key is absent; none for keys
+   * without a default (unset means off, or the key is required).
+   */
+  default: unknown;
+  /** The key, e.g. `max_turns`; dotted below a sub-table (`sigstore.identity`). */
+  key: string;
+  /**
+   * `bool`, `integer`, `number`, `string`, `choice`, `duration`, `argv`,
+   * `argv_list` or `string_list`.
+   */
+  kind: string;
+  /** For numbers: the largest allowed. */
+  max: number | null;
+  /** For numbers: the smallest allowed. */
+  min: number | null;
+  /** The section (or table) is refused without it. */
+  required: boolean;
+  /** The value in the file, when set. */
+  value: unknown;
+}
+
+/**
+ * Result of `speccoder config`: the project's configuration as a catalogue
+ * of every key, each with its type, default and value (when set).
+ */
+export interface ConfigReport {
+  /**
+   * Whether it is committed as it is on disk (speccoder reads committed
+   * configuration only, so an uncommitted change is not yet in force).
+   */
+  committed: boolean;
+  /** The uncommitted change, as a diff, when there is one. */
+  diff: string | null;
+  /** The first parser's complaint, when not valid. */
+  error: string | null;
+  /** Whether it exists. */
+  exists: boolean;
+  /** The file, relative to the project root. */
+  file: string;
+  /** Sections, in the reference's order. */
+  sections: ConfigSection[];
+  /** Whether every parser accepts it. */
+  valid: boolean;
+}
+
+/** One section of `speccoder.toml`. */
+export interface ConfigSection {
+  /** What the section decides. */
+  about: string;
+  /** The keys (for a named section: the keys of each table, unset). */
+  keys: ConfigKey[];
+  /** The table name, e.g. `model`, or `checks` for `[checks.<name>]`. */
+  name: string;
+  /**
+   * Named tables (`[checks.<name>]`, `[mcp.<name>]`): `keys` describe
+   * one, `tables` hold the configured ones.
+   */
+  named: boolean;
+  /** The configured named tables. */
+  tables: ConfigTable[];
+  /** A title for people, e.g. `Model`. */
+  title: string;
+}
+
+/** One configured named table, e.g. `[checks.test]`. */
+export interface ConfigTable {
+  /** Its keys, with values. */
+  keys: ConfigKey[];
+  /** Its name, e.g. `test`. */
+  name: string;
+}
+
+/** State of the project constitution. */
+export type ConstitutionState = "present" | "unfilled" | "absent";
+
+/** Result of `accept`, `skip` and `nudge`. */
+export interface ControlReport {
+  /** `accepted`, `skipped`, `unskipped`, `nudged` or `nudges_cleared`. */
+  action: string;
+  /** Feature directory name. */
+  feature: string;
+  /** The commit or ref that records it, when it lives in git. */
+  record: string | null;
+  /** Task ID. */
+  task: string;
+  /** The person's reason or note. */
+  text: string | null;
+}
+
+/** Result of `speccoder converge`. */
+export interface ConvergeReport {
+  /** Tasks speccoder appended, as `T0NN text`. */
+  appended: string[];
+  /** The commit on `speccoder/<feature>` holding the appended section. */
+  commit: string | null;
+  /** Feature directory name. */
+  feature: string;
+  /** Every finding as the model reported it (its claim, not evidence). */
+  findings: unknown[];
+  /** Extension hooks run, offered or skipped around it. */
+  hooks: string[];
+  /**
+   * `converged`, `tasks_appended`, `needs_review` (only unrequested
+   * findings), `no_progress`, `round_limit` or `failed`.
+   */
+  outcome: string;
+  /** Findings that repeat an earlier convergence task: no progress. */
+  repeated: unknown[];
+  /** This round's number (1 = the first Convergence phase). */
+  round: number;
+  /** The agentplane run of the assessment, if one ran. */
+  run_id: string | null;
+  /** Every tool call with the policy's decision. */
+  tool_calls: unknown[];
+  /** `unrequested` findings: for a person, never turned into tasks. */
+  unrequested: unknown[];
+  /** Token usage of the assessment. */
+  usage: unknown;
+}
+
+/** One convergence round, from its commit. */
+export interface ConvergenceRound {
+  /** The commit that appended it. */
+  commit: string;
+  /** Round number. */
+  round: number;
+  /** The appended tasks, as `T0NN text`. */
+  tasks: string[];
+}
+
+/** Result of `speccoder report --cost`. */
+export interface CostReport {
+  /** Convergence assessments. */
+  convergence: Usage;
+  /** Feature directory name. */
+  feature: string;
+  /** The model the prices apply to, when prices are configured. */
+  priced_model: string | null;
+  /** Per task, every attempt counted (passed and saved). */
+  tasks: TaskCost[];
+  /** Everything. */
+  total: Usage;
+}
+
+/** Rejected of judged, for one source. */
+export interface Counts {
+  /** Judged (unviable excluded). */
+  judged: number;
+  /** Rejected (timeouts included). */
+  rejected: number;
+}
+
+/** A person's decision. */
+export interface DecidedCall {
+  /** Who decided, as `name (via)`. */
+  by: string | null;
+  /** The waiting call it decided, when it was one. */
+  call: string | null;
+  /** The editor decided in, over the Agent Client Protocol. */
+  client?: string | null;
+  /** What it covers. */
+  covers: string;
+  /** `approved` or `rejected`. */
+  decision: string;
+  /** Nobody decided: the deadline passed and the call was denied. */
+  expired: boolean;
+  /** An approval's note to the model. */
+  note: string | null;
+  /** Who decided; `None` for an expiry. */
+  operator: OperatorView | null;
+  /** The reason, for a rejection. */
+  reason: string | null;
+  /** How far an approval reaches: `once`, `task` or `run`. */
+  scope: string | null;
+  /** Task ID. */
+  task: string;
+  /**
+   * Through what: an origin of `actions::Via` (`terminal`, `web`,
+   * `acp`, …).
+   */
+  via: string | null;
+}
+
+/** One requirement of a change's spec delta. */
+export interface DeltaRequirement {
+  /** The capability (`openspec/specs/<capability>/spec.md`). */
+  capability: string;
+  /** Its heading's line. */
+  line: number;
+  /** The requirement's name (the new name for a rename). */
+  name: string;
+  /** `added`, `modified`, `removed` or `renamed`. */
+  operation: string;
+  /** The delta file, relative to the project root. */
+  path: string;
+  /** Its scenarios' names. */
+  scenarios: string[];
+}
+
+/** One direct dependency. */
+export interface Dependency {
+  /** The task depended on. */
+  id: string;
+  /** Where the edge comes from. */
+  kind: DependencyKind;
+  /** The ID does not exist in the task list. */
+  missing: boolean;
+}
+
+/** Origin of a dependency. */
+export type DependencyKind = "structural" | "explicit";
+
+/** How dependencies within a phase are determined. */
+export type DependencyMode = "structural" | "declared" | "chain";
+
+/** A problem found while discovering or parsing. */
+export interface Diagnostic {
+  /** Stable code, e.g. `tasks.duplicate-id`. */
+  code: string;
+  /** What to do about it. */
+  hint: string | null;
+  /** 1-based line, if known. */
+  line: number | null;
+  /** What is wrong. */
+  message: string;
+  /** Workspace-relative file, if the problem is in one. */
+  path: string | null;
+  /** How serious it is. */
+  severity: Severity;
+}
+
+/** What the next attempt is told about the previous one. */
+export interface Digest {
+  /** The attempt this digest describes (1-based). */
+  attempt: number;
+  /** Checks that did not pass. */
+  checks: FailedCheck[];
+  /** Paths the previous attempt changed; its changes were discarded. */
+  discarded: string[];
+  /** The verdict's reasons. */
+  reasons: string[];
+}
+
+/** One doctor check. */
+export interface DoctorCheck {
+  /** `git`, `repository`, `project`, `config`, `key`, `sandbox`, … */
+  check: string;
+  /** The catalog code of a failure or warning. */
+  code: string | null;
+  /** What was found. */
+  detail: string;
+  /** How to resolve it. */
+  fix: string[];
+  /** Pass, warn or fail. */
+  level: DoctorLevel;
+  /** The fix speccoder can apply itself, on the person's yes. */
+  remedy?: Remedy | null;
+}
+
+/** How a doctor check came out. */
+export type DoctorLevel = "pass" | "info" | "warn" | "fail";
+
+/** Result of `speccoder doctor`. */
+export interface DoctorReport {
+  /** Every check, in order. */
+  checks: DoctorCheck[];
+  /** `macos aarch64`. */
+  os: string;
+  /** speccoder's version. */
+  speccoder: string;
+}
+
+/**
+ * What changed since a tick: the tick's commit holds the intent
+ * it was judged against; the checkout's `HEAD` holds the intent now.
+ */
+export interface Drift {
+  /**
+   * The intent files that differ (project-relative), task lists aside.
+   * Empty when the intent is not in git (in place, ignored): it changed,
+   * which file is not known.
+   */
+  files: string[];
+  /**
+   * The requirements the task cites whose line changed, appeared or went
+   * away: the evidence no longer speaks for them. Empty: what changed is
+   * elsewhere in the intent.
+   */
+  requirements: RequirementDrift[];
+}
+
+/** A failed attempt that was undone and retried. */
+export interface EarlierAttempt {
+  /** The attempt's status. */
+  attempt_status: string;
+  /** What the next attempt was told. */
+  digest: Digest;
+  /** The failure's fingerprint. */
+  fingerprint: string;
+  /** The agentplane run of the attempt. */
+  run_id: string;
+  /** Token usage of the attempt. */
+  usage: unknown;
+  /** The verifier's verdict. */
+  verdict: Verdict | null;
+}
+
+/**
+ * The envelope as it is serialised — the schema of [`CommandResult`]
+ * (whose fields are private and whose serialisation is written by hand).
+ */
+export interface Envelope {
+  /**
+   * The catalog code: present for every non-ok result and for a
+   * degraded success.
+   */
+  code?: string | null;
+  /** The command. */
+  command: string;
+  /** The command's payload. */
+  data?: CommandData | null;
+  /** The code's section on the codes page. */
+  docs?: string | null;
+  /** The process exit status (always the status's). */
+  exit_code: ExitCode;
+  /** How to resolve it: commands, or `→ ` lines for a person. */
+  fix?: string[] | null;
+  /** One line, for a person. */
+  message: string;
+  /** The steps that continue. */
+  next?: NextStep[] | null;
+  /** The name of `data`'s schema (`schemas/v2/<payload>.json`). */
+  payload?: string | null;
+  /** The fix speccoder can apply itself, on the person's yes. */
+  remedy?: Remedy | null;
+  /** The envelope's version. */
+  schema_version: number;
+  /** The outcome class. */
+  status: CommandStatus;
+}
+
+/** One judged case. */
+export interface EvalCase {
+  /** The attempt status. */
+  attempt_status: string | null;
+  /** Attempts made at the task, retries included. */
+  attempts: number;
+  /** `correct`, `false_completion`, `not_completed`, `honest_stop`, `cheat`, `invalid_case` or `error`. */
+  classification: string;
+  /** `complete` or `stop`. */
+  expect: string;
+  /** An attempt passed the visible checks and failed the held-out tests. */
+  gap: boolean;
+  /** The held-out tests' part (`acceptance.held_out` of the run report). */
+  held_out: unknown;
+  /** The model's own closing report, or its reason for stopping. */
+  model_said: string | null;
+  /** Whether the gaming monitor flagged the attempt, when it ran. */
+  monitor_flagged: boolean | null;
+  /** Directory name. */
+  name: string;
+  /** Whether the held-out oracle passed (when it ran). */
+  oracle_passed: boolean | null;
+  /** The run's status word and message. */
+  outcome: string;
+  /** Stopped because a test rejected a permitted alternative. */
+  over_strict: boolean;
+  /**
+   * Whether the recorded attempt replays strictly from its journal
+   * ; `None` when there is no journaled run (external executors).
+   */
+  replays: boolean | null;
+  /** The round of a repeated suite run (1-based). */
+  round: number;
+  /** The attempt's run id, when one ran. */
+  run_id: string | null;
+  /** The combined acceptance strength, when measured. */
+  strength?: number | null;
+  /** The attempt's tool calls with the policy's decisions. */
+  tool_calls: unknown[];
+  /** Token usage of the attempt. */
+  usage: unknown;
+  /** The verifier's verdict. */
+  verdict: Verdict | null;
+}
+
+/** Result of `speccoder eval`. */
+export interface EvalReport {
+  /** One entry per case, in name order. */
+  cases: EvalCase[];
+  /** The model the suite ran with, `provider/model`. */
+  model: string;
+  /** Counts per classification. */
+  summary: EvalSummary;
+}
+
+/** Suite counts and metrics. */
+export interface EvalSummary {
+  /** Cases run. */
+  cases: number;
+  /** `expect = "reject"` cases that were not ticked. */
+  caught: number;
+  /** Impossible cases that finished with green checks. */
+  cheats: number;
+  /** Completed and right. */
+  correct: number;
+  /** Completed with a passing verdict but wrong. */
+  false_completions: number;
+  /**
+   * Attempts that passed visibly, and how many of them the held-out tests
+   * failed; `None` when no held-out test ran.
+   */
+  held_out_gap: HeldOutGap | null;
+  /** Ticked cases whose held-out tests passed, against the oracle. */
+  held_out_oracle: HeldOutOracle | null;
+  /** Impossible cases that stopped for a person. */
+  honest_stops: number;
+  /** Cases that could not be judged. */
+  invalid_or_error: number;
+  /**
+   * The median combined acceptance strength over verified cases that
+   * measured it; `None`: not measured.
+   */
+  median_acceptance_strength: number | null;
+  /** How well the gaming monitor did, when it ran on any case. */
+  monitor: MonitorScore | null;
+  /** Possible cases that stopped or failed verification. */
+  not_completed: number;
+  /**
+   * Cases stopped for a person because a test rejected a permitted
+   * alternative.
+   */
+  over_strict_stops: number;
+  /** correct / (correct + false completions), when defined. */
+  precision: number | null;
+  /** Recorded attempts checked by strict replay, and how many replayed. */
+  replay_checked: number;
+  /** Of those, the ones that replayed exactly. */
+  replayed: number;
+  /** Input + output tokens per correct case, when any. */
+  tokens_per_correct: number | null;
+}
+
+/** One line of the stream. */
+export type EventLine = {
+  /** 1, 2, 3, … — a gap means a lost line. */
+  seq: number;
+  /** RFC 3339 UTC, milliseconds. */
+  ts: string;
+  /** The envelope version: the result envelope's `schema_version`. */
+  v: number;
+} & (
+  /** The first line: who is speaking, and what the stream supports. */
+  | {
+    /** Feature-detect on these, never on the version. */
+    capabilities: string[];
+    /** The command. */
+    command: string;
+    /** speccoder's version. */
+    speccoder: string;
+    type: "session.started";
+  }
+  /** A feature run begins, with its plan. */
+  | {
+    /** Feature directory name. */
+    feature: string;
+    /** Every task, in document order. */
+    tasks: PlannedTask[];
+    type: "run.started";
+  }
+  /** A task's run begins. */
+  | {
+    /** Feature. */
+    feature: string;
+    /** Task ID. */
+    task: string;
+    /** Title. */
+    title: string;
+    type: "task.started";
+  }
+  /** A stage begins. */
+  | {
+    /** `1/2`, a short commit id. */
+    detail: string | null;
+    /** The stage. */
+    stage: Stage;
+    /** Task ID. */
+    task: string;
+    type: "stage.started";
+  }
+  /** A stage ends (or does not apply). */
+  | {
+    /** Detail, or why it was skipped. */
+    detail: string | null;
+    /** How long it took. */
+    elapsed_ms: number | null;
+    /** The stage. */
+    stage: Stage;
+    /** `passed`, `failed` or `skipped`. */
+    state: StageState;
+    /** The last lines of a failed check. */
+    tail: string[];
+    /** Task ID. */
+    task: string;
+    type: "stage.finished";
+  }
+  /** A run picks up an attempt a killed process left behind. */
+  | {
+    /** The last tool call. */
+    last_call: string | null;
+    /** Where it was. */
+    stage: Stage | null;
+    /** Task ID. */
+    task: string;
+    type: "task.resumed";
+  }
+  /** A tool call and the policy's decision. */
+  | {
+    /** `allow`, `deny`, `approval`, `unknown`, `stop`. */
+    decision: string;
+    /** Whether an allowed call succeeded. */
+    ok: boolean | null;
+    /** The last lines of a failed command. */
+    tail: string[];
+    /** A path, a command, a pattern. */
+    target: string;
+    /** Task ID. */
+    task: string;
+    /** The tool. */
+    tool: string;
+    /** Model turn, 1-based. */
+    turn: number;
+    type: "tool_call";
+  }
+  /** A call waits for a person. */
+  | {
+    /** The call id. */
+    call: string;
+    /** What an approval for the task or run would cover. */
+    class: string;
+    /** Task ID. */
+    task: string;
+    /** The tool. */
+    tool: string;
+    type: "approval.requested";
+    /** What waits. */
+    what: string;
+  }
+  /** A person decided a call. */
+  | {
+    /** Who. */
+    by: string;
+    /** The call id. */
+    call: string;
+    /** `approve` or `reject`. */
+    decision: string;
+    /** `asserted`, `connected`, `expired`. */
+    how: string;
+    /** `once`, `task`, `run`. */
+    scope: string | null;
+    /** Task ID. */
+    task: string;
+    type: "approval.decided";
+  }
+  /** Tokens so far in the current attempt (at most once a second). */
+  | {
+    /** Input tokens read from the cache. */
+    cache_read_tokens: number;
+    /** Input tokens written to the cache. */
+    cache_write_tokens: number;
+    /** Input tokens. */
+    input_tokens: number;
+    /** Output tokens. */
+    output_tokens: number;
+    /** Task ID. */
+    task: string;
+    type: "usage";
+    /** USD, when priced. */
+    usd: number | null;
+  }
+  /** A task's run ended. */
+  | {
+    /** Cache reads. */
+    cache_read_tokens: number;
+    /** Cache writes. */
+    cache_write_tokens: number;
+    /** Input tokens. */
+    input_tokens: number;
+    /** The run's message. */
+    message: string;
+    /** `verified`, `regression_only`, `failed`, `needs_approval`, … */
+    outcome: string;
+    /** Output tokens. */
+    output_tokens: number;
+    /** The attempt's run id. */
+    run: string | null;
+    /** Task ID. */
+    task: string;
+    type: "task.finished";
+    /** USD, when priced. */
+    usd: number | null;
+  }
+  /** What the model said in a turn: its account, a claim. */
+  | {
+    /** Task ID. */
+    task: string;
+    /** The words. */
+    text: string;
+    /** Model turn (1-based). */
+    turn: number;
+    type: "said";
+  }
+  /** The model's summary of its reasoning in a turn: its account, a claim. */
+  | {
+    /** Task ID. */
+    task: string;
+    /** The summary. */
+    text: string;
+    /** Model turn (1-based). */
+    turn: number;
+    type: "reasoning";
+  }
+  /** Anything else worth a line. */
+  | {
+    /** The line. */
+    text: string;
+    type: "notice";
+  }
+  /** The last line: the command's result, as `--json` prints it. */
+  | {
+    /** The result envelope. */
+    result: CommandResult;
+    type: "result";
+  });
+
+/** Result of `speccoder-verify tour` and `/api/tour`: one task's tour. */
+export interface EvidenceTour {
+  /** The task commit, when one carries the task's evidence. */
+  commit: string | null;
+  /** The unit. */
+  feature: string;
+  /** The six steps, in order — only the first for an unverifiable tick. */
+  steps: TourStep[];
+  /** Task ID. */
+  task: string;
+  /** The task's title. */
+  title: string;
+  /** For an unverifiable tick: why the evidence does not count. */
+  unverifiable: string | null;
+  /** The verdict the evidence claims, when any. */
+  verdict: string | null;
+}
+
+/**
+ * Process exit status of a command.
+ *
+ * Reserved ranges: `10..=19` for discovery and diagnostic failures, `20..=29`
+ * for run outcomes. Values outside the named constants and those ranges are
+ * not used.
+ */
+export type ExitCode = number;
+
+/** Result of `speccoder explain`. */
+export interface ExplainReport {
+  /** The code asked for, or every code with `--list`. */
+  codes: CodeInfo[];
+}
+
+/** One check that did not pass. */
+export interface FailedCheck {
+  /** The command, as run. */
+  argv: string[];
+  /** Output from the first error line on, capped. */
+  excerpt: string;
+  /** Failing test IDs, when the check reports tests. */
+  failing_tests: string[];
+  /** Name from `speccoder.toml` (or `acceptance`). */
+  name: string;
+  /** What happened. */
+  status: CheckStatus;
+}
+
+/** One feature (or change) of the project, as `speccoder feature` lists it. */
+export interface FeatureEntry {
+  /** Which planning artifacts exist: `spec`, `plan`, `tasks`. */
+  artifacts: string[];
+  /** The current one. */
+  current: boolean;
+  /** Repository-relative directory. */
+  dir: string;
+  /** Ticked tasks. */
+  done: number;
+  /** Directory name, e.g. `001-greet`. */
+  name: string;
+  /** 1-based position, the number `speccoder feature <n>` takes. */
+  number: number;
+  /** All tasks (0: no task list yet). */
+  tasks: number;
+  /** The title its spec (or proposal) gives, when it has one. */
+  title?: string | null;
+}
+
+/** A feature directory under `specs/`. */
+export interface FeatureRef {
+  /** Workspace-relative directory, e.g. `specs/002-speckit-inspect`. */
+  dir: string;
+  /** Directory name, e.g. `002-speckit-inspect`. */
+  name: string;
+  /** Numeric prefix as written, e.g. `002` or `20260319-143022`. */
+  prefix: string;
+}
+
+/** Result of `speccoder run` without `--task`: a feature worked through. */
+export interface FeatureReport {
+  /** Every attempt, in order. */
+  attempts: RunReport[];
+  /** Convergence rounds between task runs (`run --converge`), in order. */
+  converge: ConvergeReport[];
+  /** Feature directory name. */
+  feature: string;
+  /** The `full` check tier, run once after the run ticked the last task. */
+  full_tier?: FullTier | null;
+  /** Extension hooks run, offered or skipped around it. */
+  hooks: string[];
+  /** What parallel groups did: merged, conflicts, re-verification. */
+  parallel: string[];
+  /** Why the run stopped. */
+  stop: string;
+}
+
+/** The selected feature's artifacts and tasks. */
+export interface FeatureSnapshot {
+  /** Which artifacts exist. */
+  artifacts: Artifacts;
+  /** The feature directory. */
+  feature: FeatureRef;
+  /** Dependencies and states of the tasks; present iff `tasks` is. */
+  schedule: Schedule | null;
+  /** The parsed task list, if `tasks.md` was readable. */
+  tasks: ParsedTasks | null;
+}
+
+/** Result of `speccoder feature`. */
+export interface FeaturesReport {
+  /** What this call did: `listed`, `switched` or `cleared`. */
+  action: string;
+  /** The current one's name. */
+  current: string | null;
+  /** Every feature, in order. */
+  features: FeatureEntry[];
+  /**
+   * How it is current: `argument`, `environment`, `recorded`,
+   * `only_feature` or `none`.
+   */
+  reason: string;
+  /** The same in words (`recorded in .specify/feature.json`). */
+  reason_text: string;
+  /** `feature` or `change`. */
+  unit: string;
+}
+
+/** A spec-driven format. */
+export type FormatKind = "speckit" | "openspec" | "kiro";
+
+/** The `full` check tier at the end of a feature. */
+export interface FullTier {
+  /** The checks that failed. */
+  failed: string[];
+  /** Why nothing ran, or the record could not be written. */
+  note: string | null;
+  /** Every check passed (or none applied). */
+  passed: boolean;
+  /** The checks that ran. */
+  ran: string[];
+}
+
+/** The `min_strength` gate. */
+export type Gate = "off" | "met" | "regenerated_met" | "failed";
+
+/** Visible passes the held-out tests caught. */
+export interface HeldOutGap {
+  /** Of those, the ones the held-out tests failed. */
+  held_out_failed: number;
+  /** `held_out_failed / visible_passed`. */
+  rate: number;
+  /** Attempts the held-out tests judged (they had passed visibly). */
+  visible_passed: number;
+}
+
+/** Held-out passes the hidden oracle agreed with, or not. */
+export interface HeldOutOracle {
+  /** The oracle passed too. */
+  agree: number;
+  /** The oracle failed: the held-out tests missed something. */
+  disagree: number;
+}
+
+/** Why an in-place run refused or stopped. */
+export interface InPlaceReport {
+  /**
+   * The paths involved, with why (the code and the fixes are the
+   * envelope's).
+   */
+  paths: RefusedPath[];
+}
+
+/** One decision waiting for a person. */
+export interface InboxItem {
+  /**
+   * The decisions, the one that moves the work forward first; each runs
+   * in the item's feature.
+   */
+  actions: Action[];
+  /** What it rests on: the call, the reason, the changed requirement. */
+  detail: string;
+  /** The feature. */
+  feature: string;
+  /**
+   * What kind, in the order of urgency: `unknown` (the calls waiting in
+   * the feature's journal could not be read — some may wait for you),
+   * `approval` (a run waits on it),
+   * `ruling` (a verified attempt is held: its tests reject an
+   * alternative the spec allows), `gaming` (the monitor suspects a
+   * shortcut), `stale` (proven against an earlier wording), `question`
+   * (the spec leaves questions open), `review`
+   * (requirements not approved on their current wording), `revise`
+   * (changes requested on the spec), `stuck` (the
+   * last attempt did not pass), `aside` (changes a run set aside),
+   * `commit` (planning files a run cannot
+   * read yet), `handoff` (every task done: review and hand it off).
+   */
+  kind: string;
+  /** Waiting since (Unix seconds), when known. */
+  since: number | null;
+  /** The task, when it is about one. */
+  task: string | null;
+  /** What to decide, in a line. */
+  title: string;
+}
+
+/**
+ * Result of `speccoder inbox`: every decision that waits for a
+ * person, across the project's features, the most urgent first — the
+ * person's work once the agents write the code.
+ */
+export interface InboxReport {
+  /** Features looked at. */
+  features: number;
+  /** The items, the most urgent first (see [`InboxItem::kind`]). */
+  items: InboxItem[];
+}
+
+/** One detected check. */
+export interface InitCheck {
+  /** The command. */
+  argv: string[];
+  /** `[checks.<name>]`. */
+  name: string;
+  /** `fast` or `full`. */
+  tier: string;
+  /** Why it was proposed. */
+  why: string;
+}
+
+/** The model key `init` looked for. */
+export interface InitKey {
+  /** Set in this environment. */
+  set: boolean;
+  /** `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`. */
+  variable: string;
+}
+
+/** Result of `speccoder init`. */
+export interface InitReport {
+  /** The checks it declares. */
+  checks: InitCheck[];
+  /** The commit holding `speccoder.toml`, when one was made. */
+  committed: string | null;
+  /** The repository instructions found (`AGENTS.md`, `CLAUDE.md`). */
+  instructions: string[];
+  /** The model key: the variable and whether it is set. */
+  key: InitKey;
+  /** `provider/model`. */
+  model: string;
+  /** The configuration file. */
+  path: string;
+  /** The checks run on the untouched code (empty: not run). */
+  ran: InitRun[];
+  /** Files written, relative to the project root. */
+  wrote: string[];
+}
+
+/** One check `init` ran on the untouched code. */
+export interface InitRun {
+  /** How long it took. */
+  duration_ms: number;
+  /** `[checks.<name>]`. */
+  name: string;
+  /** Passed on the untouched code. */
+  passed: boolean;
+  /**
+   * Why it did not pass: the last line of its output that says something
+   * (`No module named pytest`), or the runner's note.
+   */
+  reason: string | null;
+  /** `passed`, `failed`, `timed_out`, `skipped`, `error`. */
+  status: string;
+}
+
+/** A repository instructions file given to an attempt. */
+export interface InstructionFile {
+  /** Its size. */
+  bytes: number;
+  /** Cut to fit the instructions budget. */
+  cut: boolean;
+  /** Repository-relative path. */
+  path: string;
+  /** sha256 of the file. */
+  sha256: string;
+}
+
+/** One open issue. */
+export interface IssueEntry {
+  /** Who it is assigned to (logins). */
+  assignees: string[];
+  /** The feature whose spec names this issue, when one does. */
+  feature: string | null;
+  /** Label names. */
+  labels: string[];
+  /** Assigned to the person speccoder is signed in as. */
+  mine: boolean;
+  /** `#n`. */
+  number: number;
+  /** Its title. */
+  title: string;
+  /** Last update, ISO 8601. */
+  updated: string | null;
+  /** Its address. */
+  url: string;
+}
+
+/**
+ * Result of `speccoder issue`: the repository's open GitHub issues, read
+ * through GitHub's API as the person.
+ */
+export interface IssuesReport {
+  /**
+   * Open issues: assigned to the person first, then the most recently
+   * updated.
+   */
+  issues: IssueEntry[];
+  /** `owner/name`. */
+  repo: string | null;
+}
+
+/**
+ * One step of a feature's journey: `spec`, `plan`, `tasks`, `commit`,
+ * `run`, `review`.
+ */
+export interface JourneyStep {
+  /** Its name. */
+  name: string;
+  /** Where it is. */
+  state: StepState;
+}
+
+/** How a code presents itself. */
+export type Kind = "error" | "stop" | "warning";
+
+/** An attempt that did not pass, as saved under `refs/speccoder/attempts/`. */
+export interface LastAttempt {
+  /** `verification_failed`, `blocked`, `needs_approval`, `not_demonstrated`, `interrupted`, … */
+  outcome: string;
+  /** Why. */
+  reason: string;
+  /** The ref holding the attempt's tree. */
+  reference: string;
+  /** The agentplane run, when there was one. */
+  run_id: string | null;
+}
+
+/** Which units a check covers. */
+export type Mode = "touched" | "all";
+
+/**
+ * The gaming monitor against the oracle's ground truth: a positive is a
+ * cheat or a false completion (both passed the visible checks).
+ */
+export interface MonitorScore {
+  /** Not flagged but a cheat or false completion. */
+  false_negatives: number;
+  /** Flagged but correct. */
+  false_positives: number;
+  /** Cases the monitor judged. */
+  judged: number;
+  /** true / (true + false positives), when anything was flagged. */
+  precision: number | null;
+  /** true positives / all positives, when there were any. */
+  recall: number | null;
+  /** Flagged and really a cheat or false completion. */
+  true_positives: number;
+}
+
+/** Mutants of the changed code, run against the acceptance command only. */
+export interface Mutants {
+  /** Caught by an assertion. */
+  caught: number;
+  /** Not caught. */
+  missed: number;
+  /** The missed ones, as the tool names them. */
+  survivors: string[];
+  /** Caught by the deadline. */
+  timeout: number;
+  /** The tool. */
+  tool: string;
+  /** Did not build. */
+  unviable: number;
+}
+
+/** A model-written near miss: plausible, and wrong about one scenario. */
+export interface NearMiss {
+  /** Against the visible and the held-out set together. */
+  combined: Outcome;
+  /** `near-miss-1`, … */
+  id: string;
+  /** What it gets wrong, in one line (the author's claim). */
+  rationale: string;
+  /** The scenario or requirement it gets wrong. */
+  scenario: string;
+  /** Against the visible set. */
+  visible: Outcome;
+}
+
+/** One step a person can take. */
+export interface NextStep {
+  /** A copy-pasteable command (`"…"` marks text the person writes). */
+  command: string;
+  /** Why, in one short line. */
+  why: string;
+}
+
+/** One task object's verification. */
+export interface ObjectVerification {
+  /** `task` or `skip`. */
+  kind: string;
+  /** The commit (or skip record) id. */
+  object: string;
+  /** The outcome. */
+  outcome: VerifyOutcome;
+  /** Every reason found. */
+  reasons: VerifyReason[];
+  /** For a missing attestation: an attested commit with the same tree. */
+  same_tree_as: string | null;
+  /** Who signed, when signed. */
+  signer: SignerView | null;
+  /** How many statements the bundle holds. */
+  statements: number;
+  /** Task ID. */
+  task: string;
+  /** The verdict the statements claim. */
+  verdict: string | null;
+}
+
+/** A question a document leaves open, to answer in place. */
+export interface OpenQuestion {
+  /** The document (project-relative). */
+  file: string;
+  /** `Q1`, `Q2`, … in reading order. */
+  id: string;
+  /** Its line (1-based). */
+  line: number;
+  /** The requirement or section it is in. */
+  near: string | null;
+  /** The question. */
+  text: string;
+}
+
+/** What an OpenSpec project adds to its snapshot. */
+export interface OpenSpecMeta {
+  /** `context` of `openspec/config.yaml`, if any. */
+  context: string | null;
+  /** The selected change's delta requirements, in file order. */
+  requirements: DeltaRequirement[];
+  /** The workflow schema (`spec-driven` is the one speccoder runs). */
+  schema: string;
+  /** What a unit of work is called. */
+  unit_kind: string;
+}
+
+/** Who decided, and how speccoder knows the name. */
+export interface OperatorView {
+  /** The name. */
+  actor: string;
+  /**
+   * `asserted` (typed at a local terminal or the CLI) or `connected`
+   * (reported by a client over its connection, e.g. an editor).
+   */
+  basis: string;
+}
+
+/** What a candidate run showed. */
+export type Outcome = "rejected" | "survived" | "timeout" | "unviable";
+
+/** A parsed `tasks.md`. */
+export interface ParsedTasks {
+  /** How dependencies within a phase are determined. */
+  dependency_mode: DependencyMode;
+  /** Workspace-relative path of the file. */
+  path: string;
+  /** Level-2 headings, in document order. */
+  phases: Phase[];
+  /** Tasks, in document order. */
+  tasks: Task[];
+  /** Counts over `tasks`. */
+  totals: Totals;
+}
+
+/**
+ * A call that stopped an attempt for approval, or a question, waiting for
+ * a person.
+ */
+export interface PendingCall {
+  /** Its arguments as the model sent them. */
+  arguments: unknown;
+  /** The waiting call's id (`approve --call`); empty for a stopped attempt. */
+  call: string;
+  /** What a decision would cover, e.g. ``write `Cargo.toml` ``. */
+  covers: string;
+  /** Seconds since the epoch it is denied as expired at. */
+  deadline: number | null;
+  /** `approval` or `question`. */
+  kind: string;
+  /** The call as the inline prompt shows it. */
+  presentation: ApprovalView | null;
+  /** A question's text. */
+  question: string | null;
+  /** Why it needs approval. */
+  reason: string;
+  /** The saved attempt. */
+  reference: string;
+  /**
+   * `task` (the attempt waits and resumes) or `attempt` (stopped and saved
+   * in a parallel lane).
+   */
+  source: string;
+  /** Task ID. */
+  task: string;
+  /** The tool. */
+  tool: string;
+  /** Seconds since the epoch the call has waited since. */
+  waiting_since: number | null;
+}
+
+/** An alternative the author says the spec allows. */
+export interface Permitted {
+  /** `sha256:<hex>` of its files: what a ruling is bound to. */
+  digest: string;
+  /** The failing run's last lines, when rejected. */
+  failing?: string | null;
+  /** `permitted-1`, … */
+  id: string;
+  /** Against the visible and held-out set together. */
+  outcome: PermittedOutcome;
+  /** Where its patch is kept for a person. */
+  patch?: string | null;
+  /** The freedom it uses (the author's claim). */
+  rationale: string;
+  /** The scenario whose open choice it takes differently. */
+  scenario: string;
+}
+
+/** What a spec-permitted alternative showed. */
+export type PermittedOutcome = "accepted" | "rejected" | "ruled" | "timeout" | "unviable";
+
+/** A level-2 heading of `tasks.md`. */
+export interface Phase {
+  /** 1-based line of the heading. */
+  line: number;
+  /** SHA-256 (hex) of the section, heading through the byte before the next phase. */
+  section_hash: string;
+  /** Heading text, e.g. `Phase 1: Setup`. */
+  title: string;
+}
+
+/** A task of the plan. */
+export interface PlannedTask {
+  /** Task ID. */
+  id: string;
+  /** `done`, `ready`, `blocked` or `skipped`. */
+  state: string;
+  /** Title. */
+  title: string;
+}
+
+/** Result of `speccoder pr`: a draft pull request with the evidence. */
+export interface PrReport {
+  /** The branch the pull request targets. */
+  base: string;
+  /** Pull request body (Markdown): every task's evidence. */
+  body: string;
+  /** `speccoder/<feature>`. */
+  branch: string;
+  /** What runs (or would run), in order. */
+  commands: string[];
+  /**
+   * `present`: a workflow under `.github/workflows/` runs
+   * `speccoder-verify`; `absent`: none does.
+   */
+  evidence_check: string;
+  /** Feature directory name. */
+  feature: string;
+  /**
+   * The unit's held-out ref pushed with the branch
+   * (`refs/speccoder/held-out/<unit>`), when a closed task names a set.
+   */
+  held_out_ref: string | null;
+  /** The tasks closed on the pushed head whose held-out sets it carries. */
+  held_out_tasks: string[];
+  /** Held-out sets of open tasks: they stay local. */
+  held_out_withheld: number;
+  /** Whether the branch was pushed and the draft opened (`false`: a dry run). */
+  opened: boolean;
+  /** The git remote pushed to. */
+  remote: string;
+  /** Pull request title. */
+  title: string;
+  /** The pull request, when opened. */
+  url: string | null;
+}
+
+/** Everything discovered about one Spec Kit project. */
+export interface ProjectSnapshot {
+  /** State of `.specify/memory/constitution.md`. */
+  constitution: ConstitutionState;
+  /** Problems found while discovering and parsing. */
+  diagnostics: Diagnostic[];
+  /** The selected feature, if any. */
+  feature: FeatureSnapshot | null;
+  /** Feature directories, ordered by numeric prefix then name. */
+  features: FeatureRef[];
+  /** The spec format (omitted for Spec Kit, the reference format). */
+  format?: FormatKind;
+  /**
+   * What an OpenSpec project adds: its schema, context and the selected
+   * change's requirements.
+   */
+  openspec?: OpenSpecMeta | null;
+  /** Absolute, canonical project root (the directory containing `.specify/`). */
+  root: string;
+  /** Which feature was selected, and why. */
+  selection: Selection;
+  /** Spec Kit metadata recorded in the project. */
+  speckit: SpeckitMeta;
+}
+
+/** Result of `speccoder propose`. */
+export interface ProposeReport {
+  /** Feature directory name. */
+  feature: string;
+  /** The structured proposal (`summary`, `steps`, `files`, `checks`, `risks`). */
+  proposal: unknown;
+  /** The agentplane run that holds the call. */
+  run_id: string;
+  /** agentplane run status, e.g. `succeeded`. */
+  run_status: string;
+  /** Task ID. */
+  task: string;
+  /** Token usage as the provider reported it. */
+  usage: unknown;
+}
+
+/** A path that blocks worktree mode. */
+export interface RefusedPath {
+  /** Repository-relative path. */
+  path: string;
+  /** `ignored`, `untracked` or `modified`. */
+  reason: string;
+}
+
+/** A test that passed in the baseline and no longer does. */
+export interface Regression {
+  /** `check/test`. */
+  id: string;
+  /** `failed`, `skipped`, or `missing`. */
+  now: string;
+}
+
+/**
+ * The fix speccoder knows and can apply itself: what it does, the exact
+ * command it amounts to, how to take it back. An interface offers it as
+ * one action (never applies it unasked); a script reads the command.
+ */
+export interface Remedy {
+  /** The same, as a command run in the checkout. */
+  command: string;
+  /** What it changes, in one line. */
+  effect: string;
+  /** It writes git history (a commit): an interface asks first. */
+  history: boolean;
+  /** The action, a verb first (`Commit Cargo.lock`). */
+  label: string;
+  /** How an interface applies it. */
+  run: Runnable;
+  /** How to take it back once applied. */
+  undo: string | null;
+}
+
+/** Result of `speccoder replay`. */
+export interface ReplayReport {
+  /** What the replay said. */
+  detail: string;
+  /** `reproduced`, `diverged` or `not_found`. */
+  result: string;
+  /** The replayed run. */
+  run_id: string;
+}
+
+/** One cited requirement, as the tick saw it and as the spec has it now. */
+export interface RequirementDrift {
+  /** `FR-003`. */
+  id: string;
+  /** Its line now; `None`: it was removed. */
+  now: string | null;
+  /** Its line when the task was ticked; `None`: it did not exist yet. */
+  then: string | null;
+}
+
+/** One requirement and its review. */
+export interface ReviewItem {
+  /** When (Unix seconds). */
+  at: number | null;
+  /**
+   * Who decided (as for every decision: git's `user.name`, else the OS
+   * user), when someone did.
+   */
+  by: string | null;
+  /** The comment, for a change request (or a note on an approval). */
+  comment: string | null;
+  /** For `lapsed`: the wording that was decided on. */
+  decided_on: string | null;
+  /** `FR-001`. */
+  id: string;
+  /**
+   * `open` (not reviewed), `approved`, `changes_requested`, or `lapsed`
+   * (decided on a wording that has changed since).
+   */
+  state: string;
+  /** Its wording now (the line, markup aside). */
+  text: string;
+}
+
+/**
+ * Result of `speccoder review`: every requirement of the feature's
+ * spec as a card, with the person's decision on its exact wording.
+ */
+export interface ReviewReport {
+  /**
+   * Requirements changed in the checkout since the last commit of the
+   * spec: what a commit would record.
+   */
+  changes: RequirementDrift[];
+  /** The feature. */
+  feature: string;
+  /** Where the review is recorded (project-relative); commit it to share. */
+  file: string;
+  /** The spec's versions in git, newest first (the last twelve). */
+  history: SpecVersion[];
+  /**
+   * The questions the documents leave open (`[NEEDS CLARIFICATION: …]`),
+   * in reading order.
+   */
+  questions: OpenQuestion[];
+  /** One per requirement, in the spec's order. */
+  requirements: ReviewItem[];
+  /**
+   * The format's skill that revises the spec from the comments
+   * (Spec Kit: `clarify`), when it has one.
+   */
+  revise_with: string | null;
+  /**
+   * What that skill is asked, while changes are requested: every
+   * request with its requirement.
+   */
+  revision: string | null;
+  /** Counts by state. */
+  totals: ReviewTotals;
+}
+
+/** Counts of [`ReviewItem::state`]. */
+export interface ReviewTotals {
+  /** Approved on their current wording. */
+  approved: number;
+  /** Changes requested. */
+  changes_requested: number;
+  /** Decided on an earlier wording. */
+  lapsed: number;
+  /** Never reviewed. */
+  open: number;
+  /** Questions the documents leave open. */
+  questions: number;
+}
+
+/**
+ * A person's ruling that an over-strict finding was wrong: the tests were
+ * right, the alternative is not what the spec allows.
+ */
+export interface Ruling {
+  /** Who ruled. */
+  by: string;
+  /** The alternative's digest. */
+  digest: string;
+  /** Why. */
+  reason: string;
+  /** Its scenario. */
+  scenario: string;
+}
+
+/** Result of `speccoder run`. */
+export interface RunReport {
+  /** Spec-derived acceptance tests: files, command, red/green, notes. */
+  acceptance: unknown;
+  /** `completed`, `blocked`, `needs_approval`, `budget_exhausted` or `failed`. */
+  attempt_status: string;
+  /**
+   * What the tick's attestation came to: `{ state: signed | unsigned |
+   * missing, signer, reason }`.
+   */
+  attestation?: unknown;
+  /** Paths changed between the checkpoints: `added` / `modified` / `deleted`. */
+  changes: ([string, string])[];
+  /** The commit on `speccoder/<feature>` holding the attempt and the tick. */
+  commit: string | null;
+  /** Earlier attempts at this task in this run, discarded and retried. */
+  earlier: EarlierAttempt[];
+  /** Feature directory name. */
+  feature: string;
+  /**
+   * The repository's instructions the attempt was given (`AGENTS.md`,
+   * `CLAUDE.md`, …), root first.
+   */
+  instructions?: InstructionFile[];
+  /** Integrity findings of the attempt's diff (each also fails the verdict). */
+  integrity: string[];
+  /** The model's own closing report — its claim, not the verdict. */
+  model_report: unknown;
+  /**
+   * The gaming monitor's view of a passing attempt: `suspected`,
+   * `findings`, `usage` (or `error`). Never shown to the implementer.
+   */
+  monitor: unknown;
+  /**
+   * Mutation testing of the attempt's changes: `tool`, `caught`,
+   * `missed`, `timeout`, `unviable`, `survivors` (or `error`).
+   */
+  mutation: unknown;
+  /** Things a person should know that are not part of the verdict. */
+  notices: string[];
+  /** The call awaiting approval, if any. */
+  pending: unknown;
+  /** Why the attempt stopped, when it did not complete. */
+  reason: string | null;
+  /** Why no further attempt was made after a failed one, if it failed. */
+  retry_stop: string | null;
+  /** The agentplane run of the attempt. */
+  run_id: string;
+  /** Best-of-n: every sample's evidence and which one was kept. */
+  samples: unknown[];
+  /**
+   * The ref this attempt was saved under when it did not pass; the
+   * worktree went back to where it started.
+   */
+  saved_attempt: string | null;
+  /** Changes outside the paths the task names: reported, never gated. */
+  scope?: ScopeFinding | null;
+  /** The ref uncommitted leftovers were saved under before this run. */
+  set_aside: string | null;
+  /** The acceptance set's strength: after a `verified` verdict. */
+  strength?: AcceptanceStrength | null;
+  /** Task ID. */
+  task: string;
+  /** The engine ticked the task in the worktree's `tasks.md`. */
+  ticked: boolean;
+  /** Every tool call with the policy's decision. */
+  tool_calls: unknown[];
+  /** Token usage summed over the attempt's turns. */
+  usage: unknown;
+  /** The verifier's verdict (only for completed attempts). */
+  verdict: Verdict | null;
+  /** Checks after the attempt, compared with the baseline. */
+  verification: VerifyReport | null;
+  /** The worktree the attempt worked in. */
+  worktree: string;
+}
+
+/** How an interface runs an action itself. */
+export type Runnable =
+  /** A planning skill (`speccoder spec <name> <arguments>`). */
+  | {
+    /** Its arguments (the input, when one is asked for). */
+    arguments: string;
+    kind: "skill";
+    /** The skill. */
+    name: string;
+  }
+  /** `speccoder run`, the feature or one task. */
+  | {
+    kind: "run";
+    /** One task, or the feature's ready tasks. */
+    task: string | null;
+  }
+  /**
+   * `speccoder run --converge`: the ready tasks, then the assessment of
+   * the code against the spec as it is now, appending what remains.
+   */
+  | {
+    kind: "converge";
+  }
+  /** Commit exactly these planning files. */
+  | {
+    kind: "commit";
+    /** Repository-relative paths. */
+    paths: string[];
+  }
+  /** Approve the task's waiting call. */
+  | {
+    kind: "approve";
+    /** The task. */
+    task: string;
+  }
+  /** Reject it (the input is the reason). */
+  | {
+    kind: "reject";
+    /** The task. */
+    task: string;
+  }
+  /** Tick the task on the person's word (the input is the reason). */
+  | {
+    kind: "accept";
+    /** The task. */
+    task: string;
+  }
+  /** Skip the task (the input is the reason). */
+  | {
+    kind: "skip";
+    /** The task. */
+    task: string;
+  }
+  /** Leave a note for the task's next attempts (the input is the note). */
+  | {
+    kind: "nudge";
+    /** The task. */
+    task: string;
+  }
+  /** Rule that a held attempt's tests are right (the input is the reason). */
+  | {
+    kind: "rule";
+    /** The task. */
+    task: string;
+  }
+  /**
+   * Record the person's review of requirements (the input is the
+   * comment; required to request changes).
+   */
+  | {
+    /** The requirement identifiers; empty: every one not yet approved. */
+    ids: string[];
+    kind: "review";
+    /**
+     * `approve`, `request` (changes), `clear`; `answer` (ids: the
+     * question) and `edit` / `edit-approve` (ids: the requirement) take
+     * the input as the words.
+     */
+    verdict: string;
+  }
+  /** Tell a GitHub issue it is being specified as the current feature. */
+  | {
+    /** Also assign it to the person. */
+    assign: boolean;
+    /** The issue's number. */
+    issue: number;
+    kind: "issue_comment";
+  }
+  /** Record a quick change and, when `run`, run it. */
+  | {
+    /** When it is done: its acceptance scenarios. */
+    checks: string[];
+    kind: "quick_change";
+    /** The change, in the person's words. */
+    request: string;
+    /** Run it once recorded. */
+    run: boolean;
+  }
+  /**
+   * Commit the changes set aside before the task's run onto the
+   * feature's branch, as the person's own.
+   */
+  | {
+    kind: "keep_set_aside";
+    /** The task. */
+    task: string;
+  }
+  /** Discard them. */
+  | {
+    kind: "drop_set_aside";
+    /** The task. */
+    task: string;
+  }
+  /**
+   * Commit the setup a run stops on (an uncommitted lockfile, build
+   * output not ignored) in the checkout.
+   */
+  | {
+    kind: "fix_setup";
+  }
+  /** Pick the current feature. */
+  | {
+    kind: "feature";
+  }
+  /** Push the feature's branch and open (or update) its draft pull request. */
+  | {
+    kind: "pull_request";
+  };
+
+/** Which tasks can start now, and what blocks the rest. */
+export interface Schedule {
+  /** One entry per task, in document order. */
+  tasks: ScheduledTask[];
+  /** Counts over `tasks`. */
+  totals: ScheduleTotals;
+}
+
+/** Schedule counts. */
+export interface ScheduleTotals {
+  /** Tasks waiting on something. */
+  blocked: number;
+  /** Ticked tasks. */
+  done: number;
+  /** Tasks that can start now. */
+  ready: number;
+}
+
+/** A task's dependencies and state. */
+export interface ScheduledTask {
+  /** Open, missing or cyclic dependencies, in document order. */
+  blocked_by: string[];
+  /** Direct dependencies. */
+  depends_on: Dependency[];
+  /** Task ID. */
+  id: string;
+  /** Done, ready or blocked. */
+  state: TaskState;
+}
+
+/** One published schema. */
+export interface SchemaName {
+  /** What it describes. */
+  describes: string;
+  /** `result`, `event`, `run`, … */
+  name: string;
+  /** Where it is published. */
+  url: string;
+}
+
+/** Result of `speccoder schema`. */
+export interface SchemaReport {
+  /** Every schema speccoder publishes. */
+  names: SchemaName[];
+  /** The schema asked for. */
+  schema: unknown;
+}
+
+/** What an attempt changed beyond the paths its task names. */
+export interface ScopeFinding {
+  /** The paths the task names. */
+  named: string[];
+  /** Changed paths outside them. */
+  outside: string[];
+  /** The task names at least one path. */
+  stated: boolean;
+}
+
+/** How the feature was selected. */
+export interface Selection {
+  /** Name of the selected feature. */
+  feature: string | null;
+  /** Why this feature (or none) was selected. */
+  reason: SelectionReason;
+}
+
+/** Why a feature was selected. */
+export type SelectionReason = "argument" | "environment" | "recorded" | "only_feature" | "none";
+
+/** Changes saved and set aside so a run could start from the branch tip. */
+export interface SetAside {
+  /** The files they change, repository-relative. */
+  files: string[];
+  /** The ref holding them. */
+  reference: string;
+}
+
+/** Diagnostic severity. */
+export type Severity = "error" | "warning" | "info";
+
+/** Who signed. */
+export interface SignerView {
+  /** The key's fingerprint (`SHA256:…`, an OpenPGP fingerprint). */
+  keyid: string;
+  /** `ssh`, `openpgp` or `sigstore`. */
+  kind: string;
+  /** The principal the verifier's trust input names for it. */
+  principal?: string | null;
+}
+
+/** One installed Agent Skill. */
+export interface SkillEntry {
+  /** What it does. */
+  description: string;
+  /** Its name. */
+  name: string;
+  /** The `SKILL.md`. */
+  path: string;
+  /** Why speccoder does not host it, if it does not. */
+  refused: string | null;
+}
+
+/**
+ * The part a planning skill plays in its format's planning, from the
+ * format's adapter: what an interface finds "the create step" or "the
+ * analysis step" by, without naming a format's skill.
+ */
+export type SkillRole = "create" | "toward_tasks" | "revise" | "check" | "other";
+
+/** Result of `speccoder spec <name>`. */
+export interface SkillRunReport {
+  /** Paths changed in the checkout: `added` / `modified` / `deleted`. */
+  changes: ([string, string])[];
+  /**
+   * The unit the skill worked on, or created and made current, and how
+   * it is known (`001-x (recorded in .specify/feature.json)`).
+   */
+  current?: string | null;
+  /** Extension hooks run, offered or skipped around it. */
+  hooks: string[];
+  /** The call awaiting approval, if any. */
+  pending: unknown;
+  /** Questions it could not get answered. */
+  questions: string[];
+  /** Why it stopped, when it did not complete. */
+  reason: string | null;
+  /** The agentplane run. */
+  run_id: string;
+  /** The skill. */
+  skill: string;
+  /** `completed`, `incomplete`, `needs_approval`, `blocked`, `denied`, `budget_exhausted` or `failed`. */
+  status: string;
+  /** The model's summary. */
+  summary: string | null;
+  /** Every tool call with the policy's decision. */
+  tool_calls: unknown[];
+  /** Token usage. */
+  usage: unknown;
+}
+
+/** Result of `speccoder spec` without a name. */
+export interface SkillsReport {
+  /** Installed skills by name. */
+  skills: SkillEntry[];
+}
+
+/** A task skipped by a person's decision: no tick, not counted. */
+export interface SkippedTask {
+  /** The unit. */
+  feature: string;
+  /** Task ID. */
+  task: string;
+}
+
+/** Where a step's content comes from. */
+export type Source = "signed" | "committed" | "not_recorded";
+
+/** One commit of the spec and what it changed in its requirements. */
+export interface SpecVersion {
+  /** Requirements it added. */
+  added: string[];
+  /** Its author. */
+  author: string;
+  /** The commit. */
+  commit: string;
+  /** `YYYY-MM-DD`. */
+  date: string;
+  /** Requirements it removed. */
+  removed: string[];
+  /** Requirements it reworded. */
+  reworded: string[];
+  /** Its subject line. */
+  subject: string;
+}
+
+/** Spec Kit metadata from `.specify/*.json`; each field is `None` when absent. */
+export interface SpeckitMeta {
+  /** `feature_directory` from `feature.json`, as recorded. */
+  current_feature: string | null;
+  /** `sequential` or `timestamp`. */
+  feature_numbering: string | null;
+  /** The coding-agent integration, e.g. `claude`. */
+  integration: string | null;
+  /** Script flavour, e.g. `sh`. */
+  script: string | null;
+  /** `speckit_version` from `init-options.json`. */
+  version: string | null;
+}
+
+/** A stage of a task, in pipeline order. */
+export type Stage = "baseline" | "red" | "attempt" | "verify" | "audit" | "mutation" | "strength" | "monitor" | "commit";
+
+/** Where a stage is. */
+export type StageState = "started" | "passed" | "failed" | "skipped";
+
+/** How far a measurement got. */
+export type State = "measured" | "partial" | "not_measured" | "not_applicable";
+
+/** Result of `speccoder report`: what the branch's history shows. */
+export interface StatusReport {
+  /** The planning artifacts that exist (`spec`, `plan`, `tasks`). */
+  artifacts: string[];
+  /** `speccoder/<feature>`, if speccoder has worked on the feature. */
+  branch: string | null;
+  /** Convergence rounds, oldest first. */
+  convergence: ConvergenceRound[];
+  /** Feature directory name. */
+  feature: string;
+  /**
+   * GitHub issue URLs the feature's spec names: where it came from, and
+   * what its pull request closes.
+   */
+  issues: string[];
+  /** Where the feature is: spec → plan → tasks → commit → run → review. */
+  journey: JourneyStep[];
+  /**
+   * While the feature has no task list: the planning skills that come
+   * next (`plan`, `tasks`); empty once it has one.
+   */
+  planning?: string[];
+  /**
+   * The person's review of the spec's requirements, when the
+   * format has requirement identifiers.
+   */
+  review?: ReviewTotals | null;
+  /**
+   * How the feature was chosen (`recorded in .specify/feature.json`,
+   * `the only feature`, `named with --feature`).
+   */
+  selected_by: string;
+  /** Where `tasks.md` was read: `branch` or `checkout`. */
+  source: string;
+  /** Every task, in document order. */
+  tasks: TaskStatus[];
+  /** Counts by evidence. */
+  totals: StatusTotals;
+  /**
+   * Requirement → task → verdict, in the spec's order; a requirement no
+   * task cites is a row without a task.
+   */
+  trace: TraceRow[];
+  /**
+   * Planning files under the feature's directory not yet committed
+   * (`speccoder run` reads committed files only).
+   */
+  uncommitted?: string[];
+  /** Commits on the branch that the checkout's HEAD does not contain. */
+  unmerged_commits: number;
+}
+
+/** Counts of [`TaskStatus::state`]. */
+export interface StatusTotals {
+  /** Ticked by `speccoder task accept`: a person's attestation, not evidence. */
+  attested: number;
+  /** Open and blocked. */
+  blocked: number;
+  /** In place: committed by speccoder, the local tick missing. */
+  evidence_without_tick: number;
+  /** Open and ready. */
+  ready: number;
+  /** Ticked with regression evidence only. */
+  regression_only: number;
+  /** Open and skipped by a person. */
+  skipped: number;
+  /** Ticks whose cited requirements changed since. */
+  stale: number;
+  /** Ticked without a speccoder commit (by a person, or before speccoder). */
+  ticked_without_evidence: number;
+  /** Ticked with task-specific evidence. */
+  verified: number;
+  /** Ticks speccoder committed without an attestation. */
+  without_attestation: number;
+}
+
+/** A step of the tour, in its order. */
+export type StepKind = "requirement" | "frozen_tests" | "red" | "diff" | "green" | "strength";
+
+/** Where a step of the journey is. */
+export type StepState = "done" | "now" | "todo" | "skipped";
+
+/** One set's strength. */
+export interface Strength {
+  /** Mutants; `None` when not run. */
+  mutants: Counts | null;
+  /** Near misses. */
+  near_misses: Counts;
+  /** Rejected / judged over every source; `None` when nothing was judged. */
+  share: number | null;
+  /** How far it got. */
+  state: State;
+  /** What got through: mutant names and near-miss ids with their scenario. */
+  survivors: string[];
+  /** Candidates that did not build. */
+  unviable: number;
+}
+
+/** One task line of `tasks.md`, as written. */
+export interface Task {
+  /** Byte range `[start, end)` of the list item in the file. */
+  byte_range: number[];
+  /** Task IDs named after `depends on` / `after` in the text, in order. */
+  depends_on: string[];
+  /** `[x]` or `[X]`. */
+  done: boolean;
+  /** Task ID, e.g. `T014`. */
+  id: string;
+  /** 1-based line. */
+  line: number;
+  /** SHA-256 (hex) of the task's line, without its line ending. */
+  line_hash: string;
+  /** Carries the `[P]` marker. */
+  parallel: boolean;
+  /** Enclosing level-2 heading. */
+  phase: string | null;
+  /** Story label without brackets, e.g. `US1`. */
+  story: string | null;
+  /** Enclosing level-3 heading within the phase. */
+  subsection: string | null;
+  /** Text after the ID and markers. */
+  title: string;
+}
+
+/** One task's cost. */
+export interface TaskCost {
+  /** Attempts recorded in git (the passing commit and saved attempts). */
+  attempts: number;
+  /** Task ID. */
+  task: string;
+  /** Tokens and money. */
+  usage: Usage;
+}
+
+/** Whether a task can start. */
+export type TaskState = "done" | "ready" | "blocked";
+
+/** One task and its evidence. */
+export interface TaskStatus {
+  /**
+   * For a task speccoder committed: its attestation as the note says,
+   * signatures unchecked — `signed <kind> <keyid>`, `unsigned` or
+   * `missing` (`attest verify` checks them).
+   */
+  attestation: string | null;
+  /** Open dependencies of a blocked task. */
+  blocked_by: string[];
+  /** The speccoder commit that ticked it. */
+  commit: string | null;
+  /**
+   * What changed in the intent (spec, plan, constitution) since this
+   * task's evidence was committed: its tick was judged against an earlier
+   * version. `None`: nothing changed, or the task has no commit.
+   */
+  drift?: Drift | null;
+  /** Task ID. */
+  id: string;
+  /** For an open task: its latest saved attempt. */
+  last_attempt: LastAttempt | null;
+  /** The reason a person gave for `accept` or `skip`. */
+  note: string | null;
+  /** Enclosing phase heading. */
+  phase: string;
+  /** The agentplane run of that attempt. */
+  run_id: string | null;
+  /**
+   * Changes found in the worktree when the task's run started (a person's
+   * edits, or an interrupted run's leftovers), saved and set aside.
+   */
+  set_aside?: SetAside | null;
+  /**
+   * `verified`, `regression_only` (ticked by speccoder with that verdict),
+   * `attested` (ticked by `speccoder task accept`), `ticked_without_evidence`
+   * (ticked, no speccoder commit), `evidence_without_tick` (in place: a
+   * verdict commit names the task, its local tick is missing),
+   * `skipped`, `ready` or `blocked`.
+   */
+  state: string;
+  /**
+   * A verified tick's acceptance strength as its trailer says
+   * (`0.83 mutants=9/11 near-miss=1/2`, `not measured (…)`).
+   */
+  strength?: string | null;
+  /** Title after markers. */
+  title: string;
+}
+
+/** Outcome of one test from a JUnit report. */
+export type TestOutcome = "passed" | "failed" | "skipped" | "error";
+
+/** One test. */
+export interface TestResult {
+  /** `classname::name`, or `name` when there is no class. */
+  id: string;
+  /** What happened. */
+  outcome: TestOutcome;
+}
+
+/** A ticked task at the checked head. */
+export interface Tick {
+  /** The task line (a tick) or the home's assessment (trailer-only). */
+  anchor: Anchor;
+  /** For trailer-only: the claim's digest at the head (the bug's triad). */
+  claim_sha256: string | null;
+  /** The unit, as the format adapter names it. */
+  feature: string;
+  /** A tick or a trailer-only task. */
+  kind: TickKind;
+  /**
+   * sha256 of the task line with its box read as open: what the
+   * predicate's `task.line_hash` must equal. `None` for trailer-only.
+   */
+  line_sha256: string | null;
+  /** Task ID (`T012`, `1.3`, `bug:<slug>`). */
+  task: string;
+  /** The task's title. */
+  title: string;
+}
+
+/** What a checked task is. */
+export type TickKind = "tick" | "trailer_only";
+
+/** A tick's outcome. */
+export type TickOutcome = "evidenced" | "stale" | "unverifiable" | "regressed";
+
+/** One tick's report. */
+export interface TickReport {
+  /**
+   * The task commit checked (the latest reachable with the task's
+   * verdict trailers), when one exists.
+   */
+  commit: string | null;
+  /** Who accepted an `attested` tick. */
+  decider: string | null;
+  /** More on the reason, in one line. */
+  detail: string | null;
+  /**
+   * Predicate fields or revisions this verifier does not know (kept,
+   * never deciding).
+   */
+  newer_fields: string[];
+  /** The outcome. */
+  outcome: TickOutcome;
+  /** For `unverifiable`. */
+  reason: Unverifiable | null;
+  /** Who signed. */
+  signer: SignerView | null;
+  /** For `stale`: the cited requirements that changed since the tick. */
+  stale: RequirementDrift[];
+  /** For `stale`: the first changed requirement's line at the head. */
+  stale_anchor: Anchor | null;
+  /** The tick. */
+  tick: Tick;
+  /** `verified`, `regression_only` or `attested`, as the evidence claims. */
+  verdict: string | null;
+  /** `attest verify`'s object for the commit, unchanged. */
+  verification: ObjectVerification | null;
+}
+
+/** Task counts. */
+export interface Totals {
+  /** Ticked tasks. */
+  done: number;
+  /** Unticked tasks. */
+  open: number;
+  /** All tasks. */
+  total: number;
+}
+
+/** One step. */
+export interface TourStep {
+  /** What it shows, Markdown: a first line, then optional block lines. */
+  body_markdown: string;
+  /** The facts shown, as data (names, counts, digests). */
+  facts: unknown;
+  /** Which. */
+  kind: StepKind;
+  /** Where it comes from. */
+  source: Source;
+  /** Its title (`Requirement`, `Frozen tests`, …). */
+  title: string;
+}
+
+/** One row of the requirement → scenario → test → verdict matrix. */
+export interface TraceRow {
+  /**
+   * The requirement changed since that task's tick: the verdict is for
+   * its earlier wording.
+   */
+  changed: boolean;
+  /** `FR-001`, `SC-002`. */
+  requirement: string;
+  /** `US1.2`: story 1, acceptance scenario 2. */
+  scenario: string | null;
+  /** The task that cites it. */
+  task: string | null;
+  /** The acceptance test. */
+  test: string | null;
+  /** That task's verdict. */
+  verdict: string | null;
+}
+
+/**
+ * Result of `speccoder ui`, printed once the host listens (under `--json`
+ * the only result: the host keeps serving after it).
+ */
+export interface UiReport {
+  /** The port on 127.0.0.1. */
+  port: number;
+  /** The project served. */
+  root: string;
+  /** The address to open, with this start's key in its fragment. */
+  url: string;
+}
+
+/** Why a tick's evidence does not verify. */
+export type Unverifiable = "ticked_without_evidence" | "missing" | "malformed" | "bad_signature" | "mismatch" | "untrusted_signer" | "unsigned" | "commit_unreachable" | "tool_missing";
+
+/** Token counts, and USD when prices are configured. */
+export interface Usage {
+  /** Input tokens read from the cache. */
+  cache_read_tokens: number;
+  /** Tokens written to the cache. */
+  cache_write_tokens: number;
+  /** Input tokens (including those read from the cache). */
+  input_tokens: number;
+  /** Output tokens. */
+  output_tokens: number;
+  /** USD, when `[model]` has prices. */
+  usd: number | null;
+}
+
+/** How strong the evidence for a task is. */
+export type Verdict =
+  /** A task-specific check produced evidence, nothing failed, nothing regressed. */
+  | {
+    verdict: "verified";
+  }
+  /** Nothing failed or regressed, but nothing task-specific was established. */
+  | {
+    verdict: "regression_only";
+  }
+  /** Something failed or regressed. */
+  | {
+    /** One line per reason. */
+    reasons: string[];
+    verdict: "failed";
+  };
+
+/** What `attest verify` found for one task object. */
+export type VerifyOutcome = "ok" | "unsigned" | "missing" | "bad_signature" | "untrusted_signer" | "mismatch" | "malformed" | "tool_missing";
+
+/** Why an object got its outcome. */
+export interface VerifyReason {
+  /** A stable code, e.g. `subject`, `trailer`, `line_hash`, `signature`. */
+  code: string;
+  /** What it should be. */
+  expected?: string | null;
+  /** The field that disagrees. */
+  field?: string | null;
+  /** What it is. */
+  found?: string | null;
+}
+
+/** Everything one `verify` run established. */
+export interface VerifyReport {
+  /** One result per configured check, in configuration order. */
+  checks: CheckResult[];
+  /** Comparison with a baseline, if one was given. */
+  comparison: Comparison | null;
+  /** Whether verification passed (see [`passes`]). */
+  passed: boolean;
+  /** Project root the checks ran in. */
+  root: string;
+  /** `fast` or `full`. */
+  tier: string;
+}
+
+/** Result of `speccoder worktree`. */
+export interface WorktreeReport {
+  /** Commit the branch points at. */
+  base: string | null;
+  /** `speccoder/<feature>`. */
+  branch: string | null;
+  /** Created now (`false`: reused). */
+  created: boolean;
+  /** The feature the worktree is for. */
+  feature: string;
+  /** Absolute worktree path. */
+  path: string | null;
+  /** Spec Kit project directory inside the worktree. */
+  project_dir: string | null;
+  /** Offending paths with reasons, when refused. */
+  refused_paths: RefusedPath[];
+}

@@ -2,6 +2,7 @@
   import { app } from "../lib/app.svelte";
   import { phaseLabel as short, symbol, word } from "../lib/marks";
   import { get, q } from "../lib/api";
+  import { KINDS, offer, ofTask } from "../lib/actions";
   import type { Action, Task } from "../lib/types";
   import Code from "./Code.svelte";
   import Icon from "./Icon.svelte";
@@ -47,9 +48,7 @@
     const x = e.clientX;
     const y = e.clientY;
     const actions = await get<Action[]>(`/api/actions${q({ feature: app.feature ?? undefined, task: t.id })}`).catch(() => [] as Action[]);
-    const mine = actions.filter((a) => (a.group === "task" || a.group === "work") && a.label.includes(t.id));
-    const verb = (a: Action) => a.label.replace(` ${t.id}`, "").replace(/^./, (c) => c.toUpperCase());
-    const icons: Record<string, string> = { run: "play", accept: "check", skip: "skip", nudge: "sparkle" };
+    const mine = ofTask(actions, t.id);
     const copy = (text: string, what: string) => () => {
       void navigator.clipboard?.writeText(text);
       app.toast({ tone: "ok", text: `Copied ${what}`, detail: text });
@@ -60,7 +59,7 @@
       title: `${t.id} · ${word(laneOf(t))}`,
       items: [
         { label: "Show Evidence", icon: "shield", act: () => void app.selectTask(t.id) },
-        ...mine.map((a) => ({ label: verb(a) + (a.input ? "…" : ""), icon: icons[a.label.split(" ")[0] ?? ""], disabled: a.blocked ?? (app.job?.running ? "a job is running" : null), hint: `$ ${a.command}`, act: () => void app.perform(a) })),
+        ...mine.map((a) => ({ label: KINDS[a.id.kind].verb + (a.input ? "…" : ""), icon: KINDS[a.id.kind].icon, disabled: a.blocked ?? (app.job?.running ? "a job is running" : null), hint: `$ ${a.command}`, act: () => void app.perform(a) })),
         { label: "Copy Task ID", icon: "copy", act: copy(t.id, "the task ID") },
         { label: "Copy the Run Command", icon: "terminal", act: copy(`speccoder run --task ${t.id}`, "the command") },
       ],
@@ -69,7 +68,7 @@
 
   function runTask(t: Task, e: MouseEvent) {
     e.stopPropagation();
-    app.perform({ group: "work", label: `run ${t.id}`, why: t.title, command: `speccoder run --task ${t.id}`, run: { kind: "run", task: t.id }, blocked: null, input: null });
+    app.perform(offer({ kind: "run", task: t.id }, { group: "work", label: `run ${t.id}`, why: t.title, command: `speccoder run --task ${t.id}` }));
   }
 </script>
 

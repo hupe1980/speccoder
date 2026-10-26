@@ -105,6 +105,344 @@ pub enum Runnable {
     PullRequest,
 }
 
+/// What kind of action it is: one per [`Runnable`] kind (a run split by
+/// whether it names a task), plus [`ActionKind::Command`] for an action an
+/// interface does not run itself. Exhaustive at any one version; a new
+/// kind arrives with its `Runnable` variant (the *adding a kind* contract
+/// of `speccoder_runtime::actions::perform`).
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    Serialize,
+    Deserialize,
+    schemars::JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum ActionKind {
+    /// [`Runnable::Skill`].
+    Skill,
+    /// [`Runnable::Run`] with a task.
+    RunTask,
+    /// [`Runnable::Run`] without one: the feature.
+    RunFeature,
+    /// [`Runnable::Converge`].
+    Converge,
+    /// [`Runnable::Commit`].
+    Commit,
+    /// [`Runnable::Approve`].
+    Approve,
+    /// [`Runnable::Reject`].
+    Reject,
+    /// [`Runnable::Accept`].
+    Accept,
+    /// [`Runnable::Skip`].
+    Skip,
+    /// [`Runnable::Nudge`].
+    Nudge,
+    /// [`Runnable::Rule`].
+    Rule,
+    /// [`Runnable::Review`].
+    Review,
+    /// [`Runnable::IssueComment`].
+    IssueComment,
+    /// [`Runnable::QuickChange`].
+    QuickChange,
+    /// [`Runnable::KeepSetAside`].
+    KeepSetAside,
+    /// [`Runnable::DropSetAside`].
+    DropSetAside,
+    /// [`Runnable::FixSetup`].
+    FixSetup,
+    /// [`Runnable::Feature`].
+    Feature,
+    /// [`Runnable::PullRequest`].
+    PullRequest,
+    /// No runnable: the person runs the command.
+    Command,
+}
+
+impl ActionKind {
+    /// Every kind, in declaration order (a test holds it to the enum).
+    pub const ALL: &'static [Self] = &[
+        Self::Skill,
+        Self::RunTask,
+        Self::RunFeature,
+        Self::Converge,
+        Self::Commit,
+        Self::Approve,
+        Self::Reject,
+        Self::Accept,
+        Self::Skip,
+        Self::Nudge,
+        Self::Rule,
+        Self::Review,
+        Self::IssueComment,
+        Self::QuickChange,
+        Self::KeepSetAside,
+        Self::DropSetAside,
+        Self::FixSetup,
+        Self::Feature,
+        Self::PullRequest,
+        Self::Command,
+    ];
+
+    /// Its name as serialized (`run_task`).
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Skill => "skill",
+            Self::RunTask => "run_task",
+            Self::RunFeature => "run_feature",
+            Self::Converge => "converge",
+            Self::Commit => "commit",
+            Self::Approve => "approve",
+            Self::Reject => "reject",
+            Self::Accept => "accept",
+            Self::Skip => "skip",
+            Self::Nudge => "nudge",
+            Self::Rule => "rule",
+            Self::Review => "review",
+            Self::IssueComment => "issue_comment",
+            Self::QuickChange => "quick_change",
+            Self::KeepSetAside => "keep_set_aside",
+            Self::DropSetAside => "drop_set_aside",
+            Self::FixSetup => "fix_setup",
+            Self::Feature => "feature",
+            Self::PullRequest => "pull_request",
+            Self::Command => "command",
+        }
+    }
+
+    /// One runnable of this kind (`None` for [`ActionKind::Command`]): what
+    /// tests and documentation enumerate the kinds by.
+    #[must_use]
+    pub fn example(self) -> Option<Runnable> {
+        let task = || "T001".to_owned();
+        Some(match self {
+            Self::Skill => Runnable::Skill {
+                name: "plan".to_owned(),
+                arguments: String::new(),
+            },
+            Self::RunTask => Runnable::Run { task: Some(task()) },
+            Self::RunFeature => Runnable::Run { task: None },
+            Self::Converge => Runnable::Converge,
+            Self::Commit => Runnable::Commit {
+                paths: vec!["plan.md".to_owned()],
+            },
+            Self::Approve => Runnable::Approve { task: task() },
+            Self::Reject => Runnable::Reject { task: task() },
+            Self::Accept => Runnable::Accept { task: task() },
+            Self::Skip => Runnable::Skip { task: task() },
+            Self::Nudge => Runnable::Nudge { task: task() },
+            Self::Rule => Runnable::Rule { task: task() },
+            Self::Review => Runnable::Review {
+                ids: vec!["FR-001".to_owned()],
+                verdict: "approve".to_owned(),
+            },
+            Self::IssueComment => Runnable::IssueComment {
+                issue: 42,
+                assign: false,
+            },
+            Self::QuickChange => Runnable::QuickChange {
+                request: "a change".to_owned(),
+                checks: Vec::new(),
+                run: false,
+            },
+            Self::KeepSetAside => Runnable::KeepSetAside { task: task() },
+            Self::DropSetAside => Runnable::DropSetAside { task: task() },
+            Self::FixSetup => Runnable::FixSetup,
+            Self::Feature => Runnable::Feature,
+            Self::PullRequest => Runnable::PullRequest,
+            Self::Command => return None,
+        })
+    }
+}
+
+impl Runnable {
+    /// One runnable of every kind ([`ActionKind::example`]).
+    #[must_use]
+    pub fn examples() -> Vec<Self> {
+        ActionKind::ALL.iter().filter_map(|k| k.example()).collect()
+    }
+
+    /// Its kind.
+    #[must_use]
+    pub const fn kind(&self) -> ActionKind {
+        match self {
+            Self::Skill { .. } => ActionKind::Skill,
+            Self::Run { task: Some(_) } => ActionKind::RunTask,
+            Self::Run { task: None } => ActionKind::RunFeature,
+            Self::Converge => ActionKind::Converge,
+            Self::Commit { .. } => ActionKind::Commit,
+            Self::Approve { .. } => ActionKind::Approve,
+            Self::Reject { .. } => ActionKind::Reject,
+            Self::Accept { .. } => ActionKind::Accept,
+            Self::Skip { .. } => ActionKind::Skip,
+            Self::Nudge { .. } => ActionKind::Nudge,
+            Self::Rule { .. } => ActionKind::Rule,
+            Self::Review { .. } => ActionKind::Review,
+            Self::IssueComment { .. } => ActionKind::IssueComment,
+            Self::QuickChange { .. } => ActionKind::QuickChange,
+            Self::KeepSetAside { .. } => ActionKind::KeepSetAside,
+            Self::DropSetAside { .. } => ActionKind::DropSetAside,
+            Self::FixSetup => ActionKind::FixSetup,
+            Self::Feature => ActionKind::Feature,
+            Self::PullRequest => ActionKind::PullRequest,
+        }
+    }
+}
+
+/// What an action is, independent of its wording: its kind and what it
+/// is about (the task, the skill, the issue). An interface finds an action
+/// by this, never by its label.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct ActionId {
+    /// Its kind.
+    pub kind: ActionKind,
+    /// What it is about: a task's id, a skill's name, an issue's number,
+    /// a review's `verdict` (`verdict:first id`), a command's words.
+    pub subject: Option<String>,
+}
+
+/// The identity of the action that runs `run` (or, without one, stands
+/// for `command`): derived, so it cannot disagree with what runs.
+#[must_use]
+pub fn identity(run: Option<&Runnable>, command: &str) -> ActionId {
+    let Some(run) = run else {
+        // The command's words: `speccoder attest verify` → `attest verify`.
+        let words: Vec<&str> = command
+            .split_whitespace()
+            .skip_while(|w| *w == "speccoder")
+            .take_while(|w| {
+                w.chars().next().is_some_and(|c| c.is_ascii_lowercase())
+                    && w.chars()
+                        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+            })
+            .collect();
+        return ActionId {
+            kind: ActionKind::Command,
+            subject: (!words.is_empty()).then(|| words.join(" ")),
+        };
+    };
+    let subject = match run {
+        Runnable::Skill { name, .. } => Some(name.clone()),
+        Runnable::Run { task } => task.clone(),
+        Runnable::Approve { task }
+        | Runnable::Reject { task }
+        | Runnable::Accept { task }
+        | Runnable::Skip { task }
+        | Runnable::Nudge { task }
+        | Runnable::Rule { task }
+        | Runnable::KeepSetAside { task }
+        | Runnable::DropSetAside { task } => Some(task.clone()),
+        Runnable::IssueComment { issue, .. } => Some(issue.to_string()),
+        Runnable::Review { ids, verdict } => Some(match ids.first() {
+            Some(id) => format!("{verdict}:{id}"),
+            None => verdict.clone(),
+        }),
+        Runnable::Converge
+        | Runnable::Commit { .. }
+        | Runnable::QuickChange { .. }
+        | Runnable::FixSetup
+        | Runnable::Feature
+        | Runnable::PullRequest => None,
+    };
+    ActionId {
+        kind: run.kind(),
+        subject,
+    }
+}
+
+/// The part a planning skill plays in its format's planning, from the
+/// format's adapter: what an interface finds "the create step" or "the
+/// analysis step" by, without naming a format's skill.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum SkillRole {
+    /// It creates a unit (Spec Kit's `specify`).
+    Create,
+    /// It leads toward the task list (`plan`, `tasks`).
+    TowardTasks,
+    /// It revises a written spec (`clarify`).
+    Revise,
+    /// It checks the planning files for consistency (`analyze`).
+    Check,
+    /// Anything else.
+    Other,
+}
+
+/// The interface a person acted through, as a write records it (`via`):
+/// one vocabulary for every record. Records written before it named
+/// `cli`, `tui` or `dashboard` (read as [`Via::Terminal`]) and
+/// `editor <name>` (read as [`Via::Acp`], the name a separate client).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum Via {
+    /// A terminal: the line CLI, its prompts, the dashboard.
+    #[serde(alias = "cli", alias = "tui", alias = "dashboard")]
+    Terminal,
+    /// The web app, in a browser tab or the desktop window.
+    Web,
+    /// The desktop window, once it can tell itself from a tab.
+    Window,
+    /// An editor over the Agent Client Protocol.
+    Acp,
+    /// A phone.
+    Phone,
+    /// Continuous integration.
+    Ci,
+    /// A client over the Model Context Protocol.
+    Mcp,
+}
+
+impl Via {
+    /// Its recorded value (`terminal`).
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Terminal => "terminal",
+            Self::Web => "web",
+            Self::Window => "window",
+            Self::Acp => "acp",
+            Self::Phone => "phone",
+            Self::Ci => "ci",
+            Self::Mcp => "mcp",
+        }
+    }
+
+    /// A recorded value, read back with the client it names (`editor Zed`
+    /// → `acp`, `Zed`); `None` for a value no interface ever recorded.
+    #[must_use]
+    pub fn read(recorded: &str) -> Option<(Self, Option<String>)> {
+        if let Some(client) = recorded.strip_prefix("editor ") {
+            return Some((Self::Acp, Some(client.to_owned())));
+        }
+        let via = match recorded {
+            "terminal" | "cli" | "tui" | "dashboard" => Self::Terminal,
+            "web" => Self::Web,
+            "window" => Self::Window,
+            "acp" | "editor" => Self::Acp,
+            "phone" => Self::Phone,
+            "ci" => Self::Ci,
+            "mcp" => Self::Mcp,
+            _ => return None,
+        };
+        Some((via, None))
+    }
+}
+
+impl std::fmt::Display for Via {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 /// One thing a person can do now.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct Action {
@@ -126,9 +464,52 @@ pub struct Action {
     /// It leaves the machine (a push, a pull request) or cannot be undone
     /// (a discard): what an interface says in a confirmation before it runs it.
     pub confirm: Option<String>,
+    /// What it is, independent of its wording ([`identity`]).
+    pub id: ActionId,
+    /// A planning skill's part in its format's planning; `None` for
+    /// everything else.
+    pub role: Option<SkillRole>,
 }
 
 impl Action {
+    /// An action that stands for `command`, which the person runs.
+    #[must_use]
+    pub fn new(
+        group: &str,
+        label: impl Into<String>,
+        why: impl Into<String>,
+        command: impl Into<String>,
+    ) -> Self {
+        let command = command.into();
+        Self {
+            group: group.to_owned(),
+            label: label.into(),
+            why: why.into(),
+            id: identity(None, &command),
+            command,
+            run: None,
+            blocked: None,
+            input: None,
+            confirm: None,
+            role: None,
+        }
+    }
+
+    /// Run by an interface as `run`; its identity follows.
+    #[must_use]
+    pub fn with_run(mut self, run: Runnable) -> Self {
+        self.id = identity(Some(&run), &self.command);
+        self.run = Some(run);
+        self
+    }
+
+    /// A planning skill playing `role`.
+    #[must_use]
+    pub const fn with_role(mut self, role: SkillRole) -> Self {
+        self.role = Some(role);
+        self
+    }
+
     /// It can be run from an interface, now.
     #[must_use]
     pub const fn runnable(&self) -> bool {
@@ -224,6 +605,111 @@ pub fn journey(f: JourneyFacts) -> Vec<JourneyStep> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_kind_is_listed_once_and_every_runnable_has_its_own() {
+        // The schema lists every variant the compiler knows.
+        let schema = serde_json::to_value(schemars::schema_for!(ActionKind))
+            .unwrap_or_else(|e| panic!("{e}"));
+        let mut named: Vec<String> = schema["oneOf"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|v| v["const"].as_str().map(str::to_owned))
+            .collect();
+        named.sort();
+        let mut listed: Vec<String> = ActionKind::ALL
+            .iter()
+            .map(|k| k.as_str().to_owned())
+            .collect();
+        listed.sort();
+        assert_eq!(named, listed, "ActionKind::ALL is not the enum");
+        for k in ActionKind::ALL {
+            assert_eq!(
+                serde_json::to_value(k).unwrap_or_default(),
+                k.as_str(),
+                "{k:?}"
+            );
+            if let Some(run) = k.example() {
+                assert_eq!(run.kind(), *k);
+                assert_eq!(identity(Some(&run), "").kind, *k);
+            }
+        }
+        assert_eq!(
+            Runnable::examples().len(),
+            ActionKind::ALL.len() - 1,
+            "every kind but `command` has a runnable"
+        );
+    }
+
+    #[test]
+    fn identity_is_what_runs_never_how_it_is_worded() {
+        let a = Action::new(
+            "task",
+            "accept T004",
+            "tick it",
+            "speccoder task accept T004",
+        )
+        .with_run(Runnable::Accept {
+            task: "T004".to_owned(),
+        });
+        let mut b = a.clone();
+        b.label = "x tick it anyway".to_owned();
+        b.why = "x".to_owned();
+        assert_eq!(a.id, b.id);
+        assert_eq!(
+            a.id,
+            ActionId {
+                kind: ActionKind::Accept,
+                subject: Some("T004".to_owned())
+            }
+        );
+        let id = |c: &str| identity(None, c).subject;
+        assert_eq!(
+            id("speccoder attest verify").as_deref(),
+            Some("attest verify")
+        );
+        assert_eq!(id("speccoder doctor").as_deref(), Some("doctor"));
+        assert_eq!(id("speccoder pr --yes").as_deref(), Some("pr"));
+        assert_eq!(
+            id("speccoder spec specify \"…\"").as_deref(),
+            Some("spec specify")
+        );
+        let review = |ids: &[&str], v: &str| {
+            identity(
+                Some(&Runnable::Review {
+                    ids: ids.iter().map(|s| (*s).to_owned()).collect(),
+                    verdict: v.to_owned(),
+                }),
+                "",
+            )
+            .subject
+        };
+        assert_eq!(review(&[], "approve").as_deref(), Some("approve"));
+        assert_eq!(review(&["Q1"], "answer").as_deref(), Some("answer:Q1"));
+    }
+
+    #[test]
+    fn origins_read_back_from_every_value_ever_recorded() {
+        for (old, via, client) in [
+            ("cli", Via::Terminal, None),
+            ("tui", Via::Terminal, None),
+            ("dashboard", Via::Terminal, None),
+            ("terminal", Via::Terminal, None),
+            ("web", Via::Web, None),
+            ("editor Zed", Via::Acp, Some("Zed")),
+        ] {
+            assert_eq!(
+                Via::read(old),
+                Some((via, client.map(str::to_owned))),
+                "{old}"
+            );
+        }
+        let parsed: Via = serde_json::from_str("\"dashboard\"").unwrap_or(Via::Web);
+        assert_eq!(parsed, Via::Terminal);
+        assert_eq!(Via::Acp.as_str(), "acp");
+        assert_eq!(Via::read("nobody"), None);
+    }
 
     fn states(f: JourneyFacts) -> Vec<(String, StepState)> {
         journey(f).into_iter().map(|s| (s.name, s.state)).collect()

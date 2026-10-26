@@ -54,6 +54,7 @@ speccoder run                        # works through the feature's tasks
 speccoder do "make the login button blue"   # a small change, judged like any other
 speccoder review                     # sign off the spec, requirement by requirement
 speccoder inbox                      # what waits for your decision, in every feature
+speccoder actions                    # what you can do now, each with its command (--json for scripts)
 speccoder report                     # every task and the evidence behind its tick
 git merge speccoder/001-my-feature   # after reviewing the branch
 ```

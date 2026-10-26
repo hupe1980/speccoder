@@ -5,7 +5,7 @@
   // goes to the system keychain, never into the page, a file or a log.
   import { app } from "../lib/app.svelte";
   import { post } from "../lib/api";
-  import type { Envelope } from "../lib/types";
+  import type { Reply } from "../lib/types";
   import Icon from "./Icon.svelte";
 
   let { host, onclose }: { host: string; onclose: () => void } = $props();
@@ -18,7 +18,7 @@
   let copied = $state(false);
   const make = $derived(`https://${host}/settings/personal-access-tokens/new`);
 
-  function done(r: Envelope<unknown>) {
+  function done(r: Reply<unknown>) {
     if (r.status !== "ok") {
       error = r.message;
       return;
@@ -40,7 +40,7 @@
       }
       code = { user_code: r.user_code, verification_uri: r.verification_uri };
       copied = await navigator.clipboard?.writeText(r.user_code).then(() => true, () => false) ?? false;
-      done(await post<Envelope<unknown>>("/api/github/device/wait", {}));
+      done(await post<Reply<unknown>>("/api/github/device/wait", {}));
     } catch (e) {
       error = String((e as Error).message ?? e);
     } finally {
@@ -53,7 +53,7 @@
     busy = true;
     error = null;
     try {
-      const r = await post<Envelope<unknown>>("/api/github/login", { token });
+      const r = await post<Reply<unknown>>("/api/github/login", { token });
       token = "";
       done(r);
     } catch (err) {

@@ -4,14 +4,15 @@
   // configuration (its checks run on the untouched code, then it is
   // committed), and the first feature. Every step names its CLI command.
   import { app } from "../lib/app.svelte";
+  import { byRole } from "../lib/actions";
   import { get, post } from "../lib/api";
-  import type { Envelope } from "../lib/types";
+  import type { Reply } from "../lib/types";
   import Icon from "./Icon.svelte";
 
   interface Check { check: string; level: string; detail: string; fix: string[] }
   interface Proposed { name: string; argv: string[]; tier: string; junit: string | null; why: string }
   interface SetupState {
-    doctor: Envelope<{ checks: Check[] }>;
+    doctor: Reply<{ checks: Check[] }>;
     preview: { configured: boolean; checks: Proposed[]; allow: string[][]; formatter: string[] | null; keys: [string, boolean][] };
   }
   interface Ran { name: string; passed: boolean; status: string; duration_ms: number }
@@ -21,7 +22,7 @@
   let provider = $state<"anthropic" | "openai">("anthropic");
   let model = $state("");
   let busy = $state(false);
-  let result = $state<(Envelope<{ ran: Ran[]; wrote: string[]; committed: string | null }> & { to_commit?: string[]; failed?: string[] }) | null>(null);
+  let result = $state<(Reply<{ ran: Ran[]; wrote: string[]; committed: string | null }> & { to_commit?: string[]; failed?: string[] }) | null>(null);
   let committed = $state<string | null>(null);
   let idea = $state("");
   let error = $state<string | null>(null);
@@ -45,7 +46,8 @@
   const keyVar = $derived(provider === "openai" ? "OPENAI_API_KEY" : "ANTHROPIC_API_KEY");
   const providers: [string, string, string, string][] = [["anthropic", "Anthropic", "Claude models", "ANTHROPIC_API_KEY"], ["openai", "OpenAI", "GPT models", "OPENAI_API_KEY"]];
   const steps = ["Welcome", "Model", "Checks", "Set Up", "First Feature"];
-  const specify = $derived(app.actions.find((a) => a.run?.kind === "skill" && a.input && /specify/.test(a.label)));
+  // The format's skill that creates a unit, by its role: whatever it is named.
+  const specify = $derived(byRole(app.actions, "create").find((a) => a.input));
   const words = (a: string[]) => a.map((w) => (/\s/.test(w) ? JSON.stringify(w) : w)).join(" ");
   const cli = $derived(`speccoder init --provider ${provider}${model.trim() ? ` --model ${model.trim()}` : ""}`);
 

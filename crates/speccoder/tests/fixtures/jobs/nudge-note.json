@@ -1,0 +1,24 @@
+{
+  "head": "init",
+  "result": {
+    "command": "nudge",
+    "data": {
+      "action": "nudged",
+      "feature": "001-graph",
+      "record": null,
+      "task": "T008",
+      "text": "use the session type"
+    },
+    "exit_code": 0,
+    "message": "T008's next attempts will read: use the session type",
+    "next": [
+      {
+        "command": "speccoder run",
+        "why": "continue the feature"
+      }
+    ],
+    "payload": "control",
+    "schema_version": 2,
+    "status": "ok"
+  }
+}

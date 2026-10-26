@@ -1,0 +1,17 @@
+{
+  "head": "init",
+  "result": {
+    "code": "NOT-FOUND",
+    "command": "rule",
+    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#not-found",
+    "exit_code": 15,
+    "fix": [
+      "speccoder report"
+    ],
+    "message": "T009 has no attempt held for a ruling on its tests",
+    "schema_version": 2,
+    "status": "not_found"
+  },
+  "review": null,
+  "status": ""
+}

@@ -61,7 +61,14 @@ fn repo() -> tempfile::TempDir {
     git(r, &["commit", "-q", "-m", "init"]);
     // The person approved both specs and committed the review.
     for f in ["001-login", "002-logout"] {
-        let res = speccoder_runtime::review::decide(r, Some(f), &[], "approve", None, "cli");
+        let res = speccoder_runtime::review::decide(
+            r,
+            Some(f),
+            &[],
+            "approve",
+            None,
+            speccoder_core::actions::Via::Terminal,
+        );
         assert_eq!(
             res.status(),
             speccoder_core::CommandStatus::Ok,
@@ -199,7 +206,14 @@ fn nothing_waiting_says_so() {
     let (i, _) = inbox(r);
     assert_eq!(i.items.len(), 1, "the unreviewed spec: {:?}", i.items);
     assert_eq!(i.items[0].kind, "review");
-    let res = speccoder_runtime::review::decide(r, None, &[], "approve", None, "cli");
+    let res = speccoder_runtime::review::decide(
+        r,
+        None,
+        &[],
+        "approve",
+        None,
+        speccoder_core::actions::Via::Terminal,
+    );
     assert_eq!(
         res.status(),
         speccoder_core::CommandStatus::Ok,
@@ -324,7 +338,7 @@ fn a_change_request_waits_to_be_revised() {
         &["FR-001".to_owned()],
         "request",
         Some("name the login methods"),
-        "cli",
+        speccoder_core::actions::Via::Terminal,
     );
     assert_eq!(
         res.status(),

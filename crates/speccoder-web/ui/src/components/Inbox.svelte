@@ -3,6 +3,7 @@
   // project's features, the most urgent first — the person's work once the
   // agents write the code. Each row decides in place; Open shows the task.
   import { app } from "../lib/app.svelte";
+  import { KINDS, key } from "../lib/actions";
   import type { Action, InboxItem } from "../lib/types";
   import Code from "./Code.svelte";
   import Icon from "./Icon.svelte";
@@ -21,9 +22,12 @@
     commit: { title: "Plans to Commit", icon: "doc", tone: "ready", why: "A run reads committed files only." },
     handoff: { title: "Ready to Hand Off", icon: "arrowup", tone: "verified", why: "Every task is done — review the branch." },
   };
-  const order = Object.keys(sections);
+  // A kind the page has no section for is shown, never dropped.
+  const other = { title: "Other", icon: "info", tone: "ready", why: "Something speccoder waits on that this page does not group yet." };
+  const order = [...Object.keys(sections), "other"];
   const items = $derived(app.inbox?.data?.items ?? []);
-  const groups = $derived(order.map((k) => ({ k, ...sections[k]!, items: items.filter((i) => i.kind === k) })).filter((g) => g.items.length));
+  const sectionOf = (i: InboxItem) => (i.kind in sections ? i.kind : "other");
+  const groups = $derived(order.map((k) => ({ k, ...(sections[k] ?? other), items: items.filter((i) => sectionOf(i) === k) })).filter((g) => g.items.length));
   const features = $derived(new Set(items.map((i) => i.feature)).size);
 
   const ago = (s: number | null) => {
@@ -31,9 +35,13 @@
     const m = Math.round((Date.now() / 1000 - s) / 60);
     return m < 1 ? "just now" : m < 60 ? `${m} min` : m < 1440 ? `${Math.round(m / 60)} h` : `${Math.round(m / 1440)} d`;
   };
-  const verb = (a: Action) => {
-    const w = a.label.replace(/ T\d+.*$/, "").replace(/ again$/, " Again");
-    return w.charAt(0).toUpperCase() + w.slice(1);
+  // A task's action says its kind's verb ("Run Again" for a task that
+  // did not pass); any other says what it does.
+  const verb = (i: InboxItem, a: Action) => {
+    // An approval that asks for words answers a question.
+    if (a.id.kind === "approve" && a.input) return "Answer";
+    if (i.task && a.id.subject === i.task) return KINDS[a.id.kind].verb + (a.id.kind === "run_task" ? " Again" : "");
+    return a.label.charAt(0).toUpperCase() + a.label.slice(1);
   };
 
   async function decide(i: InboxItem, a: Action) {
@@ -67,7 +75,7 @@
       <span class="ok" aria-hidden="true"><Icon name="check" size={30} weight={2.4} /></span>
       <strong>Nothing needs you</strong>
       <span class="muted">The agents can work. {#if app.primary}Next: {app.primary.label}.{/if}</span>
-      {#if app.primary}<button class="btn primary" disabled={!!app.job?.running} onclick={() => app.primary && app.perform(app.primary)}>{verb(app.primary)}</button>{/if}
+      {#if app.primary}<button class="btn primary" disabled={!!app.job?.running} onclick={() => app.primary && app.perform(app.primary)}>{app.primary.label.charAt(0).toUpperCase() + app.primary.label.slice(1)}</button>{/if}
     </div>
   {:else}
     {#each groups as g (g.k)}
@@ -86,8 +94,8 @@
                 {#if i.detail}<span class="detail"><Code text={i.detail} /></span>{/if}
               </div>
               <div class="acts">
-                {#each i.actions as a, n (a.label)}
-                  <button class="btn small" class:primary={n === 0} class:ghost={n > 1} disabled={!!a.blocked || !!app.job?.running} title={`${a.blocked ?? a.why}\n$ ${a.command}`} onclick={() => decide(i, a)}>{verb(a)}</button>
+                {#each i.actions as a, n (key(a))}
+                  <button class="btn small" class:primary={n === 0} class:ghost={n > 1} disabled={!!a.blocked || !!app.job?.running} title={`${a.blocked ?? a.why}\n$ ${a.command}`} onclick={() => decide(i, a)}>{verb(i, a)}</button>
                 {/each}
                 <button class="btn small ghost" onclick={() => open(i)} title="Show it with its evidence"><Icon name="chevron" size={10} weight={2.6} /> Open</button>
               </div>

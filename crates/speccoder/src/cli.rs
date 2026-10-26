@@ -170,6 +170,13 @@ pub enum Command {
     },
     /// What waits for your decision in every feature, the most urgent first, with the command for each.
     Inbox,
+    /// What you can do now in the project: every action the interfaces offer, with its command.
+    #[command(hide = true)]
+    Actions {
+        /// Also the actions of this task (as when an interface has it selected).
+        #[arg(long)]
+        task: Option<String>,
+    },
     /// GitHub: sign in with a short code in your browser, see who speccoder is there, sign out.
     Auth {
         #[command(subcommand)]

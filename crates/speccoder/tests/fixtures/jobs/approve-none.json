@@ -1,0 +1,15 @@
+{
+  "head": "init",
+  "result": {
+    "code": "NOT-FOUND",
+    "command": "approve",
+    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#not-found",
+    "exit_code": 15,
+    "fix": [
+      "speccoder report"
+    ],
+    "message": "T005 has no call awaiting a decision (see `speccoder report --approvals`)",
+    "schema_version": 2,
+    "status": "not_found"
+  }
+}

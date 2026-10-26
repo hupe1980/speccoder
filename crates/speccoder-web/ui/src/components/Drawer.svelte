@@ -6,6 +6,7 @@
   const evidenceOf = latest();
   const patchOf = latest();
   import { phaseLabel, symbol, word } from "../lib/marks";
+  import { KINDS, key, offer, ofTask } from "../lib/actions";
   import type { AccountTurn, Row, Task } from "../lib/types";
   import Account from "./Account.svelte";
   import Diff from "./Diff.svelte";
@@ -60,12 +61,8 @@
     );
   });
 
-  // "accept T001" in the inspector of T001 is "Accept".
-  const short = (label: string) => {
-    const s = label.replace(` ${app.selected}`, "").trim();
-    return s.charAt(0).toUpperCase() + s.slice(1);
-  };
-  const actions = $derived(app.actions.filter((a) => (a.group === "task" || a.group === "work") && a.label.includes(app.selected ?? "\0")));
+  // The selected task's own actions, by their subject: "Accept", "Skip"…
+  const actions = $derived(app.selected ? ofTask(app.actions, app.selected) : []);
   const verdictTitle = $derived(data ? word(data.banner.mark).replace(/^./, (c) => c.toUpperCase()) : "");
   // The runtime's banner words, unless they only repeat the verdict.
   const verdictWords = $derived.by(() => {
@@ -129,8 +126,8 @@
           <ul class="files mono">{#each aside.files.slice(0, 5) as f (f)}<li>{f}</li>{/each}{#if aside.files.length > 5}<li class="more">+{aside.files.length - 5} more</li>{/if}</ul>
           <div class="row">
             <button class="btn small" onclick={() => { showAside = true; tab = "diff"; }}><Icon name="doc" size={12} /> Show Changes</button>
-            <button class="btn small tinted" disabled={!!app.job?.running} onclick={() => app.perform({ group: "task", label: `keep the changes set aside before ${id}`, why: "committed onto the feature's branch as yours", command: `speccoder task restore ${id}`, run: { kind: "keep_set_aside", task: id }, blocked: null, input: null })}><Icon name="check" size={12} weight={2.4} /> Keep on the Branch</button>
-            <button class="btn small ghost danger" disabled={!!app.job?.running} onclick={() => app.perform({ group: "task", label: `discard the changes set aside before ${id}`, why: "deleted; the branch stays as it is", command: `speccoder task drop ${id}`, run: { kind: "drop_set_aside", task: id }, blocked: null, input: null, confirm: `Discard the ${aside.files.length} changed file(s) set aside before ${id}? They are deleted, not kept anywhere.` })}>Discard…</button>
+            <button class="btn small tinted" disabled={!!app.job?.running} onclick={() => app.perform(offer({ kind: "keep_set_aside", task: id }, { group: "task", label: `keep the changes set aside before ${id}`, why: "committed onto the feature's branch as yours", command: `speccoder task restore ${id}` }))}><Icon name="check" size={12} weight={2.4} /> Keep on the Branch</button>
+            <button class="btn small ghost danger" disabled={!!app.job?.running} onclick={() => app.perform(offer({ kind: "drop_set_aside", task: id }, { group: "task", label: `discard the changes set aside before ${id}`, why: "deleted; the branch stays as it is", command: `speccoder task drop ${id}`, confirm: `Discard the ${aside.files.length} changed file(s) set aside before ${id}? They are deleted, not kept anywhere.` }))}>Discard…</button>
           </div>
         </div>
       </section>
@@ -172,10 +169,10 @@
     {/if}
     {#if actions.length}
       <div class="acts">
-        {#each actions as a (a.label)}
-          {@const verb = a.label.split(" ")[0] ?? ""}
+        {#each actions as a (key(a))}
+          {@const kind = KINDS[a.id.kind]}
           <button class="btn small" class:primary={a.group === "work"} disabled={!!a.blocked || !!app.job?.running} title={`${a.blocked ?? a.why}\n$ ${a.command}`} onclick={() => app.perform(a)}>
-            {#if icons[verb]}<Icon name={icons[verb]} size={11} weight={2.2} />{/if}{short(a.label)}
+            {#if kind.icon}<Icon name={kind.icon} size={11} weight={2.2} />{/if}{kind.verb}{a.input ? "…" : ""}
           </button>
         {/each}
       </div>

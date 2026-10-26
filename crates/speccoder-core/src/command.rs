@@ -200,6 +200,19 @@ pub enum CommandData {
     BranchVerify(Box<crate::verify_branch::BranchReport>),
     /// `speccoder-verify tour` / `/api/tour`: one task's evidence tour.
     EvidenceTour(Box<crate::tour::EvidenceTour>),
+    /// `actions`: what can be done now.
+    Actions(Box<ActionsReport>),
+}
+
+/// Result of `speccoder actions`: what a person can do now in the
+/// project — the list every interface renders — and where the feature is
+/// on its journey.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct ActionsReport {
+    /// Every action, by group, the most urgent first.
+    pub actions: Vec<crate::actions::Action>,
+    /// The feature's journey (spec → plan → tasks → commit → run → review).
+    pub journey: Vec<crate::actions::JourneyStep>,
 }
 
 /// Result of `speccoder auth`: who speccoder acts as on a GitHub
@@ -616,6 +629,7 @@ impl CommandData {
             Self::Auth(_) => "auth",
             Self::BranchVerify(_) => "branch_verify",
             Self::EvidenceTour(_) => "evidence_tour",
+            Self::Actions(_) => "actions",
         }
     }
 }
@@ -656,6 +670,7 @@ pub const PAYLOADS: &[&str] = &[
     "auth",
     "branch_verify",
     "evidence_tour",
+    "actions",
 ];
 
 /// A repository instructions file given to an attempt.
@@ -1307,8 +1322,12 @@ pub struct DecidedCall {
     pub call: Option<String>,
     /// Who decided; `None` for an expiry.
     pub operator: Option<OperatorView>,
-    /// Through what: `terminal`, `cli` or `editor <name>`.
+    /// Through what: an origin of `actions::Via` (`terminal`, `web`,
+    /// `acp`, …).
     pub via: Option<String>,
+    /// The editor decided in, over the Agent Client Protocol.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub client: Option<String>,
     /// Nobody decided: the deadline passed and the call was denied.
     pub expired: bool,
 }

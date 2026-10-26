@@ -1,0 +1,24 @@
+{
+  "head": "init",
+  "result": {
+    "command": "accept",
+    "data": {
+      "action": "accepted",
+      "feature": "001-graph",
+      "record": "<hex>",
+      "task": "T006",
+      "text": "done by hand"
+    },
+    "exit_code": 0,
+    "message": "T006 ticked as attested by Dana Example (asserted) (not verified); `report` shows it as such; attestation unsigned: no signing key is configured in git (user.signingKey)",
+    "next": [
+      {
+        "command": "speccoder run",
+        "why": "continue the feature"
+      }
+    ],
+    "payload": "control",
+    "schema_version": 2,
+    "status": "ok"
+  }
+}

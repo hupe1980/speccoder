@@ -1,0 +1,10 @@
+{
+  "head": "spec(001-graph): review.json",
+  "result": {
+    "command": "commit",
+    "exit_code": 0,
+    "message": "committed 1 file(s) as <hex> \"spec(001-graph): review.json\"",
+    "schema_version": 2,
+    "status": "ok"
+  }
+}

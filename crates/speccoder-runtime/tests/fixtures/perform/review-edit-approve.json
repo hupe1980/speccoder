@@ -1,0 +1,84 @@
+{
+  "head": "init",
+  "result": {
+    "command": "review",
+    "data": {
+      "changes": [
+        {
+          "id": "FR-001",
+          "now": "- **FR-001**: Users MUST log in with a passkey.",
+          "then": "- **FR-001**: Users MUST log in."
+        },
+        {
+          "id": "FR-002",
+          "now": "- **FR-002**: Sessions MUST expire after thirty minutes.",
+          "then": "- **FR-002**: Sessions MUST expire after [NEEDS CLARIFICATION: how long?]."
+        }
+      ],
+      "feature": "001-graph",
+      "file": "specs/001-graph/review.json",
+      "history": [
+        {
+          "added": [
+            "FR-001",
+            "FR-002"
+          ],
+          "author": "Dana Example",
+          "commit": "<hex>",
+          "date": "2026-10-26",
+          "removed": [],
+          "reworded": [],
+          "subject": "init"
+        }
+      ],
+      "questions": [],
+      "requirements": [
+        {
+          "at": null,
+          "by": null,
+          "comment": null,
+          "decided_on": null,
+          "id": "FR-001",
+          "state": "open",
+          "text": "Users MUST log in with a passkey."
+        },
+        {
+          "at": 0,
+          "by": "Dana Example",
+          "comment": null,
+          "decided_on": null,
+          "id": "FR-002",
+          "state": "approved",
+          "text": "Sessions MUST expire after thirty minutes."
+        }
+      ],
+      "revise_with": null,
+      "revision": null,
+      "totals": {
+        "approved": 1,
+        "changes_requested": 0,
+        "lapsed": 0,
+        "open": 1,
+        "questions": 0
+      }
+    },
+    "exit_code": 0,
+    "message": "reworded FR-002 and approved it; approved FR-002; 1/2 requirements approved; 1 to review — commit specs/001-graph/review.json to share it",
+    "payload": "review",
+    "schema_version": 2,
+    "status": "ok"
+  },
+  "review": {
+    "requirements": {
+      "FR-002": {
+        "at": 0,
+        "by": "Dana Example",
+        "line": "- **FR-002**: Sessions MUST expire after thirty minutes.",
+        "sha256": "sha256:<hex>",
+        "verdict": "approved",
+        "via": "web"
+      }
+    }
+  },
+  "status": " M specs/001-graph/spec.md\n?? specs/001-graph/review.json\n"
+}

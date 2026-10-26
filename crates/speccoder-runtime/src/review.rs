@@ -433,7 +433,7 @@ pub fn decide(
     ids: &[String],
     verdict: &str,
     comment: Option<&str>,
-    via: &str,
+    via: speccoder_core::actions::Via,
 ) -> CommandResult {
     let u = match unit("review", path, feature) {
         Ok(u) => u,
@@ -675,7 +675,7 @@ pub fn edit(
     id: &str,
     wording: &str,
     approve: bool,
-    via: &str,
+    via: speccoder_core::actions::Via,
 ) -> CommandResult {
     let u = match unit("review", path, feature) {
         Ok(u) => u,

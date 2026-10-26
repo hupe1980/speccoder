@@ -1,6 +1,7 @@
 <script lang="ts">
   import { app } from "../lib/app.svelte";
-  import type { JourneyStep } from "../lib/types";
+  import { key } from "../lib/actions";
+  import type { JourneyStep, StatusTotals } from "../lib/types";
   import Preflight from "./Preflight.svelte";
   import Ring from "./Ring.svelte";
   import Icon from "./Icon.svelte";
@@ -21,7 +22,7 @@
   const commitPaths = $derived(primary?.run?.kind === "commit" ? primary.run.paths : []);
   const labels: Record<string, string> = { spec: "Spec", plan: "Plan", tasks: "Tasks", commit: "Commit", run: "Run", review: "Review" };
   const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
-  const totals = $derived(report?.totals ?? {});
+  const totals = $derived<Partial<StatusTotals>>(report?.totals ?? {});
   const legend = $derived(ORDER.map((k) => ({ k, n: totals[k] ?? 0 })).filter((s) => s.n > 0));
   const headline = $derived(primary ? (primary.run?.kind === "skill" ? cap(primary.why) : cap(primary.label)) : "");
   const verb = $derived(
@@ -119,7 +120,7 @@
           {verb}<kbd>N</kbd>
         </button>
         {#if !compact}
-          {#each others.slice(0, 2) as o (o.label)}
+          {#each others.slice(0, 2) as o (key(o))}
             <button class="btn small ghost" disabled={busy || !!o.blocked} title={o.blocked ?? o.why} onclick={() => app.perform(o)}>{cap(o.label)}</button>
           {/each}
         {/if}

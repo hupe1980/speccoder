@@ -195,8 +195,13 @@ pub fn parse(line: &str, offered: &[String]) -> Parsed {
 /// Asks about `p` on `out`, reading answers from `input`; end of input
 /// rejects ("no answer (input closed)").
 pub fn ask_with(input: &mut dyn BufRead, out: &mut dyn Write, p: &Presentation) -> Answer {
-    let by = || Some(Who::local("terminal"));
-    let closed = || Answer::reject("no answer (input closed)", Some(Who::local("terminal")));
+    let by = || Some(Who::local(speccoder_core::actions::Via::Terminal));
+    let closed = || {
+        Answer::reject(
+            "no answer (input closed)",
+            Some(Who::local(speccoder_core::actions::Via::Terminal)),
+        )
+    };
     let mut read = |out: &mut dyn Write, prompt: &str| -> Option<String> {
         let _ = write!(out, "{prompt}");
         let _ = out.flush();

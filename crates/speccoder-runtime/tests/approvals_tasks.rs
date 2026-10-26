@@ -98,7 +98,7 @@ fn report(r: &CommandResult) -> &RunReport {
 }
 
 fn pending(r: &Path, state: &Path) -> Vec<speccoder_core::PendingCall> {
-    match decide_with(r, None, Verb::List, state).data() {
+    match speccoder_runtime::approvals::list_with(r, None, state).data() {
         Some(CommandData::Approvals(a)) => a.pending.clone(),
         other => panic!("{other:?}"),
     }
@@ -329,6 +329,7 @@ fn a_waiting_task_holds_the_worktree_until_it_is_decided() {
             reason: None,
         }),
         state.path(),
+        speccoder_core::actions::Via::Terminal,
     );
     assert_eq!(all.status(), CommandStatus::Ok, "{}", all.message());
     assert_eq!(
@@ -351,6 +352,7 @@ fn a_waiting_task_holds_the_worktree_until_it_is_decided() {
             reason: None,
         }),
         state.path(),
+        speccoder_core::actions::Via::Terminal,
     );
     assert_eq!(none.status(), CommandStatus::NotFound, "{}", none.message());
 
@@ -417,7 +419,13 @@ fn a_resumed_attempt_that_fails_is_undone_to_where_the_task_started() {
         "{}",
         first.message()
     );
-    let ok = decide_with(r.path(), None, Verb::Approve("T005"), state.path());
+    let ok = decide_with(
+        r.path(),
+        None,
+        Verb::Approve("T005"),
+        state.path(),
+        speccoder_core::actions::Via::Terminal,
+    );
     assert_eq!(ok.status(), CommandStatus::Ok, "{}", ok.message());
 
     let (f, d) = fake();
@@ -465,7 +473,7 @@ fn calls_waiting_in_a_journal_another_process_holds_are_unknown_never_none() {
     let held =
         agentplane::store::RedbStore::open(plane_dir(r.path(), state.path()).join("journal.redb"))
             .unwrap();
-    let listed = decide_with(r.path(), None, Verb::List, state.path());
+    let listed = speccoder_runtime::approvals::list_with(r.path(), None, state.path());
     let Some(CommandData::Approvals(a)) = listed.data() else {
         panic!("{listed:?}");
     };
@@ -486,7 +494,13 @@ fn calls_waiting_in_a_journal_another_process_holds_are_unknown_never_none() {
         i.items
     );
     // A decision cannot be made blind.
-    let approve = decide_with(r.path(), None, Verb::Approve("T005"), state.path());
+    let approve = decide_with(
+        r.path(),
+        None,
+        Verb::Approve("T005"),
+        state.path(),
+        speccoder_core::actions::Via::Terminal,
+    );
     assert_eq!(
         approve.status(),
         CommandStatus::Error,

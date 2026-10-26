@@ -1,0 +1,32 @@
+{
+  "head": "spec(001-graph): review.json",
+  "result": {
+    "command": "commit",
+    "exit_code": 0,
+    "message": "committed 1 file(s) as <hex> \"spec(001-graph): review.json\"",
+    "schema_version": 2,
+    "status": "ok"
+  },
+  "review": {
+    "requirements": {
+      "FR-001": {
+        "at": 0,
+        "by": "Dana Example",
+        "comment": "looks right",
+        "line": "- **FR-001**: Users MUST log in with a passkey.",
+        "sha256": "sha256:<hex>",
+        "verdict": "approved",
+        "via": "web"
+      },
+      "FR-002": {
+        "at": 0,
+        "by": "Dana Example",
+        "line": "- **FR-002**: Sessions MUST expire after thirty minutes.",
+        "sha256": "sha256:<hex>",
+        "verdict": "approved",
+        "via": "web"
+      }
+    }
+  },
+  "status": " M specs/001-graph/spec.md\n"
+}

@@ -3,6 +3,7 @@
   // each check with a coloured symbol badge, what is wrong, and its fix as a
   // command to copy. Failures first: they stop a run; warnings spoil one.
   import { app } from "../lib/app.svelte";
+  import { offer } from "../lib/actions";
   import Icon from "./Icon.svelte";
   import Code from "./Code.svelte";
 
@@ -40,7 +41,7 @@
             {#if i.remedy}
               {@const r = i.remedy}
               <!-- What speccoder can fix itself is one click, its command a tooltip away. -->
-              <button class="btn small tinted" title="{r.effect} — $ {r.command}" disabled={!!app.job?.running} onclick={() => app.perform({ group: "work", label: r.label, why: r.effect, command: r.command, run: r.run, blocked: null, input: null })}>
+              <button class="btn small tinted" title="{r.effect} — $ {r.command}" disabled={!!app.job?.running} onclick={() => app.perform(offer(r.run, { group: "work", label: r.label, why: r.effect, command: r.command }))}>
                 <Icon name="check" size={11} weight={2.4} /> {r.label}
               </button>
             {:else}

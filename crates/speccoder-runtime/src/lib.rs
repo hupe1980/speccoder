@@ -72,6 +72,8 @@ pub mod review;
 #[cfg(feature = "engine")]
 pub mod sandbox;
 #[cfg(feature = "engine")]
+pub mod service;
+#[cfg(feature = "engine")]
 pub mod settings;
 #[cfg(feature = "engine")]
 pub mod skills;
