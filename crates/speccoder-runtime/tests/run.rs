@@ -3693,3 +3693,97 @@ fn uncommitted_setup_config_is_part_of_the_fix() {
     assert!(git_out(r.path(), &["ls-files", ".config/nextest.toml"]).contains("nextest.toml"));
     assert!(speccoder_runtime::code::setup_remedy(r.path(), None).is_none());
 }
+
+/// An OpenAI Responses model's commentary — its words beside its calls,
+/// which that wire marks apart from the answer — is shown live and kept,
+/// before any text the turn has; a final turn's commentary too.
+#[test]
+fn the_model_s_commentary_is_what_it_said() {
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    let turn = |text: &str,
+                commentary: &str,
+                calls: Vec<agentplane::model::ToolCall>,
+                structured: Option<Value>| agentplane::model::Completion {
+        tool_calls: calls,
+        text: text.to_owned(),
+        model: None,
+        usage: agentplane::model::Usage::default(),
+        stop_reason: None,
+        truncated: false,
+        commentary: Some(commentary.to_owned()),
+        compacted: None,
+        structured,
+        continuation: None,
+        reasoning: None,
+    };
+    f.will_answer(turn(
+        "",
+        "Reading the library first.",
+        vec![agentplane::model::ToolCall {
+            id: "c1".to_owned(),
+            name: "read_file".to_owned(),
+            arguments: json!({ "path": "src/lib.rs" }),
+        }],
+        None,
+    ));
+    f.will_answer(turn(
+        "then the edit.",
+        "Adding login().",
+        vec![agentplane::model::ToolCall {
+            id: "c2".to_owned(),
+            name: "edit_file".to_owned(),
+            arguments: json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\npub fn login() {}" }),
+        }],
+        None,
+    ));
+    let answer = done("added login");
+    f.will_answer(turn(&answer.to_string(), "Done.", Vec::new(), Some(answer)));
+    let rec = Arc::new(Recorder::default());
+    let options = speccoder_runtime::RunOptions {
+        progress: Some(rec.clone()),
+        ..speccoder_runtime::RunOptions::default()
+    };
+    let res = speccoder_runtime::run_with_options(
+        r.path(),
+        None,
+        "T005",
+        state.path(),
+        d,
+        None,
+        &options,
+    );
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let said: Vec<(u32, String)> = rec
+        .0
+        .lock()
+        .unwrap()
+        .iter()
+        .filter_map(|e| match e {
+            Event::Said { turn, text, .. } => Some((*turn, text.clone())),
+            _ => None,
+        })
+        .collect();
+    let expected = vec![
+        (1, "Reading the library first.".to_owned()),
+        (2, "Adding login().\n\nthen the edit.".to_owned()),
+        (3, "Done.".to_owned()),
+    ];
+    assert_eq!(said, expected);
+    let plane = speccoder_runtime::worktree::project_state_dir(state.path(), r.path());
+    let kept = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(speccoder_runtime::substrate::account(
+            &plane,
+            &report(&res).run_id,
+        ))
+        .unwrap();
+    let kept: Vec<(u32, String)> = kept
+        .into_iter()
+        .map(|t| (t.turn, t.said.unwrap_or_default()))
+        .collect();
+    assert_eq!(kept, expected);
+}

@@ -732,3 +732,45 @@ fn a_run_in_another_process_leaves_the_journal_readable() {
     // Once it is gone, the call is decided as ever.
     assert_eq!(pending(r.path(), state.path()).len(), 1);
 }
+
+/// A waiting call shows what the model said when it asked: its
+/// commentary, where the provider marks it apart from the answer.
+#[test]
+fn a_waiting_call_shows_the_model_s_commentary() {
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_answer(agentplane::model::Completion {
+        tool_calls: vec![agentplane::model::ToolCall {
+            id: "c1".to_owned(),
+            name: "write_file".to_owned(),
+            arguments: json!({ "path": "package.json", "content": "{}\n" }),
+        }],
+        text: String::new(),
+        model: None,
+        usage: agentplane::model::Usage::default(),
+        stop_reason: None,
+        truncated: false,
+        commentary: Some("The manifest comes first.".to_owned()),
+        compacted: None,
+        structured: None,
+        continuation: None,
+        reasoning: None,
+    });
+    let first = speccoder_runtime::run_with(r.path(), None, "T005", state.path(), d, None);
+    assert_eq!(
+        first.status(),
+        CommandStatus::NeedsHuman,
+        "{}",
+        first.message()
+    );
+    let waiting = pending(r.path(), state.path());
+    assert_eq!(
+        waiting[0]
+            .presentation
+            .as_ref()
+            .and_then(|p| p.claim.as_deref()),
+        Some("The manifest comes first."),
+        "{waiting:?}"
+    );
+}

@@ -1055,6 +1055,22 @@ pub async fn replay_strict(
         .map_err(|e| PlaneError(e.to_string()))
 }
 
+/// What the model said in a turn beside its answer — a claim, never
+/// evidence: its commentary, where the provider marks it apart (OpenAI
+/// Responses), then its text when the turn called tools (a turn without
+/// calls answers with its text). `None` when it said nothing.
+#[must_use]
+pub fn said(completion: &agentplane::model::Completion) -> Option<String> {
+    let commentary = completion.commentary.as_deref().map(str::trim);
+    let text = (!completion.tool_calls.is_empty()).then(|| completion.text.trim());
+    let parts: Vec<&str> = [commentary, text]
+        .into_iter()
+        .flatten()
+        .filter(|t| !t.is_empty())
+        .collect();
+    (!parts.is_empty()).then(|| parts.join("\n\n"))
+}
+
 /// One model turn of an attempt, as the person is shown it afterwards: the
 /// model's summary of its reasoning and its words beside its calls — its
 /// account, a claim. Control characters escaped.
@@ -1095,7 +1111,7 @@ pub async fn account(dir: &Path, run: &str) -> Result<Vec<AccountTurn>, PlaneErr
         .zip(1u32..)
         .filter_map(|(t, turn)| {
             let c = t.completion?;
-            let said = (!c.tool_calls.is_empty()).then(|| text(&c.text)).flatten();
+            let said = said(&c).as_deref().and_then(text);
             let reasoning = c.reasoning.as_deref().and_then(text);
             (said.is_some() || reasoning.is_some()).then_some(AccountTurn {
                 turn,

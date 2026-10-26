@@ -16,6 +16,9 @@ adheres to [Semantic Versioning](https://semver.org/).
   decision on a waiting call — is refused while the run holds the journal,
   and at once. A read never creates, moves or writes the journal; a call past
   its deadline is not listed as waiting.
+- **OpenAI's words beside its calls are shown.** With the Responses API, the
+  model's commentary appears as what it said — live, in waiting calls and in
+  `task show --account` — as Anthropic's words already did.
 
 ### Upgrading
 

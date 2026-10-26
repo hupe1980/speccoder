@@ -1039,20 +1039,19 @@ pub(crate) async fn tool_loop(
         }
         let asked_calls = transcript.asked(&completion);
         // The model's own words beside its calls, live: its account, a
-        // claim. A turn without calls is its final answer, reported as such.
-        if let Some((task, p)) = observer.as_ref().filter(|_| !asked_calls.is_empty()) {
-            let said = completion.peek().text.trim();
-            if !said.is_empty() {
-                let text: String = crate::approvals::present::escape(said)
-                    .chars()
-                    .take(2000)
-                    .collect();
-                p.event(&crate::progress::Event::Said {
-                    task: task.clone(),
-                    turn: turn + 1,
-                    text,
-                });
-            }
+        // claim. A turn without calls is its final answer, reported as such;
+        // its commentary, where the provider marks one, is still words.
+        let said = super::said(completion.peek());
+        if let (Some((task, p)), Some(said)) = (observer.as_ref(), said.as_deref()) {
+            let text: String = crate::approvals::present::escape(said)
+                .chars()
+                .take(2000)
+                .collect();
+            p.event(&crate::progress::Event::Said {
+                task: task.clone(),
+                turn: turn + 1,
+                text,
+            });
         }
         if asked_calls.is_empty() {
             let report = completion
@@ -1299,7 +1298,7 @@ pub(crate) async fn tool_loop(
                     asked: &asked,
                     reason,
                     turn: turn + 1,
-                    said: &completion.peek().text,
+                    said: said.as_deref().unwrap_or_default(),
                     asker: ask.as_ref(),
                     policy: &policy,
                     object: object.as_ref(),
