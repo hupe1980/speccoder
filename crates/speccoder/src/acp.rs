@@ -854,19 +854,6 @@ mod tests {
             (&d.amendment["via"], &d.amendment["client"]),
             (&json!("acp"), &json!("Zed"))
         );
-        // Read back as recorded; one recorded before origins were one
-        // vocabulary reads the same.
-        let back = speccoder_runtime::approvals::tasks::read(&d);
-        assert_eq!(back.by.as_ref(), Some(&by));
-        let mut old = d.clone();
-        old.amendment = json!({ "scope": "run", "via": "editor Zed" });
-        let old = speccoder_runtime::approvals::tasks::read(&old)
-            .by
-            .unwrap_or_else(|| panic!("no one"));
-        assert_eq!(
-            (old.via.as_str(), old.client.as_deref()),
-            ("acp", Some("Zed"))
-        );
     }
 
     #[test]

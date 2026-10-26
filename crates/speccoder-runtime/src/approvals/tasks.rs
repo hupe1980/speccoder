@@ -221,6 +221,28 @@ mod tests {
     }
 
     #[test]
+    fn a_decision_reads_back_with_its_origin_also_one_recorded_before() {
+        let editor = Who {
+            name: "dana".to_owned(),
+            via: "acp".to_owned(),
+            client: Some("Zed".to_owned()),
+            basis: "connected".to_owned(),
+        };
+        let answer = Answer::approve(Scope::Run, None, Some(editor.clone()));
+        let mut d = decision_for(&answer, &editor, None).unwrap();
+        assert_eq!(read(&d).by.as_ref(), Some(&editor));
+        // As an editor's decision was recorded before one origin vocabulary.
+        d.amendment = json!({ "scope": "run", "via": "editor Zed" });
+        let old = read(&d).by.unwrap();
+        assert_eq!(
+            (old.via.as_str(), old.client.as_deref()),
+            ("acp", Some("Zed"))
+        );
+        d.amendment = json!({ "scope": "run", "via": "dashboard" });
+        assert_eq!(read(&d).by.unwrap().via, "terminal");
+    }
+
+    #[test]
     fn every_scope_and_note_survive_the_record() {
         for scope in [Scope::Once, Scope::Task, Scope::Run] {
             let answer = Answer::approve(scope, Some("keep it small".to_owned()), Some(who()));

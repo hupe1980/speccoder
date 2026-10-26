@@ -92,11 +92,12 @@ Decisions travel in each attempt's recorded input, run grants included, so a rep
 Every decision is a record in the run's journal: **who made it, how speccoder knows that name, through what, when, and what exactly was shown**.
 
 - The name is git's `user.name` in the project, else your operating-system user, else `unknown`. `task accept`'s `Accepted-By` uses the same name.
-- How it is known: `asserted` for an answer at the terminal, in the dashboard, in the web interface or with `task approve`/`task reject`; `connected` for one an editor reports over ACP (`via editor Zed`). speccoder authenticates nobody, so it never claims more.
+- How it is known: `asserted` for an answer at the terminal, in the dashboard, in the web interface or with `task approve`/`task reject`; `connected` for one an editor reports over ACP. speccoder authenticates nobody, so it never claims more.
+- Through what (`via`): the interface you used — `terminal` (the CLI, its prompts and the dashboard), `web` (the app) or `acp` (an editor, named in `client`: `via acp`, `client Zed`). Decisions recorded by earlier versions as `cli`, `tui` or `dashboard` read as `terminal`, and `editor Zed` as `acp` with client `Zed`.
 - An approval holds only for the call it was shown: a decision bound to anything else is refused and the call is presented again.
 - A call allowed or denied without asking names the **rule** that decided it (``allowed command `cargo test` ``, `workspace write`, a grant for the task), never a person; an expired call says `expired`.
 
-The run report shows it per call (`by`, `operator`, `via`), `report --approvals` lists it, and strict replay reads every decision back without asking anyone.
+The run report shows it per call (`by`, `operator`, `via`), `report --approvals` lists it (with `client` for an editor), and strict replay reads every decision back without asking anyone.
 
 ## Frozen tests
 
