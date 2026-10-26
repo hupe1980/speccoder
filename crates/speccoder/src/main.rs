@@ -1,6 +1,7 @@
 //! The `speccoder` binary: parse, delegate to the runtime, render.
 
 mod acp;
+mod actions;
 #[cfg(window)]
 mod app;
 mod attention;
@@ -21,6 +22,8 @@ mod prompt;
 mod schema;
 mod style;
 mod tui;
+#[cfg(test)]
+mod typescript;
 
 use speccoder_core::ExitCode;
 
@@ -536,27 +539,53 @@ fn main() {
                 progress,
                 ..speccoder_runtime::RunOptions::default()
             };
-            let result =
-                speccoder_runtime::quick::change(path, request, checks, !*no_run, "cli", &options);
+            let result = speccoder_runtime::quick::change(
+                path,
+                request,
+                checks,
+                !*no_run,
+                speccoder_core::actions::Via::Terminal,
+                &options,
+            );
             if let Some(a) = &attention {
                 a.finish(&result);
             }
             result
         }
         Command::Inbox => speccoder_runtime::inbox::inbox(path, feature),
+        Command::Actions { task } => {
+            speccoder_runtime::actions::list(path, feature, task.as_deref())
+        }
         Command::Auth { action } => auth(path, action.as_ref()),
         Command::Review { action } => {
             use cli::ReviewAction as R;
             use speccoder_runtime::review;
             match action {
                 None => review::report(path, feature),
-                Some(R::Approve { ids, comment }) => {
-                    review::decide(path, feature, ids, "approve", comment.as_deref(), "cli")
-                }
-                Some(R::Request { ids, comment }) => {
-                    review::decide(path, feature, ids, "request", Some(comment), "cli")
-                }
-                Some(R::Clear { ids }) => review::decide(path, feature, ids, "clear", None, "cli"),
+                Some(R::Approve { ids, comment }) => review::decide(
+                    path,
+                    feature,
+                    ids,
+                    "approve",
+                    comment.as_deref(),
+                    speccoder_core::actions::Via::Terminal,
+                ),
+                Some(R::Request { ids, comment }) => review::decide(
+                    path,
+                    feature,
+                    ids,
+                    "request",
+                    Some(comment),
+                    speccoder_core::actions::Via::Terminal,
+                ),
+                Some(R::Clear { ids }) => review::decide(
+                    path,
+                    feature,
+                    ids,
+                    "clear",
+                    None,
+                    speccoder_core::actions::Via::Terminal,
+                ),
                 Some(R::Answer { question, answer }) => {
                     review::answer(path, feature, question, answer)
                 }
@@ -564,7 +593,14 @@ fn main() {
                     id,
                     wording,
                     approve,
-                }) => review::edit(path, feature, id, wording, *approve, "cli"),
+                }) => review::edit(
+                    path,
+                    feature,
+                    id,
+                    wording,
+                    *approve,
+                    speccoder_core::actions::Via::Terminal,
+                ),
             }
         }
         Command::Issue {
@@ -803,11 +839,7 @@ fn main() {
         Command::Report { cost: true, .. } => speccoder_runtime::controls::cost(path, feature),
         Command::Report {
             approvals: true, ..
-        } => speccoder_runtime::approvals::decide(
-            path,
-            feature,
-            speccoder_runtime::approvals::Verb::List,
-        ),
+        } => speccoder_runtime::approvals::list(path, feature),
         Command::Report { .. } => speccoder_runtime::status::report(path, feature),
         Command::Explain { code, list } => explain::command(code.as_deref(), *list),
         Command::Schema { name } => schema::command(name.as_deref()),
@@ -1136,6 +1168,7 @@ fn command_name(command: Option<&Command>) -> &'static str {
             C::Issue { .. } => "issue",
             C::Do { .. } => "do",
             C::Inbox => "inbox",
+            C::Actions { .. } => "actions",
             C::Auth { .. } => "auth",
             C::Review { .. } => "review",
             C::Run { .. } => "run",
@@ -1199,6 +1232,7 @@ fn task_action(
                 note: note.as_deref(),
                 reason: None,
             }),
+            speccoder_core::actions::Via::Terminal,
         ),
         T::Reject {
             task,
@@ -1217,6 +1251,7 @@ fn task_action(
                 note: None,
                 reason: Some(reason),
             }),
+            speccoder_core::actions::Via::Terminal,
         ),
         T::Accept {
             task,

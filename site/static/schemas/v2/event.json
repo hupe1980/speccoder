@@ -111,6 +111,10 @@
           "description": "`next`, `plan`, `work`, `task`, `feature` or `review`.",
           "type": "string"
         },
+        "id": {
+          "$ref": "#/$defs/ActionId",
+          "description": "What it is, independent of its wording ([`identity`])."
+        },
         "input": {
           "description": "What to ask for before it runs (`Describe the feature`).",
           "type": [
@@ -121,6 +125,17 @@
         "label": {
           "description": "What it does, in a few words.",
           "type": "string"
+        },
+        "role": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SkillRole"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "A planning skill's part in its format's planning; `None` for\neverything else."
         },
         "run": {
           "anyOf": [
@@ -146,7 +161,159 @@
         "run",
         "blocked",
         "input",
-        "confirm"
+        "confirm",
+        "id",
+        "role"
+      ],
+      "type": "object"
+    },
+    "ActionId": {
+      "description": "What an action is, independent of its wording: its kind and what it\nis about (the task, the skill, the issue). An interface finds an action\nby this, never by its label.",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/ActionKind",
+          "description": "Its kind."
+        },
+        "subject": {
+          "description": "What it is about: a task's id, a skill's name, an issue's number,\na review's `verdict` (`verdict:first id`), a command's words.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "subject"
+      ],
+      "type": "object"
+    },
+    "ActionKind": {
+      "description": "What kind of action it is: one per [`Runnable`] kind (a run split by\nwhether it names a task), plus [`ActionKind::Command`] for an action an\ninterface does not run itself. Exhaustive at any one version; a new\nkind arrives with its `Runnable` variant (the *adding a kind* contract\nof `speccoder_runtime::actions::perform`).",
+      "oneOf": [
+        {
+          "const": "skill",
+          "description": "[`Runnable::Skill`].",
+          "type": "string"
+        },
+        {
+          "const": "run_task",
+          "description": "[`Runnable::Run`] with a task.",
+          "type": "string"
+        },
+        {
+          "const": "run_feature",
+          "description": "[`Runnable::Run`] without one: the feature.",
+          "type": "string"
+        },
+        {
+          "const": "converge",
+          "description": "[`Runnable::Converge`].",
+          "type": "string"
+        },
+        {
+          "const": "commit",
+          "description": "[`Runnable::Commit`].",
+          "type": "string"
+        },
+        {
+          "const": "approve",
+          "description": "[`Runnable::Approve`].",
+          "type": "string"
+        },
+        {
+          "const": "reject",
+          "description": "[`Runnable::Reject`].",
+          "type": "string"
+        },
+        {
+          "const": "accept",
+          "description": "[`Runnable::Accept`].",
+          "type": "string"
+        },
+        {
+          "const": "skip",
+          "description": "[`Runnable::Skip`].",
+          "type": "string"
+        },
+        {
+          "const": "nudge",
+          "description": "[`Runnable::Nudge`].",
+          "type": "string"
+        },
+        {
+          "const": "rule",
+          "description": "[`Runnable::Rule`].",
+          "type": "string"
+        },
+        {
+          "const": "review",
+          "description": "[`Runnable::Review`].",
+          "type": "string"
+        },
+        {
+          "const": "issue_comment",
+          "description": "[`Runnable::IssueComment`].",
+          "type": "string"
+        },
+        {
+          "const": "quick_change",
+          "description": "[`Runnable::QuickChange`].",
+          "type": "string"
+        },
+        {
+          "const": "keep_set_aside",
+          "description": "[`Runnable::KeepSetAside`].",
+          "type": "string"
+        },
+        {
+          "const": "drop_set_aside",
+          "description": "[`Runnable::DropSetAside`].",
+          "type": "string"
+        },
+        {
+          "const": "fix_setup",
+          "description": "[`Runnable::FixSetup`].",
+          "type": "string"
+        },
+        {
+          "const": "feature",
+          "description": "[`Runnable::Feature`].",
+          "type": "string"
+        },
+        {
+          "const": "pull_request",
+          "description": "[`Runnable::PullRequest`].",
+          "type": "string"
+        },
+        {
+          "const": "command",
+          "description": "No runnable: the person runs the command.",
+          "type": "string"
+        }
+      ]
+    },
+    "ActionsReport": {
+      "description": "Result of `speccoder actions`: what a person can do now in the\nproject — the list every interface renders — and where the feature is\non its journey.",
+      "properties": {
+        "actions": {
+          "description": "Every action, by group, the most urgent first.",
+          "items": {
+            "$ref": "#/$defs/Action"
+          },
+          "type": "array"
+        },
+        "journey": {
+          "description": "The feature's journey (spec → plan → tasks → commit → run → review).",
+          "items": {
+            "$ref": "#/$defs/JourneyStep"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "actions",
+        "journey"
       ],
       "type": "object"
     },
@@ -224,12 +391,20 @@
             "$ref": "#/$defs/PendingCall"
           },
           "type": "array"
+        },
+        "unreadable": {
+          "description": "Why the calls waiting in the journal could not be read (another\nspeccoder holds it, …): `pending` may then be incomplete — unknown,\nnever \"nothing waiting\".",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
         "feature",
         "pending",
-        "decided"
+        "decided",
+        "unreadable"
       ],
       "type": "object"
     },
@@ -777,6 +952,10 @@
         {
           "$ref": "#/$defs/AuthReport",
           "description": "`auth`: who speccoder is on a GitHub host."
+        },
+        {
+          "$ref": "#/$defs/ActionsReport",
+          "description": "`actions`: what can be done now."
         }
       ],
       "description": "Command-specific payload of a result."
@@ -1452,6 +1631,13 @@
             "null"
           ]
         },
+        "client": {
+          "description": "The editor decided in, over the Agent Client Protocol.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "covers": {
           "description": "What it covers.",
           "type": "string"
@@ -1501,7 +1687,7 @@
           "type": "string"
         },
         "via": {
-          "description": "Through what: `terminal`, `cli` or `editor <name>`.",
+          "description": "Through what: an origin of `actions::Via` (`terminal`, `web`,\n`acp`, …).",
           "type": [
             "string",
             "null"
@@ -2649,7 +2835,7 @@
           "type": "string"
         },
         "kind": {
-          "description": "What kind, in the order of urgency: `approval` (a run waits on it),\n`ruling` (a verified attempt is held: its tests reject an\nalternative the spec allows), `gaming` (the monitor suspects a\nshortcut), `stale` (proven against an earlier wording), `question`\n(the spec leaves questions open), `review`\n(requirements not approved on their current wording), `revise`\n(changes requested on the spec), `stuck` (the\nlast attempt did not pass), `commit` (planning files a run cannot\nread yet), `handoff` (every task done: review and hand it off).",
+          "description": "What kind, in the order of urgency: `unknown` (the calls waiting in\nthe feature's journal could not be read — some may wait for you),\n`approval` (a run waits on it),\n`ruling` (a verified attempt is held: its tests reject an\nalternative the spec allows), `gaming` (the monitor suspects a\nshortcut), `stale` (proven against an earlier wording), `question`\n(the spec leaves questions open), `review`\n(requirements not approved on their current wording), `revise`\n(changes requested on the spec), `stuck` (the\nlast attempt did not pass), `aside` (changes a run set aside),\n`commit` (planning files a run cannot\nread yet), `handoff` (every task done: review and hand it off).",
           "type": "string"
         },
         "since": {
@@ -4996,6 +5182,36 @@
         "refused"
       ],
       "type": "object"
+    },
+    "SkillRole": {
+      "description": "The part a planning skill plays in its format's planning, from the\nformat's adapter: what an interface finds \"the create step\" or \"the\nanalysis step\" by, without naming a format's skill.",
+      "oneOf": [
+        {
+          "const": "create",
+          "description": "It creates a unit (Spec Kit's `specify`).",
+          "type": "string"
+        },
+        {
+          "const": "toward_tasks",
+          "description": "It leads toward the task list (`plan`, `tasks`).",
+          "type": "string"
+        },
+        {
+          "const": "revise",
+          "description": "It revises a written spec (`clarify`).",
+          "type": "string"
+        },
+        {
+          "const": "check",
+          "description": "It checks the planning files for consistency (`analyze`).",
+          "type": "string"
+        },
+        {
+          "const": "other",
+          "description": "Anything else.",
+          "type": "string"
+        }
+      ]
     },
     "SkillRunReport": {
       "description": "Result of `speccoder spec <name>`.",

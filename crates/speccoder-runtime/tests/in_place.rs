@@ -646,14 +646,7 @@ fn waits_on_a_manifest(f: &FakeProvider) {
 }
 
 fn listed(r: &Path, state: &Path) -> usize {
-    match speccoder_runtime::approvals::decide_with(
-        r,
-        None,
-        speccoder_runtime::approvals::Verb::List,
-        state,
-    )
-    .data()
-    {
+    match speccoder_runtime::approvals::list_with(r, None, state).data() {
         Some(CommandData::Approvals(a)) => a.pending.len(),
         other => panic!("{other:?}"),
     }
@@ -690,6 +683,7 @@ fn a_call_waiting_in_place_keeps_the_checkout_and_resumes_after_approval() {
         None,
         speccoder_runtime::approvals::Verb::Approve("T005"),
         state.path(),
+        speccoder_core::actions::Via::Terminal,
     );
     assert_eq!(ok.status(), CommandStatus::Ok, "{}", ok.message());
 
@@ -759,6 +753,7 @@ fn a_refused_run_keeps_the_waiting_attempt_resumable() {
         None,
         speccoder_runtime::approvals::Verb::Approve("T005"),
         state.path(),
+        speccoder_core::actions::Via::Terminal,
     );
     assert_eq!(ok.status(), CommandStatus::Ok, "{}", ok.message());
     let (f, d) = fake();

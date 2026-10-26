@@ -10,6 +10,7 @@
   // feature, or shows the one it started) — or why GitHub is not reachable,
   // and Sign In when that is the reason.
   import { app } from "../lib/app.svelte";
+  import { offer } from "../lib/actions";
   import { latest } from "../lib/api";
   import type { Action } from "../lib/types";
   import Icon from "./Icon.svelte";
@@ -34,15 +35,10 @@
         app.toast({ tone: "error", text: `Issue #${n} could not be read`, detail: r.error ?? "no skill creates a feature here" });
         return;
       }
-      const action: Action = {
-        group: "plan",
-        label: `specify a feature from issue #${n}`,
-        why: "Spec Kit's specify skill, with the issue as the description",
-        command: `speccoder issue start ${n}`,
-        run: { kind: "skill", name: r.skill, arguments: r.description },
-        blocked: null,
-        input: null,
-      };
+      const action = offer(
+        { kind: "skill", name: r.skill, arguments: r.description },
+        { group: "plan", label: `specify a feature from issue #${n}`, why: "the format's skill that creates a feature, with the issue as the description", command: `speccoder issue start ${n}` },
+      );
       await app.perform(action);
     } finally {
       starting = null;
@@ -52,16 +48,16 @@
   // it is written on GitHub, as the person.
   async function tell(n: number, feature: string) {
     if (app.feature !== feature) await app.selectFeature(feature);
-    const action: Action = {
-      group: "plan",
-      label: `comment on #${n}`,
-      why: "the issue shows it is being specified; once per feature",
-      command: `speccoder issue comment ${n} --feature ${feature}`,
-      run: { kind: "issue_comment", issue: n, assign: false },
-      blocked: null,
-      input: null,
-      confirm: `Comment on #${n}, as you, that it is being specified as ${feature} — with the spec's path and its branch. Said once: a second time changes nothing.`,
-    };
+    const action = offer(
+      { kind: "issue_comment", issue: n, assign: false },
+      {
+        group: "plan",
+        label: `comment on #${n}`,
+        why: "the issue shows it is being specified; once per feature",
+        command: `speccoder issue comment ${n} --feature ${feature}`,
+        confirm: `Comment on #${n}, as you, that it is being specified as ${feature} — with the spec's path and its branch. Said once: a second time changes nothing.`,
+      },
+    );
     await app.perform(action);
   }
   const copy = (t: string) => {

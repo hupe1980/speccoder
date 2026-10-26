@@ -11,7 +11,7 @@ adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 
 - **The model's reasoning.** Each attempt turn asks the provider for a
-  summary of the model's reasoning (Anthropic, OpenAI Responses, Gemini;
+  summary of the model's reasoning (Anthropic, OpenAI Responses;
   `[model] reasoning_summary = false` turns it off). It is shown as the
   model's account, never as evidence: `∴` lines in the terminal, a live
   thinking line in the app, ACP thoughts, the `reasoning` event, and per
@@ -27,6 +27,15 @@ adheres to [Semantic Versioning](https://semver.org/).
   commits the lockfile and ignores the build output from the start.
 - File-type icons in the app's file tree and diffs.
 - `cargo binstall speccoder` takes the release archive.
+- **`speccoder actions`.** What you can do now, by group, each with its
+  command, why it is blocked and what it asks for — the list the dashboard,
+  the app and an editor offer. `--task T` adds the task's own; `--json`
+  prints the new `actions` payload (schema `actions.json`) for scripts,
+  equal to what the app is served.
+- Every action carries an `id` (its `kind` and `subject`: `accept` /
+  `T004`) and a planning skill its `role` (`create`, `toward_tasks`,
+  `revise`, `check`), so scripts and the app find an action by what it is,
+  never by its wording; a decided call names the editor in `client`.
 
 - **Runs in a terminal, seen in the app.** A `speccoder run` from another
   process shows in the status bar, on the Board and in Up next, with its
@@ -51,6 +60,18 @@ adheres to [Semantic Versioning](https://semver.org/).
   profile never committed, the fix.
 - `task drop` discards every set-aside change of the task, also those 0.1.0
   saved.
+- One dispatcher: the app, the terminal's next-step and fix offers, the
+  dashboard and an editor take an action the same way, with the same
+  input rules and messages.
+- One origin vocabulary for what a person decides through: `terminal`
+  (the CLI, its prompts, the dashboard — once `cli` or `dashboard`), `web`,
+  `acp` (an editor — once `editor <name>`, the name now in `client`).
+  Earlier records read back.
+- The app finds Setup's first step, the analysis step and every task
+  action by what it is: an OpenSpec project or a reworded label changes
+  nothing about what a button runs. Needs You shows an item of a kind it
+  does not know under Other instead of dropping it, and its buttons say
+  the action's verb (Keep, Discard, Rule).
 
 ### Fixed
 
@@ -63,6 +84,14 @@ adheres to [Semantic Versioning](https://semver.org/).
   removed tests. Before, the removal failed the attempt afterwards.
 - A feature run reports the code of the task that stopped it
   (`CHECK-BROKEN`, not `CONFIG`).
+- A decision on a waiting call recorded `cli` whatever interface made it
+  (a reject in the app, a decision in the dashboard); it records the
+  interface now.
+- Calls waiting in a journal another speccoder holds were listed as
+  "nothing awaits a decision". Needs You, `inbox`, `report --approvals` and
+  `status` now say the calls are unknown and why (`unreadable` in the
+  `approvals` payload, the `unknown` kind in `inbox`), and a decision is not
+  made blind. A read no longer creates an empty journal.
 
 ## [0.1.0] - 2026-10-25
 

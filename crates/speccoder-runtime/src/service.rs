@@ -1,0 +1,160 @@
+//! The web host's one way into the runtime: every entry point it uses,
+//! re-exported or delegated without changing a result. A write the host
+//! serves goes through [`actions::perform`], like every interface's; a
+//! later feature adds read views here as delegates, never a second write
+//! path. The layering test holds the host to this module.
+
+use std::path::Path;
+
+pub use crate::RunOptions;
+
+/// The action list and the one dispatcher.
+pub mod actions {
+    pub use crate::actions::{Dispatch, Interface, Offer, available, list, offered, perform};
+}
+
+/// Calls waiting for a person, and who answers them.
+pub mod approvals {
+    pub use crate::approvals::{Answer, Approver, Presentation, Who, list};
+}
+
+/// A run's progress, as it happens and as another process left it.
+pub mod progress {
+    pub use crate::progress::{Event, Progress, read_live};
+}
+
+/// Read views.
+pub mod status {
+    pub use crate::status::report;
+}
+
+/// The next steps a result names.
+pub mod next {
+    pub use crate::next::attach;
+}
+
+/// The person's review of the spec.
+pub mod review {
+    pub use crate::review::report;
+}
+
+/// Needs You.
+pub mod inbox {
+    pub use crate::inbox::inbox;
+}
+
+/// A task's evidence.
+pub mod evidence {
+    pub use crate::evidence::{account_of, banner, rows, statements};
+}
+
+/// The feature's documents.
+pub mod documents {
+    pub use crate::documents::{of_feature, render};
+}
+
+/// The machine and the project, checked.
+pub mod doctor {
+    pub use crate::doctor::run;
+}
+
+/// `speccoder.toml`.
+pub mod settings {
+    pub use crate::settings::{apply, commit, show};
+}
+
+/// Tokens and money.
+pub mod controls {
+    pub use crate::controls::cost;
+}
+
+/// The code view: the branch's change, its files.
+pub mod code {
+    pub use crate::code::{changes, file, tree, worktree_file, worktree_view};
+}
+
+/// Setting up a project.
+pub mod init {
+    pub use crate::init::{commit_written, finish, prepare, preview, root_of};
+}
+
+/// The features.
+pub mod current {
+    pub use crate::current::list;
+}
+
+/// The pull request, previewed.
+pub mod handoff {
+    pub use crate::handoff::{PrOptions, pr};
+}
+
+/// Where speccoder keeps its state.
+pub mod worktree {
+    pub use crate::worktree::state_dir;
+}
+
+/// GitHub: sign-in, issues, the branch's pull request.
+pub mod github {
+    pub use crate::github::{
+        Ctx, description, issue, issues, login_with_token, pr_for, reach, refused, repo, started,
+        status,
+    };
+
+    /// Signing in on a device.
+    pub mod auth {
+        pub use crate::github::auth::{Pending, client_id, start, wait};
+    }
+
+    /// GitHub's addresses.
+    pub mod http {
+        pub use crate::github::http::oauth;
+    }
+}
+
+/// How the project's format words things, for the page's header.
+#[derive(Debug, Clone, Copy)]
+pub struct FormatWords {
+    /// The format (`Spec Kit`).
+    pub name: &'static str,
+    /// What it calls a unit of work (`feature`, `change`).
+    pub unit: &'static str,
+}
+
+/// The words of the format of the project at `root`.
+#[must_use]
+pub fn format_words(root: &Path) -> FormatWords {
+    let format = crate::format::at(root);
+    FormatWords {
+        name: format.wording().name,
+        unit: format.messages().unit,
+    }
+}
+
+/// The installed name of the format's skill that creates a unit, if it has one.
+#[must_use]
+pub fn create_skill(root: &Path) -> Option<String> {
+    let planning = crate::format::at(root).planning();
+    planning
+        .creates
+        .first()
+        .map(|c| format!("{}{c}", planning.prefix))
+}
+
+/// One commit's patch, if `commit` names a commit (a blob or a tree id
+/// from elsewhere in the repository is never shown); empty otherwise.
+#[must_use]
+pub fn commit_patch(root: &Path, commit: &str) -> String {
+    let git = crate::git::Git::at(root);
+    // `^{commit}` peels or fails.
+    let Ok(id) = git.line(&[
+        "rev-parse",
+        "--verify",
+        "-q",
+        &format!("{commit}^{{commit}}"),
+    ]) else {
+        return String::new();
+    };
+    git.run(&["show", "--no-color", "--patch", "--format=%h %s%n%n%b", &id])
+        .map(|b| String::from_utf8_lossy(&b).into_owned())
+        .unwrap_or_default()
+}

@@ -1,0 +1,23 @@
+{
+  "head": "spec(001-graph): review.json",
+  "result": {
+    "code": "NO-REMOTE",
+    "command": "pr",
+    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#no-remote",
+    "exit_code": 14,
+    "fix": [
+      "git remote add origin <url>",
+      "git remote -v",
+      "speccoder pr --remote <name>"
+    ],
+    "message": "no git remote `origin`",
+    "next": [
+      {
+        "command": "speccoder doctor",
+        "why": "check the rest of the setup"
+      }
+    ],
+    "schema_version": 2,
+    "status": "git_precondition"
+  }
+}

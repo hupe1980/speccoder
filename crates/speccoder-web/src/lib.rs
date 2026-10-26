@@ -41,8 +41,15 @@ pub struct Shared {
     pub closing: tokio::sync::watch::Receiver<bool>,
     /// A GitHub sign-in waiting for the person to enter its code:
     /// the host, the app and the pending device code — never sent to the page.
-    pub device:
-        Arc<std::sync::Mutex<Option<(String, String, speccoder_runtime::github::auth::Pending)>>>,
+    pub device: Arc<
+        std::sync::Mutex<
+            Option<(
+                String,
+                String,
+                speccoder_runtime::service::github::auth::Pending,
+            )>,
+        >,
+    >,
 }
 
 /// How long open requests get to finish after ctrl-c.
@@ -198,8 +205,8 @@ async fn project(State(s): State<Shared>) -> Json<Value> {
     let root = s.root.clone();
     Json(
         off(move || {
-            let format = speccoder_runtime::format::at(&root);
-            let features = speccoder_runtime::current::list(&root, None);
+            let words = speccoder_runtime::service::format_words(&root);
+            let features = speccoder_runtime::service::current::list(&root, None);
             let name = root
                 .file_name()
                 .map(|n| n.to_string_lossy().into_owned())
@@ -207,8 +214,8 @@ async fn project(State(s): State<Shared>) -> Json<Value> {
             json!({
                 "name": name,
                 "root": root.display().to_string(),
-                "format": format.wording().name,
-                "unit": format.messages().unit,
+                "format": words.name,
+                "unit": words.unit,
                 "features": features.data().and_then(|d| match d {
                     CommandData::Features(f) => serde_json::to_value(f).ok(),
                     _ => None,
@@ -223,8 +230,8 @@ async fn project(State(s): State<Shared>) -> Json<Value> {
 async fn report(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Json<Value> {
     let root = s.root.clone();
     let r = off(move || {
-        speccoder_runtime::next::attach(
-            speccoder_runtime::status::report(&root, q.feature.as_deref()),
+        speccoder_runtime::service::next::attach(
+            speccoder_runtime::service::status::report(&root, q.feature.as_deref()),
             q.feature.as_deref(),
         )
     })
@@ -234,7 +241,8 @@ async fn report(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Json<
 
 async fn review(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Json<Value> {
     let root = s.root.clone();
-    let r = off(move || speccoder_runtime::review::report(&root, q.feature.as_deref())).await;
+    let r =
+        off(move || speccoder_runtime::service::review::report(&root, q.feature.as_deref())).await;
     envelope(&r)
 }
 
@@ -249,7 +257,7 @@ async fn account(State(s): State<Shared>, Query(q): Query<RunQuery>) -> Json<Val
     let root = s.root.clone();
     Json(
         off(
-            move || match speccoder_runtime::evidence::account_of(&root, &q.run) {
+            move || match speccoder_runtime::service::evidence::account_of(&root, &q.run) {
                 Ok(turns) => json!({ "turns": turns }),
                 Err(e) => json!({ "error": e }),
             },
@@ -260,7 +268,7 @@ async fn account(State(s): State<Shared>, Query(q): Query<RunQuery>) -> Json<Val
 
 async fn inbox(State(s): State<Shared>) -> Json<Value> {
     let root = s.root.clone();
-    let r = off(move || speccoder_runtime::inbox::inbox(&root, None)).await;
+    let r = off(move || speccoder_runtime::service::inbox::inbox(&root, None)).await;
     envelope(&r)
 }
 
@@ -268,7 +276,7 @@ async fn actions(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Json
     let root = s.root.clone();
     Json(
         off(move || {
-            json!(speccoder_runtime::actions::available(
+            json!(speccoder_runtime::service::actions::available(
                 &root,
                 q.feature.as_deref(),
                 q.task.as_deref()
@@ -280,14 +288,8 @@ async fn actions(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Json
 
 async fn approvals(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Json<Value> {
     let root = s.root.clone();
-    let r = off(move || {
-        speccoder_runtime::approvals::decide(
-            &root,
-            q.feature.as_deref(),
-            speccoder_runtime::approvals::Verb::List,
-        )
-    })
-    .await;
+    let r =
+        off(move || speccoder_runtime::service::approvals::list(&root, q.feature.as_deref())).await;
     envelope(&r)
 }
 
@@ -295,7 +297,7 @@ async fn evidence(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Jso
     let root = s.root.clone();
     Json(
         off(move || {
-            let report = speccoder_runtime::status::report(&root, q.feature.as_deref());
+            let report = speccoder_runtime::service::status::report(&root, q.feature.as_deref());
             let Some(CommandData::Report(r)) = report.data() else {
                 return json!({ "error": report.message() });
             };
@@ -305,13 +307,13 @@ async fn evidence(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Jso
             let statements = t
                 .commit
                 .as_deref()
-                .map(|c| speccoder_runtime::evidence::statements(&root, c))
+                .map(|c| speccoder_runtime::service::evidence::statements(&root, c))
                 .unwrap_or_default();
-            let (mark, words) = speccoder_runtime::evidence::banner(&t.state);
+            let (mark, words) = speccoder_runtime::service::evidence::banner(&t.state);
             json!({
                 "task": t,
                 "banner": { "mark": mark, "words": words },
-                "rows": speccoder_runtime::evidence::rows(t, &statements, None),
+                "rows": speccoder_runtime::service::evidence::rows(t, &statements, None),
             })
         })
         .await,
@@ -327,23 +329,7 @@ async fn diff(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Respons
         )
             .into_response();
     };
-    let patch = off(move || {
-        let git = speccoder_runtime::git::Git::at(&root);
-        // Only a commit: a blob or a tree id from elsewhere in the
-        // repository is never shown (`^{commit}` peels or fails).
-        let Ok(id) = git.line(&[
-            "rev-parse",
-            "--verify",
-            "-q",
-            &format!("{commit}^{{commit}}"),
-        ]) else {
-            return String::new();
-        };
-        git.run(&["show", "--no-color", "--patch", "--format=%h %s%n%n%b", &id])
-            .map(|b| String::from_utf8_lossy(&b).into_owned())
-            .unwrap_or_default()
-    })
-    .await;
+    let patch = off(move || speccoder_runtime::service::commit_patch(&root, &commit)).await;
     Json(json!({ "patch": patch })).into_response()
 }
 
@@ -351,7 +337,7 @@ async fn documents(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Js
     let root = s.root.clone();
     Json(
         off(move || {
-            json!(speccoder_runtime::documents::of_feature(
+            json!(speccoder_runtime::service::documents::of_feature(
                 &root,
                 q.feature.as_deref()
             ))
@@ -362,13 +348,14 @@ async fn documents(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Js
 
 async fn doctor(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Json<Value> {
     let root = s.root.clone();
-    let r = off(move || speccoder_runtime::doctor::run(&root, q.feature.as_deref(), None)).await;
+    let r = off(move || speccoder_runtime::service::doctor::run(&root, q.feature.as_deref(), None))
+        .await;
     envelope(&r)
 }
 
 async fn config(State(s): State<Shared>) -> Json<Value> {
     let root = s.root.clone();
-    let r = off(move || speccoder_runtime::settings::show(&root)).await;
+    let r = off(move || speccoder_runtime::service::settings::show(&root)).await;
     envelope(&r)
 }
 
@@ -382,7 +369,7 @@ struct ConfigBody {
 /// so a saved change is in force only once committed.
 async fn config_save(State(s): State<Shared>, Json(b): Json<ConfigBody>) -> Json<Value> {
     let root = s.root.clone();
-    let r = off(move || speccoder_runtime::settings::apply(&root, &b.changes)).await;
+    let r = off(move || speccoder_runtime::service::settings::apply(&root, &b.changes)).await;
     envelope(&r)
 }
 
@@ -390,7 +377,8 @@ async fn config_save(State(s): State<Shared>, Json(b): Json<ConfigBody>) -> Json
 /// commits in the same checkout).
 async fn config_commit(State(s): State<Shared>) -> Json<Value> {
     let (root, hub) = (s.root.clone(), Arc::clone(&s.hub));
-    let r = off(move || hub.exclusive(|| speccoder_runtime::settings::commit(&root))).await;
+    let r =
+        off(move || hub.exclusive(|| speccoder_runtime::service::settings::commit(&root))).await;
     match r {
         Ok(result) => envelope(&result),
         Err(e) => Json(json!({ "status": "error", "message": e })),
@@ -399,7 +387,8 @@ async fn config_commit(State(s): State<Shared>) -> Json<Value> {
 
 async fn cost(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Json<Value> {
     let root = s.root.clone();
-    let r = off(move || speccoder_runtime::controls::cost(&root, q.feature.as_deref())).await;
+    let r =
+        off(move || speccoder_runtime::service::controls::cost(&root, q.feature.as_deref())).await;
     envelope(&r)
 }
 
@@ -407,7 +396,7 @@ async fn cost(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Json<Va
 async fn changes(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Json<Value> {
     let root = s.root.clone();
     Json(json!(
-        off(move || speccoder_runtime::code::changes(&root, q.feature.as_deref())).await
+        off(move || speccoder_runtime::service::code::changes(&root, q.feature.as_deref())).await
     ))
 }
 
@@ -416,8 +405,8 @@ async fn tree(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Json<Va
     let root = s.root.clone();
     let ((rev, files), worktree) = off(move || {
         (
-            speccoder_runtime::code::tree(&root, q.feature.as_deref()),
-            speccoder_runtime::code::worktree_view(&root, q.feature.as_deref()),
+            speccoder_runtime::service::code::tree(&root, q.feature.as_deref()),
+            speccoder_runtime::service::code::worktree_view(&root, q.feature.as_deref()),
         )
     })
     .await;
@@ -436,8 +425,8 @@ async fn file(State(s): State<Shared>, Query(q): Query<FileQuery>) -> Json<Value
     let markdown = q.path.to_ascii_lowercase().ends_with(".md");
     // Committed at the revision, else untracked in the worktree.
     let r = off(move || {
-        speccoder_runtime::code::file(&root, q.feature.as_deref(), &q.path).or_else(|e| {
-            speccoder_runtime::code::worktree_file(&root, q.feature.as_deref(), &q.path)
+        speccoder_runtime::service::code::file(&root, q.feature.as_deref(), &q.path).or_else(|e| {
+            speccoder_runtime::service::code::worktree_file(&root, q.feature.as_deref(), &q.path)
                 .map_err(|_| e)
         })
     })
@@ -445,7 +434,7 @@ async fn file(State(s): State<Shared>, Query(q): Query<FileQuery>) -> Json<Value
     Json(match r {
         // Markdown also rendered (raw HTML shown as text), for the preview.
         Ok(text) if markdown => {
-            json!({ "text": text, "html": speccoder_runtime::documents::render(&text) })
+            json!({ "text": text, "html": speccoder_runtime::service::documents::render(&text) })
         }
         Ok(text) => json!({ "text": text }),
         Err(e) => json!({ "error": e }),
@@ -458,8 +447,8 @@ async fn setup(State(s): State<Shared>) -> Json<Value> {
     let root = s.root.clone();
     let (doctor, preview) = off(move || {
         (
-            speccoder_runtime::doctor::run(&root, None, None),
-            speccoder_runtime::init::preview(&root),
+            speccoder_runtime::service::doctor::run(&root, None, None),
+            speccoder_runtime::service::init::preview(&root),
         )
     })
     .await;
@@ -480,7 +469,7 @@ async fn setup_init(State(s): State<Shared>, Json(b): Json<SetupBody>) -> Json<V
     }
     let root = s.root.clone();
     let r = off(move || {
-        speccoder_runtime::init::prepare(
+        speccoder_runtime::service::init::prepare(
             &root,
             b.provider.as_deref(),
             b.model.as_deref(),
@@ -493,7 +482,7 @@ async fn setup_init(State(s): State<Shared>, Json(b): Json<SetupBody>) -> Json<V
         Err(refused) => envelope(&refused),
         Ok(p) => {
             let (to_commit, failed) = (p.to_commit.clone(), p.failed.clone());
-            let Json(mut v) = envelope(&speccoder_runtime::init::finish(p));
+            let Json(mut v) = envelope(&speccoder_runtime::service::init::finish(p));
             v["to_commit"] = json!(to_commit);
             v["failed"] = json!(failed);
             Json(v)
@@ -511,8 +500,8 @@ async fn setup_commit(State(s): State<Shared>, Json(b): Json<SetupCommit>) -> Js
     let (root, hub) = (s.root.clone(), Arc::clone(&s.hub));
     let r = off(move || {
         hub.exclusive(|| {
-            speccoder_runtime::init::commit_written(
-                &speccoder_runtime::init::root_of(&root),
+            speccoder_runtime::service::init::commit_written(
+                &speccoder_runtime::service::init::root_of(&root),
                 &b.paths,
             )
         })
@@ -531,14 +520,18 @@ async fn github(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Json<
     let root = s.root.clone();
     Json(
         off(move || {
-            use speccoder_runtime::github;
+            use speccoder_runtime::service::github;
             let ctx = github::Ctx::from_env();
             let status = github::status(&ctx, &root);
             if !status.ready {
                 return json!({ "status": status });
             }
             let issues = github::issues(&ctx, &root, &github::started(&root));
-            let branch = match speccoder_runtime::status::report(&root, q.feature.as_deref()).data()
+            let branch = match speccoder_runtime::service::status::report(
+                &root,
+                q.feature.as_deref(),
+            )
+            .data()
             {
                 Some(speccoder_core::CommandData::Report(r)) => r.branch.clone(),
                 _ => None,
@@ -569,7 +562,7 @@ async fn github_device(State(s): State<Shared>) -> Json<Value> {
     let slot = Arc::clone(&s.device);
     Json(
         off(move || {
-            use speccoder_runtime::github;
+            use speccoder_runtime::service::github;
             let host = github::repo(&root, None).map_or_else(|_| "github.com".to_owned(), |r| r.host);
             let Some(client) = github::auth::client_id(&host) else {
                 return json!({ "error": format!("{host} has no speccoder app: sign in with a token instead") });
@@ -595,7 +588,7 @@ async fn github_device_wait(State(s): State<Shared>) -> Json<Value> {
     let root = s.root.clone();
     let slot = Arc::clone(&s.device);
     let r = off(move || {
-        use speccoder_runtime::github;
+        use speccoder_runtime::service::github;
         let Some((host, client, pending)) = slot.lock().ok().and_then(|mut d| d.take()) else {
             return speccoder_core::CommandResult::new(
                 "auth",
@@ -632,10 +625,10 @@ struct TokenBody {
 async fn github_login(State(s): State<Shared>, Json(b): Json<TokenBody>) -> Json<Value> {
     let root = s.root.clone();
     let r = off(move || {
-        let host = speccoder_runtime::github::repo(&root, None)
+        let host = speccoder_runtime::service::github::repo(&root, None)
             .map_or_else(|_| "github.com".to_owned(), |r| r.host);
-        speccoder_runtime::github::login_with_token(
-            &speccoder_runtime::github::Ctx::from_env(),
+        speccoder_runtime::service::github::login_with_token(
+            &speccoder_runtime::service::github::Ctx::from_env(),
             &host,
             &b.token,
         )
@@ -649,16 +642,21 @@ async fn github_login(State(s): State<Shared>, Json(b): Json<TokenBody>) -> Json
 async fn github_issue(State(s): State<Shared>, Query(q): Query<IssueQuery>) -> Json<Value> {
     let root = s.root.clone();
     Json(
-        off(move || match speccoder_runtime::github::issue(&speccoder_runtime::github::Ctx::from_env(), &root, &q.number) {
-            Ok(issue) => {
-                let planning = speccoder_runtime::format::at(&root).planning();
-                json!({
-                    "description": speccoder_runtime::github::description(&issue),
-                    "skill": planning.creates.first().map(|c| format!("{}{c}", planning.prefix)),
-                    "issue": issue,
-                })
+        off(move || {
+            match speccoder_runtime::service::github::issue(
+                &speccoder_runtime::service::github::Ctx::from_env(),
+                &root,
+                &q.number,
+            ) {
+                Ok(issue) => {
+                    json!({
+                        "description": speccoder_runtime::service::github::description(&issue),
+                        "skill": speccoder_runtime::service::create_skill(&root),
+                        "issue": issue,
+                    })
+                }
+                Err(e) => json!({ "error": e }),
             }
-            Err(e) => json!({ "error": e }),
         })
         .await,
     )
@@ -668,15 +666,15 @@ async fn github_issue(State(s): State<Shared>, Query(q): Query<IssueQuery>) -> J
 async fn pr_preview(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Json<Value> {
     let root = s.root.clone();
     let r = off(move || {
-        speccoder_runtime::handoff::pr(
+        speccoder_runtime::service::handoff::pr(
             &root,
             q.feature.as_deref(),
-            &speccoder_runtime::handoff::PrOptions {
+            &speccoder_runtime::service::handoff::PrOptions {
                 remote: "origin",
                 base: None,
                 open: false,
                 force: false,
-                github: &speccoder_runtime::github::Ctx::from_env(),
+                github: &speccoder_runtime::service::github::Ctx::from_env(),
             },
         )
     })
@@ -691,10 +689,10 @@ async fn live(State(s): State<Shared>) -> Json<Value> {
     let root = s.root.clone();
     Json(
         off(move || {
-            let Some(state) = speccoder_runtime::worktree::state_dir() else {
+            let Some(state) = speccoder_runtime::service::worktree::state_dir() else {
                 return json!({ "live": null });
             };
-            match speccoder_runtime::progress::read_live(&root, &state) {
+            match speccoder_runtime::service::progress::read_live(&root, &state) {
                 Some((live, running)) => json!({
                     "live": live,
                     "running": running,
@@ -733,7 +731,7 @@ async fn start(State(s): State<Shared>, Json(b): Json<Start>) -> Response {
 #[derive(Debug, Deserialize)]
 struct AnswerBody {
     id: u64,
-    answer: Option<speccoder_runtime::approvals::Answer>,
+    answer: Option<speccoder_runtime::service::approvals::Answer>,
     text: Option<String>,
 }
 

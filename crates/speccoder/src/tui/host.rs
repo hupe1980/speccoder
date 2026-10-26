@@ -64,8 +64,8 @@ impl Approver for Channel {
         rx.recv().ok().flatten()
     }
 
-    fn via(&self) -> String {
-        "dashboard".to_owned()
+    fn via(&self) -> speccoder_core::actions::Via {
+        speccoder_core::actions::Via::Terminal
     }
 }
 
@@ -88,7 +88,7 @@ pub fn start(
     let (tx, rx) = channel();
     let ch = Channel {
         tx: Arc::new(Mutex::new(tx)),
-        who: Who::local_in(path, "dashboard"),
+        who: Who::local_in(path, speccoder_core::actions::Via::Terminal),
     };
     let cancel = Arc::new(AtomicBool::new(false));
     let hosting = Hosting {
@@ -118,7 +118,7 @@ pub fn start(
 /// The dashboard's side, as a person answers: who they are.
 #[must_use]
 pub fn person(path: &Path) -> Who {
-    Who::local_in(path, "dashboard")
+    Who::local_in(path, speccoder_core::actions::Via::Terminal)
 }
 
 #[cfg(test)]

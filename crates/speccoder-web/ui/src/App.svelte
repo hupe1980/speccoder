@@ -1,6 +1,7 @@
 <script lang="ts">
   import { flushSync } from "svelte";
   import { app } from "./lib/app.svelte";
+  import { byKind } from "./lib/actions";
   import Sidebar from "./components/Sidebar.svelte";
   import Hero from "./components/Hero.svelte";
   import Board from "./components/Board.svelte";
@@ -92,14 +93,14 @@
         });
       }
       case "file.quick": app.quick = true; return;
-      case "file.commit": return run(find((a) => a.run?.kind === "commit"), "Nothing to commit: the planning files are committed");
-      case "run.feature": return run(find((a) => a.run?.kind === "run" && a.run.task === null), "No task is ready to run");
-      case "run.task": return run(find((a) => a.run?.kind === "run" && a.run.task !== null), "Select a ready task first");
-      case "run.converge": return run(find((a) => a.run?.kind === "converge"), "Nothing to re-check: no tick was proven against an earlier wording");
+      case "file.commit": return run(byKind(app.actions, "commit")[0], "Nothing to commit: the planning files are committed");
+      case "run.feature": return run(byKind(app.actions, "run_feature")[0], "No task is ready to run");
+      case "run.task": return run(byKind(app.actions, "run_task")[0], "Select a ready task first");
+      case "run.converge": return run(byKind(app.actions, "converge")[0], "Nothing to re-check: no tick was proven against an earlier wording");
       case "task.nudge": case "task.skip": case "task.accept": {
-        const verb = id.slice(5);
+        const verb = id === "task.nudge" ? "nudge" : id === "task.skip" ? "skip" : "accept";
         if (!app.selected) return app.toast({ tone: "warn", text: "Select a task first (click its card on the board)" });
-        return run(find((a) => a.group === "task" && a.label === `${verb} ${app.selected}`), `${app.selected} cannot be ${verb === "accept" ? "accepted" : verb === "skip" ? "skipped" : "nudged"} now`);
+        return run(byKind(app.actions, verb, app.selected).find((a) => a.group === "task"), `${app.selected} cannot be ${verb === "accept" ? "accepted" : verb === "skip" ? "skipped" : "nudged"} now`);
       }
       case "task.evidence":
         if (!app.selected) return app.toast({ tone: "warn", text: "Select a task first (click its card on the board)" });

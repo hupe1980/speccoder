@@ -4,7 +4,7 @@
   // proven by evidence, and what it waits for. A card opens its board.
   import { app } from "../lib/app.svelte";
   import { get, q } from "../lib/api";
-  import type { CostReport, Envelope, Report } from "../lib/types";
+  import type { CostReport, Reply, Report } from "../lib/types";
   import Ring from "./Ring.svelte";
   import Icon from "./Icon.svelte";
   import GitHub from "./GitHub.svelte";
@@ -16,10 +16,10 @@
   $effect(() => {
     void app.report; // refresh with the page
     for (const f of features) {
-      void get<Envelope<Report>>(`/api/report${q({ feature: f.name })}`)
+      void get<Reply<Report>>(`/api/report${q({ feature: f.name })}`)
         .then((r) => (reports = { ...reports, [f.name]: r.data ?? null }))
         .catch(() => (reports = { ...reports, [f.name]: null }));
-      void get<Envelope<CostReport>>(`/api/cost${q({ feature: f.name })}`)
+      void get<Reply<CostReport>>(`/api/cost${q({ feature: f.name })}`)
         .then((r) => (costs = { ...costs, [f.name]: r.data ?? null }))
         .catch(() => (costs = { ...costs, [f.name]: null }));
     }

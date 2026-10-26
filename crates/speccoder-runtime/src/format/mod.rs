@@ -315,6 +315,31 @@ pub struct Planning {
     /// The skill that revises a written spec from a person's comments
     /// (Spec Kit: `clarify`), if the format has one.
     pub revises: Option<&'static str>,
+    /// The skill that checks the planning files for consistency (Spec
+    /// Kit: `analyze`), if the format has one.
+    pub checks: Option<&'static str>,
+}
+
+impl Planning {
+    /// The part the skill `short` (without the prefix) plays: it creates a
+    /// unit, leads toward the task list, revises a spec, checks the
+    /// planning, or something else — in that order of precedence.
+    #[must_use]
+    pub fn role_of(&self, short: &str) -> speccoder_core::actions::SkillRole {
+        use speccoder_core::actions::SkillRole;
+        let toward = |plan| (self.toward_tasks)(plan).contains(&short);
+        if self.creates.contains(&short) {
+            SkillRole::Create
+        } else if toward(false) || toward(true) {
+            SkillRole::TowardTasks
+        } else if self.revises == Some(short) {
+            SkillRole::Revise
+        } else if self.checks == Some(short) {
+            SkillRole::Check
+        } else {
+            SkillRole::Other
+        }
+    }
 }
 
 /// What a worktree needs committed: a worktree contains only commits.

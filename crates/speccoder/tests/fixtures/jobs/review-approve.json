@@ -1,0 +1,66 @@
+{
+  "head": "init",
+  "result": {
+    "command": "review",
+    "data": {
+      "changes": [
+        {
+          "id": "FR-002",
+          "now": "- **FR-002**: Sessions MUST expire after thirty minutes.",
+          "then": "- **FR-002**: Sessions MUST expire after [NEEDS CLARIFICATION: how long?]."
+        }
+      ],
+      "feature": "001-graph",
+      "file": "specs/001-graph/review.json",
+      "history": [
+        {
+          "added": [
+            "FR-001",
+            "FR-002"
+          ],
+          "author": "Dana Example",
+          "commit": "<hex>",
+          "date": "2026-10-26",
+          "removed": [],
+          "reworded": [],
+          "subject": "init"
+        }
+      ],
+      "questions": [],
+      "requirements": [
+        {
+          "at": 0,
+          "by": "Dana Example",
+          "comment": null,
+          "decided_on": null,
+          "id": "FR-001",
+          "state": "approved",
+          "text": "Users MUST log in."
+        },
+        {
+          "at": 0,
+          "by": "Dana Example",
+          "comment": null,
+          "decided_on": null,
+          "id": "FR-002",
+          "state": "approved",
+          "text": "Sessions MUST expire after thirty minutes."
+        }
+      ],
+      "revise_with": null,
+      "revision": null,
+      "totals": {
+        "approved": 2,
+        "changes_requested": 0,
+        "lapsed": 0,
+        "open": 0,
+        "questions": 0
+      }
+    },
+    "exit_code": 0,
+    "message": "approved FR-001, FR-002; 2/2 requirements approved — commit specs/001-graph/review.json to share it",
+    "payload": "review",
+    "schema_version": 2,
+    "status": "ok"
+  }
+}

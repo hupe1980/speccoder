@@ -143,6 +143,7 @@ pub static PLANNING: Planning = Planning {
     current_env: Some(FEATURE_ENV),
     toward_tasks,
     revises: Some("clarify"),
+    checks: Some("analyze"),
 };
 
 fn toward_tasks(has_plan: bool) -> &'static [&'static str] {

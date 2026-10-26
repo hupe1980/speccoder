@@ -2,6 +2,7 @@
   // The feature's code: what its branch changed — by commit (one per task,
   // with its verdict) and by file — and its files, browsable and readable.
   import { app } from "../lib/app.svelte";
+  import { offer } from "../lib/actions";
   import { get, latest, q } from "../lib/api";
   import { symbol, word } from "../lib/marks";
   import { language } from "../lib/highlight";
@@ -274,7 +275,7 @@
               <strong>{wt.blocking.join(", ")} {wt.blocking.length === 1 ? "is" : "are"} in the worktree, not in git</strong>
               <p>The checks write {wt.blocking.length === 1 ? "it" : "them"} on every run, so a run stops until {wt.blocking.length === 1 ? "it is" : "they are"} part of your checkout's setup.</p>
               <div class="row">
-                <button class="btn small tinted" disabled={!!app.job?.running} onclick={() => app.perform({ group: "work", label: `commit the setup: ${wt.blocking.join(", ")}`, why: "copied into your checkout and committed; the next run takes it", command: wt.fix ?? "", run: { kind: "fix_setup" }, blocked: null, input: null })}><Icon name="check" size={11} weight={2.4} /> {wt.blocking.some((b) => b.endsWith("/")) ? "Fix the Setup" : `Commit ${wt.blocking.join(", ")}`}</button>
+                <button class="btn small tinted" disabled={!!app.job?.running} onclick={() => app.perform(offer({ kind: "fix_setup" }, { group: "work", label: `commit the setup: ${wt.blocking.join(", ")}`, why: "copied into your checkout and committed; the next run takes it", command: wt.fix ?? "" }))}><Icon name="check" size={11} weight={2.4} /> {wt.blocking.some((b) => b.endsWith("/")) ? "Fix the Setup" : `Commit ${wt.blocking.join(", ")}`}</button>
                 {#if wt.fix}<button class="btn small ghost" onclick={() => { void navigator.clipboard?.writeText(wt.fix ?? ""); app.toast({ tone: "ok", text: "Copied the command", detail: "Run it in your checkout." }); }}><Icon name="copy" size={11} /> Copy the Command</button>{/if}
               </div>
             </div>

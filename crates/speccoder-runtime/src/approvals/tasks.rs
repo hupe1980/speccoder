@@ -80,6 +80,9 @@ pub fn presentation_of(proposed_action: &Value, context: &PresentContext) -> Opt
 pub fn decision_for(answer: &Answer, by: &Who, text: Option<&str>) -> Option<Decision> {
     let operator: Operator = by.operator()?;
     let mut amendment = json!({ "scope": answer.scope.name(), "via": by.via });
+    if let Some(client) = &by.client {
+        amendment["client"] = json!(client);
+    }
     if let Some(note) = &answer.note {
         amendment["note"] = json!(note);
     }
@@ -139,7 +142,10 @@ pub fn ask(
 
 /// Who answered, named as git names them in the project they decide for.
 fn named(by: Option<Who>, approver: &dyn super::Approver, context: &PresentContext) -> Who {
-    let mut by = by.unwrap_or_else(|| Who::local(&approver.via()));
+    let mut by = by.unwrap_or_else(|| match approver.client() {
+        Some(client) => Who::connected(&client),
+        None => Who::local(approver.via()),
+    });
     if let Some(root) = &context.root {
         by.name = super::who_in(root);
     }
@@ -169,10 +175,16 @@ pub fn read(d: &Decision) -> Read {
         Some("run") => Scope::Run,
         _ => Scope::Task,
     };
-    let by = d.decided.operator().map(|op| Who {
-        name: op.actor().to_owned(),
-        via: a["via"].as_str().unwrap_or("cli").to_owned(),
-        basis: op.basis().to_string(),
+    // Read as every record is (`cli`, `editor <name>` before origins were
+    // one vocabulary).
+    let by = d.decided.operator().and_then(|op| {
+        serde_json::from_value::<Who>(json!({
+            "name": op.actor(),
+            "via": a["via"].as_str().unwrap_or("terminal"),
+            "client": a["client"],
+            "basis": op.basis().to_string(),
+        }))
+        .ok()
     });
     let expired = matches!(d.decided, Decided::OnExpiry(_));
     let answer = if d.approved {
@@ -203,8 +215,31 @@ mod tests {
         Who {
             name: "dana".to_owned(),
             via: "terminal".to_owned(),
+            client: None,
             basis: "asserted".to_owned(),
         }
+    }
+
+    #[test]
+    fn a_decision_reads_back_with_its_origin_also_one_recorded_before() {
+        let editor = Who {
+            name: "dana".to_owned(),
+            via: "acp".to_owned(),
+            client: Some("Zed".to_owned()),
+            basis: "connected".to_owned(),
+        };
+        let answer = Answer::approve(Scope::Run, None, Some(editor.clone()));
+        let mut d = decision_for(&answer, &editor, None).unwrap();
+        assert_eq!(read(&d).by.as_ref(), Some(&editor));
+        // As an editor's decision was recorded before one origin vocabulary.
+        d.amendment = json!({ "scope": "run", "via": "editor Zed" });
+        let old = read(&d).by.unwrap();
+        assert_eq!(
+            (old.via.as_str(), old.client.as_deref()),
+            ("acp", Some("Zed"))
+        );
+        d.amendment = json!({ "scope": "run", "via": "dashboard" });
+        assert_eq!(read(&d).by.unwrap().via, "terminal");
     }
 
     #[test]

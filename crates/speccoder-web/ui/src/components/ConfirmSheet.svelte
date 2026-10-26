@@ -4,16 +4,16 @@
   // the commands, the title and the body.
   import { app } from "../lib/app.svelte";
   import { get, q } from "../lib/api";
-  import type { Envelope } from "../lib/types";
+  import type { Reply } from "../lib/types";
   import Icon from "./Icon.svelte";
 
   const a = $derived(app.confirming!.action);
   interface Preview { branch: string; base: string; remote: string; title: string; body: string; commands: string[] }
-  let preview = $state<Envelope<Preview> | null>(null);
+  let preview = $state<Reply<Preview> | null>(null);
   let showBody = $state(false);
   $effect(() => {
     if (a.run?.kind !== "pull_request") return;
-    void get<Envelope<Preview>>(`/api/pr/preview${q({ feature: app.feature ?? undefined })}`).then((p) => (preview = p));
+    void get<Reply<Preview>>(`/api/pr/preview${q({ feature: app.feature ?? undefined })}`).then((p) => (preview = p));
   });
   const blocked = $derived(preview && preview.status !== "ok" ? preview.message : null);
   const go = () => app.perform(a, undefined, true);

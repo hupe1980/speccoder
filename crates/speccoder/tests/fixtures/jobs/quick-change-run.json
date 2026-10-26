@@ -1,0 +1,22 @@
+{
+  "head": "spec(002-quick-changes): quick change: Log every sign-out",
+  "result": {
+    "code": "KEY-MISSING",
+    "command": "run",
+    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#key-missing",
+    "exit_code": 13,
+    "fix": [
+      "export OPENAI_API_KEY=…",
+      "→ or another provider, or a local model: speccoder config set model.provider openai-compatible (see Settings › Model)"
+    ],
+    "message": "recorded \"Log every sign-out\" as FR-002 and T002 in 002-quick-changes; OPENAI_API_KEY is not set; speccoder reads the key only from the environment",
+    "next": [
+      {
+        "command": "speccoder doctor",
+        "why": "check the rest of the setup once the key is set"
+      }
+    ],
+    "schema_version": 2,
+    "status": "config_error"
+  }
+}

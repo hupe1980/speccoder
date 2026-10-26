@@ -180,4 +180,6 @@ Do not share the printed address: it holds the key.
 
 `speccoder --json ui --no-open` prints one result once the host listens (`payload: ui` with `url`, `port` and `root`; schema [`ui.json`](@/docs/cli.md#json-output)) and keeps serving.
 
+What the app offers is the list `speccoder actions` prints, and it takes each action the way the terminal and an editor do (one dispatcher in the runtime, which the host reaches only through its `service` facade), so a button and its command always do the same.
+
 `ctrl-c` stops the host and a job running in it; the interrupted attempt is journaled and resumes with the next `speccoder run`, finished calls not repeated.

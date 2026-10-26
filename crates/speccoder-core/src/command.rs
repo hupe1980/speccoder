@@ -195,6 +195,19 @@ pub enum CommandData {
     Review(Box<ReviewReport>),
     /// `auth`: who speccoder is on a GitHub host.
     Auth(Box<AuthReport>),
+    /// `actions`: what can be done now.
+    Actions(Box<ActionsReport>),
+}
+
+/// Result of `speccoder actions`: what a person can do now in the
+/// project — the list every interface renders — and where the feature is
+/// on its journey.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct ActionsReport {
+    /// Every action, by group, the most urgent first.
+    pub actions: Vec<crate::actions::Action>,
+    /// The feature's journey (spec → plan → tasks → commit → run → review).
+    pub journey: Vec<crate::actions::JourneyStep>,
 }
 
 /// Result of `speccoder auth`: who speccoder acts as on a GitHub
@@ -330,14 +343,17 @@ pub struct InboxReport {
 /// One decision waiting for a person.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct InboxItem {
-    /// What kind, in the order of urgency: `approval` (a run waits on it),
+    /// What kind, in the order of urgency: `unknown` (the calls waiting in
+    /// the feature's journal could not be read — some may wait for you),
+    /// `approval` (a run waits on it),
     /// `ruling` (a verified attempt is held: its tests reject an
     /// alternative the spec allows), `gaming` (the monitor suspects a
     /// shortcut), `stale` (proven against an earlier wording), `question`
     /// (the spec leaves questions open), `review`
     /// (requirements not approved on their current wording), `revise`
     /// (changes requested on the spec), `stuck` (the
-    /// last attempt did not pass), `commit` (planning files a run cannot
+    /// last attempt did not pass), `aside` (changes a run set aside),
+    /// `commit` (planning files a run cannot
     /// read yet), `handoff` (every task done: review and hand it off).
     pub kind: String,
     /// The feature.
@@ -606,6 +622,7 @@ impl CommandData {
             Self::Inbox(_) => "inbox",
             Self::Review(_) => "review",
             Self::Auth(_) => "auth",
+            Self::Actions(_) => "actions",
         }
     }
 }
@@ -644,6 +661,7 @@ pub const PAYLOADS: &[&str] = &[
     "inbox",
     "review",
     "auth",
+    "actions",
 ];
 
 /// A repository instructions file given to an attempt.
@@ -1203,6 +1221,10 @@ pub struct ApprovalsReport {
     pub pending: Vec<PendingCall>,
     /// Decisions recorded for the feature's tasks.
     pub decided: Vec<DecidedCall>,
+    /// Why the calls waiting in the journal could not be read (another
+    /// speccoder holds it, …): `pending` may then be incomplete — unknown,
+    /// never "nothing waiting".
+    pub unreadable: Option<String>,
 }
 
 /// A call that stopped an attempt for approval, or a question, waiting for
@@ -1291,8 +1313,12 @@ pub struct DecidedCall {
     pub call: Option<String>,
     /// Who decided; `None` for an expiry.
     pub operator: Option<OperatorView>,
-    /// Through what: `terminal`, `cli` or `editor <name>`.
+    /// Through what: an origin of `actions::Via` (`terminal`, `web`,
+    /// `acp`, …).
     pub via: Option<String>,
+    /// The editor decided in, over the Agent Client Protocol.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub client: Option<String>,
     /// Nobody decided: the deadline passed and the call was denied.
     pub expired: bool,
 }

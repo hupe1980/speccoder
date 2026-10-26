@@ -673,7 +673,7 @@ pub fn rule(
         )
         .with_code("NOT-FOUND");
     }
-    let by = crate::approvals::Who::local_in(&root, "cli").name;
+    let by = crate::approvals::who_in(&root);
     for p in &chosen {
         let ruling = speccoder_core::strength::Ruling {
             digest: p.digest.clone(),

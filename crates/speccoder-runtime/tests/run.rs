@@ -1659,7 +1659,7 @@ fn a_deferred_approval_resumes_the_attempt_without_asking_the_model_again() {
     assert_eq!(report(&first).pending.as_ref().unwrap()["waiting"], true);
 
     // 2. It is listed as a waiting call with what a decision would cover.
-    let listed = decide_with(r.path(), None, Verb::List, state.path());
+    let listed = speccoder_runtime::approvals::list_with(r.path(), None, state.path());
     let a = approvals(&listed);
     assert_eq!(a.pending.len(), 1, "{}", listed.message());
     assert_eq!(
@@ -1673,7 +1673,13 @@ fn a_deferred_approval_resumes_the_attempt_without_asking_the_model_again() {
     assert!(!a.pending[0].call.is_empty() && a.pending[0].deadline.is_some());
 
     // 3. Approve — no model needed — recorded with who decided.
-    let ok = decide_with(r.path(), None, Verb::Approve("T005"), state.path());
+    let ok = decide_with(
+        r.path(),
+        None,
+        Verb::Approve("T005"),
+        state.path(),
+        speccoder_core::actions::Via::Terminal,
+    );
     assert_eq!(ok.status(), CommandStatus::Ok, "{}", ok.message());
     assert!(ok.message().contains("(asserted)"), "{}", ok.message());
     assert!(approvals(&ok).pending.is_empty());
@@ -1712,6 +1718,7 @@ fn a_rejected_call_is_denied_with_the_persons_reason() {
         None,
         Verb::Reject("T005", "no new dependencies"),
         state.path(),
+        speccoder_core::actions::Via::Terminal,
     );
     assert_eq!(no.status(), CommandStatus::Ok, "{}", no.message());
 
@@ -1729,9 +1736,15 @@ fn a_rejected_call_is_denied_with_the_persons_reason() {
     // The attempt continued: one model turn after the refusal, nothing redone.
     assert_eq!(f2.asked().len(), 1);
     // Nothing awaits a decision any more; approving now is refused.
-    let listed = decide_with(r.path(), None, Verb::List, state.path());
+    let listed = speccoder_runtime::approvals::list_with(r.path(), None, state.path());
     assert!(approvals(&listed).pending.is_empty());
-    let again = decide_with(r.path(), None, Verb::Approve("T005"), state.path());
+    let again = decide_with(
+        r.path(),
+        None,
+        Verb::Approve("T005"),
+        state.path(),
+        speccoder_core::actions::Via::Terminal,
+    );
     assert_eq!(again.status(), CommandStatus::NotFound);
 }
 
@@ -1827,7 +1840,7 @@ fn an_inline_approval_continues_the_same_attempt_and_replays_without_asking() {
         ("write `package.json`", "medium")
     );
     // "Once" records no decision for the task.
-    let listed = decide_with(r.path(), None, Verb::List, state.path());
+    let listed = speccoder_runtime::approvals::list_with(r.path(), None, state.path());
     assert!(approvals(&listed).decided.is_empty());
     // Strict replay reads the answer from the journal: nobody is asked.
     let replayed = speccoder_runtime::replay_with(r.path(), &rep.run_id, state.path());
@@ -1863,7 +1876,7 @@ fn for_this_task_is_recorded_and_a_rejection_reaches_the_model() {
         "a person rejected this: no network"
     );
     assert_eq!(rep.tool_calls[1]["rejected_by"], "person");
-    let listed = decide_with(r.path(), None, Verb::List, state.path());
+    let listed = speccoder_runtime::approvals::list_with(r.path(), None, state.path());
     let decided = &approvals(&listed).decided;
     assert_eq!(decided.len(), 1);
     assert_eq!(
@@ -2255,7 +2268,13 @@ fn an_approved_frozen_test_edit_passes_but_an_approved_weakening_is_refused() {
     f.will_call_tool("c1", "write_file", json!({ "path": "tests/existing.rs", "content": "#[test]\nfn existing() {}\n#[test]\nfn added() {}\n" }));
     let first = run(r.path(), state.path(), "T005", d);
     assert_eq!(report(&first).attempt_status, "needs_approval");
-    decide_with(r.path(), None, Verb::Approve("T005"), state.path());
+    decide_with(
+        r.path(),
+        None,
+        Verb::Approve("T005"),
+        state.path(),
+        speccoder_core::actions::Via::Terminal,
+    );
     let (f2, d2) = fake();
     f2.will_call_tool("c2", "write_file", json!({ "path": "tests/existing.rs", "content": "#[test]\nfn existing() {}\n#[test]\nfn added() {}\n" }));
     f2.will_structure(done("added a test"));
@@ -2277,7 +2296,13 @@ fn an_approved_frozen_test_edit_passes_but_an_approved_weakening_is_refused() {
         json!({ "path": "tests/existing.rs", "content": "// nothing\n" }),
     );
     run(r.path(), state.path(), "T005", d);
-    decide_with(r.path(), None, Verb::Approve("T005"), state.path());
+    decide_with(
+        r.path(),
+        None,
+        Verb::Approve("T005"),
+        state.path(),
+        speccoder_core::actions::Via::Terminal,
+    );
     let (f2, d2) = fake();
     f2.will_call_tool(
         "c2",
@@ -3155,7 +3180,7 @@ fn later_keeps_the_call_waiting_for_speccoder_approve() {
         rep.saved_attempt.is_none(),
         "a waiting attempt is kept, not saved and undone"
     );
-    let listed = decide_with(r.path(), None, Verb::List, state.path());
+    let listed = speccoder_runtime::approvals::list_with(r.path(), None, state.path());
     let pending = &approvals(&listed).pending;
     assert_eq!(pending.len(), 1, "{pending:?}");
     assert_eq!(
@@ -3262,7 +3287,7 @@ fn a_waiting_call_is_listed_as_it_was_asked_and_a_note_reaches_the_attempt() {
     let person = Scripted::new(vec![Answer::stop(None)]);
     let _ =
         speccoder_runtime::run_with_approver(r.path(), None, "T005", state.path(), d, None, person);
-    let listed = decide_with(r.path(), None, Verb::List, state.path());
+    let listed = speccoder_runtime::approvals::list_with(r.path(), None, state.path());
     let p = &approvals(&listed).pending[0];
     let v = p.presentation.as_ref().unwrap();
     assert_eq!(
@@ -3280,6 +3305,7 @@ fn a_waiting_call_is_listed_as_it_was_asked_and_a_note_reaches_the_attempt() {
         None,
         Verb::ApproveNoted("T005", "an empty object is enough"),
         state.path(),
+        speccoder_core::actions::Via::Terminal,
     );
     assert_eq!(ok.status(), CommandStatus::Ok, "{}", ok.message());
     // The attempt continues and the model reads the note with the call's result.
@@ -3461,7 +3487,14 @@ fn a_required_review_stops_the_run_until_the_spec_is_approved() {
     assert_eq!(f.calls(), 0, "nothing was asked of the model");
     // Approved but not committed: the review is intent, and a worktree
     // holds commits only.
-    let ok = speccoder_runtime::review::decide(r.path(), None, &[], "approve", None, "cli");
+    let ok = speccoder_runtime::review::decide(
+        r.path(),
+        None,
+        &[],
+        "approve",
+        None,
+        speccoder_core::actions::Via::Terminal,
+    );
     assert_eq!(ok.status(), CommandStatus::Ok, "{}", ok.message());
     let (_, d) = fake();
     let res = run(r.path(), state.path(), "T005", d);

@@ -42,6 +42,7 @@ pub mod quick;
 pub mod resume;
 pub mod review;
 pub mod sandbox;
+pub mod service;
 pub mod settings;
 pub mod skills;
 pub mod status;

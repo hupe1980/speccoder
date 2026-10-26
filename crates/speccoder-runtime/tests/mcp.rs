@@ -171,6 +171,7 @@ impl Approver for Yes {
             Some(speccoder_runtime::approvals::Who {
                 name: "dana".to_owned(),
                 via: "terminal".to_owned(),
+                client: None,
                 basis: "asserted".to_owned(),
             }),
         )

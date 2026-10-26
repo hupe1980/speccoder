@@ -5,12 +5,12 @@
   // decisions waiting, the host. Each item is a button to where it leads.
   import { app } from "../lib/app.svelte";
   import { get, latest, q } from "../lib/api";
-  import type { Envelope } from "../lib/types";
+  import type { Reply, StatusTotals } from "../lib/types";
   import Icon from "./Icon.svelte";
   import LiveCard from "./LiveCard.svelte";
 
   const r = $derived(app.report?.data ?? null);
-  const t = $derived(r?.totals ?? {});
+  const t = $derived<Partial<StatusTotals>>(r?.totals ?? {});
   const stale = $derived(t.stale ?? 0);
   const review = $derived(r?.review ?? null);
   const reviewed = $derived(review ? review.approved + review.open + review.changes_requested + review.lapsed : 0);
@@ -29,7 +29,7 @@
   const costOf = latest();
   $effect(() => {
     void app.report;
-    costOf(get<Envelope<Cost>>(`/api/cost${q({ feature: app.feature ?? undefined })}`), (c) => (cost = c.data ?? null), () => (cost = null));
+    costOf(get<Reply<Cost>>(`/api/cost${q({ feature: app.feature ?? undefined })}`), (c) => (cost = c.data ?? null), () => (cost = null));
   });
   const tokens = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}k` : String(n));
   const spend = $derived.by(() => {
