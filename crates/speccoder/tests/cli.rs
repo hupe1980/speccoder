@@ -250,6 +250,7 @@ fn verify_without_config_exits_13() {
 
 fn git(dir: &std::path::Path, args: &[&str]) {
     let ok = std::process::Command::new("git")
+        .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
         .args([
             "-c",
             "user.name=t",
@@ -629,6 +630,7 @@ fn make_project() -> tempfile::TempDir {
     let git = |args: &[&str]| {
         assert!(
             std::process::Command::new("git")
+                .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
                 .args([
                     "-c",
                     "user.name=t",
@@ -685,6 +687,7 @@ fn init_runs_the_checks_and_names_the_commit_without_making_it() {
         "{next:?}"
     );
     let log = std::process::Command::new("git")
+        .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
         .args(["log", "--format=%s"])
         .current_dir(dir.path())
         .output()
@@ -774,6 +777,7 @@ fn init_at_a_terminal_commits_only_the_config_on_yes() {
     let text = String::from_utf8_lossy(&out.stdout);
     assert!(text.contains("Commit speccoder.toml?"), "{text}");
     let log = std::process::Command::new("git")
+        .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
         .args(["log", "--format=%s"])
         .current_dir(dir.path())
         .output()
@@ -784,6 +788,7 @@ fn init_at_a_terminal_commits_only_the_config_on_yes() {
         "{text}"
     );
     let files = std::process::Command::new("git")
+        .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
         .args(["show", "--name-only", "--format=", "HEAD"])
         .current_dir(dir.path())
         .output()
@@ -857,6 +862,7 @@ fn init_at_a_terminal_commits_the_nextest_profile_with_the_config() {
     std::fs::remove_file(dir.path().join("Makefile")).unwrap();
     let git = |args: &[&str]| {
         std::process::Command::new("git")
+            .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
             .args([
                 "-c",
                 "user.name=t",
@@ -983,6 +989,7 @@ fn config_sets_checks_and_commits_the_configuration_alone() {
     let (code, v) = run(&["commit"]);
     assert_eq!(code, Some(0), "{v}");
     let shown = std::process::Command::new("git")
+        .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
         .args(["show", "--name-only", "--format=%s", "HEAD"])
         .current_dir(d)
         .output()

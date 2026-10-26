@@ -21,6 +21,7 @@ const CHECK: &str = "[checks.has-ok]\nargv = [\"grep\", \"-q\", \"fn ok\", \"src
 
 fn git(dir: &Path, args: &[&str]) {
     let ok = Command::new("git")
+        .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
         .args(["-c", "user.name=t", "-c", "user.email=t@example.com"])
         .args([
             "-c",

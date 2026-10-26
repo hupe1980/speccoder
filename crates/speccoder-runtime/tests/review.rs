@@ -14,6 +14,7 @@ use speccoder_runtime::review;
 
 fn git(dir: &Path, args: &[&str]) {
     let out = Command::new("git")
+        .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
         .args([
             "-c",
             "user.name=Ada",

@@ -50,6 +50,7 @@ fn tasks_md(n: usize) -> String {
 /// git in `dir`, as Ada, never signing commits, no hooks.
 pub fn git(dir: &Path, args: &[&str]) -> String {
     let out = Command::new("git")
+        .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
         .args(["-c", "user.name=Ada", "-c", "user.email=ada@example.com"])
         .args([
             "-c",

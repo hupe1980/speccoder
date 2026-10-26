@@ -32,6 +32,7 @@ const HELD_OUT_PATH: &str = "tests/held_out_login.txt";
 
 fn git(dir: &Path, args: &[&str]) -> String {
     let out = Command::new("git")
+        .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
         .args(["-c", "user.name=t", "-c", "user.email=t@example.com"])
         .args([
             "-c",
@@ -399,6 +400,7 @@ fn a_finished_feature_publishes_its_held_out_sets() {
     // Never in the project's repository, which every later attempt reads:
     // no ref, and not one object of the publication.
     let local = Command::new("git")
+        .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
         .args(["rev-parse", "--verify", "-q", reference])
         .current_dir(wt)
         .output()
@@ -429,6 +431,7 @@ fn a_finished_feature_publishes_its_held_out_sets() {
         &["rev-parse", &format!("{reference}:T005/manifest.json")],
     );
     let in_project = Command::new("git")
+        .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
         .args(["cat-file", "-e", blob.trim()])
         .env("GIT_ALTERNATE_OBJECT_DIRECTORIES", "")
         .current_dir(wt)

@@ -20,6 +20,7 @@ const SKILL: &str = "---\nname: \"demo-specify\"\ndescription: \"Write a feature
 
 fn git(dir: &Path, args: &[&str]) {
     let ok = Command::new("git")
+        .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
         .args([
             "-c",
             "user.name=t",
@@ -285,6 +286,7 @@ fn a_mandatory_before_implement_hook_runs_as_a_hosted_skill_and_optional_ones_ar
     );
     let st = String::from_utf8(
         Command::new("git")
+            .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
             .args(["status", "--porcelain", "--ignored"])
             .current_dir(r.path())
             .output()

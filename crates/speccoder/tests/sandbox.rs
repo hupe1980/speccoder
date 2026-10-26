@@ -187,6 +187,7 @@ fn git_push_from_a_test_fails() {
     };
     let remote = w.outside.path().join("remote.git");
     let ok = std::process::Command::new("git")
+        .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
         .args(["init", "-q", "--bare"])
         .arg(&remote)
         .status()

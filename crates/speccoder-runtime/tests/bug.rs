@@ -27,6 +27,7 @@ use speccoder_runtime::bug::{self, Request};
 
 fn git(dir: &Path, args: &[&str]) -> String {
     let out = Command::new("git")
+        .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
         .args([
             "-c",
             "user.name=Ada",

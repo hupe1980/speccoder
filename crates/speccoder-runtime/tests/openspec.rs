@@ -27,6 +27,7 @@ fn fixtures() -> PathBuf {
 
 fn git(dir: &Path, args: &[&str]) -> String {
     let out = Command::new("git")
+        .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
         .args(["-c", "user.name=t", "-c", "user.email=t@example.com"])
         .args([
             "-c",

@@ -16,6 +16,7 @@ use serde_json::{Value, json};
 
 fn git(dir: &Path, args: &[&str]) {
     let ok = Command::new("git")
+        .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
         .args([
             "-c",
             "user.name=t",
@@ -294,6 +295,7 @@ fn a_command_killed_mid_run_is_not_guessed_about() {
     // interrupted command wrote is kept in the saved attempt.
     assert!(!log.exists(), "the interrupted attempt was not undone");
     let kept = Command::new("git")
+        .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
         .args(["show", &format!("{saved}:calls.log")])
         .current_dir(r)
         .output()
@@ -484,6 +486,7 @@ fn ignored_spec_repo(port: &str) -> tempfile::TempDir {
 
 fn head_of(r: &Path) -> String {
     let out = Command::new("git")
+        .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
         .args(["symbolic-ref", "--short", "HEAD"])
         .current_dir(r)
         .output()
@@ -577,6 +580,7 @@ fn a_killed_in_place_attempt_resumes_and_returns_to_the_original_branch() {
     let requests = fs::read_to_string(mock_dir.path().join("requests")).unwrap();
     assert_eq!(requests.lines().count(), 3, "{requests}");
     let log = Command::new("git")
+        .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
         .args(["show", "speccoder/001-graph:calls.log"])
         .current_dir(r)
         .output()
@@ -622,6 +626,7 @@ fn return_leaves_a_killed_in_place_run_without_running_anything() {
         "the interrupted work is undone"
     );
     let refs = Command::new("git")
+        .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
         .args([
             "for-each-ref",
             "--format=%(refname)",

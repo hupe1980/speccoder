@@ -20,6 +20,7 @@ const CONFIG: &str = "[model]\nprovider = \"openai\"\nmodel = \"gpt-5.4-mini\"\n
 
 fn git(dir: &Path, args: &[&str]) {
     let ok = Command::new("git")
+        .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
         .args([
             "-c",
             "user.name=Dana Example",
@@ -462,6 +463,7 @@ fn a_resumed_attempt_that_fails_is_undone_to_where_the_task_started() {
         "the failed attempt's write is still there"
     );
     let status = Command::new("git")
+        .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
         .args(["status", "--porcelain"])
         .current_dir(wt)
         .output()

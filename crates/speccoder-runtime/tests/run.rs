@@ -37,6 +37,7 @@ fn write_accept_sh(root: &Path) {
 
 fn git(dir: &Path, args: &[&str]) {
     let ok = Command::new("git")
+        .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
         .args([
             "-c",
             "user.name=t",
@@ -664,6 +665,7 @@ fn out_of_scope_changes_are_reported_not_gated() {
         (true, vec!["src/util.rs".to_owned()])
     );
     let message = Command::new("git")
+        .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
         .args(["log", "-1", "--format=%B"])
         .current_dir(&rep.worktree)
         .output()
@@ -728,6 +730,7 @@ fn an_overridden_checklist_gate_is_recorded_on_the_commit() {
     let attempt = &fr.attempts[0];
     assert!(attempt.ticked, "{}", res.message());
     let message = Command::new("git")
+        .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
         .args(["log", "-1", "--format=%B"])
         .current_dir(&attempt.worktree)
         .output()
@@ -752,6 +755,7 @@ fn feature(res: &CommandResult) -> &speccoder_core::FeatureReport {
 fn git_out(dir: &Path, args: &[&str]) -> String {
     String::from_utf8(
         Command::new("git")
+            .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
             .args(args)
             .current_dir(dir)
             .output()
@@ -1001,6 +1005,7 @@ fn a_missing_symbol_is_absent_red_and_can_verify() {
     assert_eq!(rep.verdict, Some(Verdict::Verified));
     // The kind of red travels with the tick.
     let message = Command::new("git")
+        .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
         .args(["log", "-1", "--format=%B"])
         .current_dir(&rep.worktree)
         .output()
@@ -2719,6 +2724,7 @@ fn files_the_checks_generate_do_not_empty_a_lane_merge() {
     // Every ticked task's work is on the branch.
     for f in ["src/alpha.rs", "src/beta.rs"] {
         let shown = Command::new("git")
+            .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
             .args(["show", &format!("HEAD:{f}")])
             .current_dir(&feature_wt)
             .output()
