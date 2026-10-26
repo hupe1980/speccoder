@@ -1118,31 +1118,39 @@ fn decided(feature: &str, decisions: &Decisions) -> Vec<DecidedCall> {
     out
 }
 
+/// Whether a call with deadline `due` still waits at `now`: one whose
+/// deadline has passed is denied as expired by the next writer.
+fn still_waits(due: Option<agentplane::core::Timestamp>, now: agentplane::core::Timestamp) -> bool {
+    due.is_none_or(|due| due > now)
+}
+
 /// Calls of `feature` waiting for a person on a human task, oldest
 /// first: the attempt is suspended and resumes once they are decided.
 ///
-/// `Err` says why they could not be read: an unreadable journal means the
-/// calls waiting are unknown, never that none wait. A project without a
-/// journal has none, and a read never creates one.
+/// Read beside the journal's writer, which may be a run in another
+/// process. `Err` says why they could not be read: an unreadable journal
+/// means the calls waiting are unknown, never that none wait. A project
+/// without a journal has none, and a read never creates one. A call past
+/// its deadline is not listed: the next writer denies it as expired (a
+/// decision sweeps first, so it cannot be approved).
 fn waiting_tasks(
     root: &Path,
     dir: &Path,
     feature: &str,
 ) -> Result<Vec<(PendingCall, agentplane::core::Task)>, String> {
-    if !dir.join(crate::substrate::JOURNAL).exists() {
-        return Ok(Vec::new());
-    }
     let rt = crate::tokio_runtime()?;
-    let plane = crate::substrate::Plane::open_for_decisions(dir).map_err(|e| e.0)?;
-    // A call past its deadline is denied as expired before it is listed.
-    let _ = rt.block_on(plane.expire_due(agentplane::core::Timestamp::now_utc()));
+    let Some(plane) = crate::substrate::Plane::open_for_reading(dir).map_err(|e| e.0)? else {
+        return Ok(Vec::new());
+    };
     let open = rt
         .block_on(plane.open_tasks())
         .map_err(|e| format!("listing the waiting calls: {}", e.0))?;
+    let now = agentplane::core::Timestamp::now_utc();
     let prefix = format!("{feature}/");
     Ok(open
         .into_iter()
         .filter(|t| t.kind == tasks::APPROVAL)
+        .filter(|t| still_waits(t.due_at, now))
         .filter_map(|t| {
             let request = tasks::request_of(&t.justification.proposed_action)?;
             let task = request.task.strip_prefix(&prefix)?.to_owned();
@@ -1220,6 +1228,8 @@ pub fn withdraw_waiting(
     }
     let rt = crate::tokio_runtime()?;
     let plane = crate::substrate::Plane::open_for_decisions(dir).map_err(|e| e.0)?;
+    rt.block_on(plane.expire_due(agentplane::core::Timestamp::now_utc()))
+        .map_err(|e| e.0)?;
     let by = agentplane::core::Operator::from_parts(who_in(root), "asserted")
         .ok()
         .ok_or_else(|| "no name to record the withdrawal under".to_owned())?;
@@ -1240,6 +1250,10 @@ fn decide_waiting(
 ) -> Result<(), String> {
     let rt = crate::tokio_runtime()?;
     let plane = crate::substrate::Plane::open_for_decisions(dir).map_err(|e| e.0)?;
+    // A call past its deadline is denied as expired before anything is
+    // decided: it cannot be approved late.
+    rt.block_on(plane.expire_due(agentplane::core::Timestamp::now_utc()))
+        .map_err(|e| e.0)?;
     let decision = tasks::decision_for(answer, by, None)
         .ok_or_else(|| format!("`{}` is not a name a decision can carry", by.name))?;
     rt.block_on(plane.decide(task.id, &decision))
@@ -1912,7 +1926,9 @@ pub fn allow_always(
         return refuse("not a call id");
     };
     let row = match crate::tokio_runtime().and_then(|rt| {
-        let plane = crate::substrate::Plane::open_for_decisions(&dir).map_err(|e| e.0)?;
+        let Some(plane) = crate::substrate::Plane::open_for_reading(&dir).map_err(|e| e.0)? else {
+            return Ok(None);
+        };
         rt.block_on(plane.task(id)).map_err(|e| e.0)
     }) {
         Ok(Some(row)) => row,
@@ -2022,6 +2038,16 @@ mod tests {
             canonical: path.to_owned(),
             asked: path.to_owned(),
         }
+    }
+
+    #[test]
+    fn a_call_past_its_deadline_is_not_listed_as_waiting() {
+        let now = agentplane::core::Timestamp::now_utc();
+        let minute = std::time::Duration::from_secs(60);
+        assert!(still_waits(None, now));
+        assert!(still_waits(Some(now + minute), now));
+        assert!(!still_waits(Some(now), now));
+        assert!(!still_waits(Some(now - minute), now));
     }
 
     #[test]

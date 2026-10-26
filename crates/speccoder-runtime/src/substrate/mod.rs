@@ -241,21 +241,18 @@ impl Drop for RunClaim {
     }
 }
 
-fn open_store(dir: &Path) -> Result<Arc<RedbStore>, PlaneError> {
-    open_or_replace(dir).map(|(store, _)| store)
-}
-
-/// The journals this process has open, shared: redb locks the file per
-/// process, so a second open here (the web host answering two requests, a
-/// run beside a read) would refuse itself.
+/// The journals this process writes, shared: a journal has one writer
+/// (redb refuses a second even in this process), so a decision the app
+/// records while its own job runs goes through the job's handle.
 static OPEN: std::sync::Mutex<Vec<(std::path::PathBuf, std::sync::Weak<RedbStore>)>> =
     std::sync::Mutex::new(Vec::new());
 
-/// Opens the journal, sharing the handle this process already has. A
-/// journal this build cannot read — another format after an upgrade, or
-/// damage — is moved aside and a fresh one opened: durable outcomes live in
-/// git, the journal is replaceable. A journal another process holds is
-/// waited for briefly (a read holds it for milliseconds), then an error.
+/// Opens the journal to write, sharing the handle this process already
+/// writes through, and sharing the file with readers in other processes
+/// (`open_shared`). A journal this build cannot read — another format
+/// after an upgrade, or damage — is moved aside and a fresh one opened:
+/// durable outcomes live in git, the journal is replaceable. A journal
+/// another process writes is refused at once.
 fn open_or_replace(dir: &Path) -> Result<(Arc<RedbStore>, Option<std::path::PathBuf>), PlaneError> {
     std::fs::create_dir_all(dir).map_err(|e| PlaneError(format!("{}: {e}", dir.display())))?;
     let path = dir.join(JOURNAL);
@@ -279,17 +276,9 @@ fn open_fresh(
     dir: &Path,
     path: &Path,
 ) -> Result<(Arc<RedbStore>, Option<std::path::PathBuf>), PlaneError> {
-    let mut opened = RedbStore::open(path);
-    for _ in 0..20 {
-        if !matches!(opened, Err(agentplane::core::StoreError::InUse(_))) {
-            break;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(100));
-        opened = RedbStore::open(path);
-    }
-    match opened {
+    match RedbStore::open_shared(path) {
         Ok(store) => Ok((Arc::new(store), None)),
-        // Another speccoder holds it: its run's record is live. Touch nothing.
+        // Another speccoder writes it: its run's record is live. Touch nothing.
         Err(agentplane::core::StoreError::InUse(e)) => Err(PlaneError(format!(
             "another speccoder is working on this project (its journal in {} is in use): {e}",
             dir.display()
@@ -306,13 +295,39 @@ fn open_fresh(
                     "the journal is unreadable ({e}) and cannot be moved aside: {r}"
                 ))
             })?;
-            RedbStore::open(path)
+            RedbStore::open_shared(path)
                 .map(|store| (Arc::new(store), Some(aside)))
                 .map_err(|e| PlaneError(format!("cannot open a fresh journal: {e}")))
         }
         // Anything else is not the journal's fault: leave it alone.
         Err(e) => Err(PlaneError(format!(
             "cannot open the journal in {}: {e}",
+            dir.display()
+        ))),
+    }
+}
+
+/// Opens the journal to read beside its writer, in this process or
+/// another: `None` when there is none (a read never creates one). Never
+/// registered, moved aside or written — any write through it is refused.
+///
+/// # Errors
+///
+/// It cannot be read: a writer that holds it alone (an earlier speccoder
+/// build), damage, another format.
+pub fn open_reader(dir: &Path) -> Result<Option<Arc<RedbStore>>, PlaneError> {
+    let path = dir.join(JOURNAL);
+    if !path.exists() {
+        return Ok(None);
+    }
+    match RedbStore::open_read_only(&path) {
+        Ok(store) => Ok(Some(Arc::new(store))),
+        Err(agentplane::core::StoreError::InUse(e)) => Err(PlaneError(format!(
+            "another process holds the journal in {} alone (a speccoder build that does not share it): {e}",
+            dir.display()
+        ))),
+        Err(e) => Err(PlaneError(format!(
+            "cannot read the journal in {}: {e}",
             dir.display()
         ))),
     }
@@ -484,6 +499,28 @@ impl Plane {
             replaced_journal,
             _run: None,
         })
+    }
+
+    /// The journal read beside its writer, with no skills and no model:
+    /// the waiting calls and recorded calls as they stand. `None` when the
+    /// project has no journal. Nothing is written — not even an expired
+    /// call's denial, which the next writer records.
+    ///
+    /// # Errors
+    ///
+    /// The journal cannot be read ([`open_reader`]).
+    pub fn open_for_reading(dir: &Path) -> Result<Option<Self>, PlaneError> {
+        let Some(store) = open_reader(dir)? else {
+            return Ok(None);
+        };
+        let runtime = Runtime::builder_on(store)
+            .try_build()
+            .map_err(|e| PlaneError(format!("building the plane: {e}")))?;
+        Ok(Some(Self {
+            runtime,
+            replaced_journal: None,
+            _run: None,
+        }))
     }
 
     /// Settles every waiting call whose deadline has passed at `now`: the
@@ -957,7 +994,9 @@ pub async fn admitted(
 ) -> Result<Option<agentplane::core::Tainted<Value>>, PlaneError> {
     let id = agentplane::core::RunId::parse(run)
         .map_err(|_| PlaneError(format!("`{run}` is not a run id")))?;
-    let store = open_store(dir)?;
+    let Some(store) = open_reader(dir)? else {
+        return Ok(None);
+    };
     let history = store
         .read(id, 1)
         .await
@@ -982,7 +1021,9 @@ pub async fn replay_strict(
 ) -> Result<Option<agentplane::runtime::Verdict>, PlaneError> {
     let id = agentplane::core::RunId::parse(run)
         .map_err(|_| PlaneError(format!("`{run}` is not a run id")))?;
-    let store = open_store(dir)?;
+    let Some(store) = open_reader(dir)? else {
+        return Ok(None);
+    };
     let history = store
         .read(id, 1)
         .await
@@ -1038,7 +1079,9 @@ pub async fn account(dir: &Path, run: &str) -> Result<Vec<AccountTurn>, PlaneErr
     let Ok(id) = agentplane::core::RunId::parse(run) else {
         return Ok(Vec::new());
     };
-    let store = open_store(dir)?;
+    let Some(store) = open_reader(dir)? else {
+        return Ok(Vec::new());
+    };
     let history = store
         .read(id, 1)
         .await
@@ -1128,14 +1171,19 @@ mod tests {
         let shared = open_or_replace(dir.path()).unwrap_or_else(|e| panic!("{}", e.0));
         assert!(Arc::ptr_eq(&store, &shared.0) && shared.1.is_none());
         drop((store, shared));
-        // Held elsewhere (another process's lock, here a direct open): a
-        // brief wait, then refused, and nothing is moved.
+        // Written elsewhere (another process's lock, here a direct open):
+        // refused at once, and nothing is moved.
         let held = RedbStore::open(dir.path().join(JOURNAL)).unwrap_or_else(|e| panic!("{e}"));
+        let started = std::time::Instant::now();
         let second = open_or_replace(dir.path())
             .err()
             .map(|e| e.0)
             .unwrap_or_default();
         assert!(second.contains("another speccoder"), "{second}");
+        assert!(started.elapsed() < std::time::Duration::from_millis(500));
+        // A writer that holds the file alone cannot be read beside: said,
+        // never read as empty.
+        assert!(open_reader(dir.path()).is_err());
         drop(held);
         assert!(
             open_or_replace(dir.path())
@@ -1143,5 +1191,40 @@ mod tests {
                 .1
                 .is_none()
         );
+    }
+
+    #[test]
+    fn a_reader_creates_nothing_and_reads_beside_this_process_s_writer() {
+        let dir = tempfile::tempdir().unwrap_or_else(|e| panic!("{e}"));
+        // No journal: nothing to read, and none is created.
+        assert!(
+            open_reader(dir.path())
+                .unwrap_or_else(|e| panic!("{}", e.0))
+                .is_none()
+        );
+        assert!(
+            Plane::open_for_reading(dir.path())
+                .unwrap_or_else(|e| panic!("{}", e.0))
+                .is_none()
+        );
+        assert!(
+            !dir.path().join(JOURNAL).exists(),
+            "a read created a journal"
+        );
+        // Beside a writer in this process (the app reading while its job
+        // runs): the reader opens; a second run here is still refused.
+        let model =
+            model_config::parse("[model]\nprovider = \"openai\"\nmodel = \"gpt-5.4-mini\"\n")
+                .unwrap_or_else(|e| panic!("{e}"))
+                .unwrap_or_else(|| panic!("no model"));
+        let fake: Arc<dyn ModelProvider> = agentplane::model::fake::FakeProvider::new();
+        let run = Plane::open(dir.path(), &model, Arc::clone(&fake))
+            .unwrap_or_else(|e| panic!("{}", e.0));
+        let reader = open_reader(dir.path())
+            .unwrap_or_else(|e| panic!("{}", e.0))
+            .unwrap_or_else(|| panic!("no journal"));
+        assert!(reader.is_read_only());
+        assert!(Plane::open(dir.path(), &model, fake).is_err());
+        drop(run);
     }
 }

@@ -9,6 +9,20 @@ adheres to [Semantic Versioning](https://semver.org/).
 ### Changed
 
 - **Built on agentplane 0.54.0.**
+- **Watch a project while a run works on it.** `speccoder status`,
+  `report --approvals`, `inbox`, `task show --account` and the app read the
+  journal of a run in another process at once, instead of waiting and saying
+  another speccoder is working. Only a second writer — another run, or a
+  decision on a waiting call — is refused while the run holds the journal,
+  and at once. A read never creates, moves or writes the journal; a call past
+  its deadline is not listed as waiting.
+
+### Upgrading
+
+- A project journal written by 0.2.0 still opens. A run in it that recorded a
+  person's decision under 0.2.0 can no longer be replayed or resumed: run the
+  task again (ticks and attempt refs in git are untouched). While a 0.2.0
+  process holds a journal, a newer one reads its waiting calls as `unknown`.
 
 ## [0.2.0] - 2026-10-26
 

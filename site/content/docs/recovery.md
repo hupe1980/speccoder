@@ -39,7 +39,7 @@ A failed or stopped attempt is saved under `refs/speccoder/attempts/<feature>/<t
 
 ## An unreadable journal
 
-A journal this build cannot read (another format, or damage) is moved aside as `journal.<time>.unreadable.redb` and a fresh one is started; progress lives in git, so only replay of older runs is lost. A journal another speccoder process is using is never touched: the second process says so and stops.
+A journal this build cannot read (another format, or damage) is moved aside as `journal.<time>.unreadable.redb` and a fresh one is started; progress lives in git, so only replay of older runs is lost. While one speccoder process writes the journal (a run, a decision), others read it as it stands — `status`, `report --approvals`, `inbox`, `task show --account` and the app answer at once; a second writer is refused at once and touches nothing. A reader never creates, moves or repairs the journal: one it cannot read (or one an earlier build holds alone) leaves the waiting calls `unknown`, never none.
 
 ## Replay
 

@@ -744,18 +744,17 @@ pub fn status_with(path: &Path, state: &Path) -> CommandResult {
 
 /// One line per call waiting for a person: what, since when, until when.
 fn waiting_lines(plane_dir: &Path) -> Vec<String> {
-    // No journal, nothing waits — and a read never creates one.
-    if !plane_dir.join(crate::substrate::JOURNAL).exists() {
-        return Vec::new();
-    }
-    // Unreadable is said, never shown as nothing waiting.
+    // Unreadable is said, never shown as nothing waiting. Read beside the
+    // journal's writer (a run in another process); no journal, nothing
+    // waits — and a read never creates one.
     let unknown = |why: String| vec![format!("waiting for a person: unknown — {why}")];
     let rt = match crate::tokio_runtime() {
         Ok(rt) => rt,
         Err(e) => return unknown(e),
     };
-    let plane = match crate::substrate::Plane::open_for_decisions(plane_dir) {
-        Ok(p) => p,
+    let plane = match crate::substrate::Plane::open_for_reading(plane_dir) {
+        Ok(Some(p)) => p,
+        Ok(None) => return Vec::new(),
         Err(e) => return unknown(e.0),
     };
     let now = agentplane::core::Timestamp::now_utc();
