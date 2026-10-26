@@ -35,7 +35,9 @@ impl Fake {
 }
 
 /// Serves `routes` — `("GET /user", 200, json)`, matched on method and the
-/// path without its query — forever; anything else is a 404.
+/// path without its query — forever; anything else is a 404. A request
+/// asking for a diff (`Accept: application/vnd.github.diff`) is answered by
+/// the route `"GET /path diff"` when there is one.
 pub fn serve(routes: Vec<(&'static str, u16, String)>) -> Fake {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let url = format!("http://{}", listener.local_addr().unwrap());
@@ -52,7 +54,7 @@ pub fn serve(routes: Vec<(&'static str, u16, String)>) -> Fake {
             let mut parts = line.split_whitespace();
             let method = parts.next().unwrap_or_default().to_owned();
             let path = parts.next().unwrap_or_default().to_owned();
-            let (mut length, mut authorization) = (0usize, String::new());
+            let (mut length, mut authorization, mut diff) = (0usize, String::new(), false);
             loop {
                 let mut h = String::new();
                 if reader.read_line(&mut h).is_err() || h.trim().is_empty() {
@@ -61,6 +63,9 @@ pub fn serve(routes: Vec<(&'static str, u16, String)>) -> Fake {
                 let lower = h.to_ascii_lowercase();
                 if let Some(v) = lower.strip_prefix("content-length:") {
                     length = v.trim().parse().unwrap_or(0);
+                }
+                if lower.starts_with("accept:") && lower.contains("diff") {
+                    diff = true;
                 }
                 if lower.starts_with("authorization:") {
                     authorization = h["authorization:".len()..].trim().to_owned();
@@ -77,9 +82,11 @@ pub fn serve(routes: Vec<(&'static str, u16, String)>) -> Fake {
             });
             let bare = path.split('?').next().unwrap_or_default();
             let key = format!("{method} {bare}");
+            let as_diff = format!("{key} diff");
             let (status, text) = routes
                 .iter()
-                .find(|(k, ..)| *k == key)
+                .find(|(k, ..)| diff && *k == as_diff)
+                .or_else(|| routes.iter().find(|(k, ..)| *k == key))
                 .map(|(_, s, t)| (*s, t.clone()))
                 .unwrap_or((404, r#"{"message":"Not Found"}"#.to_owned()));
             let reply = format!(
