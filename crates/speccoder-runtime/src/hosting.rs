@@ -283,6 +283,7 @@ fn run_unguarded(
                 a.task.split('/').next().unwrap_or_default().to_owned()
             }),
             &i.always,
+            state,
         );
         i.outcome
     });

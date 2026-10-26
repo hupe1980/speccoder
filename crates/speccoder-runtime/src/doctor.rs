@@ -276,6 +276,22 @@ pub fn checks(
             &["export SPECCODER_STATE_DIR=\"$PWD/.speccoder-state\""],
         ),
     });
+    // A person's decisions: a file from before decisions named objects is
+    // refused by every run (never read as "no decisions").
+    if let Some(dir) = crate::worktree::state_dir() {
+        let project = crate::worktree::project_state_dir(&dir, &root);
+        if let Err(e) = crate::approvals::Decisions::load(&project) {
+            out.push(failed(
+                "decisions",
+                "CONFIG-INVALID",
+                e,
+                &[&format!(
+                    "rm {}   (it predates this version; its decisions are not carried over)",
+                    project.join(crate::approvals::FILE).display()
+                )],
+            ));
+        }
+    }
     // The attestation signing key.
     let attest = run_config
         .as_ref()

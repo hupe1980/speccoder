@@ -729,6 +729,7 @@ pub fn allow_always_inline(
     root: &Path,
     feature: &str,
     always: &[crate::substrate::Always],
+    state: &Path,
 ) -> Vec<String> {
     always
         .iter()
@@ -738,7 +739,7 @@ pub fn allow_always_inline(
                 task,
                 call: a.call.clone(),
             };
-            perform(root, Some(feature), Dispatch::new(&run, a.via))
+            perform_in(root, Some(feature), Dispatch::new(&run, a.via), Some(state))
                 .message()
                 .to_owned()
         })

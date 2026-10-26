@@ -432,19 +432,19 @@ pub(crate) fn run_task(
 
     // A person's approvals (of this run only: a grant ends with its run)
     // and rejections for this task.
-    let run_id = options.run();
+    let this_run = options.run();
     let (decisions, task_grants) = match approvals::Decisions::load(&s.plane_dir) {
         Ok(mut d) => {
             // Decisions on a call a lane stopped belong to the run that
             // now attempts the task.
-            if d.claim(&feature_name, task, run_id.as_str())
+            if d.claim(&feature_name, task, this_run.as_str())
                 && let Err(e) = d.save(&s.plane_dir)
             {
                 return refuse(CommandStatus::Error, e);
             }
             (
                 d.for_task(&feature_name, task),
-                d.for_run(&feature_name, task, run_id.as_str()),
+                d.for_run(&feature_name, task, this_run.as_str()),
             )
         }
         Err(e) => return refuse(CommandStatus::ConfigError, e),
@@ -926,6 +926,12 @@ pub(crate) fn run_task(
                 .as_ref()
                 .and_then(|s| s.lock().ok().map(|s| s.hidden.clone()))
                 .unwrap_or_default();
+            // The task's grants of this run as they stand now (an earlier
+            // attempt's "for the task" answers included): journaled.
+            let task_grants: Vec<crate::tools::policy::Object> =
+                approvals::Decisions::load(&s.plane_dir)
+                    .map(|d| d.for_run(&feature_name, task, this_run.as_str()))
+                    .unwrap_or_else(|_| task_grants.clone());
             // This run's grants as they stand now: journaled with the input.
             let run_approved: Vec<crate::tools::policy::Object> = options
                 .run_grants
@@ -960,7 +966,7 @@ pub(crate) fn run_task(
                     wait_secs: run_config.approval_wait.as_secs(),
                     network_allow: &sandbox_config.network_allow,
                     network_allow_prefix: &sandbox_config.network_allow_prefix,
-                    run_id: run_id.as_str(),
+                    run_id: this_run.as_str(),
                     asked: options.asked_now(),
                     budget: run_config.approval_budget,
                     prompts: approver.is_some() && options.lane.is_none(),
@@ -1031,7 +1037,7 @@ pub(crate) fn run_task(
                         attempt: attempt_no,
                         sample: samples.len(),
                         acceptance: acceptance_saved.clone(),
-                        run_id: Some(run_id.to_string()),
+                        run_id: Some(this_run.to_string()),
                         asked: options.asked_now(),
                         run_grants: run_approved.clone(),
                     },
@@ -1073,6 +1079,7 @@ pub(crate) fn run_task(
                             path,
                             &feature_name,
                             &x.always,
+                            state,
                         ));
                         (x.outcome, x.waiting)
                     }
@@ -1237,7 +1244,7 @@ pub(crate) fn run_task(
                 task,
                 &report.tool_calls,
                 &options.run_grants,
-                run_id.as_str(),
+                this_run.as_str(),
             );
             // A person approving an MCP call reviewed the tool as it is now.
             for c in report

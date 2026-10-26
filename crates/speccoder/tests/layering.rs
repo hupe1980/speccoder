@@ -731,6 +731,9 @@ const DISPATCHERS: &[&str] = &[
     "speccoder/src/follow.rs",
     "speccoder/src/acp.rs",
     "speccoder/src/tui/mod.rs",
+    // The line CLI's own commands (`config set` on a prefix list,
+    // `approvals batch`).
+    "speccoder/src/main.rs",
 ];
 
 /// Where code names the dispatcher outside [`DISPATCHERS`].
@@ -965,4 +968,59 @@ fn needs_you_has_a_place_for_every_kind_the_inbox_lists() {
         "Inbox.svelte has no section for {missing:?} (they show under Other until it does)"
     );
     assert!(page.contains("\"other\""), "no fallback section");
+}
+
+/// The allow lists an approval would widen: only the runtime's action arms
+/// (`AllowAlways`, `WidenPolicy`) write them, never an interface by key.
+const POLICY_KEYS: &[&str] = &["\"commands.allow\"", "\"sandbox.network_allow\""];
+
+/// Interface files (the CLI, the web host, the page) naming an allow list's
+/// key in code.
+fn policy_writers(files: &[(String, String)]) -> Vec<String> {
+    let mut errors = Vec::new();
+    for (rel, text) in files {
+        let interface = rel.starts_with("speccoder/src/")
+            || rel.starts_with("speccoder-web/src/")
+            || rel.starts_with("speccoder-web/ui/src/");
+        if !interface || rel.ends_with("schema.gen.ts") {
+            continue;
+        }
+        for (i, line) in code_of(text).lines().enumerate() {
+            if let Some(k) = POLICY_KEYS.iter().find(|k| line.contains(*k)) {
+                errors.push(format!(
+                    "layering: {rel}:{} names {k}: the allow lists are written by the runtime's actions only (AllowAlways, WidenPolicy)",
+                    i + 1
+                ));
+            }
+        }
+    }
+    errors
+}
+
+#[test]
+fn no_interface_writes_the_allow_lists_itself() {
+    let mut files = sources();
+    let ui = Path::new(env!("CARGO_MANIFEST_DIR")).join("../speccoder-web/ui/src");
+    let mut paths = Vec::new();
+    ui_files(&ui, &mut paths);
+    for p in paths {
+        let rel = format!(
+            "speccoder-web/ui/src/{}",
+            p.strip_prefix(&ui).unwrap().display()
+        );
+        files.push((rel, std::fs::read_to_string(&p).unwrap()));
+    }
+    let errors = policy_writers(&files);
+    assert!(errors.is_empty(), "\n{}", errors.join("\n"));
+}
+
+#[test]
+fn the_policy_writer_scan_finds_a_planted_one() {
+    let sheet =
+        "await post(\"/api/config\", { changes: [{ key: \"commands.allow\", append: argv }] });\n";
+    let errors = policy_writers(&[(
+        "speccoder-web/ui/src/components/AskSheet.svelte".to_owned(),
+        sheet.to_owned(),
+    )]);
+    assert_eq!(errors.len(), 1, "{errors:?}");
 }

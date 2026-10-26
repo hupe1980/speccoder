@@ -143,6 +143,58 @@ fn escapes_and_secrets_are_refused_for_reading() {
     );
 }
 
+/// A directory symlinked to the spec does not carry a write into it: the
+/// protected set is judged on the file a write reaches. And `fs/resolve`
+/// names that file, the command's program and directory.
+#[cfg(unix)]
+#[test]
+fn a_write_through_a_symlinked_directory_is_judged_on_the_file_it_reaches() {
+    let w = worktree();
+    std::os::unix::fs::symlink(w.path().join("specs/001-x"), w.path().join("notes")).unwrap();
+    let t = tools(w.path());
+    let out = call(
+        &t,
+        "write_file",
+        json!({"path": "notes/tasks.md", "content": "- [X] T001 a\n"}),
+    );
+    let refused = err(&out);
+    assert!(refused.contains("protected"), "{refused}");
+    assert!(
+        fs::read_to_string(w.path().join("specs/001-x/tasks.md"))
+            .unwrap()
+            .contains("- [ ] T001")
+    );
+    let resolved = call(
+        &t,
+        "resolve",
+        json!({"tool": "write_file", "arguments": {"path": "notes/tasks.md"}}),
+    );
+    assert_eq!(
+        resolved["object"]["canonical"], "specs/001-x/tasks.md",
+        "{resolved}"
+    );
+    assert_eq!(resolved["object"]["asked"], "notes/tasks.md");
+    let cmd = call(
+        &t,
+        "resolve",
+        json!({"tool": "run_command", "arguments": {"argv": ["true", "x"], "cwd": "src"}}),
+    );
+    assert_eq!(cmd["object"]["cwd"], "src", "{cmd}");
+    assert!(
+        cmd["object"]["executable"]
+            .as_str()
+            .unwrap()
+            .ends_with("/true"),
+        "{cmd}"
+    );
+    let none = call(
+        &t,
+        "resolve",
+        json!({"tool": "read_file", "arguments": {"path": "x"}}),
+    );
+    assert_eq!(none, json!({"ok": true, "object": null}));
+}
+
 // ── US2: writing ────────────────────────────────────────────────────────────
 
 /// Every optional argument the schema declares nullable is readable as

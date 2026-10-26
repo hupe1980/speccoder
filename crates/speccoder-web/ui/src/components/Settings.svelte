@@ -6,7 +6,8 @@
   // because speccoder reads committed configuration only.
   import { app } from "../lib/app.svelte";
   import { get, post } from "../lib/api";
-  import type { ConfigChange, ConfigKey, ConfigReport, ConfigSection, Reply } from "../lib/types";
+  import type { ConfigChange, ConfigKey, ConfigReport, ConfigSection, PolicyCoverage, Reply } from "../lib/types";
+  import { offer } from "../lib/actions";
   import Icon from "./Icon.svelte";
   import Diff from "./Diff.svelte";
 
@@ -77,6 +78,31 @@
   const words = (v: unknown) => (Array.isArray(v) ? v.map((w) => (/\s/.test(String(w)) ? JSON.stringify(w) : String(w))).join(" ") : "");
   // Words as a shell would split them, quotes keeping spaces together.
   const split = (s: string) => [...s.matchAll(/"([^"]*)"|'([^']*)'|(\S+)/g)].map((m) => m[1] ?? m[2] ?? m[3] ?? "");
+
+  // A prefix list is never saved from the draft: each entry it gains is
+  // shown with every command from the journal it would newly allow, and
+  // saved only as the confirmation of that preview (its digest).
+  const PREFIX_KEYS = ["commands.allow_prefix", "sandbox.network_allow_prefix"];
+  let previews = $state<Record<string, PolicyCoverage | string>>({});
+  let adding = $state<Record<string, string>>({});
+  async function coverage(path: string, prefix: string[]) {
+    const id = `${path}:${JSON.stringify(prefix)}`;
+    const r = await get<Reply<PolicyCoverage>>(`/api/policy/coverage?key=${encodeURIComponent(path)}&prefix=${encodeURIComponent(JSON.stringify(prefix))}`);
+    previews = { ...previews, [id]: r.data ?? r.message };
+  }
+  async function widen(path: string, c: PolicyCoverage) {
+    const key = path === "commands.allow_prefix" ? "commands_prefix" : "network_prefix";
+    await app.perform(
+      offer({ kind: "widen_policy", key, prefix: c.entry.prefix, digest: c.digest }, {
+        group: "settings",
+        label: `allow prefix ${c.entry.prefix.join(" ")}`,
+        why: "saved from its coverage preview",
+        command: `speccoder config set ${path} '${JSON.stringify(c.entry.prefix)}' --yes`,
+      }),
+    );
+    adding = { ...adding, [path]: "" };
+    await load();
+  }
 
   async function save() {
     saving = true;
@@ -164,6 +190,26 @@
     </div>
   {:else if k.kind === "argv"}
     <input class="field mono" value={words(v)} placeholder={k.required ? "program and arguments" : "—"} onchange={(e) => { const t = (e.target as HTMLInputElement).value.trim(); set(path, k, t ? split(t) : undefined); }} aria-label={label(k.key)} />
+  {:else if PREFIX_KEYS.includes(path)}
+    {@const list = (Array.isArray(v) ? v : []) as string[][]}
+    <div class="list">
+      {#each list as item, i}
+        {@const id = `${path}:${JSON.stringify(item)}`}
+        <div class="item">
+          <span class="field mono ro">{words(item)}</span>
+          <button class="btn small ghost" onclick={() => coverage(path, item)}>Coverage</button>
+          <button class="x" aria-label="Remove" onclick={() => set(path, k, list.filter((_, j) => j !== i))}><Icon name="minus" size={11} weight={2.4} /></button>
+        </div>
+        {@render preview(path, previews[id], false)}
+      {/each}
+      <div class="item">
+        <input class="field mono" placeholder="npm run" value={adding[path] ?? ""} oninput={(e) => (adding = { ...adding, [path]: (e.target as HTMLInputElement).value })} aria-label="New prefix" />
+        <button class="btn small" disabled={split((adding[path] ?? "").trim()).length < 2} onclick={() => coverage(path, split((adding[path] ?? "").trim()))}>Preview…</button>
+      </div>
+      {#if (adding[path] ?? "").trim()}
+        {@render preview(path, previews[`${path}:${JSON.stringify(split((adding[path] ?? "").trim()))}`], true)}
+      {/if}
+    </div>
   {:else if k.kind === "argv_list" || k.kind === "string_list"}
     {@const list = (Array.isArray(v) ? v : []) as unknown[]}
     <div class="list">
@@ -178,6 +224,21 @@
     </div>
   {:else}
     <input class="field" value={v ?? ""} placeholder={k.kind === "duration" ? "7d" : "—"} onchange={(e) => { const t = (e.target as HTMLInputElement).value.trim(); set(path, k, t || undefined); }} aria-label={label(k.key)} />
+  {/if}
+{/snippet}
+
+{#snippet preview(path: string, c: PolicyCoverage | string | undefined, saving: boolean)}
+  {#if typeof c === "string"}
+    <p class="err">{c}</p>
+  {:else if c}
+    <div class="coverage">
+      <p class="muted">{c.rows.filter((r) => !r.still_asks).length} command(s) from the journal would run without asking:</p>
+      {#each c.rows as r}
+        <div class="mono">{r.argv.join(" ")} <span class="muted">×{r.count} · {r.decided.map((d) => `${d.decision} ×${d.count}`).join(", ")}</span>{#if r.still_asks} <span class="chip">{r.still_asks}</span>{/if}</div>
+      {/each}
+      {#if !c.complete}<p class="err">The preview is incomplete — {c.unreadable.join("; ")}. Saving waits until the journal can be read.</p>{/if}
+      {#if saving}<button class="btn small primary" disabled={!c.complete} onclick={() => widen(path, c)}>Save Prefix</button>{/if}
+    </div>
   {/if}
 {/snippet}
 
@@ -321,6 +382,9 @@
   .stepper input::-webkit-inner-spin-button { display: none; }
   .list { display: grid; gap: 0.3rem; justify-items: end; }
   .item { display: flex; gap: 0.3rem; align-items: center; }
+  .ro { display: inline-block; padding: 0.3rem 0.5rem; }
+  .coverage { font-size: 0.82rem; display: grid; gap: 0.2rem; padding: 0.4rem 0; }
+  .err { color: var(--danger, #ff3b30); font-size: 0.82rem; margin: 0; }
   .x { width: 20px; height: 20px; border-radius: 50%; border: 0; background: var(--danger-fill); color: #fff; cursor: pointer; display: grid; place-items: center; }
 
   .commit { display: flex; align-items: center; gap: 1rem; justify-content: space-between; padding: 0.9rem 1.1rem; border-radius: var(--radius); background: var(--attention-bg); }

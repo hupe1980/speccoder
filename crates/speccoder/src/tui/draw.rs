@@ -530,8 +530,22 @@ fn queue(f: &mut Frame<'_>, app: &App, area: Rect) {
                 v.body_lines.len() - 6
             ))));
         }
+        for line in v.object.iter().chain(&v.sources) {
+            items.push(ListItem::new(a(&format!("  {line}"))));
+        }
         items.push(ListItem::new(a(&format!("  Sandbox  {}", v.sandbox))));
-        items.push(ListItem::new(a(&format!("  a → {}   r reject", v.scope))));
+        let batched = pending
+            .get(app.approval.min(pending.len().saturating_sub(1)))
+            .is_some_and(|p| p.batched);
+        items.push(ListItem::new(a(&format!(
+            "  a → {}   r reject{}",
+            v.scope,
+            if batched {
+                "   B the run's waiting calls, each once"
+            } else {
+                ""
+            }
+        ))));
     }
     let decided = app.snap.approvals.as_ref().map_or(0, |q| q.decided.len());
     let mut state = ListState::default().with_selected(

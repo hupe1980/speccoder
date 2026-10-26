@@ -1,0 +1,37 @@
+{
+  "head": "spec(002-quick-changes): quick change: Log every sign-in",
+  "result": {
+    "code": "NOT-FOUND",
+    "command": "approvals",
+    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#not-found",
+    "exit_code": 15,
+    "fix": [
+      "speccoder report"
+    ],
+    "message": "no calls wait together in run run-1-<hex>",
+    "schema_version": 2,
+    "status": "not_found"
+  },
+  "review": {
+    "requirements": {
+      "FR-001": {
+        "at": 0,
+        "by": "Dana Example",
+        "comment": "looks right",
+        "line": "- **FR-001**: Users MUST log in with a passkey.",
+        "sha256": "sha256:<hex>",
+        "verdict": "approved",
+        "via": "web"
+      },
+      "FR-002": {
+        "at": 0,
+        "by": "Dana Example",
+        "line": "- **FR-002**: Sessions MUST expire after thirty minutes.",
+        "sha256": "sha256:<hex>",
+        "verdict": "approved",
+        "via": "web"
+      }
+    }
+  },
+  "status": " M speccoder.toml\n M specs/001-graph/spec.md\n?? .specify/feature.json\n"
+}

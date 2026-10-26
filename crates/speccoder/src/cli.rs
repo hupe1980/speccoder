@@ -192,6 +192,12 @@ pub enum Command {
         #[command(subcommand)]
         action: Option<IssueAction>,
     },
+    /// Calls waiting for a person, and the decisions made; `batch` decides a run's waiting calls together.
+    #[command(hide = true)]
+    Approvals {
+        #[command(subcommand)]
+        action: Option<ApprovalsAction>,
+    },
     /// The project's configuration: every key of speccoder.toml, its value and default; set, unset, commit.
     Config {
         #[command(subcommand)]
@@ -677,6 +683,40 @@ pub enum IssueAction {
     },
 }
 
+/// `speccoder approvals` actions.
+#[derive(Debug, Subcommand)]
+pub enum ApprovalsAction {
+    /// Decide the calls waiting in a run's batch together, each once:
+    /// `approvals batch run-… approve --digest D`.
+    Batch {
+        /// The run (`speccoder approvals` lists it).
+        run: String,
+        /// `approve` or `reject`.
+        verdict: VerdictArg,
+        /// The digest of the list you saw (`speccoder approvals`).
+        #[arg(long)]
+        digest: String,
+        /// Only these calls (default: every listed one).
+        #[arg(long = "call")]
+        calls: Vec<String>,
+        /// A rejection's reason, which the model is told.
+        #[arg(long)]
+        reason: Option<String>,
+        /// Start the run's asking budget again.
+        #[arg(long)]
+        resume_asking: bool,
+    },
+}
+
+/// A batch decision.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum VerdictArg {
+    /// Each listed call runs once.
+    Approve,
+    /// Each listed call is refused, with one reason.
+    Reject,
+}
+
 /// `speccoder config` actions.
 #[derive(Debug, Subcommand)]
 pub enum ConfigAction {
@@ -688,12 +728,27 @@ pub enum ConfigAction {
     /// Set a key: `config set budget.max_turns 40`, `config set format.argv cargo fmt`,
     /// or JSON (`config set commands.allow '[["cargo","check"]]'`); words starting
     /// with `-` after `--` (`config set checks.lint.argv -- cargo clippy -- -D warnings`).
+    /// A prefix list (`commands.allow_prefix`, `sandbox.network_allow_prefix`)
+    /// shows what each new prefix would newly allow and is written only once
+    /// you confirm (`--yes` without a terminal).
     Set {
         /// The dotted key.
         key: String,
         /// The value: words read by the key's kind, or JSON.
         #[arg(required = true, num_args = 1..)]
         value: Vec<String>,
+        /// Confirm a prefix list's preview without being asked.
+        #[arg(long)]
+        yes: bool,
+    },
+    /// What a prefix would newly allow, from the project's journal:
+    /// `config coverage commands.allow_prefix npm run`.
+    Coverage {
+        /// `commands.allow_prefix` or `sandbox.network_allow_prefix`.
+        key: String,
+        /// The prefix's program and arguments.
+        #[arg(required = true, num_args = 1.., allow_hyphen_values = true)]
+        prefix: Vec<String>,
     },
     /// Remove a key, so its default applies.
     Unset {

@@ -1218,6 +1218,15 @@ pub(crate) async fn tool_loop(
                 }
             }
             let mut person: Option<Value> = None;
+            // Allowed by a person's grant for the task (of this run): the
+            // person's decision, not a rule's.
+            if decision == Decision::Allow && object.is_some() {
+                person = Some(json!({
+                    "approved_by": "person",
+                    "scope": "task-grant",
+                    "grant": { "scope": "task", "run": run },
+                }));
+            }
             let mut note: Option<String> = None;
             // An object a person already approved for this run or task.
             if matches!(decision, Decision::Approval(_))

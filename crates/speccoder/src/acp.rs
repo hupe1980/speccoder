@@ -335,7 +335,14 @@ fn approval_content(p: &Presentation) -> Value {
         }
         content.push(diff);
     }
-    // The object and where its arguments came from lead the text.
+    let text = approval_text(p);
+    content.push(json!({ "type": "content", "content": { "type": "text", "text": text } }));
+    Value::Array(content)
+}
+
+/// What the person needs to decide, as the request's text: the object and
+/// where its arguments came from first.
+pub fn approval_text(p: &Presentation) -> String {
     let mut text = String::new();
     for line in p.object.iter().chain(&p.sources) {
         text.push_str(line);
@@ -357,8 +364,7 @@ fn approval_content(p: &Presentation) -> Value {
         text.push_str(&format!("Model says (a claim): \"{claim}\"\n"));
     }
     text.push_str(&format!("Risk: {}", p.request.risk));
-    content.push(json!({ "type": "content", "content": { "type": "text", "text": text } }));
-    Value::Array(content)
+    text
 }
 
 impl Approver for Permissions {
