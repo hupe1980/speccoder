@@ -1059,11 +1059,22 @@ pub(crate) fn run_task(
                 .and_then(|s| s.lock().ok().map(|s| s.hidden.clone()))
                 .unwrap_or_default();
             // The task's grants of this run as they stand now (an earlier
-            // attempt's "for the task" answers included): journaled.
-            let task_grants: Vec<crate::tools::policy::Object> =
-                approvals::Decisions::load(&s.plane_dir)
-                    .map(|d| d.for_run(&feature_name, task, this_run.as_str()))
-                    .unwrap_or_else(|_| task_grants.clone());
+            // attempt's "for the task" answers included), and the calls a
+            // person approved once, which this attempt alone is given:
+            // journaled. Decisions that cannot be read stop the task — the
+            // grants read when it began may hold one rejected since.
+            let (task_grants, approved_once) = match approvals::Decisions::load(&s.plane_dir) {
+                Ok(mut d) => {
+                    let once = d.take_once(&feature_name, task, this_run.as_str());
+                    if !once.is_empty()
+                        && let Err(e) = d.save(&s.plane_dir)
+                    {
+                        return fail(CommandStatus::Error, e);
+                    }
+                    (d.for_run(&feature_name, task, this_run.as_str()), once)
+                }
+                Err(e) => return fail(CommandStatus::ConfigError, e),
+            };
             // This run's grants as they stand now: journaled with the input.
             let run_approved: Vec<crate::tools::policy::Object> = options
                 .run_grants
@@ -1084,6 +1095,7 @@ pub(crate) fn run_task(
                     approved: &task_grants,
                     rejected: &decisions.rejected,
                     run_approved: &run_approved,
+                    approved_once: &approved_once,
                     nudges: &decisions.nudges,
                     mcp: &connected.tools,
                     root: &wt_root_canonical,
@@ -1393,14 +1405,18 @@ pub(crate) fn run_task(
                 notices: notices.clone(),
                 ..bare_report(&feature_name, task, &wt_path, &attempt_status)
             };
-            record_inline_approvals(
+            if let Err(e) = record_inline_approvals(
                 &s.plane_dir,
                 &feature_name,
                 task,
                 &report.tool_calls,
                 &options.run_grants,
                 this_run.as_str(),
-            );
+            ) {
+                report.notices.push(format!(
+                    "the decisions made in this attempt were not recorded ({e}): later attempts ask again"
+                ));
+            }
             // A person approving an MCP call reviewed the tool as it is now.
             for c in report
                 .tool_calls

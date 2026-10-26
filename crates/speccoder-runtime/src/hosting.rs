@@ -668,7 +668,15 @@ pub fn commit_planning_as(
     if paths.is_empty() {
         return refuse(CommandStatus::NotFound, "nothing to commit");
     }
-    if let Some(p) = paths.iter().find(|p| !p.starts_with(&dir)) {
+    // Inside the unit by its components: `<unit>/../../src/x` starts with
+    // the unit's name and is not in it.
+    let inside = |p: &str| {
+        p.strip_prefix(&dir).is_some_and(|rest| {
+            rest.split('/')
+                .all(|c| !c.is_empty() && c != "." && c != "..")
+        })
+    };
+    if let Some(p) = paths.iter().find(|p| !inside(p)) {
         return refuse(
             CommandStatus::UsageError,
             &format!(

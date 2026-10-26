@@ -563,7 +563,11 @@ impl WorkspaceTools {
     }
 
     /// A command's object: its argv, the directory it runs in and the
-    /// executable that directory and environment resolve it to.
+    /// executable that directory and environment resolve it to. An
+    /// executable inside the workspace is named with the digest of its
+    /// content: the model can rewrite it, and a rewritten one is another
+    /// object (asked again, and refused at use when it changed after the
+    /// decision).
     fn command_object(
         &self,
         argv: &[String],
@@ -575,7 +579,21 @@ impl WorkspaceTools {
         let executable = argv
             .first()
             .and_then(|p| crate::sandbox::resolve_executable(p, &dir, &self.command_env(None)))
-            .map_or_else(|| policy::NOT_FOUND.to_owned(), |p| p.display().to_string());
+            .map_or_else(
+                || policy::NOT_FOUND.to_owned(),
+                |p| {
+                    if p.starts_with(&self.root) {
+                        let content = std::fs::read(&p).unwrap_or_default();
+                        format!(
+                            "{} (sha256 {})",
+                            p.display(),
+                            crate::integrity::sha256_hex(&content)
+                        )
+                    } else {
+                        p.display().to_string()
+                    }
+                },
+            );
         Ok(Object::command(
             argv.to_vec(),
             if rel.is_empty() { ".".to_owned() } else { rel },
@@ -596,10 +614,24 @@ impl WorkspaceTools {
                 self.policy.protected().reason(class)
             )));
         }
-        if let Some(Object::Path { canonical: was, .. }) = expect
-            && *was != canonical
-        {
-            return Err(changed(was, &canonical));
+        match expect {
+            Some(Object::Path { canonical: was, .. }) if *was != canonical => {
+                return Err(changed(was, &canonical));
+            }
+            Some(_) => {}
+            // Allowed by a rule on the path as asked: the rules that need
+            // a person (a frozen test, a context file, a manifest) were
+            // judged on that spelling. One that reaches another file — a
+            // symlinked directory, another letter case — is written by
+            // the name of the file it reaches, and judged on that.
+            None => {
+                let asked = normalise(rel).map_err(|e| failure(e.0))?;
+                if asked != canonical {
+                    return Err(failure(format!(
+                        "refused: `{asked}` reaches `{canonical}`; write it by that path"
+                    )));
+                }
+            }
         }
         Ok(self.root.join(canonical))
     }

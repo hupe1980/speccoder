@@ -129,7 +129,7 @@ speccoder signs each tick's [attestations](@/docs/attestations.md) with your git
 
 ## Checking someone else's evidence
 
-[`speccoder-verify`](@/docs/verifier.md) is built to run on a pull request you do not trust: it reads git objects only (no working tree), executes nothing from the checked tree (no build, test, hook or script), spawns only `git` and the signature tool a signature names with a scrubbed environment, opens no socket, and takes trust only from you — never a key the branch declares. The [action](@/docs/github.md#evidence-check) downloads it only after checking its build provenance and sha256, never passes it a token, and refuses to run under `pull_request_target` when the head is checked out in the workspace: add no checkout or build step to that workflow.
+[`speccoder-verify`](@/docs/verifier.md) is built to run on a pull request you do not trust: it reads git objects only (no working tree), executes nothing from the checked tree (no build, test, hook or script), spawns only `git` and the signature tool a signature names with a scrubbed environment, opens no socket, and takes trust only from you — never a key the branch declares. The action takes it from a commit the checked one did not write (a pull request's base, the commit before a push to the default branch, else the default branch's tip) and fails where there is none; a check that cannot read the branch fails rather than coming out neutral. The [action](@/docs/github.md#evidence-check) downloads it only after checking its build provenance and sha256, never passes it a token, and refuses to run under `pull_request_target` when the head is checked out in the workspace: add no checkout or build step to that workflow.
 
 ## What it does not protect against
 

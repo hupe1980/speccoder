@@ -97,6 +97,14 @@ pub const CATALOG: &[Entry] = &[
         "`speccoder explain` knows the codes speccoder itself prints; the closest names are listed with the error.",
         ["speccoder explain --list"]
     ),
+    entry!(
+        "CALL-CHANGED",
+        E,
+        S::UsageError,
+        "the call waiting now is not the one that was shown",
+        "An approval or rejection from an interface names the call it showed and that call's object. The call expired or was decided and another waits now, or the attempt stopped on another object; nothing was decided.",
+        ["speccoder report --approvals"]
+    ),
     // ── internal ──────────────────────────────────────────────────────
     entry!(
         "INTERNAL",

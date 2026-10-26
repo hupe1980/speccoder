@@ -98,7 +98,7 @@ The description is the author's account. The **`speccoder / evidence`** check is
    ada@example.com namespaces="in-toto" ssh-ed25519 AAAAC3Nza…
    ```
 
-   The action reads it from the pull request's **base** commit — a pull request that adds its own key to the file is not trusted by it. For Sigstore, set `certificate-identity` and `certificate-oidc-issuer` instead.
+   The action never reads it from the commit it checks — a change that adds its own key to the file is not trusted by it. On a pull request it reads the **base** commit's; on a push to the default branch, the commit before the push (`before`); on any other push, and on other events, the default branch's tip. Where there is no such commit, or it is the checked commit itself (the push that creates the default branch, a branch pushed at the default branch's tip), the job fails — `allow-neutral` does not pass it. A key added to the file takes effect for the pushes after the merge that adds it. For Sigstore, set `certificate-identity` and `certificate-oidc-issuer` instead.
 
 2. **The workflow**, for pull requests from branches of the repository:
 
@@ -140,14 +140,14 @@ The description is the author's account. The **`speccoder / evidence`** check is
 
    The verifier reads the fork's notes and objects and executes nothing from them; the action refuses to run if the head is checked out in the workspace. If your policy forbids `pull_request_target`, a two-stage `workflow_run` (the first workflow uploads the event, the second runs the action) gives the same guarantees.
 
-4. **Make it required.** In the branch's protection rule (or ruleset), require the status check `speccoder / evidence`, source **GitHub Actions** (the workflow token creates it). GitHub counts a `neutral` required check as passing; a pull request that touches no unit has nothing to check, so the action publishes that as `failure`, titled `neutral: no ticks checked`, unless you set `allow-neutral: true`.
+4. **Make it required.** In the branch's protection rule (or ruleset), require the status check `speccoder / evidence`, source **GitHub Actions** (the workflow token creates it). GitHub counts a `neutral` required check as passing; a pull request that touches no unit has nothing to check, so the action publishes that as `failure`, titled `neutral: no ticks checked`, unless you set `allow-neutral: true`. A check that cannot read the branch (a git failure, a tree it cannot write out whole, a head that drops the spec project) is an error and fails the job even with `allow-neutral: true`.
 
 5. **Merge with merge commits** for verified features. A squash or rebase merge makes new commits: the attestations name the old ones, which are no longer reachable, and on the default branch those ticks become `commit_unreachable`. Push the notes too (`speccoder pr` does; `git push origin refs/notes/speccoder` otherwise).
 
 | Input | Default | |
 |---|---|---|
 | `version` | the action's release | the verifier to download (provenance and sha256 checked) |
-| `allowed-signers` | `.github/speccoder/allowed_signers` | read from the base revision |
+| `allowed-signers` | `.github/speccoder/allowed_signers` | read from the base, the commit before a push, or the default branch's tip — never the checked commit |
 | `certificate-identity`, `certificate-oidc-issuer` | — | Sigstore trust; installs `cosign` |
 | `require-signed` | `true` | unsigned ticks are unverifiable |
 | `require-verified` | `false` | `regression_only` and `attested` fail too |

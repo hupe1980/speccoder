@@ -5,7 +5,7 @@ use crate::format::Rules;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 
-use globset::{Glob, GlobSet, GlobSetBuilder};
+use globset::{GlobBuilder, GlobSet, GlobSetBuilder};
 
 /// A path refused, with the reason the model is told.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -34,10 +34,14 @@ pub fn normalise(rel: &str) -> Result<String, Refused> {
     Ok(parts.join("/"))
 }
 
+/// A glob set matched regardless of letter case, on every OS: on a
+/// case-insensitive volume (macOS and Windows by default) `Speccoder.toml`
+/// and `.CLAUDE/settings.json` are the protected files, and a set that
+/// folds case everywhere is the stricter answer on the others.
 fn set(patterns: &[&str]) -> GlobSet {
     let mut b = GlobSetBuilder::new();
     for p in patterns {
-        if let Ok(g) = Glob::new(p) {
+        if let Ok(g) = GlobBuilder::new(p).case_insensitive(true).build() {
             b.add(g);
         }
     }
@@ -234,7 +238,11 @@ impl Protected {
     /// [`REVIEW_FILE`]. A planning skill writes intent; never this.
     #[must_use]
     pub fn is_review(&self, rel: &str) -> bool {
-        self.intent.is_match(rel) && rel.rsplit('/').next() == Some(REVIEW_FILE)
+        self.intent.is_match(rel)
+            && rel
+                .rsplit('/')
+                .next()
+                .is_some_and(|f| f.eq_ignore_ascii_case(REVIEW_FILE))
     }
 
     /// Whether a normalised path is a secret (refused for reading too).
@@ -246,7 +254,12 @@ impl Protected {
     /// The protected class a normalised path belongs to, for writing.
     #[must_use]
     pub fn write_class(&self, rel: &str) -> Option<Class> {
-        if rel == ".git" || rel.starts_with(".git/") || rel.contains("/.git/") {
+        let folded = rel.to_lowercase();
+        if folded == ".git"
+            || folded.starts_with(".git/")
+            || folded.contains("/.git/")
+            || folded.ends_with("/.git")
+        {
             Some(Class::Git)
         } else if self.is_secret(rel) {
             Some(Class::Secret)
@@ -320,7 +333,9 @@ pub fn resolve_for_write(root: &Path, rel: &str) -> Result<PathBuf, Refused> {
 /// The file a write of `rel` reaches, workspace-relative: every existing
 /// ancestor's symlinks resolved (they must stay inside `root`, which is
 /// canonical), the components that do not exist yet appended as written,
-/// and the target itself never a symlink. Two spellings that reach the
+/// and the target itself never a symlink. Every component that exists is
+/// named as the volume stores it, so on a case-insensitive volume
+/// `Speccoder.toml` answers `speccoder.toml`. Two spellings that reach the
 /// same file give the same answer; the same spelling after a directory was
 /// swapped for a symlink gives another.
 pub fn canonical_for_write(root: &Path, rel: &str) -> Result<String, Refused> {
@@ -342,7 +357,13 @@ pub fn canonical_for_write(root: &Path, rel: &str) -> Result<String, Refused> {
                     "`{rel}` is a symlink; not written through"
                 )));
             }
-            at = next;
+            // Not a symlink: canonicalizing only names it as stored.
+            let canonical =
+                fs::canonicalize(&next).map_err(|e| Refused(format!("`{rel}`: {e}")))?;
+            if !canonical.starts_with(root) {
+                return Err(Refused(format!("`{rel}` resolves outside the workspace")));
+            }
+            at = canonical;
             break;
         }
         let canonical = fs::canonicalize(&next).map_err(|e| Refused(format!("`{rel}`: {e}")))?;
@@ -430,6 +451,56 @@ mod tests {
         }
         for f in ["src/lib.rs", "src/testing.rs", "docs/tests.md"] {
             assert!(!is_test_path(f), "{f}");
+        }
+    }
+
+    /// Letter case never takes a path out of the protected set: on a
+    /// case-insensitive volume each of these is the protected file itself.
+    #[test]
+    fn letter_case_does_not_leave_the_protected_set() {
+        let p = Protected::default();
+        for (path, class) in [
+            ("Speccoder.toml", Class::Judge),
+            ("SPECCODER.TOML", Class::Judge),
+            ("makefile", Class::Judge),
+            ("JUSTFILE", Class::Judge),
+            (".CURSOR/rules.json", Class::Judge),
+            (".CLAUDE/settings.json", Class::Judge),
+            (".Github/workflows/ci.yml", Class::Judge),
+            ("Specs/001-x/tasks.md", Class::Intent),
+            (".SPECIFY/memory/constitution.md", Class::Intent),
+            (".GIT/config", Class::Git),
+            ("sub/.Git", Class::Git),
+            (".ENV", Class::Secret),
+            ("certs/server.KEY", Class::Secret),
+        ] {
+            assert_eq!(p.write_class(path), Some(class), "{path}");
+        }
+        assert!(p.is_review("specs/001-x/Review.JSON"));
+        assert!(p.is_context("agents.md") && p.is_context("web/Claude.md"));
+        assert!(p.is_manifest("crates/x/cargo.TOML"));
+        assert!(is_test_path("Tests/api.rs"));
+    }
+
+    /// An existing file is named as the volume stores it: on a
+    /// case-insensitive volume another spelling reaches the same file and
+    /// gives the same answer.
+    #[test]
+    fn an_existing_file_is_named_as_stored() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = fs::canonicalize(dir.path()).unwrap();
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::write(root.join("speccoder.toml"), "").unwrap();
+        fs::write(root.join("src/lib.rs"), "").unwrap();
+        let insensitive = root.join("SPECCODER.toml").exists();
+        let got = canonical_for_write(&root, "Speccoder.toml").unwrap();
+        let lib = canonical_for_write(&root, "SRC/Lib.rs").unwrap();
+        if insensitive {
+            assert_eq!(got, "speccoder.toml");
+            assert_eq!(lib, "src/lib.rs");
+        } else {
+            assert_eq!(got, "Speccoder.toml");
+            assert_eq!(lib, "SRC/Lib.rs");
         }
     }
 

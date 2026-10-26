@@ -1328,8 +1328,9 @@ pub struct ObjectView {
 pub struct BatchView {
     /// The run.
     pub run: String,
-    /// SHA-256 over the sorted ids of every call listed: a decision names
-    /// it and is refused when the list changed.
+    /// SHA-256 over the sorted digests of every call listed
+    /// ([`PendingCall::digest`]): a decision names it and is refused when
+    /// the list, or the object of a call in it, changed.
     pub digest: String,
     /// The calls by class, in the order write, command, network, mcp.
     pub groups: Vec<BatchGroup>,
@@ -1384,6 +1385,23 @@ pub struct PendingCall {
     pub run: Option<String>,
     /// It waits in its run's batch: the asking budget was used.
     pub batched: bool,
+    /// SHA-256 over its id and the object a decision covers: a decision
+    /// names it and is refused when another call (or another object) waits
+    /// now.
+    pub digest: String,
+}
+
+impl PendingCall {
+    /// Its id in decisions and batches: the waiting call's, or
+    /// `attempt:<task>` for a call a parallel lane stopped.
+    #[must_use]
+    pub fn id(&self) -> String {
+        if self.call.is_empty() {
+            format!("attempt:{}", self.task)
+        } else {
+            self.call.clone()
+        }
+    }
 }
 
 /// Who decided, and how speccoder knows the name.

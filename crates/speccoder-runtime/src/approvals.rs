@@ -37,6 +37,10 @@ pub struct RunGrant {
     /// The run (`run-<secs>-<hex>`), once claimed.
     #[serde(default)]
     pub run: Option<String>,
+    /// It covers one call: the next attempt of the task in its run is
+    /// given it ([`Decisions::take_once`]) and may make the call one time.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub once: bool,
 }
 
 /// One task's decisions.
@@ -270,9 +274,49 @@ impl Decisions {
         self.for_task(feature, task)
             .approved
             .into_iter()
-            .filter(|g| g.run.as_deref() == Some(run))
+            .filter(|g| !g.once && g.run.as_deref() == Some(run))
             .map(|g| g.object)
             .collect()
+    }
+
+    /// Removes and returns the once-grants of `feature/task` claimed by
+    /// `run`: the attempt they are handed to may make each call one time,
+    /// and no later attempt has them.
+    pub fn take_once(&mut self, feature: &str, task: &str, run: &str) -> Vec<Object> {
+        let Some(d) = self.tasks.get_mut(&format!("{feature}/{task}")) else {
+            return Vec::new();
+        };
+        let (once, kept): (Vec<RunGrant>, Vec<RunGrant>) = std::mem::take(&mut d.approved)
+            .into_iter()
+            .partition(|g| g.once && g.run.as_deref() == Some(run));
+        d.approved = kept;
+        once.into_iter().map(|g| g.object).collect()
+    }
+
+    /// Records an approval of `object` for one call of the task's next
+    /// attempt (a call a lane stopped, decided in its run's batch); a
+    /// rejection of the same object is withdrawn.
+    pub fn approve_once(&mut self, feature: &str, task: &str, object: Object, by: &Who) {
+        let d = self.tasks.entry(format!("{feature}/{task}")).or_default();
+        d.rejected.retain(|r| r.object != object);
+        let grant = RunGrant {
+            object: object.clone(),
+            run: None,
+            once: true,
+        };
+        if !d.approved.contains(&grant) {
+            d.approved.push(grant);
+        }
+        d.decided.push(Decided {
+            verb: "approve".to_owned(),
+            object: Some(object),
+            run: None,
+            reason: None,
+            scope: "once".to_owned(),
+            note: None,
+            by: by.clone(),
+            at: now(),
+        });
     }
 
     /// Binds the task's unclaimed grants (decisions on a call a lane
@@ -304,6 +348,7 @@ impl Decisions {
         let grant = RunGrant {
             object: object.clone(),
             run: run.map(str::to_owned),
+            once: false,
         };
         if !d.approved.contains(&grant) {
             d.approved.push(grant);
@@ -798,6 +843,24 @@ fn saved_request(feature: &str, task: &str, pending: &serde_json::Value) -> Opti
     Some(r)
 }
 
+/// [`speccoder_core::PendingCall::digest`]: SHA-256 over the call's id
+/// and the object a decision covers, as recorded.
+#[must_use]
+pub fn call_digest(id: &str, object: Option<&Object>) -> String {
+    use sha2::{Digest as _, Sha256};
+    let object = serde_json::to_string(&object).unwrap_or_default();
+    Sha256::digest(format!("{id}\n{object}").as_bytes())
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
+/// `p` with its digest.
+fn with_digest(mut p: PendingCall, object: Option<&Object>) -> PendingCall {
+    p.digest = call_digest(&p.id(), object);
+    p
+}
+
 /// Open tasks' latest attempts that stopped for approval and are undecided.
 fn pending(
     root: &Path,
@@ -825,22 +888,25 @@ fn pending(
         }
         let presentation = view(root, &saved.task, &saved.reference, &request);
         out.push((
-            PendingCall {
-                task: saved.task.clone(),
-                covers: object.describe(),
-                tool: request.tool.clone(),
-                arguments: request.arguments.clone(),
-                reason: request.reason.clone(),
-                reference: saved.reference.clone(),
-                presentation: Some(presentation),
-                source: "attempt".to_owned(),
-                kind: "approval".to_owned(),
-                object: Some(object_view(&object)),
-                sources: present::source_lines(&request),
-                run: request.run.clone(),
-                batched: request.batched,
-                ..PendingCall::default()
-            },
+            with_digest(
+                PendingCall {
+                    task: saved.task.clone(),
+                    covers: object.describe(),
+                    tool: request.tool.clone(),
+                    arguments: request.arguments.clone(),
+                    reason: request.reason.clone(),
+                    reference: saved.reference.clone(),
+                    presentation: Some(presentation),
+                    source: "attempt".to_owned(),
+                    kind: "approval".to_owned(),
+                    object: Some(object_view(&object)),
+                    sources: present::source_lines(&request),
+                    run: request.run.clone(),
+                    batched: request.batched,
+                    ..PendingCall::default()
+                },
+                Some(&object),
+            ),
             object,
         ));
     }
@@ -936,13 +1002,13 @@ fn decided(feature: &str, decisions: &Decisions) -> Vec<DecidedCall> {
             covers: g.object.describe(),
             reason: None,
             by: last(&g.object).map(|x| x.by.describe()),
-            scope: Some("task".to_owned()),
             note: last(&g.object).and_then(|x| x.note.clone()),
             operator: last(&g.object).map(|x| x.by.view()),
             via: last(&g.object).map(|x| x.by.via.clone()),
             client: last(&g.object).and_then(|x| x.by.client.clone()),
             object: Some(object_view(&g.object)),
             run: g.run.clone(),
+            scope: Some(if g.once { "once" } else { "task" }.to_owned()),
             ..DecidedCall::default()
         }));
         out.extend(d.rejected.iter().map(|r| DecidedCall {
@@ -1017,25 +1083,29 @@ fn waiting_tasks(
             let task = request.task.strip_prefix(&prefix)?.to_owned();
             let view = presented(root, &request, &task, None);
             Some((
-                PendingCall {
-                    task,
-                    covers: request.covers(),
-                    object: request.object.as_ref().map(object_view),
-                    sources: present::source_lines(&request),
-                    run: request.run.clone(),
-                    batched: request.batched,
-                    tool: request.tool.clone(),
-                    arguments: request.arguments.clone(),
-                    reason: request.reason.clone(),
-                    reference: String::new(),
-                    presentation: Some(view),
-                    call: t.id.to_hex(),
-                    source: "task".to_owned(),
-                    kind: tasks::APPROVAL.to_owned(),
-                    question: None,
-                    waiting_since: Some(t.created_at.unix_timestamp().max(0).unsigned_abs()),
-                    deadline: t.due_at.map(|d| d.unix_timestamp().max(0).unsigned_abs()),
-                },
+                with_digest(
+                    PendingCall {
+                        task,
+                        covers: request.covers(),
+                        object: request.object.as_ref().map(object_view),
+                        sources: present::source_lines(&request),
+                        run: request.run.clone(),
+                        batched: request.batched,
+                        tool: request.tool.clone(),
+                        arguments: request.arguments.clone(),
+                        reason: request.reason.clone(),
+                        reference: String::new(),
+                        presentation: Some(view),
+                        call: t.id.to_hex(),
+                        source: "task".to_owned(),
+                        kind: tasks::APPROVAL.to_owned(),
+                        question: None,
+                        waiting_since: Some(t.created_at.unix_timestamp().max(0).unsigned_abs()),
+                        deadline: t.due_at.map(|d| d.unix_timestamp().max(0).unsigned_abs()),
+                        digest: String::new(),
+                    },
+                    request.object.as_ref(),
+                ),
                 t,
             ))
         })
@@ -1144,6 +1214,11 @@ pub struct Choice<'a> {
     pub note: Option<&'a str>,
     /// A rejection's reason, which the model is told.
     pub reason: Option<&'a str>,
+    /// The digest of the call the person was shown
+    /// ([`speccoder_core::PendingCall::digest`]): refused when the call
+    /// that waits now has another. `None` from the command line, which
+    /// names the call itself.
+    pub digest: Option<&'a str>,
 }
 
 impl<'a> Choice<'a> {
@@ -1158,6 +1233,7 @@ impl<'a> Choice<'a> {
             scope: Scope::Task,
             note,
             reason: None,
+            digest: None,
         }
     }
 
@@ -1172,6 +1248,18 @@ impl<'a> Choice<'a> {
             scope: Scope::Task,
             note: None,
             reason: Some(reason),
+            digest: None,
+        }
+    }
+
+    /// The same, bound to the call shown: its id (a waiting call's, or
+    /// `attempt:<task>`) and digest.
+    #[must_use]
+    pub fn shown(self, call: &'a str, digest: &'a str) -> Self {
+        Self {
+            call: (!call.starts_with("attempt:")).then_some(call),
+            digest: Some(digest),
+            ..self
         }
     }
 }
@@ -1208,9 +1296,21 @@ pub fn decide_with(
         Ok(x) => x,
         Err(r) => return *r,
     };
-    let mut decisions = match Decisions::load(&dir) {
-        Ok(d) => d,
+    // Decisions that cannot be read decide nothing; a listing says the
+    // calls a lane stopped are unknown, never that none wait.
+    let (mut decisions, decisions_unreadable) = match Decisions::load(&dir) {
+        Ok(d) => (d, None),
+        Err(e) if verb == Verb::List => (Decisions::default(), Some(e)),
         Err(e) => return CommandResult::new(command, CommandStatus::ConfigError, &e),
+    };
+    // A lane's stopped calls are those not decided yet: unknown without
+    // the decisions.
+    let lane_pending = |decisions: &Decisions, open: &[String]| {
+        if decisions_unreadable.is_some() {
+            Vec::new()
+        } else {
+            pending(&root, &feature, open, decisions)
+        }
     };
     // Open tasks, from the speccoder branch when there is one.
     let status = crate::status::report(&root, Some(&feature));
@@ -1227,7 +1327,11 @@ pub fn decide_with(
         Ok(rows) => (rows, None),
         Err(e) => (Vec::new(), Some(e)),
     };
-    let waiting = pending(&root, &feature, &open, &decisions);
+    let unreadable = match (unreadable, &decisions_unreadable) {
+        (Some(a), Some(b)) => Some(format!("{a}; {b}")),
+        (a, b) => a.or_else(|| b.clone()),
+    };
+    let waiting = lane_pending(&decisions, &open);
 
     // A call waiting on a task is decided there: who, how known, bound to
     // what was shown. Its attempt continues on the next run.
@@ -1254,6 +1358,16 @@ pub fn decide_with(
                     .is_none_or(|id| !id.is_empty() && p.call.starts_with(id))
             })
             .collect();
+        if let Some(shown) = c.digest
+            && matching.iter().any(|(p, _)| p.digest != shown)
+        {
+            return CommandResult::new(
+                command,
+                CommandStatus::UsageError,
+                "the call changed since it was shown; see `speccoder report --approvals` for the one waiting now",
+            )
+            .with_code("CALL-CHANGED");
+        }
         if matching.len() > 1 && !c.all {
             let list: Vec<String> = matching
                 .iter()
@@ -1308,20 +1422,21 @@ pub fn decide_with(
                     )
                 });
             }
+            // The calls waiting after the decision, or why they are unknown.
+            let (after, unreadable) = match waiting_tasks(&root, &dir, &feature) {
+                Ok(rows) => (rows, None),
+                Err(e) => (Vec::new(), Some(e)),
+            };
+            let lanes = lane_pending(&decisions, &open);
             let report = ApprovalsReport {
                 decided: decided(&feature, &decisions),
-                pending: waiting_tasks(&root, &dir, &feature)
-                    .unwrap_or_default()
+                pending: after
                     .into_iter()
                     .map(|(c, _)| c)
-                    .chain(
-                        pending(&root, &feature, &open, &decisions)
-                            .into_iter()
-                            .map(|(c, _)| c),
-                    )
+                    .chain(lanes.into_iter().map(|(c, _)| c))
                     .collect(),
                 feature,
-                unreadable: None,
+                unreadable,
                 batch: Vec::new(),
             };
             return CommandResult::new(
@@ -1345,6 +1460,10 @@ pub fn decide_with(
     // In a parallel lane, a stopped attempt is saved with its call:
     // deciding it records a grant of exactly that object, which the next
     // run that attempts the task claims (it ends with that run).
+    let shown = match verb {
+        Verb::Decide(c) => c.digest,
+        _ => None,
+    };
     let verb = match verb {
         Verb::Decide(c) => match (c.task, c.approve, c.note) {
             (Some(t), true, Some(n)) => Verb::ApproveNoted(t, n),
@@ -1378,6 +1497,14 @@ pub fn decide_with(
                     ),
                 );
             };
+            if shown.is_some_and(|d| d != call.digest) {
+                return CommandResult::new(
+                    command,
+                    CommandStatus::UsageError,
+                    "the call changed since it was shown; see `speccoder report --approvals` for the one waiting now",
+                )
+                .with_code("CALL-CHANGED");
+            }
             let what = match verb {
                 Verb::Reject(_, reason) => {
                     decisions.reject(
@@ -1426,16 +1553,13 @@ pub fn decide_with(
             format!("{what}; run the task again to continue (speccoder run --task {task})")
         }
     };
+    let lanes = lane_pending(&decisions, &open);
     let report = ApprovalsReport {
         decided: decided(&feature, &decisions),
         pending: tasks_waiting
             .into_iter()
             .map(|(c, _)| c)
-            .chain(
-                pending(&root, &feature, &open, &decisions)
-                    .into_iter()
-                    .map(|(c, _)| c),
-            )
+            .chain(lanes.into_iter().map(|(c, _)| c))
             .collect(),
         feature,
         unreadable,
@@ -1451,25 +1575,13 @@ pub fn decide_with(
 
 // ── The asking budget's batch ───────────────────────────────────────
 
-/// The id a call a lane stopped has in a batch (it waits on no task).
-fn lane_call(task: &str) -> String {
-    format!("attempt:{task}")
-}
-
-/// The id a pending call has in a batch.
-fn batch_id(p: &PendingCall) -> String {
-    if p.call.is_empty() {
-        lane_call(&p.task)
-    } else {
-        p.call.clone()
-    }
-}
-
-/// SHA-256 over the sorted ids of `calls`.
+/// SHA-256 over the sorted digests of the calls listed
+/// ([`speccoder_core::PendingCall::digest`]): each binds its id and its
+/// object, so a lane's newer attempt stopped on another object changes it.
 #[must_use]
-pub fn batch_digest(calls: &[String]) -> String {
+pub fn batch_digest(digests: &[String]) -> String {
     use sha2::{Digest as _, Sha256};
-    let mut ids = calls.to_vec();
+    let mut ids = digests.to_vec();
     ids.sort();
     Sha256::digest(ids.join("\n").as_bytes())
         .iter()
@@ -1502,7 +1614,7 @@ pub fn batches(pending: &[PendingCall]) -> Vec<speccoder_core::BatchView> {
                         .filter(|p| {
                             p.object.as_ref().map_or("write", |o| o.class.as_str()) == *class
                         })
-                        .map(|p| batch_id(p))
+                        .map(|p| p.id())
                         .collect();
                     (!calls.is_empty()).then(|| speccoder_core::BatchGroup {
                         class: (*class).to_owned(),
@@ -1510,9 +1622,9 @@ pub fn batches(pending: &[PendingCall]) -> Vec<speccoder_core::BatchView> {
                     })
                 })
                 .collect::<Vec<_>>();
-            let ids: Vec<String> = of_run.iter().map(|p| batch_id(p)).collect();
+            let digests: Vec<String> = of_run.iter().map(|p| p.digest.clone()).collect();
             speccoder_core::BatchView {
-                digest: batch_digest(&ids),
+                digest: batch_digest(&digests),
                 run,
                 groups,
             }
@@ -1621,13 +1733,22 @@ pub fn decide_batch(
             else {
                 continue;
             };
+            // The object the listing showed, never one found now.
             let object = pending(&root, &feature, &[task.to_owned()], &decisions)
                 .into_iter()
-                .map(|(_, o)| o)
-                .next();
-            let Some(object) = object else { continue };
+                .find(|(now, _)| now.digest == p.digest)
+                .map(|(_, o)| o);
+            let Some(object) = object else {
+                return CommandResult::new(
+                    command,
+                    CommandStatus::UsageError,
+                    &format!("the list changed; {task}'s attempt stopped on another call"),
+                )
+                .with_code("CALL-CHANGED");
+            };
             if choice.approve {
-                decisions.approve(&feature, task, object, None, &by);
+                // Once: the task's next attempt may make this call one time.
+                decisions.approve_once(&feature, task, object, &by);
             } else {
                 decisions.reject(&feature, task, object, reason, &by);
             }
@@ -1643,10 +1764,7 @@ pub fn decide_batch(
         lines.push(format!("{}: {}", p.task, p.covers));
     }
     if choice.resume_asking
-        && let Some(first) = report
-            .pending
-            .iter()
-            .find(|p| listed_ids.contains(&batch_id(p)))
+        && let Some(first) = report.pending.iter().find(|p| listed_ids.contains(&p.id()))
     {
         decisions.note(
             &feature,
@@ -1921,17 +2039,22 @@ mod tests {
 
     #[test]
     fn a_runs_batch_lists_its_lanes_stopped_calls_too() {
-        let call = |task: &str, id: &str, batched: bool, class: &str, run: &str| PendingCall {
-            task: task.to_owned(),
-            call: id.to_owned(),
-            kind: tasks::APPROVAL.to_owned(),
-            run: Some(run.to_owned()),
-            batched,
-            object: Some(speccoder_core::ObjectView {
-                class: class.to_owned(),
-                ..speccoder_core::ObjectView::default()
-            }),
-            ..PendingCall::default()
+        let call = |task: &str, id: &str, batched: bool, class: &str, run: &str| {
+            with_digest(
+                PendingCall {
+                    task: task.to_owned(),
+                    call: id.to_owned(),
+                    kind: tasks::APPROVAL.to_owned(),
+                    run: Some(run.to_owned()),
+                    batched,
+                    object: Some(speccoder_core::ObjectView {
+                        class: class.to_owned(),
+                        ..speccoder_core::ObjectView::default()
+                    }),
+                    ..PendingCall::default()
+                },
+                Some(&file(task)),
+            )
         };
         let pending = vec![
             call("T1", "aa", true, "write", "run-1"),
@@ -1957,7 +2080,49 @@ mod tests {
         );
         assert_eq!(
             b[0].digest,
-            batch_digest(&["attempt:T2".to_owned(), "aa".to_owned()])
+            batch_digest(&[pending[1].digest.clone(), pending[0].digest.clone()])
         );
+        // A newer attempt of T2 stopped on another object: the same ids,
+        // another digest, so a decision on the list seen is refused.
+        let mut newer = pending.clone();
+        newer[1] = with_digest(newer[1].clone(), Some(&file("other.json")));
+        assert_eq!(newer[1].id(), pending[1].id());
+        assert_ne!(batches(&newer)[0].digest, b[0].digest);
+    }
+
+    /// A call's digest binds its id and its object: another call, or the
+    /// same lane's attempt stopped on another object, has another.
+    #[test]
+    fn a_calls_digest_binds_its_id_and_object() {
+        let a = call_digest("attempt:T1", Some(&file("a.json")));
+        assert_eq!(a, call_digest("attempt:T1", Some(&file("a.json"))));
+        assert_ne!(a, call_digest("attempt:T1", Some(&file("b.json"))));
+        assert_ne!(a, call_digest("attempt:T2", Some(&file("a.json"))));
+        assert_ne!(a, call_digest("attempt:T1", None));
+    }
+
+    /// A once-grant (a lane's call decided in its batch) is claimed by the
+    /// next run, handed to one attempt and gone after it: never a grant
+    /// for the task or the run.
+    #[test]
+    fn a_once_grant_is_given_to_one_attempt_only() {
+        let mut d = Decisions::default();
+        let by = Who::local(Via::Terminal);
+        d.approve_once("f", "T1", file("package.json"), &by);
+        assert!(d.decided("f", "T1", &file("package.json")));
+        assert!(d.claim("f", "T1", "run-2"));
+        assert!(d.for_run("f", "T1", "run-2").is_empty(), "not for the run");
+        assert_eq!(d.take_once("f", "T1", "run-2"), [file("package.json")]);
+        assert!(
+            d.take_once("f", "T1", "run-2").is_empty(),
+            "one attempt only"
+        );
+        assert_eq!(d.for_task("f", "T1").decided[0].scope, "once");
+        // It reads back as written; a task grant carries no `once`.
+        let text = serde_json::to_string(&d).unwrap();
+        assert_eq!(serde_json::from_str::<Decisions>(&text).unwrap(), d);
+        d.approve("f", "T1", file("x"), Some("run-2"), &by);
+        let grant = serde_json::to_value(&d.for_task("f", "T1").approved[0]).unwrap();
+        assert!(grant.get("once").is_none(), "{grant}");
     }
 }

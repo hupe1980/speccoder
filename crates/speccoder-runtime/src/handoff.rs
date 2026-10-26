@@ -549,25 +549,31 @@ pub fn pr(path: &Path, feature: Option<&str>, options: &PrOptions<'_>) -> Comman
     let held_out_warning = if selection.sets.is_empty() {
         String::new()
     } else {
-        let published = crate::held_out::publish_closed(
-            &repo_root,
-            &report.feature,
-            &tip,
-            &selection,
-            &project_state
-                .as_ref()
-                .map_or_else(std::env::temp_dir, |s| s.join("tmp")),
-        );
-        let pushed = published.and_then(|_| {
-            repo.run(&[
-                "push",
-                "--quiet",
-                options.remote,
-                &format!("{held_out_ref}:{held_out_ref}"),
-            ])
-            .map(|_| ())
-            .map_err(|e| e.0)
-        });
+        // Built in the private store and pushed from it: the project's
+        // repository, which later attempts read, never holds them.
+        let pushed = project_state
+            .as_ref()
+            .ok_or_else(|| "no state directory".to_owned())
+            .and_then(|s| {
+                let store = crate::held_out::publication_store(s, &repo_root)?;
+                let commit = crate::held_out::publish_closed(
+                    &store,
+                    &report.feature,
+                    &tip,
+                    &selection,
+                    &s.join("tmp"),
+                )?;
+                match commit {
+                    Some(c) => crate::held_out::push(
+                        &repo_root,
+                        &store,
+                        options.remote,
+                        &report.feature,
+                        &c,
+                    ),
+                    None => Ok(()),
+                }
+            });
         match pushed {
             Ok(()) => String::new(),
             Err(e) => format!(

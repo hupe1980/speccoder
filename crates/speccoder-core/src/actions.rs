@@ -29,15 +29,24 @@ pub enum Runnable {
         /// Repository-relative paths.
         paths: Vec<String>,
     },
-    /// Approve the task's waiting call.
+    /// Approve the task's waiting call: the one that was shown, refused
+    /// when another waits now.
     Approve {
         /// The task.
         task: String,
+        /// The call's id ([`crate::PendingCall::id`]).
+        call: String,
+        /// The digest of the call that was shown ([`crate::PendingCall::digest`]).
+        digest: String,
     },
-    /// Reject it (the input is the reason).
+    /// Reject it (the input is the reason), bound the same way.
     Reject {
         /// The task.
         task: String,
+        /// The call's id ([`crate::PendingCall::id`]).
+        call: String,
+        /// The digest of the call that was shown ([`crate::PendingCall::digest`]).
+        digest: String,
     },
     /// Tick the task on the person's word (the input is the reason).
     Accept {
@@ -378,8 +387,16 @@ impl ActionKind {
             Self::Commit => Runnable::Commit {
                 paths: vec!["plan.md".to_owned()],
             },
-            Self::Approve => Runnable::Approve { task: task() },
-            Self::Reject => Runnable::Reject { task: task() },
+            Self::Approve => Runnable::Approve {
+                task: task(),
+                call: "0f3c".to_owned(),
+                digest: "d1".to_owned(),
+            },
+            Self::Reject => Runnable::Reject {
+                task: task(),
+                call: "0f3c".to_owned(),
+                digest: "d1".to_owned(),
+            },
             Self::Accept => Runnable::Accept { task: task() },
             Self::Skip => Runnable::Skip { task: task() },
             Self::Nudge => Runnable::Nudge { task: task() },
@@ -517,8 +534,8 @@ pub fn identity(run: Option<&Runnable>, command: &str) -> ActionId {
     let subject = match run {
         Runnable::Skill { name, .. } => Some(name.clone()),
         Runnable::Run { task } => task.clone(),
-        Runnable::Approve { task }
-        | Runnable::Reject { task }
+        Runnable::Approve { task, .. }
+        | Runnable::Reject { task, .. }
         | Runnable::Accept { task }
         | Runnable::Skip { task }
         | Runnable::Nudge { task }

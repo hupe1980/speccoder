@@ -408,8 +408,16 @@
           "type": "object"
         },
         {
-          "description": "Approve the task's waiting call.",
+          "description": "Approve the task's waiting call: the one that was shown, refused\nwhen another waits now.",
           "properties": {
+            "call": {
+              "description": "The call's id ([`crate::PendingCall::id`]).",
+              "type": "string"
+            },
+            "digest": {
+              "description": "The digest of the call that was shown ([`crate::PendingCall::digest`]).",
+              "type": "string"
+            },
             "kind": {
               "const": "approve",
               "type": "string"
@@ -421,13 +429,23 @@
           },
           "required": [
             "kind",
-            "task"
+            "task",
+            "call",
+            "digest"
           ],
           "type": "object"
         },
         {
-          "description": "Reject it (the input is the reason).",
+          "description": "Reject it (the input is the reason), bound the same way.",
           "properties": {
+            "call": {
+              "description": "The call's id ([`crate::PendingCall::id`]).",
+              "type": "string"
+            },
+            "digest": {
+              "description": "The digest of the call that was shown ([`crate::PendingCall::digest`]).",
+              "type": "string"
+            },
             "kind": {
               "const": "reject",
               "type": "string"
@@ -439,7 +457,9 @@
           },
           "required": [
             "kind",
-            "task"
+            "task",
+            "call",
+            "digest"
           ],
           "type": "object"
         },
