@@ -231,8 +231,14 @@ pub(crate) fn run_task(
     let head_now = git::Git::at(&wt_root)
         .line(&["rev-parse", "HEAD"])
         .unwrap_or_default();
-    let interrupted = resume::load(&marker_path)
-        .filter(|m| m.head == head_now && options.lane.is_none() && !head_now.is_empty());
+    // An autopilot run has exactly the grants ticked on its sheet (FR-014):
+    // it resumes no interrupted attempt — whose journal holds an earlier
+    // run's grants and answers — but sets it aside like any leftover, and
+    // adopts no answer kept for the task.
+    let autopilot = options.mode == speccoder_core::oracle::RunMode::Autopilot;
+    let interrupted = resume::load(&marker_path).filter(|m| {
+        m.head == head_now && options.lane.is_none() && !head_now.is_empty() && !autopilot
+    });
     // A resumed attempt continues its run: this invocation adopts the
     // run's id, its asking count and its grants.
     if let Some(m) = &interrupted {
@@ -518,15 +524,20 @@ pub(crate) fn run_task(
     let (decisions, task_grants) = match approvals::Decisions::load(&s.plane_dir) {
         Ok(mut d) => {
             // Decisions on a call a lane stopped belong to the run that
-            // now attempts the task.
-            if d.claim(&feature_name, task, this_run.as_str())
+            // now attempts the task (an autopilot run claims none).
+            if !autopilot
+                && d.claim(&feature_name, task, this_run.as_str())
                 && let Err(e) = d.save(&s.plane_dir)
             {
                 return refuse(CommandStatus::Error, e);
             }
             (
                 d.for_task(&feature_name, task),
-                d.for_run(&feature_name, task, this_run.as_str()),
+                if autopilot {
+                    Vec::new()
+                } else {
+                    d.for_run(&feature_name, task, this_run.as_str())
+                },
             )
         }
         Err(e) => return refuse(CommandStatus::ConfigError, e),
@@ -1197,6 +1208,9 @@ pub(crate) fn run_task(
             // journaled. Decisions that cannot be read stop the task — the
             // grants read when it began may hold one rejected since.
             let (task_grants, approved_once) = match approvals::Decisions::load(&s.plane_dir) {
+                // Autopilot: only the ticked grants (`run_grants`) — no
+                // answer kept for the task, no once-grant is taken.
+                Ok(_) if autopilot => (Vec::new(), Vec::new()),
                 Ok(mut d) => {
                     let once = d.take_once(&feature_name, task, this_run.as_str());
                     if !once.is_empty()

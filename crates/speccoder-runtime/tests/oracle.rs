@@ -1066,3 +1066,102 @@ fn us1_red_is_each_test_s_own_never_a_neighbour_s() {
     );
     assert_eq!(v.uncovered, ["US1-2", "US1-3"]);
 }
+
+#[test]
+fn autopilot_never_adopts_the_grants_of_an_interrupted_earlier_run() {
+    // C3: an Ask run waits on `cargo add serde` and the person approves it;
+    // the attempt is then resumed on autopilot with nothing ticked.
+    if speccoder_runtime::sandbox::backend().is_err() {
+        return; // autopilot needs the OS sandbox
+    }
+    let r = repo();
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = written(r.path(), state.path());
+    let frozen = speccoder_runtime::review::approve_and_run(
+        r.path(),
+        None,
+        RunMode::Ask,
+        &[],
+        Via::Terminal,
+        Some(state.path()),
+        Some(d.clone()),
+        &RunOptions {
+            max_tasks: Some(0),
+            ..RunOptions::default()
+        },
+    );
+    assert!(
+        frozen.message().contains("froze tests for 1"),
+        "{}",
+        frozen.message()
+    );
+    f.will_call_tool(
+        "c0",
+        "run_command",
+        json!({ "argv": ["cargo", "add", "serde"] }),
+    );
+    let asked = speccoder_runtime::pipeline::run_feature_with(
+        r.path(),
+        None,
+        state.path(),
+        &d,
+        None,
+        &one_task(),
+    );
+    assert_eq!(
+        asked.status(),
+        CommandStatus::NeedsHuman,
+        "{}",
+        asked.message()
+    );
+    let ok = speccoder_runtime::approvals::decide_with(
+        r.path(),
+        None,
+        speccoder_runtime::approvals::Verb::Approve("T005"),
+        state.path(),
+        Via::Terminal,
+    );
+    assert_eq!(ok.status(), CommandStatus::Ok, "{}", ok.message());
+    // On autopilot the attempt asks for the same command again.
+    f.will_call_tool(
+        "c2",
+        "run_command",
+        json!({ "argv": ["cargo", "add", "serde"] }),
+    );
+    write_lib(&f, "c1", "pub fn ok() {}\npub fn login() {}\n");
+    let res = speccoder_runtime::pipeline::run_feature_with(
+        r.path(),
+        None,
+        state.path(),
+        &d,
+        None,
+        &RunOptions {
+            mode: RunMode::Autopilot,
+            ..one_task()
+        },
+    );
+    let Some(CommandData::Feature(fr)) = res.data() else {
+        panic!("{}", res.message())
+    };
+    let calls: Vec<&Value> = fr
+        .attempts
+        .iter()
+        .flat_map(|a| a.tool_calls.iter())
+        .collect();
+    assert!(
+        calls
+            .iter()
+            .filter(|c| c["arguments"]["argv"][1] == "add")
+            .all(|c| c["decision"] == "deny"),
+        "the earlier run's approval was used on autopilot: {} {calls:#?}",
+        res.message(),
+    );
+    assert!(
+        fr.autopilot_denied
+            .iter()
+            .any(|x| x.object.contains("cargo add serde")),
+        "{} {:?}",
+        res.message(),
+        fr.autopilot_denied
+    );
+}
