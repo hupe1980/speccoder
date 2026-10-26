@@ -467,6 +467,7 @@ mod tests {
             call: "c1".to_owned(),
             tool: "run_command".to_owned(),
             class: String::new(),
+            object: String::new(),
             what: "cargo add x".to_owned(),
         }
     }

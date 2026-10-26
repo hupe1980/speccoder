@@ -21,12 +21,12 @@ const MODEL: &str = "[model]\nprovider = \"openai\"\nmodel = \"gpt-5.4-mini\"\n"
 /// The check, and `grep` allowed for the scripted acceptance tests (a
 /// check whose prefix is a bare program allows only itself).
 const CHECK: &str = "[checks.has-ok]\nargv = [\"grep\", \"-q\", \"fn ok\", \"src/lib.rs\"]\n";
-const GREP: &str = "[commands]\nallow = [[\"grep\"], [\"./accept.sh\"]]\n";
+const GREP: &str = "[commands]\nallow_prefix = [[\"grep\", \"-q\"], [\"./accept.sh\", \"--\"]]\n";
 
 /// A stand-in test runner for scripted acceptance tests: one test, "the
 /// pattern is in src/lib.rs", reported with libtest's summary line so its
 /// red is an assertion failure.
-const ACCEPT_SH: &str = "#!/bin/sh\nif [ \"$2\" = flaky ] && grep -q \"$1\" src/lib.rs && [ ! -e .flaky-seen ]; then\n  touch .flaky-seen\n  echo 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out'\n  exit 101\nelif grep -q \"$1\" src/lib.rs; then\n  echo 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out'\nelif [ \"$2\" = absent ]; then\n  echo 'error[E0425]: cannot find function `login` in this scope' >&2\n  echo 'error: could not compile `demo` (test \"acceptance\") due to 1 previous error' >&2\n  exit 101\nelif [ \"$2\" = syntax ]; then\n  echo 'error: expected one of `,`, `:`, or `}`, found `=`' >&2\n  echo 'error: could not compile `demo` (test \"acceptance\") due to 1 previous error' >&2\n  exit 101\nelse\n  echo 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out'\n  exit 101\nfi\n";
+const ACCEPT_SH: &str = "#!/bin/sh\n[ \"$1\" = -- ] && shift\nif [ \"$2\" = flaky ] && grep -q \"$1\" src/lib.rs && [ ! -e .flaky-seen ]; then\n  touch .flaky-seen\n  echo 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out'\n  exit 101\nelif grep -q \"$1\" src/lib.rs; then\n  echo 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out'\nelif [ \"$2\" = absent ]; then\n  echo 'error[E0425]: cannot find function `login` in this scope' >&2\n  echo 'error: could not compile `demo` (test \"acceptance\") due to 1 previous error' >&2\n  exit 101\nelif [ \"$2\" = syntax ]; then\n  echo 'error: expected one of `,`, `:`, or `}`, found `=`' >&2\n  echo 'error: could not compile `demo` (test \"acceptance\") due to 1 previous error' >&2\n  exit 101\nelse\n  echo 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out'\n  exit 101\nfi\n";
 
 fn write_accept_sh(root: &Path) {
     use std::os::unix::fs::PermissionsExt;
@@ -114,7 +114,10 @@ fn repo_with(extra_config: &str, files: &[(&str, &str)]) -> tempfile::TempDir {
 /// `extra_config` with `grep` added to its `[commands] allow` (or a new one).
 fn with_grep(extra_config: &str) -> String {
     if extra_config.contains("[commands]") {
-        extra_config.replace("allow = [", "allow = [[\"grep\"], [\"./accept.sh\"], ")
+        extra_config.replace(
+            "[commands]\n",
+            "[commands]\nallow_prefix = [[\"grep\", \"-q\"], [\"./accept.sh\", \"--\"]]\n",
+        )
     } else {
         format!("{GREP}{extra_config}")
     }
@@ -472,7 +475,10 @@ fn new_test_files_are_free_to_write() {
 
 #[test]
 fn a_command_that_deletes_a_frozen_test_fails_the_verdict() {
-    let r = repo_with("[commands]\nallow = [[\"rm\"]]\n", &[EXISTING_TEST]);
+    let r = repo_with(
+        "[commands]\nallow = [[\"rm\", \"tests/existing.rs\"]]\n",
+        &[EXISTING_TEST],
+    );
     let state = tempfile::tempdir().unwrap();
     let (f, d) = fake();
     f.will_call_tool(
@@ -495,7 +501,7 @@ fn a_command_that_deletes_a_frozen_test_fails_the_verdict() {
 
 #[test]
 fn skip_markers_and_ci_changes_are_flagged() {
-    let r = repo("[commands]\nallow = [[\"cp\"]]\n");
+    let r = repo("[commands]\nallow = [[\"cp\", \"src/lib.rs\", \".gitlab-ci.yml\"]]\n");
     let state = tempfile::tempdir().unwrap();
     let (f, d) = fake();
     f.will_call_tool("c1", "edit_file", json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\n\n#[test]\n#[ignore]\nfn slow() {}" }));
@@ -525,7 +531,7 @@ fn skip_markers_and_ci_changes_are_flagged() {
 #[test]
 fn a_command_writing_agent_settings_stops_the_attempt_at_once() {
     let r = repo_with(
-        "[commands]\nallow = [[\"cp\"]]\n",
+        "[commands]\nallow = [[\"cp\", \"src/lib.rs\", \".claude/settings.json\"]]\n",
         &[(".claude/README.md", "agent config\n")],
     );
     let state = tempfile::tempdir().unwrap();
@@ -561,7 +567,7 @@ fn a_command_writing_agent_settings_stops_the_attempt_at_once() {
 #[test]
 fn a_command_writing_ignored_agent_settings_is_caught_too() {
     let r = repo_with(
-        "[commands]\nallow = [[\"cp\"]]\n",
+        "[commands]\nallow = [[\"cp\", \"src/lib.rs\", \".claude/settings.local.json\"]]\n",
         &[
             (".claude/README.md", "agent config\n"),
             (".gitignore", ".claude/settings.local.json\n"),
@@ -590,7 +596,7 @@ fn a_command_writing_ignored_agent_settings_is_caught_too() {
 #[test]
 fn agent_configuration_is_denied_and_context_files_ask() {
     let r = repo_with(
-        "[commands]\nallow = [[\"cat\"]]\n",
+        "[commands]\nallow = [[\"cat\", \".claude/settings.json\"]]\n",
         &[
             ("AGENTS.md", "# Agents\n"),
             (".claude/settings.json", "{}\n"),
@@ -946,7 +952,7 @@ fn acceptance(path: &str, argv: &[&str]) -> Value {
     json!({ "files": [{ "path": path, "content": "acceptance: login exists\n", "scenarios": [] }], "argv": argv, "notes": [] })
 }
 
-const GREP_LOGIN: &[&str] = &["./accept.sh", "fn login"];
+const GREP_LOGIN: &[&str] = &["./accept.sh", "--", "fn login"];
 
 #[test]
 fn a_build_error_is_not_red_and_cannot_verify() {
@@ -955,7 +961,7 @@ fn a_build_error_is_not_red_and_cannot_verify() {
     let (f, d) = fake();
     f.will_structure(acceptance(
         "tests/acceptance_login.txt",
-        &["./accept.sh", "fn login", "syntax"],
+        &["./accept.sh", "--", "fn login", "syntax"],
     ));
     f.will_call_tool("c1", "edit_file", json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\npub fn login() {}" }));
     f.will_structure(done("login"));
@@ -979,7 +985,7 @@ fn a_missing_symbol_is_absent_red_and_can_verify() {
     let (f, d) = fake();
     f.will_structure(acceptance(
         "tests/acceptance_login.txt",
-        &["./accept.sh", "fn login", "absent"],
+        &["./accept.sh", "--", "fn login", "absent"],
     ));
     f.will_call_tool("c1", "edit_file", json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\npub fn login() {}" }));
     f.will_structure(done("login"));
@@ -1009,7 +1015,7 @@ fn a_flaky_acceptance_check_is_never_verified() {
     let (f, d) = fake();
     f.will_structure(acceptance(
         "tests/acceptance_login.txt",
-        &["./accept.sh", "fn login", "flaky"],
+        &["./accept.sh", "--", "fn login", "flaky"],
     ));
     f.will_call_tool("c1", "edit_file", json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\npub fn login() {}" }));
     f.will_structure(done("login"));
@@ -1836,7 +1842,7 @@ fn an_inline_approval_continues_the_same_attempt_and_replays_without_asking() {
     assert_eq!(asked.len(), 1);
     assert_eq!(asked[0].task, "001-graph/T005");
     assert_eq!(
-        (asked[0].covers.as_str(), asked[0].risk.as_str()),
+        (asked[0].covers().as_str(), asked[0].risk.as_str()),
         ("write `package.json`", "medium")
     );
     // "Once" records no decision for the task.
@@ -3295,7 +3301,7 @@ fn a_waiting_call_is_listed_as_it_was_asked_and_a_note_reaches_the_attempt() {
         ("Write this file?", "package.json")
     );
     assert_eq!(v.body_lines, ["    1 │ {}"]);
-    assert_eq!(v.scope, "for the rest of T005: this path, any content");
+    assert_eq!(v.scope, "for the rest of T005: this file, any content");
     assert_eq!(v.risk, "medium");
     let json = serde_json::to_value(&listed).unwrap();
     assert_eq!(json["data"]["pending"][0]["presentation"]["kind"], "write");

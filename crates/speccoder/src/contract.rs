@@ -284,7 +284,8 @@ fn every_event_type_validates() {
             call: "c1".to_owned(),
             tool: "run_command".to_owned(),
             what: "cargo add x".to_owned(),
-            class: "run `cargo add x`".to_owned(),
+            class: "command".to_owned(),
+            object: "argv#1a2b3c4d5e6f".to_owned(),
         },
         Event::ApprovalDecided {
             task: "T001".to_owned(),
@@ -293,6 +294,8 @@ fn every_event_type_validates() {
             scope: Some("once".to_owned()),
             by: "Ada".to_owned(),
             how: "asserted".to_owned(),
+            class: "command".to_owned(),
+            object: "argv#1a2b3c4d5e6f".to_owned(),
         },
         Event::Usage {
             task: "T001".to_owned(),
@@ -483,6 +486,7 @@ fn every_listed_action_is_a_command_that_parses() {
         pending: Vec::new(),
         decided: Vec::new(),
         unreadable: None,
+        batch: Vec::new(),
     };
     let graph = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../speccoder-speckit/tests/fixtures/graph/specs");

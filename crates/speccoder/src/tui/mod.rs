@@ -533,6 +533,11 @@ impl App {
                     self.answered();
                     Action::Answer(a)
                 }
+                Parsed::Always => {
+                    let a = Answer::always(self.who());
+                    self.answered();
+                    Action::Answer(a)
+                }
                 Parsed::Reject { .. } => {
                     self.typing = Some((Typing::Reason, String::new()));
                     Action::None
@@ -848,6 +853,7 @@ fn with_primary(mut snap: Snapshot, path: &Path, feature: Option<&str>) -> Snaps
                     pending: Vec::new(),
                     decided: Vec::new(),
                     unreadable: Some("the journal was busy".to_owned()),
+                    batch: Vec::new(),
                 }),
         ),
     ))

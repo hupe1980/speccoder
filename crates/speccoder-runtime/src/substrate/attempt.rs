@@ -18,7 +18,7 @@ use super::model_config::{CacheTtl, PromptStyle};
 use super::propose::layout;
 use super::provenance;
 use crate::approvals::{Answer, Decision as Said, PresentContext, Request, Scope, Who};
-use crate::tools::policy::{Decision, Policy};
+use crate::tools::policy::{Decision, Object, Policy};
 
 /// The capability the skill provides.
 pub const CAPABILITY: &str = "speccoder.task.attempt";
@@ -220,6 +220,15 @@ pub fn input(
             trusted(json!(settings.frozen_additions)),
         ),
         ("network_allow", trusted(json!(settings.network_allow))),
+        ("allow_prefix", trusted(json!(settings.allow_prefix))),
+        (
+            "network_allow_prefix",
+            trusted(json!(settings.network_allow_prefix)),
+        ),
+        ("run_id", trusted(json!(settings.run_id))),
+        ("asked", trusted(json!(settings.asked))),
+        ("budget", trusted(json!(settings.budget))),
+        ("prompts", trusted(json!(settings.prompts))),
         ("asks", trusted(json!(settings.asks))),
         ("wait_secs", trusted(json!(settings.wait_secs))),
         ("in_place", trusted(json!(settings.in_place))),
@@ -274,8 +283,10 @@ fn conversation_label(input: &Tainted<Value>) -> agentplane::core::Label {
 pub struct Settings<'a> {
     /// Configured checks' argvs (their prefixes are allowed commands).
     pub checks: &'a [Vec<String>],
-    /// Extra allowed command prefixes.
+    /// Exact commands allowed (`[commands] allow`).
     pub allow: &'a [Vec<String>],
+    /// Allowed command prefixes (`[commands] allow_prefix`).
+    pub allow_prefix: &'a [Vec<String>],
     /// Model turns.
     pub max_turns: u32,
     /// Tool calls.
@@ -284,12 +295,12 @@ pub struct Settings<'a> {
     pub reasoning: bool,
     /// Test files frozen for this attempt.
     pub frozen: &'a [String],
-    /// A person's approvals for this task.
-    pub approved: &'a [crate::tools::policy::Grant],
+    /// A person's approvals for this task, in this run.
+    pub approved: &'a [Object],
     /// A person's rejections for this task.
     pub rejected: &'a [crate::tools::policy::Rejection],
-    /// Classes a person approved for every task of this run.
-    pub run_approved: &'a [crate::tools::policy::Grant],
+    /// Objects a person approved for every task of this run.
+    pub run_approved: &'a [Object],
     /// A person's notes for this task (`nudge`).
     pub nudges: &'a [String],
     /// The project's MCP tools for this run.
@@ -303,8 +314,18 @@ pub struct Settings<'a> {
     pub asks: &'a str,
     /// How long a call waits for a person before it is denied as expired.
     pub wait_secs: u64,
-    /// Command prefixes that get the network (`[sandbox] network_allow`).
+    /// Exact commands that get the network (`[sandbox] network_allow`).
     pub network_allow: &'a [Vec<String>],
+    /// Prefixes that get it (`[sandbox] network_allow_prefix`).
+    pub network_allow_prefix: &'a [Vec<String>],
+    /// The run the attempt belongs to.
+    pub run_id: &'a str,
+    /// Prompts the run has shown a person so far.
+    pub asked: u32,
+    /// `[approvals] budget`.
+    pub budget: u32,
+    /// A person is prompted inline (not `--no-prompt`).
+    pub prompts: bool,
     /// An in-place attempt: git that moves the checkout is denied.
     pub in_place: bool,
     /// In place: what git ignored at the run's start, hidden from the tools.
@@ -413,7 +434,7 @@ impl Skill for Attempt {
             })
             .unwrap_or_default();
         let decisions = |key: &str| settings[key].clone();
-        let approved: Vec<crate::tools::policy::Grant> =
+        let approved: Vec<Object> =
             serde_json::from_value(decisions("approved")).unwrap_or_default();
         let rejected: Vec<crate::tools::policy::Rejection> =
             serde_json::from_value(decisions("rejected")).unwrap_or_default();
@@ -421,6 +442,8 @@ impl Skill for Attempt {
         let mcp: Vec<crate::mcp::McpTool> =
             serde_json::from_value(settings["mcp"].clone()).unwrap_or_default();
         let policy = Policy::new(&argvs(&settings["checks"]), &argvs(&settings["allow"]))
+            .with_prefixes(argvs(&settings["allow_prefix"]))
+            .with_network_prefixes(argvs(&settings["network_allow_prefix"]))
             .rules(self.format.rules())
             .with_frozen(frozen)
             .with_decisions(approved, rejected)
@@ -504,7 +527,7 @@ impl Skill for Attempt {
                     };
                     let lines: Vec<String> = told
                         .iter()
-                        .map(|r| format!("- {}: {}", r.grant.describe(), r.reason))
+                        .map(|r| format!("- {}: {}", r.object.describe(), r.reason))
                         .collect();
                     let text = format!(
                         "# Rejected by a person\n\nThese calls were rejected for this task; find another way or call report_blocked:\n\n{}\n",
@@ -542,8 +565,31 @@ impl Skill for Attempt {
                 ..self.present.clone()
             },
         );
-        let remembered: Vec<crate::tools::policy::Grant> =
+        let remembered: Vec<Object> =
             serde_json::from_value(settings["run_approved"].clone()).unwrap_or_default();
+        // Untrusted text the prompt itself carries.
+        let mut parts = Vec::new();
+        let given: Vec<crate::instructions::Instruction> =
+            serde_json::from_value(input.peek()["instructions"].clone()).unwrap_or_default();
+        if let Some(text) = crate::instructions::section(&given) {
+            parts.push(crate::approvals::derived::Part {
+                from: provenance::WORKTREE.to_owned(),
+                turn: 0,
+                text,
+            });
+        }
+        if !input.peek()["digest"].is_null() {
+            parts.push(crate::approvals::derived::Part {
+                from: provenance::VERIFIER.to_owned(),
+                turn: 0,
+                text: crate::approvals::derived::text_of(&input.peek()["digest"]),
+            });
+        }
+        let number = |k: &str, d: u32| {
+            settings[k]
+                .as_u64()
+                .map_or(d, |n| u32::try_from(n).unwrap_or(u32::MAX))
+        };
         tool_loop(
             cx,
             &prompt,
@@ -559,6 +605,17 @@ impl Skill for Attempt {
                 frozen_additions: settings["frozen_additions"] == true,
                 ask,
                 run_approved: remembered,
+                run: settings["run_id"].as_str().map(str::to_owned),
+                asking: Asking {
+                    asked: number("asked", 0),
+                    budget: number("budget", DEFAULT_BUDGET),
+                    prompts: settings["prompts"] == true,
+                },
+                parts,
+                mcp_digests: mcp
+                    .iter()
+                    .map(|t| (t.name.clone(), t.digest.clone()))
+                    .collect(),
                 observer: self.progress.clone().map(|p| {
                     (
                         task_name.rsplit('/').next().unwrap_or_default().to_owned(),
@@ -634,6 +691,7 @@ fn emit_with_tail(
 fn needs_person(
     observer: Option<&(String, std::sync::Arc<dyn crate::progress::Progress>)>,
     asked: &agentplane::model::ToolCall,
+    object: Option<&Object>,
 ) {
     if let Some((task, p)) = observer {
         let (tool, arguments) = (asked.name.as_str(), &asked.arguments);
@@ -648,9 +706,10 @@ fn needs_person(
             call: asked.id.clone(),
             tool: tool.to_owned(),
             what,
-            class: crate::tools::policy::Grant::of(tool, arguments)
-                .map(|g| g.describe())
+            class: object
+                .map(|o| o.class().as_str().to_owned())
                 .unwrap_or_default(),
+            object: object.map(Object::short).unwrap_or_default(),
         });
     }
 }
@@ -662,6 +721,7 @@ fn person_decided(
     decision: &str,
     scope: Option<&str>,
     who: Option<&Who>,
+    object: Option<&Object>,
 ) {
     if let Some((task, p)) = observer {
         p.event(&crate::progress::Event::ApprovalDecided {
@@ -671,7 +731,82 @@ fn person_decided(
             scope: scope.map(str::to_owned),
             by: who.map_or_else(|| "nobody (expired)".to_owned(), |w| w.name.clone()),
             how: who.map_or_else(|| "expired".to_owned(), |w| w.basis.clone()),
+            class: object
+                .map(|o| o.class().as_str().to_owned())
+                .unwrap_or_default(),
+            object: object.map(Object::short).unwrap_or_default(),
         });
+    }
+}
+
+/// What a call needing a person is asked by.
+struct Question<'a> {
+    asked: &'a agentplane::model::ToolCall,
+    reason: &'a str,
+    turn: u32,
+    said: &'a str,
+    asker: Option<&'a Asker>,
+    policy: &'a Policy,
+    object: Option<&'a Object>,
+    remembered: &'a [(Object, &'static str)],
+    parts: &'a [crate::approvals::derived::Part],
+    run: Option<&'a str>,
+}
+
+/// The journaled question for a call needing a person: its object, what
+/// changed since an approval of the same name, where its arguments were
+/// copied from, and the choices that leaves — all from journaled data.
+fn question(q: &Question<'_>) -> Request {
+    let (tool, arguments) = (q.asked.name.as_str(), &q.asked.arguments);
+    let kind = crate::approvals::kind_of(tool, arguments);
+    let risk = crate::approvals::risk(tool, q.reason);
+    // Always Allow commits an exact entry: judged without the network.
+    let always_risk = if kind == "network" {
+        let mut bare = arguments.clone();
+        if let Some(o) = bare.as_object_mut() {
+            o.remove("network");
+        }
+        match q.policy.base(tool, &bare) {
+            Decision::Allow => "low",
+            Decision::Approval(r) => crate::approvals::risk(tool, &r),
+            Decision::Deny(_) => "high",
+        }
+    } else {
+        risk
+    };
+    let (sources, more) = crate::approvals::derived::sources(tool, arguments, q.parts);
+    let changed = q.object.and_then(|o| {
+        q.remembered
+            .iter()
+            .map(|(r, _)| r)
+            .chain(q.policy.approved())
+            .find_map(|earlier| o.changed_from(earlier))
+    });
+    Request {
+        task: q.asker.map(|a| a.task.clone()).unwrap_or_default(),
+        task_title: q.asker.map(|a| a.task_title.clone()).unwrap_or_default(),
+        turn: q.turn,
+        tool: tool.to_owned(),
+        arguments: arguments.clone(),
+        kind: kind.to_owned(),
+        reason: q.reason.to_owned(),
+        object: q.object.cloned(),
+        changed,
+        risk: risk.to_owned(),
+        claim: crate::approvals::claim(q.said),
+        options: crate::approvals::options(
+            risk,
+            q.object.is_some(),
+            !sources.is_empty(),
+            kind,
+            always_risk,
+        ),
+        sources,
+        more,
+        run: q.run.map(str::to_owned),
+        asked: 0,
+        budget: 0,
+        batched: false,
     }
 }
 
@@ -700,11 +835,46 @@ pub(crate) struct LoopSpec {
     pub finish: fn(&Value) -> &'static str,
     /// Ask a person instead of stopping when a call needs approval.
     pub ask: Option<Asker>,
-    /// Classes a person approved for this run: allowed without asking.
-    pub run_approved: Vec<crate::tools::policy::Grant>,
+    /// Objects a person approved for this run: allowed without asking.
+    pub run_approved: Vec<Object>,
     /// Live progress: the task ID and where to report.
     pub observer: Option<(String, std::sync::Arc<dyn crate::progress::Progress>)>,
+    /// The run the attempt belongs to (`run-<secs>-<hex>`).
+    pub run: Option<String>,
+    /// How a run asks: its count so far, its budget and whether a person is
+    /// prompted at all.
+    pub asking: Asking,
+    /// Untrusted content the prompt carries (inlined worktree text, the
+    /// verifier's digest): what derived arguments are found in.
+    pub parts: Vec<crate::approvals::derived::Part>,
+    /// MCP tools' digests by model-facing name: their objects.
+    pub mcp_digests: std::collections::BTreeMap<String, String>,
 }
+
+/// A run's asking budget as an attempt sees it (all journaled).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Asking {
+    /// Prompts shown to a person in the run so far.
+    pub asked: u32,
+    /// `[approvals] budget`: at most this many per run.
+    pub budget: u32,
+    /// A person is prompted inline; `false` with `--no-prompt` (calls wait
+    /// as ordinary approvals, nothing is counted).
+    pub prompts: bool,
+}
+
+impl Default for Asking {
+    fn default() -> Self {
+        Self {
+            asked: 0,
+            budget: DEFAULT_BUDGET,
+            prompts: false,
+        }
+    }
+}
+
+/// `[approvals] budget` unless configured.
+pub const DEFAULT_BUDGET: u32 = 12;
 
 /// The governed tool loop shared by attempts and convergence: every call is
 /// classified first (deny → refused and told; approval → stop; allow →
@@ -728,11 +898,17 @@ pub(crate) async fn tool_loop(
         ask,
         run_approved,
         observer,
+        run,
+        asking,
+        mut parts,
+        mcp_digests,
     } = spec;
-    // Classes allowed without asking: this run's, then what a person
+    // Objects allowed without asking: this run's, then what a person
     // answered "for the task" or "for this run" in this attempt.
-    let mut remembered: Vec<(crate::tools::policy::Grant, &'static str)> =
+    let mut remembered: Vec<(Object, &'static str)> =
         run_approved.into_iter().map(|g| (g, "run-grant")).collect();
+    let mut prompted = asking.asked;
+    let mut told_budget = false;
     let catalog = crate::tools::catalog();
 
     // What the conversation has read, with its labels: agentplane checks
@@ -750,10 +926,12 @@ pub(crate) async fn tool_loop(
                extra: Value,
                log: &[Value],
                usage: agentplane::model::Usage,
-               conversation: &Label| {
+               conversation: &Label,
+               prompted: u32| {
         let mut out = json!({
             "status": status,
             "tool_calls": log,
+            "asked": prompted,
             "usage": {
                 "input_tokens": usage.input_tokens,
                 "output_tokens": usage.output_tokens,
@@ -854,11 +1032,16 @@ pub(crate) async fn tool_loop(
                 &log,
                 usage,
                 &conversation,
+                prompted,
             );
         }
 
         for mut asked in asked_calls {
             relativise(&mut asked.arguments, root.as_deref());
+            // Only speccoder sets the object a call is checked against.
+            if let Some(o) = asked.arguments.as_object_mut() {
+                o.remove(crate::tools::EXPECT);
+            }
             calls += 1;
             if calls > max_tool_calls {
                 return end(
@@ -867,6 +1050,7 @@ pub(crate) async fn tool_loop(
                     &log,
                     usage,
                     &conversation,
+                    prompted,
                 );
             }
             if asked.name == ASK_PERSON && tools.iter().any(|t| t.name == ASK_PERSON) {
@@ -929,6 +1113,7 @@ pub(crate) async fn tool_loop(
                     &log,
                     usage,
                     &conversation,
+                    prompted,
                 );
             }
             let declared = tools.iter().any(|t| t.name == asked.name);
@@ -949,7 +1134,7 @@ pub(crate) async fn tool_loop(
                 transcript.failed(asked, Tainted::trusted("no tool of that name".to_owned()));
                 continue;
             };
-            let mut decision = policy.classify(&asked.name, &asked.arguments);
+            let mut decision = policy.base(&asked.name, &asked.arguments);
             // `[tests] frozen = "additions"`: read the frozen test (a
             // journaled call, so replay sees the same content) and allow a
             // write that keeps every existing line.
@@ -996,44 +1181,112 @@ pub(crate) async fn tool_loop(
                     additions_only = true;
                 }
             }
-            // A class a person already approved for this run or task.
-            let grant = crate::tools::policy::Grant::of(&asked.name, &asked.arguments);
+            // A person would be needed: the object the call reaches is
+            // resolved by a journaled step (replay reads the same object
+            // back), and only a decision on that very object applies.
+            let mut object: Option<Object> = None;
+            if matches!(decision, Decision::Approval(_)) {
+                if asked.name.starts_with(crate::mcp::PREFIX) {
+                    object = mcp_digests.get(&asked.name).map(|digest| Object::Tool {
+                        name: asked.name.clone(),
+                        digest: digest.clone(),
+                    });
+                } else {
+                    let resolved = cx
+                        .call_tool(
+                            ToolId::new("fs", "resolve"),
+                            Tainted::with_label(
+                                json!({ "tool": asked.name, "arguments": asked.arguments }),
+                                completion.label().clone(),
+                            ),
+                        )
+                        .await?;
+                    let out = resolved.peek();
+                    if out["ok"] == true {
+                        object = serde_json::from_value(out["object"].clone()).ok();
+                    } else {
+                        decision = Decision::Deny(
+                            out["error"]
+                                .as_str()
+                                .unwrap_or("the call's object cannot be resolved")
+                                .to_owned(),
+                        );
+                    }
+                }
+                if matches!(decision, Decision::Approval(_)) {
+                    decision = policy.classify(&asked.name, &asked.arguments, object.as_ref());
+                }
+            }
             let mut person: Option<Value> = None;
             let mut note: Option<String> = None;
+            // An object a person already approved for this run or task.
             if matches!(decision, Decision::Approval(_))
-                && let Some((_, scope)) = grant
+                && let Some((_, scope)) = object
                     .as_ref()
-                    .and_then(|g| remembered.iter().find(|(r, _)| r == g))
+                    .and_then(|o| remembered.iter().find(|(r, _)| r == o))
             {
-                person = Some(json!({ "approved_by": "person", "scope": scope }));
+                person = Some(json!({
+                    "approved_by": "person",
+                    "scope": scope,
+                    "grant": { "scope": scope.trim_end_matches("-grant"), "run": run },
+                }));
                 decision = Decision::Allow;
             }
-            // ask a person now, as a journaled effect, instead of stopping.
-            if let (Decision::Approval(reason), Some(asker)) = (&decision, &ask) {
-                let risk = crate::approvals::risk(&asked.name, reason);
-                let claim = crate::approvals::claim(&completion.peek().text);
-                let request = Request {
-                    task: asker.task.clone(),
-                    task_title: asker.task_title.clone(),
+            // Still a person's: the question, with everything it is decided by.
+            let request = match &decision {
+                Decision::Approval(reason) => Some(question(&Question {
+                    asked: &asked,
+                    reason,
                     turn: turn + 1,
-                    tool: asked.name.clone(),
-                    arguments: asked.arguments.clone(),
-                    kind: crate::approvals::kind_of(&asked.name, &asked.arguments).to_owned(),
-                    reason: reason.clone(),
-                    covers: grant.as_ref().map(|g| g.describe()).unwrap_or_default(),
-                    risk: risk.to_owned(),
-                    claim: claim.clone(),
-                    options: crate::approvals::options(risk, grant.is_some()),
-                };
-                needs_person(observer.as_ref(), &asked);
+                    said: &completion.peek().text,
+                    asker: ask.as_ref(),
+                    policy: &policy,
+                    object: object.as_ref(),
+                    remembered: &remembered,
+                    parts: &parts,
+                    run: run.as_deref(),
+                })),
+                _ => None,
+            };
+            // ask a person now, as a journaled effect, instead of stopping.
+            if let (Some(mut request), Some(asker)) = (request.clone(), &ask) {
+                // The run's asking budget: within it a person is prompted
+                // (and counted, whatever they answer); past it the call
+                // waits in the run's batch, nobody interrupted.
+                if asking.prompts {
+                    if prompted < asking.budget {
+                        prompted += 1;
+                        request.asked = prompted;
+                    } else {
+                        request.batched = true;
+                    }
+                    request.budget = asking.budget;
+                }
+                if request.batched {
+                    if !told_budget && let Some((_, p)) = &observer {
+                        p.event(&crate::progress::Event::Notice {
+                            text: format!(
+                                "approval budget ({}) reached: calls wait in Needs You (speccoder approvals)",
+                                asking.budget
+                            ),
+                        });
+                    }
+                    told_budget = true;
+                } else {
+                    needs_person(observer.as_ref(), &asked, object.as_ref());
+                }
                 let decided = wait_for_person(
                     cx,
                     asker,
                     &mut obligation,
-                    &crate::approvals::tasks::approval_task(&request, grant.as_ref(), &log),
+                    &crate::approvals::tasks::approval_task(&request, &log),
                 )
                 .await?;
                 let read = crate::approvals::tasks::read(&decided);
+                // A batch decision may start the run's asking again.
+                if read.resume_asking {
+                    prompted = 0;
+                }
                 let answer: Answer = read.answer.clone();
                 // Who decided, and how that is known, is journaled with it.
                 let approver = serde_json::to_value(&answer.by).unwrap_or(Value::Null);
@@ -1048,24 +1301,30 @@ pub(crate) async fn tool_loop(
                     },
                     (answer.decision == Said::Approve).then(|| answer.scope.name()),
                     read.by.as_ref().filter(|_| !read.expired),
+                    object.as_ref(),
                 );
                 match answer.decision {
                     Said::Approve => {
-                        person = Some(json!({
+                        let mut p = json!({
                             "approved_by": "person",
                             "scope": answer.scope.name(),
                             "note": answer.note,
                             "approver": approver,
                             "operator": operator,
-                        }));
-                        if let (Some(g), Scope::Task | Scope::Run) = (&grant, answer.scope) {
+                        });
+                        if answer.always {
+                            p["always"] = json!(true);
+                        }
+                        if let (Some(o), Scope::Task | Scope::Run) = (&object, answer.scope) {
                             let remembered_as = if answer.scope == Scope::Run {
                                 "run-grant"
                             } else {
                                 "task-grant"
                             };
-                            remembered.push((g.clone(), remembered_as));
+                            p["grant"] = json!({ "scope": answer.scope.name(), "run": run });
+                            remembered.push((o.clone(), remembered_as));
                         }
+                        person = Some(p);
                         note = answer.note;
                         decision = Decision::Allow;
                     }
@@ -1088,9 +1347,13 @@ pub(crate) async fn tool_loop(
             // — named, so a rule's decision is never read as a person's.
             let rule = person
                 .is_none()
-                .then(|| policy.rule(&asked.name, &asked.arguments));
+                .then(|| policy.rule(&asked.name, &asked.arguments, object.as_ref()));
             let with_person = |mut entry: Value| {
                 if let Some(o) = entry.as_object_mut() {
+                    // The object decided on, whoever decided.
+                    if let Some(obj) = &object {
+                        o.insert("object".to_owned(), json!(obj));
+                    }
                     match (person.as_ref().and_then(Value::as_object), &rule) {
                         (Some(p), _) => {
                             // An expiry is nobody's decision.
@@ -1134,21 +1397,33 @@ pub(crate) async fn tool_loop(
                             &log,
                             usage,
                             &conversation,
+                            prompted,
                         );
                     }
                     continue;
                 }
                 Decision::Approval(reason) => {
-                    let entry = json!({ "tool": asked.name, "arguments": asked.arguments, "decision": "approval", "reason": reason });
+                    let mut entry = json!({ "tool": asked.name, "arguments": asked.arguments, "decision": "approval", "reason": reason });
+                    if let Some(obj) = &object {
+                        entry["object"] = json!(obj);
+                    }
                     emit(observer.as_ref(), turn + 1, &entry);
-                    needs_person(observer.as_ref(), &asked);
+                    needs_person(observer.as_ref(), &asked, object.as_ref());
                     log.push(entry);
                     return end(
                         "needs_approval",
-                        json!({ "pending": { "tool": asked.name, "arguments": asked.arguments, "reason": reason } }),
+                        json!({ "pending": {
+                            "tool": asked.name,
+                            "arguments": asked.arguments,
+                            "reason": reason,
+                            "object": object,
+                            "run": run,
+                            "request": request,
+                        } }),
                         &log,
                         usage,
                         &conversation,
+                        prompted,
                     );
                 }
                 Decision::Allow => {
@@ -1164,6 +1439,16 @@ pub(crate) async fn tool_loop(
                         && let Some(o) = arguments.as_object_mut()
                     {
                         o.insert("call_id".to_owned(), Value::String(asked.id.clone()));
+                    }
+                    // Decided on an object: the tool checks it again at
+                    // use, and refuses when the call now reaches another.
+                    if let (Some(obj), Some(o)) = (&object, arguments.as_object_mut())
+                        && matches!(
+                            asked.name.as_str(),
+                            "write_file" | "edit_file" | "run_command"
+                        )
+                    {
+                        o.insert(crate::tools::EXPECT.to_owned(), json!(obj));
                     }
                     let args = Tainted::with_label(arguments, completion.label().clone());
                     let result = match cx.call_tool(target.clone(), args).await {
@@ -1188,6 +1473,26 @@ pub(crate) async fn tool_loop(
                     let mut entry = with_person(
                         json!({ "tool": asked.name, "arguments": asked.arguments, "decision": "allow", "ok": ok }),
                     );
+                    if let Some(changed) = output["object_changed"].as_object() {
+                        entry["decision"] = json!("refused_changed");
+                        entry["expected"] = changed.get("expected").cloned().unwrap_or(Value::Null);
+                        entry["found"] = changed.get("found").cloned().unwrap_or(Value::Null);
+                    }
+                    // What the tool returned is content the attempt read:
+                    // arguments copied from it later are named as such.
+                    if let Some(part) = crate::approvals::derived::part_of(
+                        &asked.name,
+                        &asked.arguments,
+                        &output,
+                        turn + 1,
+                        &format!("tool://{}/{}", target.server, target.tool),
+                        |p: &str| {
+                            policy.protected().write_class(p)
+                                == Some(crate::tools::paths::Class::Intent)
+                        },
+                    ) {
+                        parts.push(part);
+                    }
                     if additions_only {
                         entry["frozen_additions"] = json!(true);
                     }
@@ -1216,6 +1521,7 @@ pub(crate) async fn tool_loop(
                             &log,
                             usage,
                             &conversation,
+                            prompted,
                         );
                     }
                     // A tool that refused (`error`) is a failed call; a
@@ -1253,6 +1559,7 @@ pub(crate) async fn tool_loop(
         &log,
         usage,
         &conversation,
+        prompted,
     )
 }
 

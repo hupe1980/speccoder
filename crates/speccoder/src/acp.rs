@@ -297,6 +297,24 @@ struct Permissions {
 }
 
 /// The editor's kind for a call.
+/// The presentation's choices as ACP permission options, in its order:
+/// ACP has four kinds, so the names carry the distinction.
+#[must_use]
+pub fn permission_options(p: &Presentation) -> Vec<Value> {
+    p.options
+        .iter()
+        .map(|o| {
+            let (kind, name) = match o.choice.as_str() {
+                "once" => ("allow_once", o.label.clone()),
+                "task" | "run" | "always" => ("allow_always", o.label.clone()),
+                "stop" => ("reject_once", "Stop the task".to_owned()),
+                _ => ("reject_once", o.label.clone()),
+            };
+            json!({ "optionId": o.choice, "name": name, "kind": kind })
+        })
+        .collect()
+}
+
 fn approval_kind(kind: &str) -> &'static str {
     match kind {
         "write" | "edit" => "edit",
@@ -317,7 +335,16 @@ fn approval_content(p: &Presentation) -> Value {
         }
         content.push(diff);
     }
+    // The object and where its arguments came from lead the text.
     let mut text = String::new();
+    for line in p.object.iter().chain(&p.sources) {
+        text.push_str(line);
+        text.push('\n');
+    }
+    if let Some(notice) = &p.notice {
+        text.push_str(notice);
+        text.push('\n');
+    }
     if !matches!(p.request.kind.as_str(), "write" | "edit") || p.new_text.is_none() {
         text.push_str(&p.body.join("\n"));
         text.push('\n');
@@ -364,18 +391,7 @@ impl Approver for Permissions {
         let c = &self.conn.0;
         let call_id = c.id("approval");
         let task = p.request.task.rsplit('/').next().unwrap_or(&p.request.task);
-        let options: Vec<Value> = p
-            .options
-            .iter()
-            .map(|o| {
-                let kind = match o.choice.as_str() {
-                    "once" => "allow_once",
-                    "task" | "run" => "allow_always",
-                    _ => "reject_once",
-                };
-                json!({ "optionId": o.choice, "name": o.label, "kind": kind })
-            })
-            .collect();
+        let options = permission_options(p);
         let reply = c.request(
             "session/request_permission",
             json!({
@@ -402,6 +418,9 @@ impl Approver for Permissions {
             Some("once") => Answer::approve(Scope::Once, None, by()),
             Some("task") => Answer::approve(Scope::Task, None, by()),
             Some("run") => Answer::approve(Scope::Run, None, by()),
+            Some("always") if p.request.options.iter().any(|o| o == "always") => {
+                Answer::always(by())
+            }
             Some("stop") => Answer::stop(by()),
             _ => {
                 let reason = self
@@ -755,10 +774,14 @@ mod tests {
                 arguments,
                 kind: kind.to_owned(),
                 reason: "why".to_owned(),
-                covers: "c".to_owned(),
+                object: Some(speccoder_runtime::tools::policy::Object::Path {
+                    canonical: "Cargo.toml".to_owned(),
+                    asked: "Cargo.toml".to_owned(),
+                }),
                 risk: risk.to_owned(),
                 claim: Some("it is needed".to_owned()),
-                options: speccoder_runtime::approvals::options(risk, true),
+                options: speccoder_runtime::approvals::options(risk, true, false, kind, risk),
+                ..speccoder_runtime::approvals::Request::default()
             },
             &speccoder_runtime::approvals::PresentContext {
                 root: Some(dir.path().to_path_buf()),

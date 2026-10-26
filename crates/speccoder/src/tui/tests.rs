@@ -92,12 +92,16 @@ fn snapshot() -> Snapshot {
                     sandbox: "a file write — nothing is executed".to_owned(),
                     claim: None,
                     risk: "medium".to_owned(),
-                    scope: "for the rest of T002: this path, any content".to_owned(),
+                    scope: "for the rest of T002: this file, any content".to_owned(),
+                    object: vec!["file  package.json".to_owned()],
+                    sources: Vec::new(),
+                    options: Vec::new(),
                 }),
                 ..PendingCall::default()
             }],
             decided: Vec::new(),
             unreadable: None,
+            batch: Vec::new(),
         }),
         problem: None,
         next: Some(speccoder_core::next::NextStep {
@@ -126,10 +130,14 @@ fn call() -> Presentation {
             arguments: json!({ "path": "Cargo.toml", "old_string": "serde = \"1\"\n", "new_string": "serde = \"1\"\nunicode-normalization = \"0.1\"\n" }),
             kind: "edit".to_owned(),
             reason: "`Cargo.toml` is a dependency manifest".to_owned(),
-            covers: "write `Cargo.toml`".to_owned(),
+            object: Some(speccoder_runtime::tools::policy::Object::Path {
+                canonical: "Cargo.toml".to_owned(),
+                asked: "Cargo.toml".to_owned(),
+            }),
             risk: "medium".to_owned(),
             claim: Some("NFKD is needed".to_owned()),
-            options: options("medium", true),
+            options: options("medium", true, false, "edit", "medium"),
+            ..Request::default()
         },
         &PresentContext {
             root: Some(dir.path().to_path_buf()),
@@ -223,7 +231,7 @@ fn the_observer_shows_tasks_the_live_run_and_the_queue() {
         "△ T002 write `package.json` — a dependency manifest",
         "Write this file?  package.json   risk ■■□ medium",
         "1 │ {}",
-        "a → for the rest of T002: this path, any content",
+        "a → for the rest of T002: this file, any content",
         "1 verified",
         "Next: speccoder task approve T002 — allow it",
         "in-place · speccoder/001-x (returns to main)",
@@ -365,7 +373,7 @@ fn the_approval_overlay_answers_with_the_prompts_keys() {
 fn a_high_risk_call_offers_no_run_scope_and_v_shows_everything() {
     let mut app = hosted();
     let mut p = call();
-    p.request.options = options("high", true);
+    p.request.options = options("high", true, false, "edit", "high");
     app.ask(Ask::Call(Box::new(p)));
     assert_eq!(app.key(KeyCode::Char('r')), Action::None);
     assert!(

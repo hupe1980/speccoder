@@ -21,6 +21,20 @@
           "description": "`write`, `edit`, `run`, `network` or `mcp`.",
           "type": "string"
         },
+        "object": {
+          "description": "The object's lines.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "options": {
+          "description": "The choices offered, in order.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "risk": {
           "description": "`low`, `medium` or `high`.",
           "type": "string"
@@ -30,8 +44,15 @@
           "type": "string"
         },
         "scope": {
-          "description": "What `approve` grants: `for the rest of T004: this path, any content`.",
+          "description": "What `approve` grants: `for the rest of T004: this file, any content`.",
           "type": "string"
+        },
+        "sources": {
+          "description": "Where arguments were copied from.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         },
         "subject": {
           "description": "The path, the whole command, or the MCP tool.",
@@ -50,7 +71,57 @@
         "sandbox",
         "claim",
         "risk",
-        "scope"
+        "scope",
+        "object",
+        "sources",
+        "options"
+      ],
+      "type": "object"
+    },
+    "BatchGroup": {
+      "description": "One class of a batch.",
+      "properties": {
+        "calls": {
+          "description": "The waiting calls' ids.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "class": {
+          "description": "`write`, `command`, `network` or `mcp`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "class",
+        "calls"
+      ],
+      "type": "object"
+    },
+    "BatchView": {
+      "description": "A run whose asking budget is used, with its waiting calls by class.",
+      "properties": {
+        "digest": {
+          "description": "SHA-256 over the sorted ids of every call listed: a decision names\nit and is refused when the list changed.",
+          "type": "string"
+        },
+        "groups": {
+          "description": "The calls by class, in the order write, command, network, mcp.",
+          "items": {
+            "$ref": "#/$defs/BatchGroup"
+          },
+          "type": "array"
+        },
+        "run": {
+          "description": "The run.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "run",
+        "digest",
+        "groups"
       ],
       "type": "object"
     },
@@ -97,6 +168,17 @@
             "null"
           ]
         },
+        "object": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ObjectView"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The object it decided on."
+        },
         "operator": {
           "anyOf": [
             {
@@ -110,6 +192,13 @@
         },
         "reason": {
           "description": "The reason, for a rejection.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "run": {
+          "description": "The run it belongs to (a grant covers nothing after it).",
           "type": [
             "string",
             "null"
@@ -145,7 +234,40 @@
         "call",
         "operator",
         "via",
-        "expired"
+        "expired",
+        "object",
+        "run"
+      ],
+      "type": "object"
+    },
+    "ObjectView": {
+      "description": "The object a person's decision covers, as reports show it.",
+      "properties": {
+        "class": {
+          "description": "`write`, `command`, `network` or `mcp`.",
+          "type": "string"
+        },
+        "describe": {
+          "description": "One line: ``run `make check` ``.",
+          "type": "string"
+        },
+        "lines": {
+          "description": "The object in full, as every interface shows it.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "short": {
+          "description": "The canonical path, `argv#<12 hex>` or `<tool>@<12 hex>`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "class",
+        "short",
+        "describe",
+        "lines"
       ],
       "type": "object"
     },
@@ -173,6 +295,10 @@
         "arguments": {
           "description": "Its arguments as the model sent them."
         },
+        "batched": {
+          "description": "It waits in its run's batch: the asking budget was used.",
+          "type": "boolean"
+        },
         "call": {
           "description": "The waiting call's id (`approve --call`); empty for a stopped attempt.",
           "type": "string"
@@ -193,6 +319,17 @@
         "kind": {
           "description": "`approval` or `question`.",
           "type": "string"
+        },
+        "object": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ObjectView"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The object a decision covers."
         },
         "presentation": {
           "anyOf": [
@@ -220,9 +357,23 @@
           "description": "The saved attempt.",
           "type": "string"
         },
+        "run": {
+          "description": "The run it belongs to.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "source": {
           "description": "`task` (the attempt waits and resumes) or `attempt` (stopped and saved\nin a parallel lane).",
           "type": "string"
+        },
+        "sources": {
+          "description": "Where arguments of the call were copied from (source lines).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         },
         "task": {
           "description": "Task ID.",
@@ -255,7 +406,10 @@
         "kind",
         "question",
         "waiting_since",
-        "deadline"
+        "deadline",
+        "object",
+        "run",
+        "batched"
       ],
       "type": "object"
     }
@@ -264,6 +418,13 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "description": "Result of `speccoder report --approvals`, `approve` and `reject`.",
   "properties": {
+    "batch": {
+      "description": "Runs whose asking budget is used: their waiting calls, decided\ntogether (`speccoder approvals batch`).",
+      "items": {
+        "$ref": "#/$defs/BatchView"
+      },
+      "type": "array"
+    },
     "decided": {
       "description": "Decisions recorded for the feature's tasks.",
       "items": {

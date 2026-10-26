@@ -29,14 +29,16 @@ pub(crate) fn monitor_summary(monitor: Option<&serde_json::Value>) -> String {
         .unwrap_or_else(|| "no details given".to_owned())
 }
 
-/// Inline "for this task" approvals become task decisions, as if made with
-/// `speccoder task approve`, so a retry or a later attempt is not asked again.
+/// Inline "for this task" approvals become task decisions of this run, as
+/// if made with `speccoder task approve`, so a retry or a later attempt of
+/// the run is not asked again — and a later run is.
 pub(crate) fn record_inline_approvals(
     dir: &Path,
     feature: &str,
     task: &str,
     calls: &[serde_json::Value],
-    run_grants: &std::sync::Mutex<Vec<tools::policy::Grant>>,
+    run_grants: &std::sync::Mutex<Vec<tools::policy::Object>>,
+    run: &str,
 ) {
     // Every decision a person made in this attempt, with who made it and how
     // far it reaches; calls an earlier decision allowed (`*-grant`) are not
@@ -46,7 +48,7 @@ pub(crate) fn record_inline_approvals(
         .filter(|c| c["approved_by"] == "person" || c["rejected_by"] == "person")
         .filter(|c| !c["scope"].as_str().is_some_and(|s| s.ends_with("-grant")))
         .filter_map(|c| {
-            let grant = tools::policy::Grant::of(c["tool"].as_str()?, &c["arguments"])?;
+            let object: tools::policy::Object = serde_json::from_value(c["object"].clone()).ok()?;
             let by = serde_json::from_value::<approvals::Who>(c["approver"].clone())
                 .unwrap_or_else(|_| approvals::Who {
                     name: "unknown".to_owned(),
@@ -57,7 +59,8 @@ pub(crate) fn record_inline_approvals(
             let approved = c["approved_by"] == "person";
             Some(approvals::Decided {
                 verb: if approved { "approve" } else { "reject" }.to_owned(),
-                grant,
+                object: Some(object),
+                run: Some(run.to_owned()),
                 reason: c["rejection"].as_str().map(str::to_owned),
                 scope: c["scope"].as_str().unwrap_or("once").to_owned(),
                 note: c["note"].as_str().map(str::to_owned),
@@ -76,7 +79,10 @@ pub(crate) fn record_inline_approvals(
             match (decision.verb.as_str(), decision.scope.as_str()) {
                 // For the task: it joins the task's approvals, for later attempts.
                 ("approve", "task") => {
-                    d.approve(feature, task, decision.grant.clone(), &decision.by);
+                    let Some(object) = decision.object.clone() else {
+                        continue;
+                    };
+                    d.approve(feature, task, object, Some(run), &decision.by);
                     if let Some(last) = d
                         .tasks
                         .get_mut(&format!("{feature}/{task}"))
@@ -87,10 +93,10 @@ pub(crate) fn record_inline_approvals(
                 }
                 // For this run: every later task of the run; the history only.
                 ("approve", "run") => {
-                    if let Ok(mut g) = run_grants.lock()
-                        && !g.contains(&decision.grant)
+                    if let (Ok(mut g), Some(object)) = (run_grants.lock(), &decision.object)
+                        && !g.contains(object)
                     {
-                        g.push(decision.grant.clone());
+                        g.push(object.clone());
                     }
                     d.note(feature, task, decision);
                 }

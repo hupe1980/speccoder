@@ -87,9 +87,12 @@ pub enum Event {
         tool: String,
         /// What waits, e.g. `cargo add x` (no control characters, ≤ 60 chars).
         what: String,
-        /// The grant class an approval for the task or run would cover
-        /// (empty: none, the call is decided once).
+        /// The class of the object a decision covers: `write`, `command`,
+        /// `network` or `mcp` (empty: none, the call is decided once).
         class: String,
+        /// The object's short form: the path, `argv#<12 hex>`,
+        /// `<tool>@<12 hex>` — no argv beyond what `what` shows.
+        object: String,
     },
     /// A person decided a call inline.
     ApprovalDecided {
@@ -105,6 +108,10 @@ pub enum Event {
         by: String,
         /// How that is known: `asserted`, `connected` (or `expired`).
         how: String,
+        /// The object's class, as for [`Event::ApprovalRequested`].
+        class: String,
+        /// The object's short form.
+        object: String,
     },
     /// A tool call the model asked for, with the policy's decision.
     ToolCall {
@@ -524,7 +531,8 @@ fn waiting_lines(plane_dir: &Path) -> Vec<String> {
                 .unwrap_or_default();
             Some(format!(
                 "waiting for a person: {} — {} (for {since} min{until})",
-                request.task, request.covers
+                request.task,
+                request.covers()
             ))
         })
         .collect()

@@ -9,7 +9,8 @@
 //!   approvals live there — and never `~/.cargo/bin`);
 //! - credentials unreadable (`~/.ssh`, `~/.aws`, `~/.cargo/credentials*`, …);
 //! - no network beyond loopback, unless the command is allowed it
-//!   (`[sandbox] network_allow`) or a person approved it.
+//!   (exactly, `[sandbox] network_allow`, or by a prefix in
+//!   `[sandbox] network_allow_prefix`) or a person approved it.
 //!
 //! macOS: Seatbelt (`sandbox-exec`) with a generated profile. Linux: the
 //! `speccoder` binary re-executes itself as a helper (`__sandbox`) that
@@ -54,8 +55,10 @@ pub struct Config {
     pub mode: Mode,
     /// The network for every command.
     pub network: Network,
-    /// Command prefixes that get the network (`[["cargo", "fetch"]]`).
+    /// Exact commands that get the network (`[["cargo", "fetch"]]`).
     pub network_allow: Vec<Vec<String>>,
+    /// Command prefixes (two elements or more) that get the network.
+    pub network_allow_prefix: Vec<Vec<String>>,
     /// More writable paths (`~` is the home directory).
     pub writable: Vec<String>,
 }
@@ -66,6 +69,7 @@ impl Default for Config {
             mode: Mode::Auto,
             network: Network::Loopback,
             network_allow: Vec::new(),
+            network_allow_prefix: Vec::new(),
             writable: Vec::new(),
         }
     }
@@ -78,6 +82,8 @@ struct Raw {
     network: Option<String>,
     #[serde(default)]
     network_allow: Vec<Vec<String>>,
+    #[serde(default)]
+    network_allow_prefix: Vec<Vec<String>>,
     #[serde(default)]
     writable: Vec<String>,
 }
@@ -104,6 +110,13 @@ pub fn parse(text: &str) -> Result<Config, String> {
         Some("on") => Network::On,
         Some(o) => return Err(format!("[sandbox] network = \"{o}\" (off, loopback or on)")),
     };
+    if let Some(why) = raw
+        .network_allow_prefix
+        .iter()
+        .find_map(|p| crate::tools::policy::prefix_refusal(p))
+    {
+        return Err(format!("[sandbox] network_allow_prefix: {why}"));
+    }
     Ok(Config {
         mode,
         network,
@@ -112,6 +125,7 @@ pub fn parse(text: &str) -> Result<Config, String> {
             .into_iter()
             .filter(|p| !p.is_empty())
             .collect(),
+        network_allow_prefix: raw.network_allow_prefix,
         writable: raw.writable,
     })
 }
@@ -384,15 +398,23 @@ pub struct Sandboxed {
     pub profile: Profile,
     /// The OS mechanism.
     pub backend: Backend,
-    /// Prefixes that get the network.
+    /// Exact commands that get the network.
     pub network_allow: Vec<Vec<String>>,
+    /// Prefixes (two elements or more) that get it.
+    pub network_allow_prefix: Vec<Vec<String>>,
 }
 
 impl Sandboxed {
-    /// The network `argv` gets: its profile's, or all of it for an allowed prefix.
+    /// The network `argv` gets: its profile's, or all of it for an allowed
+    /// command (exactly, or extending an allowed prefix).
     #[must_use]
     pub fn network_for(&self, argv: &[String]) -> Network {
-        if self.network_allow.iter().any(|p| argv.starts_with(p)) {
+        if self.network_allow.iter().any(|p| p.as_slice() == argv)
+            || self
+                .network_allow_prefix
+                .iter()
+                .any(|p| crate::tools::policy::prefix_matches(p, argv))
+        {
             Network::On
         } else {
             self.profile.network
@@ -444,10 +466,23 @@ impl Sandboxed {
     }
 }
 
-/// Whether `program` names an executable file, directly or on `PATH`.
-fn resolvable(program: &str, cwd: &Path, env: &[(String, String)]) -> bool {
+/// The executable `program` runs as in `cwd` with `env`: a program with a
+/// `/` against `cwd`, else the first file of that name on `PATH` (relative
+/// `PATH` entries against `cwd` too) — canonicalised; `None` when there is
+/// none. What a command's approval names, and what it is checked against
+/// again when it runs.
+#[must_use]
+pub fn resolve_executable(program: &str, cwd: &Path, env: &[(String, String)]) -> Option<PathBuf> {
+    let candidate = |p: PathBuf| {
+        p.is_file()
+            .then(|| std::fs::canonicalize(&p).ok())
+            .flatten()
+    };
+    if program.is_empty() {
+        return None;
+    }
     if program.contains('/') {
-        return cwd.join(program).is_file();
+        return candidate(cwd.join(program));
     }
     let path = env
         .iter()
@@ -455,7 +490,13 @@ fn resolvable(program: &str, cwd: &Path, env: &[(String, String)]) -> bool {
         .map(|(_, v)| v.as_str());
     path.unwrap_or("/usr/bin:/bin")
         .split(':')
-        .any(|d| Path::new(d).join(program).is_file())
+        .filter(|d| !d.is_empty())
+        .find_map(|d| candidate(cwd.join(d).join(program)))
+}
+
+/// Whether `program` names an executable file, directly or on `PATH`.
+fn resolvable(program: &str, cwd: &Path, env: &[(String, String)]) -> bool {
+    resolve_executable(program, cwd, env).is_some()
 }
 
 impl CommandRunner for Sandboxed {
@@ -482,6 +523,7 @@ pub fn runner(root: &Path, config: &Config) -> Result<(Runner, Option<String>), 
                     profile: Profile::new(root, config, home.as_deref()),
                     backend,
                     network_allow: config.network_allow.clone(),
+                    network_allow_prefix: config.network_allow_prefix.clone(),
                 }),
                 None,
             ))
@@ -987,5 +1029,51 @@ mod tests {
         assert!(sb.contains("(deny network*)"));
         assert!(sb.contains("(subpath \"/home/u/.cargo/registry\")"));
         assert!(!sb.contains("(local ip \"localhost:*\"))\n(allow network*"));
+    }
+
+    #[test]
+    fn the_executable_is_the_first_on_the_path_canonicalised() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let root = std::fs::canonicalize(dir.path()).unwrap();
+        for d in ["bin", "usr"] {
+            std::fs::create_dir_all(root.join(d)).unwrap();
+            let f = root.join(d).join("make");
+            std::fs::write(&f, "#!/bin/sh\n").unwrap();
+            std::fs::set_permissions(&f, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        let env = |path: &str| vec![("PATH".to_owned(), path.to_owned())];
+        let usr = format!("{}", root.join("usr").display());
+        assert_eq!(
+            resolve_executable("make", &root, &env(&usr)),
+            Some(root.join("usr/make"))
+        );
+        // A worktree directory earlier on the path shadows it.
+        assert_eq!(
+            resolve_executable("make", &root, &env(&format!("bin:{usr}"))),
+            Some(root.join("bin/make"))
+        );
+        assert_eq!(
+            resolve_executable("./bin/make", &root, &env("")),
+            Some(root.join("bin/make"))
+        );
+        assert_eq!(resolve_executable("nope", &root, &env(&usr)), None);
+        assert!(!resolvable("nope", &root, &env(&usr)));
+    }
+
+    #[test]
+    fn network_allow_is_exact_and_a_prefix_needs_two_elements() {
+        let c = parse("[sandbox]\nnetwork_allow = [[\"cargo\", \"fetch\"]]\nnetwork_allow_prefix = [[\"npm\", \"ci\"]]\n").unwrap();
+        let s = Sandboxed {
+            profile: Profile::new(Path::new("/w"), &c, None),
+            backend: Backend::Seatbelt,
+            network_allow: c.network_allow.clone(),
+            network_allow_prefix: c.network_allow_prefix.clone(),
+        };
+        let argv = |s: &str| s.split(' ').map(str::to_owned).collect::<Vec<_>>();
+        assert_eq!(s.network_for(&argv("cargo fetch")), Network::On);
+        assert_ne!(s.network_for(&argv("cargo fetch --x")), Network::On);
+        assert_eq!(s.network_for(&argv("npm ci --silent")), Network::On);
+        assert!(parse("[sandbox]\nnetwork_allow_prefix = [[\"npm\"]]\n").is_err());
     }
 }

@@ -15,9 +15,9 @@ use speccoder_core::verify::Verdict;
 use speccoder_core::{CommandData, CommandResult, CommandStatus, RunReport};
 use speccoder_runtime::{RunOptions, run_feature_with, run_with};
 
-const CONFIG: &str = "[model]\nprovider = \"openai\"\nmodel = \"gpt-5.4-mini\"\n\n[checks.has-ok]\nargv = [\"grep\", \"-q\", \"fn ok\", \"src/lib.rs\"]\n\n[commands]\nallow = [[\"grep\"], [\"./accept.sh\"]]\n";
+const CONFIG: &str = "[model]\nprovider = \"openai\"\nmodel = \"gpt-5.4-mini\"\n\n[checks.has-ok]\nargv = [\"grep\", \"-q\", \"fn ok\", \"src/lib.rs\"]\n\n[commands]\nallow_prefix = [[\"grep\", \"-q\"], [\"./accept.sh\", \"--\"]]\n";
 
-const ACCEPT_SH: &str = "#!/bin/sh\nif grep -q \"$1\" src/lib.rs; then\n  echo 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out'\nelse\n  echo 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out'\n  exit 101\nfi\n";
+const ACCEPT_SH: &str = "#!/bin/sh\n[ \"$1\" = -- ] && shift\nif grep -q \"$1\" src/lib.rs; then\n  echo 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out'\nelse\n  echo 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out'\n  exit 101\nfi\n";
 
 const CHANGE: &str = "add-farewell-and-locale";
 
@@ -179,7 +179,7 @@ fn acceptance_tests_come_from_the_scenarios() {
     let r = repo("sample", "\n[acceptance]\nheld_out = false\n");
     let state = tempfile::tempdir().unwrap();
     let (f, d) = fake();
-    f.will_structure(json!({ "files": [{ "path": "tests/acceptance_1_2.txt", "content": "greeting / Default greeting / Configured default\n", "scenarios": [] }], "argv": ["./accept.sh", "fn empty_default"], "notes": [] }));
+    f.will_structure(json!({ "files": [{ "path": "tests/acceptance_1_2.txt", "content": "greeting / Default greeting / Configured default\n", "scenarios": [] }], "argv": ["./accept.sh", "--", "fn empty_default"], "notes": [] }));
     add(&f, "c1", "empty_default");
     let res = run_with(r.path(), Some(CHANGE), "1.2", state.path(), d, None);
     assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
