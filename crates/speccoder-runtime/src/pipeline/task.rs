@@ -1509,8 +1509,14 @@ pub(crate) fn run_task(
                     if !output.is_object() {
                         output = serde_json::json!({});
                     }
-                    output["reason"] =
-                        serde_json::Value::String(redact(&format!("{:?}", outcome.status), secret));
+                    // A decision an earlier release recorded is named, with
+                    // the fix, not left as a decoding error.
+                    let reason = if rt.block_on(plane.holds_a_pre_054_decision(outcome.run_id)) {
+                        substrate::PRE_054_DECISION.to_owned()
+                    } else {
+                        format!("{:?}", outcome.status)
+                    };
+                    output["reason"] = serde_json::Value::String(redact(&reason, secret));
                 }
                 (outcome.run_id.to_string(), succeeded, output)
             };

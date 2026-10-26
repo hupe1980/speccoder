@@ -934,3 +934,98 @@ fn a_killed_writer_blocks_neither_a_run_s_gate_nor_a_decision() {
     assert_eq!(approve.status(), CommandStatus::Ok, "{}", approve.message());
     assert!(pending(r.path(), state.path()).is_empty());
 }
+
+// ── a decision speccoder 0.2.0 recorded ─────────────────────────────
+
+/// Records an approval of the waiting call `call` in the journal at
+/// `journal` as speccoder 0.2.0 (agentplane 0.53) did: the decision as a
+/// worklist event with `approved: true`, the shape 0.54 replaced by a
+/// verdict, and the task completed.
+fn approve_as_0_2_0(journal: &Path, call: &str) {
+    use agentplane::case::{EventStore as _, TaskStore as _};
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let store = agentplane::store::RedbStore::open_shared(journal.join("journal.redb")).unwrap();
+    let id = agentplane::core::TaskId::parse(call).unwrap();
+    let row = rt.block_on(store.task(id)).unwrap().unwrap();
+    let by = agentplane::core::Operator::from_parts("Dana Example", "asserted").unwrap();
+    let mut decision = agentplane::core::Decision::approve(by.clone(), "");
+    decision.reviewed = Some(row.justification.digest());
+    let mut old = serde_json::to_value(&decision).unwrap();
+    let fields = old.as_object_mut().unwrap();
+    fields.remove("verdict");
+    fields.insert("approved".to_owned(), json!(true));
+    let event = agentplane::core::InboundEvent::new(
+        "agentplane://worklist",
+        format!("task-decision:{call}"),
+        "agentplane.task.decided",
+        old,
+    )
+    .correlate(agentplane::core::CorrelationKey::new("task", call))
+    .minted_by(by);
+    assert!(
+        rt.block_on(store.buffer(&event, agentplane::core::Timestamp::now_utc()))
+            .unwrap()
+    );
+    rt.block_on(store.set_state(id, agentplane::core::TaskState::Completed))
+        .unwrap();
+}
+
+/// **A decision speccoder 0.2.0 recorded** does not read in this build
+/// (agentplane 0.54 made a decision a verdict). The attempt that waited on
+/// it is named as such, with the fix — and the fix works: the next run
+/// starts the task afresh instead of failing on the same record again.
+#[test]
+fn a_decision_recorded_by_0_2_0_is_named_and_the_task_runs_again() {
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    write_manifest(&f, "c1");
+    let first = speccoder_runtime::run_with(r.path(), None, "T005", state.path(), d, None);
+    assert_eq!(
+        first.status(),
+        CommandStatus::NeedsHuman,
+        "{}",
+        first.message()
+    );
+    let waiting = pending(r.path(), state.path());
+    approve_as_0_2_0(&plane_dir(r.path(), state.path()), &waiting[0].call);
+
+    let (f2, d2) = fake();
+    f2.will_structure(done());
+    let second = speccoder_runtime::run_with(r.path(), None, "T005", state.path(), d2, None);
+    assert_eq!(
+        second.status(),
+        CommandStatus::RunFailed,
+        "{}",
+        second.message()
+    );
+    assert!(
+        second
+            .message()
+            .contains("a decision recorded by speccoder 0.2.0")
+            && second.message().contains("run the task again"),
+        "{}",
+        second.message()
+    );
+    // Its replay names it too, never as a divergence.
+    let replayed = speccoder_runtime::replay_with(r.path(), &report(&second).run_id, state.path());
+    assert!(
+        replayed.message().contains("recorded by speccoder 0.2.0"),
+        "{}",
+        replayed.message()
+    );
+    // The fix works: the next run starts the attempt afresh, and asks again.
+    let (f3, d3) = fake();
+    write_manifest(&f3, "c1");
+    let third = speccoder_runtime::run_with(r.path(), None, "T005", state.path(), d3, None);
+    assert_eq!(
+        third.status(),
+        CommandStatus::NeedsHuman,
+        "{}",
+        third.message()
+    );
+    assert_eq!(pending(r.path(), state.path()).len(), 1);
+}

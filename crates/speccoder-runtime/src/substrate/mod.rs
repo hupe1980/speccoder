@@ -343,6 +343,25 @@ pub fn open_reader(dir: &Path) -> Result<Option<Arc<RedbStore>>, PlaneError> {
     }
 }
 
+/// Whether `value` holds a decision as agentplane 0.53 and earlier
+/// recorded it: `approved` and `decided`, and no `verdict`.
+fn holds_a_pre_054_decision(value: &Value) -> bool {
+    match value {
+        Value::Object(o) => {
+            (o.contains_key("approved") && o.contains_key("decided") && !o.contains_key("verdict"))
+                || o.values().any(holds_a_pre_054_decision)
+        }
+        Value::Array(a) => a.iter().any(holds_a_pre_054_decision),
+        Value::String(s) if s.contains("\"approved\"") => {
+            serde_json::from_str::<Value>(s).is_ok_and(|v| holds_a_pre_054_decision(&v))
+        }
+        _ => false,
+    }
+}
+
+/// What a run that failed on a decision speccoder 0.2.0 recorded is told.
+pub const PRE_054_DECISION: &str = "this attempt waited on a decision recorded by speccoder 0.2.0, which this build cannot read (agentplane 0.54 records a decision as a verdict); the attempt is set aside — run the task again to start it afresh";
+
 /// Whether an unreadable journal only needs the repair a writer makes on
 /// open: redb's "repair aborted", which a read-only open reports for a file
 /// its last writer did not close.
@@ -675,6 +694,21 @@ impl Plane {
             after = Some((last.1, last.0));
         }
         Ok(out)
+    }
+
+    /// Whether `run` read a person's decision recorded by speccoder 0.2.0
+    /// (agentplane 0.53 and earlier): a decision with `approved`, which
+    /// agentplane 0.54 replaced by a verdict, so the run cannot read it
+    /// and fails on it. Told from the record's shape, never a message.
+    pub async fn holds_a_pre_054_decision(&self, run: agentplane::core::RunId) -> bool {
+        let Ok(records) = self.runtime.journal().read(run, 0).await else {
+            return false;
+        };
+        records.iter().any(|r| {
+            serde_json::to_value(r.kind())
+                .ok()
+                .is_some_and(|v| holds_a_pre_054_decision(&v))
+        })
     }
 
     /// Every task waiting for a person, oldest first.
@@ -1079,6 +1113,17 @@ pub async fn replay_strict(
         .map_err(|e| PlaneError(e.to_string()))?;
     if history.is_empty() {
         return Ok(None);
+    }
+    // A decision speccoder 0.2.0 recorded does not read in this build:
+    // named, never shown as a divergence or a decoding error.
+    if history.iter().any(|r| {
+        serde_json::to_value(r.kind())
+            .ok()
+            .is_some_and(|v| holds_a_pre_054_decision(&v))
+    }) {
+        return Err(PlaneError(format!(
+            "run {run} read a person's decision recorded by speccoder 0.2.0, which this build cannot replay (agentplane 0.54 records a decision as a verdict); its ticks and attempt refs in git are unaffected"
+        )));
     }
     // The run's MCP tools as its admitted input lists them: the same
     // manifest again. agentplane's replay-only drivers answer for every

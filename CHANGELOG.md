@@ -46,10 +46,21 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Upgrading
 
-- A project journal written by 0.2.0 still opens. A run in it that recorded a
-  person's decision under 0.2.0 can no longer be replayed or resumed: run the
-  task again (ticks and attempt refs in git are untouched). While a 0.2.0
-  process holds a journal, a newer one reads its waiting calls as `unknown`.
+- A project journal written by 0.2.0 still opens, and its runs still list
+  and show (`report --approvals`, `inbox`, `task show --account`,
+  `config coverage`). A person's decision recorded under 0.2.0 does not read
+  in this build (agentplane 0.54 records a decision as a verdict): the
+  attempt that waited on it fails once, saying so ("a decision recorded by
+  speccoder 0.2.0 … run the task again"), and is set aside; the next
+  `speccoder run` starts it afresh and asks again. `speccoder replay` of a
+  run that read such a decision says the same instead of a divergence.
+  Ticks and attempt refs in git are untouched; nothing needs deleting.
+- While a 0.2.0 process holds a journal, a newer one reads its waiting calls
+  as `unknown`.
+  The other way round, a 0.2.0 run or decision waits up to 2 s for a newer
+  speccoder's read, which holds the journal only while it reads; it stops
+  with "another speccoder is working" only if reads keep it held longer than
+  that. Upgrade every speccoder that works on a project together.
 
 ## [0.2.0] - 2026-10-26
 
