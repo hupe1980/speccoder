@@ -123,6 +123,10 @@ With `[executor] kind = "claude"`, `"codex"` or `"command"`, another agent makes
 
 speccoder signs each tick's [attestations](@/docs/attestations.md) with your git signing key. What the model runs cannot reach it: the sandbox hides `~/.ssh` and `~/.gnupg`, commands get no `SSH_AUTH_SOCK`, and the policy denies writing git notes and `update-ref` on `refs/notes`. With the sandbox off, a command could read a key file or use an agent you can; `[attest] sign_at = "later"` or a touch-to-sign key keeps signing in your hands.
 
+## Checking someone else's evidence
+
+[`speccoder-verify`](@/docs/verifier.md) is built to run on a pull request you do not trust: it reads git objects only (no working tree), executes nothing from the checked tree (no build, test, hook or script), spawns only `git` and the signature tool a signature names with a scrubbed environment, opens no socket, and takes trust only from you — never a key the branch declares. The [action](@/docs/github.md#evidence-check) downloads it only after checking its build provenance and sha256, never passes it a token, and refuses to run under `pull_request_target` when the head is checked out in the workspace: add no checkout or build step to that workflow.
+
 ## What it does not protect against
 
 - **Code that runs during checks, within the sandbox's limits:** it can read files outside the hidden paths, use CPU and memory, and write to package caches.

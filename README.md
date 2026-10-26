@@ -34,6 +34,7 @@ Coding agents are good at writing code and too good at declaring victory. specco
 - 🔒 **Isolated and sandboxed.** Work happens on `speccoder/<feature>` in a worktree of its own. Every command runs in an OS sandbox (Seatbelt on macOS, Landlock and seccomp on Linux): writes only to the worktree, no credentials, no network beyond loopback.
 - 🚦 **Every call governed.** Each tool call is allowed, sent to a person, or denied before it runs. Decisions record who made them — at the terminal, in an editor over ACP, or later.
 - 💾 **Durable and replayable.** Every model and tool call is journaled. A killed run resumes without repeating finished calls; a recorded run replays offline.
+- 🧾 **Proof a maintainer can check.** Every tick leaves signed in-toto statements in git. `speccoder-verify` — a small static binary, no model key, no network, nothing from the pull request executed — checks each `[X]` against them with the maintainer's trust, and its GitHub Action publishes the result on every push as the `speccoder / evidence` check, which a repository can make required ([proof in pull requests](https://hupe1980.github.io/speccoder/docs/verifier/)).
 - 🤖 **Your model, or your agent.** Anthropic, OpenAI, any OpenAI-compatible server (Ollama, vLLM, …), or Claude Code and Codex making the attempts under speccoder's judgement.
 
 ## 🚀 Quickstart
@@ -122,7 +123,8 @@ Early (0.x): it works end to end on small projects with OpenAI, Anthropic and lo
 | `speccoder-core` | Pure domain types: no IO, no async |
 | `speccoder-speckit` | Reads Spec Kit projects |
 | `speccoder-openspec` | Reads OpenSpec projects |
-| `speccoder-runtime` | Everything that executes: checks, tools, sandbox, git, the embedded [agentplane](https://crates.io/crates/agentplane) runtime |
+| `speccoder-runtime` | Everything that executes: checks, tools, sandbox, git, the embedded [agentplane](https://crates.io/crates/agentplane) runtime (feature `engine`; without it, the read-only half the verifier uses) |
+| `speccoder-verify` | The evidence verifier for maintainers: the runtime without `engine` — no model, no network |
 | `speccoder-web` | The web interface's host: the embedded UI (Svelte, in `ui/`) and its API, on 127.0.0.1 |
 | `speccoder` | The CLI (and the desktop window, feature `app`) |
 
