@@ -107,4 +107,14 @@ describe("OracleTests", () => {
     expect(document.body.textContent).toContain("Lapsed");
     expect(document.body.textContent).toContain("old words");
   });
+
+  it("is read-only when frozen: no Reject, Ask Again, Edit, Write Again or line comments", () => {
+    show(oracleView({ state: "frozen", frozen_by: "Ada", frozen_at: 1793000000 }));
+    expect(document.body.textContent).toContain("Frozen by Ada");
+    expect(document.body.textContent).toContain("these are the tests the run uses");
+    button("tests/acceptance_us1.rs").click();
+    flushSync();
+    const names = [...document.querySelectorAll("button")].map((b) => b.textContent?.trim() ?? "");
+    for (const gone of ["Reject…", "Ask Again…", "Edit", "Write Again", "+"]) expect(names).not.toContain(gone);
+  });
 });

@@ -1661,3 +1661,32 @@ fn a_frozen_record_without_its_approval_or_held_out_binding_is_not_reused() {
         );
     }
 }
+
+#[test]
+fn a_frozen_card_shows_the_frozen_set_not_a_draft_changed_since() {
+    // P4: the draft changes after the freeze; the run uses the frozen set.
+    let r = repo();
+    let state = tempfile::tempdir().unwrap();
+    let (_, d) = written(r.path(), state.path());
+    freeze_only(r.path(), state.path(), d);
+    let plane = speccoder_runtime::worktree::project_state_dir(state.path(), r.path());
+    let (mut draft, mut contents) = speccoder_runtime::oracle::load(&plane, "001-graph", "US1")
+        .unwrap()
+        .unwrap();
+    let changed = "checks something else\n";
+    draft.tests[0].sha256 = format!(
+        "sha256:{}",
+        speccoder_runtime::integrity::sha256_hex(changed.as_bytes())
+    );
+    contents[0].1 = changed.to_owned();
+    speccoder_runtime::oracle::store(&plane, "001-graph", &draft, &contents).unwrap();
+    let v = us1(&speccoder_runtime::review::report_in(
+        r.path(),
+        None,
+        Some(state.path()),
+    ));
+    assert_eq!(v.state, OracleState::Frozen);
+    assert_eq!(v.tests.len(), 1);
+    assert_eq!(v.tests[0].content, "checks fn login\n", "{v:?}");
+    assert_eq!(v.held_out.count, 1);
+}

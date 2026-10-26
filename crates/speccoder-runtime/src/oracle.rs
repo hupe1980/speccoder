@@ -473,7 +473,64 @@ pub fn view(
             v.frozen_by = Some(e.by.clone());
             v.frozen_at = Some(e.at);
             v.state = match crate::pre_frozen::load(project_state, unit, &req.key) {
-                Ok(Some(_)) => OracleState::Frozen,
+                Ok(Some((rec, files))) => {
+                    // The card shows what the run uses: the frozen set,
+                    // never a draft changed since (P4).
+                    let drafted = current.map(|(d, _)| d);
+                    v.tests = rec
+                        .visible
+                        .iter()
+                        .map(|t| {
+                            let same = drafted.and_then(|d| {
+                                d.tests
+                                    .iter()
+                                    .find(|x| x.path == t.path && x.sha256 == t.sha256)
+                            });
+                            OracleTest {
+                                path: t.path.clone(),
+                                content: files
+                                    .iter()
+                                    .find(|(p, _)| *p == t.path)
+                                    .map(|(_, c)| c.clone())
+                                    .unwrap_or_default(),
+                                scenarios: t.cites.clone(),
+                                red_class: same.map_or_else(
+                                    || crate::pipeline::class_word(RedClass::Assertion),
+                                    |x| crate::pipeline::class_word(x.red_class),
+                                ),
+                                red: true,
+                                authored_by: same.map_or(AuthoredBy::Model, |x| x.authored_by),
+                                edited_by: same.and_then(|x| x.edited_by.clone()),
+                            }
+                        })
+                        .collect();
+                    v.manifest_sha256 = Some(e.manifest_sha256.clone());
+                    let covered: Vec<&String> =
+                        rec.visible.iter().flat_map(|t| t.cites.iter()).collect();
+                    v.uncovered = req
+                        .scenarios
+                        .iter()
+                        .map(|s| s.id.clone())
+                        .filter(|s| !covered.contains(&s))
+                        .collect();
+                    if cfg.held_out {
+                        v.held_out = match &rec.held_out_sealed {
+                            Some(h) => HeldOutSummary {
+                                state: "kept".to_owned(),
+                                count: h.count,
+                                manifest_sha256: Some(format!("sha256:{}", h.manifest_sha256)),
+                                reason: None,
+                            },
+                            None => HeldOutSummary {
+                                state: "absent".to_owned(),
+                                count: 0,
+                                manifest_sha256: None,
+                                reason: Some("none_kept".to_owned()),
+                            },
+                        };
+                    }
+                    OracleState::Frozen
+                }
                 Ok(None) => OracleState::FrozenElsewhere,
                 Err(t) => {
                     v.error = Some(format!("the frozen set was tampered with: {}", t.0));
