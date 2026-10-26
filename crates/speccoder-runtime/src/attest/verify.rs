@@ -263,7 +263,7 @@ fn line_hash_at(repo: &Path, object: &str, tasks_path: &str, task: &str) -> Opti
     let line = text
         .lines()
         .nth(usize::try_from(t.line).ok()?.checked_sub(1)?)?;
-    Some(crate::integrity::sha256_hex(&crate::in_place::untick(
+    Some(crate::integrity::sha256_hex(&crate::integrity::untick(
         line.as_bytes(),
     )))
 }
@@ -697,7 +697,7 @@ pub fn targets(repo: &Path, feature: &str, rev: Option<&str>) -> Result<Vec<Targ
             .run(&[
                 "for-each-ref",
                 "--format=%(objectname) %(refname)",
-                &format!("{}/{feature}/", crate::controls::SKIPPED),
+                &format!("{}/{feature}/", notes::SKIPPED),
             ])
             .map(|b| String::from_utf8_lossy(&b).into_owned())
             .unwrap_or_default();

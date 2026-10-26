@@ -240,16 +240,7 @@ pub fn intent_digest(project: &Path, policy: &Policy, tasks_file: &str) -> Strin
     sha256_hex(parts.join("\n").as_bytes())
 }
 
-/// The bytes with every `[x]`/`[X]` checkbox read as `[ ]`.
-pub(crate) fn untick(bytes: &[u8]) -> Vec<u8> {
-    let mut out = bytes.to_vec();
-    for i in 1..out.len().saturating_sub(1) {
-        if out[i - 1] == b'[' && out[i + 1] == b']' && matches!(out[i], b'x' | b'X') {
-            out[i] = b' ';
-        }
-    }
-    out
-}
+pub(crate) use crate::integrity::untick;
 
 fn now() -> u64 {
     std::time::SystemTime::now()

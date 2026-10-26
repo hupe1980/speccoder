@@ -81,6 +81,7 @@ pub fn cites(title: &str, id: &str) -> bool {
         .any(|word| word == id)
 }
 
+#[cfg(feature = "engine")]
 /// The `trace[]` rows of a task's statement: each requirement its title
 /// cites, with the defining line's hash; then each acceptance test with
 /// the scenario it checks (none: the author cited none). All with the
@@ -262,6 +263,7 @@ pub fn phases(report: &RunReport) -> Vec<PhaseResult> {
     out
 }
 
+#[cfg(feature = "engine")]
 /// The decisions people made on the attempt's calls.
 fn decisions(tool_calls: &[Value]) -> Vec<Value> {
     tool_calls
@@ -282,6 +284,7 @@ fn decisions(tool_calls: &[Value]) -> Vec<Value> {
         .collect()
 }
 
+#[cfg(feature = "engine")]
 /// The acceptance set's strength as evidence: shares, counts,
 /// what got through, the permitted alternatives and the rulings — never the
 /// local patch paths or the variants' code.
@@ -300,6 +303,7 @@ fn strength(report: &RunReport) -> Value {
     })
 }
 
+#[cfg(feature = "engine")]
 /// The monitor's result, `unreviewed` when it did not finish, `off` when
 /// not configured.
 fn monitor(report: &RunReport) -> Value {
@@ -432,6 +436,7 @@ fn write(repo: &Path, commit: &str, attest: &AttestConfig, mut lines: Vec<Envelo
 /// Records a passed tick: `test-result` per phase, `task-verification`,
 /// then the `vsa` naming every other line. Never fails the tick.
 #[must_use]
+#[cfg(feature = "engine")]
 pub fn record_tick(t: &Tick<'_>, report: &RunReport) -> Value {
     let subject = Subject {
         name: format!("{}/{}", t.feature, t.task),

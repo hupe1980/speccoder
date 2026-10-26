@@ -16,8 +16,7 @@ use speccoder_core::{
 
 use crate::git::Git;
 
-/// Where skips live.
-pub const SKIPPED: &str = "refs/speccoder/skipped";
+pub use crate::attest::notes::SKIPPED;
 
 const FS: char = '\u{1f}';
 const RS: char = '\u{1e}';

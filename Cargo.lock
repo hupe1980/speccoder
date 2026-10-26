@@ -4839,6 +4839,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "speccoder-verify"
+version = "0.2.0"
+dependencies = [
+ "assert_cmd",
+ "clap",
+ "serde_json",
+ "speccoder-core",
+ "speccoder-runtime",
+ "tempfile",
+]
+
+[[package]]
 name = "speccoder-web"
 version = "0.2.0"
 dependencies = [

@@ -6,7 +6,9 @@ use std::path::Path;
 use speccoder_core::snapshot::{ProjectSnapshot, Severity};
 use speccoder_core::{CommandData, CommandResult, CommandStatus};
 
+#[cfg(feature = "engine")]
 use crate::pipeline::*;
+#[cfg(feature = "engine")]
 use crate::{context, git, substrate};
 
 /// `speccoder inspect`: report what speccoder sees in the project
@@ -68,6 +70,7 @@ pub(crate) fn summary(s: &ProjectSnapshot, m: &crate::format::Messages) -> Strin
     format!("{features}, {selected}; {errors} errors, {warnings} warnings")
 }
 
+#[cfg(feature = "engine")]
 /// `speccoder worktree`: create or reuse the git worktree speccoder works in
 /// for the selected feature of the project containing `path`.
 #[must_use]
@@ -82,6 +85,7 @@ pub fn worktree(path: &Path, feature: Option<&str>) -> CommandResult {
     }
 }
 
+#[cfg(feature = "engine")]
 /// [`worktree()`] with an explicit state directory.
 pub fn worktree_with(path: &Path, feature: Option<&str>, state: &Path) -> CommandResult {
     use speccoder_core::{RefusedPath, WorktreeReport};
@@ -168,6 +172,7 @@ pub fn worktree_with(path: &Path, feature: Option<&str>, state: &Path) -> Comman
     }
 }
 
+#[cfg(feature = "engine")]
 /// `speccoder propose`: the provider comes from `[model]`, its key from
 /// `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` (never from files).
 #[must_use]
@@ -225,6 +230,7 @@ pub fn propose(path: &Path, feature: Option<&str>, task: &str) -> CommandResult 
     propose_with(path, feature, task, &state, provider, Some(&key))
 }
 
+#[cfg(feature = "engine")]
 /// [`propose`] with an explicit state directory and model driver; `secret`
 /// is redacted from anything reported.
 pub fn propose_with(
@@ -340,6 +346,7 @@ pub fn propose_with(
         .with_data(CommandData::Propose(Box::new(report)))
 }
 
+#[cfg(feature = "engine")]
 /// `speccoder replay`: strict replay of a recorded run; calls no model.
 #[must_use]
 pub fn replay(path: &Path, run: &str) -> CommandResult {
@@ -354,6 +361,7 @@ pub fn replay(path: &Path, run: &str) -> CommandResult {
     replay_with(path, run, &state)
 }
 
+#[cfg(feature = "engine")]
 /// [`replay`] with an explicit state directory.
 pub fn replay_with(path: &Path, run: &str, state: &Path) -> CommandResult {
     use speccoder_core::ReplayReport;
@@ -396,6 +404,7 @@ pub fn replay_with(path: &Path, run: &str, state: &Path) -> CommandResult {
     }
 }
 
+#[cfg(feature = "engine")]
 /// `speccoder eval`: the suite's `[model]` decides the provider; its key
 /// comes from the environment.
 #[must_use]
@@ -437,6 +446,7 @@ pub fn eval(
     }
 }
 
+#[cfg(feature = "engine")]
 /// What a replay's finding means for the person: a faithful
 /// replay of any ending is reproduced; a different effect or ending is a
 /// divergence; a run this build cannot re-derive is neither.
@@ -477,7 +487,7 @@ pub(crate) fn replay_verdict(
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "engine"))]
 mod replay_tests {
     use super::*;
     use agentplane::runtime::{CannotReplay, Finding};

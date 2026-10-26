@@ -1,7 +1,7 @@
 # speccoder — development task runner (https://just.systems). `just ci` mirrors CI.
 
 # Publish order: every crate after the crates it depends on.
-crates := "speccoder-core speccoder-speckit speccoder-openspec speccoder-runtime speccoder-web speccoder"
+crates := "speccoder-core speccoder-speckit speccoder-openspec speccoder-runtime speccoder-verify speccoder-web speccoder"
 
 default:
     @just --list --unsorted
