@@ -1924,7 +1924,20 @@ pub(crate) fn apply_candidate(
                 .with_data(CommandData::Run(Box::new(report))),
         )
     };
-    let touched = crate::bug::candidate::touched(diff);
+    // The paths as git reads the diff: renames, mode changes and quoted
+    // paths included; a binary hunk or a symbolic link is not applied.
+    let touched = match crate::bug::candidate::touched(c.wt_root, diff) {
+        Ok(t) => t,
+        Err(r) => {
+            let message = format!("the candidate is not applied: {}", r.paths.join("; "));
+            return Err(refused(
+                "BUG-CANDIDATE-APPLY",
+                r.paths,
+                CommandStatus::GitPrecondition,
+                message,
+            ));
+        }
+    };
     let judged = crate::bug::candidate::judge_paths(&touched, c.policy, frozen, held_out_paths);
     if !judged.is_empty() {
         return Err(refused(

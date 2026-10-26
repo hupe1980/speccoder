@@ -436,17 +436,11 @@ pub fn bug_with(
             .with_code("USAGE");
         };
         let (diff, head) = match &c {
-            candidate::Spec::Patch(p) => match std::fs::read_to_string(path.join(p))
-                .or_else(|_| std::fs::read_to_string(p))
-            {
+            candidate::Spec::Patch(p) => match candidate::read_patch(&root, path, p, via) {
                 Ok(d) => (d, None),
                 Err(e) => {
-                    return CommandResult::new(
-                        "bug",
-                        CommandStatus::UsageError,
-                        &format!("{p}: {e}"),
-                    )
-                    .with_code("USAGE");
+                    return CommandResult::new("bug", CommandStatus::UsageError, &e)
+                        .with_code("USAGE");
                 }
             },
             candidate::Spec::Pr(n) => match crate::github::pull_diff(
@@ -468,7 +462,19 @@ pub fn bug_with(
             },
         };
         let policy = crate::tools::policy::Policy::new(&[], &[]).rules(format.rules());
-        let judged = candidate::judge_paths(&candidate::touched(&diff), &policy, &[], &[]);
+        let touched = match candidate::touched(&repo_prefix(&root).0, &diff) {
+            Ok(t) => t,
+            Err(r) => {
+                return refuse(&BugRefusal::new(
+                    "BUG-CANDIDATE-APPLY",
+                    format!(
+                        "the candidate cannot be read as a patch: {}",
+                        r.paths.join("; ")
+                    ),
+                ));
+            }
+        };
+        let judged = candidate::judge_paths(&touched, &policy, &[], &[]);
         if !judged.is_empty() {
             return refuse(&BugRefusal::new(
                 "BUG-CANDIDATE-JUDGE",

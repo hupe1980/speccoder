@@ -1949,6 +1949,54 @@ fn a_bugs_origin_that_cannot_be_written_is_said() {
 }
 
 #[test]
+fn a_candidate_that_renames_a_judge_input_is_refused_before_it_is_applied() {
+    let r = repo("seeded");
+    fs::write(
+        r.path().join("rename.patch"),
+        "diff --git a/speccoder.toml b/notes.toml\nsimilarity index 100%\nrename from speccoder.toml\nrename to notes.toml\n",
+    )
+    .unwrap();
+    let state = tempfile::tempdir().unwrap();
+    let mut req = request(&["an empty title is refused with a message"], &[], false);
+    req.candidate = Some("rename.patch".to_owned());
+    let res = bug::bug_with(
+        r.path(),
+        &req,
+        Via::Terminal,
+        state.path(),
+        None,
+        None,
+        &RunOptions::default(),
+    );
+    assert_eq!(
+        res.code().map(|c| c.name),
+        Some("BUG-CANDIDATE-JUDGE"),
+        "{}",
+        res.message()
+    );
+    assert!(
+        res.message().contains("speccoder.toml"),
+        "{}",
+        res.message()
+    );
+    // Through another interface, a patch outside the project is not read.
+    let outside = tempfile::NamedTempFile::new().unwrap();
+    fs::write(outside.path(), GOOD_PATCH).unwrap();
+    req.candidate = Some(outside.path().display().to_string());
+    let res = bug::bug_with(
+        r.path(),
+        &req,
+        Via::Mcp,
+        state.path(),
+        None,
+        None,
+        &RunOptions::default(),
+    );
+    assert_eq!(res.status(), CommandStatus::UsageError, "{}", res.message());
+    assert!(!r.path().join("specs").exists());
+}
+
+#[test]
 fn a_trailer_only_tasks_staleness_is_read_from_the_verified_statement_only() {
     use speccoder_core::verify_branch::TickOutcome;
     use speccoder_runtime::attest::{dsse, notes};
