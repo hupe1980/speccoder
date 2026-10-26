@@ -11,7 +11,7 @@
 
 use std::path::Path;
 
-use speccoder_core::bug::{BugHome, HomeKind, Triad, normalise};
+use speccoder_core::bug::{BugHome, HomeKind, Triad, normalise, valid_slug};
 
 use super::quick::highest;
 use crate::format::{BugRefusal, BugStep, ReadBug, RecordedBug, Rules};
@@ -116,10 +116,21 @@ fn standing_name(root: &Path) -> String {
     format!("{next:03}-{NAME}")
 }
 
-/// The extension's directory and unit name for `slug`.
+/// The extension's directory and unit name for `slug` (`None`: not this
+/// layout, or not a slug — never a path).
 pub(super) fn dir(home: &BugHome, slug: &str) -> Option<(String, String)> {
-    (home.kind == HomeKind::NativeSpeckitBug)
+    (home.kind == HomeKind::NativeSpeckitBug && valid_slug(slug))
         .then(|| (format!("{BUGS}/{slug}"), format!("bugs/{slug}")))
+}
+
+/// Whether `path` (or its directory chain under `root`) is a symbolic link:
+/// a bug directory that is one could point anywhere.
+fn linked(root: &Path, rel: &[&str]) -> bool {
+    let mut p = root.to_path_buf();
+    rel.iter().any(|part| {
+        p.push(part);
+        std::fs::symlink_metadata(&p).is_ok_and(|m| m.file_type().is_symlink())
+    })
 }
 
 /// A slug for `title`: two to four kebab-case words, made unique.
@@ -214,6 +225,12 @@ pub(super) fn record(
     tasks.push_str(&format!(
         "\n## Phase {story}: User Story {story} - {t} (Priority: P1)\n\n- [ ] {task_id} [US{story}] Fix: {t} per {requirement}\n"
     ));
+    // The person's words read back from what is about to be written,
+    // exactly (no markup of theirs stripped), or nothing is written.
+    let back = standing_triad(&spec, &requirement).map_err(|_| unfaithful(&requirement))?;
+    if !same_words(&back, triad) {
+        return Err(unfaithful(&requirement));
+    }
     // Appends only: what was there is an exact prefix of what is written,
     // checked again right before writing (principle I).
     for (path, new) in [(&spec_path, &spec), (&tasks_path, &tasks)] {
@@ -244,11 +261,50 @@ pub(super) fn record(
     })
 }
 
+/// The refusal of a triad whose words would not read back as given.
+pub(crate) fn unfaithful(requirement: &str) -> BugRefusal {
+    BugRefusal::new(
+        "BUG-ASSESSMENT-DRIFT",
+        format!(
+            "{requirement} would not read back exactly your words (a statement holds what the file's own markup means); nothing is written — reword it"
+        ),
+    )
+}
+
+/// `read` carries exactly `triad`'s statements, in order.
+pub(crate) fn same_words(read: &ReadBug, triad: &Triad) -> bool {
+    read.current == [triad.current.text.clone()]
+        && read.expected
+            == triad
+                .expected
+                .iter()
+                .map(|s| s.text.clone())
+                .collect::<Vec<_>>()
+        && read.unchanged
+            == triad
+                .unchanged
+                .iter()
+                .map(|s| s.text.clone())
+                .collect::<Vec<_>>()
+}
+
 /// The triad as the home holds it: a native bug by slug, a standing one by
 /// requirement.
 pub(super) fn read(root: &Path, home: &BugHome, key: &str) -> Result<ReadBug, BugRefusal> {
     match home.kind {
         HomeKind::NativeSpeckitBug => {
+            if !valid_slug(key) {
+                return Err(BugRefusal::new(
+                    "BUG-ASSESSMENT-UNREADABLE",
+                    format!("`{key}` is not a bug slug"),
+                ));
+            }
+            if linked(root, &[".specify", "bugs", key, ASSESSMENT]) {
+                return Err(BugRefusal::new(
+                    "BUG-ASSESSMENT-UNREADABLE",
+                    format!("{BUGS}/{key} is reached through a symbolic link: it is not read"),
+                ));
+            }
             let file = root.join(BUGS).join(key).join(ASSESSMENT);
             let text = std::fs::read_to_string(&file).map_err(|_| {
                 BugRefusal::new(
@@ -279,32 +335,46 @@ pub(super) fn read(root: &Path, home: &BugHome, key: &str) -> Result<ReadBug, Bu
 }
 
 /// The labelled statement a line holds: `Current: …`, `**Expected**: …`,
-/// `> Unchanged: …`, `1. **Current**: …`.
+/// `> Unchanged: …`, `1. **Current**: …`. The list or quote marker and the
+/// label are matched exactly at the start; the words after the label are
+/// the person's, kept byte for byte (whitespace normalised) — markup in
+/// them is theirs, never stripped.
 fn labelled(line: &str) -> Option<(&'static str, String)> {
-    let mut l = line.trim();
+    let mut l = line.trim_start();
     loop {
         let before = l;
-        l = l.trim_start_matches(['>', '-', '*', ' ']).trim_start();
-        if let Some((n, rest)) = l.split_once(". ")
+        if let Some(r) = l.strip_prefix('>') {
+            l = r.trim_start();
+        } else if let Some(r) = ["- ", "* ", "+ "].iter().find_map(|m| l.strip_prefix(m)) {
+            l = r.trim_start();
+        } else if let Some((n, rest)) = l.split_once(". ")
             && !n.is_empty()
             && n.chars().all(|c| c.is_ascii_digit())
         {
-            l = rest;
+            l = rest.trim_start();
         }
         if l == before {
             break;
         }
     }
-    let l = l.replacen("**", "", 2);
-    let (label, text) = l.split_once(':')?;
-    let label = match label.trim().to_ascii_lowercase().as_str() {
-        "current" => "current",
-        "expected" => "expected",
-        "unchanged" => "unchanged",
-        _ => return None,
-    };
-    let text = normalise(text);
-    (!text.is_empty()).then_some((label, text))
+    for label in ["current", "expected", "unchanged"] {
+        for (open, close) in [("**", "**:"), ("**", ":**"), ("", ":")] {
+            let Some(rest) = l.strip_prefix(open) else {
+                continue;
+            };
+            let Some(word) = rest.get(..label.len()) else {
+                continue;
+            };
+            if !word.eq_ignore_ascii_case(label) {
+                continue;
+            }
+            if let Some(text) = rest[label.len()..].strip_prefix(close) {
+                let text = normalise(text);
+                return (!text.is_empty()).then_some((label, text));
+            }
+        }
+    }
+    None
 }
 
 fn collect(lines: impl Iterator<Item = String>) -> ReadBug {
@@ -447,6 +517,81 @@ mod tests {
             assert_eq!(labelled(l), Some(("current", "a b".to_owned())), "{l}");
         }
         assert_eq!(labelled("Severity: high"), None);
+        // The person's own markup stays theirs.
+        assert_eq!(
+            labelled("2. **Expected**: passing **kwargs drops them"),
+            Some(("expected", "passing **kwargs drops them".to_owned()))
+        );
+        assert_eq!(
+            labelled("> Expected: `*args` and **kwargs**: kept"),
+            Some(("expected", "`*args` and **kwargs**: kept".to_owned()))
+        );
+        assert_eq!(
+            labelled("**Current:** x"),
+            Some(("current", "x".to_owned()))
+        );
+    }
+
+    proptest::proptest! {
+        #[test]
+        fn the_standing_unit_reads_back_exactly_what_it_records(
+            current in "[ -~]{1,40}",
+            expected in proptest::collection::vec("[ -~]{1,40}", 1..3),
+            unchanged in proptest::collection::vec("[ -~]{1,40}", 0..2),
+        ) {
+            let dir = tempfile::tempdir().unwrap_or_else(|e| panic!("{e}"));
+            let Ok(triad) = Triad::new(&current, &expected, &unchanged, crate::integrity::sha256_hex) else {
+                return Ok(());
+            };
+            let home = BugHome {
+                kind: HomeKind::StandingSpeckit,
+                location: "specs/001-bugfixes".to_owned(),
+                reason: String::new(),
+            };
+            // Recorded words read back exactly, or nothing is written.
+            match record(dir.path(), &home, &triad) {
+                Ok(rec) => {
+                    let back = read(dir.path(), &home, &rec.requirement).unwrap_or_else(|e| panic!("{e:?}"));
+                    proptest::prop_assert!(same_words(&back, &triad), "{back:?} vs {triad:?}");
+                }
+                Err(e) => {
+                    proptest::prop_assert_eq!(e.code, "BUG-ASSESSMENT-DRIFT");
+                    proptest::prop_assert!(!dir.path().join("specs/001-bugfixes/spec.md").exists());
+                }
+            }
+        }
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn a_slug_never_reaches_outside_the_bugs_directory() {
+        let tmp = tempfile::tempdir().unwrap_or_else(|e| panic!("{e}"));
+        let home = BugHome {
+            kind: HomeKind::NativeSpeckitBug,
+            location: BUGS.to_owned(),
+            reason: String::new(),
+        };
+        std::fs::create_dir_all(tmp.path().join("elsewhere")).unwrap_or_else(|e| panic!("{e}"));
+        std::fs::write(tmp.path().join("elsewhere/assessment.md"), FIXTURE)
+            .unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(dir(&home, "../../elsewhere"), None);
+        assert_eq!(
+            read(tmp.path(), &home, "../../elsewhere")
+                .err()
+                .map(|e| e.code),
+            Some("BUG-ASSESSMENT-UNREADABLE")
+        );
+        // A bug directory that is a symbolic link is not read.
+        std::fs::create_dir_all(tmp.path().join(BUGS)).unwrap_or_else(|e| panic!("{e}"));
+        std::os::unix::fs::symlink(
+            tmp.path().join("elsewhere"),
+            tmp.path().join(BUGS).join("linked"),
+        )
+        .unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(
+            read(tmp.path(), &home, "linked").err().map(|e| e.code),
+            Some("BUG-ASSESSMENT-UNREADABLE")
+        );
     }
 
     #[test]

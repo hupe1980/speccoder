@@ -216,6 +216,11 @@
           "type": "string"
         },
         {
+          "const": "bug_keep",
+          "description": "[`Runnable::BugKeep`].",
+          "type": "string"
+        },
+        {
           "const": "allow_always",
           "description": "[`Runnable::AllowAlways`].",
           "type": "string"
@@ -1041,6 +1046,24 @@
             "task",
             "digest",
             "reject"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Keep an already-satisfied bug's reproductions as a regression test:\ncommitted, the task attested (the input is the reason).",
+          "properties": {
+            "kind": {
+              "const": "bug_keep",
+              "type": "string"
+            },
+            "task": {
+              "description": "`<unit>/<task>`.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task"
           ],
           "type": "object"
         },

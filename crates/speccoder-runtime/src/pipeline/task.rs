@@ -808,6 +808,7 @@ pub(crate) fn run_task(
         approver: approver.as_deref(),
         held_out: run_config.held_out,
         max_tries: run_config.reproduce_tries,
+        bug_test: run_config.bug_test.as_deref(),
         start: &start,
     };
     let mut bug_fix = match super::bug::phase(&s.plane_dir, &feature_name, task, &project, format) {

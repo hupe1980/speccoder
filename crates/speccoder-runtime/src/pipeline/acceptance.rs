@@ -943,20 +943,25 @@ pub(crate) fn reuse_pre_frozen(
         }
         std::fs::write(&full, content).map_err(|e| format!("`{rel}`: {e}"))?;
     }
+    // A bug's reproduction is red only by its own test: a run of more than
+    // one test cannot say whose assertion failed.
+    let class_of = |r: &speccoder_core::verify::CheckResult,
+                    s: Option<&speccoder_core::verify::RunnerSummary>| match rule
+    {
+        RedRule::BugAssertionOnly => speccoder_core::verify::classify_red_one(r, s, ""),
+        RedRule::RunTime => classify_red(r, s),
+    };
     let mut classes = Vec::new();
     for t in tests {
         let (first, summary) = execute(project, &t.argv, runner);
-        let one = classify_red(&first, summary.as_ref());
+        let one = class_of(&first, summary.as_ref());
         let class = if t.green {
             one
         } else {
             match rule {
                 RedRule::BugAssertionOnly if one == RedClass::Assertion => {
                     let (second, summary) = execute(project, &t.argv, runner);
-                    speccoder_core::bug::bug_class(
-                        one,
-                        Some(classify_red(&second, summary.as_ref())),
-                    )
+                    speccoder_core::bug::bug_class(one, Some(class_of(&second, summary.as_ref())))
                 }
                 RedRule::BugAssertionOnly => one,
                 RedRule::RunTime if one.is_red() => {

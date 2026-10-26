@@ -348,9 +348,16 @@ mod tests {
                 words: "an empty title is refused".to_owned(),
                 file: "tests/repro_e1.rs".to_owned(),
                 test: "refused".to_owned(),
+                argv: vec![
+                    "cargo".to_owned(),
+                    "test".to_owned(),
+                    "--test".to_owned(),
+                    "repro_e1".to_owned(),
+                ],
                 excerpt: "assertion failed".to_owned(),
                 content: String::new(),
             }],
+            warning: None,
         };
         let mut err = Vec::new();
         assert_eq!(
@@ -359,7 +366,9 @@ mod tests {
         );
         let shown = String::from_utf8_lossy(&err);
         assert!(
-            shown.contains("sha256:abc") && shown.contains("E1 — an empty title is refused"),
+            shown.contains("sha256:abc")
+                && shown.contains("E1 — an empty title is refused")
+                && shown.contains("$ cargo test --test repro_e1"),
             "{shown}"
         );
         assert_eq!(

@@ -17,7 +17,9 @@ use speccoder_core::bug::{
 };
 use speccoder_core::context::ContextKind;
 use speccoder_core::stage::{Stage, StageState};
-use speccoder_core::verify::{CheckStatus, HeldOut, RedClass, Verdict, VerifyReport, classify_red};
+use speccoder_core::verify::{
+    CheckStatus, HeldOut, RedClass, Verdict, VerifyReport, classify_red, classify_red_one,
+};
 use speccoder_core::{CommandData, CommandResult, CommandStatus};
 
 use super::{AcceptanceSetup, PreparedAcceptance, ReusedTest, bare_report, class_word, stage};
@@ -50,6 +52,8 @@ pub(crate) struct Ctx<'a> {
     pub(crate) held_out: bool,
     /// `[bug] reproduce_tries`.
     pub(crate) max_tries: u32,
+    /// `[bug] test`: the command that runs one test of a file.
+    pub(crate) bug_test: Option<&'a [String]>,
     /// The tree the task started from.
     pub(crate) start: &'a worktree::Checkpoint,
 }
@@ -230,14 +234,50 @@ struct Authored {
     argv: Vec<String>,
 }
 
+/// Whether `rel` is a file that configures how tests are collected or run
+/// (a `conftest.py`, a runner's configuration): frozen as a reproduction, it
+/// would change every later test run, pass-to-pass and checks included.
+fn configures_collection(rel: &str) -> bool {
+    let name = rel.rsplit('/').next().unwrap_or(rel);
+    matches!(
+        name,
+        "conftest.py"
+            | "__init__.py"
+            | "pytest.ini"
+            | "tox.ini"
+            | "setup.cfg"
+            | "pyproject.toml"
+            | "package.json"
+            | "Cargo.toml"
+            | "build.rs"
+            | "go.mod"
+    ) || [
+        "jest.config",
+        "jest.setup",
+        "vitest.config",
+        "vitest.setup",
+        "vite.config",
+        "vitest.workspace",
+        "karma.conf",
+        ".mocharc",
+        "babel.config",
+        ".babelrc",
+    ]
+    .iter()
+    .any(|p| name.starts_with(p))
+}
+
 /// The author's files, checked: each a new test file, one per wanted
-/// statement, with a command the policy allows. `Err`: why the try is
+/// statement, naming its test. The command is speccoder's, never the
+/// author's: the one that runs only that test (`[bug] test` or the
+/// toolchain's rule), and the policy must allow it. `Err`: why the try is
 /// discarded.
 fn validate(
     answer: &Value,
     want: &[String],
     project: &Path,
     policy: &Policy,
+    template: Option<&[String]>,
 ) -> Result<Vec<Authored>, String> {
     let protected = policy.protected();
     let mut out: Vec<Authored> = Vec::new();
@@ -246,6 +286,11 @@ fn validate(
         let rel = tools::paths::normalise(path).map_err(|e| format!("`{path}`: {}", e.0))?;
         if !tools::paths::is_test_path(&rel) || protected.write_class(&rel).is_some() {
             return Err(format!("wrote outside tests (`{rel}`)"));
+        }
+        if configures_collection(&rel) {
+            return Err(format!(
+                "`{rel}` configures how tests run: a reproduction is a test file"
+            ));
         }
         if project.join(&rel).exists() || out.iter().any(|a| a.path == rel) {
             return Err(format!("`{rel}` already exists"));
@@ -256,22 +301,25 @@ fn validate(
                 "`{rel}` cites `{statement}`: one test per statement asked for"
             ));
         }
-        let argv: Vec<String> = f["argv"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(|v| v.as_str().map(str::to_owned))
-            .collect();
-        if argv.is_empty()
-            || policy.classify("run_command", &json!({ "argv": argv }), None) != Decision::Allow
-        {
+        let test = f["test"].as_str().unwrap_or_default().trim().to_owned();
+        if test.is_empty() {
+            return Err(format!("`{rel}` names no test"));
+        }
+        // Only that test runs: a command that runs others could be red by
+        // an unrelated failure.
+        let argv = crate::bug::named::argv(project, &rel, &test, template).ok_or_else(|| {
+            format!(
+                "speccoder has no rule to run only `{test}` of `{rel}`; set `[bug] test` in speccoder.toml"
+            )
+        })?;
+        if policy.classify("run_command", &json!({ "argv": argv }), None) != Decision::Allow {
             return Err(format!("`{}` is not an allowed command", argv.join(" ")));
         }
         out.push(Authored {
             path: rel,
             content: f["content"].as_str().unwrap_or_default().to_owned(),
             statement,
-            test: f["test"].as_str().unwrap_or_default().to_owned(),
+            test,
             argv,
         });
     }
@@ -285,16 +333,22 @@ fn validate(
 }
 
 /// The class and excerpt of one reproduction on the tree as it is: red
-/// only by an assertion, twice; an *Unchanged* test runs once and must pass.
-fn baseline_class(c: &Ctx<'_>, argv: &[String], reproduces: bool) -> (Vec<RedClass>, String) {
+/// only by an assertion of `test` itself, twice; an *Unchanged* test runs
+/// once and must pass.
+fn baseline_class(
+    c: &Ctx<'_>,
+    argv: &[String],
+    test: &str,
+    reproduces: bool,
+) -> (Vec<RedClass>, String) {
     let (first, summary) = super::acceptance_run(c.project, argv, c.runner);
-    let one = classify_red(&first, summary.as_ref());
+    let one = classify_red_one(&first, summary.as_ref(), test);
     let excerpt = handoff::cut(&format!("{}\n{}", first.stdout_tail, first.stderr_tail), 20);
     if !reproduces || one != RedClass::Assertion {
         return (vec![one], excerpt);
     }
     let (second, summary) = super::acceptance_run(c.project, argv, c.runner);
-    let two = classify_red(&second, summary.as_ref());
+    let two = classify_red_one(&second, summary.as_ref(), test);
     (vec![one, rules::bug_class(one, Some(two))], excerpt)
 }
 
@@ -476,6 +530,48 @@ pub(crate) fn reproduce(c: &Ctx<'_>, mut bug: BugReport) -> Result<Fix, Box<Comm
         Box::new(stop(c, bug, outcome, code, message, began))
     };
     let kept: Vec<(Reproduction, String)> = loop {
+        // Every try counts, a rejected one too: once they are used up the
+        // author is not called again.
+        if u32::try_from(bug.tries.len()).unwrap_or(u32::MAX) >= c.max_tries.max(1) {
+            let saved = state::save(c.state, &bug);
+            match rules::decide_reproduce(&bug.tries, &expected, c.max_tries) {
+                // Still waiting for the person: the same reproductions.
+                Reproduce::Reproduced { .. } if bug.confirm_digest.is_some() && saved.is_ok() => {
+                    let digest = bug.confirm_digest.clone().unwrap_or_default();
+                    let message = format!(
+                        "the reproductions wait for your confirmation (digest {digest}): speccoder bug confirm {} --digest {digest}",
+                        bug.key()
+                    );
+                    return Err(Box::new(stop(
+                        c,
+                        bug,
+                        Outcome::AwaitingConfirmation,
+                        None,
+                        message,
+                        began,
+                    )));
+                }
+                _ => {
+                    let message = format!(
+                        "cannot reproduce: the {} tries are used up ({} rejected); nothing is fixed",
+                        bug.tries.len(),
+                        bug.tries
+                            .iter()
+                            .filter(|t| t
+                                .discarded
+                                .as_deref()
+                                .is_some_and(|d| d.starts_with("rejected")))
+                            .count()
+                    );
+                    return Err(stop_now(
+                        bug,
+                        Outcome::CannotReproduce,
+                        Some("BUG-CANNOT-REPRODUCE"),
+                        message,
+                    ));
+                }
+            }
+        }
         let n = u32::try_from(bug.tries.len()).unwrap_or(u32::MAX) + 1;
         let context = manifest(c, &bug, extra.issue.as_ref());
         let rejections: Vec<String> = bug.rejections.iter().map(|r| r.reason.clone()).collect();
@@ -497,7 +593,7 @@ pub(crate) fn reproduce(c: &Ctx<'_>, mut bug: BugReport) -> Result<Fix, Box<Comm
                 }
                 let _ = std::fs::write(&full, content);
             }
-            let (classes, excerpt) = baseline_class(c, &r.argv, true);
+            let (classes, excerpt) = baseline_class(c, &r.argv, &r.test, true);
             let class = classes.last().copied().unwrap_or(RedClass::Unclassified);
             t.per_statement.push(TryStatement {
                 statement: r.statement.clone(),
@@ -532,7 +628,7 @@ pub(crate) fn reproduce(c: &Ctx<'_>, mut bug: BugReport) -> Result<Fix, Box<Comm
                 Ok((answer, run_id, usage, _notes)) => {
                     t.run_id = Some(run_id);
                     t.usage = usage;
-                    match validate(&answer, &want, c.project, c.policy) {
+                    match validate(&answer, &want, c.project, c.policy, c.bug_test) {
                         Err(why) => t.discarded = Some(why),
                         Ok(files) => {
                             for f in files {
@@ -546,7 +642,8 @@ pub(crate) fn reproduce(c: &Ctx<'_>, mut bug: BugReport) -> Result<Fix, Box<Comm
                                     break;
                                 }
                                 let reproduces = f.statement.starts_with('E');
-                                let (classes, excerpt) = baseline_class(c, &f.argv, reproduces);
+                                let (classes, excerpt) =
+                                    baseline_class(c, &f.argv, &f.test, reproduces);
                                 let class =
                                     classes.last().copied().unwrap_or(RedClass::Unclassified);
                                 let red_ok = if reproduces {
@@ -604,9 +701,18 @@ pub(crate) fn reproduce(c: &Ctx<'_>, mut bug: BugReport) -> Result<Fix, Box<Comm
             },
         );
         bug.tries.push(t);
-        let _ = state::save(c.state, &bug);
+        if let Err(e) = state::save(c.state, &bug) {
+            return Err(Box::new(stop(
+                c,
+                bug,
+                Outcome::Recorded,
+                None,
+                format!("the try could not be kept: {e}"),
+                began,
+            )));
+        }
         match rules::decide_reproduce(&bug.tries, &expected, c.max_tries) {
-            Reproduce::Reproduced { n: at } if at == n => {
+            Reproduce::Reproduced { .. } => {
                 let last = bug
                     .tries
                     .last()
@@ -634,7 +740,7 @@ pub(crate) fn reproduce(c: &Ctx<'_>, mut bug: BugReport) -> Result<Fix, Box<Comm
                 }
                 break this;
             }
-            Reproduce::Reproduced { .. } | Reproduce::Retry => {}
+            Reproduce::Retry => {}
             Reproduce::AlreadySatisfied => {
                 bug.reproductions = person.clone();
                 bug.reproductions
@@ -693,14 +799,16 @@ pub(crate) fn reproduce(c: &Ctx<'_>, mut bug: BugReport) -> Result<Fix, Box<Comm
     // Held-out variants: other inputs, the same statements; sealed.
     bug.held_out.clear();
     bug.held_out_sealed = None;
+    bug.held_out_reason = None;
     if c.held_out {
         let visible: Vec<(String, String)> = kept
             .iter()
             .filter(|(r, _)| r.reproduces())
             .map(|(r, content)| (r.file.clone(), content.clone()))
             .collect();
-        if let Some(sealed) = seal_variants(c, &mut bug, &visible, &expected, &[]) {
-            bug.held_out_sealed = Some(sealed);
+        match seal_variants(c, &mut bug, &visible, &expected, &[]) {
+            Ok(sealed) => bug.held_out_sealed = Some(sealed),
+            Err(why) => bug.held_out_reason = Some(why),
         }
     }
     bug.reproductions = kept.iter().map(|(r, _)| r.clone()).collect();
@@ -772,6 +880,7 @@ pub(crate) fn reproduce(c: &Ctx<'_>, mut bug: BugReport) -> Result<Fix, Box<Comm
                     .unwrap_or_default(),
                 file: r.file.clone(),
                 test: r.test.clone(),
+                argv: r.argv.clone(),
                 excerpt: bug
                     .tries
                     .last()
@@ -781,6 +890,7 @@ pub(crate) fn reproduce(c: &Ctx<'_>, mut bug: BugReport) -> Result<Fix, Box<Comm
                 content: content.clone(),
             })
             .collect(),
+        warning: crate::bug::held_out_warning(&bug),
     };
     match c
         .approver
@@ -791,7 +901,16 @@ pub(crate) fn reproduce(c: &Ctx<'_>, mut bug: BugReport) -> Result<Fix, Box<Comm
             freeze(c, bug, &by, via, Basis::Shown, began)
         }
         Some((ConfirmAnswer::Reject(reason), via)) => {
-            reject(c.state, &mut bug, &reason, via);
+            if let Err(e) = reject(c.state, &mut bug, &reason, via) {
+                return Err(Box::new(stop(
+                    c,
+                    bug,
+                    Outcome::Recorded,
+                    None,
+                    format!("the rejection could not be kept: {e}"),
+                    began,
+                )));
+            }
             event(c.live, c.task, BugEvent::ConfirmRejected { digest, reason });
             stage(
                 c.live,
@@ -834,8 +953,11 @@ pub(crate) fn reproduce(c: &Ctx<'_>, mut bug: BugReport) -> Result<Fix, Box<Comm
                 None,
             );
             let message = format!(
-                "{} reproduction(s) fail on the untouched code by an assertion; they wait for your confirmation (digest {digest}): {next}",
-                bug.reproductions.iter().filter(|r| r.reproduces()).count()
+                "{} reproduction(s) fail on the untouched code by an assertion; they wait for your confirmation (digest {digest}): {next}{}",
+                bug.reproductions.iter().filter(|r| r.reproduces()).count(),
+                crate::bug::held_out_warning(&bug)
+                    .map(|w| format!(" — {w}"))
+                    .unwrap_or_default()
             );
             Err(Box::new(stop(
                 c,
@@ -853,13 +975,18 @@ fn outcome_word(o: Outcome) -> String {
     o.as_str().replace('_', " ")
 }
 
-/// Records a rejection: the reason goes to the next try.
+/// Records a rejection: the reason goes to the next try, and the try that
+/// wrote what was rejected is discarded (it never reproduces again; it
+/// still counts against the tries). `Err`: it could not be kept.
 pub(crate) fn reject(
     state_dir: &Path,
     bug: &mut BugReport,
     reason: &str,
     via: speccoder_core::actions::Via,
-) {
+) -> Result<(), String> {
+    if let Some(t) = bug.tries.last_mut() {
+        t.discarded = Some(rules::rejected_try(reason));
+    }
     bug.rejections.push(rules::Rejection {
         digest: bug.confirm_digest.clone().unwrap_or_default(),
         reason: reason.to_owned(),
@@ -870,7 +997,7 @@ pub(crate) fn reject(
     bug.confirm_digest = None;
     bug.outcome = Outcome::Recorded;
     bug.stage = BugStage::Reproduce;
-    let _ = state::save(state_dir, bug);
+    state::save(state_dir, bug)
 }
 
 fn freeze(
@@ -928,7 +1055,7 @@ fn seal_variants(
     visible: &[(String, String)],
     statements: &[String],
     told: &[String],
-) -> Option<speccoder_core::acceptance::SealedRef> {
+) -> Result<speccoder_core::acceptance::SealedRef, String> {
     let (files, manifest_text) = project_view(c);
     let context = manifest(c, bug, None);
     let input = substrate::acceptance::reproduce_input(&substrate::acceptance::ReproduceParts {
@@ -944,7 +1071,8 @@ fn seal_variants(
         instructions: c.instructions,
         context: &context,
     });
-    let (answer, run_id, _, _) = author(c, input).ok()?;
+    let (answer, run_id, _, _) =
+        author(c, input).map_err(|e| format!("the held-out author: {e}"))?;
     let protected = c.policy.protected();
     let mut kept: Vec<(held_out::HeldOutFile, String)> = Vec::new();
     let mut discarded = Vec::new();
@@ -1010,10 +1138,10 @@ fn seal_variants(
     }
     // Red twice on the tree as it is, by an assertion.
     let mut red: Vec<(held_out::HeldOutFile, String)> = Vec::new();
-    let once =
-        held_out::overlay_run(c.wt_root, c.project, c.tmp, &kept, c.runner, c.policy).ok()?;
-    let twice =
-        held_out::overlay_run(c.wt_root, c.project, c.tmp, &kept, c.runner, c.policy).ok()?;
+    let once = held_out::overlay_run(c.wt_root, c.project, c.tmp, &kept, c.runner, c.policy)
+        .map_err(|e| format!("the held-out variants could not be run: {e}"))?;
+    let twice = held_out::overlay_run(c.wt_root, c.project, c.tmp, &kept, c.runner, c.policy)
+        .map_err(|e| format!("the held-out variants could not be run: {e}"))?;
     for ((f, content), (a, b)) in kept.into_iter().zip(once.iter().zip(&twice)) {
         let class = |r: &held_out::Ran| {
             r.result
@@ -1038,18 +1166,31 @@ fn seal_variants(
             });
         }
     }
+    let written = red.len();
     // Variants of statements not written again stay.
-    if let Some(old) = bug.held_out_sealed.clone()
-        && let Ok((m, contents)) = held_out::open_sealed(c.state, &bug.unit, &old)
-    {
+    if let Some(old) = bug.held_out_sealed.clone() {
+        let (m, contents) = held_out::open_sealed(c.state, &bug.unit, &old)
+            .map_err(|e| format!("the sealed held-out set could not be opened: {}", e.0))?;
         for (f, (_, content)) in m.files.into_iter().zip(contents) {
             if !statements.iter().any(|s| f.scenarios.contains(s)) {
                 red.push((f, content));
             }
         }
     }
-    if red.is_empty() {
-        return None;
+    if written == 0 {
+        return Err(if discarded.is_empty() {
+            "the held-out author wrote no variant".to_owned()
+        } else {
+            format!(
+                "no held-out variant was red on the untouched code by an assertion ({} discarded: {})",
+                discarded.len(),
+                discarded
+                    .iter()
+                    .map(|d| d.reason.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        });
     }
     let checkpoint = worktree::checkpoint(c.wt_root, c.tmp)
         .map(|cp| cp.0)
@@ -1068,7 +1209,8 @@ fn seal_variants(
         .iter()
         .map(|(f, c)| (f.path.clone(), c.clone()))
         .collect();
-    held_out::seal(c.state, &bug.unit, &bug.requirement, &manifest, &contents).ok()
+    held_out::seal(c.state, &bug.unit, &bug.requirement, &manifest, &contents)
+        .map_err(|e| format!("the held-out variants could not be sealed: {e}"))
 }
 
 /// The confirmed set at the checkpoint (the one reuse function every
@@ -1115,12 +1257,14 @@ pub(crate) struct Judging<'a> {
     pub(crate) keep: &'a Path,
 }
 
-fn run_class(c: &Ctx<'_>, argv: &[String]) -> RedClass {
-    let (r, summary) = super::acceptance_run(c.project, argv, c.runner);
-    if r.status == CheckStatus::Passed {
+/// The class of reproduction `r` (its one test) on the tree as it is.
+fn run_class(c: &Ctx<'_>, r: &Reproduction) -> RedClass {
+    let (run, summary) = super::acceptance_run(c.project, &r.argv, c.runner);
+    let class = classify_red_one(&run, summary.as_ref(), &r.test);
+    if run.status == CheckStatus::Passed && class != RedClass::Unclassified {
         RedClass::Passed
     } else {
-        classify_red(&r, summary.as_ref())
+        class
     }
 }
 
@@ -1159,7 +1303,7 @@ pub(crate) fn judge(c: &Ctx<'_>, fix: &mut Fix, j: &Judging<'_>) -> Result<Judge
     // 1. Every reproduction (and Unchanged test) on the final tree.
     let mut unchanged_ok: Vec<String> = Vec::new();
     for r in &mut fix.bug.reproductions {
-        let class = run_class(c, &r.argv);
+        let class = run_class(c, r);
         r.final_ = if class == RedClass::Passed {
             Final::Passed
         } else {
@@ -1272,7 +1416,7 @@ pub(crate) fn judge(c: &Ctx<'_>, fix: &mut Fix, j: &Judging<'_>) -> Result<Judge
     let mut rejected_by = Vec::new();
     let mut any_unviable = false;
     for r in fix.bug.reproductions.iter_mut().filter(|r| r.reproduces()) {
-        let class = run_class(c, &r.argv);
+        let class = run_class(c, r);
         r.revert = match class {
             RedClass::Assertion => {
                 rejected_by.push(r.statement.clone());
@@ -1315,6 +1459,7 @@ pub(crate) fn judge(c: &Ctx<'_>, fix: &mut Fix, j: &Judging<'_>) -> Result<Judge
 
     // 4. Special cases: one per statement, against the combined set.
     let mut special: Vec<SpecialCase> = Vec::new();
+    let mut special_error: Option<String> = None;
     let mut weak = None;
     if !revert.rejected_by.is_empty()
         && fix
@@ -1337,7 +1482,10 @@ pub(crate) fn judge(c: &Ctx<'_>, fix: &mut Fix, j: &Judging<'_>) -> Result<Judge
                     .map(|(p, content)| (r.statement.clone(), p.clone(), content.clone()))
             })
             .collect();
-        if !changed_sources.is_empty() {
+        if changed_sources.is_empty() {
+            special_error =
+                Some("the fix changes no source file a special case could replace".to_owned());
+        } else {
             let context = manifest(c, &fix.bug, None);
             let input = substrate::near_miss::special_case_input(
                 c.bundle,
@@ -1346,12 +1494,37 @@ pub(crate) fn judge(c: &Ctx<'_>, fix: &mut Fix, j: &Judging<'_>) -> Result<Judge
                 &shown,
                 &context,
             );
-            let variants =
-                c.rt.block_on(c.plane.near_miss(c.feature, c.task, input))
-                    .ok()
-                    .and_then(|o| o.output.as_ref().map(|v| v.peek()["answer"].clone()))
-                    .map(|a| special_variants(&a, &changed_sources))
-                    .unwrap_or_default();
+            // A failed or empty answer is said, never read as "none needed".
+            let variants = match c.rt.block_on(c.plane.near_miss(c.feature, c.task, input)) {
+                Err(e) => {
+                    special_error = Some(format!("the special-case author call failed: {}", e.0));
+                    Vec::new()
+                }
+                Ok(o) => {
+                    let answer = o
+                        .output
+                        .as_ref()
+                        .map(|v| v.peek()["answer"].clone())
+                        .unwrap_or_default();
+                    if !matches!(o.status, agentplane::prelude::RunStatus::Succeeded)
+                        || answer.is_null()
+                    {
+                        special_error = Some(format!(
+                            "the special-case author did not answer ({})",
+                            o.status.as_str()
+                        ));
+                        Vec::new()
+                    } else {
+                        let v = special_variants(&answer, &changed_sources);
+                        if v.is_empty() {
+                            special_error = Some(
+                                "the special-case author wrote no candidate that changes the fix's source files".to_owned(),
+                            );
+                        }
+                        v
+                    }
+                }
+            };
             let rulings = crate::strength::rulings(j.keep);
             for v in variants {
                 let statement = v.scenario.clone();
@@ -1383,11 +1556,19 @@ pub(crate) fn judge(c: &Ctx<'_>, fix: &mut Fix, j: &Judging<'_>) -> Result<Judge
                         &told,
                     );
                     worktree::restore(c.wt_root, c.tmp, &fin).map_err(|e| e.0)?;
-                    if let Some(sealed) = resealed {
-                        fix.bug.held_out_sealed = Some(sealed.clone());
-                        fix.record.held_out_sealed = Some(sealed);
-                        let _ = crate::pre_frozen::store(c.state, &fix.record, &fix.files);
-                        rejected = special_rejected(c, fix, &v, &fin)?;
+                    match resealed {
+                        Ok(sealed) => {
+                            fix.bug.held_out_sealed = Some(sealed.clone());
+                            fix.record.held_out_sealed = Some(sealed);
+                            crate::pre_frozen::store(c.state, &fix.record, &fix.files).map_err(
+                                |e| format!("the re-sealed held-out set could not be kept: {e}"),
+                            )?;
+                            rejected = special_rejected(c, fix, &v, &fin)?;
+                        }
+                        // No new variant: the special case still stands, and why is said.
+                        Err(why) => {
+                            fix.bug.held_out_reason = Some(why);
+                        }
                     }
                 }
                 if !rejected && !ruled {
@@ -1411,6 +1592,63 @@ pub(crate) fn judge(c: &Ctx<'_>, fix: &mut Fix, j: &Judging<'_>) -> Result<Judge
             }
         }
     }
+    // Held-out: every sealed variant — a regenerated one too — runs on the
+    // final tree and must pass there (FR-016, FR-019).
+    let held = match fix.bug.held_out_sealed.clone() {
+        Some(sealed) => {
+            let (m, contents) = held_out::open_sealed(c.state, &fix.bug.unit, &sealed)
+                .map_err(|e| format!("the sealed held-out set could not be opened: {}", e.0))?;
+            let files: Vec<(held_out::HeldOutFile, String)> = m
+                .files
+                .into_iter()
+                .zip(contents.into_iter().map(|(_, x)| x))
+                .collect();
+            let runs =
+                held_out::overlay_run(c.wt_root, c.project, c.tmp, &files, c.runner, c.policy)?;
+            let mut failed: Vec<String> = Vec::new();
+            let mut passed: Vec<String> = Vec::new();
+            for ((f, _), r) in files.iter().zip(&runs) {
+                let ok = r
+                    .result
+                    .as_ref()
+                    .is_some_and(|(res, _)| res.status == CheckStatus::Passed);
+                for st in &f.scenarios {
+                    if ok {
+                        passed.push(st.clone());
+                    } else {
+                        failed.push(st.clone());
+                    }
+                }
+            }
+            if runs.len() != files.len() {
+                failed.push("held-out".to_owned());
+            }
+            for h in &mut fix.bug.held_out {
+                h.final_ = if failed.contains(&h.statement) {
+                    Final::Failed
+                } else if passed.contains(&h.statement) {
+                    Final::Passed
+                } else {
+                    Final::NotRun
+                };
+            }
+            failed.sort();
+            failed.dedup();
+            if failed.is_empty() {
+                HeldOut::Passed { files: files.len() }
+            } else {
+                HeldOut::Failed { scenarios: failed }
+            }
+        }
+        None if c.held_out => HeldOut::Absent {
+            reason: fix
+                .bug
+                .held_out_reason
+                .clone()
+                .unwrap_or_else(|| "none_kept".to_owned()),
+        },
+        None => HeldOut::Off,
+    };
     // The tree and the judge inputs are as they were.
     let now = worktree::checkpoint(c.wt_root, c.tmp).map_err(|e| e.0)?;
     if now != fin {
@@ -1438,33 +1676,19 @@ pub(crate) fn judge(c: &Ctx<'_>, fix: &mut Fix, j: &Judging<'_>) -> Result<Judge
                 .collect(),
         },
     );
-    // Held-out: they passed (or the verdict would have failed already).
-    let held = match &fix.bug.held_out_sealed {
-        Some(h) => HeldOut::Passed { files: h.count },
-        None if c.held_out => HeldOut::Absent {
-            reason: "none_kept".to_owned(),
-        },
-        None => HeldOut::Off,
-    };
-    for h in &mut fix.bug.held_out {
-        h.final_ = if matches!(held, HeldOut::Passed { .. }) {
-            Final::Passed
-        } else {
-            Final::NotRun
-        };
-    }
     let verdict = {
         let d = rules::Discrimination {
             reproductions: &fix.bug.reproductions,
             revert: &revert,
             special_case: &special,
+            special_case_error: special_error.as_deref(),
         };
         rules::bug_verdict(j.base.clone(), &d, &p2p, &held)
     };
     fix.bug.pass_to_pass = Some(p2p);
     fix.bug.revert = Some(revert);
     fix.bug.special_case = special;
-    let _ = state::save(c.state, &fix.bug);
+    state::save(c.state, &fix.bug).map_err(|e| format!("the bug could not be kept: {e}"))?;
     Ok(Judged { verdict, weak })
 }
 
@@ -1537,7 +1761,7 @@ fn special_rejected(
         .iter()
         .filter(|r| r.statement == v.scenario)
     {
-        if run_class(c, &r.argv) == RedClass::Assertion {
+        if run_class(c, r) == RedClass::Assertion {
             rejected = true;
         }
     }
@@ -1701,7 +1925,20 @@ pub(crate) fn apply_candidate(
                 .with_data(CommandData::Run(Box::new(report))),
         )
     };
-    let touched = crate::bug::candidate::touched(diff);
+    // The paths as git reads the diff: renames, mode changes and quoted
+    // paths included; a binary hunk or a symbolic link is not applied.
+    let touched = match crate::bug::candidate::touched(c.wt_root, diff) {
+        Ok(t) => t,
+        Err(r) => {
+            let message = format!("the candidate is not applied: {}", r.paths.join("; "));
+            return Err(refused(
+                "BUG-CANDIDATE-APPLY",
+                r.paths,
+                CommandStatus::GitPrecondition,
+                message,
+            ));
+        }
+    };
     let judged = crate::bug::candidate::judge_paths(&touched, c.policy, frozen, held_out_paths);
     if !judged.is_empty() {
         return Err(refused(
@@ -1866,5 +2103,84 @@ impl NativeBug {
             },
             dependencies: Vec::new(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_reproduction_is_a_test_file_run_by_speccoders_own_command() {
+        let dir = tempfile::tempdir().unwrap_or_else(|e| panic!("{e}"));
+        let policy = Policy::new(
+            &[],
+            &[vec![
+                "./run-one".to_owned(),
+                "tests/repro.sh".to_owned(),
+                "empty".to_owned(),
+            ]],
+        );
+        let template = [
+            "./run-one".to_owned(),
+            "{file}".to_owned(),
+            "{name}".to_owned(),
+        ];
+        let want = ["E1".to_owned()];
+        let answer = |path: &str, test: &str| json!({ "files": [{ "path": path, "content": "x", "statement": "E1", "test": test, "argv": ["sh", "-c", "exit 1"] }] });
+        // The author's command is never run: speccoder's runs only the test.
+        let ok = validate(
+            &answer("tests/repro.sh", "empty"),
+            &want,
+            dir.path(),
+            &policy,
+            Some(&template),
+        );
+        let Ok(files) = ok else {
+            panic!("{ok:?}", ok = ok.err());
+        };
+        assert_eq!(files[0].argv, ["./run-one", "tests/repro.sh", "empty"]);
+        // A file that configures how every test runs is not a reproduction.
+        for path in [
+            "tests/conftest.py",
+            "tests/__init__.py",
+            "tests/vitest.setup.ts",
+        ] {
+            let e = validate(
+                &answer(path, "t"),
+                &want,
+                dir.path(),
+                &policy,
+                Some(&template),
+            )
+            .err();
+            assert!(
+                e.as_deref()
+                    .is_some_and(|e| e.contains("configures how tests run")),
+                "{path}: {e:?}"
+            );
+        }
+        // A test without a name, or with no rule to run it alone, is not one.
+        assert!(
+            validate(
+                &answer("tests/repro.sh", " "),
+                &want,
+                dir.path(),
+                &policy,
+                Some(&template)
+            )
+            .is_err()
+        );
+        assert!(
+            validate(
+                &answer("tests/repro.unknown", "t"),
+                &want,
+                dir.path(),
+                &policy,
+                None
+            )
+            .err()
+            .is_some_and(|e| e.contains("[bug] test"))
+        );
     }
 }

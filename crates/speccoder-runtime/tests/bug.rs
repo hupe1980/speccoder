@@ -525,7 +525,7 @@ fn a_bug_already_fixed_is_said_so_and_never_ticked() {
     assert_eq!(item.group, "ready_to_review");
     assert!(item.actions.iter().any(|a| matches!(
         a.run,
-        Some(speccoder_core::actions::Runnable::Accept { .. })
+        Some(speccoder_core::actions::Runnable::BugKeep { .. })
     )));
 }
 
@@ -763,9 +763,13 @@ fn judge_candidate(
     d: &Arc<dyn ModelProvider>,
     candidate: &str,
     github: Option<speccoder_runtime::github::Ctx>,
+    special: bool,
 ) -> CommandResult {
     f.will_structure(reproductions());
     f.will_structure(held_out("refuses_blank"));
+    if special {
+        special_case(f);
+    }
     let mut req = request(
         &["an empty title is refused with a message"],
         &["a title is saved"],
@@ -836,8 +840,7 @@ fn a_pull_request_is_judged_from_its_diff_and_its_head_is_recorded() {
     let (f, d) = fake();
     let github = speccoder_runtime::github::Ctx::fixed(&api.url, Some("t0ken"));
     // The special-case author is the only model call after confirmation.
-    special_case(&f);
-    let res = judge_candidate(r.path(), state.path(), &f, &d, "pr:7", Some(github));
+    let res = judge_candidate(r.path(), state.path(), &f, &d, "pr:7", Some(github), true);
     assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
     let b = the_bug(&res);
     assert_eq!(b.verdict, Some(Verdict::Verified));
@@ -876,7 +879,7 @@ fn a_patch_that_does_not_apply_is_refused_and_a_failing_one_is_not_retried() {
     fs::write(r.path().join("stale.patch"), stale).unwrap();
     let state = tempfile::tempdir().unwrap();
     let (f, d) = fake();
-    let res = judge_candidate(r.path(), state.path(), &f, &d, "stale.patch", None);
+    let res = judge_candidate(r.path(), state.path(), &f, &d, "stale.patch", None, false);
     assert_eq!(
         res.code().map(|c| c.name),
         Some("BUG-CANDIDATE-APPLY"),
@@ -896,7 +899,7 @@ fn a_patch_that_does_not_apply_is_refused_and_a_failing_one_is_not_retried() {
     fs::write(r.path().join("wrong.patch"), wrong).unwrap();
     let state = tempfile::tempdir().unwrap();
     let (f, d) = fake();
-    let res = judge_candidate(r.path(), state.path(), &f, &d, "wrong.patch", None);
+    let res = judge_candidate(r.path(), state.path(), &f, &d, "wrong.patch", None, false);
     let b = the_bug(&res);
     assert_eq!(b.outcome, Outcome::Failed, "{}", res.message());
     assert_ne!(b.verdict, Some(Verdict::Verified));
@@ -1389,4 +1392,843 @@ fn a_kiro_project_has_no_place_for_a_bug_yet() {
         res.message()
     );
     assert!(res.message().contains("F-052"), "{}", res.message());
+}
+
+/// An approver who rejects every set of reproductions, counting.
+#[derive(Debug, Default)]
+struct Rejects(std::sync::atomic::AtomicUsize);
+impl Approver for Rejects {
+    fn ask(&self, _: &Presentation) -> Answer {
+        panic!("no call should need approval")
+    }
+    fn confirm(&self, _: &ConfirmRequest) -> Option<ConfirmAnswer> {
+        self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        Some(ConfirmAnswer::Reject("it tests the wrong field".to_owned()))
+    }
+}
+
+/// `f` on its own thread, failed when it takes longer than two minutes
+/// (a loop that never ends is a failure, not a hung suite).
+fn within<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> T {
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = tx.send(f());
+    });
+    rx.recv_timeout(std::time::Duration::from_secs(120))
+        .unwrap_or_else(|_| panic!("it did not end: the reproduce loop runs on"))
+}
+
+#[test]
+fn a_rejected_reproduction_is_discarded_and_the_tries_run_out() {
+    // Inline: the person rejects every try; the author is called at most
+    // `reproduce_tries` times, then cannot_reproduce.
+    let r = repo("seeded");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    for _ in 0..3 {
+        f.will_structure(reproductions());
+        f.will_structure(held_out("refuses_blank"));
+    }
+    let rejects = Arc::new(Rejects::default());
+    let options = RunOptions {
+        approver: Some(rejects.clone()),
+        ..RunOptions::default()
+    };
+    let (root, st) = (r.path().to_path_buf(), state.path().to_path_buf());
+    let res = within(move || {
+        bug::bug_with(
+            &root,
+            &request(
+                &["an empty title is refused with a message"],
+                &["a title is saved"],
+                true,
+            ),
+            Via::Terminal,
+            &st,
+            Some(d),
+            None,
+            &options,
+        )
+    });
+    assert_eq!(
+        res.code().map(|c| c.name),
+        Some("BUG-CANNOT-REPRODUCE"),
+        "{}",
+        res.message()
+    );
+    let b = the_bug(&res);
+    assert_eq!(b.outcome, Outcome::CannotReproduce);
+    assert_eq!(b.tries.len(), 3);
+    assert!(
+        b.tries.iter().all(|t| t
+            .discarded
+            .as_deref()
+            .is_some_and(|d| d.starts_with("rejected"))),
+        "{:#?}",
+        b.tries
+    );
+    assert_eq!(rejects.0.load(std::sync::atomic::Ordering::SeqCst), 3);
+    assert_eq!(
+        f.calls(),
+        6,
+        "three reproduction and three held-out calls, no more"
+    );
+    assert!(
+        b.handoff.as_ref().unwrap().statements.reproduced.is_empty(),
+        "a rejected try reproduces nothing"
+    );
+
+    // From the command line: `bug confirm --reject` twice, a fresh try
+    // each time; the third rejection ends it without another author call.
+    let r = repo("seeded");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    for _ in 0..3 {
+        f.will_structure(reproductions());
+        f.will_structure(held_out("refuses_blank"));
+    }
+    let first = record_and_reproduce(r.path(), state.path(), &d);
+    let mut b = the_bug(&first).clone();
+    for n in 1..=3 {
+        let (root, st, key, digest, d) = (
+            r.path().to_path_buf(),
+            state.path().to_path_buf(),
+            b.key(),
+            b.confirm_digest.clone().unwrap(),
+            Arc::clone(&d),
+        );
+        let res = within(move || {
+            bug::confirm_with(
+                &root,
+                &key,
+                &digest,
+                Some("it tests the wrong field"),
+                Via::Terminal,
+                &st,
+                Some(d),
+                None,
+                &RunOptions::default(),
+            )
+        });
+        b = the_bug(&res).clone();
+        if n < 3 {
+            assert_eq!(
+                b.outcome,
+                Outcome::AwaitingConfirmation,
+                "{}",
+                res.message()
+            );
+            assert_eq!(b.tries.len(), n + 1);
+        } else {
+            assert_eq!(
+                res.code().map(|c| c.name),
+                Some("BUG-CANNOT-REPRODUCE"),
+                "{}",
+                res.message()
+            );
+        }
+    }
+    assert_eq!(f.calls(), 6, "no author call once the tries are used up");
+}
+
+#[test]
+fn a_regenerated_variant_runs_on_the_fixed_tree_before_verified() {
+    let r = repo("special-case");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_structure(reproductions());
+    // A held-out variant no stronger than the reproduction.
+    f.will_structure(held_out("refuses_empty"));
+    let first = record_and_reproduce(r.path(), state.path(), &d);
+    let b = the_bug(&first).clone();
+    let _ = bug::confirm_with(
+        r.path(),
+        &b.key(),
+        b.confirm_digest.as_deref().unwrap(),
+        None,
+        Via::Terminal,
+        state.path(),
+        None,
+        None,
+        &RunOptions::default(),
+    );
+    // The fix handles the empty title only.
+    fix(
+        &f,
+        "// saves_title\n// refuses_empty\npub fn save(title: &str) -> Result<char, String> {\n    title.chars().next().ok_or_else(|| \"a title is needed\".to_owned())\n}\n",
+    );
+    special_case(&f);
+    // The regenerated variant rejects the special case, and the fix too.
+    f.will_structure(json!({ "files": [{ "path": "tests/held_e1_2.txt", "content": "expect: refuses_whitespace\n", "scenarios": ["E1"], "argv": ["./check.sh", "--", "tests/held_e1_2.txt"], "composition": false }], "notes": [] }));
+    let res = bug::run_with(
+        r.path(),
+        None,
+        Some(&b.key()),
+        state.path(),
+        d,
+        None,
+        &RunOptions::default(),
+    );
+    let b = the_bug(&res);
+    assert_ne!(b.verdict, Some(Verdict::Verified), "{}", res.message());
+    assert!(
+        b.special_case.iter().any(|s| s.regenerated && s.rejected),
+        "{:?}",
+        b.special_case
+    );
+    assert!(
+        b.held_out.iter().any(|h| h.final_ == Final::Failed),
+        "{:?}",
+        b.held_out
+    );
+    assert!(b.commit.is_none());
+}
+
+#[test]
+fn a_special_case_author_that_does_not_answer_never_ends_verified() {
+    let r = repo("seeded");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_structure(reproductions());
+    f.will_structure(held_out("refuses_blank"));
+    let first = record_and_reproduce(r.path(), state.path(), &d);
+    let b = the_bug(&first).clone();
+    let _ = bug::confirm_with(
+        r.path(),
+        &b.key(),
+        b.confirm_digest.as_deref().unwrap(),
+        None,
+        Via::Terminal,
+        state.path(),
+        None,
+        None,
+        &RunOptions::default(),
+    );
+    // The fix, and nothing for the special-case author: its call fails.
+    fix(&f, FIXED);
+    let res = bug::run_with(
+        r.path(),
+        None,
+        Some(&b.key()),
+        state.path(),
+        d,
+        None,
+        &RunOptions::default(),
+    );
+    let b = the_bug(&res);
+    assert_ne!(b.verdict, Some(Verdict::Verified), "{}", res.message());
+    assert_ne!(b.outcome, Outcome::Fixed);
+    assert!(b.commit.is_none());
+    let tasks = fs::read_to_string(r.path().join("specs/001-bugfixes/tasks.md")).unwrap();
+    assert!(tasks.contains("- [ ] T001"), "{tasks}");
+}
+
+/// An approver who looks and decides later, keeping what it was shown.
+#[derive(Debug, Default)]
+struct Looks(std::sync::Mutex<Option<ConfirmRequest>>);
+impl Approver for Looks {
+    fn ask(&self, _: &Presentation) -> Answer {
+        panic!("no call should need approval")
+    }
+    fn confirm(&self, r: &ConfirmRequest) -> Option<ConfirmAnswer> {
+        *self.0.lock().unwrap() = Some(r.clone());
+        None
+    }
+}
+
+#[test]
+fn a_reproduction_is_red_only_by_its_own_test_and_the_person_sees_its_command() {
+    // An unrelated failing test in the repository.
+    let r = repo("seeded");
+    fs::write(
+        r.path().join("tests/broken.txt"),
+        "expect: nothing_says_this\n",
+    )
+    .unwrap();
+    git(r.path(), &["add", "-A"]);
+    git(r.path(), &["commit", "-q", "-m", "a broken test"]);
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    // The author's test passes on the untouched code; its command runs the
+    // broken test instead.
+    for _ in 0..3 {
+        f.will_structure(json!({ "files": [
+            { "path": "tests/repro_e1.txt", "content": "expect: saves_title\n", "statement": "E1", "test": "saves_title", "argv": ["./check.sh", "--", "tests/broken.txt"] },
+        ], "notes": [] }));
+    }
+    let res = bug::bug_with(
+        r.path(),
+        &request(&["an empty title is refused with a message"], &[], true),
+        Via::Terminal,
+        state.path(),
+        Some(d),
+        None,
+        &RunOptions::default(),
+    );
+    let b = the_bug(&res);
+    assert_ne!(
+        b.outcome,
+        Outcome::AwaitingConfirmation,
+        "an unrelated failure reproduced nothing: {}",
+        res.message()
+    );
+    assert_eq!(b.outcome, Outcome::AlreadySatisfied, "{}", res.message());
+    assert!(
+        b.reproductions
+            .iter()
+            .all(|x| x.argv == ["./check.sh", "--", "tests/repro_e1.txt"]),
+        "{:?}",
+        b.reproductions
+    );
+
+    // What the person confirms names the exact command, bound into the digest.
+    let r = repo("seeded");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_structure(reproductions());
+    f.will_structure(held_out("refuses_blank"));
+    let looks = Arc::new(Looks::default());
+    let options = RunOptions {
+        approver: Some(looks.clone()),
+        ..RunOptions::default()
+    };
+    let res = bug::bug_with(
+        r.path(),
+        &request(
+            &["an empty title is refused with a message"],
+            &["a title is saved"],
+            true,
+        ),
+        Via::Terminal,
+        state.path(),
+        Some(d),
+        None,
+        &options,
+    );
+    assert_eq!(the_bug(&res).outcome, Outcome::AwaitingConfirmation);
+    let shown = looks.0.lock().unwrap().clone().unwrap();
+    let e1 = shown
+        .reproductions
+        .iter()
+        .find(|x| x.statement == "E1")
+        .unwrap();
+    assert_eq!(e1.argv, ["./check.sh", "--", "tests/repro_e1.txt"]);
+    let text = speccoder_runtime::approvals::present::confirm_text(&shown);
+    assert!(
+        text.contains("$ ./check.sh -- tests/repro_e1.txt"),
+        "{text}"
+    );
+    let mut other = the_bug(&res).reproductions.clone();
+    other[0].argv = vec![
+        "./check.sh".to_owned(),
+        "--".to_owned(),
+        "tests/other.txt".to_owned(),
+    ];
+    assert_ne!(
+        speccoder_runtime::bug::confirm::digest(&other),
+        shown.digest,
+        "the command is part of what is confirmed"
+    );
+}
+
+#[test]
+fn an_already_satisfied_bug_is_kept_as_a_regression_test() {
+    let r = repo("already");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    for _ in 0..3 {
+        f.will_structure(json!({ "files": [test_file("tests/repro_e1.txt", "E1", "refuses_empty")], "notes": [] }));
+    }
+    let res = bug::bug_with(
+        r.path(),
+        &request(&["an empty title is refused with a message"], &[], true),
+        Via::Terminal,
+        state.path(),
+        Some(d),
+        None,
+        &RunOptions::default(),
+    );
+    let b = the_bug(&res).clone();
+    assert_eq!(b.outcome, Outcome::AlreadySatisfied);
+    assert!(
+        res.next().iter().any(|n| n
+            .command
+            .starts_with(&format!("speccoder bug keep {}", b.key()))),
+        "{:?}",
+        res.next()
+    );
+    assert_eq!(
+        bug::keep_with(r.path(), &b.key(), "  ", state.path()).status(),
+        CommandStatus::UsageError
+    );
+    let kept = bug::keep_with(
+        r.path(),
+        &b.key(),
+        "kept as a regression test",
+        state.path(),
+    );
+    assert_eq!(kept.status(), CommandStatus::Ok, "{}", kept.message());
+    let k = the_bug(&kept);
+    let commit = k.commit.clone().unwrap();
+    let message = git(r.path(), &["log", "-1", "--format=%B", &commit]);
+    for want in [
+        "Spec-Task: 001-bugfixes/T001",
+        "Verdict: attested",
+        "Accepted-By: ",
+        "Bug: already_satisfied (standing_speckit) triad=sha256:",
+    ] {
+        assert!(message.contains(want), "{want}: {message}");
+    }
+    assert_eq!(
+        git(r.path(), &["show", &format!("{commit}:tests/repro_e1.txt")]),
+        "expect: refuses_empty\n",
+        "the reproduction is committed"
+    );
+    let tasks = git(
+        r.path(),
+        &["show", &format!("{commit}:specs/001-bugfixes/tasks.md")],
+    );
+    assert!(tasks.contains("- [X] T001"), "{tasks}");
+    // Decided: not offered again, not kept twice.
+    let inbox = speccoder_runtime::inbox::inbox_with(r.path(), None, Some(state.path()));
+    let Some(CommandData::Inbox(i)) = inbox.data() else {
+        panic!()
+    };
+    assert!(!i.items.iter().any(|x| x.kind == "bug_already_satisfied"));
+    assert_ne!(
+        bug::keep_with(r.path(), &b.key(), "again", state.path()).status(),
+        CommandStatus::Ok
+    );
+}
+
+#[test]
+fn an_extension_bug_already_satisfied_is_kept_as_a_trailer_only_task() {
+    let r = extension_repo();
+    fs::copy(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/bug/already/src/lib.rs"),
+        r.path().join("src/lib.rs"),
+    )
+    .unwrap();
+    git(r.path(), &["commit", "-qam", "fixed already"]);
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_call_tool("w", "write_file", json!({ "path": ".specify/bugs/saving-an-empty-title/assessment.md", "content": ASSESSMENT }));
+    f.will_structure(
+        json!({ "summary": "assessed", "status": "done", "files_written": [], "questions": [] }),
+    );
+    for _ in 0..3 {
+        f.will_structure(json!({ "files": [
+            test_file("tests/repro_e1.txt", "E1", "refuses_empty"),
+            test_file("tests/repro_u1.txt", "U1", "saves_title"),
+        ], "notes": [] }));
+    }
+    let res = bug::bug_with(
+        r.path(),
+        &request(
+            &["an empty title is refused with a message"],
+            &["a title is saved"],
+            true,
+        ),
+        Via::Terminal,
+        state.path(),
+        Some(d),
+        None,
+        &RunOptions::default(),
+    );
+    let b = the_bug(&res).clone();
+    assert_eq!(b.outcome, Outcome::AlreadySatisfied, "{}", res.message());
+    let kept = bug::keep_with(
+        r.path(),
+        &b.key(),
+        "kept as a regression test",
+        state.path(),
+    );
+    assert_eq!(kept.status(), CommandStatus::Ok, "{}", kept.message());
+    let commit = the_bug(&kept).commit.clone().unwrap();
+    let message = git(r.path(), &["log", "-1", "--format=%B", &commit]);
+    assert!(
+        message.contains("Spec-Task: bugs/saving-an-empty-title/bug:saving-an-empty-title")
+            && message.contains("Verdict: attested"),
+        "{message}"
+    );
+    assert_eq!(
+        git(r.path(), &["show", &format!("{commit}:tests/repro_e1.txt")]),
+        "expect: refuses_empty\n"
+    );
+    // Nothing of the extension's is touched.
+    assert_eq!(
+        git(
+            r.path(),
+            &[
+                "show",
+                &format!("{commit}:.specify/bugs/saving-an-empty-title/assessment.md"),
+            ],
+        ),
+        ASSESSMENT
+    );
+    let checked = speccoder_runtime::attest::branch::recorded(
+        r.path(),
+        &commit,
+        "bugs/saving-an-empty-title",
+    )
+    .unwrap_or_else(|e| panic!("{e:?}"));
+    let t = checked
+        .report
+        .ticks
+        .iter()
+        .find(|t| t.tick.task == "bug:saving-an-empty-title")
+        .unwrap_or_else(|| panic!("{:#?}", checked.report));
+    assert_eq!(
+        t.outcome,
+        speccoder_core::verify_branch::TickOutcome::Evidenced,
+        "{t:?}"
+    );
+}
+
+#[test]
+fn an_issue_that_cannot_be_read_records_nothing_and_closes_nothing() {
+    let r = repo("seeded");
+    git(
+        r.path(),
+        &["remote", "add", "origin", "https://github.com/o/r.git"],
+    );
+    // GitHub knows no issue 4127.
+    let api = fake_github::serve(Vec::new());
+    let state = tempfile::tempdir().unwrap();
+    let mut req = request(&["an empty title is refused with a message"], &[], false);
+    req.issue = Some(4127);
+    req.github = Some(speccoder_runtime::github::Ctx::fixed(
+        &api.url,
+        Some("t0ken"),
+    ));
+    let res = bug::bug_with(
+        r.path(),
+        &req,
+        Via::Terminal,
+        state.path(),
+        None,
+        None,
+        &RunOptions::default(),
+    );
+    assert_eq!(
+        res.code().map(|c| c.name),
+        Some("GITHUB-FAILED"),
+        "{}",
+        res.message()
+    );
+    assert!(res.message().contains("#4127"), "{}", res.message());
+    assert!(!r.path().join("specs").exists(), "nothing was recorded");
+}
+
+#[test]
+fn the_persons_markup_is_their_words_byte_for_byte() {
+    let r = repo("seeded");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_structure(reproductions());
+    f.will_structure(held_out("refuses_blank"));
+    let res = bug::bug_with(
+        r.path(),
+        &request(
+            &["passing **kwargs drops them"],
+            &["a `*args` call is saved"],
+            true,
+        ),
+        Via::Terminal,
+        state.path(),
+        Some(d),
+        None,
+        &RunOptions::default(),
+    );
+    let b = the_bug(&res);
+    assert_eq!(
+        b.outcome,
+        Outcome::AwaitingConfirmation,
+        "{}",
+        res.message()
+    );
+    // Read back on the run exactly as given: no lapse to other words.
+    assert_eq!(b.triad.expected[0].text, "passing **kwargs drops them");
+    assert_eq!(b.triad.unchanged[0].text, "a `*args` call is saved");
+    let spec = fs::read_to_string(r.path().join("specs/001-bugfixes/spec.md")).unwrap();
+    assert!(
+        spec.contains("2. **Expected**: passing **kwargs drops them\n"),
+        "{spec}"
+    );
+}
+
+#[test]
+fn an_assessment_with_words_the_person_did_not_give_stops() {
+    for (what, assessment) in [
+        (
+            "an extra statement",
+            ASSESSMENT.replace(
+                "> Unchanged: a title is saved\n",
+                "> Expected: also log a warning\n> Unchanged: a title is saved\n",
+            ),
+        ),
+        (
+            "a longer statement",
+            ASSESSMENT.replace(
+                "> Expected: an empty title is refused with a message\n",
+                "> Expected: an empty title is refused with a message or saved as untitled\n",
+            ),
+        ),
+    ] {
+        let r = extension_repo();
+        let state = tempfile::tempdir().unwrap();
+        let (f, d) = fake();
+        f.will_call_tool("w", "write_file", json!({ "path": ".specify/bugs/saving-an-empty-title/assessment.md", "content": assessment }));
+        f.will_structure(
+            json!({ "summary": "assessed", "status": "done", "files_written": [], "questions": [] }),
+        );
+        let res = bug::bug_with(
+            r.path(),
+            &request(
+                &["an empty title is refused with a message"],
+                &["a title is saved"],
+                false,
+            ),
+            Via::Terminal,
+            state.path(),
+            Some(d),
+            None,
+            &RunOptions::default(),
+        );
+        assert_eq!(
+            res.code().map(|c| c.name),
+            Some("BUG-ASSESSMENT-DRIFT"),
+            "{what}: {}",
+            res.message()
+        );
+        assert!(
+            res.message().contains("not yours"),
+            "{what}: {}",
+            res.message()
+        );
+    }
+}
+
+#[test]
+fn a_slug_is_never_a_path_whoever_names_it() {
+    let r = extension_repo();
+    // An assessment outside the bugs directory, where `../..` would reach.
+    fs::create_dir_all(r.path().join("x")).unwrap();
+    fs::write(r.path().join("x/assessment.md"), ASSESSMENT).unwrap();
+    git(r.path(), &["add", "-A"]);
+    git(r.path(), &["commit", "-qm", "elsewhere"]);
+    let state = tempfile::tempdir().unwrap();
+    let res = bug::bug_with(
+        r.path(),
+        &Request {
+            slug: Some("../../x".to_owned()),
+            ..Request::default()
+        },
+        Via::Web,
+        state.path(),
+        None,
+        None,
+        &RunOptions::default(),
+    );
+    assert_eq!(res.status(), CommandStatus::UsageError, "{}", res.message());
+    let (_, d) = fake();
+    let res = bug::run_with(
+        r.path(),
+        Some("../../x"),
+        None,
+        state.path(),
+        d,
+        None,
+        &RunOptions::default(),
+    );
+    assert_eq!(res.status(), CommandStatus::UsageError, "{}", res.message());
+    assert!(
+        !state.path().join("x").exists() && fs::read_dir(state.path()).unwrap().count() == 0,
+        "nothing was kept"
+    );
+    // A pull request's trailer naming a path: the verifier reads nothing outside.
+    git(
+        r.path(),
+        &[
+            "commit",
+            "-q",
+            "--allow-empty",
+            "-m",
+            "fix\n\nSpec-Task: bugs/../../x/bug:../../x\nVerdict: verified\n",
+        ],
+    );
+    let head = git(r.path(), &["rev-parse", "HEAD"]).trim().to_owned();
+    let checked =
+        speccoder_runtime::attest::branch::recorded(r.path(), &head, "bugs/empty-title-crash")
+            .unwrap_or_else(|e| panic!("{e:?}"));
+    assert!(
+        !checked
+            .report
+            .ticks
+            .iter()
+            .any(|t| t.tick.task.contains("..")),
+        "{:#?}",
+        checked.report.ticks
+    );
+}
+
+#[test]
+fn a_bugs_origin_that_cannot_be_written_is_said() {
+    let r = repo("seeded");
+    let state = tempfile::tempdir().unwrap();
+    // Another origin holds the requirement the bug will be recorded as.
+    let plane = speccoder_runtime::worktree::project_state_dir(state.path(), r.path());
+    speccoder_runtime::ladder::record_origin(
+        &plane,
+        "001-bugfixes/FR-001",
+        vec![speccoder_core::ladder::Origin::Issue {
+            number: 7,
+            repo: None,
+            context_sha256: None,
+        }],
+    )
+    .unwrap();
+    let res = bug::bug_with(
+        r.path(),
+        &request(&["an empty title is refused with a message"], &[], false),
+        Via::Terminal,
+        state.path(),
+        None,
+        None,
+        &RunOptions::default(),
+    );
+    assert_eq!(res.status(), CommandStatus::Error, "{}", res.message());
+    assert!(res.message().contains("origin"), "{}", res.message());
+}
+
+#[test]
+fn a_candidate_that_renames_a_judge_input_is_refused_before_it_is_applied() {
+    let r = repo("seeded");
+    fs::write(
+        r.path().join("rename.patch"),
+        "diff --git a/speccoder.toml b/notes.toml\nsimilarity index 100%\nrename from speccoder.toml\nrename to notes.toml\n",
+    )
+    .unwrap();
+    let state = tempfile::tempdir().unwrap();
+    let mut req = request(&["an empty title is refused with a message"], &[], false);
+    req.candidate = Some("rename.patch".to_owned());
+    let res = bug::bug_with(
+        r.path(),
+        &req,
+        Via::Terminal,
+        state.path(),
+        None,
+        None,
+        &RunOptions::default(),
+    );
+    assert_eq!(
+        res.code().map(|c| c.name),
+        Some("BUG-CANDIDATE-JUDGE"),
+        "{}",
+        res.message()
+    );
+    assert!(
+        res.message().contains("speccoder.toml"),
+        "{}",
+        res.message()
+    );
+    // Through another interface, a patch outside the project is not read.
+    let outside = tempfile::NamedTempFile::new().unwrap();
+    fs::write(outside.path(), GOOD_PATCH).unwrap();
+    req.candidate = Some(outside.path().display().to_string());
+    let res = bug::bug_with(
+        r.path(),
+        &req,
+        Via::Mcp,
+        state.path(),
+        None,
+        None,
+        &RunOptions::default(),
+    );
+    assert_eq!(res.status(), CommandStatus::UsageError, "{}", res.message());
+    assert!(!r.path().join("specs").exists());
+}
+
+#[test]
+fn a_trailer_only_tasks_staleness_is_read_from_the_verified_statement_only() {
+    use speccoder_core::verify_branch::TickOutcome;
+    use speccoder_runtime::attest::{dsse, notes};
+    let r = extension_repo();
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_call_tool("w", "write_file", json!({ "path": ".specify/bugs/saving-an-empty-title/assessment.md", "content": ASSESSMENT }));
+    f.will_structure(
+        json!({ "summary": "assessed", "status": "done", "files_written": [], "questions": [] }),
+    );
+    f.will_structure(reproductions());
+    f.will_structure(held_out("refuses_blank"));
+    fix(&f, FIXED);
+    special_case(&f);
+    let options = RunOptions {
+        approver: Some(Arc::new(Confirms)),
+        ..RunOptions::default()
+    };
+    let res = bug::bug_with(
+        r.path(),
+        &request(
+            &["an empty title is refused with a message"],
+            &["a title is saved"],
+            true,
+        ),
+        Via::Terminal,
+        state.path(),
+        Some(d),
+        None,
+        &options,
+    );
+    let commit = the_bug(&res)
+        .commit
+        .clone()
+        .unwrap_or_else(|| panic!("{}", res.message()));
+    // The words change after the fix: its verdict is for the earlier ones.
+    git(r.path(), &["checkout", "-q", &commit]);
+    let file = r
+        .path()
+        .join(".specify/bugs/saving-an-empty-title/assessment.md");
+    fs::write(
+        &file,
+        ASSESSMENT.replace("refused with a message", "refused with a clear message"),
+    )
+    .unwrap();
+    git(r.path(), &["commit", "-qam", "reword"]);
+    let head = git(r.path(), &["rev-parse", "HEAD"]).trim().to_owned();
+    let unit = "bugs/saving-an-empty-title";
+    let tick = |head: &str| {
+        let checked = speccoder_runtime::attest::branch::recorded(r.path(), head, unit)
+            .unwrap_or_else(|e| panic!("{e:?}"));
+        checked
+            .report
+            .ticks
+            .into_iter()
+            .find(|t| t.tick.task == "bug:saving-an-empty-title")
+            .unwrap_or_else(|| panic!("no trailer-only task"))
+    };
+    let stale = tick(&head);
+    assert_eq!(stale.outcome, TickOutcome::Stale, "{stale:?}");
+    // Another statement put in front, claiming the words at the head, does
+    // not make the earlier verdict current.
+    let note = notes::read(r.path(), &commit).unwrap();
+    let (lines, _) = dsse::decode(&note);
+    let mut forged = lines
+        .iter()
+        .filter_map(dsse::Envelope::statement)
+        .find(|s| {
+            s["predicateType"]
+                .as_str()
+                .is_some_and(|t| t.contains("task-verification"))
+        })
+        .unwrap();
+    forged["predicate"]["bug"]["triad_sha256"] = json!(stale.tick.claim_sha256.clone().unwrap());
+    let mut all = vec![dsse::Envelope::unsigned(
+        &serde_json::to_vec(&forged).unwrap(),
+    )];
+    all.extend(lines);
+    notes::write(r.path(), &commit, &dsse::encode(&all)).unwrap();
+    let t = tick(&head);
+    assert_ne!(t.outcome, TickOutcome::Evidenced, "{t:?}");
 }

@@ -402,6 +402,32 @@ pub fn classify_red_each(
     )
 }
 
+/// The class of the one test `test` from a run of the command that is to
+/// run only it: by name from a per-test report; without one, from the
+/// runner's summary only when it ran exactly one test — a run of several
+/// tests cannot say which of them failed, so it is
+/// [`RedClass::Unclassified`], never an assertion of `test`'s.
+#[must_use]
+pub fn classify_red_one(
+    result: &CheckResult,
+    summary: Option<&RunnerSummary>,
+    test: &str,
+) -> RedClass {
+    if test.is_empty() {
+        // No name: a per-test report must hold exactly one test.
+        if result.tests.as_ref().is_some_and(|t| t.len() > 1) {
+            return RedClass::Unclassified;
+        }
+    } else if let Some(each) = classify_red_each(result, &[test.to_owned()]) {
+        return each.first().map_or(RedClass::NoTests, |(_, c)| *c);
+    }
+    let class = classify_red(result, summary);
+    match summary {
+        Some(s) if !s.build_failed && s.passed + s.failed + s.errors > 1 => RedClass::Unclassified,
+        _ => class,
+    }
+}
+
 /// How strong the evidence for a task is.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case", tag = "verdict")]
@@ -536,6 +562,50 @@ mod tests {
         );
         r.tests = None;
         assert!(classify_red_each(&r, &wanted).is_none(), "by name instead");
+    }
+
+    #[test]
+    fn one_test_is_red_only_by_its_own_assertion() {
+        let failed = check("acceptance", CheckStatus::Failed, None);
+        let one = RunnerSummary {
+            failed: 1,
+            ..RunnerSummary::default()
+        };
+        assert_eq!(
+            classify_red_one(&failed, Some(&one), "t"),
+            RedClass::Assertion
+        );
+        // An unrelated test failing next to it says nothing about `t`.
+        let many = RunnerSummary {
+            passed: 3,
+            failed: 1,
+            ..RunnerSummary::default()
+        };
+        assert_eq!(
+            classify_red_one(&failed, Some(&many), "t"),
+            RedClass::Unclassified
+        );
+        // By name from a report: the unrelated failure is not `t`'s.
+        let mut r = check("acceptance", CheckStatus::Failed, Some(&[]));
+        r.tests = Some(vec![
+            TestResult {
+                id: "other::broken".to_owned(),
+                outcome: TestOutcome::Failed,
+            },
+            TestResult {
+                id: "repro::t".to_owned(),
+                outcome: TestOutcome::Passed,
+            },
+        ]);
+        assert_eq!(classify_red_one(&r, None, "t"), RedClass::Passed);
+        assert_eq!(classify_red_one(&r, None, "broken"), RedClass::Assertion);
+        assert_eq!(classify_red_one(&r, None, "gone"), RedClass::NoTests);
+        // A reused set names files, not tests: the one-test rule alone.
+        assert_eq!(classify_red_one(&r, None, ""), RedClass::Unclassified);
+        assert_eq!(
+            classify_red_one(&failed, Some(&many), ""),
+            RedClass::Unclassified
+        );
     }
 
     fn check(

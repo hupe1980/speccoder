@@ -33,6 +33,7 @@ export const KINDS: Record<ActionKind, { verb: string; icon?: string; holdsWorkt
   bug_fix: { verb: "Record", icon: "exclaim", holdsWorktree: true },
   bug_confirm: { verb: "Confirm", icon: "check", holdsWorktree: true },
   bug_run: { verb: "Reproduce", icon: "play", holdsWorktree: true },
+  bug_keep: { verb: "Keep", icon: "check", holdsWorktree: true },
   oracle_tests: { verb: "Write Tests", icon: "shield", holdsWorktree: false },
   approve_and_run: { verb: "Approve and Run", icon: "play", holdsWorktree: true },
   comment: { verb: "Comment", icon: "doc", holdsWorktree: false },

@@ -90,7 +90,7 @@ Every result that is not plainly `ok` names a code — `error[CODE]`, `stopped[C
 | [`BUG-NO-UNIT`](#bug-no-unit) | error | 2 | this spec format has no place for a bug |
 | [`BUG-EMPTY`](#bug-empty) | error | 2 | the symptom and every statement need words |
 | [`BUG-NO-EXPECTED`](#bug-no-expected) | error | 2 | a bug needs at least one --expected statement |
-| [`BUG-ASSESSMENT-DRIFT`](#bug-assessment-drift) | stop | 23 | the bug's assessment does not carry your words |
+| [`BUG-ASSESSMENT-DRIFT`](#bug-assessment-drift) | stop | 23 | the bug's home does not carry exactly your words |
 | [`BUG-ASSESSMENT-UNREADABLE`](#bug-assessment-unreadable) | stop | 23 | the bug's assessment is not in a shape speccoder reads |
 | [`BUG-TEST-NOT-FOUND`](#bug-test-not-found) | error | 2 | the test named with --test is not found |
 | [`BUG-TEST-NOT-RED`](#bug-test-not-red) | error | 2 | the named test does not fail on an assertion |
@@ -101,7 +101,7 @@ Every result that is not plainly `ok` names a code — `error[CODE]`, `stopped[C
 | [`BUG-UNCHANGED-NOT-HOLDING`](#bug-unchanged-not-holding) | stop | 23 | an Unchanged statement does not hold today |
 | [`BUG-NOT-DISCRIMINATING`](#bug-not-discriminating) | error | 20 | the reproduction does not tell the fix from no fix |
 | [`BUG-REPRO-WEAK`](#bug-repro-weak) | stop | 23 | a fix that special-cases the reproduction's input passes |
-| [`BUG-CANDIDATE-APPLY`](#bug-candidate-apply) | error | 14 | the candidate patch does not apply |
+| [`BUG-CANDIDATE-APPLY`](#bug-candidate-apply) | error | 14 | the candidate patch is not applied |
 | [`BUG-CANDIDATE-JUDGE`](#bug-candidate-judge) | error | 2 | the candidate patch touches what judges it |
 | [`EVAL-FAILED`](#eval-failed) | error | 24 | the evaluation found a false completion or a cheat |
 
@@ -770,9 +770,9 @@ A reproduction asserts what should happen; speccoder never infers it from the sy
 
 ### BUG-ASSESSMENT-DRIFT
 
-The bug's assessment does not carry your words.
+The bug's home does not carry exactly your words.
 
-The format's own bug step wrote `assessment.md`, and at least one of your Current, Expected or Unchanged statements is not in it verbatim (whitespace aside). The reproductions are written from your words only, so the bug stops before reproduce.
+What the bug's home reads back — the format's own `assessment.md`, or the standing unit as speccoder would write it — is not exactly your Current, Expected and Unchanged statements (whitespace aside): one is missing, or it carries one you did not give, a longer or reworded one, or one whose words the file's own markup would change. The reproductions are written from your words only, so the bug stops before anything is reproduced (in a standing unit, before anything is written).
 
 - Edit the assessment so it carries each statement as a `Current:` / `Expected:` / `Unchanged:` line
 - `speccoder bug --slug <slug>`
@@ -822,7 +822,7 @@ Each stated behaviour gets its own reproduction: repeat `--test` once per `--exp
 
 The bug could not be reproduced: nothing is fixed.
 
-Every try of the reproduction author ended without a test of each Expected statement failing on an assertion. A fix without a failing reproduction would be a guess, so the bug stops for you with the tries made and what each showed.
+Every try of the reproduction author ended without a test of each Expected statement failing on its own assertion, or you rejected what it wrote (a rejected try counts against `[bug] reproduce_tries` and reproduces nothing). A fix without a failing reproduction would be a guess, so the bug stops for you with the tries made and what each showed.
 
 - `speccoder bug "…" --expected "…" --test <file>::<test>`
 
@@ -830,9 +830,9 @@ Every try of the reproduction author ended without a test of each Expected state
 
 The reproductions already pass: nothing to fix.
 
-Every reproduction passed on the untouched code on every try. Nothing is ticked; keep a reproduction as a regression test or drop the task.
+Every reproduction passed on the untouched code on every try. Nothing is ticked; keep the reproductions as a regression test (committed, the task attested) or drop the task.
 
-- `speccoder task accept <task> --reason "kept as a regression test"`
+- `speccoder bug keep <feature>/<task> --reason "kept as a regression test"`
 - `speccoder task drop <task>`
 
 ### BUG-UNCHANGED-NOT-HOLDING
@@ -861,17 +861,17 @@ A candidate fix that only recognises the reproduction's literal inputs passed th
 
 ### BUG-CANDIDATE-APPLY
 
-The candidate patch does not apply.
+The candidate patch is not applied.
 
-`--candidate` applies the patch on the untouched code with `git apply --check` first; some hunks did not apply.
+`--candidate` applies the patch on the untouched code with `git apply --check` first; some hunks did not apply, git could not read it as a patch, or it carries a binary hunk or a symbolic link (neither is judged as a candidate).
 
-- Rebase the patch on HEAD
+- Rebase the patch on HEAD, as a text diff without binary hunks or links
 
 ### BUG-CANDIDATE-JUDGE
 
 The candidate patch touches what judges it.
 
-A candidate must not change a frozen reproduction, a held-out path or another judge input (checks, configuration, the intent). It is refused before it is applied.
+A candidate must not change a frozen reproduction, a held-out path or another judge input (checks, configuration, the intent) — by an edit, a rename, a deletion or a mode change, as git itself reads the patch. It is refused before it is applied.
 
 - Remove those hunks from the patch
 

@@ -143,6 +143,12 @@ pub enum Runnable {
         /// Reject instead.
         reject: bool,
     },
+    /// Keep an already-satisfied bug's reproductions as a regression test:
+    /// committed, the task attested (the input is the reason).
+    BugKeep {
+        /// `<unit>/<task>`.
+        task: String,
+    },
     /// Continue a bug: reproduce again, or run its confirmed fix.
     BugRun {
         /// A bug of the format's own bug structure, by slug.
@@ -358,6 +364,8 @@ pub enum ActionKind {
     BugConfirm,
     /// [`Runnable::BugRun`].
     BugRun,
+    /// [`Runnable::BugKeep`].
+    BugKeep,
     /// [`Runnable::AllowAlways`].
     AllowAlways,
     /// [`Runnable::WidenPolicy`].
@@ -405,6 +413,7 @@ impl ActionKind {
         Self::BugFix,
         Self::BugConfirm,
         Self::BugRun,
+        Self::BugKeep,
         Self::AllowAlways,
         Self::WidenPolicy,
         Self::DecideBatch,
@@ -443,6 +452,7 @@ impl ActionKind {
             Self::BugFix => "bug_fix",
             Self::BugConfirm => "bug_confirm",
             Self::BugRun => "bug_run",
+            Self::BugKeep => "bug_keep",
             Self::AllowAlways => "allow_always",
             Self::WidenPolicy => "widen_policy",
             Self::DecideBatch => "decide_batch",
@@ -522,6 +532,9 @@ impl ActionKind {
             Self::BugRun => Runnable::BugRun {
                 slug: None,
                 task: Some("007-bugfixes/T001".to_owned()),
+            },
+            Self::BugKeep => Runnable::BugKeep {
+                task: "007-bugfixes/T001".to_owned(),
             },
             Self::AllowAlways => Runnable::AllowAlways {
                 task: task(),
@@ -604,6 +617,7 @@ impl Runnable {
             Self::BugFix { .. } => ActionKind::BugFix,
             Self::BugConfirm { .. } => ActionKind::BugConfirm,
             Self::BugRun { .. } => ActionKind::BugRun,
+            Self::BugKeep { .. } => ActionKind::BugKeep,
             Self::AllowAlways { .. } => ActionKind::AllowAlways,
             Self::WidenPolicy { .. } => ActionKind::WidenPolicy,
             Self::DecideBatch { .. } => ActionKind::DecideBatch,
@@ -669,7 +683,7 @@ pub fn identity(run: Option<&Runnable>, command: &str) -> ActionId {
         Runnable::WidenPolicy { key, .. } => Some(key.as_str().to_owned()),
         Runnable::DecideBatch { run, .. } => Some(run.clone()),
         Runnable::IssueComment { issue, .. } => Some(issue.to_string()),
-        Runnable::BugConfirm { task, .. } => Some(task.clone()),
+        Runnable::BugConfirm { task, .. } | Runnable::BugKeep { task } => Some(task.clone()),
         Runnable::BugRun { slug, task } => task.clone().or_else(|| slug.clone()),
         Runnable::BugFix { slug, issue, .. } => {
             slug.clone().or_else(|| issue.map(|n| format!("#{n}")))

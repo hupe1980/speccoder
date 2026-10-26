@@ -55,13 +55,14 @@ pub fn next(bug: &BugReport, outcome: Outcome) -> Vec<NextStep> {
                 "drop it",
             ),
         ],
+        Outcome::AlreadySatisfied if bug.commit.is_some() => vec![step(
+            format!("speccoder report --feature {}", bug.unit),
+            "kept as a regression test: the evidence",
+        )],
         Outcome::AlreadySatisfied => vec![
             step(
-                format!(
-                    "speccoder task accept {} --feature {} --reason \"kept as a regression test\"",
-                    bug.task, bug.unit
-                ),
-                "keep the reproduction as a regression test (attested)",
+                format!("speccoder bug keep {key} --reason \"kept as a regression test\""),
+                "keep the reproduction as a regression test: committed, the task attested",
             ),
             step(
                 format!(
@@ -107,9 +108,11 @@ pub fn compose(
 ) -> Handoff {
     let mut statements = Statements::default();
     for e in bug.expected_ids() {
+        // A discarded (or rejected) try is evidence of nothing.
         let classes: Vec<RedClass> = bug
             .tries
             .iter()
+            .filter(|t| t.discarded.is_none())
             .filter_map(|t| {
                 t.per_statement
                     .iter()

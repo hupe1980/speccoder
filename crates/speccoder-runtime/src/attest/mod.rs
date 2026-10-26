@@ -687,6 +687,9 @@ pub fn record_decision(t: &Tick<'_>, by: &str, reason: &str) -> Value {
             by: by.to_owned(),
             reason: reason.to_owned(),
         }),
+        // A bug's decision (kept as a regression test) anchors on its triad.
+        bug: t.bug.as_ref().map(|b| b.0.clone()),
+        acceptance: t.bug.as_ref().map(|b| b.1.clone()),
         ..predicate(
             t,
             tree,

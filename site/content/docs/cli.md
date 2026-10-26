@@ -63,6 +63,7 @@ Every stop and finish ends with a `Next:` block of copy-pasteable commands (`nex
 | `speccoder do "…" [--check "…"]… [--no-run] [--no-prompt]` | A small change: a story, an approved requirement and a task, committed, then run ([quick changes](@/docs/running.md#quick-changes)) |
 | `speccoder bug "…" --expected "…"… [--unchanged "…"]… [--issue N] [--test PATH::NAME]… [--candidate PATCH\|pr:N] [--slug S] [--no-run] [--no-prompt]` | A bug in your words: reproduced by a test that fails by an assertion first, confirmed by you once, fixed with the revert rejected ([bug fixes](@/docs/bugs.md)) |
 | `speccoder bug confirm <unit>/<task> [--digest D] [--reject --reason R] [--no-run]` | Confirm a bug's reproductions (bound to the digest shown), or reject them with a reason |
+| `speccoder bug keep <unit>/<task> --reason R` | An already-satisfied bug: commit its reproductions as a regression test and attest the task |
 | `speccoder bug run (--task <unit>/<task> \| --slug S)` | Reproduce a bug again, or run its confirmed fix |
 | `speccoder task approve [T] [--call ID] [--all] [--scope once\|task\|run] [--note "…"]` | Approve a waiting call (default scope: its object for the task, in its run); the next `run` continues from it. `--all` without `T`: every waiting call of the feature |
 | `speccoder task reject [T] [--call ID] [--all] --reason R` | Reject it; the attempt continues and the model is told why |

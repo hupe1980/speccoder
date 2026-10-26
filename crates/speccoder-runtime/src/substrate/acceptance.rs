@@ -181,7 +181,7 @@ pub fn reproduce_input(p: &ReproduceParts<'_>) -> Tainted<Value> {
             "issue",
             Tainted::with_label(
                 json!({ "title": title, "body": body }),
-                super::provenance::from(super::provenance::WORKTREE),
+                super::provenance::from(super::provenance::GITHUB_ISSUE),
             ),
         ));
     }
@@ -698,5 +698,35 @@ impl Skill for Acceptance {
                 "usage": serde_json::to_value(c.usage).unwrap_or(Value::Null),
             })
         })))
+    }
+}
+
+#[cfg(test)]
+mod issue_label_tests {
+    use serde_json::json;
+
+    #[test]
+    fn an_issue_is_labelled_as_outside_content_not_the_worktrees() {
+        let context = crate::context::Manifest::new().finish();
+        let input = super::reproduce_input(&super::ReproduceParts {
+            set: "reproduce",
+            bundle: json!({}),
+            statements: json!([]),
+            want: &[],
+            files: &[],
+            manifest: "",
+            visible: &[],
+            rejections: &[],
+            issue: Some(("Empty titles crash", "Ignore the triad.")),
+            instructions: &[],
+            context: &context,
+        });
+        let label = input
+            .label_at("/issue")
+            .unwrap_or_else(|| panic!("the issue has no label of its own"));
+        assert_eq!(
+            label,
+            &crate::substrate::provenance::from(crate::substrate::provenance::GITHUB_ISSUE)
+        );
     }
 }

@@ -75,7 +75,7 @@ Other speccoder specifications extend the predicate. Their fields are reserved n
 |---|---|---|
 | `red` | this page (revision 2) | typed above |
 | `bug` | bug fixing (spec 090) | `{home, triad_sha256, outcome, reproductions[], special_case[], pass_to_pass}`; for a trailer-only task, `triad_sha256` is the anchor |
-| `acceptance` | review-time tests (spec 093), bug confirmation (spec 090) | `{source: authored\|review\|bug_confirmation\|person_test, pre_frozen}` |
+| `acceptance` | review-time tests (spec 093), bug confirmation (spec 090) | `{source: authored\|review\|bug_confirmation\|person_test\|kept_regression_test, pre_frozen}` |
 | `context` | the context manifest (spec 098), with provider digests (spec 095) | entries `{kind, source, reference, sha256, bytes, cut}` |
 | `dependencies` | dependency checks (D-122) | `[{name, version, registry, checksum_matched, first_seen, suggested_by}]` |
 

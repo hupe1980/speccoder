@@ -441,8 +441,15 @@ fn unit(
 /// triad's digest; `None` when the home cannot be read.
 fn trailer_only(format: &dyn Adapter, project: &Path, prefix: &str, claim: &str) -> Option<Tick> {
     let (unit, task) = claim.rsplit_once('/')?;
-    let slug = task.strip_prefix("bug:")?;
+    // The claim comes from a commit's trailer (an untrusted pull request
+    // writes those): only a slug, and only the unit that slug's bug is.
+    let slug = task
+        .strip_prefix("bug:")
+        .filter(|s| speccoder_core::bug::valid_slug(s))?;
     let home = format.bug_unit(project).ok().filter(|h| h.kind.native())?;
+    if format.bug_dir(&home, slug).map(|(_, u)| u).as_deref() != Some(unit) {
+        return None;
+    }
     let read = format.read_bug(project, &home, slug).ok()?;
     let triad = speccoder_core::bug::Triad::new(
         read.current.first().map_or("", String::as_str),
@@ -556,19 +563,47 @@ fn outcome_of(
         match tv {
             Some(Ok(tv)) => {
                 // A trailer-only task has no line: its claim is anchored on
-                // the bug's triad (checked for staleness by the caller).
+                // the bug's triad, as the verified predicate (the one the
+                // signature check covered) records it — never another
+                // envelope of the note.
+                let triad = tv
+                    .bug
+                    .as_ref()
+                    .and_then(|b| b["triad_sha256"].as_str().map(str::to_owned));
+                let agree = statements
+                    .iter()
+                    .filter(|s| s["predicateType"] == statement::TASK_VERIFICATION)
+                    .all(|s| s["predicate"]["bug"]["triad_sha256"].as_str() == triad.as_deref());
                 let anchored = match tick.kind {
                     TickKind::Tick => Some(&tv.task.line_hash) == tick.line_sha256.as_ref(),
-                    TickKind::TrailerOnly => tv
-                        .bug
-                        .as_ref()
-                        .is_some_and(|b| b["triad_sha256"].as_str().is_some()),
+                    TickKind::TrailerOnly => triad.is_some() && agree,
                 };
-                if !anchored {
+                if tick.kind == TickKind::TrailerOnly && triad.is_some() && !agree {
+                    unverifiable(
+                        &mut r,
+                        Unverifiable::Mismatch,
+                        Some(
+                            "the note's task-verification statements name different triads"
+                                .to_owned(),
+                        ),
+                    );
+                } else if !anchored {
                     unverifiable(
                         &mut r,
                         Unverifiable::Mismatch,
                         Some("the task line changed since its tick: task.line_hash differs from the line at the head".to_owned()),
+                    );
+                }
+                // The triad read at the head against the one the fix was judged on.
+                if r.outcome == TickOutcome::Evidenced
+                    && tick.kind == TickKind::TrailerOnly
+                    && triad.as_deref() != tick.claim_sha256.as_deref()
+                {
+                    r.outcome = TickOutcome::Stale;
+                    r.stale_anchor = Some(tick.anchor.clone());
+                    r.detail = Some(
+                        "the bug's triad changed since its fix: the verdict is for the earlier words"
+                            .to_owned(),
                     );
                 }
                 r.newer_fields = tv.newer_fields();
@@ -1130,7 +1165,7 @@ fn run(
             trust: trust.as_ref().unwrap_or(&unchecked),
             format: Some(format),
         };
-        let mut r = if trust.is_some() {
+        let r = if trust.is_some() {
             let v = super::verify::object(
                 &cx,
                 &Target {
@@ -1148,26 +1183,6 @@ fn run(
             }
             r
         };
-        // The triad read at the head against the one the fix was judged on.
-        let signed = statements
-            .iter()
-            .find(|s| s["predicateType"] == statement::TASK_VERIFICATION)
-            .and_then(|s| {
-                s["predicate"]["bug"]["triad_sha256"]
-                    .as_str()
-                    .map(str::to_owned)
-            });
-        if r.outcome == TickOutcome::Evidenced
-            && let (Some(now), Some(then)) = (tick.claim_sha256.as_deref(), signed.as_deref())
-            && now != then
-        {
-            r.outcome = TickOutcome::Stale;
-            r.stale_anchor = Some(tick.anchor.clone());
-            r.detail = Some(
-                "the bug's triad changed since its fix: the verdict is for the earlier words"
-                    .to_owned(),
-            );
-        }
         if !report.features.contains(&tick.feature) {
             report.features.push(tick.feature.clone());
         }
