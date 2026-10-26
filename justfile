@@ -25,8 +25,9 @@ lint:
 # On Linux the sandbox re-runs the speccoder binary as its helper; the
 # runtime crate's tests find it here (built by the same nextest run).
 # Every test writes state to a throwaway directory, removed afterwards —
-# never to the developer's real one (nextest's setup script nests a fresh
-# directory per run inside it; see .config/nextest.toml).
+# never to the developer's real one (nextest's wrapper script gives each
+# test process a fresh directory of its own inside it; see
+# .config/nextest.toml).
 test:
     #!/usr/bin/env bash
     set -euo pipefail

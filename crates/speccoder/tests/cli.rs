@@ -1177,3 +1177,41 @@ fn doctor_fails_a_state_path_that_is_a_file() {
         assert_eq!(check["level"], "fail", "{}: {check}", path.display());
     }
 }
+
+/// Under nextest every test process gets a state directory of its own,
+/// fresh and empty: what one test leaves there, no other test sees.
+fn a_state_directory_of_its_own(mine: &str, theirs: &str) {
+    if std::env::var_os("NEXTEST").is_none() {
+        eprintln!("skipped: not under nextest");
+        return;
+    }
+    let dir = std::path::PathBuf::from(std::env::var_os("SPECCODER_STATE_DIR").unwrap());
+    let home = std::path::PathBuf::from(std::env::var_os("HOME").unwrap());
+    assert!(
+        !dir.starts_with(home.join(".local/state")),
+        "{}",
+        dir.display()
+    );
+    assert!(!dir.join(theirs).exists(), "another test's state is here");
+    // And git runs without background maintenance racing the test.
+    let auto = std::process::Command::new("git")
+        .args(["config", "--get", "maintenance.auto"])
+        .output()
+        .unwrap();
+    assert_eq!(String::from_utf8_lossy(&auto.stdout).trim(), "false");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join(mine), "").unwrap();
+    // Long enough that the other test, run beside or after, would see it.
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    assert!(!dir.join(theirs).exists(), "another test's state is here");
+}
+
+#[test]
+fn each_test_has_a_state_directory_of_its_own_a() {
+    a_state_directory_of_its_own("a", "b");
+}
+
+#[test]
+fn each_test_has_a_state_directory_of_its_own_b() {
+    a_state_directory_of_its_own("b", "a");
+}

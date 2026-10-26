@@ -1,5 +1,5 @@
-# Setup scripts isolate the state directory (below).
-experimental = ["setup-scripts"]
+# A wrapper script isolates the state directory of every test (below).
+experimental = ["wrapper-scripts"]
 
 # The `speccoder` profile writes a JUnit report, the format speccoder's own
 # verifier will read from target projects.
@@ -13,20 +13,21 @@ path = "junit.xml"
 [profile.ci]
 fail-fast = false
 
-# Every test runs against a throwaway state directory (scripts/test-state.sh):
-# a test, or a binary it spawns, that forgets to name one cannot reach the
-# developer's real `~/.local/state/speccoder`.
-[scripts.setup.isolated-state]
+# Every test process runs inside scripts/test-state.sh: a throwaway state
+# directory of its own, removed after it, so a test — or a binary it spawns
+# — that forgets to name one cannot reach the developer's real
+# `~/.local/state/speccoder`, nor another test's state.
+[scripts.wrapper.isolated-state]
 command = { command-line = "scripts/test-state.sh", relative-to = "workspace-root" }
 
 [[profile.default.scripts]]
 filter = "all()"
-setup = "isolated-state"
+run-wrapper = "isolated-state"
 
 [[profile.ci.scripts]]
 filter = "all()"
-setup = "isolated-state"
+run-wrapper = "isolated-state"
 
 [[profile.speccoder.scripts]]
 filter = "all()"
-setup = "isolated-state"
+run-wrapper = "isolated-state"

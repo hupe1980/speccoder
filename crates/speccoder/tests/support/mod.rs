@@ -6,12 +6,44 @@
 
 use serde_json::Value;
 
-/// A state directory of this test process's own — nextest runs each test
-/// in a process of its own — for every binary a test spawns without naming
-/// one: the developer's real state directory is never written.
+/// A state directory of this test process's own, for every binary a test
+/// spawns without naming one: the developer's real state directory is
+/// never written. Under nextest it is the one its wrapper made for this
+/// test (`scripts/test-state.sh`), removed when the test ends. Under plain
+/// `cargo test` it is this process's own under the target directory's
+/// `tmp` (removed by `cargo clean`); those of processes that ended are
+/// removed as the next one starts.
 pub fn isolated_state() -> &'static std::path::Path {
-    static DIR: std::sync::OnceLock<tempfile::TempDir> = std::sync::OnceLock::new();
-    DIR.get_or_init(|| tempfile::tempdir().unwrap()).path()
+    static DIR: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();
+    DIR.get_or_init(|| {
+        if std::env::var_os("NEXTEST").is_some()
+            && let Some(dir) = std::env::var_os("SPECCODER_STATE_DIR").filter(|d| !d.is_empty())
+        {
+            return dir.into();
+        }
+        let root = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("speccoder-test-state");
+        std::fs::create_dir_all(&root).unwrap();
+        for entry in std::fs::read_dir(&root).unwrap().flatten() {
+            let ended = entry
+                .file_name()
+                .to_str()
+                .and_then(|n| n.parse::<u32>().ok())
+                .is_some_and(|pid| {
+                    !std::process::Command::new("kill")
+                        .args(["-0", &pid.to_string()])
+                        .stderr(std::process::Stdio::null())
+                        .status()
+                        .is_ok_and(|s| s.success())
+                });
+            if ended {
+                let _ = std::fs::remove_dir_all(entry.path());
+            }
+        }
+        let dir = root.join(std::process::id().to_string());
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    })
 }
 
 fn schema(name: &str) -> Value {

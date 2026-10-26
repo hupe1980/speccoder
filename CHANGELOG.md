@@ -48,7 +48,11 @@ adheres to [Semantic Versioning](https://semver.org/).
   state directory that cannot be made, because its path or a parent is a
   file.
 - The test suite no longer writes to your real state directory
-  (`~/.local/state/speccoder`): every test runs against a throwaway one.
+  (`~/.local/state/speccoder`). Under nextest (`just test`, CI) every test
+  process runs with a fresh state directory of its own, removed when it
+  ends, and git's background maintenance off; under plain `cargo test` the
+  tests name throwaway directories themselves (the binaries they spawn get
+  one per test process under `target/tmp`).
 
 ### Upgrading
 
