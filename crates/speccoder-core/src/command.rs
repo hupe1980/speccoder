@@ -195,6 +195,11 @@ pub enum CommandData {
     Review(Box<ReviewReport>),
     /// `auth`: who speccoder is on a GitHub host.
     Auth(Box<AuthReport>),
+    /// `speccoder-verify check` / `attest verify --branch`: every tick of
+    /// a branch and what its evidence comes to.
+    BranchVerify(Box<crate::verify_branch::BranchReport>),
+    /// `speccoder-verify tour` / `/api/tour`: one task's evidence tour.
+    EvidenceTour(Box<crate::tour::EvidenceTour>),
     /// `actions`: what can be done now.
     Actions(Box<ActionsReport>),
 }
@@ -622,6 +627,8 @@ impl CommandData {
             Self::Inbox(_) => "inbox",
             Self::Review(_) => "review",
             Self::Auth(_) => "auth",
+            Self::BranchVerify(_) => "branch_verify",
+            Self::EvidenceTour(_) => "evidence_tour",
             Self::Actions(_) => "actions",
         }
     }
@@ -661,6 +668,8 @@ pub const PAYLOADS: &[&str] = &[
     "inbox",
     "review",
     "auth",
+    "branch_verify",
+    "evidence_tour",
     "actions",
 ];
 
@@ -1342,22 +1351,26 @@ pub enum VerifyOutcome {
     Mismatch,
     /// A line does not parse.
     Malformed,
+    /// The signature's tool (`ssh-keygen`, `gpg`, `cosign`) cannot run:
+    /// nothing can be said about it.
+    ToolMissing,
 }
 
 impl VerifyOutcome {
     /// How grave: when several apply, the gravest is the outcome
-    /// (`malformed` > `bad_signature` > `mismatch` > `untrusted_signer` >
-    /// `unsigned` > `ok`; `missing` stands alone).
+    /// (`malformed` > `bad_signature` > `mismatch` > `tool_missing` >
+    /// `untrusted_signer` > `unsigned` > `ok`; `missing` stands alone).
     #[must_use]
     pub const fn rank(self) -> u8 {
         match self {
             Self::Ok => 0,
             Self::Unsigned => 1,
             Self::UntrustedSigner => 2,
-            Self::Mismatch => 3,
-            Self::BadSignature => 4,
-            Self::Malformed => 5,
-            Self::Missing => 6,
+            Self::ToolMissing => 3,
+            Self::Mismatch => 4,
+            Self::BadSignature => 5,
+            Self::Malformed => 6,
+            Self::Missing => 7,
         }
     }
 
@@ -1372,6 +1385,7 @@ impl VerifyOutcome {
             Self::UntrustedSigner => "untrusted_signer",
             Self::Mismatch => "mismatch",
             Self::Malformed => "malformed",
+            Self::ToolMissing => "tool_missing",
         }
     }
 }
@@ -1676,6 +1690,16 @@ pub struct PrReport {
     pub opened: bool,
     /// The pull request, when opened.
     pub url: Option<String>,
+    /// The unit's held-out ref pushed with the branch
+    /// (`refs/speccoder/held-out/<unit>`), when a closed task names a set.
+    pub held_out_ref: Option<String>,
+    /// The tasks closed on the pushed head whose held-out sets it carries.
+    pub held_out_tasks: Vec<String>,
+    /// Held-out sets of open tasks: they stay local.
+    pub held_out_withheld: usize,
+    /// `present`: a workflow under `.github/workflows/` runs
+    /// `speccoder-verify`; `absent`: none does.
+    pub evidence_check: String,
 }
 
 /// Result of `speccoder converge`.
@@ -2049,6 +2073,35 @@ impl CommandResult {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn payload_names_are_unique() {
+        let mut seen = std::collections::BTreeSet::new();
+        for p in PAYLOADS {
+            assert!(seen.insert(*p), "payload {p} is listed twice");
+        }
+        let branch = CommandData::BranchVerify(Box::new(crate::verify_branch::BranchReport {
+            head: String::new(),
+            base: None,
+            mode: crate::verify_branch::Mode::All,
+            features: Vec::new(),
+            ticks: Vec::new(),
+            skipped: Vec::new(),
+            totals: crate::verify_branch::BranchTotals::default(),
+            conclusion: crate::verify_branch::Conclusion::Neutral,
+            trust: serde_json::Value::Null,
+            accepted_unsigned: false,
+            require_verified: false,
+            trace: Vec::new(),
+            share: None,
+            open_no_claim: Vec::new(),
+            not_evaluated: Vec::new(),
+            newer_fields: Vec::new(),
+        }));
+        assert!(PAYLOADS.contains(&branch.kind()));
+        assert_ne!(branch.kind(), "verify");
+        assert_ne!(branch.kind(), "attest");
+    }
 
     #[test]
     fn every_status_maps_to_its_documented_exit_code() {

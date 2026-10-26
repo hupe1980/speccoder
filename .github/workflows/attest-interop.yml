@@ -21,4 +21,24 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: stable
+      - run: pip install --user jsonschema
       - run: scripts/attest-interop.sh
+
+  # Keyless Sigstore end to end: the job's own OIDC identity signs a tick's
+  # summary, cosign verifies it against that identity (F-061).
+  sigstore:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup toolchain install # from rust-toolchain.toml
+      - uses: Swatinem/rust-cache@v2
+      - uses: sigstore/cosign-installer@v3.8.1
+      - run: cargo install --locked cargo-nextest
+      - env:
+          SPECCODER_SIGSTORE_TEST: "1"
+          SPECCODER_SIGSTORE_IDENTITY: https://github.com/${{ github.workflow_ref }}
+          SPECCODER_SIGSTORE_ISSUER: https://token.actions.githubusercontent.com
+        run: cargo nextest run -p speccoder-runtime --test attest sigstore

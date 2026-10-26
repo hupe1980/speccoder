@@ -80,9 +80,10 @@ Without an argument it checks every task commit on `speccoder/<feature>` and the
 | `bad_signature` | A signature does not verify: a statement was edited after signing |
 | `mismatch` | A statement disagrees with the commit, its trailers or the other statements |
 | `malformed` | A line is not a DSSE envelope with a statement |
+| `tool_missing` | The signature's tool (`ssh-keygen`, `gpg`, `cosign`) cannot run here: nothing can be said about it, so it never passes |
 | `missing` | The commit has no attestation. If another attested commit has the same tree (a rebase drops notes), it is named |
 
-When several apply, the worst is reported: `missing`, then `malformed`, `bad_signature`, `mismatch`, `untrusted_signer`, `unsigned`. Exit code 26 (`attestation_failed`) means at least one object is not `ok` — `unsigned` counts only with `--require-signed`. `--json` gives every object with its reasons.
+When several apply, the worst is reported: `missing`, then `malformed`, `bad_signature`, `mismatch`, `tool_missing`, `untrusted_signer`, `unsigned`. Exit code 26 (`attestation_failed`) means at least one object is not `ok` — `unsigned` counts only with `--require-signed`. `--json` gives every object with its reasons.
 
 **Whom you trust** comes from you, not from the repository:
 
@@ -91,6 +92,14 @@ When several apply, the worst is reported: `missing`, then `malformed`, `bad_sig
 | SSH | git's `gpg.ssh.allowedSignersFile`, or `--allowed-signers FILE` (the [`ssh-keygen` format](https://man.openbsd.org/ssh-keygen#ALLOWED_SIGNERS): `ada@example.com namespaces="in-toto" ssh-ed25519 AAAA…`) |
 | OpenPGP | Your GnuPG keyring: keys you trust fully or ultimately |
 | Sigstore | `--certificate-identity` and `--certificate-oidc-issuer`. `[attest.sigstore]` in the project only *suggests* them — `speccoder pr` prints them in its verify command for you to confirm |
+
+### On a branch, by its maintainer
+
+`attest verify` starts from commits. A maintainer asks a different question — *does every `[X]` on this branch carry evidence that verifies?* — and should not need speccoder or a model key for it. [`speccoder-verify`](@/docs/verifier.md) starts from the ticks, checks each with the same rules (one implementation), and adds what only a branch shows: ticks without evidence, task lines reworded after their tick, requirements changed since, evidence a squash merge lost. On GitHub it runs as the [`speccoder / evidence` check](@/docs/github.md#evidence-check). `speccoder attest verify --branch [--base REV]` is the same check from here.
+
+The verifier is `speccoder-runtime` built without its `engine` feature: the model substrate, the HTTP client and the keychain are not in the binary, which the workspace's layering test enforces on every pull request. Code added to the runtime later goes behind `engine` unless the verifier needs it.
+
+What a tick signs is specified openly: [the task-verification predicate](@/docs/task-verification.md).
 
 ### Without speccoder
 
@@ -111,7 +120,7 @@ For OpenPGP the decoded signature is an armored detached signature (`gpg --verif
 
 `speccoder report` shows each tick's attestation as the note says it — `signed ssh SHA256:…`, `unsigned`, `missing` — without checking signatures (that is `attest verify`'s job), and counts ticks without one.
 
-`speccoder pr` adds an Attestation column to the evidence table and the commands to check it, and pushes `refs/notes/speccoder` after the branch — never with `--force`. When the remote's notes have diverged, it says how to merge them (`git notes --ref=speccoder merge`) and opens the pull request anyway.
+`speccoder pr` adds an Attestation column to the evidence table, each task's [evidence tour](@/docs/verifier.md#the-evidence-tour) and the commands to check it, and pushes `refs/notes/speccoder` after the branch — never with `--force` — then the held-out tests of the tasks closed on the pushed head. When the remote's notes have diverged, it says how to merge them (`git notes --ref=speccoder merge`) and opens the pull request anyway.
 
 Parallel lanes re-issue a task's statements for the commit that lands on the feature branch and sign them again: what is attested is the commit you merge, not the lane's.
 

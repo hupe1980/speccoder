@@ -52,6 +52,8 @@ cat > CHANGELOG.md <<'MD'
 [Unreleased]: https://github.com/hupe1980/speccoder/compare/v0.0.1...HEAD
 [0.0.1]: https://github.com/hupe1980/speccoder/releases/tag/v0.0.1
 MD
+mkdir -p packaging/speccoder-verify-action
+printf 'inputs:\n  version:\n    default: "0.1.0-dev" # the release this action is cut with; scripts/release/bump.sh sets it\n' > packaging/speccoder-verify-action/action.yml
 printf 'target/\n' > .gitignore
 cargo generate-lockfile --quiet
 g() { git -c user.name=t -c user.email=t@example.com -c commit.gpgsign=false -c tag.gpgsign=false "$@"; }
@@ -70,8 +72,9 @@ before="$(cat CHANGELOG.md)"
 [ "$(cat CHANGELOG.md)" = "$before" ] || fail "a pre-release bump changed the CHANGELOG"
 grep -q '^version = "0.1.0-rc.1"' Cargo.toml || fail "workspace version not set"
 grep -q 'speccoder-core = { path = "crates/speccoder-core", version = "0.1.0-rc.1" }' Cargo.toml || fail "internal dependency version not set"
+grep -q 'default: "0.1.0-rc.1" # the release this action' packaging/speccoder-verify-action/action.yml || fail "the action's version not set"
 changed="$(git status --porcelain | awk '{print $2}' | sort | tr '\n' ' ')"
-[ "$changed" = "Cargo.lock Cargo.toml " ] || fail "bump touched: $changed"
+[ "$changed" = "Cargo.lock Cargo.toml packaging/speccoder-verify-action/action.yml " ] || fail "bump touched: $changed"
 refuses "not clean" "$scripts/bump.sh" 0.1.0
 g commit -qam "rc"
 g update-ref refs/remotes/origin/main HEAD
@@ -107,15 +110,20 @@ rm dirty.txt
 "$scripts/bump.sh" 0.2.0-rc.1 >/dev/null && g commit -qam rc2 && g tag v0.2.0-rc.1
 refuses "is a pre-release" "$scripts/publish.sh" speccoder-core
 
-# Formula: every checksum substituted, no placeholder left.
+# Formula: every checksum substituted, no placeholder left — the
+# verifier's archives beside speccoder's change nothing in it.
 cd "$work"
 for t in aarch64-apple-darwin aarch64-unknown-linux-gnu x86_64-unknown-linux-gnu; do
   printf '%064d  speccoder-0.1.0-%s.tar.gz\n' "${#t}" "$t"
 done > SHA256SUMS
+for t in aarch64-apple-darwin aarch64-unknown-linux-musl x86_64-unknown-linux-musl; do
+  printf '%064d  speccoder-verify-0.1.0-%s.tar.gz\n' "$((${#t} + 1))" "$t"
+done >> SHA256SUMS
 "$scripts/formula.sh" 0.1.0 SHA256SUMS > speccoder.rb || fail "formula"
 [ "$(grep -c 'sha256 "0\{40\}' speccoder.rb)" = 3 ] || fail "three checksums"
 grep -q 'version "0.1.0"' speccoder.rb || fail "formula version"
 ! grep -q '@' speccoder.rb || fail "placeholder left in the formula"
+grep -q 'speccoder-verify' speccoder.rb && fail "the formula names the verifier"
 head -n 2 SHA256SUMS > short
 refuses "no checksum for" "$scripts/formula.sh" 0.1.0 short
 

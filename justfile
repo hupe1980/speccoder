@@ -1,7 +1,7 @@
 # speccoder — development task runner (https://just.systems). `just ci` mirrors CI.
 
 # Publish order: every crate after the crates it depends on.
-crates := "speccoder-core speccoder-speckit speccoder-openspec speccoder-runtime speccoder-web speccoder"
+crates := "speccoder-core speccoder-speckit speccoder-openspec speccoder-runtime speccoder-verify speccoder-web speccoder"
 
 default:
     @just --list --unsorted
@@ -19,6 +19,8 @@ fmt-check:
 lint:
     @echo "==> gate: lint"
     cargo clippy --workspace --all-targets -- -D warnings
+    # The verifier alone resolves the runtime without `engine`: its read half lints clean too.
+    cargo clippy -p speccoder-verify --all-targets -- -D warnings
 
 test:
     @echo "==> gate: test"
@@ -85,6 +87,7 @@ release-test:
     @echo "==> gate: release-test"
     scripts/test-installer.sh
     scripts/release/test.sh
+    packaging/speccoder-verify-action/test.sh
 
 # Set the version; for a release also cut the CHANGELOG. Never commits.
 bump version:

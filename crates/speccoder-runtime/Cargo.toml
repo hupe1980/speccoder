@@ -12,21 +12,28 @@ authors.workspace = true
 keywords.workspace = true
 categories.workspace = true
 
+[features]
+default = ["engine"]
+# Everything that runs a model, opens a socket or reads the keychain: the
+# substrate, the GitHub client, sign-in. Off, the crate is the read-only half
+# `speccoder-verify` builds on (git, the format adapters, attestation checks).
+engine = ["dep:agentplane", "dep:async-trait", "dep:tokio", "dep:reqwest", "dep:keyring"]
+
 [dependencies]
 pulldown-cmark = { workspace = true, features = ["html"] }
 speccoder-core.workspace = true
 speccoder-speckit.workspace = true
 speccoder-openspec.workspace = true
-agentplane.workspace = true
-async-trait.workspace = true
+agentplane = { workspace = true, optional = true }
+async-trait = { workspace = true, optional = true }
 globset.workspace = true
 ignore.workspace = true
 regex.workspace = true
 similar.workspace = true
 schemars.workspace = true
-tokio = { workspace = true, features = ["rt"] }
-reqwest = { workspace = true }
-keyring = { workspace = true }
+tokio = { workspace = true, features = ["rt"], optional = true }
+reqwest = { workspace = true, optional = true }
+keyring = { workspace = true, optional = true }
 nix.workspace = true
 quick-xml.workspace = true
 serde.workspace = true

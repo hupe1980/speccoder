@@ -7,17 +7,21 @@
 //! signing key. `accept` and `skip` write a `task-verification` alone. The
 //! model never sees, writes or signs any of it.
 
+pub mod branch;
+pub mod check;
 pub mod dsse;
 pub mod notes;
 pub mod policy;
 pub mod sign;
 pub mod statement;
+pub(crate) mod tree;
 pub mod verify;
 
 use std::path::Path;
 
 use serde_json::{Value, json};
 use speccoder_core::RunReport;
+use speccoder_core::predicate::{self, Decider, TaskRef, TaskVerificationV0, Unit};
 
 use self::dsse::Envelope;
 use self::statement::{Phase, PhaseResult, Subject};
@@ -81,6 +85,7 @@ pub fn cites(title: &str, id: &str) -> bool {
         .any(|word| word == id)
 }
 
+#[cfg(feature = "engine")]
 /// The `trace[]` rows of a task's statement: each requirement its title
 /// cites, with the defining line's hash; then each acceptance test with
 /// the scenario it checks (none: the author cited none). All with the
@@ -262,6 +267,7 @@ pub fn phases(report: &RunReport) -> Vec<PhaseResult> {
     out
 }
 
+#[cfg(feature = "engine")]
 /// The decisions people made on the attempt's calls.
 fn decisions(tool_calls: &[Value]) -> Vec<Value> {
     tool_calls
@@ -282,6 +288,7 @@ fn decisions(tool_calls: &[Value]) -> Vec<Value> {
         .collect()
 }
 
+#[cfg(feature = "engine")]
 /// The acceptance set's strength as evidence: shares, counts,
 /// what got through, the permitted alternatives and the rulings — never the
 /// local patch paths or the variants' code.
@@ -300,6 +307,7 @@ fn strength(report: &RunReport) -> Value {
     })
 }
 
+#[cfg(feature = "engine")]
 /// The monitor's result, `unreviewed` when it did not finish, `off` when
 /// not configured.
 fn monitor(report: &RunReport) -> Value {
@@ -429,9 +437,89 @@ fn write(repo: &Path, commit: &str, attest: &AttestConfig, mut lines: Vec<Envelo
     outcome(signed, signer, reason.as_deref())
 }
 
+#[cfg(feature = "engine")]
+/// The red run's excerpt for the predicate, when the tests went red and
+/// their output was kept (`acceptance.red_output`).
+fn red(report: &RunReport) -> Option<predicate::Red> {
+    let a = report.acceptance.as_ref().filter(|a| a["red"] == true)?;
+    red_of(a["red_class"].as_str()?, a["red_output"].as_str()?)
+}
+
+/// The last at most [`predicate::RED_EXCERPT_MAX`] bytes of `output` (on a
+/// character boundary), with its digests; withheld when not clean (a local
+/// path, a credential): only clean text is signed. `None` for a class that
+/// is not red.
+#[must_use]
+pub fn red_of(class: &str, output: &str) -> Option<predicate::Red> {
+    let kind = match class {
+        "assertion" => predicate::RedKind::Assertion,
+        "absent" => predicate::RedKind::MissingSymbol,
+        _ => return None,
+    };
+    let mut start = output.len().saturating_sub(predicate::RED_EXCERPT_MAX);
+    while !output.is_char_boundary(start) {
+        start += 1;
+    }
+    let excerpt = output[start..].trim_start_matches('\n');
+    let clean = statement::check_clean(&json!(excerpt)).is_ok();
+    Some(predicate::Red {
+        kind,
+        excerpt: clean.then(|| excerpt.to_owned()),
+        excerpt_sha256: clean.then(|| sha(excerpt)),
+        output_sha256: sha(output),
+        withheld: !clean,
+    })
+}
+
+/// The predicate's fields every statement of `t` has; the rest `None`.
+fn predicate(
+    t: &Tick<'_>,
+    tree: String,
+    policy_sha256: String,
+    time: String,
+) -> TaskVerificationV0 {
+    TaskVerificationV0 {
+        revision: Some(predicate::REVISION),
+        verdict: t.verdict.to_owned(),
+        unit: Unit {
+            format: t.format.to_owned(),
+            feature: t.feature.to_owned(),
+            dir: t.feature_dir.to_owned(),
+        },
+        task: TaskRef {
+            id: t.task.to_owned(),
+            line_hash: t.line_hash.to_owned(),
+            title: t.title.to_owned(),
+        },
+        tree,
+        spec: None,
+        trace: None,
+        integrity: None,
+        monitor: None,
+        mutation: None,
+        sandbox: None,
+        executor: None,
+        model: None,
+        run: None,
+        decisions: None,
+        strength: None,
+        instructions: None,
+        decider: None,
+        policy_sha256,
+        time,
+        red: None,
+        bug: None,
+        acceptance: None,
+        context: None,
+        dependencies: None,
+        extra: std::collections::BTreeMap::new(),
+    }
+}
+
 /// Records a passed tick: `test-result` per phase, `task-verification`,
 /// then the `vsa` naming every other line. Never fails the tick.
 #[must_use]
+#[cfg(feature = "engine")]
 pub fn record_tick(t: &Tick<'_>, report: &RunReport) -> Value {
     let subject = Subject {
         name: format!("{}/{}", t.feature, t.task),
@@ -451,29 +539,28 @@ pub fn record_tick(t: &Tick<'_>, report: &RunReport) -> Value {
             )
         })
         .collect();
-    let verification = json!({
-        "verdict": t.verdict,
-        "unit": { "format": t.format, "feature": t.feature, "dir": t.feature_dir },
-        "task": { "id": t.task, "line_hash": t.line_hash, "title": t.title },
-        "tree": tree,
-        "spec": { "section": t.section, "section_hash": sha(t.section_text) },
-        "trace": trace(t, report),
-        "integrity": { "findings": report.integrity },
-        "monitor": monitor(report),
-        "mutation": report.mutation,
-        "sandbox": t.sandbox,
-        "executor": t.executor,
-        "model": t.model,
-        "run": report.run_id,
-        "decisions": decisions(&report.tool_calls),
-        "strength": strength(report),
-        "instructions": report.instructions,
-        "policy_sha256": policy,
-        "time": time,
-    });
+    let verification = TaskVerificationV0 {
+        spec: Some(predicate::SpecRef {
+            section: t.section.map(str::to_owned),
+            section_hash: sha(t.section_text),
+        }),
+        trace: Some(json!(trace(t, report))),
+        integrity: Some(json!({ "findings": report.integrity })),
+        monitor: Some(monitor(report)),
+        mutation: Some(json!(report.mutation)),
+        sandbox: Some(t.sandbox.clone()),
+        executor: Some(t.executor.clone()),
+        model: Some(t.model.clone()),
+        run: Some(json!(report.run_id)),
+        decisions: Some(json!(decisions(&report.tool_calls))),
+        strength: Some(strength(report)),
+        instructions: Some(json!(report.instructions)),
+        red: red(report),
+        ..predicate(t, tree, policy.clone(), time.clone())
+    };
     named.push((
         "task-verification".to_owned(),
-        statement::statement(&subject, statement::TASK_VERIFICATION, verification),
+        statement::statement(&subject, statement::TASK_VERIFICATION, json!(verification)),
     ));
     let mut lines = Vec::new();
     let mut inputs = Vec::new();
@@ -591,19 +678,19 @@ pub fn record_decision(t: &Tick<'_>, by: &str, reason: &str) -> Value {
     let tree = crate::git::Git::at(t.repo)
         .line(&["rev-parse", &format!("{}^{{tree}}", t.commit)])
         .unwrap_or_default();
-    let s = statement::statement(
-        &subject,
-        statement::TASK_VERIFICATION,
-        json!({
-            "verdict": t.verdict,
-            "unit": { "format": t.format, "feature": t.feature, "dir": t.feature_dir },
-            "task": { "id": t.task, "line_hash": t.line_hash, "title": t.title },
-            "tree": tree,
-            "decider": { "by": by, "reason": reason },
-            "policy_sha256": policy::judge_config_sha256(t.config).unwrap_or_default(),
-            "time": now_rfc3339(),
+    let decision = TaskVerificationV0 {
+        decider: Some(Decider {
+            by: by.to_owned(),
+            reason: reason.to_owned(),
         }),
-    );
+        ..predicate(
+            t,
+            tree,
+            policy::judge_config_sha256(t.config).unwrap_or_default(),
+            now_rfc3339(),
+        )
+    };
+    let s = statement::statement(&subject, statement::TASK_VERIFICATION, json!(decision));
     if let Err(why) = statement::check_clean(&s) {
         return json!({ "state": "missing", "reason": format!("the statement would carry {why}; none was written") });
     }
@@ -701,6 +788,29 @@ pub fn sign_at(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_red_excerpt_is_the_clean_tail_and_withheld_when_not_clean() {
+        let long = format!("{}\nassertion failed: left == right\n", "x".repeat(4000));
+        let r = red_of("assertion", &long).unwrap();
+        assert_eq!(r.kind, predicate::RedKind::Assertion);
+        let excerpt = r.excerpt.as_deref().unwrap();
+        assert!(excerpt.len() <= predicate::RED_EXCERPT_MAX);
+        assert!(excerpt.ends_with("left == right\n"));
+        assert_eq!(r.excerpt_sha256.as_deref(), Some(sha(excerpt).as_str()));
+        assert_eq!(r.output_sha256, sha(&long));
+        assert!(!r.withheld);
+
+        let dirty = red_of("absent", "error: cannot find /Users/ada/src/lib.rs").unwrap();
+        assert_eq!(dirty.kind, predicate::RedKind::MissingSymbol);
+        assert!(dirty.withheld);
+        assert_eq!(dirty.excerpt, None);
+        assert_eq!(dirty.excerpt_sha256, None);
+        assert!(red_of("flaky", "x").is_none());
+        // A multi-byte character at the cut is never split.
+        let wide = "é".repeat(2000);
+        assert!(red_of("assertion", &wide).unwrap().excerpt.unwrap().len() <= 2048);
+    }
 
     #[test]
     fn the_clock_is_rfc3339_utc() {

@@ -1,0 +1,96 @@
+name: speccoder-verify
+description: >-
+  Checks every ticked task of a pull request against its signed speccoder
+  attestation, with the maintainer's trust, and publishes the
+  `speccoder / evidence` check. No model key, no build, nothing from the
+  pull request executed.
+author: hupe1980
+branding:
+  icon: check-circle
+  color: green
+
+inputs:
+  version:
+    description: The speccoder-verify release to run (verified by build provenance and sha256 before it runs).
+    default: "0.2.0" # the release this action is cut with; scripts/release/bump.sh sets it
+  allowed-signers:
+    description: SSH allowed-signers file, read from the base revision (never from the pull request).
+    default: .github/speccoder/allowed_signers
+  certificate-identity:
+    description: Sigstore certificate identity to trust (installs cosign when set).
+    default: ""
+  certificate-oidc-issuer:
+    description: Sigstore OIDC issuer to trust.
+    default: ""
+  require-signed:
+    description: Unsigned ticks are unverifiable.
+    default: "true"
+  require-verified:
+    description: regression_only and attested ticks fail too.
+    default: "false"
+  allow-neutral:
+    description: >-
+      Publish a neutral outcome (nothing to check) as `neutral`. GitHub counts
+      a neutral required check as passing, so by default it is published as
+      `failure`, titled neutral, and the job fails.
+    default: "false"
+  mode:
+    description: "`touched` (units the pull request changes) or `all`; default touched on pull requests, all on push."
+    default: ""
+  check-name:
+    description: The check run's name.
+    default: speccoder / evidence
+  badge-branch:
+    description: On a push to the default branch only, commit the evidence badge to this orphan branch (needs contents write). Empty is off.
+    default: ""
+  token:
+    description: Used by the action's own git and curl steps only; never passed to the verifier.
+    default: ${{ github.token }}
+
+outputs:
+  conclusion:
+    description: success, failure or neutral (the verifier's).
+    value: ${{ steps.verify.outputs.conclusion }}
+  verified:
+    description: Ticks verified.
+    value: ${{ steps.verify.outputs.verified }}
+  regression-only:
+    description: Ticks regression only.
+    value: ${{ steps.verify.outputs.regression-only }}
+  attested:
+    description: Ticks attested.
+    value: ${{ steps.verify.outputs.attested }}
+  stale:
+    description: Ticks stale.
+    value: ${{ steps.verify.outputs.stale }}
+  unverifiable:
+    description: Ticks unverifiable.
+    value: ${{ steps.verify.outputs.unverifiable }}
+  share:
+    description: Share of ticks with verifying evidence (0–1), empty without ticks.
+    value: ${{ steps.verify.outputs.share }}
+  report:
+    description: Path of the JSON report (payload branch_verify).
+    value: ${{ steps.verify.outputs.report }}
+
+runs:
+  using: composite
+  steps:
+    # Pin this to a commit in the separately published action.
+    - if: inputs.certificate-identity != ''
+      uses: sigstore/cosign-installer@v3.8.1
+    - id: verify
+      shell: bash
+      env:
+        SV_VERSION: ${{ inputs.version }}
+        SV_ALLOWED_SIGNERS: ${{ inputs.allowed-signers }}
+        SV_IDENTITY: ${{ inputs.certificate-identity }}
+        SV_ISSUER: ${{ inputs.certificate-oidc-issuer }}
+        SV_REQUIRE_SIGNED: ${{ inputs.require-signed }}
+        SV_REQUIRE_VERIFIED: ${{ inputs.require-verified }}
+        SV_ALLOW_NEUTRAL: ${{ inputs.allow-neutral }}
+        SV_MODE: ${{ inputs.mode }}
+        SV_CHECK_NAME: ${{ inputs.check-name }}
+        SV_BADGE_BRANCH: ${{ inputs.badge-branch }}
+        SV_TOKEN: ${{ inputs.token }}
+      run: '"$GITHUB_ACTION_PATH/verify.sh"'

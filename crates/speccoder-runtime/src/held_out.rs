@@ -258,33 +258,131 @@ pub fn leaked(
         .collect()
 }
 
-/// Where a finished feature's held-out sets are published.
+/// Where a unit's published held-out sets live.
 pub const REF_PREFIX: &str = "refs/speccoder/held-out";
 
-/// Publishes a finished feature's held-out sets: one commit,
-/// parented on the feature branch's tip, with `<task>/manifest.json` and
-/// `<task>/files/…` of every task, under `refs/speccoder/held-out/<feature>`.
-/// Only once the feature is done — earlier, a later task could read them.
-/// Never pushed by speccoder itself. `Ok(None)` when no task has a set.
-pub fn publish(
-    repo: &Path,
+/// The held-out sets a publication carries: exactly those whose manifest
+/// digest a task closed on the pushed head names in its evidence.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Selection {
+    /// `(store key, its directory)` of every set carried.
+    pub sets: Vec<(String, PathBuf)>,
+    /// The closed tasks whose sets are carried, in order.
+    pub tasks: Vec<String>,
+    /// Stored sets no closed task names (open tasks'): they stay local.
+    pub withheld: usize,
+    /// Named sets that no longer match their digest: left out, by key.
+    pub tampered: Vec<String>,
+}
+
+/// The digests a task commit's evidence names: the signed `held_out`
+/// phase, else the commit's `Held-Out:` trailer.
+#[must_use]
+pub fn named_digests(repo: &Path, commit: &str) -> Vec<String> {
+    let mut out: Vec<String> = crate::evidence::statements(repo, commit)
+        .iter()
+        .filter(|s| s["predicate"]["configuration"][0]["name"] == "speccoder:phase/held_out")
+        .filter_map(|s| {
+            s["predicate"]["configuration"][0]["digest"]["sha256"]
+                .as_str()
+                .map(str::to_owned)
+        })
+        .collect();
+    let trailer = Git::at(repo)
+        .line(&[
+            "log",
+            "-1",
+            "--format=%(trailers:key=Held-Out,valueonly)",
+            commit,
+        ])
+        .unwrap_or_default();
+    out.extend(
+        trailer
+            .split_whitespace()
+            .filter_map(|w| w.strip_prefix("manifest=sha256:"))
+            .map(str::to_owned),
+    );
+    out.sort();
+    out.dedup();
+    out
+}
+
+/// Selects, from every set stored for `unit` (whatever its key: a task's
+/// today, a sealed set's once the store holds them — one protocol), those
+/// whose manifest digest a closed task names. `closed` is `(task, digests
+/// its evidence names)`. Each selected set is checked against its digest
+/// first; a tampered one is never published.
+#[must_use]
+pub fn select_closed(
     project_state: &Path,
-    feature: &str,
+    unit: &str,
+    closed: &[(String, Vec<String>)],
+) -> Selection {
+    let base = project_state.join("held-out").join(unit);
+    let mut stored: Vec<(String, PathBuf)> = std::fs::read_dir(&base)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter(|e| e.path().join("manifest.json").is_file())
+        .map(|e| (e.file_name().to_string_lossy().into_owned(), e.path()))
+        .collect();
+    stored.sort();
+    let mut out = Selection::default();
+    for (key, dir) in stored {
+        let digest = std::fs::read_to_string(dir.join("manifest.json"))
+            .ok()
+            .and_then(|t| serde_json::from_str::<Manifest>(&t).ok())
+            .map(|m| m.sha256());
+        let named_by = digest.as_ref().and_then(|d| {
+            closed
+                .iter()
+                .find(|(_, digests)| digests.contains(d))
+                .map(|(task, _)| task.clone())
+        });
+        match (named_by, digest) {
+            (Some(task), Some(d)) => {
+                if load_verified(&dir, &d).is_ok() {
+                    if !out.tasks.contains(&task) {
+                        out.tasks.push(task);
+                    }
+                    out.sets.push((key, dir));
+                } else {
+                    out.tampered.push(key);
+                }
+            }
+            _ => out.withheld += 1,
+        }
+    }
+    out
+}
+
+/// Publishes `selection` as one commit under
+/// `refs/speccoder/held-out/<unit>`: `<key>/manifest.json` and
+/// `<key>/files/…` of every set, parented on `tip` (the pushed branch) and
+/// on the ref's previous commit, so the ref only grows and every push of
+/// it is a fast-forward. `Ok(None)` when nothing is selected.
+pub fn publish_closed(
+    repo: &Path,
+    unit: &str,
+    tip: &str,
+    selection: &Selection,
     tmp: &Path,
 ) -> Result<Option<String>, String> {
-    let base = project_state.join("held-out").join(feature);
     let mut files: Vec<(String, PathBuf)> = Vec::new();
-    let mut stack = vec![base.clone()];
-    while let Some(d) = stack.pop() {
-        let Ok(entries) = std::fs::read_dir(&d) else {
-            continue;
-        };
-        for e in entries.flatten() {
-            let p = e.path();
-            if p.is_dir() {
-                stack.push(p);
-            } else if let Ok(rel) = p.strip_prefix(&base) {
-                files.push((rel.to_string_lossy().replace('\\', "/"), p.clone()));
+    for (key, dir) in &selection.sets {
+        let mut stack = vec![dir.clone()];
+        while let Some(d) = stack.pop() {
+            let Ok(entries) = std::fs::read_dir(&d) else {
+                continue;
+            };
+            for e in entries.flatten() {
+                let p = e.path();
+                if p.is_dir() {
+                    stack.push(p);
+                } else if let Ok(rel) = p.strip_prefix(dir) {
+                    let rel = rel.to_string_lossy().replace('\\', "/");
+                    files.push((format!("{key}/{rel}"), p.clone()));
+                }
             }
         }
     }
@@ -317,19 +415,76 @@ pub fn publish(
         .map_err(|e| e.0)?;
     let _ = std::fs::remove_file(&index);
     let tree = String::from_utf8_lossy(&tree).trim().to_owned();
-    let branch = format!("speccoder/{feature}");
-    let parent = git
-        .line(&["rev-parse", "--verify", &format!("{branch}^{{commit}}")])
-        .map_err(|e| e.0)?;
+    let reference = format!("{REF_PREFIX}/{unit}");
+    let previous = git
+        .line(&[
+            "rev-parse",
+            "--verify",
+            "-q",
+            &format!("{reference}^{{commit}}"),
+        ])
+        .ok()
+        .filter(|c| !c.is_empty());
+    // Nothing new since the last publication of this tip: keep it.
+    if let Some(prev) = &previous
+        && git
+            .line(&["rev-parse", &format!("{prev}^{{tree}}")])
+            .ok()
+            .as_deref()
+            == Some(&tree)
+        && git
+            .succeeds(&["merge-base", "--is-ancestor", tip, prev])
+            .unwrap_or(false)
+    {
+        return Ok(Some(prev.clone()));
+    }
     let message = format!(
-        "speccoder: held-out tests of {feature}\n\nThe tests that judged each task, published once the feature is done.\nEach <task>/manifest.json hashes to its task's Held-Out trailer.\n\nSpec-Feature: {feature}\n"
+        "speccoder: held-out tests of {unit}\n\nThe tests that judged the tasks closed on {tip}: {}.\nEach <key>/manifest.json hashes to the digest its task's evidence names.\n\nSpec-Feature: {unit}\n",
+        selection.tasks.join(", ")
     );
     let mut args = crate::attempts::IDENTITY.to_vec();
-    args.extend(["commit-tree", &tree, "-p", &parent, "-m", &message]);
+    args.extend(["commit-tree", &tree, "-p", tip]);
+    if let Some(prev) = &previous {
+        args.extend(["-p", prev]);
+    }
+    args.extend(["-m", &message]);
     let commit = git.line(&args).map_err(|e| e.0)?;
-    git.run(&["update-ref", &format!("{REF_PREFIX}/{feature}"), &commit])
+    git.run(&["update-ref", &reference, &commit])
         .map_err(|e| e.0)?;
     Ok(Some(commit))
+}
+
+/// Publishes a finished feature's held-out sets locally (every task is
+/// closed then): [`publish_closed`] over the tasks the branch tip closes.
+/// Never pushed here; `speccoder pr` pushes the ref. `Ok(None)` when no
+/// closed task names a stored set.
+pub fn publish(
+    repo: &Path,
+    project_state: &Path,
+    feature: &str,
+    tmp: &Path,
+) -> Result<Option<String>, String> {
+    let branch = format!("speccoder/{feature}");
+    let tip = Git::at(repo)
+        .line(&["rev-parse", "--verify", &format!("{branch}^{{commit}}")])
+        .map_err(|e| e.0)?;
+    let closed = closed_on(repo, &tip, feature);
+    let selection = select_closed(project_state, feature, &closed);
+    publish_closed(repo, feature, &tip, &selection, tmp)
+}
+
+/// The tasks of `unit` closed on `head` (ticked, with the commit carrying
+/// their verdict — the verifier's discovery), each with the held-out
+/// digests its evidence names.
+#[must_use]
+pub fn closed_on(repo: &Path, head: &str, unit: &str) -> Vec<(String, Vec<String>)> {
+    crate::attest::branch::closed(repo, head, unit)
+        .into_iter()
+        .map(|(task, commit)| {
+            let digests = named_digests(repo, &commit);
+            (task, digests)
+        })
+        .collect()
 }
 
 #[cfg(test)]

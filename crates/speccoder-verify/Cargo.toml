@@ -1,0 +1,38 @@
+[package]
+name = "speccoder-verify"
+description = "Checks every ticked task of a branch against its signed speccoder attestation: no model, no network, nothing from the checked tree executed"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme = "README.md"
+authors.workspace = true
+keywords = ["spec-kit", "attestation", "in-toto", "verification", "ci"]
+categories = ["command-line-utilities", "development-tools"]
+
+# `cargo binstall speccoder-verify` takes the release archive instead of building.
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ version }-{ target }.tar.gz"
+bin-dir = "{ name }-{ version }-{ target }/{ bin }{ binary-ext }"
+pkg-fmt = "tgz"
+
+[[bin]]
+name = "speccoder-verify"
+path = "src/main.rs"
+
+[dependencies]
+speccoder-core.workspace = true
+# Without `engine`: no model substrate, no HTTP client, no keychain
+# (layering rule 7 holds it to that).
+speccoder-runtime.workspace = true
+clap.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+base64.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true

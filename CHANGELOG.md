@@ -25,6 +25,38 @@ adheres to [Semantic Versioning](https://semver.org/).
   output not ignored — which every check run leaves behind — stops a run
   with its fix, offered there as one click (**Commit Cargo.lock**); `init`
   commits the lockfile and ignores the build output from the start.
+- **Proof a maintainer can check: `speccoder-verify`.** A second, small
+  binary (static on Linux, under 3 MB) checks every `[X]` of the units a
+  branch touches against its signed attestation, with the maintainer's
+  trust only (an allowed-signers file, or one read from git at the base
+  revision, or a Sigstore identity — never a key the branch declares). No
+  model key, no network, nothing from the checked tree executed: it reads
+  git objects and spawns git and the signature tools. Each tick is
+  `evidenced` (verified, regression only, attested), `stale` (a cited
+  requirement changed since) or `unverifiable` with a reason, including
+  `ticked_without_evidence`, a task line reworded after its tick and
+  `commit_unreachable` after a squash merge; nothing to check is neutral,
+  never success. The same check is `speccoder attest verify --branch`.
+- **The `speccoder / evidence` check.** The `speccoder-verify` GitHub
+  Action (`packaging/speccoder-verify-action`, to be published as
+  `hupe1980/speccoder-verify`) verifies the release binary's build
+  provenance and checksum, runs it on every push with the base branch's
+  trust, and publishes a check run on the pull request's head: the verdict
+  bar, the requirement trace, an annotation on each tick that is not
+  plainly verified (on the changed requirement's line for a stale one),
+  and every task's tour. Fork pull requests work from `pull_request_target`
+  with nothing checked out; a read-only token falls back to the job summary
+  and annotations. A neutral outcome is published as `failure` unless
+  `allow-neutral: true`. An opt-in badge from the default branch.
+- **The evidence tour.** Each tick as six steps — requirement, frozen
+  tests, red, diff, green, strength — each labelled signed, committed or
+  not recorded: in the check, in `speccoder pr`'s description, in the
+  app's task inspector (Tour), and `speccoder-verify tour`.
+- **The task-verification predicate, as an open specification**, with its
+  JSON Schema (`schemas/task-verification-v0.json`): versioned by
+  `revision` within v0, unknown fields kept and tolerated, the fields of
+  later specifications reserved. New ticks sign a clean excerpt of the red
+  run's output.
 - File-type icons in the app's file tree and diffs.
 - `cargo binstall speccoder` takes the release archive.
 - **`speccoder actions`.** What you can do now, by group, each with its
@@ -50,6 +82,13 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- `speccoder pr` also pushes the held-out tests of the tasks closed on the
+  pushed head (`refs/speccoder/held-out/<unit>`, a fast-forward, never
+  forced) — exactly the sets their signed evidence names, for features and
+  standing units alike; open tasks' sets stay local. Its dry run says
+  whether a workflow runs the evidence check.
+- `speccoder-runtime` has a default feature `engine`; without it the crate
+  is the read-only half (no agentplane, tokio, reqwest or keyring).
 - agentplane 0.53.0. In an editor (ACP) the model's words arrive as its
   message and its reasoning as its thoughts.
 - Needs You counts in words (`2 tasks that did not pass`).
@@ -78,6 +117,11 @@ adheres to [Semantic Versioning](https://semver.org/).
 - An OpenSpec project without a change got no first step: Setup, the
   journey and `speccoder actions` now offer `speccoder spec propose "…"`,
   as Spec Kit projects get `spec specify`.
+- `attest verify` called a Sigstore signature `untrusted_signer` when
+  `cosign` was not installed; a signature tool that cannot run is now
+  `tool_missing` for every signer, and never passes.
+- `attest verify`'s requirement check no longer runs `tar`: the commit's
+  intent is written out from git objects, links and submodules left out.
 - The app read the journal for several requests at once and refused
   itself ("another speccoder is working on this project"); reads now share
   one handle and wait briefly for another process.

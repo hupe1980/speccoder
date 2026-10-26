@@ -224,6 +224,16 @@ fn a_tick_leaves_signed_statements_that_verify() {
     assert_eq!(trace.len(), 1, "{trace:?}");
     assert_eq!(trace[0]["requirement"], "FR-001");
     assert_eq!(trace[0]["requirement_hash"].as_str().unwrap().len(), 64);
+    // The typed predicate reads it back to the same signed bytes.
+    let typed: speccoder_core::predicate::TaskVerificationV0 =
+        serde_json::from_value(verification["predicate"].clone()).unwrap();
+    assert_eq!(typed.revision(), speccoder_core::predicate::REVISION);
+    assert!(typed.newer_fields().is_empty());
+    let back = serde_json::to_value(&typed).unwrap();
+    assert_eq!(
+        speccoder_runtime::attest::statement::canonical(&back),
+        speccoder_runtime::attest::statement::canonical(&verification["predicate"])
+    );
     for s in &all {
         assert_eq!(s["subject"][0]["digest"]["gitCommit"], commit.as_str());
         assert_eq!(s["subject"][0]["name"], "001-graph/T005");

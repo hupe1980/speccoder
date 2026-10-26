@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 /// The prefix of an MCP tool's name as the model sees it.
-pub const PREFIX: &str = "mcp__";
+pub use crate::tools::policy::MCP_PREFIX as PREFIX;
 
 /// How long a server may take to start and list its tools.
 const STARTUP: Duration = Duration::from_secs(30);

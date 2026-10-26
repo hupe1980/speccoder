@@ -101,6 +101,14 @@ export interface ActionsReport {
   journey: JourneyStep[];
 }
 
+/** Where an annotation lands: a file and a 1-based line, at the head. */
+export interface Anchor {
+  /** 1-based line. */
+  line: number;
+  /** Repository-relative path. */
+  path: string;
+}
+
 /**
  * A pending call as a person sees it: what, why, what it can reach, what
  * the model claimed, and what approving it grants.
@@ -223,6 +231,66 @@ export interface BenchReport {
   skipped: string[];
 }
 
+/** Result of `speccoder-verify check` / `speccoder attest verify --branch`. */
+export interface BranchReport {
+  /** Unsigned evidence was accepted (`--require-signed=false`). */
+  accepted_unsigned: boolean;
+  /** The merge base with the given base, when one was given. */
+  base: string | null;
+  /** The conclusion. */
+  conclusion: Conclusion;
+  /** The units checked, in order. */
+  features: string[];
+  /** The commit checked. */
+  head: string;
+  /** Which units were covered. */
+  mode: Mode;
+  /** Predicate fields or revisions seen but unknown here (tolerated). */
+  newer_fields: string[];
+  /** Rules this verifier version does not evaluate yet. */
+  not_evaluated: string[];
+  /** Bug homes touched without a verdict commit (informational). */
+  open_no_claim: string[];
+  /** `regression_only` and `attested` fail too. */
+  require_verified: boolean;
+  /** Evidenced (not stale) over all ticks; `None` without ticks. */
+  share: number | null;
+  /** Tasks skipped by a person's decision (informational). */
+  skipped: SkippedTask[];
+  /** Every tick (and trailer-only task), in document order per unit. */
+  ticks: TickReport[];
+  /** Counts by outcome. */
+  totals: BranchTotals;
+  /**
+   * Requirement → task → test → verdict, from the signed `trace[]`,
+   * with a row (no task) for each requirement no tick cites.
+   */
+  trace: TraceRow[];
+  /**
+   * The trust used: the allowed-signers file and the revision it was
+   * read at, the Sigstore identity and issuer.
+   */
+  trust: unknown;
+}
+
+/** Counts by outcome, in the verdict bar's order. */
+export interface BranchTotals {
+  /** Evidenced `attested`. */
+  attested: number;
+  /** Regressed (reserved). */
+  regressed: number;
+  /** Evidenced `regression_only`. */
+  regression_only: number;
+  /** Skipped by a person (not ticks). */
+  skipped: number;
+  /** Stale. */
+  stale: number;
+  /** Unverifiable. */
+  unverifiable: number;
+  /** Evidenced `verified`. */
+  verified: number;
+}
+
 /** One check run. */
 export interface CheckResult {
   /** The command, as run. */
@@ -292,7 +360,7 @@ export interface CodeInfo {
 }
 
 /** Command-specific payload of a result. */
-export type CommandData = ProjectSnapshot | VerifyReport | WorktreeReport | ProposeReport | ReplayReport | RunReport | EvalReport | FeatureReport | ConvergeReport | StatusReport | ApprovalsReport | ControlReport | CostReport | PrReport | BenchReport | InitReport | SkillsReport | SkillRunReport | ChecklistStatus[] | ArchiveReport | InPlaceReport | AttestReport | ExplainReport | SchemaReport | DoctorReport | FeaturesReport | UiReport | ConfigReport | IssuesReport | InboxReport | ReviewReport | AuthReport | ActionsReport;
+export type CommandData = ProjectSnapshot | VerifyReport | WorktreeReport | ProposeReport | ReplayReport | RunReport | EvalReport | FeatureReport | ConvergeReport | StatusReport | ApprovalsReport | ControlReport | CostReport | PrReport | BenchReport | InitReport | SkillsReport | SkillRunReport | ChecklistStatus[] | ArchiveReport | InPlaceReport | AttestReport | ExplainReport | SchemaReport | DoctorReport | FeaturesReport | UiReport | ConfigReport | IssuesReport | InboxReport | ReviewReport | AuthReport | BranchReport | EvidenceTour | ActionsReport;
 
 /**
  * The envelope as it is serialised — the schema of [`CommandResult`]
@@ -346,6 +414,9 @@ export interface Comparison {
   /** Tests that passed in the baseline and now fail or are missing. */
   regressions: Regression[];
 }
+
+/** The branch's conclusion. */
+export type Conclusion = "success" | "failure" | "neutral";
 
 /** One key: what it is, what it is set to, and what it is otherwise. */
 export interface ConfigKey {
@@ -989,6 +1060,24 @@ export type EventLine = {
     type: "result";
   });
 
+/** Result of `speccoder-verify tour` and `/api/tour`: one task's tour. */
+export interface EvidenceTour {
+  /** The task commit, when one carries the task's evidence. */
+  commit: string | null;
+  /** The unit. */
+  feature: string;
+  /** The six steps, in order — only the first for an unverifiable tick. */
+  steps: TourStep[];
+  /** Task ID. */
+  task: string;
+  /** The task's title. */
+  title: string;
+  /** For an unverifiable tick: why the evidence does not count. */
+  unverifiable: string | null;
+  /** The verdict the evidence claims, when any. */
+  verdict: string | null;
+}
+
 /**
  * Process exit status of a command.
  *
@@ -1317,6 +1406,9 @@ export interface LastAttempt {
   run_id: string | null;
 }
 
+/** Which units a check covers. */
+export type Mode = "touched" | "all";
+
 /**
  * The gaming monitor against the oracle's ground truth: a positive is a
  * cheat or a false completion (both passed the visible checks).
@@ -1537,8 +1629,22 @@ export interface PrReport {
   branch: string;
   /** What runs (or would run), in order. */
   commands: string[];
+  /**
+   * `present`: a workflow under `.github/workflows/` runs
+   * `speccoder-verify`; `absent`: none does.
+   */
+  evidence_check: string;
   /** Feature directory name. */
   feature: string;
+  /**
+   * The unit's held-out ref pushed with the branch
+   * (`refs/speccoder/held-out/<unit>`), when a closed task names a set.
+   */
+  held_out_ref: string | null;
+  /** The tasks closed on the pushed head whose held-out sets it carries. */
+  held_out_tasks: string[];
+  /** Held-out sets of open tasks: they stay local. */
+  held_out_withheld: number;
   /** Whether the branch was pushed and the draft opened (`false`: a dry run). */
   opened: boolean;
   /** The git remote pushed to. */
@@ -2088,6 +2194,17 @@ export interface SkillsReport {
   skills: SkillEntry[];
 }
 
+/** A task skipped by a person's decision: no tick, not counted. */
+export interface SkippedTask {
+  /** The unit. */
+  feature: string;
+  /** Task ID. */
+  task: string;
+}
+
+/** Where a step's content comes from. */
+export type Source = "signed" | "committed" | "not_recorded";
+
 /** One commit of the spec and what it changed in its requirements. */
 export interface SpecVersion {
   /** Requirements it added. */
@@ -2204,6 +2321,9 @@ export interface StatusTotals {
   /** Ticks speccoder committed without an attestation. */
   without_attestation: number;
 }
+
+/** A step of the tour, in its order. */
+export type StepKind = "requirement" | "frozen_tests" | "red" | "diff" | "green" | "strength";
 
 /** Where a step of the journey is. */
 export type StepState = "done" | "now" | "todo" | "skipped";
@@ -2324,6 +2444,67 @@ export interface TestResult {
   outcome: TestOutcome;
 }
 
+/** A ticked task at the checked head. */
+export interface Tick {
+  /** The task line (a tick) or the home's assessment (trailer-only). */
+  anchor: Anchor;
+  /** For trailer-only: the claim's digest at the head (the bug's triad). */
+  claim_sha256: string | null;
+  /** The unit, as the format adapter names it. */
+  feature: string;
+  /** A tick or a trailer-only task. */
+  kind: TickKind;
+  /**
+   * sha256 of the task line with its box read as open: what the
+   * predicate's `task.line_hash` must equal. `None` for trailer-only.
+   */
+  line_sha256: string | null;
+  /** Task ID (`T012`, `1.3`, `bug:<slug>`). */
+  task: string;
+  /** The task's title. */
+  title: string;
+}
+
+/** What a checked task is. */
+export type TickKind = "tick" | "trailer_only";
+
+/** A tick's outcome. */
+export type TickOutcome = "evidenced" | "stale" | "unverifiable" | "regressed";
+
+/** One tick's report. */
+export interface TickReport {
+  /**
+   * The task commit checked (the latest reachable with the task's
+   * verdict trailers), when one exists.
+   */
+  commit: string | null;
+  /** Who accepted an `attested` tick. */
+  decider: string | null;
+  /** More on the reason, in one line. */
+  detail: string | null;
+  /**
+   * Predicate fields or revisions this verifier does not know (kept,
+   * never deciding).
+   */
+  newer_fields: string[];
+  /** The outcome. */
+  outcome: TickOutcome;
+  /** For `unverifiable`. */
+  reason: Unverifiable | null;
+  /** Who signed. */
+  signer: SignerView | null;
+  /** For `stale`: the cited requirements that changed since the tick. */
+  stale: RequirementDrift[];
+  /** For `stale`: the first changed requirement's line at the head. */
+  stale_anchor: Anchor | null;
+  /** The tick. */
+  tick: Tick;
+  /** `verified`, `regression_only` or `attested`, as the evidence claims. */
+  verdict: string | null;
+  /** `attest verify`'s object for the commit, unchanged. */
+  verification: ObjectVerification | null;
+}
+
 /** Task counts. */
 export interface Totals {
   /** Ticked tasks. */
@@ -2332,6 +2513,20 @@ export interface Totals {
   open: number;
   /** All tasks. */
   total: number;
+}
+
+/** One step. */
+export interface TourStep {
+  /** What it shows, Markdown: a first line, then optional block lines. */
+  body_markdown: string;
+  /** The facts shown, as data (names, counts, digests). */
+  facts: unknown;
+  /** Which. */
+  kind: StepKind;
+  /** Where it comes from. */
+  source: Source;
+  /** Its title (`Requirement`, `Frozen tests`, …). */
+  title: string;
 }
 
 /** One row of the requirement → scenario → test → verdict matrix. */
@@ -2366,6 +2561,9 @@ export interface UiReport {
   url: string;
 }
 
+/** Why a tick's evidence does not verify. */
+export type Unverifiable = "ticked_without_evidence" | "missing" | "malformed" | "bad_signature" | "mismatch" | "untrusted_signer" | "unsigned" | "commit_unreachable" | "tool_missing";
+
 /** Token counts, and USD when prices are configured. */
 export interface Usage {
   /** Input tokens read from the cache. */
@@ -2398,7 +2596,7 @@ export type Verdict =
   };
 
 /** What `attest verify` found for one task object. */
-export type VerifyOutcome = "ok" | "unsigned" | "missing" | "bad_signature" | "untrusted_signer" | "mismatch" | "malformed";
+export type VerifyOutcome = "ok" | "unsigned" | "missing" | "bad_signature" | "untrusted_signer" | "mismatch" | "malformed" | "tool_missing";
 
 /** Why an object got its outcome. */
 export interface VerifyReason {
