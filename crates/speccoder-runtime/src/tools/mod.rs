@@ -563,7 +563,11 @@ impl WorkspaceTools {
     }
 
     /// A command's object: its argv, the directory it runs in and the
-    /// executable that directory and environment resolve it to.
+    /// executable that directory and environment resolve it to. An
+    /// executable inside the workspace is named with the digest of its
+    /// content: the model can rewrite it, and a rewritten one is another
+    /// object (asked again, and refused at use when it changed after the
+    /// decision).
     fn command_object(
         &self,
         argv: &[String],
@@ -575,7 +579,21 @@ impl WorkspaceTools {
         let executable = argv
             .first()
             .and_then(|p| crate::sandbox::resolve_executable(p, &dir, &self.command_env(None)))
-            .map_or_else(|| policy::NOT_FOUND.to_owned(), |p| p.display().to_string());
+            .map_or_else(
+                || policy::NOT_FOUND.to_owned(),
+                |p| {
+                    if p.starts_with(&self.root) {
+                        let content = std::fs::read(&p).unwrap_or_default();
+                        format!(
+                            "{} (sha256 {})",
+                            p.display(),
+                            crate::integrity::sha256_hex(&content)
+                        )
+                    } else {
+                        p.display().to_string()
+                    }
+                },
+            );
         Ok(Object::command(
             argv.to_vec(),
             if rel.is_empty() { ".".to_owned() } else { rel },

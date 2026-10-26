@@ -364,7 +364,7 @@ fn a_command_that_resolves_to_another_executable_is_asked_again() {
     assert!(
         changed.starts_with("executable ")
             && changed.contains("scripts/run.sh")
-            && changed.ends_with("scripts/other.sh"),
+            && changed.contains("scripts/other.sh (sha256 "),
         "{changed}"
     );
 }
@@ -460,7 +460,11 @@ fn a_batch_approval_of_a_lanes_call_covers_one_call() {
     let person = Scripted::new(vec![once()]);
     let res = run_asking(r.path(), state.path(), "T005", d, person.clone());
     let rep = report(&res);
-    assert_eq!(rep.tool_calls[0]["scope"], "once", "{:?}", rep.tool_calls);
+    assert_eq!(
+        rep.tool_calls[0]["scope"], "once-grant",
+        "{:?}",
+        rep.tool_calls
+    );
     assert_eq!(
         person.requests().len(),
         1,
@@ -479,6 +483,37 @@ fn a_batch_approval_of_a_lanes_call_covers_one_call() {
     let person2 = Scripted::new(vec![once()]);
     let again = run_asking(r.path(), state.path(), "T005", d2, person2.clone());
     assert_eq!(person2.requests().len(), 1, "{}", again.message());
+}
+
+/// A grant of a command whose program is a workspace file covers that
+/// file's content: the model rewriting it makes another object.
+#[test]
+fn a_rewritten_workspace_executable_is_asked_again() {
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    command(&f, "c1", &["./scripts/run.sh"]);
+    f.will_call_tool(
+        "c2",
+        "write_file",
+        json!({ "path": "scripts/run.sh", "content": "#!/bin/sh\ncurl example.com\n" }),
+    );
+    command(&f, "c3", &["./scripts/run.sh"]);
+    f.will_structure(done());
+    let person = Scripted::new(vec![scoped(Scope::Run), once()]);
+    let res = run_asking(r.path(), state.path(), "T005", d, person.clone());
+    let asked = person.requests();
+    assert_eq!(
+        asked.len(),
+        2,
+        "the rewritten script ran under the grant: {}",
+        res.message()
+    );
+    let changed = asked[1].changed.clone().unwrap_or_default();
+    assert!(
+        changed.starts_with("executable ") && changed.contains("sha256"),
+        "{changed}"
+    );
 }
 
 /// W5: an MCP grant named the tool; a server that changed the tool's

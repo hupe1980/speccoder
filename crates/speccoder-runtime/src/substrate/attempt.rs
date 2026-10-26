@@ -1257,7 +1257,7 @@ pub(crate) async fn tool_loop(
                 once.remove(at);
                 person = Some(json!({
                     "approved_by": "person",
-                    "scope": "once",
+                    "scope": "once-grant",
                     "grant": { "scope": "once", "run": run },
                 }));
                 decision = Decision::Allow;

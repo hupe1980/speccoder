@@ -469,12 +469,13 @@ impl Sandboxed {
 /// The executable `program` runs as in `cwd` with `env`: a program with a
 /// `/` against `cwd`, else the first file of that name on `PATH` (relative
 /// `PATH` entries against `cwd` too) — canonicalised; `None` when there is
-/// none. What a command's approval names, and what it is checked against
-/// again when it runs.
+/// none. A file without an execute bit is skipped, as `execvp` skips it:
+/// the executable named is the one that runs. What a command's approval
+/// names, and what it is checked against again when it runs.
 #[must_use]
 pub fn resolve_executable(program: &str, cwd: &Path, env: &[(String, String)]) -> Option<PathBuf> {
     let candidate = |p: PathBuf| {
-        p.is_file()
+        executable_file(&p)
             .then(|| std::fs::canonicalize(&p).ok())
             .flatten()
     };
@@ -492,6 +493,19 @@ pub fn resolve_executable(program: &str, cwd: &Path, env: &[(String, String)]) -
         .split(':')
         .filter(|d| !d.is_empty())
         .find_map(|d| candidate(cwd.join(d).join(program)))
+}
+
+/// A regular file (through symlinks) that someone may execute.
+fn executable_file(p: &Path) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        std::fs::metadata(p).is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
+    }
+    #[cfg(not(unix))]
+    {
+        p.is_file()
+    }
 }
 
 /// Whether `program` names an executable file, directly or on `PATH`.
@@ -1059,6 +1073,17 @@ mod tests {
         );
         assert_eq!(resolve_executable("nope", &root, &env(&usr)), None);
         assert!(!resolvable("nope", &root, &env(&usr)));
+        // A file without an execute bit is skipped, as execvp skips it.
+        std::fs::set_permissions(
+            root.join("bin/make"),
+            std::fs::Permissions::from_mode(0o644),
+        )
+        .unwrap();
+        assert_eq!(
+            resolve_executable("make", &root, &env(&format!("bin:{usr}"))),
+            Some(root.join("usr/make"))
+        );
+        assert_eq!(resolve_executable("./bin/make", &root, &env("")), None);
     }
 
     #[test]
