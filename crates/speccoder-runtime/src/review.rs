@@ -415,9 +415,7 @@ fn report_of(u: &Unit, full: bool) -> ReviewReport {
     } else {
         (
             Vec::new(),
-            Some(
-                "Tests for this unit are written and confirmed by its own pipeline".to_owned(),
-            ),
+            Some("Tests for this unit are written and confirmed by its own pipeline".to_owned()),
         )
     };
     let mut totals = totals;
@@ -425,7 +423,8 @@ fn report_of(u: &Unit, full: bool) -> ReviewReport {
         .iter()
         .filter(|v| v.open_ambiguities().next().is_some())
         .count();
-    let sheet = full.then(|| sheet(u, &items, &open, &oracle));
+    // The approve sheet is the view's (`report`), never a decision's result.
+    let sheet = None;
     ReviewReport {
         feature: u.feature.clone(),
         file: u.rel(),
@@ -460,7 +459,9 @@ fn autopilot_blocked(root: &Path) -> Option<String> {
     let text = crate::verify::find_config(root)
         .and_then(|d| std::fs::read_to_string(d.join(crate::verify::config::FILE)).ok())
         .unwrap_or_default();
-    let mode = crate::sandbox::parse(&text).map(|c| c.mode).unwrap_or(crate::sandbox::Mode::Auto);
+    let mode = crate::sandbox::parse(&text)
+        .map(|c| c.mode)
+        .unwrap_or(crate::sandbox::Mode::Auto);
     if mode == crate::sandbox::Mode::Off {
         return Some("autopilot needs the OS sandbox ([sandbox] mode = \"off\")".to_owned());
     }
@@ -609,7 +610,8 @@ pub fn report_in(path: &Path, feature: Option<&str>, state: Option<&Path>) -> Co
         Ok(u) => u,
         Err(r) => return *r,
     };
-    let r = report_of(&u, true);
+    let mut r = report_of(&u, true);
+    r.sheet = Some(sheet(&u, &r.requirements, &r.questions, &r.oracle));
     CommandResult::new("review", CommandStatus::Ok, &message(&r))
         .with_data(CommandData::Review(Box::new(r)))
 }
@@ -830,7 +832,9 @@ pub fn approval_digest<'a>(
     frozen.sort();
     format!(
         "sha256:{}",
-        crate::integrity::sha256_hex(format!("{}\n{}", lines.join("\n"), frozen.join("\n")).as_bytes())
+        crate::integrity::sha256_hex(
+            format!("{}\n{}", lines.join("\n"), frozen.join("\n")).as_bytes()
+        )
     )
 }
 
@@ -865,14 +869,16 @@ pub fn approve_and_run(
         )
         .with_code("NO-STATE-DIR");
     };
-    let refuse = |status, code: &str, m: String| {
-        CommandResult::new("review", status, &m).with_code(code)
-    };
+    let refuse =
+        |status, code: &str, m: String| CommandResult::new("review", status, &m).with_code(code);
     if run_active(&u) {
         return refuse(
             CommandStatus::GitPrecondition,
             "RUN-ACTIVE",
-            format!("a run is active for {}: approve and run when it ends", u.feature),
+            format!(
+                "a run is active for {}: approve and run when it ends",
+                u.feature
+            ),
         );
     }
     let open = questions(&u);

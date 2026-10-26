@@ -1,0 +1,336 @@
+{
+  "$defs": {
+    "CommentAnchor": {
+      "description": "What an anchored comment points at.",
+      "oneOf": [
+        {
+          "description": "A passage of a feature document.",
+          "properties": {
+            "end_line": {
+              "description": "Last line.",
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "kind": {
+              "const": "passage",
+              "type": "string"
+            },
+            "path": {
+              "description": "Project-relative path.",
+              "type": "string"
+            },
+            "quote": {
+              "description": "The words selected.",
+              "type": "string"
+            },
+            "quote_sha256": {
+              "default": "",
+              "description": "`sha256:<hex>` of the quote (filled when the draft is stored).",
+              "type": "string"
+            },
+            "section": {
+              "default": "",
+              "description": "Its section's heading path (`Requirements › Functional`).",
+              "type": "string"
+            },
+            "start_line": {
+              "description": "First line (1-based).",
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "path",
+            "start_line",
+            "end_line",
+            "quote",
+            "quote_sha256",
+            "section"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A line of the spec's changes since the last commit.",
+          "properties": {
+            "kind": {
+              "const": "diff_line",
+              "type": "string"
+            },
+            "line": {
+              "description": "The line (1-based) on that side.",
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "path": {
+              "description": "Project-relative path.",
+              "type": "string"
+            },
+            "quote": {
+              "description": "The line's text.",
+              "type": "string"
+            },
+            "side": {
+              "description": "`old` or `new`.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "path",
+            "side",
+            "line",
+            "quote"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A line of a shown visible test.",
+          "properties": {
+            "kind": {
+              "const": "test_line",
+              "type": "string"
+            },
+            "line": {
+              "description": "The line (1-based).",
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "path": {
+              "description": "The test's path.",
+              "type": "string"
+            },
+            "quote": {
+              "description": "The line's text.",
+              "type": "string"
+            },
+            "req": {
+              "description": "The requirement.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "req",
+            "path",
+            "line",
+            "quote"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A finding the review shows.",
+          "properties": {
+            "id": {
+              "description": "Its id.",
+              "type": "string"
+            },
+            "kind": {
+              "const": "finding",
+              "type": "string"
+            },
+            "source": {
+              "description": "`analyze` or `review`.",
+              "type": "string"
+            },
+            "text": {
+              "description": "Its text.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "source",
+            "id",
+            "text"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "CommentDraft": {
+      "description": "One comment in the tray.",
+      "properties": {
+        "anchor": {
+          "$ref": "#/$defs/CommentAnchor",
+          "description": "What it is about."
+        },
+        "at": {
+          "description": "Unix seconds.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "by": {
+          "description": "Who.",
+          "type": "string"
+        },
+        "id": {
+          "description": "`c1`, `c2`, …",
+          "type": "string"
+        },
+        "kept": {
+          "default": false,
+          "description": "The person kept it although its quote moved.",
+          "type": "boolean"
+        },
+        "state": {
+          "$ref": "#/$defs/DraftState",
+          "description": "Where it is."
+        },
+        "text": {
+          "description": "The person's words.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "anchor",
+        "text",
+        "by",
+        "at",
+        "state",
+        "kept"
+      ],
+      "type": "object"
+    },
+    "DraftState": {
+      "description": "Where a draft comment is.",
+      "oneOf": [
+        {
+          "const": "draft",
+          "description": "In the tray.",
+          "type": "string"
+        },
+        {
+          "const": "outdated",
+          "description": "Its quote is no longer where it was anchored: sent only if kept.",
+          "type": "string"
+        },
+        {
+          "const": "sent",
+          "description": "Sent in a revision turn.",
+          "type": "string"
+        }
+      ]
+    },
+    "RevisionView": {
+      "description": "What a revision turn did.",
+      "properties": {
+        "asked_again": {
+          "default": [],
+          "description": "Requirements whose tests were asked again from test comments.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "changed": {
+          "description": "Sections it changed.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "comments": {
+          "description": "The comments it was sent with.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "files": {
+          "description": "Files it changed (project-relative).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "id": {
+          "description": "`t1`, `t2`, …",
+          "type": "string"
+        },
+        "outcome": {
+          "description": "`pending` (the person keeps or undoes it), `kept`, `undone`.",
+          "type": "string"
+        },
+        "outside": {
+          "description": "Of those, the ones no comment touched.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "sections": {
+          "description": "The sections they touch.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "skill": {
+          "description": "The format's revising skill.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "comments",
+        "sections",
+        "skill",
+        "changed",
+        "outside",
+        "outcome",
+        "files",
+        "asked_again"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/comments.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Result of `speccoder review comments`: the tray and the last turn.",
+  "properties": {
+    "drafts": {
+      "description": "Every draft not yet sent, in order.",
+      "items": {
+        "$ref": "#/$defs/CommentDraft"
+      },
+      "type": "array"
+    },
+    "feature": {
+      "description": "The feature.",
+      "type": "string"
+    },
+    "revise_with": {
+      "description": "The skill a send runs (`speckit-clarify`), when the format has one.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "turn": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RevisionView"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "The last revision turn."
+    }
+  },
+  "required": [
+    "feature",
+    "drafts",
+    "turn",
+    "revise_with"
+  ],
+  "title": "review comments: the comment tray and the last revision turn",
+  "type": "object"
+}

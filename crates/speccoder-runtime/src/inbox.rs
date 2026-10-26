@@ -137,10 +137,7 @@ fn counted(kind: &str, n: usize) -> String {
         ),
         "question" => ("open question", "open questions"),
         "ambiguous" => ("scenario read two ways", "scenarios read two ways"),
-        "autopilot_denied" => (
-            "call autopilot refused",
-            "calls autopilot refused",
-        ),
+        "autopilot_denied" => ("call autopilot refused", "calls autopilot refused"),
         "review" => ("spec to review", "specs to review"),
         "revise" => ("change request", "change requests"),
         "stuck" => ("task that did not pass", "tasks that did not pass"),
@@ -640,7 +637,9 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
                 "review",
                 "reading A is meant",
                 "the first author's tests stay",
-                flag(format!("speccoder review tests {req} --reading A {scenario}")),
+                flag(format!(
+                    "speccoder review tests {req} --reading A {scenario}"
+                )),
             );
             a = a.with_run(Runnable::OracleTests {
                 req: req.clone(),
@@ -653,7 +652,9 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
                 "review",
                 "reading B is meant",
                 "its tests are written again with that reading",
-                flag(format!("speccoder review tests {req} --reading B {scenario}")),
+                flag(format!(
+                    "speccoder review tests {req} --reading B {scenario}"
+                )),
             );
             b = b.with_run(Runnable::OracleTests {
                 req: req.clone(),

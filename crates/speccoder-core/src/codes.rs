@@ -193,7 +193,10 @@ pub const CATALOG: &[Entry] = &[
         S::UsageError,
         "the requirement has no scenarios to write tests from",
         "Tests are written at review per requirement from its acceptance scenarios. The requirement named has none (or the format yields no requirement by that key), so there is nothing to derive a test from.",
-        ["speccoder review", "→ add acceptance scenarios to the requirement"]
+        [
+            "speccoder review",
+            "→ add acceptance scenarios to the requirement"
+        ]
     ),
     entry!(
         "REVIEW-TESTS-OWN-PIPELINE",
@@ -236,7 +239,7 @@ pub const CATALOG: &[Entry] = &[
         S::GitPrecondition,
         "a run is active for this project",
         "*Approve and Run* starts a feature run; one is running already (in a terminal or the web app). Approving now would start a second run beside it.",
-        ["speccoder status", "→ wait for the run to end, or stop it"]
+        ["speccoder report", "→ wait for the run to end, or stop it"]
     ),
     entry!(
         "AUTOPILOT-NEEDS-GRANT-OBJECTS",

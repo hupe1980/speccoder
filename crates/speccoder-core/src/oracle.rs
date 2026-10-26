@@ -374,7 +374,7 @@ pub struct AutopilotDenial {
 /// What an anchored comment points at.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case")]
-pub enum Anchor {
+pub enum CommentAnchor {
     /// A passage of a feature document.
     Passage {
         /// Project-relative path.
@@ -425,7 +425,7 @@ pub enum Anchor {
     },
 }
 
-impl Anchor {
+impl CommentAnchor {
     /// The quote the comment is about.
     #[must_use]
     pub fn quote(&self) -> &str {
@@ -482,7 +482,7 @@ pub struct CommentDraft {
     /// `c1`, `c2`, …
     pub id: String,
     /// What it is about.
-    pub anchor: Anchor,
+    pub anchor: CommentAnchor,
     /// The person's words.
     pub text: String,
     /// Who.
@@ -637,7 +637,10 @@ mod tests {
 
     #[test]
     fn the_same_given_with_another_outcome_is_ambiguous() {
-        let a = [e("US1-1", "name Ada", "Hello, Ada!"), e("US1-2", "\"\"", "Hello!")];
+        let a = [
+            e("US1-1", "name Ada", "Hello, Ada!"),
+            e("US1-2", "\"\"", "Hello!"),
+        ];
         let b = [
             e("US1-1", " Name   ada ", "hello, ada!"),
             e("US1-2", "\"\"", "an error"),
@@ -734,6 +737,9 @@ mod tests {
             quote: "  let x = 1;".to_owned(),
             text: " use a constant ".to_owned(),
         };
-        assert_eq!(line.nudge_line(), "src/a.rs:12 \"let x = 1;\" — use a constant");
+        assert_eq!(
+            line.nudge_line(),
+            "src/a.rs:12 \"let x = 1;\" — use a constant"
+        );
     }
 }

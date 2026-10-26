@@ -1480,7 +1480,10 @@ mod tests {
             p.settle(p.classify("run_command", &cmd("cargo add x"), None)),
             Decision::Deny(AUTOPILOT_DENIED.to_owned())
         );
-        assert_eq!(p.rule("run_command", &cmd("cargo add x"), None), "autopilot");
+        assert_eq!(
+            p.rule("run_command", &cmd("cargo add x"), None),
+            "autopilot"
+        );
         assert!(matches!(
             p.settle(p.classify("run_command", &cmd("git push origin"), None)),
             Decision::Deny(r) if r != AUTOPILOT_DENIED

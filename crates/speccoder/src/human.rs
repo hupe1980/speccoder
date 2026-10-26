@@ -1641,7 +1641,10 @@ pub fn oracle(r: &speccoder_core::ReviewReport, look: &crate::style::Look) -> Ve
                         .unwrap_or_default()
                 ),
             ),
-            S::Lapsed => (Glyph::Attention, "lapsed — frozen on an earlier wording".to_owned()),
+            S::Lapsed => (
+                Glyph::Attention,
+                "lapsed — frozen on an earlier wording".to_owned(),
+            ),
             S::FrozenElsewhere => (
                 Glyph::Ready,
                 "frozen on another machine — the run writes tests anew here".to_owned(),
@@ -1682,7 +1685,11 @@ pub fn oracle(r: &speccoder_core::ReviewReport, look: &crate::style::Look) -> Ve
         for d in &v.discarded {
             out.push(look.paint(
                 Token::Muted,
-                &format!("            discarded {} — {}", d.path, d.why.replace('_', " ")),
+                &format!(
+                    "            discarded {} — {}",
+                    d.path,
+                    d.why.replace('_', " ")
+                ),
             ));
         }
         if v.state != S::None || !v.tests.is_empty() {
@@ -1691,9 +1698,10 @@ pub fn oracle(r: &speccoder_core::ReviewReport, look: &crate::style::Look) -> Ve
                 "off" => "Held out: off".to_owned(),
                 _ => "Held out: 0".to_owned(),
             };
-            let target = v
-                .strength_target
-                .map_or_else(|| "Strength target: none set".to_owned(), |t| format!("Strength target: {t}%"));
+            let target = v.strength_target.map_or_else(
+                || "Strength target: none set".to_owned(),
+                |t| format!("Strength target: {t}%"),
+            );
             let covered = v.scenarios.len() - v.uncovered.len().min(v.scenarios.len());
             out.push(look.paint(
                 Token::Muted,
@@ -1710,7 +1718,11 @@ pub fn oracle(r: &speccoder_core::ReviewReport, look: &crate::style::Look) -> Ve
                     v.req,
                     v.calls,
                     if v.calls == 1 { "" } else { "s" },
-                    if v.ambiguity_check { "" } else { " · ambiguity check off" }
+                    if v.ambiguity_check {
+                        ""
+                    } else {
+                        " · ambiguity check off"
+                    }
                 ),
             ));
         }
@@ -1723,7 +1735,10 @@ pub fn oracle(r: &speccoder_core::ReviewReport, look: &crate::style::Look) -> Ve
 
 /// `review comments`: the tray, then the last revision turn.
 #[must_use]
-pub fn comments(c: &speccoder_core::oracle::CommentsView, look: &crate::style::Look) -> Vec<String> {
+pub fn comments(
+    c: &speccoder_core::oracle::CommentsView,
+    look: &crate::style::Look,
+) -> Vec<String> {
     use crate::style::Token;
     let mut out = Vec::new();
     for d in &c.drafts {

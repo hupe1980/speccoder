@@ -667,7 +667,7 @@
           "title": "Convergence"
         },
         {
-          "about": "Whether a run waits for every requirement to be approved.",
+          "about": "Whether a run waits for every requirement to be approved, and how tests are written at review.",
           "keys": [
             {
               "about": "A run waits until every requirement is approved on its current wording",
@@ -677,6 +677,17 @@
               "kind": "bool",
               "max": null,
               "min": null,
+              "required": false,
+              "value": null
+            },
+            {
+              "about": "Independent author calls Write Tests makes; two are compared for ambiguity",
+              "choices": [],
+              "default": 2,
+              "key": "oracle_samples",
+              "kind": "integer",
+              "max": 2.0,
+              "min": 1.0,
               "required": false,
               "value": null
             }

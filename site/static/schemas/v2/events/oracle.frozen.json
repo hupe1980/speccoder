@@ -1,0 +1,55 @@
+{
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/events/oracle.frozen.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "`oracle.frozen`, as published: digests and counts, never a test.",
+  "properties": {
+    "approval_sha256": {
+      "description": "The approval's digest.",
+      "type": "string"
+    },
+    "by": {
+      "description": "Who.",
+      "type": "string"
+    },
+    "held_out_count": {
+      "description": "Held-out tests sealed with them.",
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "manifest_sha256": {
+      "description": "The visible set's manifest digest.",
+      "type": "string"
+    },
+    "requirement": {
+      "description": "The requirement.",
+      "type": "string"
+    },
+    "unit": {
+      "description": "The unit.",
+      "type": "string"
+    },
+    "via": {
+      "description": "Through what.",
+      "type": "string"
+    },
+    "visible_count": {
+      "description": "Visible tests frozen.",
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "unit",
+    "requirement",
+    "manifest_sha256",
+    "approval_sha256",
+    "visible_count",
+    "held_out_count",
+    "by",
+    "via"
+  ],
+  "title": "a domain event's public projection: ids, digests and counts",
+  "type": "object"
+}

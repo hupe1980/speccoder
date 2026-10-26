@@ -147,6 +147,41 @@
       ],
       "type": "object"
     },
+    "AutopilotDenial": {
+      "description": "One call an autopilot run refused instead of asking.",
+      "properties": {
+        "class": {
+          "description": "`write`, `command`, `network`, `mcp` (empty: none resolved).",
+          "type": "string"
+        },
+        "object": {
+          "description": "What it reached (`src/a.rs`, `cargo add x`).",
+          "type": "string"
+        },
+        "reason": {
+          "description": "`autopilot: not asked — listed for you`.",
+          "type": "string"
+        },
+        "task": {
+          "description": "The task.",
+          "type": "string"
+        },
+        "turn": {
+          "description": "The model turn.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "task",
+        "turn",
+        "class",
+        "object",
+        "reason"
+      ],
+      "type": "object"
+    },
     "Basis": {
       "description": "How the person decided the reproductions.",
       "oneOf": [
@@ -1916,6 +1951,21 @@
       ],
       "type": "object"
     },
+    "RunMode": {
+      "description": "How a run started from the review asks for a person.",
+      "oneOf": [
+        {
+          "const": "ask",
+          "description": "*Ask on Risky Calls*: a call the policy asks about is asked inline,\nas a run from the interface does.",
+          "type": "string"
+        },
+        {
+          "const": "autopilot",
+          "description": "*Autopilot*: nothing asks; a call the policy would ask about and no\nticked grant covers is refused for the run and listed afterwards.",
+          "type": "string"
+        }
+      ]
+    },
     "RunReport": {
       "description": "Result of `speccoder run`.",
       "properties": {
@@ -2605,6 +2655,13 @@
       },
       "type": "array"
     },
+    "autopilot_denied": {
+      "description": "The calls an autopilot run refused instead of asking: listed for\nthe person.",
+      "items": {
+        "$ref": "#/$defs/AutopilotDenial"
+      },
+      "type": "array"
+    },
     "converge": {
       "description": "Convergence rounds between task runs (`run --converge`), in order.",
       "items": {
@@ -2634,6 +2691,11 @@
       },
       "type": "array"
     },
+    "mode": {
+      "$ref": "#/$defs/RunMode",
+      "default": "ask",
+      "description": "How the run asked for a person: `ask` or `autopilot`."
+    },
     "parallel": {
       "description": "What parallel groups did: merged, conflicts, re-verification.",
       "items": {
@@ -2652,7 +2714,8 @@
     "stop",
     "converge",
     "hooks",
-    "parallel"
+    "parallel",
+    "mode"
   ],
   "title": "run: a feature run's attempts",
   "type": "object"

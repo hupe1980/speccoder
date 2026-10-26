@@ -99,6 +99,11 @@ fn http(port: u16, method: &str, path: &str, auth: &str, body: &str) -> (u16, St
 fn cases() -> Vec<(&'static str, Value, Value)> {
     vec![
         (
+            "approve-and-run-question",
+            json!({ "kind": "approve_and_run", "mode": "ask", "grants": [] }),
+            Value::Null,
+        ),
+        (
             "skill-input",
             json!({ "kind": "skill", "name": "specify", "arguments": "" }),
             json!("a login page"),
@@ -209,6 +214,31 @@ fn cases() -> Vec<(&'static str, Value, Value)> {
             "feature-name",
             json!({ "kind": "feature" }),
             json!("001-graph"),
+        ),
+        (
+            "oracle-tests-acceptance-off",
+            json!({ "kind": "oracle_tests", "req": "US1", "op": "write", "path": null, "scenario": null, "reading": null }),
+            Value::Null,
+        ),
+        (
+            "comment-delete-none",
+            json!({ "kind": "comment", "op": "delete", "anchor": null, "id": "c9" }),
+            Value::Null,
+        ),
+        (
+            "comments-send-none",
+            json!({ "kind": "comments_send", "ids": [] }),
+            Value::Null,
+        ),
+        (
+            "revision-undo-none",
+            json!({ "kind": "revision_undo", "turn": null }),
+            Value::Null,
+        ),
+        (
+            "code-nudge-note",
+            json!({ "kind": "code_nudge", "task": "T008", "comments": [{ "path": "src/lib.rs", "line": 1, "quote": "pub fn ok() {}", "text": "name it" }] }),
+            Value::Null,
         ),
         (
             "quick-change-recorded",

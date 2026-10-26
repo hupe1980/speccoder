@@ -208,7 +208,7 @@ pub enum Runnable {
         /// What to do.
         op: CommentOp,
         /// What a new comment is about.
-        anchor: Option<crate::oracle::Anchor>,
+        anchor: Option<crate::oracle::CommentAnchor>,
         /// The draft (delete, keep).
         id: Option<String>,
     },

@@ -322,7 +322,7 @@ project's own language and test framework, exactly as the spec states them — d
 the spec does not state, and do not weaken an example. Put them in NEW files under the project's test \
 directory — paths that are not in the project's file list; name them after the requirement (for Rust: \
 tests/acceptance_<requirement>.rs, using the crate name from Cargo.toml) — and give the command that runs \
-only these tests (for Rust: cargo test --test <name>). Every file MUST cite the IDs of the scenarios it \
+only these tests (for Rust: cargo test --test <name>), and per file the command that runs only that file. Every file MUST cite the IDs of the scenarios it \
 tests, from the list given; a file citing none is discarded. State, per scenario you cover, the given and \
 the expected outcome you assert, in the spec's terms (`expectations`); list every scenario you cannot \
 test, with why (`untestable`). The tests must fail now and pass once the requirement is implemented. An \
@@ -349,8 +349,9 @@ pub fn review_schema() -> Value {
                         "path": { "type": "string" },
                         "content": { "type": "string" },
                         "scenarios": { "type": "array", "items": { "type": "string" } },
+                        "argv": { "type": "array", "items": { "type": "string" } },
                     },
-                    "required": ["path", "content", "scenarios"],
+                    "required": ["path", "content", "scenarios", "argv"],
                     "additionalProperties": false,
                 },
             },

@@ -274,7 +274,9 @@ pub fn load_frozen(project_state: &Path, unit: &str, key: &str) -> Option<Frozen
 /// The manifest digest of a visible set: `sha256` over its sorted
 /// `path=sha256 argv=[…]` lines — what `review.json` and the tick name.
 #[must_use]
-pub fn manifest_digest<'a>(tests: impl IntoIterator<Item = (&'a str, &'a str, &'a [String])>) -> String {
+pub fn manifest_digest<'a>(
+    tests: impl IntoIterator<Item = (&'a str, &'a str, &'a [String])>,
+) -> String {
     let mut lines: Vec<String> = tests
         .into_iter()
         .map(|(path, sha, argv)| {
@@ -432,7 +434,11 @@ pub fn view(
                 .map(|(_, c)| c.as_str())
                 .unwrap_or_default()
         };
-        v.tests = d.tests.iter().map(|t| test_view(t, content(&t.path))).collect();
+        v.tests = d
+            .tests
+            .iter()
+            .map(|t| test_view(t, content(&t.path)))
+            .collect();
         v.discarded.clone_from(&d.discarded);
         v.rejected.clone_from(&d.rejected);
         v.untestable.clone_from(&d.untestable.sample1);
@@ -592,9 +598,10 @@ fn open(path: &Path, feature: Option<&str>, state: &Path) -> Result<Ctx, Box<Com
         ))
     })?;
     let format = crate::format::of(&snapshot);
-    let policy = tools::policy::Policy::new(&crate::verify::check_argvs(&config_root), &config.allow)
-        .with_prefixes(config.allow_prefix.clone())
-        .rules(format.rules());
+    let policy =
+        tools::policy::Policy::new(&crate::verify::check_argvs(&config_root), &config.allow)
+            .with_prefixes(config.allow_prefix.clone())
+            .rules(format.rules());
     let model = substrate::model_config::parse(&text).ok().flatten();
     Ok(Ctx {
         feature: f.feature.name.clone(),
@@ -663,6 +670,9 @@ pub fn tests(
         Ok(c) => c,
         Err(r) => return *r,
     };
+    if let Err(r) = check(&ctx, request) {
+        return *r;
+    }
     let Some(model) = ctx.model.as_ref() else {
         return refuse(
             CommandStatus::ConfigError,
@@ -671,7 +681,9 @@ pub fn tests(
         );
     };
     match substrate::model_config::open_driver(model) {
-        Ok((provider, _)) => tests_with(path, feature, request, via, &state, Some(provider), options),
+        Ok((provider, _)) => {
+            tests_with(path, feature, request, via, &state, Some(provider), options)
+        }
         Err(e) => substrate::model_config::refused("review", &e),
     }
 }
@@ -691,35 +703,60 @@ pub fn tests_with(
         Ok(c) => c,
         Err(r) => return *r,
     };
+    let req = match check(&ctx, request) {
+        Ok(r) => r,
+        Err(r) => return *r,
+    };
+    let who = crate::approvals::Who::local_in(&ctx.root, via);
+    let done = match request.op {
+        OracleOp::Write => write(&ctx, &req, provider, options),
+        OracleOp::Reject => reject(&ctx, &req, request, &who.name),
+        OracleOp::Again => again(&ctx, &req, request, &who.name, provider, options),
+        OracleOp::Edit => edit(&ctx, &req, request, &who.name),
+        OracleOp::Reading => reading(&ctx, &req, request, &who.name, provider, options),
+    };
+    match done {
+        Ok(message) => {
+            let r = crate::review::report_in(path, feature, Some(state));
+            let status = r.status();
+            r.reworded(status, &message)
+        }
+        Err(r) => *r,
+    }
+}
+
+/// What refuses an oracle action before anything runs: the unit's rung,
+/// acceptance off, an unknown requirement or one without scenarios.
+fn check(ctx: &Ctx, request: &Request<'_>) -> Result<OracleRequirement, Box<CommandResult>> {
     let unit_rung = rung(ctx.format, &ctx.root, &ctx.feature);
     if unit_rung != Rung::Feature {
-        return refuse(
-            CommandStatus::UsageError,
-            "REVIEW-TESTS-OWN-PIPELINE",
-            &format!(
-                "{} is a {} unit: its tests are written and confirmed by its own pipeline",
-                ctx.feature,
-                if unit_rung == Rung::Quick {
-                    "quick-change"
-                } else {
-                    "bug"
-                }
-            ),
-        )
-        .with_fix(vec![
-            if unit_rung == Rung::Quick {
+        return Err(Box::new(
+            refuse(
+                CommandStatus::UsageError,
+                "REVIEW-TESTS-OWN-PIPELINE",
+                &format!(
+                    "{} is a {} unit: its tests are written and confirmed by its own pipeline",
+                    ctx.feature,
+                    if unit_rung == Rung::Quick {
+                        "quick-change"
+                    } else {
+                        "bug"
+                    }
+                ),
+            )
+            .with_fix(vec![if unit_rung == Rung::Quick {
                 "speccoder do \"…\"".to_owned()
             } else {
                 format!("speccoder bug confirm {}/<task>", ctx.feature)
-            },
-        ]);
+            }]),
+        ));
     }
     if !ctx.config.acceptance {
-        return refuse(
+        return Err(Box::new(refuse(
             CommandStatus::ConfigError,
             "ACCEPTANCE-OFF",
             "acceptance tests are off ([acceptance] generate = false): no tests are written at review",
-        );
+        )));
     }
     let requirements = ctx.format.oracle_requirements(&ctx.snapshot);
     let Some(req) = requirements
@@ -727,7 +764,7 @@ pub fn tests_with(
         .find(|r| r.key.eq_ignore_ascii_case(request.req))
         .cloned()
     else {
-        return refuse(
+        return Err(Box::new(refuse(
             CommandStatus::UsageError,
             "REVIEW-NO-SCENARIOS",
             &format!(
@@ -743,31 +780,19 @@ pub fn tests_with(
                         .join(", ")
                 }
             ),
-        );
+        )));
     };
     if req.scenarios.is_empty() {
-        return refuse(
+        return Err(Box::new(refuse(
             CommandStatus::UsageError,
             "REVIEW-NO-SCENARIOS",
-            &format!("{} has no acceptance scenarios to write tests from", req.key),
-        );
+            &format!(
+                "{} has no acceptance scenarios to write tests from",
+                req.key
+            ),
+        )));
     }
-    let who = crate::approvals::Who::local_in(&ctx.root, via);
-    let done = match request.op {
-        OracleOp::Write => write(&ctx, &req, provider, options),
-        OracleOp::Reject => reject(&ctx, &req, request, &who.name),
-        OracleOp::Again => again(&ctx, &req, request, &who.name, provider, options),
-        OracleOp::Edit => edit(&ctx, &req, request, &who.name),
-        OracleOp::Reading => reading(&ctx, &req, request, &who.name, provider, options),
-    };
-    match done {
-        Ok(message) => {
-            let r = crate::review::report(path, feature);
-            let status = r.status();
-            r.reworded(status, &message)
-        }
-        Err(r) => *r,
-    }
+    Ok(req)
 }
 
 type Outcome = Result<String, Box<CommandResult>>;
@@ -784,7 +809,10 @@ fn usage(message: &str) -> Box<CommandResult> {
     Box::new(refuse(CommandStatus::UsageError, "USAGE", message))
 }
 
-fn existing(ctx: &Ctx, req: &OracleRequirement) -> Result<(Draft, Vec<(String, String)>), Box<CommandResult>> {
+fn existing(
+    ctx: &Ctx,
+    req: &OracleRequirement,
+) -> Result<(Draft, Vec<(String, String)>), Box<CommandResult>> {
     match load(&ctx.plane_dir, &ctx.feature, &req.key) {
         Ok(Some((d, c))) if d.requirement.sha256 == req.digest() => Ok((d, c)),
         Ok(Some(_)) => Err(usage(&format!(
@@ -859,12 +887,8 @@ impl<'a> Author<'a> {
             },
             "dependencies": [],
         });
-        let instructions = crate::instructions::collect(
-            &ctx.root,
-            &ctx.root,
-            &[],
-            &ctx.config.instructions,
-        );
+        let instructions =
+            crate::instructions::collect(&ctx.root, &ctx.root, &[], &ctx.config.instructions);
         Ok(Self {
             ctx,
             rt,
@@ -875,9 +899,18 @@ impl<'a> Author<'a> {
     }
 
     /// The parts a call is handed, as its context manifest lists them.
-    fn context(&self, req: &OracleRequirement, notes: &[String]) -> speccoder_core::context::ContextManifest {
+    fn context(
+        &self,
+        req: &OracleRequirement,
+        notes: &[String],
+    ) -> speccoder_core::context::ContextManifest {
         let mut m = crate::context::Manifest::new();
-        m.push(ContextKind::Story, "person", "/requirement", req.text.as_bytes());
+        m.push(
+            ContextKind::Story,
+            "person",
+            "/requirement",
+            req.text.as_bytes(),
+        );
         for s in &req.scenarios {
             m.push(
                 ContextKind::Scenario,
@@ -890,7 +923,10 @@ impl<'a> Author<'a> {
             ContextKind::Constitution,
             "worktree",
             "/bundle/constitution",
-            self.bundle["constitution"].as_str().unwrap_or_default().as_bytes(),
+            self.bundle["constitution"]
+                .as_str()
+                .unwrap_or_default()
+                .as_bytes(),
         );
         m.push(
             ContextKind::Plan,
@@ -946,10 +982,16 @@ impl<'a> Author<'a> {
             .map(|o| o.peek().clone())
             .unwrap_or_default();
         let answer = output["answer"].clone();
-        if !matches!(outcome.status, agentplane::prelude::RunStatus::Succeeded) || answer.is_null() {
+        if !matches!(outcome.status, agentplane::prelude::RunStatus::Succeeded) || answer.is_null()
+        {
             let status = format!("{:?}", outcome.status);
             return Err(substrate::provider_refusal(&status).map_or_else(
-                || format!("the test author did not answer: {}", outcome.status.as_str()),
+                || {
+                    format!(
+                        "the test author did not answer: {}",
+                        outcome.status.as_str()
+                    )
+                },
                 |r| format!("the model provider refused the request: {r}"),
             ));
         }
@@ -959,16 +1001,18 @@ impl<'a> Author<'a> {
 
 fn expectations(answer: &Value, req: &OracleRequirement) -> (Vec<Expectation>, Vec<Untestable>) {
     let known = |id: &str| req.scenarios.iter().any(|s| s.id == id);
-    let e: Vec<Expectation> = serde_json::from_value::<Vec<Expectation>>(answer["expectations"].clone())
-        .unwrap_or_default()
-        .into_iter()
-        .filter(|e| known(&e.scenario))
-        .collect();
-    let u: Vec<Untestable> = serde_json::from_value::<Vec<Untestable>>(answer["untestable"].clone())
-        .unwrap_or_default()
-        .into_iter()
-        .filter(|u| known(&u.scenario))
-        .collect();
+    let e: Vec<Expectation> =
+        serde_json::from_value::<Vec<Expectation>>(answer["expectations"].clone())
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|e| known(&e.scenario))
+            .collect();
+    let u: Vec<Untestable> =
+        serde_json::from_value::<Vec<Untestable>>(answer["untestable"].clone())
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|u| known(&u.scenario))
+            .collect();
     (e, u)
 }
 
@@ -1053,7 +1097,10 @@ fn keep(
     answer: &Value,
     req: &OracleRequirement,
     taken: &[String],
-) -> (Vec<(String, String, Vec<String>, Vec<String>)>, Vec<OracleDiscarded>) {
+) -> (
+    Vec<(String, String, Vec<String>, Vec<String>)>,
+    Vec<OracleDiscarded>,
+) {
     let (valid, refused) =
         crate::pipeline::validate_answer(answer, &bench.project, &ctx.policy, &req.scenarios);
     let mut discarded: Vec<OracleDiscarded> = refused
@@ -1180,7 +1227,10 @@ fn write(
             edited_by: None,
         })
         .collect();
-    let contents: Vec<(String, String)> = kept.iter().map(|(p, c, ..)| (p.clone(), c.clone())).collect();
+    let contents: Vec<(String, String)> = kept
+        .iter()
+        .map(|(p, c, ..)| (p.clone(), c.clone()))
+        .collect();
     let (held_out, sealed) = held_out(ctx, &author, &bench, req, &tests, options);
     let draft = Draft {
         requirement: DraftRequirement {
@@ -1322,7 +1372,9 @@ fn reject(ctx: &Ctx, req: &OracleRequirement, r: &Request<'_>, by: &str) -> Outc
         return Err(usage("name the test to reject (--reject PATH)"));
     };
     let Some(reason) = r.text.map(str::trim).filter(|t| !t.is_empty()) else {
-        return Err(usage("a rejection needs a reason: why is this test wrong? (--reason \"…\")"));
+        return Err(usage(
+            "a rejection needs a reason: why is this test wrong? (--reason \"…\")",
+        ));
     };
     let (mut d, contents) = existing(ctx, req)?;
     let Some(at) = d.tests.iter().position(|t| t.path == path) else {
@@ -1464,7 +1516,10 @@ fn rewrite(
         })
         .collect();
     let first_new = plan.len();
-    plan.extend(new.iter().map(|(p, c, _, a)| (p.clone(), c.clone(), a.clone())));
+    plan.extend(
+        new.iter()
+            .map(|(p, c, _, a)| (p.clone(), c.clone(), a.clone())),
+    );
     let classes = bench.red(&plan).map_err(failed)?;
     let mut written = Vec::new();
     for (i, (path, content, cited, argv)) in new.into_iter().enumerate() {
@@ -1498,9 +1553,17 @@ fn again(
     let Some(path) = r.path else {
         return Err(usage("name the test to write again (--again PATH)"));
     };
-    let comment = r.text.map(str::trim).filter(|t| !t.is_empty()).unwrap_or("write it again");
+    let comment = r
+        .text
+        .map(str::trim)
+        .filter(|t| !t.is_empty())
+        .unwrap_or("write it again");
     let (d, contents) = existing(ctx, req)?;
-    let Some(content) = contents.iter().find(|(p, _)| p == path).map(|(_, c)| c.clone()) else {
+    let Some(content) = contents
+        .iter()
+        .find(|(p, _)| p == path)
+        .map(|(_, c)| c.clone())
+    else {
         return Err(usage(&format!("{} has no test {path}", req.key)));
     };
     let (d, written) = rewrite(
@@ -1515,7 +1578,11 @@ fn again(
         provider,
         options,
     )?;
-    let red = d.tests.iter().filter(|t| written.contains(&t.path) && t.red_class.is_red()).count();
+    let red = d
+        .tests
+        .iter()
+        .filter(|t| written.contains(&t.path) && t.red_class.is_red())
+        .count();
     Ok(format!(
         "wrote {path} of {} again: {}",
         req.key,
@@ -1536,11 +1603,16 @@ fn reading(
     options: &crate::RunOptions,
 ) -> Outcome {
     let (Some(scenario), Some(choice)) = (r.scenario, r.reading) else {
-        return Err(usage("name the reading and the scenario (--reading A|B US1-2)"));
+        return Err(usage(
+            "name the reading and the scenario (--reading A|B US1-2)",
+        ));
     };
     let (mut d, contents) = existing(ctx, req)?;
     let Some(item) = d.ambiguities.iter_mut().find(|a| a.scenario == scenario) else {
-        return Err(usage(&format!("{} has no ambiguity on {scenario}", req.key)));
+        return Err(usage(&format!(
+            "{} has no ambiguity on {scenario}",
+            req.key
+        )));
     };
     item.resolution = Some(Resolution {
         reading: choice,
@@ -1626,7 +1698,10 @@ pub fn freezable(
         let red: Vec<String> = draft.red().map(|t| t.path.clone()).collect();
         out.push(Freezable {
             req: r.clone(),
-            contents: contents.into_iter().filter(|(p, _)| red.contains(p)).collect(),
+            contents: contents
+                .into_iter()
+                .filter(|(p, _)| red.contains(p))
+                .collect(),
             draft,
             manifest,
         });
@@ -1673,7 +1748,10 @@ pub fn freeze(
     crate::pre_frozen::store(project_state, &record, &f.contents)?;
     let frozen = Frozen {
         requirement_sha256: f.draft.requirement.sha256.clone(),
-        wording: format!("{}\n{}", f.draft.requirement.title, f.draft.requirement.text),
+        wording: format!(
+            "{}\n{}",
+            f.draft.requirement.title, f.draft.requirement.text
+        ),
         manifest_sha256: f.manifest.clone(),
         tests: red
             .iter()
@@ -1686,7 +1764,10 @@ pub fn freeze(
             .collect(),
     };
     let text = serde_json::to_string_pretty(&frozen).map_err(|e| e.to_string())?;
-    write_atomic(&dir(project_state, unit, &f.req.key).join("frozen.json"), &text)?;
+    write_atomic(
+        &dir(project_state, unit, &f.req.key).join("frozen.json"),
+        &text,
+    )?;
     Ok(record)
 }
 
@@ -1759,7 +1840,11 @@ pub(crate) fn for_task(
     }
     let (record, files) = match crate::pre_frozen::load(project_state, unit, &req.key) {
         Ok(Some(x)) => x,
-        Ok(None) => return Some(TaskReuse::Elsewhere { req: req.key.clone() }),
+        Ok(None) => {
+            return Some(TaskReuse::Elsewhere {
+                req: req.key.clone(),
+            });
+        }
         Err(t) => return Some(TaskReuse::Tampered(t.0)),
     };
     // Committed by an earlier task's tick: later tasks author as today.
@@ -1812,7 +1897,10 @@ pub(crate) fn for_task(
             req.key
         )));
     }
-    if approval.as_deref().is_some_and(|a| a != record.approval_digest) {
+    if approval
+        .as_deref()
+        .is_some_and(|a| a != record.approval_digest)
+    {
         return Some(TaskReuse::Tampered(format!(
             "{}'s frozen set names another approval than review.json",
             req.key
@@ -1863,8 +1951,7 @@ pub fn autopilot_denials(
         .iter()
         .enumerate()
         .filter(|(_, c)| {
-            c["decision"] == "deny"
-                && c["reason"].as_str() == Some(tools::policy::AUTOPILOT_DENIED)
+            c["decision"] == "deny" && c["reason"].as_str() == Some(tools::policy::AUTOPILOT_DENIED)
         })
         .map(|(i, c)| {
             let object: Option<tools::policy::Object> =
@@ -1925,7 +2012,10 @@ pub(crate) fn record_denials(
         let _ = std::fs::remove_file(file);
         return;
     }
-    let _ = write_atomic(&file, &serde_json::to_string_pretty(denials).unwrap_or_default());
+    let _ = write_atomic(
+        &file,
+        &serde_json::to_string_pretty(denials).unwrap_or_default(),
+    );
 }
 
 #[cfg(test)]

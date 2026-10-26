@@ -198,7 +198,11 @@ pub fn offered_objects(
     };
     let prefix = format!("{feature}/");
     let mut out: Vec<(speccoder_core::oracle::OfferedGrant, Object)> = Vec::new();
-    for (_, task) in decisions.tasks.iter().filter(|(k, _)| k.starts_with(&prefix)) {
+    for (_, task) in decisions
+        .tasks
+        .iter()
+        .filter(|(k, _)| k.starts_with(&prefix))
+    {
         for d in task.decided.iter().filter(|d| d.verb == "approve") {
             let Some(o) = &d.object else { continue };
             let id = o.grant_id();
@@ -207,7 +211,11 @@ pub fn offered_objects(
             }
             let object = match o {
                 Object::Command { argv_sha256, .. } => {
-                    format!("{} · argv #{}", o.describe(), argv_sha256.get(..12).unwrap_or(argv_sha256))
+                    format!(
+                        "{} · argv #{}",
+                        o.describe(),
+                        argv_sha256.get(..12).unwrap_or(argv_sha256)
+                    )
                 }
                 _ => o.describe(),
             };
@@ -226,7 +234,10 @@ pub fn offered_objects(
 
 /// [`offered_objects`] as the sheet shows them.
 #[must_use]
-pub fn offered_grants(project_state: &Path, feature: &str) -> Vec<speccoder_core::oracle::OfferedGrant> {
+pub fn offered_grants(
+    project_state: &Path,
+    feature: &str,
+) -> Vec<speccoder_core::oracle::OfferedGrant> {
     offered_objects(project_state, feature)
         .into_iter()
         .map(|(g, _)| g)

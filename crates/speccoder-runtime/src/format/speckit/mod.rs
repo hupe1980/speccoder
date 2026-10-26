@@ -239,23 +239,24 @@ impl Adapter for SpecKit {
     /// `NNN-quick-changes` (spec 084) and `NNN-bugfixes` (spec 090).
     fn standing_units(&self, root: &Path) -> Vec<(String, speccoder_core::ladder::Rung)> {
         use speccoder_core::ladder::Rung;
-        let mut out: Vec<(String, Rung)> = std::fs::read_dir(root.join(speccoder_speckit::features::SPECS))
-            .into_iter()
-            .flatten()
-            .flatten()
-            .map(|e| e.file_name().to_string_lossy().into_owned())
-            .filter(|n| speccoder_speckit::features::prefix(n).is_some())
-            .filter_map(|n| {
-                let rung = if n.ends_with("-quick-changes") {
-                    Rung::Quick
-                } else if n.ends_with("-bugfixes") {
-                    Rung::Bug
-                } else {
-                    return None;
-                };
-                Some((n, rung))
-            })
-            .collect();
+        let mut out: Vec<(String, Rung)> =
+            std::fs::read_dir(root.join(speccoder_speckit::features::SPECS))
+                .into_iter()
+                .flatten()
+                .flatten()
+                .map(|e| e.file_name().to_string_lossy().into_owned())
+                .filter(|n| speccoder_speckit::features::prefix(n).is_some())
+                .filter_map(|n| {
+                    let rung = if n.ends_with("-quick-changes") {
+                        Rung::Quick
+                    } else if n.ends_with("-bugfixes") {
+                        Rung::Bug
+                    } else {
+                        return None;
+                    };
+                    Some((n, rung))
+                })
+                .collect();
         out.push((".specify/bugs".to_owned(), Rung::Bug));
         out
     }

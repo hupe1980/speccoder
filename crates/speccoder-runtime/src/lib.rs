@@ -19,9 +19,9 @@ pub mod bug;
 #[cfg(feature = "engine")]
 pub mod code;
 pub mod commands;
-pub mod context;
 #[cfg(feature = "engine")]
 pub mod comments;
+pub mod context;
 #[cfg(feature = "engine")]
 pub mod controls;
 #[cfg(feature = "engine")]

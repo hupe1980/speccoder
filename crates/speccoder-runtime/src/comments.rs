@@ -21,7 +21,7 @@ use agentplane::model::ModelProvider;
 use serde::{Deserialize, Serialize};
 use speccoder_core::actions::{CommentOp, Via};
 use speccoder_core::oracle::{
-    Anchor, CodeComment, CommentDraft, CommentsView, DraftState, RevisionView,
+    CodeComment, CommentAnchor, CommentDraft, CommentsView, DraftState, RevisionView,
 };
 use speccoder_core::{CommandData, CommandResult, CommandStatus};
 
@@ -300,7 +300,9 @@ fn read(u: &Unit, rel: &str) -> Option<String> {
 
 fn at_head(u: &Unit, rel: &str) -> Option<String> {
     let git = crate::git::Git::at(&u.root);
-    let top_prefix = git.line(&["rev-parse", "--show-prefix"]).unwrap_or_default();
+    let top_prefix = git
+        .line(&["rev-parse", "--show-prefix"])
+        .unwrap_or_default();
     git.run(&["show", &format!("HEAD:{top_prefix}{rel}")])
         .ok()
         .map(|b| String::from_utf8_lossy(&b).into_owned())
@@ -319,7 +321,7 @@ fn shown_test(u: &Unit, req: &str, path: &str) -> Option<String> {
 
 /// Checks a new anchor against what the Review shows, and fills its
 /// digest and section. `Err`: why it may not be anchored there.
-fn check(u: &Unit, anchor: Anchor) -> Result<Anchor, String> {
+fn check(u: &Unit, anchor: CommentAnchor) -> Result<CommentAnchor, String> {
     let docs = documents(u);
     let doc = |p: &str| -> Result<(), String> {
         if docs.iter().any(|d| d == p) {
@@ -332,7 +334,7 @@ fn check(u: &Unit, anchor: Anchor) -> Result<Anchor, String> {
         }
     };
     match anchor {
-        Anchor::Passage {
+        CommentAnchor::Passage {
             path,
             start_line,
             end_line,
@@ -352,7 +354,7 @@ fn check(u: &Unit, anchor: Anchor) -> Result<Anchor, String> {
                     quote.chars().take(60).collect::<String>()
                 ));
             }
-            Ok(Anchor::Passage {
+            Ok(CommentAnchor::Passage {
                 section: section_at(&text, start_line),
                 quote_sha256: digest(normal(&quote).as_bytes()),
                 path,
@@ -361,7 +363,7 @@ fn check(u: &Unit, anchor: Anchor) -> Result<Anchor, String> {
                 quote,
             })
         }
-        Anchor::DiffLine {
+        CommentAnchor::DiffLine {
             path,
             side,
             line,
@@ -377,14 +379,14 @@ fn check(u: &Unit, anchor: Anchor) -> Result<Anchor, String> {
             if line == 0 || !found(&text, line, line, &quote) {
                 return Err(format!("\"{quote}\" is not at {path}:{line} ({side})"));
             }
-            Ok(Anchor::DiffLine {
+            Ok(CommentAnchor::DiffLine {
                 path,
                 side,
                 line,
                 quote,
             })
         }
-        Anchor::TestLine {
+        CommentAnchor::TestLine {
             req,
             path,
             line,
@@ -396,14 +398,14 @@ fn check(u: &Unit, anchor: Anchor) -> Result<Anchor, String> {
             if line == 0 || !found(&content, line, line, &quote) {
                 return Err(format!("\"{quote}\" is not at {path}:{line}"));
             }
-            Ok(Anchor::TestLine {
+            Ok(CommentAnchor::TestLine {
                 req,
                 path,
                 line,
                 quote,
             })
         }
-        Anchor::Finding { source, id, text } => {
+        CommentAnchor::Finding { source, id, text } => {
             if id.trim().is_empty() || text.trim().is_empty() {
                 return Err("a finding needs its id and its words".to_owned());
             }
@@ -427,22 +429,22 @@ fn check(u: &Unit, anchor: Anchor) -> Result<Anchor, String> {
             if !shown {
                 return Err(format!("the Review shows no {source} finding {id}"));
             }
-            Ok(Anchor::Finding { source, id, text })
+            Ok(CommentAnchor::Finding { source, id, text })
         }
     }
 }
 
 /// Whether a stored draft's quote is still where it was anchored.
-fn current(u: &Unit, anchor: &Anchor) -> bool {
+fn current(u: &Unit, anchor: &CommentAnchor) -> bool {
     match anchor {
-        Anchor::Passage {
+        CommentAnchor::Passage {
             path,
             start_line,
             end_line,
             quote,
             ..
         } => read(u, path).is_some_and(|t| found(&t, *start_line, *end_line, quote)),
-        Anchor::DiffLine {
+        CommentAnchor::DiffLine {
             path,
             side,
             line,
@@ -455,13 +457,13 @@ fn current(u: &Unit, anchor: &Anchor) -> bool {
             };
             text.is_some_and(|t| found(&t, *line, *line, quote))
         }
-        Anchor::TestLine {
+        CommentAnchor::TestLine {
             req,
             path,
             line,
             quote,
         } => shown_test(u, req, path).is_some_and(|t| found(&t, *line, *line, quote)),
-        Anchor::Finding { .. } => true,
+        CommentAnchor::Finding { .. } => true,
     }
 }
 
@@ -561,7 +563,7 @@ pub fn comment(
     path: &Path,
     feature: Option<&str>,
     op: CommentOp,
-    anchor: Option<&Anchor>,
+    anchor: Option<&CommentAnchor>,
     id: Option<&str>,
     text: Option<&str>,
     via: Via,
@@ -662,7 +664,9 @@ pub fn revision_argument(drafts: &[CommentDraft], sections: &[String]) -> String
     );
     for d in drafts {
         let section = match &d.anchor {
-            Anchor::Passage { section, .. } if !section.is_empty() => format!(" [{section}]"),
+            CommentAnchor::Passage { section, .. } if !section.is_empty() => {
+                format!(" [{section}]")
+            }
             _ => String::new(),
         };
         out.push_str(&format!(
@@ -697,8 +701,8 @@ fn changed_sections(path: &str, before: &str, after: &str) -> Vec<String> {
         .map(|(h, _)| h.clone())
         .filter(|h| seen.insert(h.clone()))
         .filter(|h| {
-            let x = a.iter().find(|(n, _)| n == h).map(|(_, t)| t);
-            let y = b.iter().find(|(n, _)| n == h).map(|(_, t)| t);
+            let x = a.iter().find(|(n, _)| n == h).map(|(_, t)| t.trim_end());
+            let y = b.iter().find(|(n, _)| n == h).map(|(_, t)| t.trim_end());
             x != y
         })
         .map(|h| {
@@ -732,6 +736,26 @@ pub fn send(
             "no state directory (set SPECCODER_STATE_DIR or HOME)",
         );
     };
+    // Nothing to send is said before any model is opened.
+    if let Ok(u) = unit(path, feature, Some(&st)) {
+        let tray = load(&u.plane, &u.feature);
+        let open: Vec<&CommentDraft> = tray
+            .drafts
+            .iter()
+            .filter(|d| d.state != DraftState::Sent)
+            .collect();
+        let missing = ids.iter().find(|id| !open.iter().any(|d| d.id == **id));
+        if open.is_empty() || missing.is_some() {
+            return refuse(
+                CommandStatus::UsageError,
+                "USAGE",
+                &missing.map_or_else(
+                    || "no comments to send".to_owned(),
+                    |id| format!("{id} was sent already (or deleted): look at the tray again"),
+                ),
+            );
+        }
+    }
     crate::with_driver("review", path, feature, |_, provider, key| {
         send_with(
             path,
@@ -807,8 +831,10 @@ pub fn send_with(
         let sections: Vec<String> = chosen
             .iter()
             .filter_map(|d| match &d.anchor {
-                Anchor::Passage { section, .. } if !section.is_empty() => Some(section.clone()),
-                Anchor::DiffLine {
+                CommentAnchor::Passage { section, .. } if !section.is_empty() => {
+                    Some(section.clone())
+                }
+                CommentAnchor::DiffLine {
                     path, line, side, ..
                 } => {
                     let text = if side == "old" {
@@ -867,7 +893,7 @@ pub fn send_with(
     };
     let for_skill: Vec<CommentDraft> = sent
         .iter()
-        .filter(|d| !matches!(d.anchor, Anchor::TestLine { .. }))
+        .filter(|d| !matches!(d.anchor, CommentAnchor::TestLine { .. }))
         .cloned()
         .collect();
     let mut notes: Vec<String> = Vec::new();
@@ -927,7 +953,7 @@ pub fn send_with(
     let mut asked_again = Vec::new();
     let mut by_test: Vec<(String, String, Vec<String>)> = Vec::new();
     for d in &sent {
-        if let Anchor::TestLine {
+        if let CommentAnchor::TestLine {
             req,
             path: p,
             line,
@@ -1197,7 +1223,11 @@ pub fn code_nudge(
         .collect::<Vec<_>>()
         .join("\n");
     let Some(st) = state.map(Path::to_path_buf).or_else(worktree::state_dir) else {
-        return refuse(CommandStatus::ConfigError, "NO-STATE-DIR", "no state directory");
+        return refuse(
+            CommandStatus::ConfigError,
+            "NO-STATE-DIR",
+            "no state directory",
+        );
     };
     let r = crate::controls::nudge_with(path, Some(&u.feature), task, Some(&note), &st);
     if r.status() != CommandStatus::Ok {
@@ -1249,7 +1279,7 @@ mod tests {
     fn the_argument_scopes_the_turn() {
         let d = CommentDraft {
             id: "c1".to_owned(),
-            anchor: Anchor::Passage {
+            anchor: CommentAnchor::Passage {
                 path: "specs/001/spec.md".to_owned(),
                 start_line: 9,
                 end_line: 9,

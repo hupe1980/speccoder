@@ -1,0 +1,31 @@
+{
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/events/oracle.lapsed.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "`oracle.lapsed`, as published.",
+  "properties": {
+    "current_wording_sha256": {
+      "description": "The wording now.",
+      "type": "string"
+    },
+    "frozen_wording_sha256": {
+      "description": "The wording it was frozen on.",
+      "type": "string"
+    },
+    "requirement": {
+      "description": "The requirement.",
+      "type": "string"
+    },
+    "unit": {
+      "description": "The unit.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "unit",
+    "requirement",
+    "frozen_wording_sha256",
+    "current_wording_sha256"
+  ],
+  "title": "a domain event's public projection: ids, digests and counts",
+  "type": "object"
+}

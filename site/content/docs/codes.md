@@ -24,6 +24,14 @@ Every result that is not plainly `ok` names a code — `error[CODE]`, `stopped[C
 | [`CHECK-BROKEN`](#check-broken) | error | 13 | a check cannot run on the untouched code |
 | [`FEATURE-GONE`](#feature-gone) | error | 12 | the current feature no longer exists |
 | [`REVIEW-PENDING`](#review-pending) | stop | 23 | the spec is not approved yet |
+| [`REVIEW-AMBIGUOUS`](#review-ambiguous) | stop | 23 | two readings of a requirement disagree |
+| [`REVIEW-NO-SCENARIOS`](#review-no-scenarios) | error | 2 | the requirement has no scenarios to write tests from |
+| [`REVIEW-TESTS-OWN-PIPELINE`](#review-tests-own-pipeline) | error | 2 | this unit's tests are written by its own pipeline |
+| [`ACCEPTANCE-OFF`](#acceptance-off) | error | 13 | acceptance tests are turned off |
+| [`ORACLE-AUTHOR-FAILED`](#oracle-author-failed) | error | 21 | the test author could not write the tests |
+| [`ORACLE-TAMPERED`](#oracle-tampered) | stop | 23 | a frozen test no longer matches what was frozen |
+| [`RUN-ACTIVE`](#run-active) | error | 14 | a run is active for this project |
+| [`AUTOPILOT-NEEDS-GRANT-OBJECTS`](#autopilot-needs-grant-objects) | error | 13 | autopilot needs object-bound grants |
 | [`FEATURE-UNKNOWN`](#feature-unknown) | error | 12 | no feature has that name or number |
 | [`CONFIG`](#config) | error | 13 | the configuration or the environment is not usable |
 | [`NO-STATE-DIR`](#no-state-dir) | error | 13 | speccoder has nowhere to keep its state |
@@ -195,6 +203,76 @@ The spec is not approved yet.
 - `speccoder review approve`
 - `git commit`
 
+### REVIEW-AMBIGUOUS
+
+Two readings of a requirement disagree.
+
+When tests are written at review, two independent author calls read the same requirement. For a scenario they stated the same given with a different expected outcome (or one found it untestable): the requirement can be read two ways. Until the person says which reading is meant, or rewords it, the feature is not approved and run, its tests are not frozen, and a gated run (`[review] required`) waits.
+
+- `speccoder review tests <REQ> --reading A <scenario>`
+- `speccoder review tests <REQ> --reading B <scenario>`
+- Or reword the scenario so it reads one way
+
+### REVIEW-NO-SCENARIOS
+
+The requirement has no scenarios to write tests from.
+
+Tests are written at review per requirement from its acceptance scenarios. The requirement named has none (or the format yields no requirement by that key), so there is nothing to derive a test from.
+
+- `speccoder review`
+- Add acceptance scenarios to the requirement
+
+### REVIEW-TESTS-OWN-PIPELINE
+
+This unit's tests are written by its own pipeline.
+
+A quick change and a bug author and confirm their own acceptance: a quick change's run writes its tests, a bug's reproductions are confirmed by the person. A second, review-time oracle would be two oracles for one requirement, so the review writes none here.
+
+- `speccoder do "…"`
+- `speccoder bug confirm <unit>/<task>`
+
+### ACCEPTANCE-OFF
+
+Acceptance tests are turned off.
+
+`[acceptance] generate = false`: no acceptance tests are written, at review or at run time.
+
+- `speccoder config set acceptance.generate true`
+
+### ORACLE-AUTHOR-FAILED
+
+The test author could not write the tests.
+
+The acceptance author call failed or the model provider refused it. Nothing was stored or frozen for the requirement; the message carries the provider's reason.
+
+- `speccoder review tests <REQ> --write`
+
+### ORACLE-TAMPERED
+
+A frozen test no longer matches what was frozen.
+
+A test frozen at review is stored in the state directory with its digest. The stored file or its record no longer matches: reusing it would run tests nobody approved, so the task stops and nothing is ticked.
+
+- `speccoder review tests <REQ>`
+- Write and approve the tests again, or run without the frozen set
+
+### RUN-ACTIVE
+
+A run is active for this project.
+
+*Approve and Run* starts a feature run; one is running already (in a terminal or the web app). Approving now would start a second run beside it.
+
+- `speccoder report`
+- Wait for the run to end, or stop it
+
+### AUTOPILOT-NEEDS-GRANT-OBJECTS
+
+Autopilot needs object-bound grants.
+
+Autopilot holds only grants the person saw in full and ticked, each bound to one resolved object (a canonical path, an exact argv, an MCP tool digest). This build has no such grants, so autopilot is off.
+
+- `speccoder review approve --run ask`
+
 ### FEATURE-UNKNOWN
 
 No feature has that name or number.
@@ -224,10 +302,11 @@ Journals, worktrees and live progress live in a state directory: `$SPECCODER_STA
 
 The OS sandbox is not available and the project requires it.
 
-`[sandbox] mode = "required"` refuses to run commands unsandboxed, and this OS offers no sandbox (Linux without Landlock, a container without user namespaces, another OS).
+`[sandbox] mode = "required"` refuses to run commands unsandboxed, and this OS offers no sandbox (Linux without Landlock, a container without user namespaces, another OS). An autopilot run needs the sandbox enforced too: it is refused when the sandbox is off or unavailable.
 
 - Run on macOS or Linux 6.2+ (Landlock ABI 3)
 - Or set [sandbox] mode = "auto" to run unsandboxed and be told
+- Autopilot: choose Ask on Risky Calls, or enable the OS sandbox
 
 ### GITHUB-AUTH
 

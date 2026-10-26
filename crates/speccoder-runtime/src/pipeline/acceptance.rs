@@ -131,10 +131,7 @@ pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance 
         .iter()
         .map(|f| json!({ "path": f.path, "scenarios": f.cited }))
         .collect();
-    let planned: Vec<(String, String)> = valid
-        .into_iter()
-        .map(|f| (f.path, f.content))
-        .collect();
+    let planned: Vec<(String, String)> = valid.into_iter().map(|f| (f.path, f.content)).collect();
     if planned.is_empty() {
         return skipped("no acceptance tests were generated".to_owned(), base);
     }

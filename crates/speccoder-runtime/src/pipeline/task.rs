@@ -835,16 +835,14 @@ pub(crate) fn run_task(
     };
     // A requirement's oracle frozen at review (spec 093): reused by the
     // first task citing its scenarios while its wording is unchanged.
-    let mut review_frozen: Option<(speccoder_core::acceptance::PreFrozenAcceptance, String)> =
-        None;
+    let mut review_frozen: Option<(speccoder_core::acceptance::PreFrozenAcceptance, String)> = None;
     let mut review_reuse = None;
     if bug_fix.is_none() && run_config.acceptance && !options.fresh_acceptance {
-        match crate::oracle::for_task(&s.plane_dir, &project, &wt_root, format, &snap, &scenarios)
-        {
+        match crate::oracle::for_task(&s.plane_dir, &project, &wt_root, format, &snap, &scenarios) {
             Some(r @ crate::oracle::TaskReuse::Ready { .. }) => review_reuse = Some(r),
-            Some(crate::oracle::TaskReuse::Elsewhere { req }) => notices.push(format!(
-                "{req}: frozen oracle not present here — authoring"
-            )),
+            Some(crate::oracle::TaskReuse::Elsewhere { req }) => {
+                notices.push(format!("{req}: frozen oracle not present here — authoring"))
+            }
             Some(crate::oracle::TaskReuse::Lapsed {
                 req,
                 frozen,
@@ -994,9 +992,7 @@ pub(crate) fn run_task(
     // 4c. The held-out set: written after a red visible set, kept in
     //     the state directory, never shown to the implementer.
     let held_out_store = match (&bug_fix, &review_frozen) {
-        (Some(f), _) => {
-            crate::held_out::sealed_dir(&s.plane_dir, &f.bug.unit, &f.bug.requirement)
-        }
+        (Some(f), _) => crate::held_out::sealed_dir(&s.plane_dir, &f.bug.unit, &f.bug.requirement),
         (None, Some((r, _))) => {
             crate::held_out::sealed_dir(&s.plane_dir, &feature_name, &r.requirement)
         }

@@ -944,9 +944,21 @@ fn main() {
                     let (op, test, text, scenario, which) = if *write {
                         (OracleOp::Write, None, None, None, None)
                     } else if let Some(p) = reject {
-                        (OracleOp::Reject, Some(p.clone()), reason.clone(), None, None)
+                        (
+                            OracleOp::Reject,
+                            Some(p.clone()),
+                            reason.clone(),
+                            None,
+                            None,
+                        )
                     } else if let Some(p) = again {
-                        (OracleOp::Again, Some(p.clone()), comment.clone(), None, None)
+                        (
+                            OracleOp::Again,
+                            Some(p.clone()),
+                            comment.clone(),
+                            None,
+                            None,
+                        )
                     } else if let Some(p) = edit {
                         (OracleOp::Edit, Some(p.clone()), content, None, None)
                     } else if let Some(r) = reading {
@@ -962,7 +974,13 @@ fn main() {
                                 .with_code("USAGE");
                             }
                         };
-                        (OracleOp::Reading, None, None, r.get(1).cloned(), Some(which))
+                        (
+                            OracleOp::Reading,
+                            None,
+                            None,
+                            r.get(1).cloned(),
+                            Some(which),
+                        )
                     } else {
                         break 'tests review::report(path, feature);
                     };
@@ -977,7 +995,9 @@ fn main() {
                         text.as_deref(),
                     )
                 }
-                Some(R::Comments { action }) => review_comments(path, feature, action.as_ref(), &perform),
+                Some(R::Comments { action }) => {
+                    review_comments(path, feature, action.as_ref(), &perform)
+                }
                 Some(R::Approve { ids, comment, .. }) => review::decide(
                     path,
                     feature,
@@ -1432,13 +1452,18 @@ fn review_grants(path: &std::path::Path, feature: Option<&str>) -> speccoder_cor
     let Some(speccoder_core::CommandData::Review(rv)) = r.data() else {
         return r;
     };
-    let grants = rv.sheet.as_ref().map(|s| s.grants.clone()).unwrap_or_default();
+    let grants = rv
+        .sheet
+        .as_ref()
+        .map(|s| s.grants.clone())
+        .unwrap_or_default();
     let mut lines: Vec<String> = grants
         .iter()
         .map(|g| format!("{}  {}  {}", g.id, g.class, g.object))
         .collect();
     if lines.is_empty() {
-        lines.push("no grants are offered for this feature: an autopilot run holds none".to_owned());
+        lines
+            .push("no grants are offered for this feature: an autopilot run holds none".to_owned());
     }
     if let Some(why) = rv.sheet.as_ref().and_then(|s| s.autopilot_blocked.clone()) {
         lines.push(why);
@@ -1452,10 +1477,13 @@ fn review_comments(
     path: &std::path::Path,
     feature: Option<&str>,
     action: Option<&cli::CommentsAction>,
-    perform: &dyn Fn(&speccoder_core::actions::Runnable, Option<&str>) -> speccoder_core::CommandResult,
+    perform: &dyn Fn(
+        &speccoder_core::actions::Runnable,
+        Option<&str>,
+    ) -> speccoder_core::CommandResult,
 ) -> speccoder_core::CommandResult {
     use speccoder_core::actions::{CommentOp, Runnable};
-    use speccoder_core::oracle::Anchor;
+    use speccoder_core::oracle::CommentAnchor;
     let usage = |m: &str| {
         speccoder_core::CommandResult::new("review", speccoder_core::CommandStatus::UsageError, m)
             .with_code("USAGE")
@@ -1469,7 +1497,9 @@ fn review_comments(
         None => speccoder_runtime::comments::list(path, feature, None),
         Some(cli::CommentsAction::Delete { id }) => perform(&keep(CommentOp::Delete, id), None),
         Some(cli::CommentsAction::Keep { id }) => perform(&keep(CommentOp::Keep, id), None),
-        Some(cli::CommentsAction::Send) => perform(&Runnable::CommentsSend { ids: Vec::new() }, None),
+        Some(cli::CommentsAction::Send) => {
+            perform(&Runnable::CommentsSend { ids: Vec::new() }, None)
+        }
         Some(cli::CommentsAction::Undo) => perform(&Runnable::RevisionUndo { turn: None }, None),
         Some(cli::CommentsAction::Add {
             path: doc,
@@ -1494,7 +1524,7 @@ fn review_comments(
                     .take(b.saturating_sub(a) + 1)
                     .collect::<Vec<_>>()
                     .join("\n");
-                Anchor::Passage {
+                CommentAnchor::Passage {
                     path: doc.clone(),
                     start_line: a,
                     end_line: b,
@@ -1504,7 +1534,8 @@ fn review_comments(
                 }
             } else if let Some(t) = test {
                 let mut parts = t.splitn(3, ':');
-                let (Some(req), Some(file), Some(line)) = (parts.next(), parts.next(), parts.next())
+                let (Some(req), Some(file), Some(line)) =
+                    (parts.next(), parts.next(), parts.next())
                 else {
                     return usage("--test is `US1:tests/a.rs:3`");
                 };
@@ -1523,7 +1554,7 @@ fn review_comments(
                         .to_owned(),
                     _ => String::new(),
                 };
-                Anchor::TestLine {
+                CommentAnchor::TestLine {
                     req: req.to_owned(),
                     path: file.to_owned(),
                     line,
@@ -1533,13 +1564,15 @@ fn review_comments(
                 let Some((source, id)) = f.split_once(':') else {
                     return usage("--finding is `analyze:A1` or `review:FR-001`");
                 };
-                Anchor::Finding {
+                CommentAnchor::Finding {
                     source: source.to_owned(),
                     id: id.to_owned(),
                     text: text.clone(),
                 }
             } else {
-                return usage("say what the comment is about: --path P --lines 40-42, --test US1:PATH:LINE or --finding SRC:ID");
+                return usage(
+                    "say what the comment is about: --path P --lines 40-42, --test US1:PATH:LINE or --finding SRC:ID",
+                );
             };
             perform(
                 &Runnable::Comment {
