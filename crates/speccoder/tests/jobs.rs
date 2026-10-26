@@ -351,7 +351,7 @@ fn every_kind_through_the_job_endpoint_gives_the_result_it_gave_before() {
         }
         paths.push((p.display().to_string(), name));
     }
-    paths.sort_by(|a, b| b.0.len().cmp(&a.0.len()));
+    paths.sort_by_key(|p| std::cmp::Reverse(p.0.len()));
     let bless = std::env::var_os("SPECCODER_BLESS").is_some();
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/jobs");
     let mut differ = Vec::new();

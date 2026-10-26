@@ -440,7 +440,7 @@ impl Norm {
             paths.push((p.display().to_string(), name));
         }
         // The longest first, so a path is not replaced by its prefix.
-        paths.sort_by(|a, b| b.0.len().cmp(&a.0.len()));
+        paths.sort_by_key(|p| std::cmp::Reverse(p.0.len()));
         Self { paths }
     }
 
@@ -582,4 +582,122 @@ fn the_normaliser_replaces_ids_and_keeps_words() {
         hex("committed 1a2b3c4d5e as deadbeef1; feed facade 1234567"),
         "committed <hex> as <hex>; feed facade 1234567"
     );
+}
+
+/// The action lists of a project on its way: no feature yet, a spec, a
+/// plan, a task list not yet committed, committed with a task selected,
+/// a call waiting — and an OpenSpec project.
+fn lists() -> Vec<(String, Vec<speccoder_core::actions::Action>)> {
+    use speccoder_core::CommandData;
+    let state = tempfile::tempdir().unwrap();
+    let mut out = Vec::new();
+    let mut list = |name: &str, r: &Path, selected: Option<&str>| {
+        let listed = match speccoder_runtime::approvals::decide_with(
+            r,
+            None,
+            speccoder_runtime::approvals::Verb::List,
+            state.path(),
+        )
+        .data()
+        {
+            Some(CommandData::Approvals(a)) => Some((**a).clone()),
+            _ => None,
+        };
+        out.push((
+            name.to_owned(),
+            speccoder_runtime::actions::available_with(r, None, selected, listed.as_ref()),
+        ));
+    };
+    let empty = tempfile::tempdir().unwrap();
+    let e = empty.path();
+    fs::create_dir_all(e.join(".specify/memory")).unwrap();
+    fs::write(e.join(".specify/memory/constitution.md"), "# C\n").unwrap();
+    git(e, &["init", "-q"]);
+    git(e, &["add", "-A"]);
+    git(e, &["commit", "-q", "-m", "init"]);
+    list("no feature", e, None);
+    fs::create_dir_all(e.join("specs/001-x")).unwrap();
+    fs::write(e.join("specs/001-x/spec.md"), SPEC).unwrap();
+    list("spec", e, None);
+    fs::write(e.join("specs/001-x/plan.md"), "# Plan\n").unwrap();
+    list("plan", e, None);
+    fs::write(
+        e.join("specs/001-x/tasks.md"),
+        "# Tasks\n\n## Phase 1\n\n- [ ] T001 Do it\n- [ ] T002 Then this\n",
+    )
+    .unwrap();
+    list("tasks uncommitted", e, Some("T001"));
+    git(e, &["add", "-A"]);
+    git(e, &["commit", "-q", "-m", "plan"]);
+    list("tasks committed", e, Some("T001"));
+    let waiting = repo();
+    wait_on_t005(waiting.path(), state.path());
+    list("waiting", waiting.path(), Some("T005"));
+    let openspec = tempfile::tempdir().unwrap();
+    let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../speccoder-openspec/tests/fixtures/1.14.3/sample");
+    assert!(
+        Command::new("cp")
+            .arg("-R")
+            .arg(fixture.join("."))
+            .arg(openspec.path())
+            .status()
+            .unwrap()
+            .success()
+    );
+    git(openspec.path(), &["init", "-q"]);
+    git(openspec.path(), &["add", "-A"]);
+    git(openspec.path(), &["commit", "-q", "-m", "init"]);
+    list("openspec", openspec.path(), None);
+    out
+}
+
+#[test]
+fn group_and_identity_name_one_action_in_every_list() {
+    for (name, list) in lists() {
+        assert!(!list.is_empty(), "{name}: no actions");
+        let mut seen = std::collections::BTreeSet::new();
+        for a in &list {
+            let key = format!("{}:{:?}", a.group, a.id);
+            assert!(seen.insert(key.clone()), "{name}: {key} twice in {list:#?}");
+            assert_eq!(
+                a.id,
+                speccoder_core::actions::identity(a.run.as_ref(), &a.command),
+                "{name}: {}",
+                a.label
+            );
+            assert_eq!(
+                a.role.is_some(),
+                matches!(a.run, Some(Runnable::Skill { .. })),
+                "{name}: only a skill has a role: {}",
+                a.label
+            );
+        }
+    }
+}
+
+#[test]
+fn a_relabelled_list_keeps_every_identity_and_role() {
+    for (name, list) in lists() {
+        for a in list {
+            let mut b = a.clone();
+            b.label = format!("x {}", b.label);
+            b.why = format!("x {}", b.why);
+            // Recomputed from what runs: the wording takes no part.
+            let again = speccoder_core::actions::identity(b.run.as_ref(), &b.command);
+            assert_eq!((again, b.role), (a.id, a.role), "{name}");
+        }
+    }
+}
+
+#[test]
+fn spec_kit_offers_its_create_step_by_role() {
+    use speccoder_core::actions::SkillRole;
+    let lists = lists();
+    let first = &lists[0].1;
+    let create = first
+        .iter()
+        .find(|a| a.group == "next" && a.role == Some(SkillRole::Create))
+        .unwrap_or_else(|| panic!("{first:#?}"));
+    assert!(create.input.is_some(), "the create step asks for words");
 }

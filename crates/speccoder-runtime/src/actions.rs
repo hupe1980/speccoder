@@ -14,16 +14,7 @@ pub(crate) fn action(
     why: impl Into<String>,
     command: impl Into<String>,
 ) -> Action {
-    Action {
-        group: group.to_owned(),
-        label: label.into(),
-        why: why.into(),
-        command: command.into(),
-        run: None,
-        blocked: None,
-        input: None,
-        confirm: None,
-    }
+    Action::new(group, label, why, command)
 }
 
 /// What can be done now in the project at `path` (`feature` as for every
@@ -87,10 +78,12 @@ pub fn available_with(
                 format!("speccoder spec {name}")
             },
         );
-        a.run = Some(Runnable::Skill {
-            name: name.to_owned(),
-            arguments: String::new(),
-        });
+        a = a
+            .with_run(Runnable::Skill {
+                name: name.to_owned(),
+                arguments: String::new(),
+            })
+            .with_role(planning.role_of(name));
         if creates {
             a.input = Some(format!("Describe the {unit}"));
         }
@@ -106,7 +99,7 @@ pub fn available_with(
             format!("{} — {}", p.covers, p.reason),
             format!("speccoder task approve {}", p.task),
         );
-        a.run = Some(Runnable::Approve {
+        a = a.with_run(Runnable::Approve {
             task: p.task.clone(),
         });
         out.push(a);
@@ -116,7 +109,7 @@ pub fn available_with(
             "the model is told your reason",
             format!("speccoder task reject {} --reason \"…\"", p.task),
         );
-        r.run = Some(Runnable::Reject {
+        r = r.with_run(Runnable::Reject {
             task: p.task.clone(),
         });
         r.input = Some("Why (the model is told)".to_owned());
@@ -141,7 +134,7 @@ pub fn available_with(
                 uncommitted.join(" ")
             ),
         );
-        a.run = Some(Runnable::Commit {
+        a = a.with_run(Runnable::Commit {
             paths: uncommitted.clone(),
         });
         out.push(a);
@@ -156,7 +149,7 @@ pub fn available_with(
             format!("{ready} ready task(s), each judged on evidence"),
             "speccoder run",
         );
-        a.run = Some(Runnable::Run { task: None });
+        a = a.with_run(Runnable::Run { task: None });
         a.blocked = run_blocked.clone();
         out.push(a);
     }
@@ -181,7 +174,7 @@ pub fn available_with(
             ),
             "speccoder run --converge",
         );
-        a.run = Some(Runnable::Converge);
+        a = a.with_run(Runnable::Converge);
         a.blocked = run_blocked.clone();
         out.push(a);
     }
@@ -217,7 +210,7 @@ pub fn available_with(
                 t.title.clone(),
                 format!("speccoder run --task {}", t.id),
             );
-            a.run = Some(Runnable::Run {
+            a = a.with_run(Runnable::Run {
                 task: Some(t.id.clone()),
             });
             a.blocked = run_blocked.clone();
@@ -259,7 +252,7 @@ pub fn available_with(
                     why,
                     format!("speccoder task {verb} {} {flag} \"…\"", t.id),
                 );
-                a.run = Some(run);
+                a = a.with_run(run);
                 a.input = Some(prompt.to_owned());
                 out.push(a);
             }
@@ -273,7 +266,7 @@ pub fn available_with(
             format!("{ready} ready task(s)"),
             "speccoder run",
         );
-        a.run = Some(Runnable::Run { task: None });
+        a = a.with_run(Runnable::Run { task: None });
         a.blocked = run_blocked;
         out.push(a);
     }
@@ -286,7 +279,7 @@ pub fn available_with(
             format!("{feature_count} {unit}s"),
             "speccoder feature <name>",
         );
-        a.run = Some(Runnable::Feature);
+        a = a.with_run(Runnable::Feature);
         out.push(a);
     }
 
@@ -298,7 +291,7 @@ pub fn available_with(
         "push the branch and its evidence; open (or update) the draft",
         "speccoder pr --yes",
     );
-    pr.run = Some(Runnable::PullRequest);
+    pr = pr.with_run(Runnable::PullRequest);
     pr.confirm = Some(
         "Push the feature's speccoder branch and its attestation notes to `origin`, and open (or update) its draft pull request on GitHub, as you (your token).".to_owned(),
     );

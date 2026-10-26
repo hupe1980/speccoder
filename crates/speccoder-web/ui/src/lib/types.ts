@@ -26,6 +26,10 @@ export interface Action {
   input: string | null;
   /** It leaves the machine or cannot be undone: say this in a confirmation first. */
   confirm?: string | null;
+  /** What it is, independent of its wording. */
+  id?: { kind: string; subject: string | null };
+  /** A planning skill's part in its format's planning. */
+  role?: "create" | "toward_tasks" | "revise" | "check" | "other" | null;
 }
 
 export interface JourneyStep {

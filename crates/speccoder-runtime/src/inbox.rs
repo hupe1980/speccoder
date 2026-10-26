@@ -209,7 +209,7 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
             },
             flag(format!("speccoder task approve {}", p.task)),
         );
-        yes.run = Some(Runnable::Approve {
+        yes = yes.with_run(Runnable::Approve {
             task: p.task.clone(),
         });
         if question {
@@ -221,7 +221,7 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
             "the model is told your reason",
             flag(format!("speccoder task reject {} --reason \"…\"", p.task)),
         );
-        no.run = Some(Runnable::Reject {
+        no = no.with_run(Runnable::Reject {
             task: p.task.clone(),
         });
         no.input = Some("Why (the model is told)".to_owned());
@@ -270,7 +270,7 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
                     t.id
                 )),
             );
-            rule.run = Some(Runnable::Rule { task: t.id.clone() });
+            rule = rule.with_run(Runnable::Rule { task: t.id.clone() });
             rule.input = Some("Why the tests are right".to_owned());
             let findings: Vec<String> = held
                 .findings
@@ -307,7 +307,7 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
                 "with what the last attempt left: its facts and your notes",
                 flag(format!("speccoder run --task {}", t.id)),
             );
-            again.run = Some(Runnable::Run {
+            again = again.with_run(Runnable::Run {
                 task: Some(t.id.clone()),
             });
             again.blocked = if !r.uncommitted.is_empty() {
@@ -340,14 +340,14 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
             "committed onto the feature's branch as yours",
             flag(format!("speccoder task restore {}", t.id)),
         );
-        keep.run = Some(Runnable::KeepSetAside { task: t.id.clone() });
+        keep = keep.with_run(Runnable::KeepSetAside { task: t.id.clone() });
         let mut drop = action(
             "task",
             format!("discard the changes set aside before {}", t.id),
             "deleted; the branch stays as it is",
             flag(format!("speccoder task drop {}", t.id)),
         );
-        drop.run = Some(Runnable::DropSetAside { task: t.id.clone() });
+        drop = drop.with_run(Runnable::DropSetAside { task: t.id.clone() });
         drop.confirm = Some(format!(
             "Discard the {n} changed file(s) set aside before {}? They are deleted, not kept anywhere.",
             t.id
@@ -381,7 +381,7 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
             "convergence assesses the code against the spec as it is now",
             flag("speccoder run --converge".to_owned()),
         );
-        a.run = Some(Runnable::Converge);
+        a = a.with_run(Runnable::Converge);
         out.push(item(
             "stale",
             None,
@@ -413,10 +413,12 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
                     "the format's skill asks you the questions and writes the answers in",
                     flag(format!("speccoder spec {skill}")),
                 );
-                a.run = Some(Runnable::Skill {
-                    name: skill.clone(),
-                    arguments: String::new(),
-                });
+                a = a
+                    .with_run(Runnable::Skill {
+                        name: skill.clone(),
+                        arguments: String::new(),
+                    })
+                    .with_role(crate::format::at(path).planning().role_of(skill));
                 actions.push(a);
             }
             out.push(item(
@@ -458,7 +460,7 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
                 "on their current wording, as you",
                 flag("speccoder review approve".to_owned()),
             );
-            all.run = Some(Runnable::Review {
+            all = all.with_run(Runnable::Review {
                 ids: Vec::new(),
                 verdict: "approve".to_owned(),
             });
@@ -497,10 +499,12 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
                     "the format's skill rewrites what you asked; you review the result",
                     flag(format!("speccoder spec {skill} \"…\"")),
                 );
-                a.run = Some(Runnable::Skill {
-                    name: skill.clone(),
-                    arguments: rv.revision.clone().unwrap_or_default(),
-                });
+                a = a
+                    .with_run(Runnable::Skill {
+                        name: skill.clone(),
+                        arguments: rv.revision.clone().unwrap_or_default(),
+                    })
+                    .with_role(crate::format::at(path).planning().role_of(skill));
                 actions.push(a);
             }
             actions.push(action(
@@ -532,7 +536,7 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
                 r.uncommitted.join(" ")
             ),
         );
-        a.run = Some(Runnable::Commit {
+        a = a.with_run(Runnable::Commit {
             paths: r.uncommitted.clone(),
         });
         out.push(item(
@@ -551,7 +555,7 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
             "push the branch and its evidence; open (or update) the draft",
             flag("speccoder pr --yes".to_owned()),
         );
-        pr.run = Some(Runnable::PullRequest);
+        pr = pr.with_run(Runnable::PullRequest);
         pr.confirm = Some(
             "Push the feature's speccoder branch and its attestation notes to `origin`, and open (or update) its draft pull request on GitHub, as you (your token).".to_owned(),
         );
@@ -598,7 +602,7 @@ fn with_input(
         why,
         flag(format!("speccoder task {verb} {} {option} \"…\"", t.id)),
     );
-    a.run = Some(run);
+    a = a.with_run(run);
     a.input = Some(prompt.to_owned());
     a
 }

@@ -231,21 +231,18 @@ mod tests {
     use super::*;
 
     fn commit() -> Action {
-        Action {
-            confirm: None,
-            group: "next".to_owned(),
-            label: "commit the planning files (2)".to_owned(),
-            why: "speccoder runs from committed files".to_owned(),
-            command: "git add … && git commit -m \"spec: …\" -- …".to_owned(),
-            run: Some(Runnable::Commit {
-                paths: vec![
-                    "specs/001-x/plan.md".to_owned(),
-                    "specs/001-x/tasks.md".to_owned(),
-                ],
-            }),
-            blocked: None,
-            input: None,
-        }
+        Action::new(
+            "next",
+            "commit the planning files (2)",
+            "speccoder runs from committed files",
+            "git add … && git commit -m \"spec: …\" -- …",
+        )
+        .with_run(Runnable::Commit {
+            paths: vec![
+                "specs/001-x/plan.md".to_owned(),
+                "specs/001-x/tasks.md".to_owned(),
+            ],
+        })
     }
 
     fn steps() -> Vec<JourneyStep> {

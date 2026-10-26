@@ -111,6 +111,10 @@
           "description": "`next`, `plan`, `work`, `task`, `feature` or `review`.",
           "type": "string"
         },
+        "id": {
+          "$ref": "#/$defs/ActionId",
+          "description": "What it is, independent of its wording ([`identity`])."
+        },
         "input": {
           "description": "What to ask for before it runs (`Describe the feature`).",
           "type": [
@@ -121,6 +125,17 @@
         "label": {
           "description": "What it does, in a few words.",
           "type": "string"
+        },
+        "role": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SkillRole"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "A planning skill's part in its format's planning; `None` for\neverything else."
         },
         "run": {
           "anyOf": [
@@ -146,9 +161,137 @@
         "run",
         "blocked",
         "input",
-        "confirm"
+        "confirm",
+        "id",
+        "role"
       ],
       "type": "object"
+    },
+    "ActionId": {
+      "description": "What an action is, independent of its wording: its kind and what it\nis about (the task, the skill, the issue). An interface finds an action\nby this, never by its label.",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/ActionKind",
+          "description": "Its kind."
+        },
+        "subject": {
+          "description": "What it is about: a task's id, a skill's name, an issue's number,\na review's `verdict` (`verdict:first id`), a command's words.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "subject"
+      ],
+      "type": "object"
+    },
+    "ActionKind": {
+      "description": "What kind of action it is: one per [`Runnable`] kind (a run split by\nwhether it names a task), plus [`ActionKind::Command`] for an action an\ninterface does not run itself. Exhaustive at any one version; a new\nkind arrives with its `Runnable` variant (the *adding a kind* contract\nof `speccoder_runtime::actions::perform`).",
+      "oneOf": [
+        {
+          "const": "skill",
+          "description": "[`Runnable::Skill`].",
+          "type": "string"
+        },
+        {
+          "const": "run_task",
+          "description": "[`Runnable::Run`] with a task.",
+          "type": "string"
+        },
+        {
+          "const": "run_feature",
+          "description": "[`Runnable::Run`] without one: the feature.",
+          "type": "string"
+        },
+        {
+          "const": "converge",
+          "description": "[`Runnable::Converge`].",
+          "type": "string"
+        },
+        {
+          "const": "commit",
+          "description": "[`Runnable::Commit`].",
+          "type": "string"
+        },
+        {
+          "const": "approve",
+          "description": "[`Runnable::Approve`].",
+          "type": "string"
+        },
+        {
+          "const": "reject",
+          "description": "[`Runnable::Reject`].",
+          "type": "string"
+        },
+        {
+          "const": "accept",
+          "description": "[`Runnable::Accept`].",
+          "type": "string"
+        },
+        {
+          "const": "skip",
+          "description": "[`Runnable::Skip`].",
+          "type": "string"
+        },
+        {
+          "const": "nudge",
+          "description": "[`Runnable::Nudge`].",
+          "type": "string"
+        },
+        {
+          "const": "rule",
+          "description": "[`Runnable::Rule`].",
+          "type": "string"
+        },
+        {
+          "const": "review",
+          "description": "[`Runnable::Review`].",
+          "type": "string"
+        },
+        {
+          "const": "issue_comment",
+          "description": "[`Runnable::IssueComment`].",
+          "type": "string"
+        },
+        {
+          "const": "quick_change",
+          "description": "[`Runnable::QuickChange`].",
+          "type": "string"
+        },
+        {
+          "const": "keep_set_aside",
+          "description": "[`Runnable::KeepSetAside`].",
+          "type": "string"
+        },
+        {
+          "const": "drop_set_aside",
+          "description": "[`Runnable::DropSetAside`].",
+          "type": "string"
+        },
+        {
+          "const": "fix_setup",
+          "description": "[`Runnable::FixSetup`].",
+          "type": "string"
+        },
+        {
+          "const": "feature",
+          "description": "[`Runnable::Feature`].",
+          "type": "string"
+        },
+        {
+          "const": "pull_request",
+          "description": "[`Runnable::PullRequest`].",
+          "type": "string"
+        },
+        {
+          "const": "command",
+          "description": "No runnable: the person runs the command.",
+          "type": "string"
+        }
+      ]
     },
     "ApprovalView": {
       "description": "A pending call as a person sees it: what, why, what it can reach, what\nthe model claimed, and what approving it grants.",
@@ -5004,6 +5147,36 @@
         "refused"
       ],
       "type": "object"
+    },
+    "SkillRole": {
+      "description": "The part a planning skill plays in its format's planning, from the\nformat's adapter: what an interface finds \"the create step\" or \"the\nanalysis step\" by, without naming a format's skill.",
+      "oneOf": [
+        {
+          "const": "create",
+          "description": "It creates a unit (Spec Kit's `specify`).",
+          "type": "string"
+        },
+        {
+          "const": "toward_tasks",
+          "description": "It leads toward the task list (`plan`, `tasks`).",
+          "type": "string"
+        },
+        {
+          "const": "revise",
+          "description": "It revises a written spec (`clarify`).",
+          "type": "string"
+        },
+        {
+          "const": "check",
+          "description": "It checks the planning files for consistency (`analyze`).",
+          "type": "string"
+        },
+        {
+          "const": "other",
+          "description": "Anything else.",
+          "type": "string"
+        }
+      ]
     },
     "SkillRunReport": {
       "description": "Result of `speccoder spec <name>`.",

@@ -728,19 +728,18 @@ fn a_feature_being_planned_shows_what_writes_its_tasks() {
 #[test]
 fn n_hands_the_next_step_to_the_terminal() {
     let mut snap = snapshot();
-    snap.primary = Some(speccoder_core::actions::Action {
-        confirm: None,
-        group: "next".to_owned(),
-        label: "spec tasks".to_owned(),
-        why: "break the plan into tasks".to_owned(),
-        command: "speccoder spec tasks".to_owned(),
-        run: Some(speccoder_core::actions::Runnable::Skill {
+    snap.primary = Some(
+        speccoder_core::actions::Action::new(
+            "next",
+            "spec tasks",
+            "break the plan into tasks",
+            "speccoder spec tasks",
+        )
+        .with_run(speccoder_core::actions::Runnable::Skill {
             name: "tasks".to_owned(),
             arguments: String::new(),
         }),
-        blocked: None,
-        input: None,
-    });
+    );
     let mut app = App::new(snap);
     assert!(screen(&app).contains("n  spec tasks — break the plan into tasks (at the terminal)"));
     assert_eq!(app.key(KeyCode::Char('n')), Action::Handoff);
