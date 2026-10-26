@@ -39,6 +39,7 @@ fn sandboxed(root: &Path, home: &Path, network: Network) -> Option<Sandboxed> {
         profile: Profile::new(root, &config, Some(home)),
         backend,
         network_allow: Vec::new(),
+        network_allow_prefix: Vec::new(),
     })
 }
 

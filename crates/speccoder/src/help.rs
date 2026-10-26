@@ -18,6 +18,7 @@ pub const GROUPS: &[(&str, &[&str])] = &[
 /// The commands `help advanced` lists.
 pub const ADVANCED: &[&str] = &[
     "actions",
+    "approvals",
     "fix",
     "attest",
     "verify",

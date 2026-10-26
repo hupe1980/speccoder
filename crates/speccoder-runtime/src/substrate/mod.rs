@@ -104,7 +104,9 @@ pub fn manifest_with(
             ];
             sources.extend(catalog.iter().map(|t| provenance::tool(t.server, t.name)));
             sources.extend(mcp.iter().map(|t| provenance::tool(&t.server, &t.tool)));
-            for t in &catalog {
+            // speccoder's own read-only steps (`fs/resolve`) are granted
+            // too; the model is never offered them.
+            for t in catalog.iter().chain(crate::tools::internal().iter()) {
                 let mut grant = ToolGrant {
                     description: Some(t.description.to_owned()),
                     max_sensitivity: Some(Sensitivity::Internal),
@@ -157,6 +159,46 @@ pub struct Hooks {
     pub format: Option<&'static dyn crate::format::Adapter>,
     /// The sandbox as a person asked about a command is told.
     pub present: crate::approvals::PresentContext,
+}
+
+/// Calls the journal records, and what of it could not be read.
+#[derive(Debug, Clone, Default)]
+pub struct RecordedCalls {
+    /// The calls.
+    pub calls: Vec<RecordedCall>,
+    /// What could not be read, and why.
+    pub unreadable: Vec<String>,
+}
+
+/// One recorded call.
+#[derive(Debug, Clone)]
+pub struct RecordedCall {
+    /// Its arguments as dispatched.
+    pub arguments: Value,
+    /// When its run last wrote (seconds since the epoch).
+    pub at: u64,
+}
+
+/// What [`Plane::decide_inline`] leaves.
+#[derive(Debug)]
+pub struct Inline {
+    /// The run as it rests.
+    pub outcome: RunOutcome,
+    /// The call it still waits on.
+    pub waiting: Option<agentplane::core::Task>,
+    /// Calls answered Always Allow.
+    pub always: Vec<Always>,
+}
+
+/// A call answered Always Allow inline.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Always {
+    /// `feature/task`.
+    pub task: String,
+    /// The waiting call's id.
+    pub call: String,
+    /// The interface it was answered through.
+    pub via: speccoder_core::actions::Via,
 }
 
 /// An open plane.
@@ -504,6 +546,62 @@ impl Plane {
         tasks.task(id).await.map_err(|e| PlaneError(e.to_string()))
     }
 
+    /// Every call of `server/tool` the journal records as dispatched, in
+    /// every run, with the time its run last wrote and whether it was
+    /// decided on an object (a person's decision or grant) — and what could
+    /// not be read: a run unreadable is reported, never skipped silently.
+    pub async fn tool_calls(&self, server: &str, tool: &str) -> Result<RecordedCalls, PlaneError> {
+        let journal = self.runtime.journal();
+        let mut out = RecordedCalls::default();
+        let mut after: Option<(u64, agentplane::core::RunId)> = None;
+        loop {
+            let page = journal
+                .recent_runs(after, 500)
+                .await
+                .map_err(|e| PlaneError(format!("listing the journal's runs: {e}")))?;
+            let Some(last) = page.last().cloned() else {
+                break;
+            };
+            for (run, at) in &page {
+                let records = match journal.read(*run, 0).await {
+                    Ok(r) => r,
+                    Err(e) => {
+                        out.unreadable.push(format!("run {run}: {e}"));
+                        continue;
+                    }
+                };
+                let mut seen = std::collections::BTreeSet::new();
+                for record in records {
+                    let agentplane::RecordKind::EffectStarted { descriptor, .. } = record.kind()
+                    else {
+                        continue;
+                    };
+                    let args = &descriptor.args;
+                    if descriptor.kind != "tool.call"
+                        || args["server"] != server
+                        || args["tool"] != tool
+                    {
+                        continue;
+                    }
+                    // A retried effect is one call.
+                    let key = record
+                        .body
+                        .effect_key
+                        .as_ref()
+                        .map_or_else(|| record.body.seq.to_string(), |k| format!("{k:?}"));
+                    if seen.insert(key) {
+                        out.calls.push(RecordedCall {
+                            arguments: args["arguments"].clone(),
+                            at: *at,
+                        });
+                    }
+                }
+            }
+            after = Some((last.1, last.0));
+        }
+        Ok(out)
+    }
+
     /// Every task waiting for a person, oldest first.
     pub async fn open_tasks(&self) -> Result<Vec<agentplane::core::Task>, PlaneError> {
         let Some(tasks) = self.runtime.tasks() else {
@@ -532,27 +630,54 @@ impl Plane {
 
     /// Asks `approver` about each call the run waits on, records the
     /// decision and lets the run continue, until it no longer waits on a
-    /// person. Returns the run as it rests and the call still waiting, if
-    /// the person answered "later" or nobody is there.
+    /// person. Returns the run as it rests, the call still waiting, if
+    /// the person answered "later", nobody is there or the call waits in
+    /// its run's batch, and the calls answered Always Allow (approved once
+    /// here; their argv is added to the allow list by
+    /// `actions::perform(AllowAlways)`, which the caller runs).
     pub async fn decide_inline(
         &self,
         mut outcome: RunOutcome,
         approver: Option<&dyn crate::approvals::Approver>,
         context: &crate::approvals::PresentContext,
-    ) -> Result<(RunOutcome, Option<agentplane::core::Task>), PlaneError> {
+    ) -> Result<Inline, PlaneError> {
+        let mut always = Vec::new();
         while let Some(task) = self.waiting_on(&outcome).await? {
-            let Some(decision) =
+            let Some((decision, answer)) =
                 approver.and_then(|a| crate::approvals::tasks::ask(a, &task, context))
             else {
-                return Ok((outcome, Some(task)));
+                return Ok(Inline {
+                    outcome,
+                    waiting: Some(task),
+                    always,
+                });
             };
             self.decide(task.id, &decision).await?;
+            if answer.always && decision.approved {
+                let via = answer
+                    .by
+                    .as_ref()
+                    .and_then(|b| speccoder_core::actions::Via::read(&b.via))
+                    .map_or(speccoder_core::actions::Via::Terminal, |(v, _)| v);
+                crate::approvals::answered_always(&task.id.to_hex());
+                always.push(Always {
+                    task: crate::approvals::tasks::request_of(&task.justification.proposed_action)
+                        .map(|r| r.task)
+                        .unwrap_or_default(),
+                    call: task.id.to_hex(),
+                    via,
+                });
+            }
             match self.outcome(outcome.run_id).await? {
                 Some(o) => outcome = o,
                 None => break,
             }
         }
-        Ok((outcome, None))
+        Ok(Inline {
+            outcome,
+            waiting: None,
+            always,
+        })
     }
 
     /// The run as it rests now, its output included: the journal records

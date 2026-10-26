@@ -134,6 +134,71 @@ pub(crate) fn redact(text: &str, secret: Option<&str>) -> String {
     }
 }
 
+/// One `speccoder run` from its fresh start to its end: `run-<unix
+/// secs>-<8 hex>`. Never one attempt's agentplane run (a retry is a new one
+/// of those, in the same run).
+#[derive(
+    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
+#[serde(transparent)]
+pub struct RunId(pub String);
+
+impl RunId {
+    /// A fresh id.
+    #[must_use]
+    pub fn fresh() -> Self {
+        use sha2::{Digest as _, Sha256};
+        static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default();
+        let n = COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let digest = Sha256::digest(format!(
+            "{}/{}/{}/{n}",
+            now.as_nanos(),
+            std::process::id(),
+            std::thread::current().name().unwrap_or_default()
+        ));
+        let hex: String = digest.iter().take(4).map(|b| format!("{b:02x}")).collect();
+        Self(format!("run-{}-{hex}", now.as_secs()))
+    }
+
+    /// Its text.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl Default for RunId {
+    fn default() -> Self {
+        Self::fresh()
+    }
+}
+
+impl std::fmt::Display for RunId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl RunOptions {
+    /// The run's id now.
+    #[must_use]
+    pub fn run(&self) -> RunId {
+        self.run_id
+            .lock()
+            .map(|r| r.clone())
+            .unwrap_or_else(|_| RunId(String::new()))
+    }
+
+    /// The run's prompts so far.
+    #[must_use]
+    pub fn asked_now(&self) -> u32 {
+        self.asked.lock().map(|a| *a).unwrap_or(0)
+    }
+}
+
 /// How a run behaves beyond its configuration.
 #[derive(Debug, Clone, Default)]
 pub struct RunOptions {
@@ -161,9 +226,15 @@ pub struct RunOptions {
     /// (`run --allow-failing-baseline`); otherwise the run stops before any
     /// model call (`CHECK-BROKEN`).
     pub allow_failing_baseline: bool,
-    /// Classes a person approved "for this run": shared by every task (and
+    /// Objects a person approved "for this run": shared by every task (and
     /// lane) of one `speccoder run`, gone with it.
-    pub run_grants: Arc<std::sync::Mutex<Vec<crate::tools::policy::Grant>>>,
+    pub run_grants: Arc<std::sync::Mutex<Vec<crate::tools::policy::Object>>>,
+    /// The run: one per `speccoder run` from its fresh start; an
+    /// invocation that resumes a suspended attempt adopts that attempt's.
+    /// Grants, the asking count and the batch are keyed by it.
+    pub run_id: Arc<std::sync::Mutex<RunId>>,
+    /// Prompts the run has shown a person (`[approvals] budget` caps them).
+    pub asked: Arc<std::sync::Mutex<u32>>,
     /// Run in the person's checkout on `speccoder/<feature>` instead of a
     /// worktree (`run --in-place`).
     pub in_place: bool,

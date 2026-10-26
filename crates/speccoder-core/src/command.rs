@@ -202,6 +202,61 @@ pub enum CommandData {
     EvidenceTour(Box<crate::tour::EvidenceTour>),
     /// `actions`: what can be done now.
     Actions(Box<ActionsReport>),
+    /// `config coverage`: what a prefix entry would newly allow.
+    PolicyCoverage(Box<PolicyCoverage>),
+}
+
+/// What a prefix entry of `[commands] allow_prefix` or `[sandbox]
+/// network_allow_prefix` would newly allow: every distinct argv the
+/// project's journal recorded that it covers and the current policy does
+/// not allow. A prefix is saved only as the confirmation of this preview,
+/// and only when it is complete.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct PolicyCoverage {
+    /// The entry previewed.
+    pub entry: CoverageEntry,
+    /// Every run in the journal was read.
+    pub complete: bool,
+    /// What could not be read, and why (never "covers nothing").
+    pub unreadable: Vec<String>,
+    /// The argvs it would newly allow.
+    pub rows: Vec<CoverageRow>,
+    /// SHA-256 over the entry, the rows and `complete`: what a save names.
+    pub digest: String,
+}
+
+/// A prefix entry.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct CoverageEntry {
+    /// `commands.allow_prefix` or `sandbox.network_allow_prefix`.
+    pub key: String,
+    /// The prefix.
+    pub prefix: Vec<String>,
+}
+
+/// One argv a prefix would newly allow.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct CoverageRow {
+    /// The argv.
+    pub argv: Vec<String>,
+    /// How often the journal records it.
+    pub count: u32,
+    /// Seconds since the epoch of the latest run that called it.
+    pub last_at: Option<u64>,
+    /// How it was decided then, with how often.
+    pub decided: Vec<CoverageDecision>,
+    /// A rule asks for it (or denies it) whatever the list says: the
+    /// rule's reason. The row stays so.
+    pub still_asks: Option<String>,
+}
+
+/// How calls of one argv were decided.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct CoverageDecision {
+    /// `allowed by rule`, `approved by a person`, `waiting`.
+    pub decision: String,
+    /// How often.
+    pub count: u32,
 }
 
 /// Result of `speccoder actions`: what a person can do now in the
@@ -630,6 +685,7 @@ impl CommandData {
             Self::BranchVerify(_) => "branch_verify",
             Self::EvidenceTour(_) => "evidence_tour",
             Self::Actions(_) => "actions",
+            Self::PolicyCoverage(_) => "policy_coverage",
         }
     }
 }
@@ -671,6 +727,7 @@ pub const PAYLOADS: &[&str] = &[
     "branch_verify",
     "evidence_tour",
     "actions",
+    "policy_coverage",
 ];
 
 /// A repository instructions file given to an attempt.
@@ -1234,6 +1291,44 @@ pub struct ApprovalsReport {
     /// speccoder holds it, …): `pending` may then be incomplete — unknown,
     /// never "nothing waiting".
     pub unreadable: Option<String>,
+    /// Runs whose asking budget is used: their waiting calls, decided
+    /// together (`speccoder approvals batch`).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub batch: Vec<BatchView>,
+}
+
+/// The object a person's decision covers, as reports show it.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct ObjectView {
+    /// `write`, `command`, `network` or `mcp`.
+    pub class: String,
+    /// The canonical path, `argv#<12 hex>` or `<tool>@<12 hex>`.
+    pub short: String,
+    /// One line: ``run `make check` ``.
+    pub describe: String,
+    /// The object in full, as every interface shows it.
+    pub lines: Vec<String>,
+}
+
+/// A run whose asking budget is used, with its waiting calls by class.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct BatchView {
+    /// The run.
+    pub run: String,
+    /// SHA-256 over the sorted ids of every call listed: a decision names
+    /// it and is refused when the list changed.
+    pub digest: String,
+    /// The calls by class, in the order write, command, network, mcp.
+    pub groups: Vec<BatchGroup>,
+}
+
+/// One class of a batch.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct BatchGroup {
+    /// `write`, `command`, `network` or `mcp`.
+    pub class: String,
+    /// The waiting calls' ids.
+    pub calls: Vec<String>,
 }
 
 /// A call that stopped an attempt for approval, or a question, waiting for
@@ -1267,6 +1362,15 @@ pub struct PendingCall {
     pub waiting_since: Option<u64>,
     /// Seconds since the epoch it is denied as expired at.
     pub deadline: Option<u64>,
+    /// The object a decision covers.
+    pub object: Option<ObjectView>,
+    /// Where arguments of the call were copied from (source lines).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub sources: Vec<String>,
+    /// The run it belongs to.
+    pub run: Option<String>,
+    /// It waits in its run's batch: the asking budget was used.
+    pub batched: bool,
 }
 
 /// Who decided, and how speccoder knows the name.
@@ -1297,8 +1401,14 @@ pub struct ApprovalView {
     pub claim: Option<String>,
     /// `low`, `medium` or `high`.
     pub risk: String,
-    /// What `approve` grants: `for the rest of T004: this path, any content`.
+    /// What `approve` grants: `for the rest of T004: this file, any content`.
     pub scope: String,
+    /// The object's lines.
+    pub object: Vec<String>,
+    /// Where arguments were copied from.
+    pub sources: Vec<String>,
+    /// The choices offered, in order.
+    pub options: Vec<String>,
 }
 
 /// A person's decision.
@@ -1330,6 +1440,10 @@ pub struct DecidedCall {
     pub client: Option<String>,
     /// Nobody decided: the deadline passed and the call was denied.
     pub expired: bool,
+    /// The object it decided on.
+    pub object: Option<ObjectView>,
+    /// The run it belongs to (a grant covers nothing after it).
+    pub run: Option<String>,
 }
 
 /// What `attest verify` found for one task object.

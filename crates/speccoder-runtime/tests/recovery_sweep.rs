@@ -79,7 +79,7 @@ fn every_crash_point_of_an_attempt_resumes_honestly() {
     )
     .unwrap()
     .unwrap();
-    let allow = vec![vec!["echo".to_owned()]];
+    let allow = vec![vec!["echo".to_owned(), "built".to_owned()]];
     let policy = Policy::new(&[], &allow);
     let tools = || {
         Some(Arc::new(
@@ -89,6 +89,7 @@ fn every_crash_point_of_an_attempt_resumes_honestly() {
     let settings = Settings {
         checks: &[],
         allow: &allow,
+        allow_prefix: &[],
         max_turns: 8,
         max_tool_calls: 8,
         reasoning: false,
@@ -103,6 +104,11 @@ fn every_crash_point_of_an_attempt_resumes_honestly() {
         asks: "stop",
         wait_secs: 0,
         network_allow: &[],
+        network_allow_prefix: &[],
+        run_id: "run-1-00000000",
+        asked: 0,
+        budget: 12,
+        prompts: false,
         in_place: false,
         hidden: &[],
     };

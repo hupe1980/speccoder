@@ -154,7 +154,9 @@ pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance 
         .flatten()
         .filter_map(|v| v.as_str().map(str::to_owned))
         .collect();
-    if a.policy.classify("run_command", &json!({ "argv": argv })) != tools::policy::Decision::Allow
+    if a.policy
+        .classify("run_command", &json!({ "argv": argv }), None)
+        != tools::policy::Decision::Allow
     {
         return skipped(
             format!("`{}` is not an allowed command", argv.join(" ")),
@@ -445,7 +447,8 @@ pub(crate) fn prepare_held_out(
             discard(&rel, "composition");
             continue;
         }
-        if a.policy.classify("run_command", &json!({ "argv": argv }))
+        if a.policy
+            .classify("run_command", &json!({ "argv": argv }), None)
             != tools::policy::Decision::Allow
         {
             discard(&rel, "command");
@@ -687,7 +690,9 @@ pub(crate) fn strengthen(
         .flatten()
         .filter_map(|v| v.as_str().map(str::to_owned))
         .collect();
-    if a.policy.classify("run_command", &json!({ "argv": argv })) != tools::policy::Decision::Allow
+    if a.policy
+        .classify("run_command", &json!({ "argv": argv }), None)
+        != tools::policy::Decision::Allow
     {
         return Err(format!("`{}` is not an allowed command", argv.join(" ")));
     }

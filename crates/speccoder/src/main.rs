@@ -4,6 +4,8 @@ mod acp;
 mod actions;
 #[cfg(window)]
 mod app;
+#[cfg(test)]
+mod approval_renderers;
 mod attention;
 mod cli;
 #[cfg(test)]
@@ -220,10 +222,171 @@ fn ui(
     }
 }
 
-/// `speccoder config [get|set|unset|commit]`.
+/// `config set` on a prefix list: entries it drops are removed at once (that
+/// narrows); each one it adds is shown with what it would newly allow and
+/// written only as the confirmation of that preview (`WidenPolicy`).
+fn widen(
+    path: &std::path::Path,
+    list: speccoder_core::actions::PolicyList,
+    value: &serde_json::Value,
+    yes: bool,
+    interactive: bool,
+) -> speccoder_core::CommandResult {
+    use speccoder_core::{CommandData, CommandResult, CommandStatus, ConfigChange};
+    use std::io::Write as _;
+    let wanted: Vec<Vec<String>> = serde_json::from_value(value.clone()).unwrap_or_default();
+    let current: Vec<Vec<String>> = speccoder_runtime::settings::read(path)
+        .sections
+        .iter()
+        .flat_map(|s| {
+            s.keys
+                .iter()
+                .map(move |k| (format!("{}.{}", s.name, k.key), k))
+        })
+        .find(|(name, _)| name == list.key())
+        .and_then(|(_, k)| k.value.clone())
+        .and_then(|v| serde_json::from_value(v).ok())
+        .unwrap_or_default();
+    let kept: Vec<&Vec<String>> = current.iter().filter(|p| wanted.contains(p)).collect();
+    let mut last = speccoder_runtime::settings::show(path);
+    if kept.len() != current.len() {
+        last = speccoder_runtime::settings::apply(
+            path,
+            &[ConfigChange {
+                key: list.key().to_owned(),
+                value: Some(serde_json::json!(kept)),
+                append: None,
+            }],
+        );
+        if last.status() != CommandStatus::Ok {
+            return last;
+        }
+    }
+    let state = speccoder_runtime::worktree::state_dir();
+    for prefix in wanted.iter().filter(|p| !current.contains(p)) {
+        let shown =
+            speccoder_runtime::approvals::coverage::show(path, state.as_deref(), list, prefix);
+        let Some(CommandData::PolicyCoverage(c)) = shown.data().cloned() else {
+            return shown;
+        };
+        let confirmed = yes
+            || (interactive && {
+                eprintln!("{}", speccoder_runtime::approvals::coverage::summary(&c));
+                for row in &c.rows {
+                    let how: Vec<String> = row
+                        .decided
+                        .iter()
+                        .map(|d| format!("{} ×{}", d.decision, d.count))
+                        .collect();
+                    eprintln!(
+                        "  {}  ×{}  {}{}",
+                        row.argv.join(" "),
+                        row.count,
+                        how.join(", "),
+                        row.still_asks
+                            .as_deref()
+                            .map(|s| format!("  ({s})"))
+                            .unwrap_or_default()
+                    );
+                }
+                eprint!("Save this prefix? Type yes to confirm: ");
+                let _ = std::io::stderr().flush();
+                let mut line = String::new();
+                let _ = std::io::stdin().read_line(&mut line);
+                line.trim() == "yes"
+            });
+        if !confirmed {
+            return CommandResult::new(
+                "config",
+                CommandStatus::NeedsHuman,
+                &format!(
+                    "needs confirmation: {} — run again with --yes to save it",
+                    speccoder_runtime::approvals::coverage::summary(&c)
+                ),
+            )
+            .with_data(CommandData::PolicyCoverage(c));
+        }
+        let run = speccoder_core::actions::Runnable::WidenPolicy {
+            key: list,
+            prefix: prefix.clone(),
+            digest: c.digest.clone(),
+        };
+        last = speccoder_runtime::actions::perform(
+            path,
+            None,
+            speccoder_runtime::actions::Dispatch::new(&run, speccoder_core::actions::Via::Terminal),
+        );
+        if last.status() != CommandStatus::Ok {
+            return last;
+        }
+    }
+    last
+}
+
+/// `speccoder approvals [batch …]`.
+fn approvals(
+    path: &std::path::Path,
+    feature: Option<&str>,
+    action: Option<&cli::ApprovalsAction>,
+) -> speccoder_core::CommandResult {
+    use speccoder_core::actions::{BatchVerdict, Runnable, Via};
+    match action {
+        None => speccoder_runtime::approvals::decide(
+            path,
+            feature,
+            speccoder_runtime::approvals::Verb::List,
+            Via::Terminal,
+        ),
+        Some(cli::ApprovalsAction::Batch {
+            run,
+            verdict,
+            digest,
+            calls,
+            reason,
+            resume_asking,
+        }) => {
+            // Every listed call by default.
+            let calls = if calls.is_empty() {
+                let listed = speccoder_runtime::approvals::decide(
+                    path,
+                    feature,
+                    speccoder_runtime::approvals::Verb::List,
+                    Via::Terminal,
+                );
+                match listed.data() {
+                    Some(speccoder_core::CommandData::Approvals(a)) => a
+                        .batch
+                        .iter()
+                        .filter(|b| b.run == *run)
+                        .flat_map(|b| b.groups.iter().flat_map(|g| g.calls.clone()))
+                        .collect(),
+                    _ => Vec::new(),
+                }
+            } else {
+                calls.clone()
+            };
+            let r = Runnable::DecideBatch {
+                run: run.clone(),
+                verdict: match verdict {
+                    cli::VerdictArg::Approve => BatchVerdict::Approve,
+                    cli::VerdictArg::Reject => BatchVerdict::Reject,
+                },
+                calls,
+                digest: digest.clone(),
+                resume_asking: *resume_asking,
+            };
+            let mut d = speccoder_runtime::actions::Dispatch::new(&r, Via::Terminal);
+            d.input = reason.as_deref();
+            speccoder_runtime::actions::perform(path, feature, d)
+        }
+    }
+}
+
+/// `speccoder config [get|set|unset|commit|coverage]`.
 fn config(
     path: &std::path::Path,
     action: Option<&cli::ConfigAction>,
+    interactive: bool,
 ) -> speccoder_core::CommandResult {
     use speccoder_core::{CommandResult, CommandStatus, ConfigChange};
     use speccoder_runtime::settings;
@@ -275,12 +438,32 @@ fn config(
                 .with_fix(vec!["speccoder config".to_owned()]),
             }
         }
-        Some(cli::ConfigAction::Set { key, value }) => match settings::value_of(key, value) {
-            Ok(v) => settings::apply(path, &change(key, Some(v))),
+        Some(cli::ConfigAction::Set { key, value, yes }) => match settings::value_of(key, value) {
+            Ok(v) => match speccoder_core::actions::PolicyList::of_key(key) {
+                Some(list) => widen(path, list, &v, *yes, interactive),
+                None => settings::apply(path, &change(key, Some(v))),
+            },
             Err(e) => CommandResult::new("config", CommandStatus::ConfigError, &e)
                 .with_code("CONFIG-INVALID")
                 .with_fix(vec![format!("speccoder config get {key}")]),
         },
+        Some(cli::ConfigAction::Coverage { key, prefix }) => {
+            match speccoder_core::actions::PolicyList::of_key(key) {
+                Some(list) => speccoder_runtime::approvals::coverage::show(
+                    path,
+                    speccoder_runtime::worktree::state_dir().as_deref(),
+                    list,
+                    prefix,
+                ),
+                None => CommandResult::new(
+                    "config",
+                    CommandStatus::UsageError,
+                    &format!(
+                        "`{key}` is not a prefix list (commands.allow_prefix, sandbox.network_allow_prefix)"
+                    ),
+                ),
+            }
+        }
         Some(cli::ConfigAction::Unset { key }) => settings::apply(path, &change(key, None)),
         Some(cli::ConfigAction::Commit) => settings::commit(path),
     }
@@ -576,7 +759,14 @@ fn main() {
             no_open,
             window,
         } => ui(path, *port, *no_open, *window, cli.json),
-        Command::Config { action } => config(path, action.as_ref()),
+        Command::Config { action } => config(
+            path,
+            action.as_ref(),
+            !cli.json
+                && std::io::IsTerminal::is_terminal(&std::io::stdin())
+                && std::io::IsTerminal::is_terminal(&std::io::stderr()),
+        ),
+        Command::Approvals { action } => approvals(path, feature, action.as_ref()),
         Command::Do {
             request,
             checks,
@@ -1240,6 +1430,7 @@ fn command_name(command: Option<&Command>) -> &'static str {
             C::Feature { .. } => "feature",
             C::Ui { .. } => "ui",
             C::Config { .. } => "config",
+            C::Approvals { .. } => "approvals",
             C::Issue { .. } => "issue",
             C::Do { .. } => "do",
             C::Inbox => "inbox",

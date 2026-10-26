@@ -17,9 +17,20 @@ use crate::actions::action;
 
 /// The kinds, most urgent first: what blocks a run, what questions the
 /// evidence, what stops a task, what blocks a hand-off.
-pub const KINDS: [&str; 12] = [
-    "unknown", "approval", "ruling", "gaming", "stale", "question", "review", "revise", "stuck",
-    "aside", "commit", "handoff",
+pub const KINDS: [&str; 13] = [
+    "unknown",
+    "approval",
+    "approval_batch",
+    "ruling",
+    "gaming",
+    "stale",
+    "question",
+    "review",
+    "revise",
+    "stuck",
+    "aside",
+    "commit",
+    "handoff",
 ];
 
 /// `speccoder inbox [--feature]`: the decisions waiting in every feature of
@@ -93,6 +104,10 @@ fn counted(kind: &str, n: usize) -> String {
             "features whose waiting calls could not be read",
         ),
         "approval" => ("approval", "approvals"),
+        "approval_batch" => (
+            "run whose calls wait together",
+            "runs whose calls wait together",
+        ),
         "ruling" => ("ruling", "rulings"),
         "gaming" => ("suspected shortcut", "suspected shortcuts"),
         "stale" => (
@@ -185,8 +200,103 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
         ));
     }
 
+    // A run that used its asking budget: its waiting calls are one item,
+    // decided together.
+    let batched_runs: Vec<String> = approvals
+        .iter()
+        .flat_map(|a| &a.batch)
+        .map(|b| b.run.clone())
+        .collect();
+    for b in approvals.iter().flat_map(|a| &a.batch) {
+        let calls: Vec<String> = b.groups.iter().flat_map(|g| g.calls.clone()).collect();
+        let of_run: Vec<&speccoder_core::PendingCall> = approvals
+            .iter()
+            .flat_map(|a| &a.pending)
+            .filter(|p| p.run.as_deref() == Some(b.run.as_str()))
+            .collect();
+        let detail: Vec<String> = b
+            .groups
+            .iter()
+            .map(|g| {
+                let shown: Vec<String> = of_run
+                    .iter()
+                    .filter(|p| p.object.as_ref().map_or("write", |o| o.class.as_str()) == g.class)
+                    .map(|p| {
+                        let what = p
+                            .object
+                            .as_ref()
+                            .map_or(p.covers.clone(), |o| o.short.clone());
+                        let risk = p.presentation.as_ref().map_or("", |v| v.risk.as_str());
+                        let copied = if p.sources.is_empty() {
+                            ""
+                        } else {
+                            ", copied from content"
+                        };
+                        format!("{what} ({}, {risk}{copied})", p.task)
+                    })
+                    .collect();
+                format!("{}: {}", g.class, shown.join("; "))
+            })
+            .collect();
+        let decide = |verdict, resume_asking| Runnable::DecideBatch {
+            run: b.run.clone(),
+            verdict,
+            calls: calls.clone(),
+            digest: b.digest.clone(),
+            resume_asking,
+        };
+        let command = |verb: &str| {
+            flag(format!(
+                "speccoder approvals batch {} {verb} --digest {}",
+                b.run, b.digest
+            ))
+        };
+        let yes = action(
+            "next",
+            format!("approve the {} waiting call(s) once", calls.len()),
+            "each listed call runs once; the run keeps waiting at its next call",
+            command("approve"),
+        )
+        .with_run(decide(
+            speccoder_core::actions::BatchVerdict::Approve,
+            false,
+        ));
+        let again = action(
+            "next",
+            "approve once and resume asking",
+            "each listed call runs once, and the run prompts you again",
+            format!("{} --resume-asking", command("approve")),
+        )
+        .with_run(decide(speccoder_core::actions::BatchVerdict::Approve, true));
+        let mut no = action(
+            "next",
+            format!("reject the {} waiting call(s)", calls.len()),
+            "the model is told your reason for each",
+            format!("{} --reason \"…\"", command("reject")),
+        )
+        .with_run(decide(speccoder_core::actions::BatchVerdict::Reject, false));
+        no.input = Some("Why (the model is told)".to_owned());
+        let mut i = item(
+            "approval_batch",
+            None,
+            format!(
+                "{} call(s) wait for you in run {} (its approval budget is used)",
+                calls.len(),
+                b.run
+            ),
+            detail.join(" · "),
+            vec![yes, again, no],
+        );
+        i.since = of_run.iter().filter_map(|p| p.waiting_since).min();
+        out.push(i);
+    }
+
     // A run waits on these.
-    for p in approvals.iter().flat_map(|a| &a.pending) {
+    for p in approvals
+        .iter()
+        .flat_map(|a| &a.pending)
+        .filter(|p| p.run.as_ref().is_none_or(|r| !batched_runs.contains(r)))
+    {
         let question = p.kind == "question";
         let mut yes = action(
             "next",

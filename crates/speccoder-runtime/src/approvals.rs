@@ -1,12 +1,15 @@
 //! A person's approvals and rejections.
 //!
 //! When an attempt stops for approval, its pending call is saved with the
-//! attempt. `speccoder task approve` turns that call's class — the path
-//! of a write, the exact argv of a command — into an approval for the task;
-//! `speccoder task reject` into a denial with a reason the model is told. The
-//! next attempt carries the task's decisions in its journaled input, so
-//! strict replay needs nothing else. Standing approvals for commands are
-//! `[commands] allow` in `speccoder.toml`.
+//! attempt. `speccoder task approve` turns that call's resolved object —
+//! the canonical file of a write, the exact argv of a command with its
+//! directory and executable, an MCP tool with its definition's digest —
+//! into an approval for the task, bound to the run it was made in (a grant
+//! never outlives its run); `speccoder task reject` into a denial with a
+//! reason the model is told. The next attempt carries the task's decisions
+//! in its journaled input, so strict replay needs nothing else. Standing
+//! approvals for commands are `[commands] allow` in `speccoder.toml`
+//! (exact argvs), committed by the person.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -17,18 +20,33 @@ use speccoder_core::{
     ApprovalsReport, CommandData, CommandResult, CommandStatus, DecidedCall, PendingCall,
 };
 
-use crate::tools::policy::{Grant, Rejection};
+use crate::tools::policy::{Object, Rejection};
 
 /// The decisions file in a project's state directory.
 pub const FILE: &str = "approvals.json";
 
+/// An approved object and the run it belongs to: it covers calls of that
+/// run only. `run` is `None` for a decision on a call a parallel lane
+/// stopped (its run ended): the next run that attempts the task claims it
+/// ([`Decisions::claim`]), and it ends with that run.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RunGrant {
+    /// What it covers.
+    pub object: Object,
+    /// The run (`run-<secs>-<hex>`), once claimed.
+    #[serde(default)]
+    pub run: Option<String>,
+}
+
 /// One task's decisions.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct TaskDecisions {
-    /// Approved classes.
+    /// Approved objects, each with its run.
     #[serde(default)]
-    pub approved: Vec<Grant>,
-    /// Rejected classes with reasons.
+    pub approved: Vec<RunGrant>,
+    /// Rejected objects with reasons (a rejection holds for the task).
     #[serde(default)]
     pub rejected: Vec<Rejection>,
     /// A person's notes for the task's next attempts (`speccoder task nudge`).
@@ -165,11 +183,17 @@ pub fn who_in(dir: &Path) -> String {
 
 /// One decision, as it was made.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Decided {
-    /// `approve` or `reject`.
+    /// `approve`, `reject` or `resume_asking` (a run's asking budget
+    /// started again).
     pub verb: String,
-    /// The call class.
-    pub grant: Grant,
+    /// The object decided on; none for `resume_asking`.
+    #[serde(default)]
+    pub object: Option<Object>,
+    /// The run it was made in.
+    #[serde(default)]
+    pub run: Option<String>,
     /// A rejection's reason.
     #[serde(default)]
     pub reason: Option<String>,
@@ -205,11 +229,17 @@ pub struct Decisions {
 }
 
 impl Decisions {
-    /// Reads the decisions in `dir`; none when there is no file yet.
+    /// Reads the decisions in `dir`; none when there is no file yet. A file
+    /// in an earlier shape (grants by class, not object) is an error naming
+    /// it: reading it as "no decisions" would drop its rejections.
     pub fn load(dir: &Path) -> Result<Self, String> {
         match std::fs::read_to_string(dir.join(FILE)) {
-            Ok(text) => serde_json::from_str(&text)
-                .map_err(|e| format!("{}: {e}", dir.join(FILE).display())),
+            Ok(text) => serde_json::from_str(&text).map_err(|e| {
+                format!(
+                    "{}: {e} — written before decisions named objects; remove it to start afresh (its decisions are not carried over)",
+                    dir.join(FILE).display()
+                )
+            }),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Self::default()),
             Err(e) => Err(format!("{}: {e}", dir.join(FILE).display())),
         }
@@ -233,16 +263,55 @@ impl Decisions {
             .unwrap_or_default()
     }
 
-    /// Records an approval; a rejection of the same class is withdrawn.
-    pub fn approve(&mut self, feature: &str, task: &str, grant: Grant, by: &Who) {
+    /// The objects approved for `feature/task` in `run`: never another
+    /// run's (a grant ends with its run).
+    #[must_use]
+    pub fn for_run(&self, feature: &str, task: &str, run: &str) -> Vec<Object> {
+        self.for_task(feature, task)
+            .approved
+            .into_iter()
+            .filter(|g| g.run.as_deref() == Some(run))
+            .map(|g| g.object)
+            .collect()
+    }
+
+    /// Binds the task's unclaimed grants (decisions on a call a lane
+    /// stopped) to `run`, the run that now attempts it; whether any was.
+    pub fn claim(&mut self, feature: &str, task: &str, run: &str) -> bool {
+        let Some(d) = self.tasks.get_mut(&format!("{feature}/{task}")) else {
+            return false;
+        };
+        let mut claimed = false;
+        for g in d.approved.iter_mut().filter(|g| g.run.is_none()) {
+            g.run = Some(run.to_owned());
+            claimed = true;
+        }
+        claimed
+    }
+
+    /// Records an approval of `object` in `run`; a rejection of the same
+    /// object is withdrawn.
+    pub fn approve(
+        &mut self,
+        feature: &str,
+        task: &str,
+        object: Object,
+        run: Option<&str>,
+        by: &Who,
+    ) {
         let d = self.tasks.entry(format!("{feature}/{task}")).or_default();
-        d.rejected.retain(|r| r.grant != grant);
+        d.rejected.retain(|r| r.object != object);
+        let grant = RunGrant {
+            object: object.clone(),
+            run: run.map(str::to_owned),
+        };
         if !d.approved.contains(&grant) {
-            d.approved.push(grant.clone());
+            d.approved.push(grant);
         }
         d.decided.push(Decided {
             verb: "approve".to_owned(),
-            grant,
+            object: Some(object),
+            run: run.map(str::to_owned),
             reason: None,
             scope: task_scope(),
             note: None,
@@ -261,18 +330,19 @@ impl Decisions {
             .push(decided);
     }
 
-    /// Records a rejection; an approval of the same class is withdrawn.
-    pub fn reject(&mut self, feature: &str, task: &str, grant: Grant, reason: &str, by: &Who) {
+    /// Records a rejection; an approval of the same object is withdrawn.
+    pub fn reject(&mut self, feature: &str, task: &str, object: Object, reason: &str, by: &Who) {
         let d = self.tasks.entry(format!("{feature}/{task}")).or_default();
-        d.approved.retain(|g| *g != grant);
-        d.rejected.retain(|r| r.grant != grant);
+        d.approved.retain(|g| g.object != object);
+        d.rejected.retain(|r| r.object != object);
         d.rejected.push(Rejection {
-            grant: grant.clone(),
+            object: object.clone(),
             reason: reason.to_owned(),
         });
         d.decided.push(Decided {
             verb: "reject".to_owned(),
-            grant,
+            object: Some(object),
+            run: None,
             reason: Some(reason.to_owned()),
             scope: task_scope(),
             note: None,
@@ -281,25 +351,70 @@ impl Decisions {
         });
     }
 
-    /// Whether `grant` was decided for `feature/task` either way.
+    /// Whether `object` was decided for `feature/task` either way. An
+    /// earlier run's grant does not count: it covers nothing now.
     #[must_use]
-    pub fn decided(&self, feature: &str, task: &str, grant: &Grant) -> bool {
+    pub fn decided(&self, feature: &str, task: &str, object: &Object) -> bool {
         let d = self.for_task(feature, task);
-        d.approved.contains(grant) || d.rejected.iter().any(|r| &r.grant == grant)
+        d.approved
+            .iter()
+            .any(|g| g.object == *object && g.run.is_none())
+            || d.rejected.iter().any(|r| r.object == *object)
     }
 }
 
 // ── Inline approvals ────────────────────────────────────────────────
 
+pub mod coverage;
+pub mod derived;
 pub mod present;
 pub mod tasks;
 
+/// Calls answered Always Allow inline in this process, approved once
+/// there: the one other state `actions::perform(AllowAlways)` accepts
+/// besides a call still waiting.
+static ANSWERED_ALWAYS: std::sync::Mutex<std::collections::BTreeSet<String>> =
+    std::sync::Mutex::new(std::collections::BTreeSet::new());
+
+/// Records that the waiting call `call` was approved once by an Always
+/// Allow answer, here and now.
+pub fn answered_always(call: &str) {
+    if let Ok(mut set) = ANSWERED_ALWAYS.lock() {
+        set.insert(call.to_owned());
+    }
+}
+
+/// Whether `call` was approved by an Always Allow answer in this process;
+/// it is forgotten (one policy write per answer).
+pub(crate) fn take_answered_always(call: &str) -> bool {
+    ANSWERED_ALWAYS
+        .lock()
+        .map(|mut set| set.remove(call))
+        .unwrap_or(false)
+}
+
 pub use present::{PresentContext, Presentation, present};
+
+/// An argument of a call found verbatim in content the attempt received
+/// from a source other than the model, the person or speccoder: where it
+/// came from, so the person can tell a planted command from the model's own.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Source {
+    /// The matched argument, escaped, at most 120 characters.
+    pub argument: String,
+    /// The read path (`README.md`), the tool (`tool://fs/run_command`,
+    /// `tool://<server>/<tool>`), `speccoder://worktree` or
+    /// `speccoder://verifier`.
+    pub from: String,
+    /// The model turn it arrived in; 0 for the attempt's prompt.
+    pub turn: u32,
+}
 
 /// A call that needs a person: the identity of the journaled question, so
 /// only what the journal already holds goes in (the presentation — the diff,
 /// the sandbox line — is built live from it).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Request {
     /// `feature/task`.
     pub task: String,
@@ -318,8 +433,14 @@ pub struct Request {
     pub kind: String,
     /// Why it needs approval.
     pub reason: String,
-    /// What a "for this task" answer would cover.
-    pub covers: String,
+    /// The resolved object a decision covers; `None` only for a tool that
+    /// has none.
+    #[serde(default)]
+    pub object: Option<Object>,
+    /// What differs from an object of the same name a person approved
+    /// earlier (`executable /usr/bin/make → /w/bin/make`).
+    #[serde(default)]
+    pub changed: Option<String>,
     /// `high` (runs arbitrary code or uses the network), `medium` (changes
     /// dependencies, frozen tests or repository state; any MCP tool) or `low`.
     pub risk: String,
@@ -327,9 +448,39 @@ pub struct Request {
     /// control characters escaped — a claim, not a fact.
     #[serde(default)]
     pub claim: Option<String>,
-    /// The choices offered, in order: of `once`, `task`, `run`, `reject`, `stop`.
+    /// Arguments copied from content the attempt read, with where from (at
+    /// most five; `more` counts the rest).
+    #[serde(default)]
+    pub sources: Vec<Source>,
+    /// Sources beyond the five kept.
+    #[serde(default)]
+    pub more: u32,
+    /// The choices offered, in order: of `once`, `task`, `run`, `always`,
+    /// `reject`, `stop`.
     #[serde(default)]
     pub options: Vec<String>,
+    /// The run (`run-<secs>-<hex>`) the call belongs to.
+    #[serde(default)]
+    pub run: Option<String>,
+    /// Prompts shown in the run, this one included (0 when not prompted).
+    #[serde(default)]
+    pub asked: u32,
+    /// The run's asking budget (`[approvals] budget`).
+    #[serde(default)]
+    pub budget: u32,
+    /// The budget was used: the call waits in the run's batch, unprompted.
+    #[serde(default)]
+    pub batched: bool,
+}
+
+impl Request {
+    /// What a "for this task" answer would cover, in one line.
+    #[must_use]
+    pub fn covers(&self) -> String {
+        self.object
+            .as_ref()
+            .map_or_else(|| format!("call `{}`", self.tool), Object::describe)
+    }
 }
 
 /// How far an approval reaches.
@@ -384,9 +535,26 @@ pub struct Answer {
     /// Who answered; journaled with the answer.
     #[serde(default)]
     pub by: Option<Who>,
+    /// "Always Allow": approved once, and the exact argv added to the
+    /// project's allow list (the runtime does that, never the interface).
+    #[serde(default)]
+    pub always: bool,
+    /// With a batch decision: start the run's asking budget again.
+    #[serde(default)]
+    pub resume_asking: bool,
 }
 
 impl Answer {
+    /// Always Allow: this call once, and exactly its argv into
+    /// `[commands] allow` (or `[sandbox] network_allow`).
+    #[must_use]
+    pub fn always(by: Option<Who>) -> Self {
+        Self {
+            always: true,
+            ..Self::approve(Scope::Once, None, by)
+        }
+    }
+
     /// An approval with `scope` and an optional note to the model.
     #[must_use]
     pub fn approve(scope: Scope, note: Option<String>, by: Option<Who>) -> Self {
@@ -396,6 +564,8 @@ impl Answer {
             note: note.filter(|n| !n.trim().is_empty()),
             reason: None,
             by,
+            always: false,
+            resume_asking: false,
         }
     }
 
@@ -408,6 +578,8 @@ impl Answer {
             note: None,
             reason: Some(reason.into()),
             by,
+            always: false,
+            resume_asking: false,
         }
     }
 
@@ -420,6 +592,8 @@ impl Answer {
             note: None,
             reason: None,
             by,
+            always: false,
+            resume_asking: false,
         }
     }
 }
@@ -465,15 +639,29 @@ pub fn kind_of(tool: &str, arguments: &serde_json::Value) -> &'static str {
     }
 }
 
-/// The choices offered: "for this run" never for high risk; neither "task"
-/// nor "run" when the class is not shown in full.
+/// The choices offered, in the fixed order `once, task, run, always,
+/// reject, stop`. Remembered options (`task`, `run`, `always`) only for a
+/// call with a resolved object whose arguments were not copied from content
+/// the attempt read (`derived`); "for this run" never for high risk;
+/// "always" only for a command (`run`, `network`) whose argv is not high
+/// risk without the network (`always_risk`: an exact allow-list entry is
+/// committed, reviewed policy).
 #[must_use]
-pub fn options(risk: &str, subject_complete: bool) -> Vec<String> {
+pub fn options(
+    risk: &str,
+    has_object: bool,
+    derived: bool,
+    kind: &str,
+    always_risk: &str,
+) -> Vec<String> {
     let mut o = vec!["once"];
-    if subject_complete {
+    if has_object && !derived {
         o.push("task");
         if risk != "high" {
             o.push("run");
+        }
+        if matches!(kind, "run" | "network") && always_risk != "high" {
+            o.push("always");
         }
     }
     o.extend(["reject", "stop"]);
@@ -542,13 +730,34 @@ fn locate(
     ))
 }
 
+/// The object as reports show it.
+#[must_use]
+pub fn object_view(object: &Object) -> speccoder_core::ObjectView {
+    speccoder_core::ObjectView {
+        class: object.class().as_str().to_owned(),
+        short: object.short(),
+        describe: object.describe(),
+        lines: present::object_lines(Some(object), None),
+    }
+}
+
+/// The question a saved (lane) attempt stopped on: the request it
+/// recorded. An attempt saved before requests named objects has none.
+fn saved_request(feature: &str, task: &str, pending: &serde_json::Value) -> Option<Request> {
+    let mut r: Request = serde_json::from_value(pending["request"].clone()).ok()?;
+    if r.task.is_empty() {
+        r.task = format!("{feature}/{task}");
+    }
+    Some(r)
+}
+
 /// Open tasks' latest attempts that stopped for approval and are undecided.
 fn pending(
     root: &Path,
     feature: &str,
     open: &[String],
     decisions: &Decisions,
-) -> Vec<(PendingCall, Grant)> {
+) -> Vec<(PendingCall, Object)> {
     let mut seen = std::collections::BTreeSet::new();
     let mut out = Vec::new();
     for saved in crate::attempts::list(root, feature) {
@@ -558,28 +767,34 @@ fn pending(
         let Some(p) = saved.pending.filter(|_| saved.outcome == "needs_approval") else {
             continue;
         };
-        let tool = p["tool"].as_str().unwrap_or_default().to_owned();
-        let Some(grant) = Grant::of(&tool, &p["arguments"]) else {
+        let Some(request) = saved_request(feature, &saved.task, &p) else {
             continue;
         };
-        if decisions.decided(feature, &saved.task, &grant) {
+        let Some(object) = request.object.clone() else {
+            continue;
+        };
+        if decisions.decided(feature, &saved.task, &object) {
             continue;
         }
-        let presentation = view(root, feature, &saved.task, &saved.reference, &tool, &p);
+        let presentation = view(root, &saved.task, &saved.reference, &request);
         out.push((
             PendingCall {
                 task: saved.task.clone(),
-                covers: grant.describe(),
-                tool,
-                arguments: p["arguments"].clone(),
-                reason: p["reason"].as_str().unwrap_or_default().to_owned(),
+                covers: object.describe(),
+                tool: request.tool.clone(),
+                arguments: request.arguments.clone(),
+                reason: request.reason.clone(),
                 reference: saved.reference.clone(),
                 presentation: Some(presentation),
                 source: "attempt".to_owned(),
                 kind: "approval".to_owned(),
+                object: Some(object_view(&object)),
+                sources: present::source_lines(&request),
+                run: request.run.clone(),
+                batched: request.batched,
                 ..PendingCall::default()
             },
-            grant,
+            object,
         ));
     }
     out
@@ -589,32 +804,10 @@ fn pending(
 /// saved attempt left it, the project's sandbox, the model's claim.
 fn view(
     root: &Path,
-    feature: &str,
     task: &str,
     reference: &str,
-    tool: &str,
-    pending: &serde_json::Value,
+    request: &Request,
 ) -> speccoder_core::ApprovalView {
-    let arguments = pending["arguments"].clone();
-    let reason = pending["reason"].as_str().unwrap_or_default().to_owned();
-    let grant = Grant::of(tool, &arguments);
-    let risk = risk(tool, &reason);
-    let request = Request {
-        task: format!("{feature}/{task}"),
-        task_title: String::new(),
-        turn: pending["turn"]
-            .as_u64()
-            .and_then(|t| u32::try_from(t).ok())
-            .unwrap_or(0),
-        tool: tool.to_owned(),
-        kind: kind_of(tool, &arguments).to_owned(),
-        covers: grant.as_ref().map(|g| g.describe()).unwrap_or_default(),
-        risk: risk.to_owned(),
-        claim: pending["claim"].as_str().map(str::to_owned),
-        options: options(risk, grant.is_some()),
-        arguments,
-        reason,
-    };
     let path = request.arguments["path"].as_str().unwrap_or_default();
     let file_text = (!path.is_empty())
         .then(|| {
@@ -624,7 +817,7 @@ fn view(
                 .map(|b| String::from_utf8_lossy(&b).into_owned())
         })
         .flatten();
-    presented(root, &request, task, file_text)
+    presented(root, request, task, file_text)
 }
 
 /// `request` as the inline prompt shows it, with the project's sandbox
@@ -671,6 +864,9 @@ fn presented(
         claim: request.claim.clone(),
         risk: request.risk.clone(),
         scope: format!("for the rest of {task}: {}", p.scope),
+        object: p.object,
+        sources: p.sources,
+        options: request.options.clone(),
     }
 }
 
@@ -681,31 +877,39 @@ fn decided(feature: &str, decisions: &Decisions) -> Vec<DecidedCall> {
         let Some(task) = key.strip_prefix(&prefix) else {
             continue;
         };
-        let last = |g: &Grant| d.decided.iter().rev().find(|x| x.grant == *g);
+        let last = |o: &Object| {
+            d.decided
+                .iter()
+                .rev()
+                .find(|x| x.object.as_ref() == Some(o))
+        };
         out.extend(d.approved.iter().map(|g| DecidedCall {
             task: task.to_owned(),
             decision: "approved".to_owned(),
-            covers: g.describe(),
+            covers: g.object.describe(),
             reason: None,
-            by: last(g).map(|x| x.by.describe()),
+            by: last(&g.object).map(|x| x.by.describe()),
             scope: Some("task".to_owned()),
-            note: last(g).and_then(|x| x.note.clone()),
-            operator: last(g).map(|x| x.by.view()),
-            via: last(g).map(|x| x.by.via.clone()),
-            client: last(g).and_then(|x| x.by.client.clone()),
+            note: last(&g.object).and_then(|x| x.note.clone()),
+            operator: last(&g.object).map(|x| x.by.view()),
+            via: last(&g.object).map(|x| x.by.via.clone()),
+            client: last(&g.object).and_then(|x| x.by.client.clone()),
+            object: Some(object_view(&g.object)),
+            run: g.run.clone(),
             ..DecidedCall::default()
         }));
         out.extend(d.rejected.iter().map(|r| DecidedCall {
             task: task.to_owned(),
             decision: "rejected".to_owned(),
-            covers: r.grant.describe(),
+            covers: r.object.describe(),
             reason: Some(r.reason.clone()),
-            by: last(&r.grant).map(|x| x.by.describe()),
+            by: last(&r.object).map(|x| x.by.describe()),
             scope: Some("task".to_owned()),
             note: None,
-            operator: last(&r.grant).map(|x| x.by.view()),
-            via: last(&r.grant).map(|x| x.by.via.clone()),
-            client: last(&r.grant).and_then(|x| x.by.client.clone()),
+            operator: last(&r.object).map(|x| x.by.view()),
+            via: last(&r.object).map(|x| x.by.via.clone()),
+            client: last(&r.object).and_then(|x| x.by.client.clone()),
+            object: Some(object_view(&r.object)),
             ..DecidedCall::default()
         }));
         // "For this run" decisions live in the history only.
@@ -713,18 +917,23 @@ fn decided(feature: &str, decisions: &Decisions) -> Vec<DecidedCall> {
             d.decided
                 .iter()
                 .filter(|x| x.verb == "approve" && x.scope == "run")
-                .map(|x| DecidedCall {
-                    task: task.to_owned(),
-                    decision: "approved".to_owned(),
-                    covers: x.grant.describe(),
-                    reason: None,
-                    by: Some(x.by.describe()),
-                    scope: Some("run".to_owned()),
-                    note: x.note.clone(),
-                    operator: Some(x.by.view()),
-                    via: Some(x.by.via.clone()),
-                    client: x.by.client.clone(),
-                    ..DecidedCall::default()
+                .filter_map(|x| {
+                    let object = x.object.as_ref()?;
+                    Some(DecidedCall {
+                        task: task.to_owned(),
+                        decision: "approved".to_owned(),
+                        covers: object.describe(),
+                        reason: None,
+                        by: Some(x.by.describe()),
+                        scope: Some("run".to_owned()),
+                        note: x.note.clone(),
+                        operator: Some(x.by.view()),
+                        via: Some(x.by.via.clone()),
+                        client: x.by.client.clone(),
+                        object: Some(object_view(object)),
+                        run: x.run.clone(),
+                        ..DecidedCall::default()
+                    })
                 }),
         );
     }
@@ -763,7 +972,11 @@ fn waiting_tasks(
             Some((
                 PendingCall {
                     task,
-                    covers: request.covers.clone(),
+                    covers: request.covers(),
+                    object: request.object.as_ref().map(object_view),
+                    sources: present::source_lines(&request),
+                    run: request.run.clone(),
+                    batched: request.batched,
                     tool: request.tool.clone(),
                     arguments: request.arguments.clone(),
                     reason: request.reason.clone(),
@@ -1062,6 +1275,7 @@ pub fn decide_with(
                     .collect(),
                 feature,
                 unreadable: None,
+                batch: Vec::new(),
             };
             return CommandResult::new(
                 command,
@@ -1082,7 +1296,8 @@ pub fn decide_with(
         }
     }
     // In a parallel lane, a stopped attempt is saved with its call:
-    // deciding it records a grant the task's next attempt starts with.
+    // deciding it records a grant of exactly that object, which the next
+    // run that attempts the task claims (it ends with that run).
     let verb = match verb {
         Verb::Decide(c) => match (c.task, c.approve, c.note) {
             (Some(t), true, Some(n)) => Verb::ApproveNoted(t, n),
@@ -1131,7 +1346,13 @@ pub fn decide_with(
                     )
                 }
                 _ => {
-                    decisions.approve(&feature, task, grant.clone(), &Who::local_in(&root, via));
+                    decisions.approve(
+                        &feature,
+                        task,
+                        grant.clone(),
+                        None,
+                        &Who::local_in(&root, via),
+                    );
                     if let Verb::ApproveNoted(_, note) = verb
                         && !note.trim().is_empty()
                     {
@@ -1171,9 +1392,363 @@ pub fn decide_with(
             .collect(),
         feature,
         unreadable,
+        batch: Vec::new(),
+    };
+    let report = ApprovalsReport {
+        batch: batches(&report.pending),
+        ..report
     };
     CommandResult::new(command, CommandStatus::Ok, &message)
         .with_data(CommandData::Approvals(Box::new(report)))
+}
+
+// ── The asking budget's batch ───────────────────────────────────────
+
+/// The id a call a lane stopped has in a batch (it waits on no task).
+fn lane_call(task: &str) -> String {
+    format!("attempt:{task}")
+}
+
+/// The id a pending call has in a batch.
+fn batch_id(p: &PendingCall) -> String {
+    if p.call.is_empty() {
+        lane_call(&p.task)
+    } else {
+        p.call.clone()
+    }
+}
+
+/// SHA-256 over the sorted ids of `calls`.
+#[must_use]
+pub fn batch_digest(calls: &[String]) -> String {
+    use sha2::{Digest as _, Sha256};
+    let mut ids = calls.to_vec();
+    ids.sort();
+    Sha256::digest(ids.join("\n").as_bytes())
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
+/// The runs whose asking budget is used, each with every call of it that
+/// waits (its lanes' included), by class.
+#[must_use]
+pub fn batches(pending: &[PendingCall]) -> Vec<speccoder_core::BatchView> {
+    let mut runs: Vec<String> = pending
+        .iter()
+        .filter(|p| p.batched)
+        .filter_map(|p| p.run.clone())
+        .collect();
+    runs.sort();
+    runs.dedup();
+    runs.into_iter()
+        .map(|run| {
+            let of_run: Vec<&PendingCall> = pending
+                .iter()
+                .filter(|p| p.run.as_deref() == Some(run.as_str()) && p.kind == tasks::APPROVAL)
+                .collect();
+            let groups = ["write", "command", "network", "mcp"]
+                .iter()
+                .filter_map(|class| {
+                    let calls: Vec<String> = of_run
+                        .iter()
+                        .filter(|p| {
+                            p.object.as_ref().map_or("write", |o| o.class.as_str()) == *class
+                        })
+                        .map(|p| batch_id(p))
+                        .collect();
+                    (!calls.is_empty()).then(|| speccoder_core::BatchGroup {
+                        class: (*class).to_owned(),
+                        calls,
+                    })
+                })
+                .collect::<Vec<_>>();
+            let ids: Vec<String> = of_run.iter().map(|p| batch_id(p)).collect();
+            speccoder_core::BatchView {
+                digest: batch_digest(&ids),
+                run,
+                groups,
+            }
+        })
+        .collect()
+}
+
+/// What a batch decision decides.
+#[derive(Debug, Clone, Copy)]
+pub struct BatchChoice<'a> {
+    /// The run.
+    pub run: &'a str,
+    /// Approve (each once) or reject.
+    pub approve: bool,
+    /// The calls decided: a non-empty subset of the batch.
+    pub calls: &'a [String],
+    /// The digest of the list the person saw.
+    pub digest: &'a str,
+    /// Start the run's asking budget again.
+    pub resume_asking: bool,
+    /// A rejection's reason, for each call.
+    pub reason: Option<&'a str>,
+}
+
+/// `DecideBatch`: decides the listed calls of a run's batch, each once —
+/// never for the task or the run — recorded per call with who decided and
+/// through what; refused when the list changed since the person saw it.
+#[must_use]
+pub fn decide_batch(
+    path: &Path,
+    feature: Option<&str>,
+    choice: BatchChoice<'_>,
+    state: Option<&Path>,
+    via: Via,
+) -> CommandResult {
+    let command = "approvals";
+    let Some(state) = state else {
+        return CommandResult::new(command, CommandStatus::ConfigError, "no state directory")
+            .with_code("NO-STATE-DIR");
+    };
+    let (feature, dir, root) = match locate(command, path, feature, state) {
+        Ok(x) => x,
+        Err(r) => return *r,
+    };
+    let listed = decide_with(path, Some(&feature), Verb::List, state, via);
+    let Some(CommandData::Approvals(report)) = listed.data().cloned() else {
+        return listed;
+    };
+    if let Some(why) = &report.unreadable {
+        return CommandResult::new(
+            command,
+            CommandStatus::Error,
+            &format!("the calls waiting for a decision could not be read: {why}"),
+        );
+    }
+    let Some(batch) = report.batch.iter().find(|b| b.run == choice.run) else {
+        return CommandResult::new(
+            command,
+            CommandStatus::NotFound,
+            &format!("no calls wait together in run {}", choice.run),
+        );
+    };
+    let listed_ids: Vec<String> = batch.groups.iter().flat_map(|g| g.calls.clone()).collect();
+    if batch.digest != choice.digest {
+        return CommandResult::new(
+            command,
+            CommandStatus::UsageError,
+            &format!(
+                "the list changed; {} calls are waiting now",
+                listed_ids.len()
+            ),
+        )
+        .with_data(CommandData::Approvals(report.clone()));
+    }
+    if choice.calls.is_empty() || choice.calls.iter().any(|c| !listed_ids.contains(c)) {
+        return CommandResult::new(
+            command,
+            CommandStatus::UsageError,
+            "name calls of the batch (or none to decide them all)",
+        );
+    }
+    let by = Who::local_in(&root, via);
+    let mut decisions = match Decisions::load(&dir) {
+        Ok(d) => d,
+        Err(e) => return CommandResult::new(command, CommandStatus::ConfigError, &e),
+    };
+    let rows = match waiting_tasks(&root, &dir, &feature) {
+        Ok(r) => r,
+        Err(e) => return CommandResult::new(command, CommandStatus::Error, &e),
+    };
+    let reason = choice.reason.unwrap_or("no reason given");
+    let mut lines = Vec::new();
+    for id in choice.calls {
+        let mut answer = if choice.approve {
+            Answer::approve(Scope::Once, None, Some(by.clone()))
+        } else {
+            Answer::reject(reason, Some(by.clone()))
+        };
+        answer.resume_asking = choice.resume_asking;
+        if let Some(task) = id.strip_prefix("attempt:") {
+            // A lane's stopped call: decided for the task's next attempt.
+            let Some(p) = report
+                .pending
+                .iter()
+                .find(|p| p.call.is_empty() && p.task == task)
+            else {
+                continue;
+            };
+            let object = pending(&root, &feature, &[task.to_owned()], &decisions)
+                .into_iter()
+                .map(|(_, o)| o)
+                .next();
+            let Some(object) = object else { continue };
+            if choice.approve {
+                decisions.approve(&feature, task, object, None, &by);
+            } else {
+                decisions.reject(&feature, task, object, reason, &by);
+            }
+            lines.push(format!("{}: {}", p.task, p.covers));
+            continue;
+        }
+        let Some((p, row)) = rows.iter().find(|(p, _)| p.call == *id) else {
+            continue;
+        };
+        if let Err(e) = decide_waiting(&dir, row, &answer, &by) {
+            return CommandResult::new(command, CommandStatus::Error, &e);
+        }
+        lines.push(format!("{}: {}", p.task, p.covers));
+    }
+    if choice.resume_asking
+        && let Some(first) = report
+            .pending
+            .iter()
+            .find(|p| listed_ids.contains(&batch_id(p)))
+    {
+        decisions.note(
+            &feature,
+            &first.task,
+            Decided {
+                verb: "resume_asking".to_owned(),
+                object: None,
+                run: Some(choice.run.to_owned()),
+                reason: None,
+                scope: "run".to_owned(),
+                note: None,
+                by: by.clone(),
+                at: now(),
+            },
+        );
+    }
+    if let Err(e) = decisions.save(&dir) {
+        return CommandResult::new(command, CommandStatus::Error, &e);
+    }
+    let after = decide_with(path, Some(&feature), Verb::List, state, via);
+    CommandResult::new(
+        command,
+        CommandStatus::Ok,
+        &format!(
+            "{} {} call(s) once — by {} ({}){}: {}; `speccoder run` continues",
+            if choice.approve {
+                "approved"
+            } else {
+                "rejected"
+            },
+            lines.len(),
+            by.name,
+            by.via,
+            if choice.resume_asking {
+                "; the run asks again"
+            } else {
+                ""
+            },
+            lines.join(", ")
+        ),
+    )
+    .with_data(
+        after
+            .data()
+            .cloned()
+            .unwrap_or(CommandData::Approvals(report)),
+    )
+}
+
+// ── Always Allow ────────────────────────────────────────────────────
+
+/// `AllowAlways`: the waiting command `call` of `task` runs once and
+/// exactly its argv joins `[commands] allow` (or `[sandbox] network_allow`
+/// for a network call). Only for a call that offered it; a call still
+/// waiting is decided here, one answered Always Allow inline in this
+/// process was decided there.
+#[must_use]
+pub fn allow_always(
+    path: &Path,
+    feature: Option<&str>,
+    task: &str,
+    call: &str,
+    state: Option<&Path>,
+    via: Via,
+) -> CommandResult {
+    let command = "config";
+    let refuse = |m: &str| CommandResult::new(command, CommandStatus::UsageError, m);
+    let Some(state) = state else {
+        return CommandResult::new(command, CommandStatus::ConfigError, "no state directory")
+            .with_code("NO-STATE-DIR");
+    };
+    let (feature, dir, root) = match locate(command, path, feature, state) {
+        Ok(x) => x,
+        Err(r) => return *r,
+    };
+    if !dir.join(crate::substrate::JOURNAL).exists() {
+        return CommandResult::new(command, CommandStatus::NotFound, "no such waiting call");
+    }
+    let Ok(id) = agentplane::core::TaskId::parse(call) else {
+        return refuse("not a call id");
+    };
+    let row = match crate::tokio_runtime().and_then(|rt| {
+        let plane = crate::substrate::Plane::open_for_decisions(&dir).map_err(|e| e.0)?;
+        rt.block_on(plane.task(id)).map_err(|e| e.0)
+    }) {
+        Ok(Some(row)) => row,
+        Ok(None) => {
+            return CommandResult::new(command, CommandStatus::NotFound, "no such waiting call");
+        }
+        Err(e) => return CommandResult::new(command, CommandStatus::Error, &e),
+    };
+    let Some(request) = tasks::request_of(&row.justification.proposed_action)
+        .filter(|r| r.task == format!("{feature}/{task}"))
+    else {
+        return CommandResult::new(
+            command,
+            CommandStatus::NotFound,
+            &format!("{task} has no such call"),
+        );
+    };
+    let offered = matches!(request.kind.as_str(), "run" | "network")
+        && request.options.iter().any(|o| o == "always");
+    let Some(Object::Command { argv, network, .. }) = request.object.clone().filter(|_| offered)
+    else {
+        return refuse("Always Allow is not offered for this call");
+    };
+    let by = Who::local_in(&root, via);
+    match row.state {
+        agentplane::core::TaskState::Open | agentplane::core::TaskState::Claimed => {
+            if let Err(e) = decide_waiting(&dir, &row, &Answer::always(Some(by.clone())), &by) {
+                return CommandResult::new(command, CommandStatus::Error, &e);
+            }
+        }
+        _ if take_answered_always(call) => {}
+        _ => return refuse("this call was already decided"),
+    }
+    let key = if network {
+        "sandbox.network_allow"
+    } else {
+        "commands.allow"
+    };
+    let r = crate::settings::apply_confirmed(
+        &root,
+        &[speccoder_core::ConfigChange {
+            key: key.to_owned(),
+            value: None,
+            append: Some(serde_json::json!(argv)),
+        }],
+    );
+    if r.status() != CommandStatus::Ok {
+        return r;
+    }
+    let table = if network {
+        "[sandbox] network_allow"
+    } else {
+        "[commands] allow"
+    };
+    CommandResult::new(
+        command,
+        CommandStatus::Ok,
+        &format!(
+            "allowed once; added exactly `{}` to {table} — nothing after it runs because of this (by {} via {}); commit speccoder.toml to keep it",
+            argv.join(" "),
+            by.name,
+            by.via
+        ),
+    )
+    .with_next(r.next().to_vec())
+    .with_data(r.data().cloned().unwrap_or(CommandData::Config(Box::new(crate::settings::read(&root)))))
 }
 
 /// [`decide_with`] in the default state directory.
@@ -1212,22 +1787,130 @@ pub fn decide_in(
 mod tests {
     use super::*;
 
+    fn file(path: &str) -> Object {
+        Object::Path {
+            canonical: path.to_owned(),
+            asked: path.to_owned(),
+        }
+    }
+
     #[test]
     fn decisions_round_trip_and_replace_each_other() {
         let dir = tempfile::tempdir().unwrap_or_else(|e| panic!("{e}"));
-        let g = Grant::Write {
-            path: "Cargo.toml".to_owned(),
-        };
+        let g = file("Cargo.toml");
         let mut d = Decisions::load(dir.path()).unwrap_or_else(|e| panic!("{e}"));
         let by = Who::local(Via::Terminal);
         d.reject("f", "T1", g.clone(), "no new dependencies", &by);
-        d.approve("f", "T1", g.clone(), &by);
+        d.approve("f", "T1", g.clone(), Some("run-1"), &by);
         assert_eq!(d.tasks["f/T1"].decided.len(), 2);
         assert_eq!(d.tasks["f/T1"].decided[1].by, by);
         d.save(dir.path()).unwrap_or_else(|e| panic!("{e}"));
         let back = Decisions::load(dir.path()).unwrap_or_else(|e| panic!("{e}"));
-        assert_eq!(back.for_task("f", "T1").approved, std::slice::from_ref(&g));
+        assert_eq!(back.for_run("f", "T1", "run-1"), std::slice::from_ref(&g));
         assert!(back.for_task("f", "T1").rejected.is_empty());
-        assert!(back.decided("f", "T1", &g) && !back.decided("f", "T2", &g));
+        // Another run's grant covers nothing, and is history only.
+        assert!(back.for_run("f", "T1", "run-2").is_empty());
+        assert!(!back.decided("f", "T1", &g) && !back.decided("f", "T2", &g));
+    }
+
+    #[test]
+    fn a_lane_decision_is_claimed_by_the_next_run_only() {
+        let mut d = Decisions::default();
+        let by = Who::local(Via::Terminal);
+        d.approve("f", "T1", file("package.json"), None, &by);
+        assert!(d.decided("f", "T1", &file("package.json")));
+        assert!(d.for_run("f", "T1", "run-2").is_empty());
+        assert!(d.claim("f", "T1", "run-2"));
+        assert_eq!(d.for_run("f", "T1", "run-2"), [file("package.json")]);
+        // Claimed once: a later run gets nothing.
+        assert!(!d.claim("f", "T1", "run-3"));
+        assert!(d.for_run("f", "T1", "run-3").is_empty());
+    }
+
+    #[test]
+    fn a_decisions_file_from_before_objects_is_refused_by_name() {
+        let dir = tempfile::tempdir().unwrap_or_else(|e| panic!("{e}"));
+        std::fs::write(
+            dir.path().join(FILE),
+            r#"{"tasks":{"f/T1":{"approved":[{"kind":"write","path":"Cargo.toml"}]}}}"#,
+        )
+        .unwrap_or_else(|e| panic!("{e}"));
+        let e = Decisions::load(dir.path()).err().unwrap_or_default();
+        assert!(
+            e.contains(FILE) && e.contains("before decisions named objects"),
+            "{e}"
+        );
+    }
+
+    #[test]
+    fn remembered_options_need_an_object_and_text_not_copied_from_content() {
+        let o = |risk, has, derived, kind, always| options(risk, has, derived, kind, always);
+        assert_eq!(
+            o("low", true, false, "run", "low"),
+            ["once", "task", "run", "always", "reject", "stop"]
+        );
+        // A network call is high risk; Always Allow is judged without it.
+        assert_eq!(
+            o("high", true, false, "network", "low"),
+            ["once", "task", "always", "reject", "stop"]
+        );
+        assert_eq!(
+            o("high", true, false, "run", "high"),
+            ["once", "task", "reject", "stop"]
+        );
+        assert_eq!(
+            o("low", true, false, "write", "low"),
+            ["once", "task", "run", "reject", "stop"]
+        );
+        assert_eq!(
+            o("low", true, true, "run", "low"),
+            ["once", "reject", "stop"]
+        );
+        assert_eq!(
+            o("low", false, false, "run", "low"),
+            ["once", "reject", "stop"]
+        );
+    }
+
+    #[test]
+    fn a_runs_batch_lists_its_lanes_stopped_calls_too() {
+        let call = |task: &str, id: &str, batched: bool, class: &str, run: &str| PendingCall {
+            task: task.to_owned(),
+            call: id.to_owned(),
+            kind: tasks::APPROVAL.to_owned(),
+            run: Some(run.to_owned()),
+            batched,
+            object: Some(speccoder_core::ObjectView {
+                class: class.to_owned(),
+                ..speccoder_core::ObjectView::default()
+            }),
+            ..PendingCall::default()
+        };
+        let pending = vec![
+            call("T1", "aa", true, "write", "run-1"),
+            // A lane's stop in the same run: no task id, listed by its task.
+            call("T2", "", false, "command", "run-1"),
+            // Another run, within its budget: no batch of its own.
+            call("T3", "bb", false, "write", "run-2"),
+        ];
+        let b = batches(&pending);
+        assert_eq!(b.len(), 1);
+        assert_eq!(b[0].run, "run-1");
+        let groups: Vec<(&str, Vec<String>)> = b[0]
+            .groups
+            .iter()
+            .map(|g| (g.class.as_str(), g.calls.clone()))
+            .collect();
+        assert_eq!(
+            groups,
+            [
+                ("write", vec!["aa".to_owned()]),
+                ("command", vec!["attempt:T2".to_owned()])
+            ]
+        );
+        assert_eq!(
+            b[0].digest,
+            batch_digest(&["attempt:T2".to_owned(), "aa".to_owned()])
+        );
     }
 }

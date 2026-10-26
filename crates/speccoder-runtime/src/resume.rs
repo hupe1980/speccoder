@@ -30,6 +30,15 @@ pub struct Marker {
     pub sample: usize,
     /// The acceptance tests prepared for the task run.
     pub acceptance: Option<serde_json::Value>,
+    /// The run the attempt belongs to: an invocation resuming it adopts it.
+    #[serde(default)]
+    pub run_id: Option<String>,
+    /// The run's prompts when the attempt started.
+    #[serde(default)]
+    pub asked: u32,
+    /// The run's grants when it started.
+    #[serde(default)]
+    pub run_grants: Vec<crate::tools::policy::Object>,
 }
 
 /// Where the marker of `feature/task` lives.

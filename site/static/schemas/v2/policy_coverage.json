@@ -1,0 +1,134 @@
+{
+  "$defs": {
+    "CoverageDecision": {
+      "description": "How calls of one argv were decided.",
+      "properties": {
+        "count": {
+          "description": "How often.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "decision": {
+          "description": "`allowed by rule`, `approved by a person`, `waiting`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "decision",
+        "count"
+      ],
+      "type": "object"
+    },
+    "CoverageEntry": {
+      "description": "A prefix entry.",
+      "properties": {
+        "key": {
+          "description": "`commands.allow_prefix` or `sandbox.network_allow_prefix`.",
+          "type": "string"
+        },
+        "prefix": {
+          "description": "The prefix.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "key",
+        "prefix"
+      ],
+      "type": "object"
+    },
+    "CoverageRow": {
+      "description": "One argv a prefix would newly allow.",
+      "properties": {
+        "argv": {
+          "description": "The argv.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "count": {
+          "description": "How often the journal records it.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "decided": {
+          "description": "How it was decided then, with how often.",
+          "items": {
+            "$ref": "#/$defs/CoverageDecision"
+          },
+          "type": "array"
+        },
+        "last_at": {
+          "description": "Seconds since the epoch of the latest run that called it.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "still_asks": {
+          "description": "A rule asks for it (or denies it) whatever the list says: the\nrule's reason. The row stays so.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "argv",
+        "count",
+        "last_at",
+        "decided",
+        "still_asks"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/policy_coverage.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "What a prefix entry of `[commands] allow_prefix` or `[sandbox]\nnetwork_allow_prefix` would newly allow: every distinct argv the\nproject's journal recorded that it covers and the current policy does\nnot allow. A prefix is saved only as the confirmation of this preview,\nand only when it is complete.",
+  "properties": {
+    "complete": {
+      "description": "Every run in the journal was read.",
+      "type": "boolean"
+    },
+    "digest": {
+      "description": "SHA-256 over the entry, the rows and `complete`: what a save names.",
+      "type": "string"
+    },
+    "entry": {
+      "$ref": "#/$defs/CoverageEntry",
+      "description": "The entry previewed."
+    },
+    "rows": {
+      "description": "The argvs it would newly allow.",
+      "items": {
+        "$ref": "#/$defs/CoverageRow"
+      },
+      "type": "array"
+    },
+    "unreadable": {
+      "description": "What could not be read, and why (never \"covers nothing\").",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "entry",
+    "complete",
+    "unreadable",
+    "rows",
+    "digest"
+  ],
+  "title": "config coverage: what a prefix entry would newly allow",
+  "type": "object"
+}

@@ -87,7 +87,7 @@ export interface ActionId {
  * kind arrives with its `Runnable` variant (the *adding a kind* contract
  * of `speccoder_runtime::actions::perform`).
  */
-export type ActionKind = "skill" | "run_task" | "run_feature" | "converge" | "commit" | "approve" | "reject" | "accept" | "skip" | "nudge" | "rule" | "review" | "issue_comment" | "quick_change" | "keep_set_aside" | "drop_set_aside" | "fix_setup" | "feature" | "pull_request" | "command";
+export type ActionKind = "skill" | "run_task" | "run_feature" | "converge" | "commit" | "approve" | "reject" | "accept" | "skip" | "nudge" | "rule" | "review" | "issue_comment" | "quick_change" | "keep_set_aside" | "drop_set_aside" | "fix_setup" | "feature" | "pull_request" | "allow_always" | "widen_policy" | "decide_batch" | "command";
 
 /**
  * Result of `speccoder actions`: what a person can do now in the
@@ -120,12 +120,18 @@ export interface ApprovalView {
   claim: string | null;
   /** `write`, `edit`, `run`, `network` or `mcp`. */
   kind: string;
+  /** The object's lines. */
+  object: string[];
+  /** The choices offered, in order. */
+  options: string[];
   /** `low`, `medium` or `high`. */
   risk: string;
   /** What the call can reach. */
   sandbox: string;
-  /** What `approve` grants: `for the rest of T004: this path, any content`. */
+  /** What `approve` grants: `for the rest of T004: this file, any content`. */
   scope: string;
+  /** Where arguments were copied from. */
+  sources: string[];
   /** The path, the whole command, or the MCP tool. */
   subject: string;
   /** `Edit this file?`, `Run this command?`, …. */
@@ -134,6 +140,11 @@ export interface ApprovalView {
 
 /** Result of `speccoder report --approvals`, `approve` and `reject`. */
 export interface ApprovalsReport {
+  /**
+   * Runs whose asking budget is used: their waiting calls, decided
+   * together (`speccoder approvals batch`).
+   */
+  batch?: BatchView[];
   /** Decisions recorded for the feature's tasks. */
   decided: DecidedCall[];
   /** Feature directory name. */
@@ -219,6 +230,30 @@ export interface AuthReport {
   login: string | null;
   /** `GH_TOKEN`, `GITHUB_TOKEN`, `the keychain`, when signed in. */
   source: string | null;
+}
+
+/** One class of a batch. */
+export interface BatchGroup {
+  /** The waiting calls' ids. */
+  calls: string[];
+  /** `write`, `command`, `network` or `mcp`. */
+  class: string;
+}
+
+/** A batch decision. */
+export type BatchVerdict = "approve" | "reject";
+
+/** A run whose asking budget is used, with its waiting calls by class. */
+export interface BatchView {
+  /**
+   * SHA-256 over the sorted ids of every call listed: a decision names
+   * it and is refused when the list changed.
+   */
+  digest: string;
+  /** The calls by class, in the order write, command, network, mcp. */
+  groups: BatchGroup[];
+  /** The run. */
+  run: string;
 }
 
 /** Result of `speccoder bench import`. */
@@ -360,7 +395,7 @@ export interface CodeInfo {
 }
 
 /** Command-specific payload of a result. */
-export type CommandData = ProjectSnapshot | VerifyReport | WorktreeReport | ProposeReport | ReplayReport | RunReport | EvalReport | FeatureReport | ConvergeReport | StatusReport | ApprovalsReport | ControlReport | CostReport | PrReport | BenchReport | InitReport | SkillsReport | SkillRunReport | ChecklistStatus[] | ArchiveReport | InPlaceReport | AttestReport | ExplainReport | SchemaReport | DoctorReport | FeaturesReport | UiReport | ConfigReport | IssuesReport | InboxReport | ReviewReport | AuthReport | BranchReport | EvidenceTour | ActionsReport;
+export type CommandData = ProjectSnapshot | VerifyReport | WorktreeReport | ProposeReport | ReplayReport | RunReport | EvalReport | FeatureReport | ConvergeReport | StatusReport | ApprovalsReport | ControlReport | CostReport | PrReport | BenchReport | InitReport | SkillsReport | SkillRunReport | ChecklistStatus[] | ArchiveReport | InPlaceReport | AttestReport | ExplainReport | SchemaReport | DoctorReport | FeaturesReport | UiReport | ConfigReport | IssuesReport | InboxReport | ReviewReport | AuthReport | BranchReport | EvidenceTour | ActionsReport | PolicyCoverage;
 
 /**
  * The envelope as it is serialised — the schema of [`CommandResult`]
@@ -577,6 +612,39 @@ export interface Counts {
   rejected: number;
 }
 
+/** How calls of one argv were decided. */
+export interface CoverageDecision {
+  /** How often. */
+  count: number;
+  /** `allowed by rule`, `approved by a person`, `waiting`. */
+  decision: string;
+}
+
+/** A prefix entry. */
+export interface CoverageEntry {
+  /** `commands.allow_prefix` or `sandbox.network_allow_prefix`. */
+  key: string;
+  /** The prefix. */
+  prefix: string[];
+}
+
+/** One argv a prefix would newly allow. */
+export interface CoverageRow {
+  /** The argv. */
+  argv: string[];
+  /** How often the journal records it. */
+  count: number;
+  /** How it was decided then, with how often. */
+  decided: CoverageDecision[];
+  /** Seconds since the epoch of the latest run that called it. */
+  last_at: number | null;
+  /**
+   * A rule asks for it (or denies it) whatever the list says: the
+   * rule's reason. The row stays so.
+   */
+  still_asks: string | null;
+}
+
 /** A person's decision. */
 export interface DecidedCall {
   /** Who decided, as `name (via)`. */
@@ -593,10 +661,14 @@ export interface DecidedCall {
   expired: boolean;
   /** An approval's note to the model. */
   note: string | null;
+  /** The object it decided on. */
+  object: ObjectView | null;
   /** Who decided; `None` for an expiry. */
   operator: OperatorView | null;
   /** The reason, for a rejection. */
   reason: string | null;
+  /** The run it belongs to (a grant covers nothing after it). */
+  run: string | null;
   /** How far an approval reaches: `once`, `task` or `run`. */
   scope: string | null;
   /** Task ID. */
@@ -963,8 +1035,10 @@ export type EventLine = {
   | {
     /** The call id. */
     call: string;
-    /** What an approval for the task or run would cover. */
+    /** The object's class: `write`, `command`, `network`, `mcp`. */
     class: string;
+    /** The object's short form (path, `argv#…`, `tool@…`). */
+    object: string;
     /** Task ID. */
     task: string;
     /** The tool. */
@@ -979,10 +1053,14 @@ export type EventLine = {
     by: string;
     /** The call id. */
     call: string;
+    /** The object's class. */
+    class: string;
     /** `approve` or `reject`. */
     decision: string;
     /** `asserted`, `connected`, `expired`. */
     how: string;
+    /** The object's short form. */
+    object: string;
     /** `once`, `task`, `run`. */
     scope: string | null;
     /** Task ID. */
@@ -1488,6 +1566,18 @@ export interface ObjectVerification {
   verdict: string | null;
 }
 
+/** The object a person's decision covers, as reports show it. */
+export interface ObjectView {
+  /** `write`, `command`, `network` or `mcp`. */
+  class: string;
+  /** One line: ``run `make check` ``. */
+  describe: string;
+  /** The object in full, as every interface shows it. */
+  lines: string[];
+  /** The canonical path, `argv#<12 hex>` or `<tool>@<12 hex>`. */
+  short: string;
+}
+
 /** A question a document leaves open, to answer in place. */
 export interface OpenQuestion {
   /** The document (project-relative). */
@@ -1549,6 +1639,8 @@ export interface ParsedTasks {
 export interface PendingCall {
   /** Its arguments as the model sent them. */
   arguments: unknown;
+  /** It waits in its run's batch: the asking budget was used. */
+  batched: boolean;
   /** The waiting call's id (`approve --call`); empty for a stopped attempt. */
   call: string;
   /** What a decision would cover, e.g. ``write `Cargo.toml` ``. */
@@ -1557,6 +1649,8 @@ export interface PendingCall {
   deadline: number | null;
   /** `approval` or `question`. */
   kind: string;
+  /** The object a decision covers. */
+  object: ObjectView | null;
   /** The call as the inline prompt shows it. */
   presentation: ApprovalView | null;
   /** A question's text. */
@@ -1565,11 +1659,15 @@ export interface PendingCall {
   reason: string;
   /** The saved attempt. */
   reference: string;
+  /** The run it belongs to. */
+  run: string | null;
   /**
    * `task` (the attempt waits and resumes) or `attempt` (stopped and saved
    * in a parallel lane).
    */
   source: string;
+  /** Where arguments of the call were copied from (source lines). */
+  sources?: string[];
   /** Task ID. */
   task: string;
   /** The tool. */
@@ -1618,6 +1716,29 @@ export interface PlannedTask {
   /** Title. */
   title: string;
 }
+
+/**
+ * What a prefix entry of `[commands] allow_prefix` or `[sandbox]
+ * network_allow_prefix` would newly allow: every distinct argv the
+ * project's journal recorded that it covers and the current policy does
+ * not allow. A prefix is saved only as the confirmation of this preview,
+ * and only when it is complete.
+ */
+export interface PolicyCoverage {
+  /** Every run in the journal was read. */
+  complete: boolean;
+  /** SHA-256 over the entry, the rows and `complete`: what a save names. */
+  digest: string;
+  /** The entry previewed. */
+  entry: CoverageEntry;
+  /** The argvs it would newly allow. */
+  rows: CoverageRow[];
+  /** What could not be read, and why (never "covers nothing"). */
+  unreadable: string[];
+}
+
+/** A prefix list in `speccoder.toml`. */
+export type PolicyList = "commands_prefix" | "network_prefix";
 
 /** Result of `speccoder pr`: a draft pull request with the evidence. */
 export interface PrReport {
@@ -2046,6 +2167,44 @@ export type Runnable =
   /** Push the feature's branch and open (or update) its draft pull request. */
   | {
     kind: "pull_request";
+  }
+  /**
+   * Always Allow: approve the waiting command once and add exactly its
+   * argv to `[commands] allow` (or `[sandbox] network_allow`).
+   */
+  | {
+    /** The waiting call's id. */
+    call: string;
+    kind: "allow_always";
+    /** The task. */
+    task: string;
+  }
+  /**
+   * Add a prefix to a prefix list, as the confirmation of its coverage
+   * preview (refused when the preview changed or is incomplete).
+   */
+  | {
+    /** The digest of the preview the person saw. */
+    digest: string;
+    /** Which list. */
+    key: PolicyList;
+    kind: "widen_policy";
+    /** The prefix (two elements or more). */
+    prefix: string[];
+  }
+  /** Decide the calls waiting in a run's batch together, each once. */
+  | {
+    /** The listed calls decided (a non-empty subset). */
+    calls: string[];
+    /** The digest of the list the person saw. */
+    digest: string;
+    kind: "decide_batch";
+    /** Start the run's asking budget again. */
+    resume_asking: boolean;
+    /** The run. */
+    run: string;
+    /** Approve or reject (the input is the reason). */
+    verdict: BatchVerdict;
   };
 
 /** Which tasks can start now, and what blocks the rest. */

@@ -16,30 +16,19 @@
   const kind = (l: string) => (l.trimStart().startsWith("+") && !l.includes("+++") ? "add" : l.trimStart().startsWith("-") && !l.includes("---") ? "del" : "");
 
   const approve = (scope: "once" | "task" | "run") => app.answer({ answer: { decision: "approve", scope, note: note.trim() || null, reason: null, by: null } });
+  // Always Allow is offered by the host or not at all; the runtime adds
+  // exactly this argv to the project's policy through its one action.
+  const allowAlways = () => app.answer({ answer: { decision: "approve", scope: "once", note: null, reason: null, by: null, always: true } });
   const reject = () => {
     if (!reason.trim()) return;
     app.answer({ answer: { decision: "reject", scope: "once", note: null, reason: reason.trim(), by: null } });
   };
-  // An exact command can be allowed for good — not as a grant in memory,
-  // but as a line in the project's policy, committed and reviewed like code.
   const argv = $derived.by(() => {
     const a = p?.request.arguments?.argv;
-    return (p?.request.kind === "run" || p?.request.kind === "network") && Array.isArray(a) && a.length && a.every((x) => typeof x === "string") ? (a as string[]) : null;
+    return Array.isArray(a) && a.every((x) => typeof x === "string") ? (a as string[]) : null;
   });
-  const policyKey = $derived(p?.request.kind === "network" ? "sandbox.network_allow" : "commands.allow");
+  const policyKey = $derived(p?.request.kind === "network" ? "[sandbox] network_allow" : "[commands] allow");
   let always = $state(false);
-  async function allowAlways() {
-    if (!argv) return;
-    await approve("once");
-    try {
-      const r = await post<{ status: string; message: string }>("/api/config", { changes: [{ key: policyKey, append: argv }] });
-      app.toast(r.status === "ok"
-        ? { tone: "ok", text: `Added to [${policyKey.split(".")[0]}] ${policyKey.split(".")[1]}`, detail: "Commit speccoder.toml in Settings to put it in force" }
-        : { tone: "warn", text: "Allowed once; the policy was not changed", detail: r.message });
-    } catch (e) {
-      app.toast({ tone: "warn", text: "Allowed once; the policy was not changed", detail: String(e) });
-    }
-  }
   const stopTask = () => app.answer({ answer: { decision: "stop", scope: "once", note: null, reason: null, by: null } });
 
   function keydown(e: KeyboardEvent) {
@@ -49,10 +38,10 @@
     if (k === "y" || k === "1") approve("once");
     else if ((k === "t" || k === "2") && offered.has("task")) approve("task");
     else if ((k === "r" || k === "3") && offered.has("run")) approve("run");
-    else if (k === "n" || k === "4") rejecting = true;
-    else if (k === "s" || k === "5") stopTask();
+    else if ((k === "a" || k === "4") && offered.has("always")) always = true;
+    else if (k === "n" || k === "5") rejecting = true;
+    else if (k === "s" || k === "6") stopTask();
     else if (k === "v") full = !full;
-    else if (k === "a" && argv) always = true;
     else return;
     e.preventDefault();
   }
@@ -76,6 +65,19 @@
       {#if p.full.length > p.body.length}
         <button class="btn small ghost more" onclick={() => (full = !full)}>{full ? "Show Less" : `Show All ${p.full.length} Lines`} <kbd>V</kbd></button>
       {/if}
+      {#if p.object?.length}
+        <pre class="object" aria-label="What a decision covers">{p.object.join("\n")}</pre>
+      {/if}
+      {#if p.sources?.length}
+        <div class="sources" role="note">
+          <Icon name="exclaim" size={14} weight={2} />
+          <div>
+            {#each p.sources as line}<div><Code text={line} /></div>{/each}
+            <div class="muted">Copied from content the model read: only “Allow Once” can be given.</div>
+          </div>
+        </div>
+      {/if}
+      {#if p.notice}<p class="notice muted">{p.notice}</p>{/if}
       <dl class="grouped">
         <div><dt>Why it stopped</dt><dd><Code text={p.request.reason} /></dd></div>
         <div><dt>Sandbox</dt><dd>{p.sandbox}</dd></div>
@@ -91,10 +93,10 @@
           <button class="btn" onclick={() => (rejecting = false)}>Cancel</button>
         </div>
       {/if}
-      {#if always && argv}
+      {#if always && offered.has("always")}
         <div class="always">
           <Icon name="lock" size={14} weight={2} />
-          <span>Adds <code>{JSON.stringify(argv)}</code> to <code>[{policyKey.split(".")[0]}] {policyKey.split(".")[1]}</code> in speccoder.toml — it runs without asking once you commit it. Anything after this prefix runs too.</span>
+          <span>Adds exactly this command{argv ? "" : ""} <code>{JSON.stringify(argv)}</code> to <code>{policyKey}</code> — nothing after it runs because of this. Commit speccoder.toml in Settings to put it in force.</span>
           <button class="btn small" onclick={() => (always = false)}>Cancel</button>
           <button class="btn small primary" onclick={allowAlways}>Allow and Add</button>
         </div>
@@ -103,9 +105,9 @@
         <button class="btn plain" onclick={stopTask} title="The call keeps waiting; decide later with speccoder task approve">Stop Task <kbd>S</kbd></button>
         <span class="spacer"></span>
         <button class="btn danger" onclick={() => (rejecting = true)}>Don't Allow… <kbd>N</kbd></button>
-        {#if argv}<button class="btn" onclick={() => (always = true)} title="Add this exact command to the project's policy">Always Allow… <kbd>A</kbd></button>{/if}
-        <button class="btn" disabled={!offered.has("run")} onclick={() => approve("run")} title={offered.has("run") ? "This class of call, in every task of this run" : "Never for high-risk calls"}>Allow for Run <kbd>R</kbd></button>
-        <button class="btn" disabled={!offered.has("task")} onclick={() => approve("task")} title={offered.has("task") ? "This class of call, for the rest of the task" : "The call's class is not shown in full"}>Allow for Task <kbd>T</kbd></button>
+        {#if offered.has("always")}<button class="btn" onclick={() => (always = true)} title="Add exactly this command to the project's policy">Always Allow… <kbd>A</kbd></button>{/if}
+        <button class="btn" disabled={!offered.has("run")} onclick={() => approve("run")} title={offered.has("run") ? "This exact object, in every task of this run" : "Not offered: high risk, or copied from content the model read"}>Allow for Run <kbd>R</kbd></button>
+        <button class="btn" disabled={!offered.has("task")} onclick={() => approve("task")} title={offered.has("task") ? "This exact object, for the rest of the task in this run" : "Not offered: copied from content the model read"}>Allow for Task <kbd>T</kbd></button>
         <!-- svelte-ignore a11y_autofocus -->
         <button class="btn primary" autofocus onclick={() => approve("once")}>Allow Once <kbd>Y</kbd></button>
       </div>
@@ -163,6 +165,9 @@
   .reject { display: flex; gap: 0.5rem; align-items: center; }
   .choices { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
   .spacer { flex: 1; }
+  .object { margin: 0; padding: 0.55rem 0.8rem; border-radius: var(--radius); background: var(--surface-2, var(--accent-soft)); font-size: 0.82rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .sources { display: flex; gap: 0.6rem; padding: 0.6rem 0.8rem; border-radius: var(--radius); background: var(--warn-soft, var(--accent-soft)); font-size: 0.86rem; }
+  .notice { margin: 0; font-size: 0.84rem; }
   .always { display: flex; align-items: center; gap: 0.6rem; padding: 0.65rem 0.8rem; border-radius: var(--radius); background: var(--accent-soft); font-size: 0.86rem; }
   .always span { flex: 1; }
   .btn.plain { background: none; color: var(--muted); }

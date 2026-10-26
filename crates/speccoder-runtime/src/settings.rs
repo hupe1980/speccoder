@@ -290,26 +290,42 @@ pub const CATALOGUE: &[Section] = &[
     Section {
         name: "commands",
         title: "Commands",
-        about: "What the model may run without asking, besides the checks. Keep it narrow: an allowed prefix runs whatever follows it.",
+        about: "What the model may run without asking, besides the checks. `allow` is exact; a prefix in `allow_prefix` runs whatever follows it, so it is saved only from a preview of what it would newly allow.",
         named: false,
-        keys: &[k(
-            "allow",
-            Kind::ArgvList,
-            Some("[]"),
-            "Program prefixes the model may run without approval, e.g. [\"cargo\", \"check\"]",
-        )],
+        keys: &[
+            k(
+                "allow",
+                Kind::ArgvList,
+                Some("[]"),
+                "Exact commands that run without asking, e.g. [\"cargo\", \"check\"]; nothing after them",
+            ),
+            k(
+                "allow_prefix",
+                Kind::ArgvList,
+                Some("[]"),
+                "Command prefixes (two elements or more) whose every extension runs without asking; saved only from the coverage preview",
+            ),
+        ],
     },
     Section {
         name: "approvals",
         title: "Approvals",
-        about: "How long a call waits for a person.",
+        about: "How long a call waits for a person, and how often a run may ask.",
         named: false,
-        keys: &[k(
-            "wait",
-            Kind::Duration,
-            Some("\"7d\""),
-            "How long a call waits before it is denied as expired (m, h or d)",
-        )],
+        keys: &[
+            k(
+                "wait",
+                Kind::Duration,
+                Some("\"7d\""),
+                "How long a call waits before it is denied as expired (m, h or d)",
+            ),
+            k(
+                "budget",
+                Kind::Int(0, 100),
+                Some("12"),
+                "Prompts a run shows you; further calls wait together in Needs You",
+            ),
+        ],
     },
     Section {
         name: "tests",
@@ -479,7 +495,13 @@ pub const CATALOGUE: &[Section] = &[
                 "network_allow",
                 Kind::ArgvList,
                 Some("[]"),
-                "Command prefixes that get the network, e.g. [\"cargo\", \"fetch\"]",
+                "Exact commands that get the network, e.g. [\"cargo\", \"fetch\"]",
+            ),
+            k(
+                "network_allow_prefix",
+                Kind::ArgvList,
+                Some("[]"),
+                "Prefixes (two elements or more) whose extensions get the network; saved only from the coverage preview",
             ),
             k(
                 "writable",
@@ -1073,10 +1095,55 @@ pub fn show(root: &Path) -> CommandResult {
     result.with_data(CommandData::Config(Box::new(report)))
 }
 
+/// The keys only a coverage preview's confirmation writes.
+pub const PREFIX_KEYS: [&str; 2] = ["commands.allow_prefix", "sandbox.network_allow_prefix"];
+
 /// `speccoder config set|unset`, and the page's save: applies `changes` to
-/// the file, all or nothing.
+/// the file, all or nothing. A prefix key is refused: it is saved only as
+/// the confirmation of its coverage preview (`WidenPolicy`); removing an
+/// entry (`unset`) narrows and is allowed.
 #[must_use]
 pub fn apply(root: &Path, changes: &[ConfigChange]) -> CommandResult {
+    if let Some(c) = changes.iter().find(|c| {
+        PREFIX_KEYS.contains(&c.key.as_str()) && (c.value.is_some() || c.append.is_some())
+    }) {
+        // Setting the list to fewer entries than it has narrows it.
+        let narrows = c.value.as_ref().is_some_and(|v| {
+            let now = read(root);
+            let current = now
+                .sections
+                .iter()
+                .flat_map(|s| {
+                    s.keys
+                        .iter()
+                        .map(move |k| (format!("{}.{}", s.name, k.key), k))
+                })
+                .find(|(name, _)| *name == c.key)
+                .and_then(|(_, k)| k.value.clone())
+                .and_then(|v| v.as_array().cloned())
+                .unwrap_or_default();
+            v.as_array()
+                .is_some_and(|new| new.iter().all(|e| current.contains(e)))
+        });
+        if !narrows {
+            return CommandResult::new(
+                "config",
+                CommandStatus::UsageError,
+                &format!(
+                    "`{}` is saved only from its coverage preview: `speccoder config coverage {} <argv…>`, then confirm",
+                    c.key, c.key
+                ),
+            )
+            .with_code("CONFIG-INVALID");
+        }
+    }
+    apply_confirmed(root, changes)
+}
+
+/// [`apply`] without the prefix guard: for the confirmation of a coverage
+/// preview and for Always Allow's exact entry, which their actions checked.
+#[must_use]
+pub(crate) fn apply_confirmed(root: &Path, changes: &[ConfigChange]) -> CommandResult {
     let dir = home(root);
     let path = dir.join(FILE);
     let text = std::fs::read_to_string(&path).unwrap_or_default();

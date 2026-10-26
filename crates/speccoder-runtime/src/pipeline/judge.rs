@@ -9,7 +9,7 @@ use serde_json::Value;
 use speccoder_core::RunReport;
 use speccoder_core::verify::{CheckStatus, Verdict, VerifyReport, compare, passes, verdict};
 
-use crate::tools::policy::{Grant, Policy};
+use crate::tools::policy::{Object, Policy};
 use crate::{integrity, sandbox, verify, worktree};
 
 use super::{PreparedAcceptance, run_acceptance};
@@ -18,22 +18,21 @@ use super::{PreparedAcceptance, run_acceptance};
 /// A frozen test so approved is not a violation; the audit still flags
 /// removed tests and skip markers in it — approval permits editing a test,
 /// not weakening it.
-pub(crate) fn approved_writes(granted: &[Grant], tool_calls: &Value) -> BTreeSet<String> {
+pub(crate) fn approved_writes(granted: &[Object], tool_calls: &Value) -> BTreeSet<String> {
     granted
         .iter()
-        .filter_map(|g| match g {
-            Grant::Write { path } => Some(path.clone()),
-            _ => None,
-        })
+        .filter_map(|g| g.path().map(str::to_owned))
         .chain(
             tool_calls
                 .as_array()
                 .into_iter()
                 .flatten()
                 .filter(|c| c["approved_by"] == "person")
-                .filter_map(|c| match Grant::of(c["tool"].as_str()?, &c["arguments"]) {
-                    Some(Grant::Write { path }) => Some(path),
-                    _ => None,
+                .filter_map(|c| {
+                    serde_json::from_value::<Object>(c["object"].clone())
+                        .ok()?
+                        .path()
+                        .map(str::to_owned)
                 }),
         )
         .collect()

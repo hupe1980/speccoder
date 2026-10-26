@@ -530,8 +530,22 @@ fn queue(f: &mut Frame<'_>, app: &App, area: Rect) {
                 v.body_lines.len() - 6
             ))));
         }
+        for line in v.object.iter().chain(&v.sources) {
+            items.push(ListItem::new(a(&format!("  {line}"))));
+        }
         items.push(ListItem::new(a(&format!("  Sandbox  {}", v.sandbox))));
-        items.push(ListItem::new(a(&format!("  a → {}   r reject", v.scope))));
+        let batched = pending
+            .get(app.approval.min(pending.len().saturating_sub(1)))
+            .is_some_and(|p| p.batched);
+        items.push(ListItem::new(a(&format!(
+            "  a → {}   r reject{}",
+            v.scope,
+            if batched {
+                "   B the run's waiting calls, each once"
+            } else {
+                ""
+            }
+        ))));
     }
     let decided = app.snap.approvals.as_ref().map_or(0, |q| q.decided.len());
     let mut state = ListState::default().with_selected(
@@ -1019,7 +1033,12 @@ fn ask(f: &mut Frame<'_>, app: &App, area: Rect) {
     ];
     let body = if app.view_all { &p.full } else { &p.body };
     // Room for the body: the box less the fixed lines around it.
-    let fixed = 9 + p.options.len() + usize::from(r.claim.is_some());
+    let fixed = 9
+        + p.options.len()
+        + p.object.len()
+        + p.sources.len()
+        + usize::from(r.claim.is_some())
+        + usize::from(p.notice.is_some());
     let room = usize::from(box_.height.saturating_sub(2))
         .saturating_sub(fixed)
         .max(1);
@@ -1044,6 +1063,9 @@ fn ask(f: &mut Frame<'_>, app: &App, area: Rect) {
         },
         st(Token::Muted),
     ));
+    for line in &p.object {
+        lines.push(Line::raw(a(&format!("Object       {line}"))));
+    }
     lines.push(Line::raw(a(&format!("Why stopped  {}", r.reason))));
     lines.push(Line::raw(a(&format!("Sandbox      {}", p.sandbox))));
     if let Some(claim) = &r.claim {
@@ -1051,6 +1073,18 @@ fn ask(f: &mut Frame<'_>, app: &App, area: Rect) {
             Span::raw("Model says   "),
             Span::styled(a(&format!("\"{claim}\"   (a claim)")), st(Token::Muted)),
         ]));
+    }
+    for line in &p.sources {
+        lines.push(Line::styled(
+            a(&format!("Copied       {line}")),
+            st(Token::Attention),
+        ));
+    }
+    if let Some(notice) = &p.notice {
+        lines.push(Line::styled(
+            a(&format!("Budget       {notice}")),
+            st(Token::Muted),
+        ));
     }
     lines.push(Line::raw(""));
     for o in &p.options {
@@ -1068,7 +1102,7 @@ fn ask(f: &mut Frame<'_>, app: &App, area: Rect) {
     let keys: Vec<String> = p.options.iter().map(|o| o.key.to_string()).collect();
     lines.push(Line::styled(
         a(&format!(
-            "  {} or 1-5 · tab note · v view all · esc later",
+            "  {} or 1-6 · tab note · v view all · esc later",
             keys.join(" ")
         )),
         st(Token::Muted),

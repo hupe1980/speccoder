@@ -21,25 +21,21 @@ pub const APPROVAL: &str = "approval";
 pub const QUESTION: &str = "question";
 
 /// The waiting task for a call: the exact call, the question as the
-/// journal holds it, and the class an approval for the task or run would
-/// create. Only journaled facts go in — the approval is bound to this
-/// task's digest, so replay must rebuild it byte for byte; the presentation
-/// (the file as it is, the sandbox) is built live by whoever asks.
+/// journal holds it, and the object an approval would cover. Only journaled
+/// facts go in — the approval is bound to this task's digest, so replay
+/// must rebuild it byte for byte; the presentation (the file as it is, the
+/// sandbox) is built live by whoever asks.
 #[must_use]
-pub fn approval_task(
-    request: &Request,
-    grant: Option<&crate::tools::policy::Grant>,
-    log: &[Value],
-) -> TaskSpec {
+pub fn approval_task(request: &Request, log: &[Value]) -> TaskSpec {
     TaskSpec::new(
         APPROVAL,
         Justification::new(
-            Tainted::trusted(format!("{} — {}", request.task, request.covers)),
+            Tainted::trusted(format!("{} — {}", request.task, request.covers())),
             json!({
                 "tool": request.tool,
                 "arguments": request.arguments,
                 "task": request.task,
-                "grant": grant,
+                "object": request.object,
                 "request": request,
                 // What the attempt did before it stopped here, as journaled.
                 "log": log,
@@ -80,6 +76,12 @@ pub fn presentation_of(proposed_action: &Value, context: &PresentContext) -> Opt
 pub fn decision_for(answer: &Answer, by: &Who, text: Option<&str>) -> Option<Decision> {
     let operator: Operator = by.operator()?;
     let mut amendment = json!({ "scope": answer.scope.name(), "via": by.via });
+    if answer.always {
+        amendment["always"] = json!(true);
+    }
+    if answer.resume_asking {
+        amendment["resume_asking"] = json!(true);
+    }
     if let Some(client) = &by.client {
         amendment["client"] = json!(client);
     }
@@ -105,36 +107,44 @@ pub fn decision_for(answer: &Answer, by: &Who, text: Option<&str>) -> Option<Dec
 }
 
 /// Asks `approver` about a waiting `task` now. `None` when the person
-/// answers "later" (the call keeps waiting) or the task is not one of ours.
+/// answers "later" (the call keeps waiting), the call waits in its run's
+/// batch (the asking budget is used: nobody is interrupted), or the task is
+/// not one of ours. The answer comes with the decision.
 #[must_use]
 pub fn ask(
     approver: &dyn super::Approver,
     task: &agentplane::core::Task,
     context: &PresentContext,
-) -> Option<Decision> {
+) -> Option<(Decision, Answer)> {
     let action = &task.justification.proposed_action;
     match task.kind.as_str() {
         APPROVAL => {
-            let answer = approver.ask(&presentation_of(action, context)?);
+            let presentation = presentation_of(action, context)?;
+            if presentation.request.batched {
+                return None;
+            }
+            let mut answer = approver.ask(&presentation);
             if answer.decision == Said::Stop {
                 return None;
             }
-            decision_for(&answer, &named(answer.by.clone(), approver, context), None)
+            // Always Allow only where it was offered.
+            if answer.always && !presentation.request.options.iter().any(|o| o == "always") {
+                answer.always = false;
+            }
+            let by = named(answer.by.clone(), approver, context);
+            answer.by = Some(by.clone());
+            decision_for(&answer, &by, None).map(|d| (d, answer))
         }
         QUESTION => {
             let by = named(None, approver, context);
-            match approver.answer(action["question"].as_str()?) {
-                Some(text) => decision_for(
-                    &Answer::approve(Scope::Once, None, Some(by.clone())),
-                    &by,
-                    Some(&text),
-                ),
-                None => decision_for(
-                    &Answer::reject("declined to answer", Some(by.clone())),
-                    &by,
-                    None,
-                ),
-            }
+            let answer = match approver.answer(action["question"].as_str()?) {
+                Some(text) => {
+                    let a = Answer::approve(Scope::Once, None, Some(by.clone()));
+                    return decision_for(&a, &by, Some(&text)).map(|d| (d, a));
+                }
+                None => Answer::reject("declined to answer", Some(by.clone())),
+            };
+            decision_for(&answer, &by, None).map(|d| (d, answer))
         }
         _ => None,
     }
@@ -164,6 +174,9 @@ pub struct Read {
     pub expired: bool,
     /// A question's answer text.
     pub text: Option<String>,
+    /// The person chose to start the run's asking budget again with this
+    /// decision (a batch decision's *resume asking*).
+    pub resume_asking: bool,
 }
 
 /// Reads a recorded decision back.
@@ -188,7 +201,9 @@ pub fn read(d: &Decision) -> Read {
     });
     let expired = matches!(d.decided, Decided::OnExpiry(_));
     let answer = if d.approved {
-        Answer::approve(scope, a["note"].as_str().map(str::to_owned), by.clone())
+        let mut answer = Answer::approve(scope, a["note"].as_str().map(str::to_owned), by.clone());
+        answer.always = a["always"] == true;
+        answer
     } else {
         Answer::reject(
             if expired {
@@ -204,6 +219,7 @@ pub fn read(d: &Decision) -> Read {
         by,
         expired,
         text: a["answer"].as_str().map(str::to_owned),
+        resume_asking: a["resume_asking"] == true,
     }
 }
 
@@ -277,12 +293,15 @@ mod tests {
             arguments: json!({ "path": "src/a.rs", "content": "fn a() {}\n" }),
             kind: "write".to_owned(),
             reason: "r".to_owned(),
-            covers: "write `src/a.rs`".to_owned(),
+            object: Some(crate::tools::policy::Object::Path {
+                canonical: "src/a.rs".to_owned(),
+                asked: "src/a.rs".to_owned(),
+            }),
             risk: "low".to_owned(),
-            claim: None,
             options: vec!["once".to_owned()],
+            ..super::super::Request::default()
         };
-        let spec = approval_task(&request, None, &[]);
+        let spec = approval_task(&request, &[]);
         assert_eq!(spec.kind, APPROVAL);
         let action = &spec.justification.proposed_action;
         assert_eq!(action["arguments"]["content"], "fn a() {}\n");
@@ -290,7 +309,38 @@ mod tests {
         // Only journaled facts: the same request gives the same digest.
         assert_eq!(
             spec.justification.digest(),
-            approval_task(&request, None, &[]).justification.digest()
+            approval_task(&request, &[]).justification.digest()
         );
+    }
+
+    #[test]
+    fn a_question_recorded_before_objects_never_matches_the_rebuilt_one() {
+        let request = super::super::Request {
+            task: "001-x/T001".to_owned(),
+            tool: "write_file".to_owned(),
+            arguments: json!({ "path": "package.json", "content": "{}" }),
+            kind: "write".to_owned(),
+            reason: "a dependency manifest".to_owned(),
+            object: Some(crate::tools::policy::Object::Path {
+                canonical: "package.json".to_owned(),
+                asked: "package.json".to_owned(),
+            }),
+            risk: "medium".to_owned(),
+            ..super::super::Request::default()
+        };
+        let now = approval_task(&request, &[]);
+        // As 0.1.0 recorded it: the class in `grant`, no object.
+        let old = Justification::new(
+            Tainted::trusted(format!("{} — write `package.json`", request.task)),
+            json!({
+                "tool": request.tool,
+                "arguments": request.arguments,
+                "task": request.task,
+                "grant": { "kind": "write", "path": "package.json" },
+                "request": request,
+                "log": [],
+            }),
+        );
+        assert_ne!(old.digest(), now.justification.digest());
     }
 }

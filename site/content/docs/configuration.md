@@ -39,6 +39,8 @@ speccoder config get budget.max_turns
 speccoder config set budget.max_turns 40
 speccoder config set format.argv cargo fmt         # words, read by the key's kind
 speccoder config set commands.allow '[["cargo", "check"]]'   # or JSON
+speccoder config coverage commands.allow_prefix npm run    # what a prefix would newly allow
+speccoder config set commands.allow_prefix '[["npm", "run"]]'  # shows that, asks to confirm (--yes)
 speccoder config set checks.lint.argv -- cargo clippy -- -D warnings
 speccoder config unset budget.max_turns            # back to the default
 speccoder config commit                            # commits speccoder.toml, and nothing else
@@ -90,10 +92,16 @@ The API key comes from `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`, never from this 
 
 | Key | Default | Meaning |
 |---|---|---|
-| `[commands] allow` | `[]` | Argv prefixes the model may run without approval, besides the checks, e.g. `[["cargo", "check"]]`. Keep it narrow: a prefix allows whatever follows it |
+| `[commands] allow` | `[]` | Exact commands the model may run without approval, besides the checks, e.g. `[["cargo", "check"]]`: `cargo check --all` still asks. Always Allow adds to it |
+| `[commands] allow_prefix` | `[]` | Command prefixes of two elements or more whose every extension runs without asking, e.g. `[["npm", "run"]]`. Saved only from its [coverage preview](#prefix-lists); a bare program is refused |
 | `[approvals] wait` | `"7d"` | How long a call waits for a person (`m`, `h` or `d`) before it is denied as expired; recorded as an expiry, not as anyone's decision |
+| `[approvals] budget` | `12` | Prompts a run shows you (`0`–`100`); after them, calls wait together in [Needs You](@/docs/approvals.md#the-asking-budget). `0` never prompts |
 | `[tests] frozen` | `"ask"` | Tests that existed before an attempt: `ask` before any change, or `additions` (new lines need no approval; changing or removing lines does) |
 | `[spec] format` | detected | `speckit`, `openspec` or `kiro`; `--format` and `SPECCODER_FORMAT` override it. Kiro is recognised and refused as unsupported |
+
+### Prefix lists
+
+`[commands] allow` and `[sandbox] network_allow` match exact argvs. A prefix — every command that starts with it runs without asking — lives in `allow_prefix` / `network_allow_prefix`, and no approval ever writes it. To add one, speccoder first lists every distinct command the project's journal recorded that the prefix would newly allow: how often, when last, how it was decided then, and which a fixed rule (shells, privilege, network tools, remote git) keeps asking for or denying. The prefix is saved only as the confirmation of that list, and not at all while the journal cannot be read in full (another speccoder holds it): the preview then says what it could not read. A prefix added by hand is shown in Settings with the same list. Removing an entry is always possible.
 
 ## `[context]`
 
@@ -124,7 +132,8 @@ The API key comes from `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`, never from this 
 |---|---|---|
 | `mode` | `"auto"` | `auto` sandboxes where the OS supports it and says when it cannot; `required` refuses to run commands unsandboxed; `off` |
 | `network` | `"loopback"` | `off`, `loopback` (local test servers work; on Linux the same as `off`), or `on` |
-| `network_allow` | `[]` | Command prefixes that get the network, e.g. `[["cargo", "fetch"]]` |
+| `network_allow` | `[]` | Exact commands that get the network, e.g. `[["cargo", "fetch"]]` |
+| `network_allow_prefix` | `[]` | Prefixes (two elements or more) whose extensions get the network; saved only from its coverage preview |
 | `writable` | `[]` | Extra writable paths (`~` is your home directory), e.g. `["~/.m2"]` for Maven |
 
 What the sandbox allows: [the OS sandbox](@/docs/security.md#the-os-sandbox).

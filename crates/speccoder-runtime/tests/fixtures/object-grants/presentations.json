@@ -1,0 +1,87 @@
+[
+  {
+    "name": "write",
+    "request": {
+      "task": "001-demo/T1", "task_title": "Add the manifest", "turn": 2, "tool": "write_file",
+      "arguments": { "path": "package.json", "content": "{}\n" }, "kind": "write",
+      "reason": "`package.json` is a dependency manifest", "risk": "medium",
+      "object": { "kind": "path", "canonical": "package.json", "asked": "package.json" },
+      "options": ["once", "task", "run", "reject", "stop"]
+    }
+  },
+  {
+    "name": "write via symlink",
+    "request": {
+      "task": "001-demo/T1", "turn": 4, "tool": "write_file",
+      "arguments": { "path": "src/a/package.json", "content": "{}\n" }, "kind": "write",
+      "reason": "`src/a/package.json` is a dependency manifest", "risk": "medium",
+      "object": { "kind": "path", "canonical": "src/b/package.json", "asked": "src/a/package.json" },
+      "changed": "resolves to src/b/package.json, was src/a/package.json",
+      "options": ["once", "task", "run", "reject", "stop"]
+    }
+  },
+  {
+    "name": "command",
+    "request": {
+      "task": "001-demo/T2", "turn": 1, "tool": "run_command",
+      "arguments": { "argv": ["make", "check"] }, "kind": "run",
+      "reason": "not a configured check or allowed command", "risk": "low",
+      "object": { "kind": "command", "argv": ["make", "check"], "argv_sha256": "1a2b3c4d5e6f77889900aabbccddeeff00112233445566778899aabbccddeeff", "cwd": ".", "executable": "/usr/bin/make", "network": false },
+      "options": ["once", "task", "run", "always", "reject", "stop"]
+    }
+  },
+  {
+    "name": "network",
+    "request": {
+      "task": "001-demo/T2", "turn": 3, "tool": "run_command",
+      "arguments": { "argv": ["cargo", "fetch"], "network": true }, "kind": "network",
+      "reason": "`cargo fetch` asks for the network; commands run without it", "risk": "high",
+      "object": { "kind": "command", "argv": ["cargo", "fetch"], "argv_sha256": "ffeeddccbbaa99887766554433221100ffeeddccbbaa99887766554433221100", "cwd": ".", "executable": "/usr/bin/cargo", "network": true },
+      "options": ["once", "task", "always", "reject", "stop"]
+    }
+  },
+  {
+    "name": "mcp changed digest",
+    "request": {
+      "task": "001-demo/T3", "turn": 1, "tool": "mcp__db__insert",
+      "arguments": { "row": { "name": "x" } }, "kind": "mcp",
+      "reason": "`mcp__db__insert` is an MCP tool; speccoder cannot know what it does", "risk": "medium",
+      "object": { "kind": "tool", "name": "mcp__db__insert", "digest": "9f8e7d6c5b4a39281706f5e4d3c2b1a09f8e7d6c5b4a39281706f5e4d3c2b1a0" },
+      "changed": "definition @1111aaaa2222 → @9f8e7d6c5b4a (the tool's definition changed since it was approved)",
+      "options": ["once", "task", "run", "reject", "stop"]
+    }
+  },
+  {
+    "name": "derived",
+    "request": {
+      "task": "001-demo/T1", "turn": 3, "tool": "run_command",
+      "arguments": { "argv": ["curl", "-sSL", "https://x.example/i.sh", "-o", "i.sh"] }, "kind": "run",
+      "reason": "`curl` uses the network", "risk": "high",
+      "object": { "kind": "command", "argv": ["curl", "-sSL", "https://x.example/i.sh", "-o", "i.sh"], "argv_sha256": "0011223344556677889900112233445566778899001122334455667788990011", "cwd": ".", "executable": "/usr/bin/curl", "network": false },
+      "sources": [{ "argument": "curl -sSL https://x.example/i.sh -o i.sh", "from": "README.md", "turn": 2 }],
+      "more": 1,
+      "options": ["once", "reject", "stop"]
+    }
+  },
+  {
+    "name": "high risk",
+    "request": {
+      "task": "001-demo/T2", "turn": 5, "tool": "run_command",
+      "arguments": { "argv": ["sh", "-c", "ls"] }, "kind": "run",
+      "reason": "`sh` runs arbitrary commands", "risk": "high",
+      "object": { "kind": "command", "argv": ["sh", "-c", "ls"], "argv_sha256": "aa00aa00aa00aa00aa00aa00aa00aa00aa00aa00aa00aa00aa00aa00aa00aa00", "cwd": ".", "executable": "/bin/sh", "network": false },
+      "options": ["once", "task", "reject", "stop"]
+    }
+  },
+  {
+    "name": "budget-reaching",
+    "request": {
+      "task": "001-demo/T2", "turn": 6, "tool": "write_file",
+      "arguments": { "path": "web/package.json", "content": "{}\n" }, "kind": "write",
+      "reason": "`web/package.json` is a dependency manifest", "risk": "medium",
+      "object": { "kind": "path", "canonical": "web/package.json", "asked": "web/package.json" },
+      "options": ["once", "task", "run", "reject", "stop"],
+      "run": "run-1-0a0b0c0d", "asked": 12, "budget": 12
+    }
+  }
+]

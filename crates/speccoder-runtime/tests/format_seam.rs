@@ -152,6 +152,7 @@ fn refusal_texts_are_unchanged() {
     let refusal = match planning.classify(
         "write_file",
         &json!({ "path": "src/lib.rs", "content": "x" }),
+        None,
     ) {
         Decision::Approval(r) | Decision::Deny(r) => r,
         Decision::Allow => panic!("allowed"),
@@ -159,6 +160,7 @@ fn refusal_texts_are_unchanged() {
     let implement = match Policy::new(&[], &[]).classify(
         "write_file",
         &json!({ "path": "specs/001-x/spec.md", "content": "x" }),
+        None,
     ) {
         Decision::Deny(r) => r,
         other => panic!("{other:?}"),
