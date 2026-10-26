@@ -60,7 +60,7 @@ Whether the extension is installed comes from Spec Kit's own inventory: `specify
 | `recorded` | the triad is recorded (and, once confirmed, the fix runs next) | — |
 | `awaiting_confirmation` | every statement reproduced; your confirmation | *Blocked on you* (`bug_confirm`) |
 | `cannot_reproduce` | the tries ran out; the engine's hand-off lists each try's class and excerpt and which statements were and were not reproduced | *Blocked on you* (`bug_cannot_reproduce`): bring a `--test`, reword, try again, or skip |
-| `already_satisfied` | every reproduction passed on every try: nothing to fix, nothing ticked | *Ready to review* (`bug_already_satisfied`): keep it as a regression test (`speccoder bug keep`: the reproductions committed, the task `attested`, the commit naming the outcome — in the extension's layout a trailer-only task) or drop it |
+| `already_satisfied` | every reproduction passed on every try: nothing to fix, nothing ticked | *Ready to review* (`bug_already_satisfied`): keep it as a regression test (`speccoder bug keep`: the reproductions committed, the task `attested`, the commit naming the outcome — in the extension's layout a trailer-only task) or drop it (`speccoder task skip bug:<slug> --reason …` for a bug in the extension's layout: found by its slug) |
 | `unchanged_not_holding` | an *Unchanged* statement does not hold today | *Blocked on you* |
 | `fixed` | the fix was judged (see its verdict) | — |
 | `failed` | the fix did not pass | — |

@@ -260,12 +260,43 @@ adheres to [Semantic Versioning](https://semver.org/).
   reproductions and attests the task, extension bugs included. A failure
   to write the origin, a rejection or a re-sealed held-out set, and why no
   held-out variant was kept, are reported instead of dropped.
+- Reviewing the oracle (spec 093): a review test is red only by its own
+  file — each runs alone, and a command another test shares or that is
+  red without the file is discarded (`command_shared`, `red_without_it`).
+  Writing a frozen requirement's tests again would have replaced its
+  sealed held-out set; it is refused (`ORACLE-FROZEN`) and the Frozen card
+  shows the frozen set, read only. A task reuses a frozen set until an
+  earlier tick's `Acceptance:` trailer names it — never skipped because a
+  file sits at its path — and only when the record names the approval and
+  held-out set `review.json` records.
+- Errors that read as "nothing there" now surface: a tampered test draft
+  (the ambiguity gate and Needs You), an unreadable `review.json` (a run
+  stops, decisions are refused: `REVIEW-UNREADABLE`), an author's
+  expectations that cannot be read or name an unknown scenario
+  (`ORACLE-AUTHOR-FAILED`; ids compare case-insensitively), and a corrupt
+  comment tray.
+- Comments: a section is its document and heading; a document changed
+  while a revision ran is named and Undo will not revert it; Undo writes
+  only the unit's documents; a test comment whose Ask Again did not run
+  returns to the tray; a frozen test is recognised by its Code-view path in
+  a project below the repository's top.
+- `task skip bug:<slug>` (the bug lane's Drop step) found no bug in the
+  extension's layout.
 
 ### Security
 
 - `/api/diff` shows only commits a branch, `HEAD` or a saved attempt
-  reaches, and `/api/file` refuses paths outside the project and the state
-  directory: no endpoint reaches a sealed or held-out object (spec 093).
+  reaches, and `/api/file` refuses paths outside the project: no endpoint
+  reaches a sealed or held-out object (spec 093). Its state-directory check
+  never fired and an untracked symlink was followed: the Code view follows
+  no link, reads only files really inside the worktree, and hides the
+  held-out tests overlaid on it while they are judged.
+- Review-time red checks ran model-written tests unsandboxed when no OS
+  sandbox was available; they now refuse (`SANDBOX-UNAVAILABLE`).
+- Autopilot could use grants nobody ticked by resuming an interrupted Ask
+  run; it resumes no interrupted attempt and holds only the sheet's grants.
+- *Approve and Run* froze what the draft held when the click arrived; it
+  is bound to the digest its sheet showed (`REVIEW-CHANGED`).
 
 - Closed four ways an approval reached more than the person saw: an
   Always Allow that widened to a prefix (`npm run build` allowed `npm run
