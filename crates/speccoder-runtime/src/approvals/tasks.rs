@@ -45,17 +45,15 @@ pub fn approval_task(request: &Request, log: &[Value]) -> TaskSpec {
     )
 }
 
-/// The waiting task for a question from `task` (`skill/<name>`).
+/// The waiting task for a question from `task` (`skill/<name>`): a
+/// question in agentplane's terms, answered in free text. The question is
+/// the model's, so it travels in the proposed action, never as the
+/// trusted summary.
 #[must_use]
 pub fn question_task(task: &str, question: &str) -> TaskSpec {
-    TaskSpec::new(
-        QUESTION,
-        Justification::new(
-            Tainted::trusted(format!("{task} asks")),
-            json!({ "task": task, "question": question }),
-        ),
-        DEADLINE,
-    )
+    let mut spec = TaskSpec::question(QUESTION, Tainted::trusted(format!("{task} asks")), DEADLINE);
+    spec.justification.proposed_action = json!({ "task": task, "question": question });
+    spec
 }
 
 /// The question a waiting approval task carries.
@@ -70,8 +68,9 @@ pub fn presentation_of(proposed_action: &Value, context: &PresentContext) -> Opt
     request_of(proposed_action).map(|r| super::present(&r, context))
 }
 
-/// A person's answer as the decision recorded for its task: the scope, note,
-/// channel and any answer text travel in the amendment.
+/// A person's answer as the decision recorded for its task: an approval or
+/// rejection, or — with `text`, to a question — the answer itself. The
+/// scope, note and channel travel in the amendment.
 #[must_use]
 pub fn decision_for(answer: &Answer, by: &Who, text: Option<&str>) -> Option<Decision> {
     let operator: Operator = by.operator()?;
@@ -88,13 +87,13 @@ pub fn decision_for(answer: &Answer, by: &Who, text: Option<&str>) -> Option<Dec
     if let Some(note) = &answer.note {
         amendment["note"] = json!(note);
     }
-    if let Some(text) = text {
-        amendment["answer"] = json!(text);
-    }
     Some(
-        match answer.decision {
-            Said::Approve => Decision::approve(operator, answer.note.clone().unwrap_or_default()),
-            Said::Reject | Said::Stop => Decision::reject(
+        match (answer.decision, text) {
+            (Said::Approve, Some(text)) => Decision::answer(operator, text),
+            (Said::Approve, None) => {
+                Decision::approve(operator, answer.note.clone().unwrap_or_default())
+            }
+            (Said::Reject | Said::Stop, _) => Decision::reject(
                 operator,
                 answer
                     .reason
@@ -200,7 +199,7 @@ pub fn read(d: &Decision) -> Read {
         .ok()
     });
     let expired = matches!(d.decided, Decided::OnExpiry(_));
-    let answer = if d.approved() {
+    let answer = if d.approved() || d.answered().is_some() {
         let mut answer = Answer::approve(scope, a["note"].as_str().map(str::to_owned), by.clone());
         answer.always = a["always"] == true;
         answer
@@ -218,7 +217,7 @@ pub fn read(d: &Decision) -> Read {
         answer,
         by,
         expired,
-        text: a["answer"].as_str().map(str::to_owned),
+        text: d.answered().map(str::to_owned),
         resume_asking: a["resume_asking"] == true,
     }
 }
@@ -273,6 +272,34 @@ mod tests {
         let back = read(&decision_for(&rejected, &who(), None).unwrap());
         assert_eq!(back.answer.decision, Said::Reject);
         assert_eq!(back.answer.reason.as_deref(), Some("not that file"));
+    }
+
+    #[test]
+    fn an_answer_is_recorded_as_an_answer_and_a_refusal_as_one() {
+        let spec = question_task("skill/specify", "Which time zone?");
+        assert!(
+            spec.justification
+                .asks
+                .as_ref()
+                .is_some_and(|a| a.free_text)
+        );
+        assert_eq!(
+            spec.justification.proposed_action["question"],
+            "Which time zone?"
+        );
+        let answer = Answer::approve(Scope::Once, None, Some(who()));
+        let d = decision_for(&answer, &who(), Some("use UTC")).unwrap();
+        assert_eq!(d.answered(), Some("use UTC"));
+        assert!(!d.approved());
+        assert!(d.amendment.get("answer").is_none(), "{}", d.amendment);
+        let back = read(&d);
+        assert_eq!(back.text.as_deref(), Some("use UTC"));
+        assert_eq!(back.by, Some(who()));
+        assert_eq!(back.answer.decision, Said::Approve);
+        let declined = Answer::reject("declined to answer", Some(who()));
+        let back = read(&decision_for(&declined, &who(), None).unwrap());
+        assert!(back.text.is_none());
+        assert_eq!(back.answer.decision, Said::Reject);
     }
 
     #[test]

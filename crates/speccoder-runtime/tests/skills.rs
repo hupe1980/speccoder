@@ -182,6 +182,9 @@ fn a_planning_skill_writes_the_spec_in_the_checkout_and_asks_when_it_can() {
         "{prompt}"
     );
     assert!(asked[0].tools.iter().any(|t| t.name == "ask_person"));
+    // Recorded as an answer, by the person who gave it.
+    assert_eq!(k.tool_calls[0]["answered"], true, "{:?}", k.tool_calls);
+    assert!(!k.tool_calls[0]["operator"].is_null(), "{:?}", k.tool_calls);
     // The person's answer reached the model.
     assert!(
         serde_json::to_string(&asked[1].prompt)
