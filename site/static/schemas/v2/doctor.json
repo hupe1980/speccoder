@@ -614,6 +614,24 @@
           "type": "object"
         },
         {
+          "description": "Keep an already-satisfied bug's reproductions as a regression test:\ncommitted, the task attested (the input is the reason).",
+          "properties": {
+            "kind": {
+              "const": "bug_keep",
+              "type": "string"
+            },
+            "task": {
+              "description": "`<unit>/<task>`.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Continue a bug: reproduce again, or run its confirmed fix.",
           "properties": {
             "kind": {

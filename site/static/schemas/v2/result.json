@@ -345,6 +345,11 @@
           "type": "string"
         },
         {
+          "const": "bug_keep",
+          "description": "[`Runnable::BugKeep`].",
+          "type": "string"
+        },
+        {
           "const": "allow_always",
           "description": "[`Runnable::AllowAlways`].",
           "type": "string"
@@ -1151,6 +1156,13 @@
             "$ref": "#/$defs/HeldOutVariant"
           },
           "type": "array"
+        },
+        "held_out_reason": {
+          "description": "Why no held-out variant is sealed (the author's call failed, none\nwas red): the verdict names it, and the confirmation says it first.",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "held_out_sealed": {
           "anyOf": [
@@ -6661,6 +6673,24 @@
             "task",
             "digest",
             "reject"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Keep an already-satisfied bug's reproductions as a regression test:\ncommitted, the task attested (the input is the reason).",
+          "properties": {
+            "kind": {
+              "const": "bug_keep",
+              "type": "string"
+            },
+            "task": {
+              "description": "`<unit>/<task>`.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task"
           ],
           "type": "object"
         },

@@ -98,7 +98,7 @@ export interface ActionId {
  * kind arrives with its `Runnable` variant (the *adding a kind* contract
  * of `speccoder_runtime::actions::perform`).
  */
-export type ActionKind = "skill" | "run_task" | "run_feature" | "converge" | "commit" | "approve" | "reject" | "accept" | "skip" | "nudge" | "rule" | "review" | "issue_comment" | "quick_change" | "keep_set_aside" | "drop_set_aside" | "fix_setup" | "feature" | "pull_request" | "bug_fix" | "bug_confirm" | "bug_run" | "allow_always" | "widen_policy" | "decide_batch" | "command";
+export type ActionKind = "skill" | "run_task" | "run_feature" | "converge" | "commit" | "approve" | "reject" | "accept" | "skip" | "nudge" | "rule" | "review" | "issue_comment" | "quick_change" | "keep_set_aside" | "drop_set_aside" | "fix_setup" | "feature" | "pull_request" | "bug_fix" | "bug_confirm" | "bug_run" | "bug_keep" | "allow_always" | "widen_policy" | "decide_batch" | "command";
 
 /**
  * Result of `speccoder actions`: what a person can do now in the
@@ -383,6 +383,11 @@ export interface BugReport {
   handoff: Handoff | null;
   /** The held-out variants (never their content or path). */
   held_out: HeldOutVariant[];
+  /**
+   * Why no held-out variant is sealed (the author's call failed, none
+   * was red): the verdict names it, and the confirmation says it first.
+   */
+  held_out_reason?: string | null;
   /** The sealed set holding them. */
   held_out_sealed: SealedRef | null;
   /** Where the format keeps it. */
@@ -2702,6 +2707,15 @@ export type Runnable =
     kind: "bug_confirm";
     /** Reject instead. */
     reject: boolean;
+    /** `<unit>/<task>`. */
+    task: string;
+  }
+  /**
+   * Keep an already-satisfied bug's reproductions as a regression test:
+   * committed, the task attested (the input is the reason).
+   */
+  | {
+    kind: "bug_keep";
     /** `<unit>/<task>`. */
     task: string;
   }

@@ -203,6 +203,23 @@ adheres to [Semantic Versioning](https://semver.org/).
   read when it began, and an attempt's recorded approvals and rejections
   that cannot be read fail it instead of reading as none. Decisions made in
   an attempt that cannot be recorded are reported, not dropped.
+- `speccoder bug`: rejecting the reproductions made reproduce loop without
+  end; a rejected try is now discarded and counts against `[bug]
+  reproduce_tries`, then `cannot_reproduce`. A reproduction is red only by
+  an assertion of its own test, run by speccoder's command for that one test
+  (`[bug] test` or the toolchain's rule), never the author's, and the
+  confirmation shows that command and binds it into the digest. `verified`
+  now runs every held-out variant on the final tree — a regenerated one too
+  — and needs a special case per reproducing statement: a special-case
+  author that fails or writes none withholds it, saying why. Statements are
+  kept byte for byte (`**kwargs` stays) and read back exactly at write and
+  read time; an extension's assessment with extra or longer statements
+  stops (`BUG-ASSESSMENT-DRIFT`). An `--issue N` that cannot be read stops
+  instead of recording an origin and `Fixes:` for it. *Keep as regression
+  test* is `speccoder bug keep` (the `bug_keep` action): it commits the
+  reproductions and attests the task, extension bugs included. A failure
+  to write the origin, a rejection or a re-sealed held-out set, and why no
+  held-out variant was kept, are reported instead of dropped.
 
 ### Security
 
@@ -246,6 +263,18 @@ adheres to [Semantic Versioning](https://semver.org/).
   signer's user ID are not trust; and on a push the Action takes
   `allowed_signers` from the commit before it or the default branch, never
   from the pushed commit itself.
+- `speccoder bug`: a slug (`--slug`, `bug run --slug`, any interface, and a
+  `Spec-Task:` trailer `speccoder-verify` reads from a pull request) is a
+  plain slug, never a path, and a symlinked bug directory is not read; bug
+  state names are checked before they become paths. A candidate patch's
+  paths are read by `git apply` itself, so a rename, a mode change or a
+  quoted path of a judge input is refused before it is applied, as are
+  binary hunks and symbolic links; from the web, ACP or MCP a patch file
+  must be in the project. A trailer-only task's staleness is judged on the
+  verified statement, and a note whose statements name different triads is
+  unverifiable. `Fixes #N` in a pull request body comes only from the
+  unit's own held tasks (matched by unit and task, not a bare id), and an
+  issue's text is labelled as GitHub's, not the worktree's.
 
 ## [0.1.0] - 2026-10-25
 

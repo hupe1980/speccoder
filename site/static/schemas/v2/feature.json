@@ -308,6 +308,13 @@
           },
           "type": "array"
         },
+        "held_out_reason": {
+          "description": "Why no held-out variant is sealed (the author's call failed, none\nwas red): the verdict names it, and the confirmation says it first.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "held_out_sealed": {
           "anyOf": [
             {

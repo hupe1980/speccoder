@@ -717,8 +717,8 @@ pub const CATALOG: &[Entry] = &[
         "BUG-ASSESSMENT-DRIFT",
         P,
         S::NeedsHuman,
-        "the bug's assessment does not carry your words",
-        "The format's own bug step wrote `assessment.md`, and at least one of your Current, Expected or Unchanged statements is not in it verbatim (whitespace aside). The reproductions are written from your words only, so the bug stops before reproduce.",
+        "the bug's home does not carry exactly your words",
+        "What the bug's home reads back — the format's own `assessment.md`, or the standing unit as speccoder would write it — is not exactly your Current, Expected and Unchanged statements (whitespace aside): one is missing, or it carries one you did not give, a longer or reworded one, or one whose words the file's own markup would change. The reproductions are written from your words only, so the bug stops before anything is reproduced (in a standing unit, before anything is written).",
         [
             "→ edit the assessment so it carries each statement as a `Current:` / `Expected:` / `Unchanged:` line",
             "speccoder bug --slug <slug>"
@@ -774,7 +774,7 @@ pub const CATALOG: &[Entry] = &[
         P,
         S::NeedsHuman,
         "the bug could not be reproduced: nothing is fixed",
-        "Every try of the reproduction author ended without a test of each Expected statement failing on an assertion. A fix without a failing reproduction would be a guess, so the bug stops for you with the tries made and what each showed.",
+        "Every try of the reproduction author ended without a test of each Expected statement failing on its own assertion, or you rejected what it wrote (a rejected try counts against `[bug] reproduce_tries` and reproduces nothing). A fix without a failing reproduction would be a guess, so the bug stops for you with the tries made and what each showed.",
         [
             "speccoder bug run --task {feature}/{task}",
             "speccoder bug \"…\" --expected \"…\" --test <file>::<test>",
@@ -786,9 +786,9 @@ pub const CATALOG: &[Entry] = &[
         W,
         S::Ok,
         "the reproductions already pass: nothing to fix",
-        "Every reproduction passed on the untouched code on every try. Nothing is ticked; keep a reproduction as a regression test or drop the task.",
+        "Every reproduction passed on the untouched code on every try. Nothing is ticked; keep the reproductions as a regression test (committed, the task attested) or drop the task.",
         [
-            "speccoder task accept {task} --reason \"kept as a regression test\"",
+            "speccoder bug keep {feature}/{task} --reason \"kept as a regression test\"",
             "speccoder task drop {task}"
         ]
     ),
@@ -823,16 +823,16 @@ pub const CATALOG: &[Entry] = &[
         "BUG-CANDIDATE-APPLY",
         E,
         S::GitPrecondition,
-        "the candidate patch does not apply",
-        "`--candidate` applies the patch on the untouched code with `git apply --check` first; some hunks did not apply.",
-        ["→ rebase the patch on HEAD"]
+        "the candidate patch is not applied",
+        "`--candidate` applies the patch on the untouched code with `git apply --check` first; some hunks did not apply, git could not read it as a patch, or it carries a binary hunk or a symbolic link (neither is judged as a candidate).",
+        ["→ rebase the patch on HEAD, as a text diff without binary hunks or links"]
     ),
     entry!(
         "BUG-CANDIDATE-JUDGE",
         E,
         S::UsageError,
         "the candidate patch touches what judges it",
-        "A candidate must not change a frozen reproduction, a held-out path or another judge input (checks, configuration, the intent). It is refused before it is applied.",
+        "A candidate must not change a frozen reproduction, a held-out path or another judge input (checks, configuration, the intent) — by an edit, a rename, a deletion or a mode change, as git itself reads the patch. It is refused before it is applied.",
         ["→ remove those hunks from the patch"]
     ),
     entry!(
