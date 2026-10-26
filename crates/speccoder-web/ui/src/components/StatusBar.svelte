@@ -7,6 +7,7 @@
   import { get, latest, q } from "../lib/api";
   import type { Envelope } from "../lib/types";
   import Icon from "./Icon.svelte";
+  import LiveCard from "./LiveCard.svelte";
 
   const r = $derived(app.report?.data ?? null);
   const t = $derived(r?.totals ?? {});
@@ -18,6 +19,9 @@
   const model = $derived(check("model")?.detail.split(" ")[0] ?? null);
   const sandbox = $derived(check("sandbox"));
   const running = $derived(app.job?.running ? app.job : null);
+  // A run of this project in another process (a terminal's `speccoder run`).
+  const other = $derived(!running && (app.elsewhere || app.interrupted) ? app.live?.live ?? null : null);
+  let card = $state(false);
   const stage = $derived([...app.stages].reverse().find((x) => x.state === "started")?.stage ?? null);
 
   interface Cost { total: { input_tokens: number; output_tokens: number; usd: number | null } }
@@ -59,6 +63,12 @@
     {/if}
   </div>
   <div class="side right">
+    {#if other}
+      <button class="live other" class:stopped={app.interrupted} onclick={() => (card = !card)} aria-expanded={card} title={app.interrupted ? "A run stopped before it finished: resume it" : "A run in another speccoder (a terminal): see it"}>
+        {#if app.interrupted}<Icon name="exclaim" size={12} weight={2.4} />{:else}<span class="ring" aria-hidden="true"></span>{/if}
+        {other.task}<span class="dim">· {app.interrupted ? "interrupted" : (other.stage ?? "starting")}{app.interrupted ? "" : " · in a terminal"}</span>
+      </button>
+    {/if}
     {#if running}
       <button class="live" onclick={() => (app.view = "board")} title="What runs now">
         <span class="pulse" aria-hidden="true"></span>{app.task?.id ?? running.command}{#if stage}<span class="dim">· {stage}</span>{/if}
@@ -77,6 +87,8 @@
     <span class="conn" class:off={!app.connected} role="status" title={app.connected ? "Connected to the host" : "Reconnecting to the host…"}><span class="dot"></span>{app.connected ? "" : "Reconnecting"}</span>
   </div>
 </footer>
+
+{#if card && other}<LiveCard onclose={() => (card = false)} />{/if}
 
 <style>
   .status {
@@ -98,6 +110,13 @@
   .attn { background: var(--attention-fill); color: #fff; font-weight: 700; }
   .attn:hover { background: var(--attention-fill); color: #fff; filter: brightness(1.08); }
   .live { color: var(--running); font-weight: 600; }
+  .live.other { color: #a78bfa; }
+  .live.stopped { color: var(--attention, #ff9f0a); }
+  /* Another process's run: a slow ring in the colours the running card wears. */
+  .ring { width: 8px; height: 8px; border-radius: 50%; background: conic-gradient(from var(--a, 0deg), #ff9f0a, #ff375f, #bf5af2, #0a84ff, #64d2ff, #30d158, #ff9f0a); animation: turn 2.4s linear infinite; mask: radial-gradient(circle, transparent 30%, #000 34%); }
+  @property --a { syntax: "<angle>"; initial-value: 0deg; inherits: false; }
+  @keyframes turn { to { --a: 360deg; } }
+  @media (prefers-reduced-motion: reduce) { .ring { animation: none; } }
   .pulse { width: 6px; height: 6px; border-radius: 50%; background: var(--running-fill); animation: beat 1.2s var(--ease) infinite; }
   @keyframes beat { 50% { transform: scale(0.6); opacity: 0.5; } }
   .conn { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0 0.5rem; color: var(--attention); }

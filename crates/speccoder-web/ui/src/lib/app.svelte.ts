@@ -2,7 +2,7 @@
 // feature changes, and what the running job is doing, from its events.
 
 import { get, post, q, listen } from "./api";
-import type { Action, Envelope, Inbox, Project, Report, PendingCall, Presentation, Runnable, Document } from "./types";
+import type { Action, Envelope, Inbox, LiveRun, Project, Report, PendingCall, Presentation, Runnable, Document } from "./types";
 
 export interface StageView {
   stage: string;
@@ -60,6 +60,16 @@ class AppState {
   calls = $state<string[]>([]);
   /** What the model said last, its first line: a claim. */
   said = $state<string | null>(null);
+  /** The project's current run from any process (a terminal's included). */
+  live = $state<LiveRun | null>(null);
+  /** Another process runs this project now: it holds the worktree. */
+  get elsewhere() {
+    return !!(this.live?.running && !this.live.own && this.live.live);
+  }
+  /** A run whose process is gone before it finished: resumable. */
+  get interrupted() {
+    return !!(this.live?.interrupted && this.live.live && !this.job?.running);
+  }
   /** Where the model's latest reasoning summary landed, its last line: a claim. */
   thinking = $state<string | null>(null);
   usage = $state<{ in: number; out: number; usd: number | null }>({ in: 0, out: 0, usd: null });
@@ -147,6 +157,13 @@ class AppState {
     }
     if (a.blocked) {
       this.toast({ tone: "warn", text: a.blocked });
+      return;
+    }
+    // One run per project: another process holds the worktree and journal.
+    const runs = ["run", "converge", "quick_change", "skill", "keep_set_aside", "fix_setup"];
+    if (this.elsewhere && a.run && runs.includes(a.run.kind)) {
+      const l = this.live!.live!;
+      this.toast({ tone: "warn", text: `${l.task} is running in another speccoder (pid ${l.pid})`, detail: "It holds this project; wait for it, or stop it there." });
       return;
     }
     if (a.confirm && !confirmed) {
@@ -321,8 +338,21 @@ class AppState {
     this.section = s.get("section");
   }
 
+  /** Reads the project's live run; every few seconds while the page is seen. */
+  async pollLive() {
+    try {
+      this.live = await get<LiveRun>("/api/live");
+    } catch {
+      /* the host is away: the connection dot says so */
+    }
+  }
+
   start() {
     this.#restore();
+    void this.pollLive();
+    setInterval(() => {
+      if (!document.hidden) void this.pollLive();
+    }, 3000);
     addEventListener("popstate", () => {
       this.#restore();
       void this.refresh();
