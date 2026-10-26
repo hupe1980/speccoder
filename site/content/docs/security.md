@@ -104,6 +104,10 @@ profile speccoder /usr/local/bin/speccoder flags=(unconfined) {
 }
 ```
 
+### Tests kept from you at review
+
+When tests are written at review, the held-out set is sealed in the state directory beside them. The app, the CLI and every event show its count, state and digest — no path, no content, no literal; the oracle's payload has no field that could hold one. `/api/file` serves project paths only and refuses the state directory; `/api/diff` shows only commits a branch, `HEAD` or a saved attempt reaches. Comments, revision turns, nudges and every author call other than the held-out author's own never carry held-out material; a test in CI holds every endpoint and event of a scripted review to that.
+
 ## Secrets
 
 - API keys are read only from the environment, and never written to the journal or the output.

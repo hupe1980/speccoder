@@ -623,3 +623,45 @@ fn every_tool_and_answer_schema_is_strict_for_both_providers() {
         }
     }
 }
+
+/// Spec 093 (FR-031): what the person writes at review stays theirs — the
+/// model reaches neither `review.json` (its oracle and approval keys) nor
+/// the state directory where drafts, frozen sets, held-out sets and comment
+/// drafts live.
+#[test]
+fn the_model_writes_no_review_record_and_nothing_of_the_state_directory() {
+    let p = Policy::new(&[], &[]);
+    let review = p.classify(
+        "write_file",
+        &json!({ "path": "specs/001-x/review.json", "content": "{\"oracle\":{}}" }),
+        None,
+    );
+    assert!(
+        !matches!(review, speccoder_runtime::tools::policy::Decision::Allow),
+        "{review:?}"
+    );
+    let state = tempfile::tempdir().unwrap();
+    for outside in [
+        format!("{}/oracle/001-x/US1/draft.json", state.path().display()),
+        format!(
+            "{}/pre-frozen/001-x/US1/record.json",
+            state.path().display()
+        ),
+        format!("{}/comments/001-x.json", state.path().display()),
+        "../state/held-out/001-x/req-US1/manifest.json".to_owned(),
+    ] {
+        assert!(
+            speccoder_runtime::tools::paths::normalise(&outside).is_err(),
+            "{outside} is reachable"
+        );
+    }
+    let wt = worktree();
+    let t = tools(wt.path());
+    let v = call(
+        &t,
+        "write_file",
+        json!({ "path": format!("{}/comments/x.json", state.path().display()), "content": "{}" }),
+    );
+    assert_eq!(v["ok"], false, "{v}");
+    assert!(!state.path().join("comments/x.json").exists());
+}

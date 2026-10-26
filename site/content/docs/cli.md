@@ -82,6 +82,9 @@ Every stop and finish ends with a `Next:` block of copy-pasteable commands (`nex
 | `speccoder report --live` | What the current or last run is doing, from another terminal |
 | `speccoder report --approvals` | Calls waiting for a decision, and the decisions made, with who made them |
 | `speccoder approvals batch RUN approve\|reject --digest D [--call ID]… [--reason R] [--resume-asking]` | Decide the calls waiting together in a run that used its [asking budget](@/docs/approvals.md#the-asking-budget), each once; refused when the list changed |
+| `speccoder review tests REQ [--write\|--reject P --reason R\|--again P --comment C\|--edit P --from F\|--reading A\|B SCENARIO]` | The tests the run would use for a requirement, [written and shaped at review](@/docs/planning.md#review-the-tests) |
+| `speccoder review approve --run ask\|autopilot [--grant ID]… [--list-grants]` | Approve and Run: approve every open decision line, freeze the written tests, commit `review.json`, start the run |
+| `speccoder review comments [add\|delete\|keep\|send\|undo]` | Comments anchored to the spec, sent as one scoped revision; undo restores the documents |
 | `speccoder report --cost` | Tokens per task, and money when `[model]` has prices |
 | `speccoder report --markdown` | The report as Markdown, for pull requests and CI summaries |
 | `speccoder ui [--port N] [--no-open] [--window]` | The [web interface](@/docs/web.md) on 127.0.0.1, or a desktop window (`--window`: built in on macOS and Windows, elsewhere with `--features app`) |

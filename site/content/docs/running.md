@@ -49,6 +49,8 @@ speccoder do "Make the login button blue" --no-run      # record it, run later
 speccoder bug "saving an empty title crashes" --expected "an empty title is refused with a message"
 ```
 
+A run started with **Approve and Run** from the review uses the tests you [froze there](@/docs/planning.md#review-the-tests): the first task citing a requirement's scenarios writes them at its checkpoint, checks they fail there (with the sealed held-out set), and asks no author; its report says who froze them. On autopilot nothing asks you — a call that would is refused for the run and listed afterwards ([autopilot](@/docs/approvals.md#autopilot)).
+
 A bug is reproduced before it is fixed: one test per expected behaviour that fails on the untouched code by an assertion, shown to you once, then frozen as the fix's acceptance tests; the fix is `verified` only if undoing it makes a reproduction fail again. A bug that cannot be reproduced stops in Needs You; one that already passes is `already_satisfied` and never ticked. See [bug fixes](@/docs/bugs.md).
 
 ## Outcomes

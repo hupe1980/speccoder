@@ -352,5 +352,15 @@ mod tests {
         assert_eq!(trailer(m, "Spec-Task"), Some("007-bugfixes/T001"));
         assert_eq!(trailer(m, "Fixes"), Some("#42"));
         assert_eq!(trailer(m, "Acceptance-Str"), None);
+        // A set frozen at review has the same one form.
+        let review = "speccoder: T005 x\n\nAcceptance-Strength: 0.80 near-miss=0/1\nAcceptance: review manifest=sha256:m approval=sha256:a wording=sha256:w by=Ada Lovelace\n";
+        assert_eq!(
+            trailer(review, "Acceptance"),
+            Some("review manifest=sha256:m approval=sha256:a wording=sha256:w by=Ada Lovelace")
+        );
+        assert_eq!(
+            trailer(review, "Acceptance-Strength"),
+            Some("0.80 near-miss=0/1")
+        );
     }
 }

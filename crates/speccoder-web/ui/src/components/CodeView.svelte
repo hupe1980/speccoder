@@ -14,6 +14,8 @@
   import { diagrams } from "../lib/mermaid";
   import QuickOpen from "./QuickOpen.svelte";
   import { tick } from "svelte";
+  import { frozenTests, nudgeLine } from "../lib/review";
+  import type { CodeComment, Reply, Review } from "../lib/types";
 
   interface Changes {
     branch: string | null;
@@ -27,6 +29,41 @@
   // Mode and open file live in the app's state, so the address keeps them
   // (`?view=code&mode=files&file=src/lib.rs`).
   const mode = $derived(app.codeMode);
+  // Line comments on a task's change, sent as one nudge for its next
+  // attempt (spec 093); a frozen test's lines go to Review › Tests.
+  let frozen = $state(new Set<string>());
+  $effect(() => {
+    void app.feature;
+    get<Reply<Review>>(`/api/review${q({ feature: app.feature ?? undefined })}`)
+      .then((r) => (frozen = frozenTests(r.data?.oracle ?? [])))
+      .catch(() => (frozen = new Set()));
+  });
+  let notes = $state<CodeComment[]>([]);
+  let writing = $state<{ path: string; line: number; quote: string } | null>(null);
+  let noteWords = $state("");
+  function commentOn(c: { path: string; line: number; quote: string }) {
+    if (frozen.has(c.path)) {
+      app.toast({ tone: "warn", text: "This is a frozen test. Comment on it in Review › Tests" });
+      return;
+    }
+    writing = c;
+    noteWords = "";
+  }
+  function keepNote() {
+    if (!writing || !noteWords.trim()) return;
+    notes = [...notes, { ...writing, text: noteWords.trim() }];
+    writing = null;
+  }
+  async function sendNudge(task: string) {
+    const all = notes;
+    await app.perform(
+      offer(
+        { kind: "code_nudge", task, comments: all },
+        { group: "task", label: `nudge ${task}`, why: "the next attempt reads it", command: `speccoder task nudge ${task} "${all.map(nudgeLine).join("; ").replaceAll('"', "'")}"` },
+      ),
+    );
+    notes = [];
+  }
   let changes = $state<Changes | null>(null);
   let commit = $state<string | null>(null);
   let commitPatch = $state("");
@@ -245,7 +282,23 @@
         <div class="main">
           {#if changes.cut && !commit}<p class="muted small">The change is large; it is shown up to 2 MB. Pick a commit or a file.</p>{/if}
           {#if commit}
-            <Diff patch={commitPatch} loading={!commitPatch} />
+            {@const ofTask = taskOf(changes.commits.find((c) => c.id === commit)?.task ?? null)}
+            <Diff patch={commitPatch} loading={!commitPatch} comment={ofTask ? commentOn : null} {frozen} />
+            {#if writing && ofTask}
+              <form class="note-form" onsubmit={(e) => { e.preventDefault(); keepNote(); }}>
+                <p class="muted small mono">{writing.path}:{writing.line} “{writing.quote.trim().slice(0, 80)}”</p>
+                <!-- svelte-ignore a11y_autofocus -->
+                <textarea rows="2" bind:value={noteWords} autofocus aria-label="Comment on {writing.path}:{writing.line}" onkeydown={(e) => { if (e.key === "Escape") writing = null; if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); keepNote(); } }}></textarea>
+                <div class="note-acts"><button class="btn small primary" type="submit" disabled={!noteWords.trim()}>Add Comment <kbd>⌘↵</kbd></button><button class="btn small ghost" type="button" onclick={() => (writing = null)}>Cancel</button></div>
+              </form>
+            {/if}
+            {#if notes.length && ofTask}
+              <div class="code-tray glass" aria-live="polite">
+                <strong>{notes.length} {notes.length === 1 ? "comment" : "comments"} on {ofTask}</strong>
+                <ul>{#each notes as n, i (i)}<li class="mono small">{nudgeLine(n)} <button class="btn small ghost" aria-label="Delete this comment" onclick={() => (notes = notes.filter((_, j) => j !== i))}>×</button></li>{/each}</ul>
+                <button class="btn small primary" disabled={!!app.job?.running} title={`speccoder task nudge ${ofTask} "…"`} onclick={() => sendNudge(ofTask)}>Send {notes.length} {notes.length === 1 ? "Comment" : "Comments"} as a Nudge</button>
+              </div>
+            {/if}
           {:else}
             <Diff patch={changes.patch} only={focus} header={false} />
           {/if}
@@ -380,6 +433,12 @@
   .row1 { display: flex; align-items: center; gap: 0.4rem; font-size: 0.76rem; }
   .v { width: 16px; height: 16px; border-radius: 50%; display: grid; place-items: center; background: var(--fill-c); color: #fff; }
   .task { font-weight: 600; }
+  .note-form { display: grid; gap: 0.35rem; margin-top: 0.6rem; padding: 0.6rem; border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
+  .note-form textarea { width: 100%; box-sizing: border-box; border-radius: 8px; border: 0.5px solid var(--separator); background: var(--surface-2); color: var(--text); padding: 0.4rem 0.55rem; font: inherit; }
+  .note-form p { margin: 0; }
+  .note-acts { display: flex; gap: 0.4rem; }
+  .code-tray { position: fixed; right: 1.25rem; bottom: 2.4rem; z-index: 15; width: min(420px, calc(100vw - 2.5rem)); display: grid; gap: 0.4rem; padding: 0.7rem; border-radius: var(--radius-lg); background: var(--glass-strong); box-shadow: var(--shadow-lg), var(--glass-edge); }
+  .code-tray ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 0.2rem; }
   .when { margin-left: auto; color: var(--muted); }
   .subj { font-size: 0.84rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .fname { font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -133,6 +133,13 @@
     "ReviewTotals": {
       "description": "Counts of [`ReviewItem::state`].",
       "properties": {
+        "ambiguous": {
+          "default": 0,
+          "description": "Requirements two test authors read differently, not yet resolved:\n*Approve and Run* and a gated run wait on them.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
         "approved": {
           "description": "Approved on their current wording.",
           "format": "uint",
@@ -170,7 +177,8 @@
         "changes_requested",
         "open",
         "lapsed",
-        "questions"
+        "questions",
+        "ambiguous"
       ],
       "type": "object"
     },

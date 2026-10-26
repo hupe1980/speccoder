@@ -121,35 +121,17 @@ pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance 
     }
 
     // Validate: new test files only, a command the policy allows.
-    let protected = a.policy.protected();
     let mut written = Vec::new();
-    let mut planned = Vec::new();
-    // Each test and the scenarios it cites, of those the spec has.
-    let mut tests = Vec::new();
-    for f in answer["files"].as_array().into_iter().flatten() {
-        let (Some(path), Some(content)) = (f["path"].as_str(), f["content"].as_str()) else {
-            continue;
-        };
-        let rel = match tools::paths::normalise(path) {
-            Ok(r) => r,
-            Err(e) => return skipped(format!("`{path}`: {}", e.0), base),
-        };
-        if !tools::paths::is_test_path(&rel) || protected.write_class(&rel).is_some() {
-            return skipped(format!("`{rel}` is not a new test file"), base);
-        }
-        if a.project.join(&rel).exists() {
-            return skipped(format!("`{rel}` already exists"), base);
-        }
-        let cited: Vec<&str> = f["scenarios"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(|v| v.as_str())
-            .filter(|id| a.scenarios.iter().any(|s| s.id == *id))
-            .collect();
-        tests.push(json!({ "path": rel, "scenarios": cited }));
-        planned.push((rel, content.to_owned()));
+    let (valid, refused) = validate_answer(&answer, a.project, a.policy, a.scenarios);
+    if let Some(r) = refused.first() {
+        return skipped(r.message.clone(), base);
     }
+    // Each test and the scenarios it cites, of those the spec has.
+    let tests: Vec<serde_json::Value> = valid
+        .iter()
+        .map(|f| json!({ "path": f.path, "scenarios": f.cited }))
+        .collect();
+    let planned: Vec<(String, String)> = valid.into_iter().map(|f| (f.path, f.content)).collect();
     if planned.is_empty() {
         return skipped("no acceptance tests were generated".to_owned(), base);
     }
@@ -224,6 +206,94 @@ pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance 
         held_out: None,
         generation_failed: None,
     }
+}
+
+/// One test file of an author's answer that may be written.
+pub(crate) struct ValidFile {
+    /// Normalised, project-relative.
+    pub(crate) path: String,
+    pub(crate) content: String,
+    /// The scenario ids it cites, of those given (may be empty).
+    pub(crate) cited: Vec<String>,
+    /// The command that runs only it, when the answer gives one.
+    pub(crate) argv: Vec<String>,
+}
+
+/// A file of an answer that may not be written, and why.
+pub(crate) struct RefusedFile {
+    /// Its path as given.
+    pub(crate) path: String,
+    /// `not_a_new_test_file` or `exists`.
+    pub(crate) why: &'static str,
+    /// What a person is told.
+    pub(crate) message: String,
+}
+
+/// The acceptance author's files, checked (the one validation run time and
+/// review share): new test paths only, nothing protected, nothing that
+/// exists in `project`; each with the scenarios it cites of `scenarios`.
+pub(crate) fn validate_answer(
+    answer: &serde_json::Value,
+    project: &Path,
+    policy: &tools::policy::Policy,
+    scenarios: &[speccoder_core::spec::ScenarioRef],
+) -> (Vec<ValidFile>, Vec<RefusedFile>) {
+    let protected = policy.protected();
+    let mut valid = Vec::new();
+    let mut refused = Vec::new();
+    for f in answer["files"].as_array().into_iter().flatten() {
+        let (Some(path), Some(content)) = (f["path"].as_str(), f["content"].as_str()) else {
+            continue;
+        };
+        let rel = match tools::paths::normalise(path) {
+            Ok(r) => r,
+            Err(e) => {
+                refused.push(RefusedFile {
+                    path: path.to_owned(),
+                    why: "not_a_new_test_file",
+                    message: format!("`{path}`: {}", e.0),
+                });
+                continue;
+            }
+        };
+        if !tools::paths::is_test_path(&rel) || protected.write_class(&rel).is_some() {
+            refused.push(RefusedFile {
+                message: format!("`{rel}` is not a new test file"),
+                path: rel,
+                why: "not_a_new_test_file",
+            });
+            continue;
+        }
+        if project.join(&rel).exists() {
+            refused.push(RefusedFile {
+                message: format!("`{rel}` already exists"),
+                path: rel,
+                why: "exists",
+            });
+            continue;
+        }
+        let cited: Vec<String> = f["scenarios"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|v| v.as_str())
+            .filter(|id| scenarios.iter().any(|s| s.id == *id))
+            .map(str::to_owned)
+            .collect();
+        let argv: Vec<String> = f["argv"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|v| v.as_str().map(str::to_owned))
+            .collect();
+        valid.push(ValidFile {
+            path: rel,
+            content: content.to_owned(),
+            cited,
+            argv,
+        });
+    }
+    (valid, refused)
 }
 
 /// The class as written in reports.
@@ -808,14 +878,15 @@ mod tests {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum RedRule {
     /// A review's oracle: the run-time rule (an assertion, or an absent
-    /// symbol). The review producer (spec 093) reuses its sets with it.
-    #[allow(dead_code)]
+    /// symbol), twice; a set that is no longer red is reported as at run
+    /// time — not demonstrated — rather than refused.
     RunTime,
     /// A bug's reproductions: an assertion only, both runs.
     BugAssertionOnly,
 }
 
 /// One test of a reused set: its file, what it cites and how it runs.
+#[derive(Debug)]
 pub(crate) struct ReusedTest {
     /// Project-relative path.
     pub(crate) path: String,
@@ -825,6 +896,21 @@ pub(crate) struct ReusedTest {
     pub(crate) argv: Vec<String>,
     /// It must pass at the checkpoint instead (an *Unchanged* test).
     pub(crate) green: bool,
+}
+
+/// Where a reused set's sealed held-out tests are red-checked: overlaid on
+/// the checkpoint, run and removed (D-081).
+pub(crate) struct SealedCheck<'a> {
+    /// The project's state directory.
+    pub(crate) state: &'a Path,
+    /// The unit the set is sealed under.
+    pub(crate) unit: &'a str,
+    /// The worktree's root.
+    pub(crate) wt_root: &'a Path,
+    /// Scratch for checkpoints.
+    pub(crate) tmp: &'a Path,
+    /// The task's policy.
+    pub(crate) policy: &'a tools::policy::Policy,
 }
 
 /// Acceptance tests decided before the run, reused at the checkpoint:
@@ -839,6 +925,7 @@ pub(crate) fn reuse_pre_frozen(
     tests: &[ReusedTest],
     runner: &sandbox::Runner,
     rule: RedRule,
+    sealed: Option<&SealedCheck<'_>>,
 ) -> Result<PreparedAcceptance, String> {
     use serde_json::json;
     for (rel, content) in files {
@@ -891,6 +978,9 @@ pub(crate) fn reuse_pre_frozen(
                 RedRule::RunTime => class.is_red(),
             }
         };
+        if !holds && rule == RedRule::RunTime && !t.green {
+            return Ok(not_red_frozen(record, files, tests, t, class));
+        }
         if !holds {
             return Err(if t.green {
                 format!(
@@ -919,19 +1009,53 @@ pub(crate) fn reuse_pre_frozen(
         .filter(|t| !std::ptr::eq(*t, *first))
         .map(|t| t.argv.clone())
         .collect();
-    let held_out = match &record.held_out_sealed {
+    let mut held_sha = record
+        .held_out_sealed
+        .as_ref()
+        .map(|h| h.manifest_sha256.clone());
+    let mut held_out = match &record.held_out_sealed {
         Some(h) => {
             json!({ "state": "on", "manifest": format!("sha256:{}", h.manifest_sha256), "kept": h.count })
         }
         None => json!({ "state": "absent", "reason": "none_kept" }),
     };
+    // The sealed held-out set, red on the same checkpoint (overlaid, run,
+    // removed): a set that is not red decides nothing.
+    if let (Some(check), Some(h)) = (sealed, &record.held_out_sealed) {
+        let (manifest, contents) = crate::held_out::open_sealed(check.state, check.unit, h)
+            .map_err(|t| format!("the frozen held-out set was tampered with: {}", t.0))?;
+        let set: Vec<(crate::held_out::HeldOutFile, String)> = manifest
+            .files
+            .iter()
+            .cloned()
+            .zip(contents.into_iter().map(|(_, c)| c))
+            .collect();
+        let runs = crate::held_out::overlay_run(
+            check.wt_root,
+            project,
+            check.tmp,
+            &set,
+            runner,
+            check.policy,
+        )?;
+        let all_red = runs.iter().all(|r| {
+            r.result
+                .as_ref()
+                .is_some_and(|(res, summary)| classify_red(res, summary.as_ref()).is_red())
+        });
+        if !all_red {
+            held_sha = None;
+            held_out = json!({ "state": "absent", "reason": "not_red" });
+        }
+    }
+    let class = classes.first().copied().unwrap_or(RedClass::Assertion);
     Ok(PreparedAcceptance {
         report: json!({
             "files": files.iter().map(|(p, _)| p).collect::<Vec<_>>(),
             "tests": tests.iter().map(|t| json!({ "path": t.path, "scenarios": t.cites })).collect::<Vec<_>>(),
             "argv": first.argv,
             "red": true,
-            "red_class": RedClass::Assertion,
+            "red_class": class,
             "source": record.producer.source(),
             "pre_frozen": {
                 "manifest": crate::pre_frozen::manifest_digest(record),
@@ -945,11 +1069,57 @@ pub(crate) fn reuse_pre_frozen(
         argv: Some(first.argv.clone()),
         more_argv: more,
         red: true,
-        red_class: Some(RedClass::Assertion),
-        held_out: record
-            .held_out_sealed
-            .as_ref()
-            .map(|h| h.manifest_sha256.clone()),
+        red_class: Some(class),
+        held_out: held_sha,
         generation_failed: None,
     })
+}
+
+/// A frozen set no longer red at the checkpoint: reported as a run-time
+/// set that is not red — not demonstrated — with nothing re-authored.
+fn not_red_frozen(
+    record: &speccoder_core::acceptance::PreFrozenAcceptance,
+    files: &[(String, String)],
+    tests: &[ReusedTest],
+    failing: &ReusedTest,
+    class: RedClass,
+) -> PreparedAcceptance {
+    use serde_json::json;
+    let note = match class {
+        RedClass::Passed => "frozen at review, already passing: the acceptance tests already pass before the attempt, so they are no evidence for it".to_owned(),
+        RedClass::Flaky => "frozen at review: the acceptance tests failed once and passed when run again: not demonstrated".to_owned(),
+        other => format!(
+            "frozen at review: the acceptance tests did not fail on an assertion ({}): not demonstrated",
+            class_word(other)
+        ),
+    };
+    PreparedAcceptance {
+        report: json!({
+            "files": files.iter().map(|(p, _)| p).collect::<Vec<_>>(),
+            "tests": tests.iter().map(|t| json!({ "path": t.path, "scenarios": t.cites })).collect::<Vec<_>>(),
+            "argv": failing.argv,
+            "red": false,
+            "red_class": class,
+            "note": note,
+            "source": record.producer.source(),
+            "pre_frozen": {
+                "manifest": crate::pre_frozen::manifest_digest(record),
+                "approval": record.approval_digest,
+                "wording": record.wording_digest,
+                "by": record.decided.by,
+                "via": record.decided.via,
+            },
+            "held_out": { "state": "absent", "reason": "not_red" },
+        }),
+        argv: Some(failing.argv.clone()),
+        more_argv: tests
+            .iter()
+            .filter(|t| !std::ptr::eq(*t, failing))
+            .map(|t| t.argv.clone())
+            .collect(),
+        red: false,
+        red_class: Some(class),
+        held_out: None,
+        generation_failed: None,
+    }
 }

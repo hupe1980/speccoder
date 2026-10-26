@@ -1,0 +1,987 @@
+//! The oracle at review (spec 093) end to end with a scripted model and
+//! real red runs: tests written at review, shaped by the person, compared
+//! for ambiguity, frozen with the approval and reused by the run without
+//! an author call — and no held-out path or literal in any payload.
+
+// Test code: panicking on unexpected input is the failure report.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::process::Command;
+use std::sync::Arc;
+
+use agentplane::model::ModelProvider;
+use agentplane::model::fake::FakeProvider;
+use serde_json::{Value, json};
+use speccoder_core::actions::Via;
+use speccoder_core::oracle::{OracleOp, OracleState, OracleView, Reading, RunMode};
+use speccoder_core::{CommandData, CommandResult, CommandStatus, ReviewReport};
+use speccoder_runtime::RunOptions;
+use speccoder_runtime::oracle::{Request, tests_with};
+
+const CONFIG: &str = "[model]\nprovider = \"openai\"\nmodel = \"gpt-5.4-mini\"\n\n[checks.has-ok]\nargv = [\"grep\", \"-q\", \"fn ok\", \"src/lib.rs\"]\n\n[commands]\nallow_prefix = [[\"grep\", \"-q\"], [\"./accept.sh\", \"--\"]]\n";
+
+/// One test: "the pattern is in src/lib.rs", with libtest's summary line.
+const ACCEPT_SH: &str = "#!/bin/sh\n[ \"$1\" = -- ] && shift\nif grep -q \"$1\" src/lib.rs; then\n  echo 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out'\nelse\n  echo 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out'\n  exit 101\nfi\n";
+
+const SPEC: &str = "# Spec\n\n### User Story 1 - Login (Priority: P1)\n\nUsers log in.\n\n**Acceptance Scenarios**:\n\n1. **Given** a user, **When** they log in, **Then** a `login` function exists.\n2. **Given** an empty password, **When** they log in, **Then** they are refused.\n3. **Given** a locked account, **When** they log in, **Then** they are told so.\n\n### User Story 2 - Profile (Priority: P2)\n\nProfiles, without scenarios.\n\n## Requirements\n\n- **FR-001**: Users MUST log in.\n- **FR-002**: Users MUST be refused with an empty password.\n";
+
+/// Only the held-out test holds it.
+const SECRET: &str = "Zq9-held-out-only-literal";
+const HELD_OUT_PATH: &str = "tests/held_out_us1_login.txt";
+
+fn git(dir: &Path, args: &[&str]) -> String {
+    let out = Command::new("git")
+        .args(["-c", "user.name=Ada", "-c", "user.email=ada@example.com"])
+        .args([
+            "-c",
+            "commit.gpgsign=false",
+            "-c",
+            "init.defaultBranch=main",
+        ])
+        .args(["-c", "core.hooksPath=/dev/null"])
+        .args(args)
+        .current_dir(dir)
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "git {args:?}: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    String::from_utf8_lossy(&out.stdout).into_owned()
+}
+
+fn repo_with(spec: &str, extra: &str) -> tempfile::TempDir {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = tempfile::tempdir().unwrap();
+    let r = dir.path();
+    let fixture =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../speccoder-speckit/tests/fixtures/graph");
+    assert!(
+        Command::new("cp")
+            .arg("-R")
+            .arg(fixture.join("."))
+            .arg(r)
+            .status()
+            .unwrap()
+            .success()
+    );
+    fs::write(r.join("specs/001-graph/spec.md"), spec).unwrap();
+    fs::write(r.join("specs/001-graph/plan.md"), "# Plan\n\nRust.\n").unwrap();
+    fs::create_dir_all(r.join("src")).unwrap();
+    fs::write(r.join("src/lib.rs"), "pub fn ok() {}\n").unwrap();
+    fs::write(r.join("speccoder.toml"), format!("{CONFIG}{extra}")).unwrap();
+    fs::write(r.join("accept.sh"), ACCEPT_SH).unwrap();
+    fs::set_permissions(r.join("accept.sh"), fs::Permissions::from_mode(0o755)).unwrap();
+    git(r, &["init", "-q"]);
+    git(r, &["config", "user.name", "Ada"]);
+    git(r, &["config", "user.email", "ada@example.com"]);
+    git(r, &["add", "-A"]);
+    git(r, &["commit", "-q", "-m", "init"]);
+    dir
+}
+
+fn repo() -> tempfile::TempDir {
+    repo_with(SPEC, "")
+}
+
+fn fake() -> (Arc<FakeProvider>, Arc<dyn ModelProvider>) {
+    let f = FakeProvider::new();
+    let d: Arc<dyn ModelProvider> = f.clone();
+    (f, d)
+}
+
+fn file(path: &str, scenarios: &[&str], pattern: &str) -> Value {
+    json!({
+        "path": path,
+        "content": format!("checks {pattern}\n"),
+        "scenarios": scenarios,
+        "argv": ["./accept.sh", "--", pattern],
+    })
+}
+
+/// A review answer: its files and what it says it expects of US1-2.
+fn answer(files: Vec<Value>, us1_2: &str) -> Value {
+    json!({
+        "files": files,
+        "argv": ["./accept.sh", "--", "fn login"],
+        "notes": [],
+        "expectations": [
+            { "scenario": "US1-1", "given": "a user", "expect": "a login function" },
+            { "scenario": "US1-2", "given": "an empty password", "expect": us1_2 },
+        ],
+        "untestable": [ { "scenario": "US1-3", "why": "needs a lock service" } ],
+    })
+}
+
+fn held_out(pattern: &str) -> Value {
+    json!({ "files": [{
+        "path": HELD_OUT_PATH,
+        "content": format!("login with a token \"{SECRET}\" ({pattern})\n"),
+        "scenarios": ["US1-1"],
+        "argv": ["./accept.sh", "--", pattern],
+        "composition": false,
+    }], "notes": [] })
+}
+
+fn standard() -> Vec<Value> {
+    vec![
+        file("tests/acceptance_us1_login.txt", &["US1-1"], "fn login"),
+        file("tests/acceptance_us1_nothing.txt", &[], "fn login"),
+        file("tests/acceptance_us1_passes.txt", &["US1-2"], "fn ok"),
+    ]
+}
+
+fn request<'a>(req: &'a str, op: OracleOp) -> Request<'a> {
+    Request {
+        req,
+        op,
+        path: None,
+        scenario: None,
+        reading: None,
+        text: None,
+    }
+}
+
+fn code(r: &CommandResult) -> Option<&'static str> {
+    r.code().map(|e| e.name)
+}
+
+fn review(r: &CommandResult) -> &ReviewReport {
+    match r.data() {
+        Some(CommandData::Review(rv)) => rv,
+        other => panic!("{} → {other:?}", r.message()),
+    }
+}
+
+fn us1(r: &CommandResult) -> OracleView {
+    review(r)
+        .oracle
+        .iter()
+        .find(|v| v.req == "US1")
+        .cloned()
+        .unwrap_or_else(|| panic!("no US1: {}", r.message()))
+}
+
+fn write(r: &Path, state: &Path, d: Arc<dyn ModelProvider>) -> CommandResult {
+    tests_with(
+        r,
+        None,
+        &request("US1", OracleOp::Write),
+        Via::Terminal,
+        state,
+        Some(d),
+        &RunOptions::default(),
+    )
+}
+
+/// No held-out path or literal anywhere in `text` (SC-003).
+fn assert_no_held_out(text: &str) {
+    assert!(!text.contains(SECRET), "held-out literal in {text}");
+    assert!(!text.contains(HELD_OUT_PATH), "held-out path in {text}");
+}
+
+#[test]
+fn us1_written_tests_show_red_discarded_uncovered_and_only_a_held_out_count() {
+    let r = repo();
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_structure(answer(standard(), "refused"));
+    f.will_structure(answer(standard(), "refused"));
+    f.will_structure(held_out("fn login"));
+    let res = write(r.path(), state.path(), d);
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let v = us1(&res);
+    assert_eq!(v.state, OracleState::Written, "{v:?}");
+    let classes: Vec<(&str, &str, bool)> = v
+        .tests
+        .iter()
+        .map(|t| (t.path.as_str(), t.red_class.as_str(), t.red))
+        .collect();
+    assert_eq!(
+        classes,
+        [
+            ("tests/acceptance_us1_login.txt", "assertion", true),
+            ("tests/acceptance_us1_passes.txt", "passed", false),
+        ]
+    );
+    assert_eq!(v.discarded.len(), 1);
+    assert_eq!(v.discarded[0].why, "cites_no_scenario");
+    // The passing test covers nothing: US1-2 and US1-3 are uncovered.
+    assert_eq!(v.uncovered, ["US1-2", "US1-3"]);
+    assert_eq!(v.held_out.state, "kept");
+    assert_eq!(v.held_out.count, 1);
+    assert!(v.held_out.manifest_sha256.is_some());
+    assert_eq!(v.strength_target, None);
+    assert_eq!(v.calls, 2);
+    assert!(v.ambiguities.is_empty(), "the authors agree");
+    // US2 has no scenarios: no Tests card.
+    assert!(review(&res).oracle.iter().all(|o| o.req != "US2"));
+    // Nothing of the held-out set in the payload, nor in the person's checkout.
+    assert_no_held_out(&serde_json::to_string(&res).unwrap());
+    assert!(!r.path().join(HELD_OUT_PATH).exists());
+    assert!(!r.path().join("tests/acceptance_us1_login.txt").exists());
+    // The scratch worktree is gone.
+    assert_eq!(git(r.path(), &["worktree", "list"]).lines().count(), 1);
+    // The second author's tests are not kept; both calls were made.
+    let authors = f.asked().iter().filter(|a| a.tools.is_empty()).count();
+    assert_eq!(authors, 3, "two samples and the held-out author");
+}
+
+#[test]
+fn us1_reject_edit_and_again_shape_the_set() {
+    let r = repo();
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_structure(answer(standard(), "refused"));
+    f.will_structure(answer(standard(), "refused"));
+    f.will_structure(held_out("fn login"));
+    assert_eq!(
+        write(r.path(), state.path(), d.clone()).status(),
+        CommandStatus::Ok
+    );
+
+    // A rejection needs a reason, and is told to later author calls.
+    let mut req = request("US1", OracleOp::Reject);
+    req.path = Some("tests/acceptance_us1_passes.txt");
+    let res = tests_with(
+        r.path(),
+        None,
+        &req,
+        Via::Web,
+        state.path(),
+        None,
+        &RunOptions::default(),
+    );
+    assert_eq!(code(&res), Some("USAGE"), "{}", res.message());
+    req.text = Some("asserts the wrong rounding");
+    let res = tests_with(
+        r.path(),
+        None,
+        &req,
+        Via::Web,
+        state.path(),
+        None,
+        &RunOptions::default(),
+    );
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let v = us1(&res);
+    assert_eq!(v.tests.len(), 1);
+    assert_eq!(v.rejected[0].reason, "asserts the wrong rounding");
+    assert!(!v.rejected[0].by.is_empty());
+
+    // An edit is red-checked and marked as the person's.
+    let mut req = request("US1", OracleOp::Edit);
+    req.path = Some("tests/acceptance_us1_login.txt");
+    req.text = Some("checks fn login, edited\n");
+    let res = tests_with(
+        r.path(),
+        None,
+        &req,
+        Via::Web,
+        state.path(),
+        None,
+        &RunOptions::default(),
+    );
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let t = &us1(&res).tests[0];
+    assert_eq!(t.content, "checks fn login, edited\n");
+    assert!(t.red);
+    assert!(t.edited_by.is_some());
+    assert_eq!(
+        serde_json::to_value(t.authored_by).unwrap(),
+        json!("person")
+    );
+
+    // Ask Again: one author call, told the rejection and the comment.
+    f.will_structure(answer(
+        vec![file(
+            "tests/acceptance_us1_login.txt",
+            &["US1-1"],
+            "fn login(",
+        )],
+        "refused",
+    ));
+    let before = f.asked().len();
+    let mut req = request("US1", OracleOp::Again);
+    req.path = Some("tests/acceptance_us1_login.txt");
+    req.text = Some("check the parentheses too");
+    let res = tests_with(
+        r.path(),
+        None,
+        &req,
+        Via::Web,
+        state.path(),
+        Some(d),
+        &RunOptions::default(),
+    );
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    assert_eq!(f.asked().len(), before + 1, "exactly one author call");
+    let prompt = serde_json::to_string(&f.asked().last().unwrap().prompt).unwrap();
+    assert!(
+        prompt.contains("asserts the wrong rounding"),
+        "the rejection is told"
+    );
+    assert!(
+        prompt.contains("check the parentheses too"),
+        "the comment is told"
+    );
+    let v = us1(&res);
+    assert_eq!(v.tests.len(), 1);
+    assert_eq!(v.tests[0].content, "checks fn login(\n");
+    // What reached the calls is recorded, each person's note once, by digest.
+    let plane = speccoder_runtime::worktree::project_state_dir(state.path(), r.path());
+    let (draft, _) = speccoder_runtime::oracle::load(&plane, "001-graph", "US1")
+        .unwrap()
+        .unwrap();
+    let rejected = "Rejected `tests/acceptance_us1_passes.txt`: asserts the wrong rounding";
+    let want = speccoder_runtime::integrity::sha256_hex(rejected.as_bytes());
+    let kinds = |k: speccoder_core::context::ContextKind| {
+        draft.context.iter().filter(|e| e.kind == k).count()
+    };
+    assert_eq!(
+        draft.context.iter().filter(|e| e.sha256 == want).count(),
+        1,
+        "{:?}",
+        draft.context
+    );
+    assert_eq!(kinds(speccoder_core::context::ContextKind::Comment), 1);
+    assert!(kinds(speccoder_core::context::ContextKind::Scenario) >= 3);
+    assert!(v.tests[0].red);
+}
+
+#[test]
+fn us2_disagreeing_authors_block_approve_and_run_until_a_reading_is_chosen() {
+    let r = repo();
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_structure(answer(standard(), "refused"));
+    f.will_structure(answer(standard(), "an error message"));
+    f.will_structure(held_out("fn login"));
+    let res = write(r.path(), state.path(), d.clone());
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let v = us1(&res);
+    assert_eq!(v.state, OracleState::Ambiguous);
+    assert_eq!(v.ambiguities.len(), 1, "{:?}", v.ambiguities);
+    let a = &v.ambiguities[0];
+    assert_eq!(a.scenario, "US1-2");
+    assert_eq!(
+        (a.a.expect.as_str(), a.b.expect.as_str()),
+        ("refused", "an error message")
+    );
+    assert_eq!(review(&res).totals.ambiguous, 1);
+    let sheet = review(&res).sheet.clone().unwrap();
+    assert!(
+        sheet
+            .blocked
+            .iter()
+            .any(|b| b.contains("US1") && b.contains("US1-2")),
+        "{sheet:?}"
+    );
+
+    // Approve and Run waits; a plain approval records and says so.
+    let refused = speccoder_runtime::review::approve_and_run(
+        r.path(),
+        None,
+        RunMode::Ask,
+        &[],
+        Via::Terminal,
+        Some(state.path()),
+        Some(d.clone()),
+        &RunOptions::default(),
+    );
+    assert_eq!(
+        code(&refused),
+        Some("REVIEW-AMBIGUOUS"),
+        "{}",
+        refused.message()
+    );
+    // A gated run waits too.
+    fs::write(
+        r.path().join("speccoder.toml"),
+        format!("{CONFIG}\n[review]\nrequired = true\n"),
+    )
+    .unwrap();
+    // Per-line decisions still record, and say Approve and Run waits.
+    let plain = speccoder_runtime::review::decide_in(
+        r.path(),
+        None,
+        &[],
+        "approve",
+        None,
+        Via::Terminal,
+        Some(state.path()),
+    );
+    assert_eq!(plain.status(), CommandStatus::Ok, "{}", plain.message());
+    assert!(
+        plain
+            .message()
+            .contains("US1 is ambiguous — Approve and Run stays blocked"),
+        "{}",
+        plain.message()
+    );
+    git(r.path(), &["add", "-A"]);
+    git(r.path(), &["commit", "-q", "-m", "gate the run"]);
+    let gated = speccoder_runtime::run_with(r.path(), None, "T005", state.path(), d.clone(), None);
+    assert_eq!(
+        code(&gated),
+        Some("REVIEW-AMBIGUOUS"),
+        "{}",
+        gated.message()
+    );
+    // Reading A is meant: the item closes, the tests stay.
+    let mut req = request("US1", OracleOp::Reading);
+    req.scenario = Some("US1-2");
+    req.reading = Some(Reading::A);
+    let res = tests_with(
+        r.path(),
+        None,
+        &req,
+        Via::Web,
+        state.path(),
+        None,
+        &RunOptions::default(),
+    );
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let v = us1(&speccoder_runtime::review::report_in(
+        r.path(),
+        None,
+        Some(state.path()),
+    ));
+    assert_eq!(v.state, OracleState::Written, "{v:?}");
+    assert!(v.ambiguities.iter().all(|a| a.resolution.is_some()));
+    assert_eq!(v.tests.len(), 2, "reading A keeps the tests");
+}
+
+#[test]
+fn us2_reading_b_writes_the_scenario_s_tests_again() {
+    let r = repo();
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_structure(answer(standard(), "refused"));
+    f.will_structure(answer(standard(), "an error message"));
+    f.will_structure(held_out("fn login"));
+    assert_eq!(
+        write(r.path(), state.path(), d.clone()).status(),
+        CommandStatus::Ok
+    );
+    f.will_structure(answer(
+        vec![file(
+            "tests/acceptance_us1_error.txt",
+            &["US1-2"],
+            "fn refuse",
+        )],
+        "an error message",
+    ));
+    let mut req = request("US1", OracleOp::Reading);
+    req.scenario = Some("US1-2");
+    req.reading = Some(Reading::B);
+    let res = tests_with(
+        r.path(),
+        None,
+        &req,
+        Via::Web,
+        state.path(),
+        Some(d),
+        &RunOptions::default(),
+    );
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let prompt = serde_json::to_string(&f.asked().last().unwrap().prompt).unwrap();
+    assert!(
+        prompt.contains("reading B"),
+        "reading B is the person's note"
+    );
+    let v = us1(&res);
+    let paths: Vec<&str> = v.tests.iter().map(|t| t.path.as_str()).collect();
+    assert_eq!(
+        paths,
+        [
+            "tests/acceptance_us1_login.txt",
+            "tests/acceptance_us1_error.txt"
+        ]
+    );
+    assert!(v.tests[1].red);
+}
+
+#[test]
+fn edge_cases_refuse_with_their_codes() {
+    // Acceptance off.
+    let r = repo_with(SPEC, "\n[acceptance]\ngenerate = false\n");
+    let state = tempfile::tempdir().unwrap();
+    let (_, d) = fake();
+    let res = write(r.path(), state.path(), d.clone());
+    assert_eq!(code(&res), Some("ACCEPTANCE-OFF"), "{}", res.message());
+    // No scenarios.
+    let r = repo();
+    let res = tests_with(
+        r.path(),
+        None,
+        &request("US2", OracleOp::Write),
+        Via::Terminal,
+        state.path(),
+        Some(d.clone()),
+        &RunOptions::default(),
+    );
+    assert_eq!(code(&res), Some("REVIEW-NO-SCENARIOS"), "{}", res.message());
+    // The author fails: nothing is stored.
+    let (f, d) = fake();
+    f.will_fail(agentplane::model::ModelError::Refused {
+        model: agentplane::model::ModelId::new("openai", "gpt-5.4-mini"),
+        detail: "down".to_owned(),
+    });
+    let res = write(r.path(), state.path(), d);
+    assert_eq!(
+        code(&res),
+        Some("ORACLE-AUTHOR-FAILED"),
+        "{}",
+        res.message()
+    );
+    let v = us1(&speccoder_runtime::review::report_in(
+        r.path(),
+        None,
+        Some(state.path()),
+    ));
+    assert_eq!(v.state, OracleState::None);
+    // Held out off: said on the card.
+    let r = repo_with(
+        SPEC,
+        "\n[acceptance]\nheld_out = false\nmin_strength = 0.8\n",
+    );
+    let (f, d) = fake();
+    f.will_structure(answer(standard(), "refused"));
+    f.will_structure(answer(standard(), "refused"));
+    let v = us1(&write(r.path(), state.path(), d));
+    assert_eq!(v.held_out.state, "off");
+    assert_eq!(v.strength_target, Some(80));
+}
+
+#[test]
+fn a_quick_change_or_bug_unit_writes_no_tests_at_review() {
+    let r = repo();
+    let dir = r.path().join("specs/002-bugfixes");
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(dir.join("spec.md"), SPEC).unwrap();
+    fs::write(dir.join("tasks.md"), "# Tasks\n\n- [ ] T001 [US1] fix\n").unwrap();
+    git(r.path(), &["add", "-A"]);
+    git(r.path(), &["commit", "-q", "-m", "bugs"]);
+    let state = tempfile::tempdir().unwrap();
+    let (_, d) = fake();
+    let res = tests_with(
+        r.path(),
+        Some("002-bugfixes"),
+        &request("US1", OracleOp::Write),
+        Via::Terminal,
+        state.path(),
+        Some(d),
+        &RunOptions::default(),
+    );
+    assert_eq!(
+        code(&res),
+        Some("REVIEW-TESTS-OWN-PIPELINE"),
+        "{}",
+        res.message()
+    );
+    let rv =
+        speccoder_runtime::review::report_in(r.path(), Some("002-bugfixes"), Some(state.path()));
+    let rv = review(&rv);
+    assert!(rv.oracle.is_empty());
+    assert!(
+        rv.tests_notice
+            .as_deref()
+            .is_some_and(|n| n.contains("own pipeline"))
+    );
+}
+
+fn write_lib(f: &FakeProvider, id: &str, lib: &str) {
+    f.will_call_tool(
+        id,
+        "write_file",
+        json!({ "path": "src/lib.rs", "content": lib }),
+    );
+    f.will_structure(json!({ "summary": "done", "status": "done", "files_changed": ["src/lib.rs"], "checks_run": [], "notes": [] }));
+}
+
+/// Writes US1's tests (one red, agreeing authors), ready to approve.
+fn written(r: &Path, state: &Path) -> (Arc<FakeProvider>, Arc<dyn ModelProvider>) {
+    let (f, d) = fake();
+    f.will_structure(answer(
+        vec![file(
+            "tests/acceptance_us1_login.txt",
+            &["US1-1"],
+            "fn login",
+        )],
+        "refused",
+    ));
+    f.will_structure(answer(
+        vec![file(
+            "tests/acceptance_us1_login.txt",
+            &["US1-1"],
+            "fn login",
+        )],
+        "refused",
+    ));
+    f.will_structure(held_out("fn login"));
+    let res = write(r, state, d.clone());
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    (f, d)
+}
+
+fn one_task() -> RunOptions {
+    RunOptions {
+        max_tasks: Some(1),
+        ..RunOptions::default()
+    }
+}
+
+#[test]
+fn us3_us4_approve_freezes_and_the_run_reuses_the_oracle_without_an_author_call() {
+    let r = repo();
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = written(r.path(), state.path());
+    let authors = |f: &FakeProvider| {
+        f.asked()
+            .iter()
+            .filter(|a| {
+                let p = serde_json::to_string(&a.prompt).unwrap();
+                p.contains("You are the test author") || p.contains("HELD-OUT")
+            })
+            .count()
+    };
+    let authors_before = authors(&f);
+    write_lib(&f, "c1", "pub fn ok() {}\npub fn login() {}\n");
+    let res = speccoder_runtime::review::approve_and_run(
+        r.path(),
+        None,
+        RunMode::Ask,
+        &[],
+        Via::Web,
+        Some(state.path()),
+        Some(d),
+        &one_task(),
+    );
+    assert!(
+        res.message()
+            .starts_with("approved 2 decision line(s), froze tests for 1 requirement(s)"),
+        "{}",
+        res.message()
+    );
+    // review.json: the decisions, the oracle entry and the approval digest.
+    let record: Value = serde_json::from_str(
+        &fs::read_to_string(r.path().join("specs/001-graph/review.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(record["requirements"]["FR-001"]["verdict"], "approved");
+    assert!(
+        record["oracle"]["US1"]["manifest_sha256"]
+            .as_str()
+            .unwrap()
+            .starts_with("sha256:")
+    );
+    assert_eq!(record["oracle"]["US1"]["via"], "web");
+    let approval = record["approval"]["sha256"].as_str().unwrap().to_owned();
+    assert_eq!(record["approval"]["mode"], "ask");
+    // Committed with the approval, so the run reads it.
+    assert!(git(r.path(), &["status", "--porcelain", "specs"]).is_empty());
+    // The run: zero acceptance or held-out author calls.
+    let authors_after = authors(&f);
+    assert_eq!(
+        authors_after, authors_before,
+        "no author call at the checkpoint"
+    );
+    let Some(CommandData::Feature(fr)) = res.data() else {
+        panic!("{}", res.message())
+    };
+    let rep = &fr.attempts[0];
+    assert_eq!(
+        rep.verdict,
+        Some(speccoder_core::verify::Verdict::Verified),
+        "{}",
+        res.message()
+    );
+    let acc = rep.acceptance.as_ref().unwrap();
+    assert_eq!(acc["source"], "review");
+    assert_eq!(acc["pre_frozen"]["approval"], approval);
+    assert_eq!(acc["held_out"]["state"], "on", "{acc}");
+    assert!(
+        rep.notices
+            .iter()
+            .any(|n| n.contains("frozen at review by")),
+        "{:?}",
+        rep.notices
+    );
+    // The tick names the frozen manifest, in the one pre-frozen form.
+    let body = git(Path::new(&rep.worktree), &["log", "-1", "--format=%B"]);
+    let trailer = body
+        .lines()
+        .find(|l| l.starts_with("Acceptance: review "))
+        .unwrap_or_else(|| panic!("{body}"));
+    assert!(
+        trailer.contains(&format!("approval={approval}")),
+        "{trailer}"
+    );
+    assert!(trailer.contains("manifest=sha256:") && trailer.contains("wording=sha256:"));
+    assert_no_held_out(&serde_json::to_string(&res).unwrap());
+    // The review shows it frozen.
+    let v = us1(&speccoder_runtime::review::report_in(
+        r.path(),
+        None,
+        Some(state.path()),
+    ));
+    assert_eq!(v.state, OracleState::Frozen);
+}
+
+#[test]
+fn us4_a_tampered_frozen_test_stops_the_task_and_a_lapse_or_missing_set_authors() {
+    let r = repo();
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = written(r.path(), state.path());
+    // Approve without running: a run that cannot start (no task ready)
+    // still froze. Use one task and tamper before the run.
+    let plane = speccoder_runtime::worktree::project_state_dir(state.path(), r.path());
+    let frozen = speccoder_runtime::pre_frozen::dir(&plane, "001-graph", "US1");
+    // Freeze by approving; the run's attempt is scripted to stop early.
+    write_lib(&f, "c1", "pub fn ok() {}\npub fn login() {}\n");
+    let res = speccoder_runtime::review::approve_and_run(
+        r.path(),
+        None,
+        RunMode::Ask,
+        &[],
+        Via::Terminal,
+        Some(state.path()),
+        Some(d.clone()),
+        &RunOptions {
+            max_tasks: Some(0),
+            ..RunOptions::default()
+        },
+    );
+    assert!(
+        res.message().contains("froze tests for 1"),
+        "{}",
+        res.message()
+    );
+    assert!(frozen.join("record.json").exists());
+    // Tampered: the task stops, nothing is ticked.
+    fs::write(
+        frozen.join("files/tests/acceptance_us1_login.txt"),
+        "changed\n",
+    )
+    .unwrap();
+    let run = speccoder_runtime::run_with(r.path(), None, "T005", state.path(), d.clone(), None);
+    assert_eq!(code(&run), Some("ORACLE-TAMPERED"), "{}", run.message());
+    // Missing here (a teammate's checkout): the run authors as today.
+    fs::remove_dir_all(&frozen).unwrap();
+    let v = us1(&speccoder_runtime::review::report_in(
+        r.path(),
+        None,
+        Some(state.path()),
+    ));
+    assert_eq!(v.state, OracleState::FrozenElsewhere);
+    // Lapsed: a reworded scenario lapses the oracle.
+    fs::write(
+        r.path().join("specs/001-graph/spec.md"),
+        SPEC.replace("they are told so", "they are told to wait"),
+    )
+    .unwrap();
+    let v = us1(&speccoder_runtime::review::report_in(
+        r.path(),
+        None,
+        Some(state.path()),
+    ));
+    assert_eq!(v.state, OracleState::Lapsed, "{v:?}");
+    assert!(
+        v.frozen_on
+            .as_deref()
+            .is_some_and(|w| w.contains("they are told so")),
+        "{v:?}"
+    );
+}
+
+#[test]
+fn us3_autopilot_refuses_what_would_ask_and_lists_it() {
+    if speccoder_runtime::sandbox::backend().is_err() {
+        return; // autopilot needs the OS sandbox
+    }
+    let r = repo();
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = written(r.path(), state.path());
+    // An unlisted command would ask: on autopilot it is refused, then the
+    // attempt goes on.
+    f.will_call_tool(
+        "c0",
+        "run_command",
+        json!({ "argv": ["cargo", "add", "serde"] }),
+    );
+    write_lib(&f, "c1", "pub fn ok() {}\npub fn login() {}\n");
+    // An unknown grant id is refused, listing the offered ones.
+    let bad = speccoder_runtime::review::approve_and_run(
+        r.path(),
+        None,
+        RunMode::Autopilot,
+        &["g-nope".to_owned()],
+        Via::Web,
+        Some(state.path()),
+        Some(d.clone()),
+        &one_task(),
+    );
+    assert_eq!(code(&bad), Some("USAGE"), "{}", bad.message());
+    let res = speccoder_runtime::review::approve_and_run(
+        r.path(),
+        None,
+        RunMode::Autopilot,
+        &[],
+        Via::Web,
+        Some(state.path()),
+        Some(d),
+        &one_task(),
+    );
+    let Some(CommandData::Feature(fr)) = res.data() else {
+        panic!("{}", res.message())
+    };
+    assert_eq!(fr.mode, RunMode::Autopilot);
+    assert_eq!(fr.autopilot_denied.len(), 1, "{}", res.message());
+    assert_eq!(
+        fr.autopilot_denied[0].reason,
+        "autopilot: not asked — listed for you"
+    );
+    assert!(fr.autopilot_denied[0].object.contains("cargo add serde"));
+    // Listed for the person in Needs You, as `Ready to review`.
+    let inbox = speccoder_runtime::inbox::inbox_with(r.path(), None, Some(state.path()));
+    let Some(CommandData::Inbox(i)) = inbox.data() else {
+        panic!("{}", inbox.message())
+    };
+    let item = i
+        .items
+        .iter()
+        .find(|i| i.kind == "autopilot_denied")
+        .unwrap();
+    assert_eq!(item.group, "ready_to_review");
+}
+
+#[test]
+fn autopilot_without_a_sandbox_is_refused() {
+    let r = repo_with(SPEC, "\n[sandbox]\nmode = \"off\"\n");
+    let state = tempfile::tempdir().unwrap();
+    let (_, d) = written(r.path(), state.path());
+    let res = speccoder_runtime::review::approve_and_run(
+        r.path(),
+        None,
+        RunMode::Autopilot,
+        &[],
+        Via::Web,
+        Some(state.path()),
+        Some(d),
+        &one_task(),
+    );
+    assert_eq!(code(&res), Some("SANDBOX-UNAVAILABLE"), "{}", res.message());
+    let rv = speccoder_runtime::review::report_in(r.path(), None, Some(state.path()));
+    let sheet = review(&rv).sheet.clone().unwrap();
+    assert!(
+        sheet
+            .autopilot_blocked
+            .unwrap()
+            .contains("autopilot needs the OS sandbox")
+    );
+    // Nothing recorded by the refusal.
+    assert!(!r.path().join("specs/001-graph/review.json").exists());
+}
+
+#[test]
+fn the_ambiguous_item_waits_in_needs_you() {
+    let r = repo();
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_structure(answer(standard(), "refused"));
+    f.will_structure(answer(standard(), "an error message"));
+    f.will_structure(held_out("fn login"));
+    assert_eq!(write(r.path(), state.path(), d).status(), CommandStatus::Ok);
+    let inbox = speccoder_runtime::inbox::inbox_with(r.path(), None, Some(state.path()));
+    let Some(CommandData::Inbox(i)) = inbox.data() else {
+        panic!("{}", inbox.message())
+    };
+    let item = i.items.iter().find(|i| i.kind == "ambiguous").unwrap();
+    assert_eq!(item.group, "blocked_on_you");
+    assert!(item.detail.contains("US1/US1-2"), "{}", item.detail);
+    assert_no_held_out(&serde_json::to_string(&inbox).unwrap());
+}
+
+#[test]
+fn us5_a_test_comment_asks_again_and_no_model_input_but_the_held_out_author_s_holds_held_out_material()
+ {
+    let r = repo();
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = written(r.path(), state.path());
+    let add = speccoder_runtime::comments::comment(
+        r.path(),
+        None,
+        speccoder_core::actions::CommentOp::Add,
+        Some(&speccoder_core::oracle::CommentAnchor::TestLine {
+            req: "US1".to_owned(),
+            path: "tests/acceptance_us1_login.txt".to_owned(),
+            line: 1,
+            quote: "checks fn login".to_owned(),
+        }),
+        None,
+        Some("check the signature"),
+        Via::Web,
+        Some(state.path()),
+    );
+    assert_eq!(add.status(), CommandStatus::Ok, "{}", add.message());
+    f.will_structure(answer(
+        vec![file(
+            "tests/acceptance_us1_login.txt",
+            &["US1-1"],
+            "pub fn login",
+        )],
+        "refused",
+    ));
+    let sent = speccoder_runtime::comments::send_with(
+        r.path(),
+        None,
+        &[],
+        Via::Web,
+        state.path(),
+        Some(d),
+        None,
+        &RunOptions::default(),
+    );
+    assert_eq!(sent.status(), CommandStatus::Ok, "{}", sent.message());
+    let Some(CommandData::Comments(c)) = sent.data() else {
+        panic!("{}", sent.message())
+    };
+    assert_eq!(c.turn.as_ref().unwrap().asked_again, ["US1"]);
+    let v = us1(&speccoder_runtime::review::report_in(
+        r.path(),
+        None,
+        Some(state.path()),
+    ));
+    assert_eq!(v.tests[0].content, "checks pub fn login\n");
+    // FR-024: no input but the held-out author's own carries its material.
+    for a in f.asked() {
+        let p = serde_json::to_string(&a.prompt).unwrap();
+        if p.contains("HELD-OUT") {
+            continue;
+        }
+        assert_no_held_out(&p);
+    }
+    // A code nudge on a frozen test is a review comment instead.
+    let plane = speccoder_runtime::worktree::project_state_dir(state.path(), r.path());
+    let nudge = speccoder_runtime::comments::code_nudge(
+        r.path(),
+        None,
+        "T005",
+        &[speccoder_core::oracle::CodeComment {
+            path: "src/lib.rs".to_owned(),
+            line: 1,
+            quote: "pub fn ok() {}".to_owned(),
+            text: "name it".to_owned(),
+        }],
+        Some(state.path()),
+    );
+    assert_eq!(nudge.status(), CommandStatus::Ok, "{}", nudge.message());
+    let d = speccoder_runtime::approvals::Decisions::load(&plane).unwrap();
+    for n in d.for_task("001-graph", "T005").nudges {
+        assert_no_held_out(&n);
+    }
+}

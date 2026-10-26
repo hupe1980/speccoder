@@ -3,6 +3,7 @@
   "result": {
     "command": "review",
     "data": {
+      "approval": null,
       "changes": [
         {
           "id": "FR-001",
@@ -31,6 +32,7 @@
           "subject": "init"
         }
       ],
+      "oracle": [],
       "questions": [],
       "requirements": [
         {
@@ -54,7 +56,10 @@
       ],
       "revise_with": null,
       "revision": "Revise the spec per the reviewer's change requests; keep every requirement ID, reword only what is asked:\n- FR-001 (\"Users MUST log in with a passkey.\"): say which passkeys",
+      "sheet": null,
+      "tests_notice": null,
       "totals": {
+        "ambiguous": 0,
         "approved": 1,
         "changes_requested": 1,
         "lapsed": 0,

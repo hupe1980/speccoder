@@ -82,6 +82,10 @@ speccoder approvals batch run-… reject --digest D --reason "…"
 
 Each listed call is approved **once** (never for the task or the run) and recorded on its own. The digest covers every listed call's object, so a decision on a list that changed since you saw it is refused — a call that left or joined it, or a lane's newer attempt stopped on another object. A lane's stopped call approved here is given to the next attempt of its task alone, which may make it one time; a repeat asks again. Without `--resume-asking` the run keeps its count, so a resumed run waits again at its next call; with it, the run prompts again. The web Needs You item and the dashboard (`B` on a batched call) decide it too. Calls allowed by a rule or a grant never count; a `--no-prompt` run counts nothing.
 
+### Autopilot
+
+A run started from the review with **Approve and Run on Autopilot** (`speccoder review approve --run autopilot`) asks nobody. A call the policy would ask about is refused for that run — `autopilot: not asked — listed for you` — and the attempt goes on; every such call is listed in the run report (`autopilot_denied`) and in Needs You (*Ready to review*). The only grants it holds are the ones you ticked on the sheet: each one object a person approved earlier for this feature — a canonical path, an exact argv with its executable, an MCP tool's digest — shown in full and named by its grant id (`--grant g-…`; `--list-grants` lists them). None is ticked by default and none outlives the run. Denials, rejections and protected paths still win over every grant. Autopilot needs the OS sandbox enforced: with none, or `[sandbox] mode = "off"`, it is refused (`SANDBOX-UNAVAILABLE`).
+
 ## Later
 
 With `--no-prompt`, `--json`, without a terminal, or after `s`, the attempt **waits** at the call. Its working tree and everything it did so far are kept, and the run ends `needs_approval`.

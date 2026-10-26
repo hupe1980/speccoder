@@ -181,6 +181,15 @@ fn cases() -> Vec<Case> {
         c
     };
     vec![
+        // The open question blocks Approve and Run before anything is recorded.
+        case(
+            "approve-and-run-question",
+            Runnable::ApproveAndRun {
+                mode: speccoder_core::oracle::RunMode::Ask,
+                grants: Vec::new(),
+            },
+            None,
+        ),
         case("approve-unreadable", approve("T005"), None),
         case("reject-unreadable", reject("T005"), Some("no new files")),
         case("reject-empty", reject("T005"), None),
@@ -422,6 +431,68 @@ fn cases() -> Vec<Case> {
                 calls: Vec::new(),
                 digest: "d".to_owned(),
                 resume_asking: false,
+            },
+            None,
+        ),
+        case(
+            "oracle-tests-acceptance-off",
+            Runnable::OracleTests {
+                req: "US1".to_owned(),
+                op: speccoder_core::oracle::OracleOp::Reject,
+                path: Some("tests/a.rs".to_owned()),
+                scenario: None,
+                reading: None,
+            },
+            Some("wrong"),
+        ),
+        case(
+            "comment-outside",
+            Runnable::Comment {
+                op: speccoder_core::actions::CommentOp::Add,
+                anchor: Some(speccoder_core::oracle::CommentAnchor::Passage {
+                    path: "src/lib.rs".to_owned(),
+                    start_line: 1,
+                    end_line: 1,
+                    quote: "pub fn ok() {}".to_owned(),
+                    quote_sha256: String::new(),
+                    section: String::new(),
+                }),
+                id: None,
+            },
+            Some("rename it"),
+        ),
+        case(
+            "comment-delete-none",
+            Runnable::Comment {
+                op: speccoder_core::actions::CommentOp::Delete,
+                anchor: None,
+                id: Some("c9".to_owned()),
+            },
+            None,
+        ),
+        case(
+            "revision-undo-none",
+            Runnable::RevisionUndo { turn: None },
+            None,
+        ),
+        case(
+            "code-nudge-empty",
+            Runnable::CodeNudge {
+                task: task("T008"),
+                comments: Vec::new(),
+            },
+            None,
+        ),
+        case(
+            "code-nudge-note",
+            Runnable::CodeNudge {
+                task: task("T008"),
+                comments: vec![speccoder_core::oracle::CodeComment {
+                    path: "src/lib.rs".to_owned(),
+                    line: 1,
+                    quote: "pub fn ok() {}".to_owned(),
+                    text: "name it".to_owned(),
+                }],
             },
             None,
         ),

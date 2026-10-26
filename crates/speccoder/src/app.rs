@@ -160,6 +160,9 @@ const COMMANDS: &[&str] = &[
     "review.inbox",
     "review.pr",
     "review.report",
+    "review.tests",
+    "review.send",
+    "review.undo",
 ];
 
 /// Help: the documentation, opened in the default browser.
@@ -327,6 +330,14 @@ fn menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> 
             &item("review.inbox", "Needs You", Some("Shift+CmdOrCtrl+I"))?,
             &item("review.spec", "Review the Spec", Some("Alt+CmdOrCtrl+R"))?,
             &item("review.report", "Evidence Report", None)?,
+            &sep()?,
+            &item("review.tests", "Write Tests", Some("Shift+CmdOrCtrl+T"))?,
+            &item(
+                "review.send",
+                "Send Comments",
+                Some("Shift+CmdOrCtrl+Enter"),
+            )?,
+            &item("review.undo", "Undo Revision", None)?,
             &sep()?,
             &item("review.pr", "Open Draft Pull Request…", None)?,
         ],

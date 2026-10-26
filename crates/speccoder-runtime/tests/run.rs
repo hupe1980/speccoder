@@ -2113,6 +2113,7 @@ fn a_run_reports_its_steps_live_and_status_reads_them() {
             Event::Reasoning { .. } => "reasoning".to_owned(),
             Event::Notice { text } => text.clone(),
             Event::Bug { step, .. } => step.name().to_owned(),
+            Event::Oracle { .. } => "oracle".to_owned(),
         })
         .filter(|k| k != "usage")
         .collect();

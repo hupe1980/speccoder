@@ -1,0 +1,25 @@
+{
+  "head": "spec(001-graph): review.json",
+  "result": {
+    "code": "ACCEPTANCE-OFF",
+    "command": "review",
+    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#acceptance-off",
+    "exit_code": 13,
+    "fix": [
+      "speccoder config set acceptance.generate true"
+    ],
+    "message": "acceptance tests are off ([acceptance] generate = false): no tests are written at review",
+    "next": [
+      {
+        "command": "speccoder init",
+        "why": "write or repair speccoder.toml"
+      },
+      {
+        "command": "speccoder verify",
+        "why": "check the configured checks run"
+      }
+    ],
+    "schema_version": 2,
+    "status": "config_error"
+  }
+}

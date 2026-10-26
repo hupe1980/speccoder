@@ -61,6 +61,11 @@
       app.palette = !app.palette;
       return;
     }
+    // Review › Write Tests (⌘⇧T) and Send Comments (⌘⇧↵), as the menu bar.
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key.toLowerCase() === "t" || e.key === "Enter")) {
+      e.preventDefault();
+      return command(e.key === "Enter" ? "review.send" : "review.tests");
+    }
     if (typing || app.waiting || app.input || app.palette) return;
     if (e.key === ",") go("settings");
     if (e.key === "q") app.quick = true;
@@ -111,6 +116,9 @@
         return void app.selectTask(app.selected);
       case "run.stop": return app.job?.running ? void app.stop() : app.toast({ tone: "warn", text: "Nothing is running" });
       case "review.spec": app.doc = "review"; return go("documents");
+      // The review's own (spec 093): the review cards and the comment tray act.
+      case "review.tests": app.doc = "review"; go("documents"); return void requestAnimationFrame(() => window.dispatchEvent(new CustomEvent("speccoder:review", { detail: id })));
+      case "review.send": case "review.undo": return void window.dispatchEvent(new CustomEvent("speccoder:review", { detail: id }));
       case "review.inbox": return go("inbox");
       case "review.pr": return run(find((a) => a.run?.kind === "pull_request"), "No pull request can be opened from here");
       case "review.report": return go("report");

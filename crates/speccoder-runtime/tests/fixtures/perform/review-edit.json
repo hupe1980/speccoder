@@ -3,6 +3,7 @@
   "result": {
     "command": "review",
     "data": {
+      "approval": null,
       "changes": [
         {
           "id": "FR-001",
@@ -31,6 +32,7 @@
           "subject": "init"
         }
       ],
+      "oracle": [],
       "questions": [],
       "requirements": [
         {
@@ -54,7 +56,10 @@
       ],
       "revise_with": null,
       "revision": null,
+      "sheet": null,
+      "tests_notice": null,
       "totals": {
+        "ambiguous": 0,
         "approved": 0,
         "changes_requested": 0,
         "lapsed": 0,

@@ -1,0 +1,17 @@
+{
+  "head": "init",
+  "result": {
+    "code": "REVIEW-PENDING",
+    "command": "review",
+    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#review-pending",
+    "exit_code": 23,
+    "fix": [
+      "speccoder review",
+      "speccoder review approve",
+      "git commit"
+    ],
+    "message": "1 open question(s) first: Q1 — answer (`speccoder review answer Q1 \"…\"`) or reword",
+    "schema_version": 2,
+    "status": "needs_human"
+  }
+}

@@ -176,6 +176,80 @@ pub const CATALOG: &[Entry] = &[
         ["speccoder review", "speccoder review approve", "git commit"]
     ),
     entry!(
+        "REVIEW-AMBIGUOUS",
+        P,
+        S::NeedsHuman,
+        "two readings of a requirement disagree",
+        "When tests are written at review, two independent author calls read the same requirement. For a scenario they stated the same given with a different expected outcome (or one found it untestable): the requirement can be read two ways. Until the person says which reading is meant, or rewords it, the feature is not approved and run, its tests are not frozen, and a gated run (`[review] required`) waits.",
+        [
+            "speccoder review tests <REQ> --reading A <scenario>",
+            "speccoder review tests <REQ> --reading B <scenario>",
+            "→ or reword the scenario so it reads one way"
+        ]
+    ),
+    entry!(
+        "REVIEW-NO-SCENARIOS",
+        E,
+        S::UsageError,
+        "the requirement has no scenarios to write tests from",
+        "Tests are written at review per requirement from its acceptance scenarios. The requirement named has none (or the format yields no requirement by that key), so there is nothing to derive a test from.",
+        [
+            "speccoder review",
+            "→ add acceptance scenarios to the requirement"
+        ]
+    ),
+    entry!(
+        "REVIEW-TESTS-OWN-PIPELINE",
+        E,
+        S::UsageError,
+        "this unit's tests are written by its own pipeline",
+        "A quick change and a bug author and confirm their own acceptance: a quick change's run writes its tests, a bug's reproductions are confirmed by the person. A second, review-time oracle would be two oracles for one requirement, so the review writes none here.",
+        ["speccoder do \"…\"", "speccoder bug confirm <unit>/<task>"]
+    ),
+    entry!(
+        "ACCEPTANCE-OFF",
+        E,
+        S::ConfigError,
+        "acceptance tests are turned off",
+        "`[acceptance] generate = false`: no acceptance tests are written, at review or at run time.",
+        ["speccoder config set acceptance.generate true"]
+    ),
+    entry!(
+        "ORACLE-AUTHOR-FAILED",
+        E,
+        S::RunFailed,
+        "the test author could not write the tests",
+        "The acceptance author call failed or the model provider refused it. Nothing was stored or frozen for the requirement; the message carries the provider's reason.",
+        ["speccoder review tests <REQ> --write"]
+    ),
+    entry!(
+        "ORACLE-TAMPERED",
+        P,
+        S::NeedsHuman,
+        "a frozen test no longer matches what was frozen",
+        "A test frozen at review is stored in the state directory with its digest. The stored file or its record no longer matches: reusing it would run tests nobody approved, so the task stops and nothing is ticked.",
+        [
+            "speccoder review tests <REQ>",
+            "→ write and approve the tests again, or run without the frozen set"
+        ]
+    ),
+    entry!(
+        "RUN-ACTIVE",
+        E,
+        S::GitPrecondition,
+        "a run is active for this project",
+        "*Approve and Run* starts a feature run; one is running already (in a terminal or the web app). Approving now would start a second run beside it.",
+        ["speccoder report", "→ wait for the run to end, or stop it"]
+    ),
+    entry!(
+        "AUTOPILOT-NEEDS-GRANT-OBJECTS",
+        E,
+        S::ConfigError,
+        "autopilot needs object-bound grants",
+        "Autopilot holds only grants the person saw in full and ticked, each bound to one resolved object (a canonical path, an exact argv, an MCP tool digest). This build has no such grants, so autopilot is off.",
+        ["speccoder review approve --run ask"]
+    ),
+    entry!(
         "FEATURE-UNKNOWN",
         E,
         S::SelectionNeeded,
@@ -205,10 +279,11 @@ pub const CATALOG: &[Entry] = &[
         E,
         S::ConfigError,
         "the OS sandbox is not available and the project requires it",
-        "`[sandbox] mode = \"required\"` refuses to run commands unsandboxed, and this OS offers no sandbox (Linux without Landlock, a container without user namespaces, another OS).",
+        "`[sandbox] mode = \"required\"` refuses to run commands unsandboxed, and this OS offers no sandbox (Linux without Landlock, a container without user namespaces, another OS). An autopilot run needs the sandbox enforced too: it is refused when the sandbox is off or unavailable.",
         [
             "→ run on macOS or Linux 6.2+ (Landlock ABI 3)",
-            "→ or set [sandbox] mode = \"auto\" to run unsandboxed and be told"
+            "→ or set [sandbox] mode = \"auto\" to run unsandboxed and be told",
+            "→ autopilot: choose Ask on Risky Calls, or enable the OS sandbox"
         ]
     ),
     entry!(
