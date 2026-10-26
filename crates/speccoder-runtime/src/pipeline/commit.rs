@@ -318,3 +318,34 @@ pub(crate) fn set_aside_leftovers(
     .and_then(|saved| crate::attempts::restore_head(wt_root, tmp).map(|()| saved.reference))
     .map_err(|e| e.0)
 }
+
+#[cfg(test)]
+mod tests {
+    /// The value of trailer `key` in `message`, by exact key (`Acceptance:` is
+    /// not `Acceptance-Strength:`).
+    fn trailer<'m>(message: &'m str, key: &str) -> Option<&'m str> {
+        message.lines().find_map(|l| {
+            let (k, v) = l.split_once(':')?;
+            (k == key).then(|| v.trim())
+        })
+    }
+
+    #[test]
+    fn trailers_are_read_by_their_exact_key() {
+        let m = "speccoder: T001 fix\n\nSpec-Task: 007-bugfixes/T001\nVerdict: verified\nAcceptance-Strength: 1.00 near-miss=1/1\nAcceptance: bug_confirmation manifest=sha256:m approval=sha256:a wording=sha256:w by=Ada\nBug: fixed (standing_speckit) triad=sha256:t\nFixes #42\n";
+        assert_eq!(
+            trailer(m, "Acceptance"),
+            Some("bug_confirmation manifest=sha256:m approval=sha256:a wording=sha256:w by=Ada")
+        );
+        assert_eq!(
+            trailer(m, "Acceptance-Strength"),
+            Some("1.00 near-miss=1/1")
+        );
+        assert_eq!(
+            trailer(m, "Bug"),
+            Some("fixed (standing_speckit) triad=sha256:t")
+        );
+        assert_eq!(trailer(m, "Spec-Task"), Some("007-bugfixes/T001"));
+        assert_eq!(trailer(m, "Acceptance-Str"), None);
+    }
+}
