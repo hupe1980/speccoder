@@ -20,7 +20,9 @@ use speccoder_core::{CommandData, CommandResult, CommandStatus, RunReport};
 const CONFIG: &str = "[model]\nprovider = \"openai\"\nmodel = \"gpt-5.4-mini\"\n\n[checks.has-ok]\nargv = [\"grep\", \"-q\", \"fn ok\", \"src/lib.rs\"]\n\n[commands]\nallow_prefix = [[\"grep\", \"-q\"], [\"./accept.sh\", \"--\"]]\n\n[acceptance]\nheld_out = false\n";
 
 /// One test: "the pattern is in src/lib.rs", with libtest's summary line.
-const ACCEPT_SH: &str = "#!/bin/sh\n[ \"$1\" = -- ] && shift\nif grep -qF \"$1\" src/lib.rs; then\n  echo 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out'\nelse\n  echo 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out'\n  exit 101\nfi\n";
+// A runner: the file a command names (its second argument) must exist, or
+// it collects nothing — so a held-out file is red only by what it adds.
+const ACCEPT_SH: &str = "#!/bin/sh\n[ \"$1\" = -- ] && shift\nif [ -n \"$2\" ] && [ ! -f \"$2\" ]; then\n  echo 'test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out'\n  exit 0\nfi\nif grep -qF \"$1\" src/lib.rs; then\n  echo 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out'\nelse\n  echo 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out'\n  exit 101\nfi\n";
 
 const SPEC: &str = "# Spec\n\n### User Story 1 - Login\n\nUsers log in.\n\n**Acceptance**: a `login` function exists and does not panic.\n";
 
@@ -442,7 +444,7 @@ fn held_out_tests_count_in_the_combined_strength() {
         "path": "tests/held_out_login.txt",
         "content": "login has an empty body\n",
         "scenarios": ["US1-1"],
-        "argv": ["./accept.sh", "--", "fn login() {}"],
+        "argv": ["./accept.sh", "--", "fn login() {}", "tests/held_out_login.txt"],
         "composition": false,
     }], "notes": [] }));
     implement(&f);

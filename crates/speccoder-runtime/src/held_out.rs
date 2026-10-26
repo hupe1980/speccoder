@@ -178,6 +178,10 @@ pub struct Ran {
     pub path: String,
     /// The run, or `None` when its path already existed (not overwritten).
     pub result: Option<(CheckResult, Option<RunnerSummary>)>,
+    /// The same command on the tree without any held-out file, when asked
+    /// for ([`overlay_red`]): what the command fails anyway is not this
+    /// file's red.
+    pub without: Option<(CheckResult, Option<RunnerSummary>)>,
 }
 
 /// The marker a worktree carries while held-out files are overlaid on it:
@@ -238,6 +242,47 @@ pub fn overlay_run(
     runner: &sandbox::Runner,
     policy: &Policy,
 ) -> Result<Vec<Ran>, String> {
+    overlay(wt_root, project, tmp, files, runner, policy, false)
+}
+
+/// One command's run: its result and the runner's summary, if read.
+type Outcome = (CheckResult, Option<RunnerSummary>);
+
+/// [`overlay_run`] for a red check: each distinct command also runs once on
+/// the tree without any held-out file, so a file is red only by the failing
+/// tests it adds ([`speccoder_core::verify::classify_red_added`]).
+pub fn overlay_red(
+    wt_root: &Path,
+    project: &Path,
+    tmp: &Path,
+    files: &[(HeldOutFile, String)],
+    runner: &sandbox::Runner,
+    policy: &Policy,
+) -> Result<Vec<Ran>, String> {
+    overlay(wt_root, project, tmp, files, runner, policy, true)
+}
+
+/// The red class of one held-out run: by what its file adds when the run
+/// without it is known, else by the run alone.
+#[must_use]
+pub fn red_class(ran: &Ran) -> speccoder_core::verify::RedClass {
+    use speccoder_core::verify::{RedClass, classify_red, classify_red_added};
+    match (&ran.result, &ran.without) {
+        (None, _) => RedClass::Unclassified,
+        (Some((r, s)), Some((o, os))) => classify_red_added((r, s.as_ref()), (o, os.as_ref())),
+        (Some((r, s)), None) => classify_red(r, s.as_ref()),
+    }
+}
+
+fn overlay(
+    wt_root: &Path,
+    project: &Path,
+    tmp: &Path,
+    files: &[(HeldOutFile, String)],
+    runner: &sandbox::Runner,
+    policy: &Policy,
+    baseline: bool,
+) -> Result<Vec<Ran>, String> {
     let before = worktree::checkpoint(wt_root, tmp).map_err(|e| e.0)?;
     let judged = JudgeSnapshot::take(wt_root, policy);
     let prefix = {
@@ -273,6 +318,22 @@ pub fn overlay_run(
         std::fs::write(m, serde_json::to_string(&keys).unwrap_or_default())
             .map_err(|e| format!("the held-out overlay marker: {e}"))?;
     }
+    // Each distinct command once on the tree as it is, before any file.
+    let mut without: Vec<(Vec<String>, Outcome)> = Vec::new();
+    if baseline {
+        for (f, _) in files {
+            if !without.iter().any(|(argv, _)| *argv == f.argv) {
+                let ran = crate::pipeline::acceptance_run(project, &f.argv, runner);
+                without.push((f.argv.clone(), ran));
+            }
+        }
+    }
+    let without_of = |argv: &[String]| {
+        without
+            .iter()
+            .find(|(a, _)| a.as_slice() == argv)
+            .map(|(_, r)| r.clone())
+    };
     let mut out = Vec::new();
     for (f, content) in files {
         let full = project.join(&f.path);
@@ -280,6 +341,7 @@ pub fn overlay_run(
             out.push(Ran {
                 path: f.path.clone(),
                 result: None,
+                without: None,
             });
             continue;
         }
@@ -292,6 +354,7 @@ pub fn overlay_run(
         out.push(Ran {
             path: f.path.clone(),
             result: Some(ran),
+            without: without_of(&f.argv),
         });
     }
     worktree::restore(wt_root, tmp, &before).map_err(|e| e.0)?;

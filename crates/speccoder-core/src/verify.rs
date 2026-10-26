@@ -363,6 +363,48 @@ pub fn classify_red(result: &CheckResult, summary: Option<&RunnerSummary>) -> Re
     }
 }
 
+/// Classifies a red run against the same command run without the file
+/// under test: red by an assertion only where the file adds a failing test —
+/// one that did not fail without it (by id when both runs name their tests,
+/// else by more failures). A failure the command shows anyway is another
+/// test's, never this file's red: it is [`RedClass::Passed`].
+#[must_use]
+pub fn classify_red_added(
+    with: (&CheckResult, Option<&RunnerSummary>),
+    without: (&CheckResult, Option<&RunnerSummary>),
+) -> RedClass {
+    let class = classify_red(with.0, with.1);
+    if class != RedClass::Assertion {
+        return class;
+    }
+    let failing = |r: &CheckResult| {
+        r.tests.as_ref().map(|t| {
+            t.iter()
+                .filter(|t| t.outcome == TestOutcome::Failed)
+                .map(|t| t.id.clone())
+                .collect::<std::collections::BTreeSet<_>>()
+        })
+    };
+    let added = match (failing(with.0), failing(without.0)) {
+        (Some(w), Some(o)) => w.difference(&o).next().is_some(),
+        _ => match (with.1, without.1) {
+            (Some(w), Some(o)) => w.failed > o.failed,
+            // Without the file the command reports no count — a real runner
+            // refuses a missing test file: no assertion failed there, so the
+            // failure with it is the file's own.
+            (Some(_), None) => classify_red(without.0, None) != RedClass::Assertion,
+            _ => false,
+        },
+    };
+    if added {
+        RedClass::Assertion
+    } else if with.1.is_none() && with.0.tests.is_none() {
+        RedClass::Unclassified
+    } else {
+        RedClass::Passed
+    }
+}
+
 /// The class of each test in `wanted` from a run's JUnit report: a test
 /// matches by its id or its last `::` segments; one the report does not
 /// name was not collected. `None` when the run has no per-test report —
@@ -605,6 +647,68 @@ mod tests {
         assert_eq!(
             classify_red_one(&failed, Some(&many), ""),
             RedClass::Unclassified
+        );
+    }
+
+    #[test]
+    fn a_file_is_red_only_by_the_failures_it_adds() {
+        use TestOutcome::{Failed, Passed};
+        let without = check(
+            "held-out",
+            CheckStatus::Failed,
+            Some(&[("old::broken", Failed)]),
+        );
+        // The command fails anyway: the file's own test passes — not red.
+        let borrowed = check(
+            "held-out",
+            CheckStatus::Failed,
+            Some(&[("old::broken", Failed), ("new::variant", Passed)]),
+        );
+        assert_eq!(
+            classify_red_added((&borrowed, None), (&without, None)),
+            RedClass::Passed
+        );
+        // The file's own test fails: red.
+        let own = check(
+            "held-out",
+            CheckStatus::Failed,
+            Some(&[("old::broken", Failed), ("new::variant", Failed)]),
+        );
+        assert_eq!(
+            classify_red_added((&own, None), (&without, None)),
+            RedClass::Assertion
+        );
+        // No per-test report: by the runner's counts.
+        let plain = |status| check("held-out", status, None);
+        let count = |failed| RunnerSummary {
+            passed: 1,
+            failed,
+            ..RunnerSummary::default()
+        };
+        let (w, o) = (plain(CheckStatus::Failed), plain(CheckStatus::Failed));
+        assert_eq!(
+            classify_red_added((&w, Some(&count(1))), (&o, Some(&count(1)))),
+            RedClass::Passed
+        );
+        assert_eq!(
+            classify_red_added((&w, Some(&count(2))), (&o, Some(&count(1)))),
+            RedClass::Assertion
+        );
+        // Without the file the runner refused (no count): the failure is the file's.
+        let refused = plain(CheckStatus::Failed);
+        assert_eq!(
+            classify_red_added((&w, Some(&count(1))), (&refused, None)),
+            RedClass::Assertion
+        );
+        // Not red on its own terms stays what it is.
+        let built = plain(CheckStatus::Error);
+        let broken = RunnerSummary {
+            build_failed: true,
+            ..RunnerSummary::default()
+        };
+        assert_eq!(
+            classify_red_added((&built, Some(&broken)), (&o, Some(&count(1)))),
+            RedClass::BuildError
         );
     }
 

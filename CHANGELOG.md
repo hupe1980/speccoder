@@ -211,6 +211,8 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- A held-out test counted as red when its command failed for another
+  test's reason; it is now red only by the failures its own file adds.
 - An OpenSpec project without a change got no first step: Setup, the
   journey and `speccoder actions` now offer `speccoder spec propose "…"`,
   as Spec Kit projects get `spec specify`.

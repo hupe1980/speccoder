@@ -550,16 +550,18 @@ pub(crate) fn prepare_held_out(
     let checkpoint = worktree::checkpoint(a.worktree, a.tmp)
         .map(|c| c.0)
         .unwrap_or_default();
-    match crate::held_out::overlay_run(a.worktree, a.project, a.tmp, &kept, a.runner, a.policy) {
+    // Red by what the file adds: a failure its command shows without it is
+    // another test's.
+    match crate::held_out::overlay_red(a.worktree, a.project, a.tmp, &kept, a.runner, a.policy) {
         Ok(runs) => {
             let mut red = Vec::new();
             for ((file, content), ran) in kept.into_iter().zip(runs) {
-                match ran.result {
-                    None => discard(&file.path, "collision"),
-                    Some((result, summary)) if classify_red(&result, summary.as_ref()).is_red() => {
-                        red.push((file, content));
-                    }
-                    Some(_) => discard(&file.path, "not_red"),
+                if ran.result.is_none() {
+                    discard(&file.path, "collision");
+                } else if crate::held_out::red_class(&ran).is_red() {
+                    red.push((file, content));
+                } else {
+                    discard(&file.path, "not_red");
                 }
             }
             kept = red;
@@ -1129,7 +1131,7 @@ pub(crate) fn reuse_pre_frozen(
             .cloned()
             .zip(contents.into_iter().map(|(_, c)| c))
             .collect();
-        let runs = crate::held_out::overlay_run(
+        let runs = crate::held_out::overlay_red(
             check.wt_root,
             project,
             check.tmp,
@@ -1137,11 +1139,9 @@ pub(crate) fn reuse_pre_frozen(
             runner,
             check.policy,
         )?;
-        let all_red = runs.iter().all(|r| {
-            r.result
-                .as_ref()
-                .is_some_and(|(res, summary)| classify_red(res, summary.as_ref()).is_red())
-        });
+        let all_red = runs
+            .iter()
+            .all(|r| r.result.is_some() && crate::held_out::red_class(r).is_red());
         if !all_red {
             held_sha = None;
             held_out = json!({ "state": "absent", "reason": "not_red" });

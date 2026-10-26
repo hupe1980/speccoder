@@ -1138,18 +1138,14 @@ fn seal_variants(
     }
     // Red twice on the tree as it is, by an assertion.
     let mut red: Vec<(held_out::HeldOutFile, String)> = Vec::new();
-    let once = held_out::overlay_run(c.wt_root, c.project, c.tmp, &kept, c.runner, c.policy)
+    // Red by what each variant adds: a failure its command shows without it
+    // is another test's.
+    let once = held_out::overlay_red(c.wt_root, c.project, c.tmp, &kept, c.runner, c.policy)
         .map_err(|e| format!("the held-out variants could not be run: {e}"))?;
-    let twice = held_out::overlay_run(c.wt_root, c.project, c.tmp, &kept, c.runner, c.policy)
+    let twice = held_out::overlay_red(c.wt_root, c.project, c.tmp, &kept, c.runner, c.policy)
         .map_err(|e| format!("the held-out variants could not be run: {e}"))?;
     for ((f, content), (a, b)) in kept.into_iter().zip(once.iter().zip(&twice)) {
-        let class = |r: &held_out::Ran| {
-            r.result
-                .as_ref()
-                .map_or(RedClass::Unclassified, |(res, s)| {
-                    classify_red(res, s.as_ref())
-                })
-        };
+        let class = held_out::red_class;
         let c2 = rules::bug_class(class(a), Some(class(b)));
         bug.held_out.retain(|h| !f.scenarios.contains(&h.statement));
         bug.held_out.push(HeldOutVariant {
