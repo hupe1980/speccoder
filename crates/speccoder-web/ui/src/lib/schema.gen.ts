@@ -629,6 +629,27 @@ export interface CodeInfo {
   title: string;
 }
 
+/** The attempt's changed test files and whether the run collected them. */
+export interface Collection {
+  /** Every judged file, by path. */
+  files: FileCollection[];
+  /** The listings run, in order. */
+  listing?: ListingRun[];
+}
+
+/**
+ * A runner's collection rule: one sentence a person reads, and where it
+ * came from.
+ */
+export interface CollectionRule {
+  /** Where it came from (`Cargo.toml (default)`, `pyproject.toml [tool.pytest.ini_options]`). */
+  source: string;
+  /** The rule (``Cargo builds `tests/*.rs` and `tests/<dir>/main.rs` (and the modules they declare)``). */
+  text: string;
+  /** The toolchain. */
+  toolchain: Toolchain;
+}
+
 /** Command-specific payload of a result. */
 export type CommandData = ProjectSnapshot | VerifyReport | WorktreeReport | ProposeReport | ReplayReport | RunReport | EvalReport | FeatureReport | ConvergeReport | StatusReport | ApprovalsReport | ControlReport | CostReport | PrReport | BenchReport | InitReport | SkillsReport | SkillRunReport | ChecklistStatus[] | ArchiveReport | InPlaceReport | AttestReport | ExplainReport | SchemaReport | DoctorReport | FeaturesReport | UiReport | ConfigReport | IssuesReport | InboxReport | ReviewReport | AuthReport | BranchReport | EvidenceTour | ActionsReport | BugReport | PolicyCoverage | CommentsView;
 
@@ -985,6 +1006,9 @@ export interface CoverageRow {
   still_asks: string | null;
 }
 
+/** What decided a file's state. */
+export type DecidedBy = "static" | "junit" | "listing";
+
 /** A person's decision. */
 export interface DecidedCall {
   /** Who decided, as `name (via)`. */
@@ -1078,6 +1102,11 @@ export interface Digest {
   discarded: string[];
   /** The verdict's reasons. */
   reasons: string[];
+  /**
+   * Test files it wrote that never ran: one line each — the path, the
+   * runner's rule and the ways out.
+   */
+  uncollected?: string[];
 }
 
 /** One doctor check. */
@@ -1443,6 +1472,10 @@ export type EventLine = {
     outcome: string;
     /** Output tokens. */
     output_tokens: number;
+    /** A regression-only tick: the reason with its details and wording. */
+    regression?: RegressionOnly | null;
+    /** A regression-only tick: the reason's name. */
+    regression_reason?: string | null;
     /** The attempt's run id. */
     run: string | null;
     /** Task ID. */
@@ -1450,6 +1483,24 @@ export type EventLine = {
     type: "task.finished";
     /** USD, when priced. */
     usd: number | null;
+  }
+  /** The attempt's changed test files were checked against what the run collected. */
+  | {
+    /** Each judged test file. */
+    files: PublicCollectionFile[];
+    /** The task. */
+    task: string;
+    type: "collection.checked";
+  }
+  /** The search for the tick that made already-passing tests pass ended. */
+  | {
+    /** The implementing task, `before_feature`, or `null`. */
+    result: string | null;
+    /** Acceptance runs it took. */
+    runs: number;
+    /** Task ID. */
+    task: string;
+    type: "regression.bisected";
   }
   /** What the model said in a turn: its account, a claim. */
   | {
@@ -1765,6 +1816,32 @@ export interface FeaturesReport {
   unit: string;
 }
 
+/** One judged test file. */
+export interface FileCollection {
+  /** What decided it; `null` only when unknown. */
+  decided_by: DecidedBy | null;
+  /** The ways out, for this toolchain and file. */
+  fixes?: string[];
+  /** Workspace-relative path. */
+  path: string;
+  /** The runner's rule (not collected). */
+  rule?: CollectionRule | null;
+  /** Collected, not collected, or unknown. */
+  state: FileState;
+  /** The first 20 of their ids. */
+  test_ids: string[];
+  /** Tests from it that ran (skipped and ignored ones excluded). */
+  tests: number;
+  /**
+   * Not collected: which part of the rule the file breaks; unknown: why
+   * speccoder cannot tell.
+   */
+  why?: string | null;
+}
+
+/** Whether the run collected a test from a file. */
+export type FileState = "collected" | "not_collected" | "unknown";
+
 /** A reproduction on the final tree. */
 export type FinalState = "passed" | "failed" | "not_run";
 
@@ -1852,6 +1929,21 @@ export interface HeldOutVariant {
 
 /** Where the format keeps the bug. */
 export type HomeKind = "native_speckit_bug" | "native_kiro_bugfix" | "standing_speckit" | "standing_openspec";
+
+/** Which tick made already-passing acceptance tests pass. */
+export type ImplementedBy =
+  /** A tick on the feature branch. */
+  | {
+    /** Its commit (short). */
+    commit: string;
+    /** Its task. */
+    task: string;
+  }
+  /** They passed before the feature's first tick. */
+  | {
+    /** Always `true`. */
+    before_feature: boolean;
+  };
 
 /** Why an in-place run refused or stopped. */
 export interface InPlaceReport {
@@ -2053,6 +2145,16 @@ export interface LastAttempt {
   reference: string;
   /** The agentplane run, when there was one. */
   run_id: string | null;
+}
+
+/** A listing speccoder ran because the earlier sources left a file undecided. */
+export interface ListingRun {
+  /** The command. */
+  argv: string[];
+  /** How long it took. */
+  duration_ms: number;
+  /** How it ended. */
+  status: CheckStatus;
 }
 
 /** A pass-to-pass member on the final tree. */
@@ -2581,6 +2683,24 @@ export interface PublicBugRecorded {
   via: string;
 }
 
+/** `collection.checked`, as published: paths and states. */
+export interface PublicCollectionChecked {
+  /** Each judged test file. */
+  files: PublicCollectionFile[];
+  /** The task. */
+  task: string;
+}
+
+/** One file of [`PublicCollectionChecked`]. */
+export interface PublicCollectionFile {
+  /** `static`, `junit`, `listing`; `null` when unknown. */
+  decided_by: DecidedBy | null;
+  /** Workspace-relative path. */
+  path: string;
+  /** `collected`, `not_collected`, `unknown`. */
+  state: FileState;
+}
+
 /** `oracle.frozen`, as published: digests and counts, never a test. */
 export interface PublicOracleFrozen {
   /** The approval's digest. */
@@ -2649,6 +2769,61 @@ export interface Regression {
   /** `failed`, `skipped`, or `missing`. */
   now: string;
 }
+
+/** A regression-only tick's reason with its one-line wording. */
+export interface RegressionOnly {
+  /** The reason with its typed details. */
+  reason: RegressionReason;
+  /** speccoder's sentence for it, the same in every interface. */
+  text: string;
+}
+
+/** Why a tick is regression-only. */
+export type RegressionReason =
+  /** The task belongs to no user story. */
+  | {
+    reason: "no_story";
+  }
+  /** Its story states no acceptance scenario. */
+  | {
+    reason: "no_scenarios";
+    /** The story. */
+    story: string;
+  }
+  /** `[acceptance] generate = false`. */
+  | {
+    reason: "acceptance_off";
+  }
+  /** The test author returned no file. */
+  | {
+    reason: "author_wrote_none";
+  }
+  /** The author's answer could not be used. */
+  | {
+    /** What speccoder refused (its own words). */
+    detail: string;
+    reason: "author_failed";
+  }
+  /** The acceptance tests passed before the attempt. */
+  | {
+    /** The tick that made them pass; `null` when it could not be determined. */
+    implemented_by: ImplementedBy | null;
+    reason: "already_passing";
+  }
+  /** They did not fail on an assertion or an absent symbol. */
+  | {
+    reason: "not_red";
+    /** How the red run ended. */
+    red_class: RedClass;
+  }
+  /** The acceptance command collected no test. */
+  | {
+    reason: "tests_not_collected";
+  }
+  /** A tick made before reasons were recorded (read side only). */
+  | {
+    reason: "unrecorded";
+  };
 
 /**
  * The person rejected the reproductions shown; the reason goes to the
@@ -2980,6 +3155,11 @@ export interface RunReport {
   bug?: BugReport | null;
   /** Paths changed between the checkpoints: `added` / `modified` / `deleted`. */
   changes: ([string, string])[];
+  /**
+   * The test files the attempt added or changed, and whether the run
+   * collected a test from each.
+   */
+  collection?: Collection | null;
   /** The commit on `speccoder/<feature>` holding the attempt and the tick. */
   commit: string | null;
   /** Earlier attempts at this task in this run, discarded and retried. */
@@ -3011,6 +3191,8 @@ export interface RunReport {
   pending: unknown;
   /** Why the attempt stopped, when it did not complete. */
   reason: string | null;
+  /** Why a regression-only verdict is one (set with that verdict only). */
+  regression?: RegressionOnly | null;
   /** Why no further attempt was made after a failed one, if it failed. */
   retry_stop: string | null;
   /** The agentplane run of the attempt. */
@@ -3814,6 +3996,11 @@ export interface TaskStatus {
   note: string | null;
   /** Enclosing phase heading. */
   phase: string;
+  /**
+   * A regression-only tick: why, with speccoder's wording
+   * (`unrecorded` for a tick made before reasons were recorded).
+   */
+  regression?: RegressionOnly | null;
   /** The agentplane run of that attempt. */
   run_id: string | null;
   /**
@@ -3909,6 +4096,9 @@ export interface TickReport {
   /** `attest verify`'s object for the commit, unchanged. */
   verification: ObjectVerification | null;
 }
+
+/** A test toolchain speccoder knows how to ask. */
+export type Toolchain = "rust" | "python" | "javascript" | "go";
 
 /** Task counts. */
 export interface Totals {

@@ -156,8 +156,9 @@ pub fn sections(r: &StatusReport) -> Vec<Section> {
         });
     }
 
-    let mut table =
-        String::from("### Tasks\n\n| Task | Title | Verdict | Attestation |\n|---|---|---|---|\n");
+    let mut table = String::from(
+        "### Tasks\n\n| Task | Title | Verdict | Why | Attestation |\n|---|---|---|---|---|\n",
+    );
     for task in &r.tasks {
         let title: String = task.title.chars().take(80).collect();
         let state = if task.state == "blocked" && !task.blocked_by.is_empty() {
@@ -183,9 +184,15 @@ pub fn sections(r: &StatusReport) -> Vec<Section> {
             ),
             None => state,
         };
+        // Why a tick is regression-only: speccoder's own wording, never a model's.
+        let why = task
+            .regression
+            .as_ref()
+            .map(|r| escape(&r.text))
+            .unwrap_or_default();
         let _ = writeln!(
             table,
-            "| {} | {} | {state} | {} |",
+            "| {} | {} | {state} | {why} | {} |",
             escape(&task.id),
             escape(&title),
             task.attestation.as_deref().map(escape).unwrap_or_default()
@@ -281,6 +288,7 @@ mod tests {
             attestation: Some("signed ssh SHA256:x".to_owned()),
             strength: None,
             bug: None,
+            regression: None,
         }
     }
 

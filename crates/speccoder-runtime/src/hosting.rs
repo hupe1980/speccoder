@@ -454,6 +454,7 @@ fn run_unguarded(
         cache_read_tokens: tokens("cache_read_tokens"),
         cache_write_tokens: tokens("cache_write_tokens"),
         usd: None,
+        regression: None,
     });
     if code == CommandStatus::Ok
         && let Some(e) = &event

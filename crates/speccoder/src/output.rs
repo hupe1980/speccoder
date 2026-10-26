@@ -500,6 +500,7 @@ mod look_tests {
             attestation: None,
             strength: None,
             bug: None,
+            regression: None,
         }
     }
 
@@ -700,6 +701,7 @@ mod look_tests {
                 cache_read_tokens: 0,
                 cache_write_tokens: 0,
                 usd: None,
+                regression: None,
             },
             Event::Notice { text: "n".into() },
         ];

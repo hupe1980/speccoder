@@ -317,6 +317,24 @@ pub struct RunnerSummary {
     pub unresolved_only: bool,
 }
 
+/// How many tests a run collected — ran, passed or failed (skipped and
+/// errored at setup excluded): from its JUnit report, else the runner's
+/// summary; `None` when neither says.
+#[must_use]
+pub fn collected_count(result: &CheckResult, summary: Option<&RunnerSummary>) -> Option<usize> {
+    if let Some(tests) = result.tests.as_ref() {
+        return Some(
+            tests
+                .iter()
+                .filter(|t| matches!(t.outcome, TestOutcome::Passed | TestOutcome::Failed))
+                .count(),
+        );
+    }
+    summary
+        .filter(|s| !s.build_failed)
+        .map(|s| s.passed + s.failed)
+}
+
 /// Classifies a red run: a JUnit report first, then the runner's summary,
 /// then the check's status. Nothing recognised is [`RedClass::Unclassified`].
 #[must_use]

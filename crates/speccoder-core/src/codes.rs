@@ -615,7 +615,7 @@ pub const CATALOG: &[Entry] = &[
         W,
         S::Ok,
         "ticked on the regression checks alone, nothing task-specific was shown",
-        "The checks still pass, but no acceptance test showed this task's behaviour (the spec has no example for it, or the tests could not be made red first). It is ticked `regression_only`, never `verified`.",
+        "The checks still pass, but no acceptance test showed this task's behaviour. It is ticked `regression_only`, never `verified`, with one recorded reason: `no_story` (no user story to derive a test from), `no_scenarios` (its story states no acceptance scenario), `acceptance_off` (`[acceptance] generate = false`), `author_wrote_none` (the test author wrote no test), `author_failed` (its tests could not be used), `already_passing` (they passed before the attempt — with the task that implemented it), `not_red` (they did not fail on an assertion first) or `tests_not_collected` (the command collected no test).",
         [
             "→ add an acceptance example to the task's story, then converge",
             "speccoder converge --feature {feature}"
@@ -628,6 +628,71 @@ pub const CATALOG: &[Entry] = &[
         "an attestation is missing, unsigned where required, or does not hold",
         "`attest verify` found a tick whose signed statements are missing, malformed, edited, about another commit, or signed by no one you trust.",
         ["speccoder attest verify --feature {feature} --json"]
+    ),
+    entry!(
+        "TESTS-NOT-COLLECTED",
+        E,
+        S::VerificationFailed,
+        "a test file the attempt wrote never ran",
+        "The attempt added or changed a test file, but the runner collected no test from it: the toolchain's rule says it is never built or picked up (a Rust file no target declares, a pytest file outside `python_files`, a vitest file outside `include`, a Go file under `testdata/`), or the run's report and listing hold none of its tests. A test that never ran is evidence of nothing, so the verdict fails and the retry is told the rule.",
+        [
+            "speccoder report",
+            "→ move the tests where the runner collects them (the reason names the rule)"
+        ]
+    ),
+    entry!(
+        "PLAN-TESTS-UNCOLLECTED",
+        W,
+        S::Ok,
+        "the plan puts tests where the runner won't collect them",
+        "A task names a test path the project's runner would not collect (Cargo builds only `tests/*.rs` and `tests/<dir>/main.rs`), and no task creates the file that would declare it; or a test file in the tree is collected by nothing. Tests written there would never run. A warning: the run is not stopped.",
+        [
+            "speccoder doctor --feature {feature}",
+            "speccoder spec tasks"
+        ]
+    ),
+    entry!(
+        "PLAN-BEHAVIOUR-EARLY",
+        W,
+        S::Ok,
+        "a story's behaviour is planned before the story",
+        "A Setup or Foundational task names a symbol a user story is about. If that task implements it, the story's acceptance tests already pass when the story's tasks run: they cannot go red, and the tasks tick regression-only. Write the story's acceptance tests at that task, or re-plan.",
+        ["speccoder spec tasks"]
+    ),
+    entry!(
+        "PLAN-TEST-ONLY-TASKS",
+        W,
+        S::Ok,
+        "tasks that only write tests",
+        "A story has tasks whose only outputs are test files next to the task that implements it. speccoder writes each story's acceptance tests itself and judges the implementing task by them; a test-only task has nothing of its own to show and ticks regression-only.",
+        ["speccoder spec tasks"]
+    ),
+    entry!(
+        "PRESET-NOT-SPECKIT",
+        E,
+        S::UsageError,
+        "presets are a Spec Kit mechanism",
+        "`speccoder preset add` installs the speccoder preset through Spec Kit's own `specify preset add`; this project is not a Spec Kit project, so there is nothing to add it to.",
+        ["speccoder doctor"]
+    ),
+    entry!(
+        "PRESET-SPECKIT-MISSING",
+        E,
+        S::ConfigError,
+        "the Spec Kit tool `specify` is missing or too old",
+        "Adding the preset runs `specify preset add`, which needs `specify` at the version the preset requires. It is not installed, or older.",
+        [
+            "→ install or upgrade Spec Kit (`uv tool install specify-cli`)",
+            "speccoder doctor"
+        ]
+    ),
+    entry!(
+        "PRESET-FAILED",
+        E,
+        S::Error,
+        "the preset could not be added: `specify preset add` failed",
+        "Spec Kit refused or failed to install the preset; its own output is shown. Nothing in `specs/` was changed.",
+        ["speccoder doctor"]
     ),
     // ── stops ─────────────────────────────────────────────────────────
     entry!(
@@ -680,6 +745,18 @@ pub const CATALOG: &[Entry] = &[
         "The acceptance tests could not be made red before the attempt (they already pass, or fail for another reason), or a convergence gap shows in no failing test. Ticking would claim more than was shown.",
         [
             "speccoder report",
+            "speccoder task accept {task} --reason \"…\""
+        ]
+    ),
+    entry!(
+        "TESTS-COLLECTION-UNKNOWN",
+        P,
+        S::NeedsHuman,
+        "speccoder cannot tell whether the runner ran a test file",
+        "The attempt changed a test file, and neither the toolchain's static rule, the check's JUnit report nor the runner's listing says whether a test from it ran (an unrecognised runner, a listing that failed or timed out, no report). A tick on tests that may not have run would claim more than was shown, so the task stops; the attempt is saved under its ref. It is not retried: the model cannot fix it.",
+        [
+            "→ declare a JUnit report for the check (`junit = \"…\"`)",
+            "→ set the check's `list` command in speccoder.toml",
             "speccoder task accept {task} --reason \"…\""
         ]
     ),

@@ -18,6 +18,8 @@ pub mod bench;
 pub mod bug;
 #[cfg(feature = "engine")]
 pub mod code;
+#[cfg(feature = "engine")]
+pub mod collection;
 pub mod commands;
 #[cfg(feature = "engine")]
 pub mod comments;

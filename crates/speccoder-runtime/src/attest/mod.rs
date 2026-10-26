@@ -512,10 +512,25 @@ fn predicate(
         red: None,
         bug: None,
         acceptance: None,
+        regression: None,
+        collection: None,
         context: None,
         dependencies: None,
         extra: std::collections::BTreeMap::new(),
     }
+}
+
+/// The acceptance files speccoder wrote for the tick, and its story file
+/// (what a later task of the story may grow by additions).
+#[cfg(feature = "engine")]
+fn acceptance_files(report: &RunReport) -> Option<Value> {
+    let a = report.acceptance.as_ref()?;
+    let files = a["files"].as_array().filter(|f| !f.is_empty())?;
+    let mut v = json!({ "source": "authored", "files": files });
+    if let Some(story) = a["story_file"].as_str() {
+        v["story_file"] = json!(story);
+    }
+    Some(v)
 }
 
 /// Records a passed tick: `test-result` per phase, `task-verification`,
@@ -559,7 +574,13 @@ pub fn record_tick(t: &Tick<'_>, report: &RunReport) -> Value {
         instructions: Some(json!(report.instructions)),
         red: red(report),
         bug: t.bug.as_ref().map(|b| b.0.clone()),
-        acceptance: t.bug.as_ref().map(|b| b.1.clone()),
+        acceptance: t
+            .bug
+            .as_ref()
+            .map(|b| b.1.clone())
+            .or_else(|| acceptance_files(report)),
+        regression: report.regression.as_ref().map(|r| r.reason.clone()),
+        collection: report.collection.clone(),
         ..predicate(t, tree, policy.clone(), time.clone())
     };
     named.push((

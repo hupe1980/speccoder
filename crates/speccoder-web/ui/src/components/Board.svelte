@@ -4,6 +4,7 @@
   import { get, q } from "../lib/api";
   import { KINDS, offer, ofTask } from "../lib/actions";
   import type { Action, Task } from "../lib/types";
+  import { neverRan, regressionLabel } from "../lib/evidence";
   import Code from "./Code.svelte";
   import Icon from "./Icon.svelte";
   let expanded = $state<Record<string, boolean>>({});
@@ -86,8 +87,10 @@
         {#each expanded[lane.key] ? lane.tasks : lane.tasks.slice(0, LIMIT) as t (t.id)}
           {@const s = strength(t.strength)}
           {@const live = running === t.id}
+          {@const why = regressionLabel(t)}
+          {@const never = neverRan(t)}
           <article class="card" class:on={app.selected === t.id} class:live role="listitem" oncontextmenu={(e) => menu(t, e)}>
-            <button class="open" onclick={() => app.selectTask(t.id)} aria-label="{t.id} {t.title}, {word(laneOf(t))}">
+            <button class="open" onclick={() => app.selectTask(t.id)} aria-label="{t.id} {t.title}, {why ?? word(laneOf(t))}" title={why ?? undefined}>
               <span class="row"><span class="id mono">{t.id}</span>{#if t.phase}<span class="phase" title={t.phase}>{short(t.phase)}</span>{/if}</span>
               <span class="t"><Code text={t.title} /></span>
               {#if t.drift?.requirements.length}
@@ -102,6 +105,8 @@
                 <span class="foot"><span class="meter" title="Acceptance strength {t.strength}"><span style="width:{s * 100}%" class:low={s < 0.8}></span></span><span class="sv mono">{s.toFixed(2)}</span></span>
               {:else if t.blocked_by.length}
                 <span class="foot muted"><Icon name="hourglass" size={12} />Waits for {t.blocked_by.join(", ")}</span>
+              {:else if never && t.last_attempt}
+                <span class="foot fail" title={t.last_attempt.reason}><Icon name="xoctagon" size={12} />Tests never ran: <code>{never}</code></span>
               {:else if t.last_attempt}
                 <span class="foot fail" title={t.last_attempt.reason}><Icon name="xoctagon" size={12} />Last attempt {t.last_attempt.outcome.replaceAll("_", " ")}</span>
               {/if}

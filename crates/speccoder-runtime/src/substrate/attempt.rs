@@ -389,6 +389,13 @@ these facts from the verifier, check them yourself, and do not repeat the mistak
             c["excerpt"].as_str().unwrap_or_default()
         ));
     }
+    let uncollected = strings(&digest["uncollected"]);
+    if !uncollected.is_empty() {
+        out.push_str("\n## Tests that never ran\n\n");
+        for l in uncollected {
+            out.push_str(&format!("- {l}\n"));
+        }
+    }
     let discarded = strings(&digest["discarded"]);
     if !discarded.is_empty() {
         out.push_str(&format!(

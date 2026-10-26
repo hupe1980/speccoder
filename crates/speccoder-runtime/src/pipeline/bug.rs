@@ -1132,6 +1132,7 @@ fn seal_variants(
                 scenarios: cited,
                 argv,
                 composition: false,
+                red_tests: None,
             },
             content.to_owned(),
         ));

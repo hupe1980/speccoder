@@ -11,6 +11,7 @@
   import Account from "./Account.svelte";
   import Diff from "./Diff.svelte";
   import Drift from "./Drift.svelte";
+  import { implementedBy } from "../lib/evidence";
   import Code from "./Code.svelte";
   import Icon from "./Icon.svelte";
   import Tour from "./Tour.svelte";
@@ -24,6 +25,8 @@
   // Changes set aside before the task's run, when the person asks to see them.
   let showAside = $state(false);
   const aside = $derived(data?.task.set_aside ?? null);
+  // The tick that made already-passing tests pass: one click away.
+  const culprit = $derived(data ? implementedBy(data.task) : null);
   const source = $derived(
     showAside && aside
       ? { q: { ref: aside.reference }, label: "Set Aside" }
@@ -142,7 +145,7 @@
         {#each data.rows as r (r.label + r.text)}
           <div class="row" class:claim={r.label === "Model says"}>
             <dt><span class="dot s-{r.mark}"><Icon name={symbol(r.mark)} size={11} weight={2.4} /></span>{r.label}</dt>
-            <dd><Code text={r.text} /></dd>
+            <dd><Code text={r.text} />{#if r.label === "Acceptance" && culprit}{" "}<button class="link" aria-label="Open task {culprit}" onclick={() => app.selectTask(culprit)}>Open {culprit}</button>{/if}</dd>
           </div>
         {/each}
       </dl>
@@ -183,6 +186,7 @@
 </aside>
 
 <style>
+  .link { border: 0; background: none; padding: 0; color: var(--accent-ink); font-weight: 600; cursor: pointer; }
   .aside-card {
     display: grid; grid-template-columns: auto 1fr; gap: 0.7rem; padding: 0.8rem 0.9rem; border-radius: var(--radius);
     background: color-mix(in srgb, var(--attention, #ff9f0a) 9%, var(--surface)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--attention, #ff9f0a) 28%, transparent);

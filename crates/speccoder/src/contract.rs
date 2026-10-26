@@ -331,6 +331,7 @@ fn every_event_type_validates() {
             cache_read_tokens: 0,
             cache_write_tokens: 0,
             usd: None,
+            regression: None,
         },
         Event::Notice {
             text: "n".to_owned(),

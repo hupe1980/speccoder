@@ -172,14 +172,27 @@ pub fn lines(event: &Event, seconds: Option<u64>, verbosity: Verbosity) -> Vec<S
             input_tokens,
             output_tokens,
             usd,
+            regression,
             ..
         } => {
             let mark = match outcome.as_str() {
+                "regression_only" if regression.is_some() => "~",
                 "verified" | "regression_only" | "completed" => "✓",
                 "blocked" | "needs_approval" | "denied" | "not_demonstrated" | "incomplete"
-                | "budget_exhausted" => "⏸",
+                | "budget_exhausted" | "collection_unknown" => "⏸",
                 _ => "✗",
             };
+            // A regression-only tick says why, in speccoder's one wording.
+            if let Some(r) = regression.as_ref().filter(|_| outcome == "regression_only") {
+                return vec![format!(
+                    "{mark} {task} regression only — {} · {} in / {} out{}{}",
+                    r.text,
+                    tokens(*input_tokens),
+                    tokens(*output_tokens),
+                    money(*usd),
+                    seconds.map(|s| format!(" · {s}s")).unwrap_or_default()
+                )];
+            }
             vec![format!(
                 "{mark} {task} {outcome} · {} in / {} out{}{} — {message}",
                 tokens(*input_tokens),
@@ -307,7 +320,7 @@ fn token_of(event: &Event) -> Option<crate::style::Token> {
         Event::TaskFinished { outcome, .. } => match outcome.as_str() {
             "completed" => Token::Verified,
             "blocked" | "needs_approval" | "denied" | "not_demonstrated" | "incomplete"
-            | "budget_exhausted" | "suspected_gaming" => Token::Attention,
+            | "budget_exhausted" | "suspected_gaming" | "collection_unknown" => Token::Attention,
             o => Glyph::of_state(o).token(),
         },
         Event::Notice { .. } | Event::Said { .. } | Event::Reasoning { .. } => Token::Muted,
@@ -375,9 +388,13 @@ pub fn reader_lines(event: &Event, verbosity: Verbosity) -> Vec<String> {
             message,
             input_tokens,
             output_tokens,
+            regression,
             ..
         } => vec![
-            format!("task: {task} — {}", outcome.replace('_', " ")),
+            match regression.as_ref().filter(|_| outcome == "regression_only") {
+                Some(r) => format!("task: {task} — regression only, because: {}.", r.text),
+                None => format!("task: {task} — {}", outcome.replace('_', " ")),
+            },
             format!(
                 "usage: {} input tokens, {} output tokens",
                 input_tokens, output_tokens
@@ -431,10 +448,35 @@ mod tests {
             cache_read_tokens: 0,
             cache_write_tokens: 0,
             usd: Some(0.0123),
+            regression: None,
         };
         assert_eq!(
             line(&finished, Some(42)).as_deref(),
             Some("✓ T002 verified · 12.3k in / 678 out · $0.0123 · 42s — verdict: verified")
+        );
+        let why = Event::TaskFinished {
+            task: "T007".to_owned(),
+            outcome: "regression_only".to_owned(),
+            message: "verdict: regression_only".to_owned(),
+            run: None,
+            input_tokens: 1,
+            output_tokens: 1,
+            cache_read_tokens: 0,
+            cache_write_tokens: 0,
+            usd: None,
+            regression: Some(speccoder_core::regression::Regression::of(
+                speccoder_core::regression::RegressionReason::NoStory,
+            )),
+        };
+        assert_eq!(
+            line(&why, None).as_deref(),
+            Some(
+                "~ T007 regression only — no user story — nothing to derive a test from · 1 in / 1 out"
+            )
+        );
+        assert_eq!(
+            reader_lines(&why, Verbosity::Normal)[0],
+            "task: T007 — regression only, because: no user story — nothing to derive a test from."
         );
         assert!(
             line(

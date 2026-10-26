@@ -253,6 +253,17 @@
               "min": null,
               "required": false,
               "value": null
+            },
+            {
+              "about": "A command that lists the tests the check would run (one test id or file path per line); speccoder runs it when it cannot otherwise tell",
+              "choices": [],
+              "default": null,
+              "key": "list",
+              "kind": "argv",
+              "max": null,
+              "min": null,
+              "required": false,
+              "value": null
             }
           ],
           "name": "checks",
@@ -329,6 +340,17 @@
                   "default": null,
                   "key": "junit",
                   "kind": "string",
+                  "max": null,
+                  "min": null,
+                  "required": false,
+                  "value": null
+                },
+                {
+                  "about": "A command that lists the tests the check would run (one test id or file path per line); speccoder runs it when it cannot otherwise tell",
+                  "choices": [],
+                  "default": null,
+                  "key": "list",
+                  "kind": "argv",
                   "max": null,
                   "min": null,
                   "required": false,

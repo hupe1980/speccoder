@@ -206,6 +206,29 @@ pub enum Body {
         cache_write_tokens: u64,
         /// USD, when priced.
         usd: Option<f64>,
+        /// A regression-only tick: the reason's name.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        regression_reason: Option<String>,
+        /// A regression-only tick: the reason with its details and wording.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        regression: Option<speccoder_core::regression::Regression>,
+    },
+    /// The attempt's changed test files were checked against what the run collected.
+    #[serde(rename = "collection.checked")]
+    CollectionChecked {
+        /// The public projection.
+        #[serde(flatten)]
+        public: PublicCollectionChecked,
+    },
+    /// The search for the tick that made already-passing tests pass ended.
+    #[serde(rename = "regression.bisected")]
+    RegressionBisected {
+        /// Task ID.
+        task: String,
+        /// Acceptance runs it took.
+        runs: u32,
+        /// The implementing task, `before_feature`, or `null`.
+        result: Option<String>,
     },
     /// What the model said in a turn: its account, a claim.
     #[serde(rename = "said")]
@@ -453,6 +476,26 @@ pub struct PublicOracleFrozen {
     pub by: String,
     /// Through what.
     pub via: String,
+}
+
+/// `collection.checked`, as published: paths and states.
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct PublicCollectionChecked {
+    /// The task.
+    pub task: String,
+    /// Each judged test file.
+    pub files: Vec<PublicCollectionFile>,
+}
+
+/// One file of [`PublicCollectionChecked`].
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct PublicCollectionFile {
+    /// Workspace-relative path.
+    pub path: String,
+    /// `collected`, `not_collected`, `unknown`.
+    pub state: speccoder_core::collection::FileState,
+    /// `static`, `junit`, `listing`; `null` when unknown.
+    pub decided_by: Option<speccoder_core::collection::DecidedBy>,
 }
 
 /// `oracle.lapsed`, as published.
@@ -811,6 +854,7 @@ pub fn body(event: &Event) -> Body {
             cache_read_tokens,
             cache_write_tokens,
             usd,
+            regression,
         } => Body::TaskFinished {
             task: clean(task),
             outcome: outcome.clone(),
@@ -821,6 +865,26 @@ pub fn body(event: &Event) -> Body {
             cache_read_tokens: *cache_read_tokens,
             cache_write_tokens: *cache_write_tokens,
             usd: *usd,
+            regression_reason: regression.as_ref().map(|r| r.reason.name().to_owned()),
+            regression: regression.clone(),
+        },
+        Event::CollectionChecked { task, files } => Body::CollectionChecked {
+            public: PublicCollectionChecked {
+                task: clean(task),
+                files: files
+                    .iter()
+                    .map(|f| PublicCollectionFile {
+                        path: clean(&f.path),
+                        state: f.state,
+                        decided_by: f.decided_by,
+                    })
+                    .collect(),
+            },
+        },
+        Event::RegressionBisected { task, runs, result } => Body::RegressionBisected {
+            task: clean(task),
+            runs: *runs,
+            result: result.clone(),
         },
         Event::Said { task, turn, text } => Body::Said {
             task: clean(task),
@@ -1125,6 +1189,7 @@ mod tests {
             cache_read_tokens: 0,
             cache_write_tokens: 0,
             usd: None,
+            regression: None,
         });
         e.result(&CommandResult::ok("run", "done"));
         let l = lines(&buf);

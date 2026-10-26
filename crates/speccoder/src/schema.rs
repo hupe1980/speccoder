@@ -62,6 +62,7 @@ fn projection(name: &str) -> &'static str {
         "bug.outcome" => "events/bug.outcome",
         "oracle.frozen" => "events/oracle.frozen",
         "oracle.lapsed" => "events/oracle.lapsed",
+        "collection.checked" => "events/collection.checked",
         _ => "",
     }
 }
@@ -183,6 +184,7 @@ published! {
     "events/bug.outcome", "PublicBugOutcome" => crate::events::PublicBugOutcome,
     "events/oracle.frozen", "PublicOracleFrozen" => crate::events::PublicOracleFrozen,
     "events/oracle.lapsed", "PublicOracleLapsed" => crate::events::PublicOracleLapsed,
+    "events/collection.checked", "PublicCollectionChecked" => crate::events::PublicCollectionChecked,
     "comments", "CommentsView" => core::oracle::CommentsView,
 }
 

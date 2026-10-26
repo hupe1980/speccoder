@@ -21,6 +21,10 @@ const MODEL: &str = "[model]\nprovider = \"openai\"\nmodel = \"gpt-5.4-mini\"\n"
 /// The check, and `grep` allowed for the scripted acceptance tests (a
 /// check whose prefix is a bare program allows only itself).
 const CHECK: &str = "[checks.has-ok]\nargv = [\"grep\", \"-q\", \"fn ok\", \"src/lib.rs\"]\n";
+/// A check whose `list` names every Rust file under `tests/`: how a
+/// project without Cargo tells speccoder which test files its run collects.
+const LISTED: &str =
+    "[checks.listed]\nargv = [\"true\"]\nlist = [\"find\", \"tests\", \"-name\", \"*.rs\"]\n";
 const GREP: &str = "[commands]\nallow_prefix = [[\"grep\", \"-q\"], [\"./accept.sh\", \"--\"]]\n";
 
 /// A stand-in test runner for scripted acceptance tests: one test, "the
@@ -458,7 +462,7 @@ fn editing_a_frozen_test_stops_for_approval() {
 
 #[test]
 fn new_test_files_are_free_to_write() {
-    let r = repo_with("", &[EXISTING_TEST]);
+    let r = repo_with(LISTED, &[EXISTING_TEST]);
     let state = tempfile::tempdir().unwrap();
     let (f, d) = fake();
     f.will_call_tool(
@@ -2119,6 +2123,8 @@ fn a_run_reports_its_steps_live_and_status_reads_them() {
             Event::Notice { text } => text.clone(),
             Event::Bug { step, .. } => step.name().to_owned(),
             Event::Oracle { .. } => "oracle".to_owned(),
+            Event::CollectionChecked { .. } => "collection".to_owned(),
+            Event::RegressionBisected { .. } => "bisected".to_owned(),
         })
         .filter(|k| k != "usage")
         .collect();
@@ -2275,7 +2281,7 @@ fn the_monitor_is_off_by_default() {
 #[test]
 fn an_approved_frozen_test_edit_passes_but_an_approved_weakening_is_refused() {
     // Adding a test to an existing file, approved: a pass.
-    let r = repo_with("", &[EXISTING_TEST]);
+    let r = repo_with(LISTED, &[EXISTING_TEST]);
     let state = tempfile::tempdir().unwrap();
     let (f, d) = fake();
     f.will_call_tool("c1", "write_file", json!({ "path": "tests/existing.rs", "content": "#[test]\nfn existing() {}\n#[test]\nfn added() {}\n" }));
@@ -2368,7 +2374,10 @@ fn a_spec_without_template_story_headings_still_yields_acceptance_tests() {
 
 #[test]
 fn in_additions_mode_new_tests_in_a_frozen_file_need_no_approval() {
-    let r = repo_with("[tests]\nfrozen = \"additions\"\n", &[EXISTING_TEST]);
+    let r = repo_with(
+        &format!("{LISTED}[tests]\nfrozen = \"additions\"\n"),
+        &[EXISTING_TEST],
+    );
     let state = tempfile::tempdir().unwrap();
     let (f, d) = fake();
     f.will_call_tool("c1", "edit_file", json!({ "path": "tests/existing.rs", "old_string": "fn existing() {}\n", "new_string": "fn existing() {}\n\n#[test]\nfn added() {}\n" }));
@@ -3792,4 +3801,128 @@ fn the_model_s_commentary_is_what_it_said() {
         .map(|t| (t.turn, t.said.unwrap_or_default()))
         .collect();
     assert_eq!(kept, expected);
+}
+
+// ── tests where the runner finds them (spec 102, US1) ────────────────
+
+/// A Cargo manifest for the fixture, so its `.rs` test files have Cargo's rule.
+const CARGO: (&str, &str) = (
+    "Cargo.toml",
+    "[package]\nname = \"demo\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+);
+
+/// A listing that names the integration tests Cargo builds (`tests/*.rs`).
+const LISTS_TESTS_RS: &str =
+    "[checks.listed]\nargv = [\"true\"]\nlist = [\"sh\", \"-c\", \"ls tests/*.rs\"]\n";
+
+fn writes_test(f: &FakeProvider, id: &str, path: &str) {
+    f.will_call_tool(
+        id,
+        "write_file",
+        json!({ "path": path, "content": "#[test]\nfn greets() {}\n" }),
+    );
+    f.will_structure(done("added the test"));
+}
+
+#[test]
+fn a_test_file_cargo_never_builds_fails_and_the_retry_learns_where_it_runs() {
+    let r = repo_with(
+        &format!("{LISTS_TESTS_RS}[budget]\nmax_attempts = 2\n"),
+        &[CARGO],
+    );
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    writes_test(&f, "c1", "tests/unit/greet_name.rs");
+    writes_test(&f, "c2", "tests/greet_name.rs");
+    let res = run(r.path(), state.path(), "T005", d);
+    let rep = report(&res);
+    assert_eq!(
+        rep.verdict,
+        Some(Verdict::RegressionOnly),
+        "{}",
+        res.message()
+    );
+    let first = &rep.earlier[0];
+    assert_eq!(
+        first.verdict,
+        Some(Verdict::Failed {
+            reasons: vec!["tests not collected: `tests/unit/greet_name.rs` — Cargo builds `tests/*.rs` and `tests/<dir>/main.rs` (and the modules they declare); this file is neither".to_owned()]
+        })
+    );
+    let line = "`tests/unit/greet_name.rs` never ran: Cargo builds `tests/*.rs` and `tests/<dir>/main.rs`. Move the tests to `tests/greet_name.rs`, or add `tests/unit/main.rs` with `mod greet_name;`.";
+    assert_eq!(first.digest.uncollected, [line]);
+    assert!(
+        first
+            .fingerprint
+            .contains("uncollected: tests/unit/greet_name.rs")
+    );
+    let second = f
+        .asked()
+        .iter()
+        .map(|a| serde_json::to_string(&a.prompt).unwrap())
+        .find(|p| p.contains("Tests that never ran"))
+        .expect("the retry is told");
+    assert!(second.contains("never ran: Cargo builds"), "{second}");
+    // The retry's file is collected: the check's listing names it.
+    let c = rep.collection.as_ref().unwrap();
+    assert_eq!(c.files[0].path, "tests/greet_name.rs");
+    assert_eq!(
+        c.files[0].state,
+        speccoder_core::collection::FileState::Collected
+    );
+}
+
+#[test]
+fn the_same_uncollected_file_twice_stops_retrying() {
+    let r = repo_with(
+        &format!("{LISTS_TESTS_RS}[budget]\nmax_attempts = 3\n"),
+        &[CARGO],
+    );
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    writes_test(&f, "c1", "tests/unit/greet_name.rs");
+    writes_test(&f, "c2", "tests/unit/greet_name.rs");
+    f.will_structure(done("third"));
+    let res = run(r.path(), state.path(), "T005", d);
+    let rep = report(&res);
+    assert_eq!(
+        res.status(),
+        CommandStatus::VerificationFailed,
+        "{}",
+        res.message()
+    );
+    assert_eq!(res.code().map(|c| c.name), Some("TESTS-NOT-COLLECTED"));
+    assert!(
+        rep.retry_stop
+            .as_deref()
+            .unwrap_or_default()
+            .starts_with("same failure twice"),
+        "{:?}",
+        rep.retry_stop
+    );
+    assert!(!rep.ticked);
+}
+
+#[test]
+fn a_test_file_speccoder_cannot_tell_about_stops_for_a_person() {
+    // A listing that times out: neither collected nor not — never ticked.
+    let r = repo_with(
+        "[checks.listed]\nargv = [\"true\"]\nlist = [\"sleep\", \"5\"]\ntimeout_secs = 1\n[budget]\nmax_attempts = 2\n",
+        &[CARGO],
+    );
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    writes_test(&f, "c1", "tests/greet_name.rs");
+    let res = run(r.path(), state.path(), "T005", d);
+    let rep = report(&res);
+    assert_eq!(res.status(), CommandStatus::NeedsHuman, "{}", res.message());
+    assert_eq!(res.code().map(|c| c.name), Some("TESTS-COLLECTION-UNKNOWN"));
+    assert!(
+        res.message()
+            .starts_with("speccoder cannot tell whether the runner ran `tests/greet_name.rs` ("),
+        "{}",
+        res.message()
+    );
+    assert!(!rep.ticked && rep.saved_attempt.is_some());
+    assert!(rep.earlier.is_empty(), "never retried");
 }

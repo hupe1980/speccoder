@@ -1122,6 +1122,13 @@ pub struct RunReport {
     /// fix's discrimination).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bug: Option<Box<crate::bug::BugReport>>,
+    /// The test files the attempt added or changed, and whether the run
+    /// collected a test from each.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub collection: Option<crate::collection::Collection>,
+    /// Why a regression-only verdict is one (set with that verdict only).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub regression: Option<crate::regression::Regression>,
 }
 
 /// A failed attempt that was undone and retried.
@@ -1802,6 +1809,10 @@ pub struct TaskStatus {
     /// `cannot_reproduce`, `fixed`, …).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bug: Option<String>,
+    /// A regression-only tick: why, with speccoder's wording
+    /// (`unrecorded` for a tick made before reasons were recorded).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub regression: Option<crate::regression::Regression>,
 }
 
 /// An attempt that did not pass, as saved under `refs/speccoder/attempts/`.

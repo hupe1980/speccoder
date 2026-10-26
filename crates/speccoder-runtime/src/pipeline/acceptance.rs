@@ -165,6 +165,7 @@ pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance 
     // because what the task introduces does not exist yet; confirmed by a
     // second run.
     let (first, summary) = execute(a.project, &argv, a.runner);
+    let red_tests = speccoder_core::verify::collected_count(&first, summary.as_ref());
     let mut class = classify_red(&first, summary.as_ref());
     if class.is_red() {
         let (second, summary) = execute(a.project, &argv, a.runner);
@@ -179,6 +180,9 @@ pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance 
     report["argv"] = json!(argv);
     report["red"] = json!(red);
     report["red_class"] = json!(class);
+    if let Some(n) = red_tests {
+        report["red_tests"] = json!(n);
+    }
     if red {
         // What the attestation's red excerpt is cut from (clean-checked there).
         report["red_output"] = json!(
@@ -541,6 +545,7 @@ pub(crate) fn prepare_held_out(
                 scenarios: cited,
                 argv,
                 composition: composed,
+                red_tests: None,
             },
             content.to_owned(),
         ));
@@ -555,10 +560,14 @@ pub(crate) fn prepare_held_out(
     match crate::held_out::overlay_red(a.worktree, a.project, a.tmp, &kept, a.runner, a.policy) {
         Ok(runs) => {
             let mut red = Vec::new();
-            for ((file, content), ran) in kept.into_iter().zip(runs) {
+            for ((mut file, content), ran) in kept.into_iter().zip(runs) {
                 if ran.result.is_none() {
                     discard(&file.path, "collision");
                 } else if crate::held_out::red_class(&ran).is_red() {
+                    file.red_tests = ran
+                        .result
+                        .as_ref()
+                        .and_then(|(r, s)| speccoder_core::verify::collected_count(r, s.as_ref()));
                     red.push((file, content));
                 } else {
                     discard(&file.path, "not_red");
@@ -650,10 +659,14 @@ pub(crate) fn judge_held_out(
         .map_err(|e| ("tampered", e))?;
     let mut failed_ids: Vec<String> = Vec::new();
     for ((file, _), ran) in files.iter().zip(&runs) {
-        let passed = ran
-            .result
-            .as_ref()
-            .is_some_and(|(r, _)| r.status == CheckStatus::Passed);
+        // Green is evidence only when it collected what red did (FR-008).
+        let passed = ran.result.as_ref().is_some_and(|(r, sum)| {
+            r.status == CheckStatus::Passed
+                && file.red_tests.is_none_or(|red| {
+                    speccoder_core::verify::collected_count(r, sum.as_ref())
+                        .is_some_and(|green| green >= red)
+                })
+        });
         if !passed {
             failed_ids.extend(file.scenarios.iter().cloned());
         }

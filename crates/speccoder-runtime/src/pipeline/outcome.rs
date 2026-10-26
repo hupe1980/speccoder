@@ -87,6 +87,13 @@ pub(crate) fn status_and_message(
                 }
             ),
         ),
+        (None, "collection_unknown") => (
+            CommandStatus::NeedsHuman,
+            format!(
+                "{}; the attempt is saved, not ticked",
+                report.reason.clone().unwrap_or_default()
+            ),
+        ),
         (Some(Verdict::Failed { reasons }), _) => (
             CommandStatus::VerificationFailed,
             format!("verdict: failed — {}", reasons.join("; ")),
@@ -162,6 +169,7 @@ pub(crate) fn finished_event(
         cache_read_tokens: tokens("cache_read_tokens"),
         cache_write_tokens: tokens("cache_write_tokens"),
         usd: None,
+        regression: report.regression.clone(),
     }
 }
 
@@ -203,6 +211,8 @@ pub(crate) fn bare_report(
         instructions: Vec::new(),
         strength: None,
         bug: None,
+        collection: None,
+        regression: None,
     }
 }
 

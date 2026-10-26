@@ -1950,6 +1950,52 @@
       ],
       "type": "object"
     },
+    "Collection": {
+      "description": "The attempt's changed test files and whether the run collected them.",
+      "properties": {
+        "files": {
+          "description": "Every judged file, by path.",
+          "items": {
+            "$ref": "#/$defs/FileCollection"
+          },
+          "type": "array"
+        },
+        "listing": {
+          "description": "The listings run, in order.",
+          "items": {
+            "$ref": "#/$defs/ListingRun"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "files"
+      ],
+      "type": "object"
+    },
+    "CollectionRule": {
+      "description": "A runner's collection rule: one sentence a person reads, and where it\ncame from.",
+      "properties": {
+        "source": {
+          "description": "Where it came from (`Cargo.toml (default)`, `pyproject.toml [tool.pytest.ini_options]`).",
+          "type": "string"
+        },
+        "text": {
+          "description": "The rule (``Cargo builds `tests/*.rs` and `tests/<dir>/main.rs` (and the modules they declare)``).",
+          "type": "string"
+        },
+        "toolchain": {
+          "$ref": "#/$defs/Toolchain",
+          "description": "The toolchain."
+        }
+      },
+      "required": [
+        "toolchain",
+        "text",
+        "source"
+      ],
+      "type": "object"
+    },
     "CommandData": {
       "anyOf": [
         {
@@ -3173,6 +3219,26 @@
       ],
       "type": "object"
     },
+    "DecidedBy": {
+      "description": "What decided a file's state.",
+      "oneOf": [
+        {
+          "const": "static",
+          "description": "The toolchain's static rule.",
+          "type": "string"
+        },
+        {
+          "const": "junit",
+          "description": "The check's fresh JUnit report.",
+          "type": "string"
+        },
+        {
+          "const": "listing",
+          "description": "The runner's own listing.",
+          "type": "string"
+        }
+      ]
+    },
     "DecidedCall": {
       "description": "A person's decision.",
       "properties": {
@@ -3463,6 +3529,13 @@
         },
         "reasons": {
           "description": "The verdict's reasons.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "uncollected": {
+          "description": "Test files it wrote that never ran: one line each — the path, the\nrunner's rule and the ways out.",
           "items": {
             "type": "string"
           },
@@ -4335,6 +4408,96 @@
       ],
       "type": "object"
     },
+    "FileCollection": {
+      "description": "One judged test file.",
+      "properties": {
+        "decided_by": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DecidedBy"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What decided it; `null` only when unknown."
+        },
+        "fixes": {
+          "description": "The ways out, for this toolchain and file.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "path": {
+          "description": "Workspace-relative path.",
+          "type": "string"
+        },
+        "rule": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CollectionRule"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The runner's rule (not collected)."
+        },
+        "state": {
+          "$ref": "#/$defs/FileState",
+          "description": "Collected, not collected, or unknown."
+        },
+        "test_ids": {
+          "description": "The first 20 of their ids.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "tests": {
+          "description": "Tests from it that ran (skipped and ignored ones excluded).",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "why": {
+          "description": "Not collected: which part of the rule the file breaks; unknown: why\nspeccoder cannot tell.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "path",
+        "state",
+        "decided_by",
+        "tests",
+        "test_ids"
+      ],
+      "type": "object"
+    },
+    "FileState": {
+      "description": "Whether the run collected a test from a file.",
+      "oneOf": [
+        {
+          "const": "collected",
+          "description": "At least one test from it ran (passed or failed).",
+          "type": "string"
+        },
+        {
+          "const": "not_collected",
+          "description": "None did.",
+          "type": "string"
+        },
+        {
+          "const": "unknown",
+          "description": "speccoder cannot tell.",
+          "type": "string"
+        }
+      ]
+    },
     "FinalState": {
       "description": "A reproduction on the final tree.",
       "oneOf": [
@@ -4625,6 +4788,42 @@
           "type": "string"
         }
       ]
+    },
+    "ImplementedBy": {
+      "anyOf": [
+        {
+          "description": "A tick on the feature branch.",
+          "properties": {
+            "commit": {
+              "description": "Its commit (short).",
+              "type": "string"
+            },
+            "task": {
+              "description": "Its task.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "task",
+            "commit"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "They passed before the feature's first tick.",
+          "properties": {
+            "before_feature": {
+              "description": "Always `true`.",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "before_feature"
+          ],
+          "type": "object"
+        }
+      ],
+      "description": "Which tick made already-passing acceptance tests pass."
     },
     "InPlaceReport": {
       "description": "Why an in-place run refused or stopped.",
@@ -5085,6 +5284,34 @@
         "reason",
         "run_id",
         "reference"
+      ],
+      "type": "object"
+    },
+    "ListingRun": {
+      "description": "A listing speccoder ran because the earlier sources left a file undecided.",
+      "properties": {
+        "argv": {
+          "description": "The command.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "duration_ms": {
+          "description": "How long it took.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "status": {
+          "$ref": "#/$defs/CheckStatus",
+          "description": "How it ended."
+        }
+      },
+      "required": [
+        "argv",
+        "duration_ms",
+        "status"
       ],
       "type": "object"
     },
@@ -6472,6 +6699,36 @@
       ],
       "type": "object"
     },
+    "PublicCollectionFile": {
+      "description": "One file of [`PublicCollectionChecked`].",
+      "properties": {
+        "decided_by": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DecidedBy"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "`static`, `junit`, `listing`; `null` when unknown."
+        },
+        "path": {
+          "description": "Workspace-relative path.",
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/$defs/FileState",
+          "description": "`collected`, `not_collected`, `unknown`."
+        }
+      },
+      "required": [
+        "path",
+        "state",
+        "decided_by"
+      ],
+      "type": "object"
+    },
     "Reading": {
       "description": "One of the two readings of an ambiguous scenario.",
       "oneOf": [
@@ -6590,6 +6847,173 @@
         "now"
       ],
       "type": "object"
+    },
+    "RegressionOnly": {
+      "description": "A regression-only tick's reason with its one-line wording.",
+      "properties": {
+        "reason": {
+          "$ref": "#/$defs/RegressionReason",
+          "description": "The reason with its typed details."
+        },
+        "text": {
+          "description": "speccoder's sentence for it, the same in every interface.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "reason",
+        "text"
+      ],
+      "type": "object"
+    },
+    "RegressionReason": {
+      "description": "Why a tick is regression-only.",
+      "oneOf": [
+        {
+          "description": "The task belongs to no user story.",
+          "properties": {
+            "reason": {
+              "const": "no_story",
+              "type": "string"
+            }
+          },
+          "required": [
+            "reason"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Its story states no acceptance scenario.",
+          "properties": {
+            "reason": {
+              "const": "no_scenarios",
+              "type": "string"
+            },
+            "story": {
+              "description": "The story.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "reason",
+            "story"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "`[acceptance] generate = false`.",
+          "properties": {
+            "reason": {
+              "const": "acceptance_off",
+              "type": "string"
+            }
+          },
+          "required": [
+            "reason"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The test author returned no file.",
+          "properties": {
+            "reason": {
+              "const": "author_wrote_none",
+              "type": "string"
+            }
+          },
+          "required": [
+            "reason"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The author's answer could not be used.",
+          "properties": {
+            "detail": {
+              "description": "What speccoder refused (its own words).",
+              "type": "string"
+            },
+            "reason": {
+              "const": "author_failed",
+              "type": "string"
+            }
+          },
+          "required": [
+            "reason",
+            "detail"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The acceptance tests passed before the attempt.",
+          "properties": {
+            "implemented_by": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ImplementedBy"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The tick that made them pass; `null` when it could not be determined."
+            },
+            "reason": {
+              "const": "already_passing",
+              "type": "string"
+            }
+          },
+          "required": [
+            "reason",
+            "implemented_by"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "They did not fail on an assertion or an absent symbol.",
+          "properties": {
+            "reason": {
+              "const": "not_red",
+              "type": "string"
+            },
+            "red_class": {
+              "$ref": "#/$defs/RedClass",
+              "description": "How the red run ended."
+            }
+          },
+          "required": [
+            "reason",
+            "red_class"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The acceptance command collected no test.",
+          "properties": {
+            "reason": {
+              "const": "tests_not_collected",
+              "type": "string"
+            }
+          },
+          "required": [
+            "reason"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A tick made before reasons were recorded (read side only).",
+          "properties": {
+            "reason": {
+              "const": "unrecorded",
+              "type": "string"
+            }
+          },
+          "required": [
+            "reason"
+          ],
+          "type": "object"
+        }
+      ]
     },
     "Rejection": {
       "description": "The person rejected the reproductions shown; the reason goes to the\nauthor's next try.",
@@ -7412,6 +7836,17 @@
           },
           "type": "array"
         },
+        "collection": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Collection"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The test files the attempt added or changed, and whether the run\ncollected a test from each."
+        },
         "commit": {
           "description": "The commit on `speccoder/<feature>` holding the attempt and the tick.",
           "type": [
@@ -7469,6 +7904,17 @@
             "string",
             "null"
           ]
+        },
+        "regression": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RegressionOnly"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Why a regression-only verdict is one (set with that verdict only)."
         },
         "retry_stop": {
           "description": "Why no further attempt was made after a failed one, if it failed.",
@@ -9825,6 +10271,17 @@
           "description": "Enclosing phase heading.",
           "type": "string"
         },
+        "regression": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RegressionOnly"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "A regression-only tick: why, with speccoder's wording\n(`unrecorded` for a tick made before reasons were recorded)."
+        },
         "run_id": {
           "description": "The agentplane run of that attempt.",
           "type": [
@@ -10118,6 +10575,31 @@
         "verification"
       ],
       "type": "object"
+    },
+    "Toolchain": {
+      "description": "A test toolchain speccoder knows how to ask.",
+      "oneOf": [
+        {
+          "const": "rust",
+          "description": "Cargo (`cargo test`, `cargo nextest`).",
+          "type": "string"
+        },
+        {
+          "const": "python",
+          "description": "pytest.",
+          "type": "string"
+        },
+        {
+          "const": "javascript",
+          "description": "vitest or jest.",
+          "type": "string"
+        },
+        {
+          "const": "go",
+          "description": "`go test`.",
+          "type": "string"
+        }
+      ]
     },
     "Totals": {
       "description": "Task counts.",
@@ -11159,6 +11641,24 @@
           "minimum": 0,
           "type": "integer"
         },
+        "regression": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RegressionOnly"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "A regression-only tick: the reason with its details and wording."
+        },
+        "regression_reason": {
+          "description": "A regression-only tick: the reason's name.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "run": {
           "description": "The attempt's run id.",
           "type": [
@@ -11194,6 +11694,65 @@
         "cache_read_tokens",
         "cache_write_tokens",
         "usd"
+      ],
+      "type": "object"
+    },
+    {
+      "description": "The attempt's changed test files were checked against what the run collected.",
+      "properties": {
+        "files": {
+          "description": "Each judged test file.",
+          "items": {
+            "$ref": "#/$defs/PublicCollectionFile"
+          },
+          "type": "array"
+        },
+        "task": {
+          "description": "The task.",
+          "type": "string"
+        },
+        "type": {
+          "const": "collection.checked",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "task",
+        "files"
+      ],
+      "type": "object"
+    },
+    {
+      "description": "The search for the tick that made already-passing tests pass ended.",
+      "properties": {
+        "result": {
+          "description": "The implementing task, `before_feature`, or `null`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "runs": {
+          "description": "Acceptance runs it took.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "task": {
+          "description": "Task ID.",
+          "type": "string"
+        },
+        "type": {
+          "const": "regression.bisected",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "task",
+        "runs",
+        "result"
       ],
       "type": "object"
     },

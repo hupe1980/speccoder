@@ -597,6 +597,7 @@ pub(crate) fn run_task(
             cache_read_tokens: 0,
             cache_write_tokens: 0,
             usd: None,
+            regression: None,
         });
         refuse(status, m)
     };
@@ -1677,6 +1678,30 @@ pub(crate) fn run_task(
                     );
                     return fail(CommandStatus::ConfigError, format!("verification: {e}"));
                 }
+                // 7'. A test file the attempt wrote that the run never
+                //     collected is evidence of nothing: it fails the verdict;
+                //     one speccoder cannot tell about stops for a person.
+                let otherwise_passing = attempt_status == "completed"
+                    && findings.is_empty()
+                    && matches!(
+                        report.verdict,
+                        Some(
+                            speccoder_core::verify::Verdict::Verified
+                                | speccoder_core::verify::Verdict::RegressionOnly
+                        )
+                    );
+                if let Some(unknown) = judge_collection(
+                    &project,
+                    &runner,
+                    otherwise_passing,
+                    &mut report,
+                    &*live,
+                    task,
+                ) {
+                    attempt_status = "collection_unknown".to_owned();
+                    report.verdict = None;
+                    report.reason = Some(unknown);
+                }
                 let checks_held = report.verification.as_ref().is_some_and(|v| v.passed);
                 stage_with_tail(
                     &*live,
@@ -1929,7 +1954,13 @@ pub(crate) fn run_task(
                 break (report, attempt_status);
             }
             let discarded: Vec<String> = report.changes.iter().map(|(p, _)| p.clone()).collect();
-            let d = speccoder_core::retry::digest(attempt_no, &reasons, verification, &discarded);
+            let mut d =
+                speccoder_core::retry::digest(attempt_no, &reasons, verification, &discarded);
+            d.uncollected = report
+                .collection
+                .as_ref()
+                .map(speccoder_core::collection::Collection::retry_lines)
+                .unwrap_or_default();
             let fingerprint = speccoder_core::retry::fingerprint(&d);
             let stop = if bug_candidate.is_some() {
                 Some("a candidate is judged, never retried".to_owned())
@@ -2611,8 +2642,103 @@ pub(crate) fn run_task(
         suspected,
         redact(&message, secret),
     ));
-    CommandResult::new("run", status, &redact(&message, secret))
-        .with_data(CommandData::Run(Box::new(report)))
+    let code = collection_code(&report, &attempt_status);
+    let result = CommandResult::new("run", status, &redact(&message, secret));
+    match code {
+        Some(c) => result.with_code(c),
+        None => result,
+    }
+    .with_data(CommandData::Run(Box::new(report)))
+}
+
+/// The code of a run the collection check decided: a file that never ran
+/// (`TESTS-NOT-COLLECTED`), or one speccoder cannot tell about.
+fn collection_code(
+    report: &speccoder_core::RunReport,
+    attempt_status: &str,
+) -> Option<&'static str> {
+    if attempt_status == "collection_unknown" {
+        return Some("TESTS-COLLECTION-UNKNOWN");
+    }
+    match &report.verdict {
+        Some(speccoder_core::verify::Verdict::Failed { reasons })
+            if reasons
+                .first()
+                .is_some_and(|r| r.starts_with(speccoder_core::collection::REASON_PREFIX)) =>
+        {
+            Some("TESTS-NOT-COLLECTED")
+        }
+        _ => None,
+    }
+}
+
+/// Judges the attempt's changed test files against what the run collected
+/// (FR-001…FR-006): a file no test ran from fails the verdict (its reason
+/// first); for an otherwise passing attempt, a file speccoder cannot tell
+/// about returns the stop's message. Listings run only then.
+fn judge_collection(
+    project: &Path,
+    runner: &sandbox::Runner,
+    otherwise_passing: bool,
+    report: &mut speccoder_core::RunReport,
+    live: &dyn progress::Progress,
+    task: &str,
+) -> Option<String> {
+    let checks = std::fs::read_to_string(project.join(crate::verify::config::FILE))
+        .ok()
+        .and_then(|t| crate::verify::config::parse(&t).ok())
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|c| c.tier == crate::verify::config::Tier::Fast)
+        .collect::<Vec<_>>();
+    let results = report
+        .verification
+        .as_ref()
+        .map(|v| v.checks.clone())
+        .unwrap_or_default();
+    let c = crate::collection::judge(&crate::collection::Input {
+        root: project,
+        changes: &report.changes,
+        checks: &checks,
+        results: &results,
+        runner,
+        listings: otherwise_passing,
+    })?;
+    live.event(&progress::Event::CollectionChecked {
+        task: task.to_owned(),
+        files: c
+            .files
+            .iter()
+            .map(|f| progress::CollectionFile {
+                path: f.path.clone(),
+                state: f.state,
+                decided_by: f.decided_by,
+            })
+            .collect(),
+    });
+    let never = c.reasons();
+    let unknown: Vec<String> = c
+        .unknown()
+        .map(|f| {
+            format!(
+                "speccoder cannot tell whether the runner ran `{}` ({})",
+                f.path,
+                f.why.as_deref().unwrap_or("no report or listing names it")
+            )
+        })
+        .collect();
+    report.collection = Some(c);
+    if !never.is_empty() {
+        let mut reasons = never;
+        if let Some(speccoder_core::verify::Verdict::Failed { reasons: more }) =
+            report.verdict.take()
+        {
+            reasons.extend(more);
+        }
+        report.verdict = Some(speccoder_core::verify::Verdict::Failed { reasons });
+        return None;
+    }
+    (otherwise_passing && !unknown.is_empty()).then(|| unknown.join("; "))
 }
 
 /// `note`, with what the check itself said last (its own reason) and, for

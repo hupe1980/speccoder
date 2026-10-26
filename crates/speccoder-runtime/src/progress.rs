@@ -165,6 +165,25 @@ pub enum Event {
         cache_write_tokens: u64,
         /// USD, when priced.
         usd: Option<f64>,
+        /// A regression-only tick: why, worded.
+        regression: Option<speccoder_core::regression::Regression>,
+    },
+    /// The attempt's changed test files were checked against what the run
+    /// collected (`collection.checked`).
+    CollectionChecked {
+        /// Task ID.
+        task: String,
+        /// Each judged file: path, state, what decided it.
+        files: Vec<CollectionFile>,
+    },
+    /// The bisection for an already-passing tick ended (`regression.bisected`).
+    RegressionBisected {
+        /// Task ID.
+        task: String,
+        /// Acceptance runs it took.
+        runs: u32,
+        /// The task that made the tests pass, `before_feature`, or `null`.
+        result: Option<String>,
     },
     /// What the model said in a turn, beside its tool calls: its
     /// account of what it is doing — a claim, never evidence. Control
@@ -206,6 +225,17 @@ pub enum Event {
         /// What happened.
         step: OracleEvent,
     },
+}
+
+/// One judged file of [`Event::CollectionChecked`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct CollectionFile {
+    /// Workspace-relative path.
+    pub path: String,
+    /// `collected`, `not_collected`, `unknown`.
+    pub state: speccoder_core::collection::FileState,
+    /// `static`, `junit`, `listing`; `null` when unknown.
+    pub decided_by: Option<speccoder_core::collection::DecidedBy>,
 }
 
 /// A step of the oracle at review.
@@ -652,7 +682,9 @@ impl Progress for Live {
                 Event::Notice { .. }
                 | Event::RunStarted { .. }
                 | Event::Bug { .. }
-                | Event::Oracle { .. } => {}
+                | Event::Oracle { .. }
+                | Event::CollectionChecked { .. }
+                | Event::RegressionBisected { .. } => {}
             }
             s.updated_at = now();
             self.write(&s);

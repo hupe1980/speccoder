@@ -31,6 +31,9 @@ pub struct HeldOutFile {
     pub argv: Vec<String>,
     /// It exercises several scenarios together.
     pub composition: bool,
+    /// Tests its red run collected: its green run must collect as many.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub red_tests: Option<usize>,
 }
 
 /// A file the author wrote that was not kept, and why.
@@ -800,6 +803,7 @@ mod tests {
                 scenarios: vec!["US1-1".to_owned()],
                 argv: vec!["true".to_owned()],
                 composition: false,
+                red_tests: None,
             }],
             discarded: Vec::new(),
         };

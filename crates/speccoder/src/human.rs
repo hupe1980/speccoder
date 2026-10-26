@@ -812,7 +812,10 @@ pub fn status(w: &mut impl Write, r: &StatusReport, message: &str) -> io::Result
         }
         let note = match t.state.as_str() {
             "verified" => "verified".to_owned(),
-            "regression_only" => "regression only".to_owned(),
+            "regression_only" => match &t.regression {
+                Some(r) if look.screen_reader => format!("regression only, because: {}", r.text),
+                _ => "regression only".to_owned(),
+            },
             "ticked_without_evidence" => "ticked, no speccoder evidence".to_owned(),
             "evidence_without_tick" => {
                 "committed, local tick missing — `run --in-place` ticks it".to_owned()
@@ -838,6 +841,9 @@ pub fn status(w: &mut impl Write, r: &StatusReport, message: &str) -> io::Result
         }
         if let Some(n) = &t.note {
             writeln!(w, "      reason: {}", shorten(n, 90))?;
+        }
+        if let Some(r) = t.regression.as_ref().filter(|_| !look.screen_reader) {
+            writeln!(w, "      why: {}", r.text)?;
         }
         if let Some(d) = &t.drift {
             if d.stale() {
