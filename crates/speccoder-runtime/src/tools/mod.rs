@@ -596,10 +596,24 @@ impl WorkspaceTools {
                 self.policy.protected().reason(class)
             )));
         }
-        if let Some(Object::Path { canonical: was, .. }) = expect
-            && *was != canonical
-        {
-            return Err(changed(was, &canonical));
+        match expect {
+            Some(Object::Path { canonical: was, .. }) if *was != canonical => {
+                return Err(changed(was, &canonical));
+            }
+            Some(_) => {}
+            // Allowed by a rule on the path as asked: the rules that need
+            // a person (a frozen test, a context file, a manifest) were
+            // judged on that spelling. One that reaches another file — a
+            // symlinked directory, another letter case — is written by
+            // the name of the file it reaches, and judged on that.
+            None => {
+                let asked = normalise(rel).map_err(|e| failure(e.0))?;
+                if asked != canonical {
+                    return Err(failure(format!(
+                        "refused: `{asked}` reaches `{canonical}`; write it by that path"
+                    )));
+                }
+            }
         }
         Ok(self.root.join(canonical))
     }

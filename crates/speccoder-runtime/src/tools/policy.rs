@@ -705,7 +705,11 @@ impl Policy {
                 "`{p}` is an agent context file: every later agent session reads it"
             ));
         }
-        if self.frozen.contains(&p) {
+        if self
+            .frozen
+            .iter()
+            .any(|f| f.to_lowercase() == p.to_lowercase())
+        {
             return Decision::Approval(format!(
                 "`{p}` is a frozen test (it existed when the attempt started)"
             ));

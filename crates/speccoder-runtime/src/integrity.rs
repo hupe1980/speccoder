@@ -215,7 +215,10 @@ pub fn audit_in(
     let removed_lines = removed_lines(patch);
 
     for c in changes {
-        if frozen.contains(&c.path) {
+        if frozen
+            .iter()
+            .any(|f| f.to_lowercase() == c.path.to_lowercase())
+        {
             match c.kind {
                 ChangeKind::Deleted => findings.push(format!("frozen test deleted: {}", c.path)),
                 ChangeKind::Modified
@@ -477,6 +480,43 @@ mod tests {
                     &BTreeSet::new()
                 )
                 .is_empty()
+        );
+    }
+
+    /// An agent configuration created under another letter case — the
+    /// directory absent when the attempt began — is a judge input: on a
+    /// case-insensitive volume the agent loads it as `.claude/…`.
+    #[test]
+    fn a_judge_input_in_another_letter_case_is_drift() {
+        use crate::tools::policy::Policy;
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let policy = Policy::new(&[], &[]);
+        let before = JudgeSnapshot::take(root, &policy);
+        std::fs::create_dir_all(root.join(".CLAUDE")).unwrap();
+        std::fs::write(root.join(".CLAUDE/settings.json"), "{}").unwrap();
+        std::fs::create_dir_all(root.join(".Cursor")).unwrap();
+        std::fs::write(root.join(".Cursor/rules.json"), "{}").unwrap();
+        std::fs::write(root.join("Makefile.x"), "free").unwrap();
+        std::fs::write(root.join("MAKEFILE"), "all:").unwrap();
+        let after = JudgeSnapshot::take(root, &policy);
+        let drift: Vec<&str> = before
+            .drift(&after, &policy, &BTreeSet::new())
+            .iter()
+            .map(|d| d.class)
+            .collect();
+        assert_eq!(drift, ["judge", "judge", "judge"], "{:?}", after.0.keys());
+        // A frozen test is frozen in any letter case.
+        let frozen: BTreeSet<String> = ["tests/api.rs".to_owned()].into();
+        assert_eq!(
+            audit(
+                &[change("Tests/API.rs", ChangeKind::Deleted)],
+                "",
+                &frozen,
+                false,
+                &BTreeSet::new()
+            ),
+            ["frozen test deleted: Tests/API.rs"]
         );
     }
 }
