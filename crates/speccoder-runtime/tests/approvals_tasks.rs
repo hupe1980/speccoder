@@ -681,6 +681,22 @@ fn a_run_in_another_process_leaves_the_journal_readable() {
         "{:?}",
         i.items
     );
+    // So does status.
+    let started = std::time::Instant::now();
+    let status = speccoder_runtime::progress::status_with(r.path(), state.path());
+    timed("status", started);
+    assert!(
+        status
+            .message()
+            .contains("waiting for a person: 001-graph/T005"),
+        "{}",
+        status.message()
+    );
+    assert!(
+        !status.message().contains("unknown"),
+        "{}",
+        status.message()
+    );
     // The model's account of the run.
     let started = std::time::Instant::now();
     let account = tokio::runtime::Builder::new_current_thread()
