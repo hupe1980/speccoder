@@ -235,7 +235,7 @@ fn triad_of(read: &crate::format::ReadBug) -> Result<Triad, BugRefusal> {
     .map_err(|e| BugRefusal::new(e.code(), e.message()))
 }
 
-/// [`bug`] against `state` with `provider` (needed to record in a format's
+/// [`bug()`] against `state` with `provider` (needed to record in a format's
 /// own bug structure and to run).
 #[allow(clippy::too_many_lines)] // one linear procedure, in reading order
 #[must_use]
@@ -869,7 +869,7 @@ pub fn run(
     })
 }
 
-/// [`run`] against `state` with `provider`.
+/// [`run()`] against `state` with `provider`.
 #[must_use]
 pub fn run_with(
     path: &Path,
@@ -972,7 +972,7 @@ pub fn confirm(
     }
 }
 
-/// [`confirm`] against `state`; `provider` runs what follows (none: only
+/// [`confirm()`] against `state`; `provider` runs what follows (none: only
 /// the decision is recorded).
 #[allow(clippy::too_many_arguments)]
 #[must_use]
