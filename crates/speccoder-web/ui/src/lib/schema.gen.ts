@@ -2151,7 +2151,7 @@ export interface ObjectView {
 
 /**
  * A grant an autopilot run may hold, offered on the approve sheet: one
- * object-bound grant (F-125) a person decided earlier for this feature.
+ * object-bound grant a person decided earlier for this feature.
  */
 export interface OfferedGrant {
   /** `write`, `command`, `network` or `mcp`. */
@@ -2856,7 +2856,7 @@ export interface ReviewReport {
   history: SpecVersion[];
   /**
    * One per requirement with scenarios (`US1`), beside the decision
-   * lines: the tests the run would use, as written at review (D-117).
+   * lines: the tests the run would use, as written at review.
    */
   oracle: OracleView[];
   /**
@@ -3296,7 +3296,7 @@ export type Runnable =
    * start the feature's run, asking or on autopilot.
    */
   | {
-    /** The grant ids (F-125 objects) an autopilot run holds. */
+    /** The grant ids (object-bound grants) an autopilot run holds. */
     grants: string[];
     kind: "approve_and_run";
     /** How the run asks. */

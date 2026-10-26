@@ -231,7 +231,7 @@ pub(crate) fn run_task(
     let head_now = git::Git::at(&wt_root)
         .line(&["rev-parse", "HEAD"])
         .unwrap_or_default();
-    // An autopilot run has exactly the grants ticked on its sheet (FR-014):
+    // An autopilot run has exactly the grants ticked on its sheet:
     // it resumes no interrupted attempt — whose journal holds an earlier
     // run's grants and answers — but sets it aside like any leftover, and
     // adopts no answer kept for the task.
@@ -431,7 +431,7 @@ pub(crate) fn run_task(
         .with_code("REVIEW-PENDING");
     }
     // Two test authors read a requirement two ways: the person says which
-    // is meant before a gated run (spec 093).
+    // is meant before a gated run.
     if run_config.review_required {
         let ambiguous = match crate::oracle::open_ambiguities(
             &s.plane_dir,
@@ -857,7 +857,7 @@ pub(crate) fn run_task(
         Some(f) => super::bug::scenarios(&f.bug),
         None => format.scenarios(&snap, task),
     };
-    // A requirement's oracle frozen at review (spec 093): reused by the
+    // A requirement's oracle frozen at review: reused by the
     // first task citing its scenarios while its wording is unchanged.
     let mut review_frozen: Option<(speccoder_core::acceptance::PreFrozenAcceptance, String)> = None;
     let mut review_reuse = None;
@@ -945,7 +945,7 @@ pub(crate) fn run_task(
             }
         }
     } else if let Some(reuse) = review_reuse.take() {
-        // A frozen oracle (spec 093): its tests at this checkpoint, red by
+        // A frozen oracle: its tests at this checkpoint, red by
         // the run-time rule, its sealed held-out set red too — no author call.
         stage(&*live, task, Stage::Red, StageState::Started, None, None);
         let crate::oracle::TaskReuse::Ready {

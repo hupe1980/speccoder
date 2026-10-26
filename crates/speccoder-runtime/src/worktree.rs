@@ -103,7 +103,7 @@ pub struct Worktree {
 }
 
 /// A detached worktree of a checkout's `HEAD` for one check (the review's
-/// red check, spec 093): never the person's checkout, never the feature's
+/// red check): never the person's checkout, never the feature's
 /// worktree. Removed when dropped — on every way out.
 #[derive(Debug)]
 pub struct Scratch {

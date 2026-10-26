@@ -116,7 +116,7 @@
         return void app.selectTask(app.selected);
       case "run.stop": return app.job?.running ? void app.stop() : app.toast({ tone: "warn", text: "Nothing is running" });
       case "review.spec": app.doc = "review"; return go("documents");
-      // The review's own (spec 093): the review cards and the comment tray act.
+      // The review's own: the review cards and the comment tray act.
       case "review.tests": app.doc = "review"; go("documents"); return void requestAnimationFrame(() => window.dispatchEvent(new CustomEvent("speccoder:review", { detail: id })));
       case "review.send": case "review.undo": return void window.dispatchEvent(new CustomEvent("speccoder:review", { detail: id }));
       case "review.inbox": return go("inbox");

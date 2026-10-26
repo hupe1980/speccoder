@@ -30,7 +30,7 @@
   // (`?view=code&mode=files&file=src/lib.rs`).
   const mode = $derived(app.codeMode);
   // Line comments on a task's change, sent as one nudge for its next
-  // attempt (spec 093); a frozen test's lines go to Review › Tests.
+  // attempt; a frozen test's lines go to Review › Tests.
   let frozen = $state(new Set<string>());
   $effect(() => {
     void app.feature;

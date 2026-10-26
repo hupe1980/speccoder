@@ -9,7 +9,7 @@
 use serde::Serialize;
 use serde_json::{Value, json};
 use speccoder_core::verify_branch::{
-    Anchor, BranchReport, Conclusion, D121_REGRESSIONS, TRAILER_ONLY_TASKS, TickOutcome,
+    Anchor, BranchReport, Conclusion, EARLIER_TASK_REGRESSIONS, TRAILER_ONLY_TASKS, TickOutcome,
     TickReport, Unverifiable,
 };
 use speccoder_core::workflow::{ANNOTATIONS_PER_KIND, data, property};
@@ -207,8 +207,8 @@ pub fn summary(report: &BranchReport, omitted_annotations: usize) -> String {
     let mut notes = Vec::new();
     for n in &report.not_evaluated {
         notes.push(match n.as_str() {
-            D121_REGRESSIONS => {
-                "earlier-task regressions (D-121) not checked by this verifier version".to_owned()
+            EARLIER_TASK_REGRESSIONS => {
+                "regressions of earlier tasks are not checked by this verifier version".to_owned()
             }
             TRAILER_ONLY_TASKS => "a trailer-only bug task (`Spec-Task: <unit>/bug:<slug>`) is in range; this verifier version cannot check it, so the branch fails".to_owned(),
             other => format!("{other}: not checked by this verifier version"),
@@ -533,7 +533,7 @@ mod tests {
             require_verified: false,
             trace: Vec::new(),
             open_no_claim: Vec::new(),
-            not_evaluated: vec![D121_REGRESSIONS.to_owned()],
+            not_evaluated: vec![EARLIER_TASK_REGRESSIONS.to_owned()],
             newer_fields: vec!["provenance".to_owned()],
         }
     }
@@ -584,7 +584,7 @@ mod tests {
             "{s}"
         );
         assert!(
-            s.contains("earlier-task regressions (D-121) not checked by this verifier version")
+            s.contains("regressions of earlier tasks are not checked by this verifier version")
         );
         assert!(s.contains("fields from a newer predicate revision not shown: provenance"));
         assert!(s.contains("`.github/speccoder/allowed_signers` at `base`"));

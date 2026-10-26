@@ -234,7 +234,7 @@ impl Adapter for OpenSpec {
             .collect()
     }
 
-    /// The standing bug-fix change (spec 090).
+    /// The standing bug-fix change.
     fn standing_units(&self, _root: &Path) -> Vec<(String, speccoder_core::ladder::Rung)> {
         vec![("bugfixes".to_owned(), speccoder_core::ladder::Rung::Bug)]
     }

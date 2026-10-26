@@ -206,7 +206,7 @@ pub enum Runnable {
     ApproveAndRun {
         /// How the run asks.
         mode: crate::oracle::RunMode,
-        /// The grant ids (F-125 objects) an autopilot run holds.
+        /// The grant ids (object-bound grants) an autopilot run holds.
         grants: Vec<String>,
         /// The sheet's `sha256`: what the person saw approved and frozen.
         /// Required from every interface but a terminal command.

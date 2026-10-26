@@ -5385,7 +5385,7 @@
       "type": "object"
     },
     "OfferedGrant": {
-      "description": "A grant an autopilot run may hold, offered on the approve sheet: one\nobject-bound grant (F-125) a person decided earlier for this feature.",
+      "description": "A grant an autopilot run may hold, offered on the approve sheet: one\nobject-bound grant a person decided earlier for this feature.",
       "properties": {
         "class": {
           "description": "`write`, `command`, `network` or `mcp`.",
@@ -7110,7 +7110,7 @@
         },
         "oracle": {
           "default": [],
-          "description": "One per requirement with scenarios (`US1`), beside the decision\nlines: the tests the run would use, as written at review (D-117).",
+          "description": "One per requirement with scenarios (`US1`), beside the decision\nlines: the tests the run would use, as written at review.",
           "items": {
             "$ref": "#/$defs/OracleView"
           },
@@ -8258,7 +8258,7 @@
           "description": "Approve every approvable decision line, freeze the written tests and\nstart the feature's run, asking or on autopilot.",
           "properties": {
             "grants": {
-              "description": "The grant ids (F-125 objects) an autopilot run holds.",
+              "description": "The grant ids (object-bound grants) an autopilot run holds.",
               "items": {
                 "type": "string"
               },
@@ -9975,7 +9975,7 @@
         },
         {
           "const": "trailer_only",
-          "description": "A closed task of a format home without a task list: its verdict\ncommit is the claim (spec 090's `bug:<slug>`).",
+          "description": "A closed task of a format home without a task list: its verdict\ncommit is the claim (a bug's `bug:<slug>`).",
           "type": "string"
         }
       ]
@@ -9990,7 +9990,7 @@
         },
         {
           "const": "stale",
-          "description": "The evidence verifies, but a requirement the task cites changed\nsince the tick (D-091): it is for the earlier wording.",
+          "description": "The evidence verifies, but a requirement the task cites changed\nsince the tick: it is for the earlier wording.",
           "type": "string"
         },
         {
@@ -10000,7 +10000,7 @@
         },
         {
           "const": "regressed",
-          "description": "Reserved (D-121): a later signed checkpoint marks this earlier task\nregressed. No producer yet; it fails like `unverifiable`.",
+          "description": "Reserved: a later signed checkpoint marks this earlier task\nregressed. No producer yet; it fails like `unverifiable`.",
           "type": "string"
         }
       ]

@@ -185,7 +185,7 @@ pub fn who_in(dir: &Path) -> String {
         .unwrap_or_else(|| "unknown".to_owned())
 }
 
-/// The object-bound grants (F-125) a person approved earlier for this
+/// The object-bound grants a person approved earlier for this
 /// feature's tasks — distinct, by grant id, in the order first decided —
 /// with the objects themselves: what an autopilot run may be given.
 #[must_use]

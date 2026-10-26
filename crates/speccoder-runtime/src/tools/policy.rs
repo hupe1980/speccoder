@@ -181,7 +181,7 @@ impl Object {
         }
     }
 
-    /// Its grant id (F-125): `g-<16 hex>` over what the object is — the
+    /// Its grant id: `g-<16 hex>` over what the object is — the
     /// canonical path, every field of a command, a tool's name and digest —
     /// so one id names one object and nothing else.
     #[must_use]
@@ -344,7 +344,7 @@ pub struct Policy {
     /// In place: what git ignored at the run's start (directories end in
     /// `/`), invisible to the file tools unless protected.
     hidden: Vec<String>,
-    /// An autopilot run (spec 093): a call that would ask a person, and that
+    /// An autopilot run: a call that would ask a person, and that
     /// no grant covers, is refused for the run instead.
     autopilot: bool,
 }

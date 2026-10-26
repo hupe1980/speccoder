@@ -551,7 +551,7 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
         ));
     }
 
-    // What the last autopilot run refused instead of asking (spec 093).
+    // What the last autopilot run refused instead of asking.
     let denied = project_state
         .as_deref()
         .map(|s| crate::oracle::last_denials(s, feature))
@@ -625,7 +625,7 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
                 actions,
             ));
         }
-        // Two test authors read a requirement two ways (spec 093).
+        // Two test authors read a requirement two ways.
         let requirements = match crate::inspect(path, Some(feature)).data() {
             Some(CommandData::Inspect(snap)) => crate::format::of(snap).oracle_requirements(snap),
             _ => Vec::new(),

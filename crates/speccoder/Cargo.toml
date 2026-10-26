@@ -1,6 +1,6 @@
 [package]
 name = "speccoder"
-description = "Spec-driven coding agent for GitHub Spec Kit and OpenSpec projects: the spec is the intent, tasks.md the plan, verification evidence decides done"
+description = "Spec-driven coding, decided by evidence: works through GitHub Spec Kit and OpenSpec tasks and ticks one only when tests derived from the spec prove it"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

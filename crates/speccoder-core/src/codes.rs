@@ -799,7 +799,7 @@ pub const CATALOG: &[Entry] = &[
         E,
         S::UsageError,
         "this spec format has no place for a bug",
-        "A bug lives in the format's own bug structure (Spec Kit's `bug` extension) or in its standing bug-fix unit (Spec Kit's `NNN-bugfixes`, an OpenSpec standing change). Kiro's `bugfix.md` runs once speccoder has a Kiro adapter (F-052); until then nothing is written.",
+        "A bug lives in the format's own bug structure (Spec Kit's `bug` extension) or in its standing bug-fix unit (Spec Kit's `NNN-bugfixes`, an OpenSpec standing change). Kiro projects are not supported: nothing is written.",
         [
             "→ write a spec for the change and run it",
             "→ a change without a reproduction: speccoder do \"…\""

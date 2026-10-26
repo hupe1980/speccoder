@@ -313,7 +313,7 @@ pub struct ReviewReport {
     /// The spec's versions in git, newest first (the last twelve).
     pub history: Vec<SpecVersion>,
     /// One per requirement with scenarios (`US1`), beside the decision
-    /// lines: the tests the run would use, as written at review (D-117).
+    /// lines: the tests the run would use, as written at review.
     #[serde(default)]
     pub oracle: Vec<crate::oracle::OracleView>,
     /// Why the review writes no tests for this unit: its own pipeline

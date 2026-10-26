@@ -171,7 +171,7 @@ pub fn vsa(s: &Summary) -> Value {
 }
 
 /// Why `v` may not go into a statement: an absolute local path, a URL with
-/// credentials, or something shaped like a secret (FR-013).
+/// credentials, or something shaped like a secret.
 pub fn check_clean(v: &Value) -> Result<(), String> {
     let mut problem = None;
     walk(v, &mut |s| {

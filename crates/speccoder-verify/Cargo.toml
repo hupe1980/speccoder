@@ -1,6 +1,6 @@
 [package]
 name = "speccoder-verify"
-description = "Checks every ticked task of a branch against its signed speccoder attestation: no model, no network, nothing from the checked tree executed"
+description = "Checks every ticked task of a branch against its signed speccoder evidence: no model, no network, nothing from the branch executed"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

@@ -279,7 +279,7 @@ fn diff(repo: &Path, commit: &str) -> TourStep {
 }
 
 /// Step 5: what passed after — acceptance, held-out, the checks against
-/// their baseline — and signed dependencies (D-122), shown, never failing.
+/// their baseline — and signed dependencies, shown, never failing.
 fn green(statements: &[Value], tv: Option<&TaskVerificationV0>, verdict: Option<&str>) -> TourStep {
     let Some(green) = phase(statements, "green") else {
         return step(

@@ -1,4 +1,4 @@
-//! The oracle at review (D-117, spec 093): per requirement, the visible
+//! The oracle at review: per requirement, the visible
 //! acceptance tests the run would use — written on the person's request,
 //! red-checked on the current tree, shaped by the person and frozen with
 //! the approval — and the review comments anchored to what the person
@@ -330,7 +330,7 @@ pub struct ReviewApproval {
 }
 
 /// A grant an autopilot run may hold, offered on the approve sheet: one
-/// object-bound grant (F-125) a person decided earlier for this feature.
+/// object-bound grant a person decided earlier for this feature.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct OfferedGrant {
     /// Its grant id: what `--grant` and the sheet's tick name.

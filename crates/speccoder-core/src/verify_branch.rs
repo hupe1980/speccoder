@@ -10,9 +10,9 @@ use serde::Serialize;
 
 use crate::{ObjectVerification, RequirementDrift, SignerView, TraceRow, VerifyOutcome};
 
-/// `not_evaluated`: earlier-task regressions (D-121) have no signed record
+/// `not_evaluated`: earlier-task regressions have no signed record
 /// this verifier could read yet.
-pub const D121_REGRESSIONS: &str = "d121_regressions";
+pub const EARLIER_TASK_REGRESSIONS: &str = "earlier_task_regressions";
 /// `not_evaluated`: a trailer-only bug task (`Spec-Task: <unit>/bug:<slug>`)
 /// is in the checked range, and this version cannot check it.
 pub const TRAILER_ONLY_TASKS: &str = "trailer_only_tasks";
@@ -33,7 +33,7 @@ pub enum TickKind {
     /// A `[X]` line in a task list.
     Tick,
     /// A closed task of a format home without a task list: its verdict
-    /// commit is the claim (spec 090's `bug:<slug>`).
+    /// commit is the claim (a bug's `bug:<slug>`).
     TrailerOnly,
 }
 
@@ -123,11 +123,11 @@ pub enum TickOutcome {
     /// The evidence verifies; `verdict` says what it shows.
     Evidenced,
     /// The evidence verifies, but a requirement the task cites changed
-    /// since the tick (D-091): it is for the earlier wording.
+    /// since the tick: it is for the earlier wording.
     Stale,
     /// The evidence does not verify; `reason` says why.
     Unverifiable,
-    /// Reserved (D-121): a later signed checkpoint marks this earlier task
+    /// Reserved: a later signed checkpoint marks this earlier task
     /// regressed. No producer yet; it fails like `unverifiable`.
     Regressed,
 }
@@ -515,7 +515,7 @@ mod tests {
             Conclusion::Failure
         );
         assert_eq!(
-            Conclusion::of(&[ok], false, &[D121_REGRESSIONS.to_owned()]),
+            Conclusion::of(&[ok], false, &[EARLIER_TASK_REGRESSIONS.to_owned()]),
             Conclusion::Success
         );
     }

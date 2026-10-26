@@ -1,4 +1,4 @@
-//! The shared pieces this build introduces (spec 090) serialise to the field
+//! The shared pieces this build introduces serialise to the field
 //! and name sets their owners' data models define, so the owners extend
 //! them rather than replace them.
 

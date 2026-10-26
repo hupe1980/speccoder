@@ -1287,7 +1287,7 @@
           "description": "Approve every approvable decision line, freeze the written tests and\nstart the feature's run, asking or on autopilot.",
           "properties": {
             "grants": {
-              "description": "The grant ids (F-125 objects) an autopilot run holds.",
+              "description": "The grant ids (object-bound grants) an autopilot run holds.",
               "items": {
                 "type": "string"
               },

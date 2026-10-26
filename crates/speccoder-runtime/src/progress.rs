@@ -208,7 +208,7 @@ pub enum Event {
     },
 }
 
-/// A step of the oracle at review (spec 093).
+/// A step of the oracle at review.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum OracleEvent {

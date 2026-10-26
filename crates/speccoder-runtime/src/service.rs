@@ -35,7 +35,7 @@ pub mod next {
 
 /// The person's review of the spec.
 pub mod review {
-    /// The comment tray and the last revision turn (spec 093).
+    /// The comment tray and the last revision turn.
     pub use crate::comments::list as comments;
     pub use crate::review::report;
 }

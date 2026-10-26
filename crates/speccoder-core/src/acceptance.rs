@@ -1,6 +1,6 @@
 //! Acceptance tests decided before the run: one record for every producer
-//! — a review that froze the oracle (spec 093) and a bug's confirmed
-//! reproduction (spec 090). The fix's checkpoint reuses the record instead
+//! — a review that froze the oracle and a bug's confirmed
+//! reproduction. The fix's checkpoint reuses the record instead
 //! of calling the acceptance author; a change of the wording it was decided
 //! on lapses it.
 

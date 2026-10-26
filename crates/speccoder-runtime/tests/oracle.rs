@@ -1,4 +1,4 @@
-//! The oracle at review (spec 093) end to end with a scripted model and
+//! The oracle at review end to end with a scripted model and
 //! real red runs: tests written at review, shaped by the person, compared
 //! for ambiguity, frozen with the approval and reused by the run without
 //! an author call — and no held-out path or literal in any payload.
@@ -178,7 +178,7 @@ fn write(r: &Path, state: &Path, d: Arc<dyn ModelProvider>) -> CommandResult {
     )
 }
 
-/// No held-out path or literal anywhere in `text` (SC-003).
+/// No held-out path or literal anywhere in `text`.
 fn assert_no_held_out(text: &str) {
     assert!(!text.contains(SECRET), "held-out literal in {text}");
     assert!(!text.contains(HELD_OUT_PATH), "held-out path in {text}");

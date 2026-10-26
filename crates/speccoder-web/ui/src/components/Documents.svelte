@@ -88,7 +88,7 @@
     article?.closest("main")?.scrollTo({ top: 0 });
   }
   // A passage selected in the rendered document: a Comment button beside
-  // it (or `c`), then a popover for the words (spec 093).
+  // it (or `c`), then a popover for the words.
   let picked = $state<{ text: string; x: number; y: number } | null>(null);
   let composing = $state(false);
   let words = $state("");

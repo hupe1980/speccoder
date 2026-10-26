@@ -1,6 +1,6 @@
 [package]
 name = "speccoder-core"
-description = "Pure domain types of speccoder: ids, task graph, state machines, command results. No IO, no async."
+description = "Pure domain of speccoder: project snapshots, the task graph, verdict rules and command results. No IO, no async."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

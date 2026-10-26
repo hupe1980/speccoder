@@ -342,7 +342,7 @@ pub struct Settings<'a> {
     pub in_place: bool,
     /// In place: what git ignored at the run's start, hidden from the tools.
     pub hidden: &'a [String],
-    /// An autopilot run: a call that would ask is refused instead (spec 093).
+    /// An autopilot run: a call that would ask is refused instead.
     pub autopilot: bool,
 }
 

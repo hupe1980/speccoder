@@ -40,7 +40,7 @@ struct Decision {
 struct Record {
     #[serde(default)]
     requirements: BTreeMap<String, Decision>,
-    /// The frozen oracle, by requirement (`US1`): digests only (spec 093).
+    /// The frozen oracle, by requirement (`US1`): digests only.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     oracle: BTreeMap<String, crate::oracle::OracleEntry>,
     /// The approval that froze it.

@@ -206,7 +206,7 @@ fn a_thin_set_is_measured_and_what_got_through_is_named() {
             .unwrap()
             .contains("panic!")
     );
-    // The variant author never saw a test (FR-004).
+    // The variant author never saw a test.
     let author = f
         .asked()
         .iter()
@@ -217,7 +217,7 @@ fn a_thin_set_is_measured_and_what_got_through_is_named() {
         !author.contains("login exists") && !author.contains("acceptance_login"),
         "{author}"
     );
-    // The implementer never saw a variant (SC-003).
+    // The implementer never saw a variant.
     for req in implementer_requests(&f) {
         assert!(!req.contains("nope") && !req.contains("near-miss"), "{req}");
     }

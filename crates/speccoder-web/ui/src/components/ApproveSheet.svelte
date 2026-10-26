@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Approve the spec and run (spec 093): one of three — ask on risky
+  // Approve the spec and run: one of three — ask on risky
   // calls, autopilot, or keep refining — with what the approval records and
   // freezes in view. Autopilot asks nobody: a call that would ask is refused
   // and listed afterwards; it holds only the grants ticked here, each shown

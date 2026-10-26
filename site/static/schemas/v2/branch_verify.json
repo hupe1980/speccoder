@@ -314,7 +314,7 @@
         },
         {
           "const": "trailer_only",
-          "description": "A closed task of a format home without a task list: its verdict\ncommit is the claim (spec 090's `bug:<slug>`).",
+          "description": "A closed task of a format home without a task list: its verdict\ncommit is the claim (a bug's `bug:<slug>`).",
           "type": "string"
         }
       ]
@@ -329,7 +329,7 @@
         },
         {
           "const": "stale",
-          "description": "The evidence verifies, but a requirement the task cites changed\nsince the tick (D-091): it is for the earlier wording.",
+          "description": "The evidence verifies, but a requirement the task cites changed\nsince the tick: it is for the earlier wording.",
           "type": "string"
         },
         {
@@ -339,7 +339,7 @@
         },
         {
           "const": "regressed",
-          "description": "Reserved (D-121): a later signed checkpoint marks this earlier task\nregressed. No producer yet; it fails like `unverifiable`.",
+          "description": "Reserved: a later signed checkpoint marks this earlier task\nregressed. No producer yet; it fails like `unverifiable`.",
           "type": "string"
         }
       ]

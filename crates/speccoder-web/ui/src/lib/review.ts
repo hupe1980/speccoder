@@ -1,4 +1,4 @@
-// The review's own logic, beside the host's payloads (spec 093): what an
+// The review's own logic, beside the host's payloads: what an
 // approval freezes per requirement, when Approve and Run may run, the
 // comment tray grouped by section, a selection found in its document's
 // Markdown, and the Code view's nudge lines. Pure: the components render

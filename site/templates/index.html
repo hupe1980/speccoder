@@ -100,11 +100,19 @@
     <div class="cards">
       <article class="card">
         <h3>Evidence decides</h3>
-        <p><code>verified</code> means spec-derived tests went red → green and nothing regressed. Optional mutation testing and a reasoning-blind gaming monitor catch tests written to pass.</p>
+        <p><code>verified</code> means spec-derived tests went red → green and nothing regressed. Held-out tests the model never sees and wrong variants of the change test the tests themselves.</p>
+      </article>
+      <article class="card">
+        <h3>Review the tests first</h3>
+        <p>Approve each requirement together with the tests derived from it — red before any code exists. Change the spec later and the older ticks say so.</p>
+      </article>
+      <article class="card">
+        <h3>Bugs, reproduced first</h3>
+        <p><code>speccoder bug</code> writes a test that fails the way you describe, asks you once, and accepts a fix only if undoing it makes that test fail again.</p>
       </article>
       <article class="card">
         <h3>Spec Kit and OpenSpec</h3>
-        <p>Reads your specs as Spec Kit 0.13–1.2 and OpenSpec 1.0+ write them, and runs their planning skills, Spec Kit's hooks and workflows, and OpenSpec's archive checks.</p>
+        <p>Reads your specs as Spec Kit 0.13–1.2 and OpenSpec 1.0+ write them, and runs their own planning skills, hooks and workflows.</p>
       </article>
       <article class="card">
         <h3>Isolated and sandboxed</h3>
@@ -112,7 +120,7 @@
       </article>
       <article class="card">
         <h3>Every call governed</h3>
-        <p>A policy classifies each call before it runs. Approvals are inline, in your editor or later — and every decision records who made it.</p>
+        <p>Each call is classified before it runs. An approval covers exactly what you saw and ends with the run; every decision records who made it.</p>
       </article>
       <article class="card">
         <h3>Durable and replayable</h3>
@@ -123,12 +131,8 @@
         <p>Anthropic, OpenAI or a local OpenAI-compatible server — or let Claude Code or Codex make the attempts and keep speccoder's judgement.</p>
       </article>
       <article class="card">
-        <h3>The spec stays the truth</h3>
-        <p>Sign off each requirement's wording. Change it later and the ticks proven against the old words say so; one command re-checks the code against the spec as it is.</p>
-      </article>
-      <article class="card">
-        <h3>Ready for review</h3>
-        <p>Start from a GitHub issue, hand off a draft pull request whose description is the evidence behind every tick — no <code>gh</code> needed. speccoder never merges.</p>
+        <h3>Proof in the pull request</h3>
+        <p>Every tick is signed. <code>speccoder-verify</code> checks them on any pull request — no model, no network — and posts the <code>speccoder / evidence</code> check with a tour of each task.</p>
       </article>
     </div>
   </div>
