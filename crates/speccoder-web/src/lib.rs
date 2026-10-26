@@ -197,6 +197,17 @@ fn revision(q: &FeatureQuery) -> Option<String> {
     ok.then(|| r.to_owned())
 }
 
+/// A project-relative path the file view may show.
+fn file_path_ok(path: &str) -> bool {
+    let p = Path::new(path);
+    !path.is_empty()
+        && !p.is_absolute()
+        && p.components()
+            .all(|c| matches!(c, std::path::Component::Normal(_)))
+        && speccoder_runtime::service::worktree::state_dir()
+            .is_none_or(|s| !Path::new(path).starts_with(&s))
+}
+
 fn envelope(r: &CommandResult) -> Json<Value> {
     Json(serde_json::to_value(r).unwrap_or(Value::Null))
 }
@@ -243,6 +254,16 @@ async fn review(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Json<
     let root = s.root.clone();
     let r =
         off(move || speccoder_runtime::service::review::report(&root, q.feature.as_deref())).await;
+    envelope(&r)
+}
+
+/// The comment tray and the last revision turn.
+async fn review_comments(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Json<Value> {
+    let root = s.root.clone();
+    let r = off(move || {
+        speccoder_runtime::service::review::comments(&root, q.feature.as_deref(), None)
+    })
+    .await;
     envelope(&r)
 }
 
@@ -481,6 +502,11 @@ struct FileQuery {
 /// One file at the feature's revision, when the tree lists it.
 async fn file(State(s): State<Shared>, Query(q): Query<FileQuery>) -> Json<Value> {
     let root = s.root.clone();
+    // Project paths only: nothing absolute, nothing up, nothing of the
+    // state directory (where drafts, frozen and held-out sets live).
+    if !file_path_ok(&q.path) {
+        return Json(json!({ "error": format!("{} is not a project file", q.path) }));
+    }
     let markdown = q.path.to_ascii_lowercase().ends_with(".md");
     // Committed at the revision, else untracked in the worktree.
     let r = off(move || {
@@ -846,6 +872,7 @@ pub fn router(s: Shared) -> Router {
         .route("/api/bug", get(bug))
         .route("/api/account", get(account))
         .route("/api/review", get(review))
+        .route("/api/review/comments", get(review_comments))
         .route("/api/approvals", get(approvals))
         .route("/api/evidence", get(evidence))
         .route("/api/tour", get(tour))
