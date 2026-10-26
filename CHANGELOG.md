@@ -75,6 +75,9 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- An OpenSpec project without a change got no first step: Setup, the
+  journey and `speccoder actions` now offer `speccoder spec propose "…"`,
+  as Spec Kit projects get `spec specify`.
 - The app read the journal for several requests at once and refused
   itself ("another speccoder is working on this project"); reads now share
   one handle and wait briefly for another process.
