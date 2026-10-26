@@ -256,8 +256,10 @@ pub fn checks(
     // The state directory.
     out.push(match crate::worktree::state_dir() {
         Some(dir) => {
-            let writable =
-                std::fs::create_dir_all(&dir).is_ok() && tempfile::tempfile_in(&dir).is_ok();
+            // Probed without creating it: a check writes nothing of its
+            // own — the directory, or the nearest folder it would be made in.
+            let existing = dir.ancestors().find(|a| a.is_dir());
+            let writable = existing.is_some_and(|a| tempfile::tempfile_in(a).is_ok());
             if writable {
                 check("state", DoctorLevel::Pass, dir.display().to_string())
             } else {

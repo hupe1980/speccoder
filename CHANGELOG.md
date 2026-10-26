@@ -24,6 +24,13 @@ adheres to [Semantic Versioning](https://semver.org/).
   the journal, not by words in the message. A refused request no longer
   stops the suite because its message mentions "credit" or "quota".
 
+### Fixed
+
+- **Reading a project no longer creates a journal.** `task show --account`
+  and a strict replay on a project speccoder never ran created an empty
+  journal in the state directory, and `doctor` created the state directory
+  itself; now only a run or a decision creates them.
+
 ### Upgrading
 
 - A project journal written by 0.2.0 still opens. A run in it that recorded a

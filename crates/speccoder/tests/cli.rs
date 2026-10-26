@@ -1106,3 +1106,36 @@ fn bug_refuses_missing_words_before_writing_and_a_symptom_named_run_follows_two_
     let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
     assert_eq!(v["status"], "usage_error", "{v}");
 }
+
+/// Reading a project records nothing: on a project speccoder never ran,
+/// the read commands neither create the state directory nor a journal —
+/// a missing journal is "nothing recorded", never a new file.
+#[test]
+fn reading_a_fresh_project_creates_no_state() {
+    let dir = make_project();
+    let state = tempfile::tempdir().unwrap();
+    let missing = state.path().join("state");
+    for args in [
+        &["status"][..],
+        &["inbox"],
+        &["report"],
+        &["report", "--approvals"],
+        &["report", "--live"],
+        &["actions"],
+        &["doctor"],
+        &["task", "show", "T005", "--account"],
+    ] {
+        let _ = speccoder()
+            .args(args)
+            .current_dir(dir.path())
+            .env("SPECCODER_STATE_DIR", &missing)
+            .output()
+            .unwrap();
+        assert!(
+            !missing.exists(),
+            "`speccoder {}` created {}",
+            args.join(" "),
+            missing.display()
+        );
+    }
+}
