@@ -1560,8 +1560,14 @@ fn special_rejected(
     Ok(rejected)
 }
 
-/// The trailers a bug task's tick commit carries.
-pub(crate) fn trailers(fix: &Fix, verdict_word: &str) -> String {
+/// The trailers a bug task's tick commit carries; `rulings`: the person's
+/// rulings on special cases (`task rule --tests-right`), named when one
+/// let a special case through.
+pub(crate) fn trailers(
+    fix: &Fix,
+    verdict_word: &str,
+    rulings: &[speccoder_core::strength::Ruling],
+) -> String {
     let outcome = if matches!(verdict_word, "verified" | "attested") {
         "fixed"
     } else {
@@ -1576,6 +1582,19 @@ pub(crate) fn trailers(fix: &Fix, verdict_word: &str) -> String {
         &fix.record
             .trailer(&crate::pre_frozen::manifest_digest(&fix.record)),
     );
+    for s in fix
+        .bug
+        .special_case
+        .iter()
+        .filter(|s| s.ruled && !s.rejected)
+    {
+        if let Some(r) = rulings.iter().find(|r| r.digest == s.digest) {
+            out.push_str(&format!(
+                "Ruling: tests-right {} {} by {} — {}\n",
+                s.statement, r.digest, r.by, r.reason
+            ));
+        }
+    }
     if let Some(i) = fix.bug.issue.as_ref().filter(|_| outcome == "fixed") {
         out.push_str(&format!("Fixes #{}\n", i.number));
     }

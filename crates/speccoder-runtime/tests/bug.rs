@@ -797,6 +797,47 @@ fn a_fix_that_only_recognises_the_reproductions_input_is_never_verified() {
         "{:?}",
         b.special_case
     );
+    let b = b.clone();
+
+    // The person rules the reproduction right: the next run judges the
+    // held attempt again from the journal, with no model call, and ticks.
+    let calls = f.calls();
+    let ruled = speccoder_runtime::controls::rule(
+        r.path(),
+        Some(&b.unit),
+        &b.task,
+        "the empty title is the only input the bug is about",
+        None,
+        state.path(),
+    );
+    assert_eq!(ruled.status(), CommandStatus::Ok, "{}", ruled.message());
+    let (_, nothing) = fake();
+    let res = bug::run_with(
+        r.path(),
+        None,
+        Some(&b.key()),
+        state.path(),
+        nothing,
+        None,
+        &RunOptions::default(),
+    );
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let b = the_bug(&res);
+    assert_eq!(b.outcome, Outcome::Fixed);
+    assert!(
+        b.special_case.iter().all(|s| s.rejected || s.ruled),
+        "{:?}",
+        b.special_case
+    );
+    assert_eq!(f.calls(), calls, "a model call was repeated");
+    let message = git(
+        r.path(),
+        &["log", "-1", "--format=%B", b.commit.as_deref().unwrap()],
+    );
+    assert!(
+        message.contains("Ruling: tests-right E1 sha256:"),
+        "{message}"
+    );
 }
 
 #[test]
