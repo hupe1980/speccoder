@@ -8,14 +8,12 @@ group = "Trust"
 nav = "Evaluation and benchmarks"
 +++
 
-speccoder is measured against oracles it never sees.
-
 ## The evaluation suite
 
-A suite is a directory of cases plus an `eval.toml` whose `[model]` and `[budget]` every case runs with. The repository's `evals/` suite holds small Spec Kit and OpenSpec projects; `evals/bugs/` is a suite of bug cases. Each case is a directory with:
+speccoder is measured against oracles it never sees. A suite is a directory of cases plus an `eval.toml` whose `[model]` and `[budget]` every case runs with. The repository's `evals/` suite holds small Spec Kit and OpenSpec projects; `evals/bugs/` is a suite of bug cases. Each case is a directory with:
 
 - `project/`: a committed project with a spec, plan, tasks and the visible checks in its `speccoder.toml`;
-- `oracle/`: **hidden oracle** tests, copied into the worktree only after the attempt, which decide whether a completion is really correct;
+- `oracle/`: **hidden oracle** tests, copied into the worktree only after the attempt, which decide whether a completion is correct;
 - `case.toml`: the task, the oracle command (`[oracle] argv`) and the expectation (`expect`).
 
 | `expect` | The right answer |
@@ -31,7 +29,7 @@ A **bug case** adds a `[bug]` table (`symptom`, `expected`, `unchanged`) and run
 speccoder eval evals                         # every case (default directory: evals)
 speccoder eval evals/bugs                    # the bug cases
 speccoder eval evals --case wrap-text        # one case
-speccoder eval evals --repeat 3              # results vary between runs; repeat (1–100)
+speccoder eval evals --repeat 3              # repeat each case (1–100)
 speccoder eval evals --keep runs/            # keep each case's repository and journal
 speccoder eval evals --executor claude       # let Claude Code (or codex) make the attempts
 ```
@@ -61,7 +59,7 @@ If the model provider refuses a request, the suite stops there and says which ca
 
 ## Comparing models and agents
 
-The same cases and oracles compare one model with another, or speccoder's own loop with an external agent. With `--executor`, the agent makes every attempt while the model in `eval.toml` still writes the acceptance tests. `--executor` is refused when `eval.toml` already has an `[executor]`. Results on a handful of cases are indicative, not a leaderboard: use `--repeat` and read the per-case results.
+The same cases compare one model with another, or speccoder's own loop with an external agent. With `--executor`, the agent makes every attempt while the model in `eval.toml` still writes the acceptance tests; it is refused when `eval.toml` already has an `[executor]`. Results on a handful of cases are indicative: use `--repeat` and read the per-case results.
 
 ## Public benchmarks
 
@@ -76,4 +74,4 @@ speccoder eval bench --executor claude
 
 Each case's project is the repository at `base_commit` with a Spec Kit feature around the issue: `spec.md` carries the issue text and one task resolves it, `expect = "complete"`. The oracle is the set of files the benchmark's `test_patch` adds or changes, which the agent never sees. The test command comes from the instance's `test_cmd`, else `--test-cmd`, else the project (Cargo, npm, pytest, Go).
 
-Downloading datasets, cloning repositories and providing the environment the tests need are up to you: SWE-bench runs each instance in a container image; here the tests run on your machine, in the sandbox.
+Downloading datasets, cloning repositories and providing the environment the tests need are up to you: the tests run on your machine, in the sandbox, not in SWE-bench's container images.

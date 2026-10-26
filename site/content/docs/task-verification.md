@@ -7,7 +7,7 @@ weight = 97
 group = "Trust"
 +++
 
-speccoder's in-toto predicate: *this task of this spec was verified, by this evidence, against the spec text its commit holds*. Anyone can check it, or write a verifier, without speccoder. The structure follows in-toto's [predicate template](https://github.com/in-toto/attestation/blob/main/spec/predicates/template.md).
+speccoder's in-toto predicate: *this task of this spec was verified, by this evidence, against the spec text its commit holds*. A reviewer or CI job checks a ticked task (`[X]` in `tasks.md`, a task of an OpenSpec change) with it, against their own trust, with or without speccoder. The structure follows in-toto's [predicate template](https://github.com/in-toto/attestation/blob/main/spec/predicates/template.md).
 
 ## Predicate type and versioning
 
@@ -19,10 +19,6 @@ Within v0 the predicate only grows: an added field raises **`revision`** (an int
 - **Producers** MUST NOT make an [opaque field](#opaque-fields) required.
 
 This page describes revision **2**.
-
-## Purpose
-
-A reviewer or a CI job checks that a ticked task (`[X]` in `tasks.md`, a task of an OpenSpec change) was verified against the spec its commit holds: which tests failed first and passed after, what regressed, how strong the tests are, who decided otherwise. Signatures are checked against the reviewer's own trust.
 
 ## Prerequisites
 
@@ -94,7 +90,7 @@ A verifier applies, per ticked task (as [`speccoder-verify`](@/docs/verifier.md)
 
 **The red excerpt** is cut from the end of the captured output and signed only when clean: no absolute local path, no URL with credentials, nothing key-shaped. Otherwise `excerpt` is `null` and `withheld` true.
 
-**Held-out publication.** `refs/speccoder/held-out/<unit>` carries exactly the held-out sets whose manifest digest a task closed on the pushed head names in its `held_out` phase (never an open task's set), each at `<key>/manifest.json` and `<key>/files/…`. Each publication commit is parented on the pushed tip and the previous publication, so the ref only grows ([where the sets are kept](@/docs/evidence.md#where-they-are-kept)).
+**Held-out publication.** `refs/speccoder/held-out/<unit>` carries the held-out sets whose manifest digest a closed task names in its `held_out` phase, each at `<key>/manifest.json` and `<key>/files/…` ([where the sets are kept](@/docs/evidence.md#where-they-are-kept)).
 
 ## Example
 

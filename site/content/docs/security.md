@@ -10,7 +10,7 @@ nav = "Security and the sandbox"
 
 ## The threat model in one sentence
 
-**Your checks run code the model wrote**, possibly after it read text an attacker controls (a dependency's README, an issue, a tool's output). speccoder treats the code it runs as untrusted:
+**Your checks run code the model wrote**, possibly after it read text an attacker controls (a dependency's README, an issue, a tool's output), so speccoder treats the code it runs as untrusted:
 
 | Layer | Decides | Where |
 |---|---|---|
@@ -23,17 +23,15 @@ nav = "Security and the sandbox"
 
 ## Isolation
 
-All work happens on the branch `speccoder/<feature>`, in a worktree under speccoder's state directory; it reaches your branch only when you merge it. speccoder never fetches or pushes on its own: `speccoder pr` pushes, after you confirm. The model writes in your checkout only through a hosted planning skill (`speccoder spec …`), which may write only the format's planning artifacts and leaves them uncommitted.
+All work happens on `speccoder/<feature>` in a worktree under speccoder's state directory, and reaches your branch only when you merge it. speccoder never fetches or pushes on its own; `speccoder pr` pushes after you confirm. The model writes in your checkout only through a hosted planning skill (`speccoder spec …`), which may write only the format's planning artifacts and leaves them uncommitted.
 
 ### In-place mode
 
-[`--in-place`](@/docs/running.md#in-place-runs) runs the attempt in your checkout instead of a worktree. Instead:
+[`--in-place`](@/docs/running.md#in-place-runs) runs the attempt in your checkout. It needs a clean checkout and stops when HEAD, the branch, the tree, or any spec, plan, task list, constitution, check or agent-configuration file (git-ignored ones included) changes other than by its own tick. Instead of a worktree's isolation:
 
-- **A clean checkout.** The run refuses a dirty checkout, works on `speccoder/<feature>`, and before every task checks that HEAD, the branch and the tree are as speccoder left them.
-- **Frozen intent and judge.** Every spec, plan, task list, constitution, check and agent-configuration file, git-ignored ones included, is hashed at the start and compared before every task and every tick. Only the engine's own tick may change them.
 - **No git that moves the checkout.** The model's `git checkout`, `switch`, `reset`, `commit`, `merge`, `rebase`, `cherry-pick`, `revert`, `stash`, `branch`, `tag`, `update-ref`, `worktree`, `am`, `apply --index` and `restore --staged` are denied.
-- **Only what a worktree would hold.** The file tools refuse files git ignored at the start, except the spec, plan and tasks, which stay readable and never writable. The list is journaled, so a resume or replay decides the same way.
-- **`.git` read-only, ignored secrets unreadable.** macOS: Seatbelt rules. Linux: each command starts in its own user and mount namespace with `.git` bound read-only and git-ignored credential-like files (`.env`, keys) covered (they read as empty).
+- **Only what a worktree would hold.** The file tools refuse files git ignored at the start (a journaled list), except the spec, plan and tasks, which stay readable and never writable.
+- **`.git` read-only, ignored secrets unreadable.** macOS: Seatbelt rules. Linux: each command starts in its own user and mount namespace with `.git` bound read-only and git-ignored credential-like files (`.env`, keys) reading as empty.
 - **A guard where the sandbox cannot.** Some hosts forbid user namespaces (a container's default seccomp profile, Ubuntu's AppArmor restriction); the run says so at the start. In every case speccoder hashes `.git`'s `config`, `hooks/`, `info/` and every branch and tag but its own, and stops before the next tick when they change (`GIT-CHANGED`). speccoder's own git calls never run hooks or an fsmonitor.
 
 Not confined in place:
@@ -50,13 +48,13 @@ Every tool call is classified before it runs.
 
 **Denied** (no approval lifts a denial):
 - writing the spec (`.specify/`, `specs/`, `openspec/`) or anything that decides verification: `speccoder.toml`, CI configuration (`.github/`, `.gitlab-ci.yml`), test-runner and build configuration (`.cargo/config*`, `.config/nextest.toml`, `pytest.ini`, `tox.ini`, jest/vitest configs, `deny.toml`, `justfile`, `Makefile`);
-- writing agent configuration (`.claude/`, `.agents/`, `.codex/`, `.gemini/`, `.opencode/`, `.cursor/`, `.kiro/` and others, `.mcp.json`, `opencode.json`): hooks, settings, skills and MCP servers there run code in a later agent session, outside the sandbox;
+- writing agent configuration (`.claude/`, `.agents/`, `.codex/`, `.gemini/`, `.opencode/`, `.cursor/`, `.kiro/` and others, `.mcp.json`, `opencode.json`), whose hooks, settings, skills and MCP servers run code in a later agent session, outside the sandbox;
 - anything under `.git`;
 - reading or writing secret-looking files (`.env*`, `*.pem`, `*.key`, SSH keys, `.netrc`, `.npmrc`, `.pypirc`);
 - paths outside the worktree, symlink escapes included;
 - privilege escalation (`sudo`, `su`, `doas`, `pkexec`), git remotes (`push`, `fetch`, `pull`, `clone`, `remote`, `submodule`), destructive git (`clean`, `reset --hard`, `filter-branch`), and writing git notes (attestations are speccoder's).
 
-**Needs a person:** agent context files (`AGENTS.md`, `CLAUDE.md`, `GEMINI.md`); dependency manifests; tests that existed before the attempt; shells, `env`, `xargs`, `eval`; network tools; recursive `rm`; git commands that change state; unlisted commands; MCP tools not in `allow`; any command that asks for the network.
+**Needs a person** ([approvals](@/docs/approvals.md)): agent context files (`AGENTS.md`, `CLAUDE.md`, `GEMINI.md`); dependency manifests; tests that existed before the attempt; shells, `env`, `xargs`, `eval`; network tools; recursive `rm`; git commands that change state; unlisted commands; MCP tools not in `allow`; any command that asks for the network.
 
 **Allowed:** reading the project, writing ordinary source files, the configured checks, and the [allow lists](@/docs/approvals.md#allow-lists).
 
@@ -66,11 +64,7 @@ Every tool call is classified before it runs.
 - A write is judged on the file it reaches: symlinks of existing directories are resolved (they must stay inside the worktree), and the file itself is never written through a symlink.
 - A write whose spelling reaches another file (a symlinked directory, another letter case) is refused unless it names that file.
 
-**Approvals stay narrow.** A grant covers one resolved object, is checked again when the call runs, and ends with its run. Arguments copied from content the model read can be approved once only. A prefix allow list is saved only from a preview of what it would newly allow. A run prompts at most `[approvals] budget` times, so a flood of prompts cannot tire the reviewer into a yes. Details: [approvals](@/docs/approvals.md#what-a-decision-covers).
-
-Three denied calls in a row end an attempt.
-
-After every command speccoder re-checks the protected inputs, git-ignored ones included: a command (a test, say) that changed one ends the attempt with an integrity finding.
+Approvals stay narrow: a grant covers one resolved object and ends with its run, copied arguments can be approved once only, and a run prompts a bounded number of times ([what a decision covers](@/docs/approvals.md#what-a-decision-covers)). Three denied calls in a row end an attempt. After every command speccoder re-checks the protected inputs, git-ignored ones included: a command that changed one ends the attempt with an integrity finding.
 
 ## The OS sandbox
 
@@ -84,8 +78,8 @@ Inside, a command:
 - **writes** only to the worktree, a private temporary directory and the package caches builds need (`~/.cargo/registry`, `~/.cache`, `~/.npm`, `~/go/pkg/mod`, `~/Library/Caches`, …), plus `[sandbox] writable`; not to speccoder's state, `~/.cargo/bin` or your checkout;
 - **cannot read** credentials: `~/.ssh`, `~/.aws`, `~/.azure`, `~/.gnupg`, `~/.netrc`, `~/.docker`, `~/.kube`, `~/.npmrc`, `~/.pypirc`, `~/.git-credentials`, `~/.password-store`, `~/.config/gh`, `~/.config/gcloud`, `~/.cargo/credentials`, keyrings and keychains;
 - **has no network** beyond loopback (`[sandbox] network = "loopback"`, the default), so local test servers work; on Linux loopback is blocked too;
-- **cannot connect to a Unix socket outside the writable paths** — the Docker daemon's, a database's, an agent's; a check that needs one lists its directory in `[sandbox] writable`;
-- on macOS **cannot open applications** or send Apple events, which would run code outside the sandbox.
+- **cannot connect to a Unix socket outside the writable paths** (the Docker daemon's, a database's, an agent's); a check that needs one lists its directory in `[sandbox] writable`;
+- on macOS **cannot open applications** or send Apple events.
 
 A command gets the network only when it is exactly in `[sandbox] network_allow`, extends a `[sandbox] network_allow_prefix` entry, or a person approves that exact call. Fetch dependencies before a run (`cargo fetch`, `npm ci`), or allow the fetching command. CI runs an escape suite against these properties on macOS and Linux.
 
@@ -104,42 +98,26 @@ profile speccoder /usr/local/bin/speccoder flags=(unconfined) {
 
 ## Held-out tests
 
-Held-out tests never enter the project's repository, the worktree (except overlaid while a judge run checks them) or any implementer prompt; they are sealed in the state directory ([where](@/docs/evidence.md#where-they-are-kept)). The app, the CLI and every event show their count, state and digest — no path, no content, no literal.
-
-- The web interface's file view serves project paths only, follows no symbolic link, and reads an untracked file only when its real path is inside the feature's worktree and no held-out set is overlaid. The diff view shows only commits a branch, `HEAD` or a saved attempt reaches.
-- Comments, revision turns, nudges and every author call but the held-out author's own never carry held-out material.
+Held-out tests are sealed in the state directory ([where they are kept](@/docs/evidence.md#where-they-are-kept)). The web interface's file view serves project paths only, follows no symbolic link, and reads an untracked file only when its real path is inside the feature's worktree and no held-out set is overlaid; the diff view shows only commits a branch, `HEAD` or a saved attempt reaches. Comments, revisions, nudges and every author call but the held-out author's own never carry held-out material.
 
 ## Secrets
 
 - API keys are read only from the environment, and never written to the journal or the output.
 - Every command speccoder starts gets an environment without secret-looking variables: `*_API_KEY`, `*_TOKEN`, `*SECRET*`, `*PASSWORD*`, `AWS_*`, `ANTHROPIC_*`, `OPENAI_*`, `SSH_AUTH_SOCK`, `GIT_ASKPASS`, `SSH_ASKPASS`. Colour is off for these commands (`NO_COLOR=1`, `CARGO_TERM_COLOR=never`).
 - Commands run with stdin closed, a deadline for their whole process group, and capped output.
+- Signing keys: see [what a signature proves](@/docs/attestations.md#what-a-signature-proves).
 
 ## Provenance labels
 
-speccoder runs on the [agentplane](https://crates.io/crates/agentplane) runtime, whose gates decide by **labels**: where content came from. Everything the model reads is labelled by its real source where it enters:
-
-- **trusted:** speccoder's own instructions, and your committed spec, plan, notes and decisions;
-- **untrusted, by source:** check output quoted in a retry, worktree content (`AGENTS.md` included), MCP tool descriptions and results, speccoder's tool results, and the model's answers.
-
-Every model call carries the labels of everything its conversation has read. A mutating call's arguments may come only from the model, speccoder's tools, the verifier, the worktree and your configured MCP tools. Labels are never inferred from content, so an unanticipated source is never trusted.
+speccoder runs on the [agentplane](https://crates.io/crates/agentplane) runtime, whose gates decide by **labels**: where content came from, set where it enters, never inferred from content. Trusted are speccoder's own instructions and your committed spec, plan, notes and decisions; untrusted are check output, worktree content (`AGENTS.md` included), MCP tool descriptions and results, tool results and the model's answers. Every model call carries the labels of everything its conversation has read, and a mutating call's arguments may come only from the model, speccoder's tools, the verifier, the worktree and your configured MCP tools.
 
 ## External agents
 
 With an [`[executor]`](@/docs/integrations.md#external-agents), another agent makes the attempt with its own tools, outside speccoder's sandbox and with your environment (it needs its own credentials). speccoder's policy cannot refuse its individual calls; its own permission system is the boundary. The worktree, the diff audit, the checks and the verdict still apply.
 
-## Signing keys
-
-speccoder signs each tick's [attestations](@/docs/attestations.md) with your git signing key. What the model runs cannot reach it: the sandbox hides `~/.ssh` and `~/.gnupg`, commands get no `SSH_AUTH_SOCK`, and the policy denies writing git notes and `update-ref` on `refs/notes`. With the sandbox off, a command could read a key file or use an agent you can; `[attest] sign_at = "later"` or a touch-to-sign key keeps signing in your hands.
-
 ## Checking someone else's evidence
 
-[`speccoder-verify`](@/docs/verifier.md) is built to run on a pull request you do not trust: it reads git objects only, executes nothing from the checked tree, spawns only `git` and the signature tool a signature names (with a scrubbed environment), opens no socket, and takes trust only from you — never from a key the branch declares. The [action](@/docs/github.md#evidence-check):
-
-- takes trust from a commit the checked one did not write (a pull request's base, the commit before a push to the default branch, else the default branch's tip), and fails where there is none;
-- fails, rather than coming out neutral, when it cannot read the branch;
-- runs the verifier only after checking its build provenance and sha256, and never passes it a token;
-- refuses to run under `pull_request_target` when the head is checked out in the workspace: add no checkout or build step to that workflow.
+[`speccoder-verify`](@/docs/verifier.md) is built to run on a pull request you do not trust: it executes nothing from the checked tree and takes trust only from you. The [action](@/docs/github.md#evidence-check) adds trust from a commit the checked one did not write and refuses to run with the head checked out under `pull_request_target`.
 
 ## What it does not protect against
 
@@ -151,10 +129,10 @@ speccoder signs each tick's [attestations](@/docs/attestations.md) with your git
 
 ## Running it safely
 
-1. Keep the sandbox on (`[sandbox] mode = "required"` enforces it), and prefer a container, VM or dedicated account without your personal credentials.
-2. Keep API keys in the environment and use one with a spending limit.
-3. Review `speccoder.toml` after `speccoder init`, especially `[commands]`, `[sandbox] network_allow*` and `[mcp]`. Keep allowances narrow.
-4. For unattended runs use `--no-prompt`: a call that needs approval waits for `task approve` instead of prompting.
+1. Keep the sandbox on (`[sandbox] mode = "required"`), and prefer a container, VM or dedicated account without your personal credentials.
+2. Use an API key with a spending limit.
+3. Review `[commands]`, `[sandbox] network_allow*` and `[mcp]` after `speccoder init`; keep allowances narrow.
+4. Use `--no-prompt` for unattended runs.
 5. Read `speccoder report` and the branch's diff before merging.
 
 To report a vulnerability, use [GitHub's private security advisories](https://github.com/hupe1980/speccoder/security/advisories/new).
