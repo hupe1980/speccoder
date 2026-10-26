@@ -312,4 +312,35 @@ mod tests {
             approval_task(&request, &[]).justification.digest()
         );
     }
+
+    #[test]
+    fn a_question_recorded_before_objects_never_matches_the_rebuilt_one() {
+        let request = super::super::Request {
+            task: "001-x/T001".to_owned(),
+            tool: "write_file".to_owned(),
+            arguments: json!({ "path": "package.json", "content": "{}" }),
+            kind: "write".to_owned(),
+            reason: "a dependency manifest".to_owned(),
+            object: Some(crate::tools::policy::Object::Path {
+                canonical: "package.json".to_owned(),
+                asked: "package.json".to_owned(),
+            }),
+            risk: "medium".to_owned(),
+            ..super::super::Request::default()
+        };
+        let now = approval_task(&request, &[]);
+        // As 0.1.0 recorded it: the class in `grant`, no object.
+        let old = Justification::new(
+            Tainted::trusted(format!("{} — write `package.json`", request.task)),
+            json!({
+                "tool": request.tool,
+                "arguments": request.arguments,
+                "task": request.task,
+                "grant": { "kind": "write", "path": "package.json" },
+                "request": request,
+                "log": [],
+            }),
+        );
+        assert_ne!(old.digest(), now.justification.digest());
+    }
 }

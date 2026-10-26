@@ -1272,6 +1272,11 @@ pub(crate) async fn tool_loop(
                     request.budget = asking.budget;
                 }
                 if request.batched {
+                    // The batch item is created: the person is notified
+                    // once; calls joining it notify no one.
+                    if !told_budget {
+                        needs_person(observer.as_ref(), &asked, object.as_ref());
+                    }
                     if !told_budget && let Some((_, p)) = &observer {
                         p.event(&crate::progress::Event::Notice {
                             text: format!(

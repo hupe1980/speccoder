@@ -1871,4 +1871,46 @@ mod tests {
             ["once", "reject", "stop"]
         );
     }
+
+    #[test]
+    fn a_runs_batch_lists_its_lanes_stopped_calls_too() {
+        let call = |task: &str, id: &str, batched: bool, class: &str, run: &str| PendingCall {
+            task: task.to_owned(),
+            call: id.to_owned(),
+            kind: tasks::APPROVAL.to_owned(),
+            run: Some(run.to_owned()),
+            batched,
+            object: Some(speccoder_core::ObjectView {
+                class: class.to_owned(),
+                ..speccoder_core::ObjectView::default()
+            }),
+            ..PendingCall::default()
+        };
+        let pending = vec![
+            call("T1", "aa", true, "write", "run-1"),
+            // A lane's stop in the same run: no task id, listed by its task.
+            call("T2", "", false, "command", "run-1"),
+            // Another run, within its budget: no batch of its own.
+            call("T3", "bb", false, "write", "run-2"),
+        ];
+        let b = batches(&pending);
+        assert_eq!(b.len(), 1);
+        assert_eq!(b[0].run, "run-1");
+        let groups: Vec<(&str, Vec<String>)> = b[0]
+            .groups
+            .iter()
+            .map(|g| (g.class.as_str(), g.calls.clone()))
+            .collect();
+        assert_eq!(
+            groups,
+            [
+                ("write", vec!["aa".to_owned()]),
+                ("command", vec!["attempt:T2".to_owned()])
+            ]
+        );
+        assert_eq!(
+            b[0].digest,
+            batch_digest(&["attempt:T2".to_owned(), "aa".to_owned()])
+        );
+    }
 }

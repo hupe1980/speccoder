@@ -90,6 +90,19 @@
     const r = await get<Reply<PolicyCoverage>>(`/api/policy/coverage?key=${encodeURIComponent(path)}&prefix=${encodeURIComponent(JSON.stringify(prefix))}`);
     previews = { ...previews, [id]: r.data ?? r.message };
   }
+  // What the checks allow (configuration, never a grant): shown so a
+  // committed allowance is never invisible.
+  const fromChecks = $derived.by(() => {
+    const checks = report?.sections.find((x) => x.name === "checks");
+    return (checks?.tables ?? []).flatMap((t) => {
+      const argv = t.keys.find((k) => k.key === "argv")?.value;
+      if (!Array.isArray(argv) || !argv.length) return [];
+      const a = argv.map(String);
+      const head = a.slice(0, a.findIndex((w) => w.startsWith("-")) === -1 ? a.length : a.findIndex((w) => w.startsWith("-")));
+      const exact = head.length <= 1;
+      return [{ name: t.name, prefix: exact ? a : head, exact }];
+    });
+  });
   async function widen(path: string, c: PolicyCoverage) {
     const key = path === "commands.allow_prefix" ? "commands_prefix" : "network_prefix";
     await app.perform(
@@ -318,6 +331,20 @@
         <div class="grouped">
           {#each section.keys as k (k.key)}{@render row(`${section.name}.${k.key}`, k)}{/each}
         </div>
+        {#if section.name === "commands" && fromChecks.length}
+          <h3 class="sub">From checks</h3>
+          <p class="muted small">Each configured check allows its program and subcommands, up to its first option; a check that starts with an option allows exactly itself. Change them in Checks.</p>
+          <div class="grouped">
+            {#each fromChecks as c (c.name)}
+              {@const id = `commands.allow_prefix:${JSON.stringify(c.prefix)}`}
+              <div class="row">
+                <div class="what"><span class="name">{c.name}</span><span class="meta mono">{words(c.prefix)}{c.exact ? " — exactly this command" : " …"}</span></div>
+                <div class="ctl">{#if !c.exact}<button class="btn small ghost" onclick={() => coverage("commands.allow_prefix", c.prefix)}>Coverage</button>{/if}</div>
+              </div>
+              {#if !c.exact}{@render preview("commands.allow_prefix", previews[id], false)}{/if}
+            {/each}
+          </div>
+        {/if}
       {/if}
     {/if}
   </div>
@@ -382,6 +409,8 @@
   .stepper input::-webkit-inner-spin-button { display: none; }
   .list { display: grid; gap: 0.3rem; justify-items: end; }
   .item { display: flex; gap: 0.3rem; align-items: center; }
+  .sub { font-size: 0.86rem; margin: 1rem 0 0.2rem; }
+  .small { font-size: 0.8rem; margin: 0 0 0.4rem; }
   .ro { display: inline-block; padding: 0.3rem 0.5rem; }
   .coverage { font-size: 0.82rem; display: grid; gap: 0.2rem; padding: 0.4rem 0; }
   .err { color: var(--danger, #ff3b30); font-size: 0.82rem; margin: 0; }
