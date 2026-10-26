@@ -673,3 +673,82 @@ fn fifty_signed_ticks_are_checked_within_the_budget() {
     eprintln!("50 signed ticks checked in {took:?} (budget {budget} ms)");
     assert!(took < std::time::Duration::from_millis(budget), "{took:?}");
 }
+
+#[test]
+fn openpgp_signed_ticks_verify_against_the_keyring_and_a_tampered_one_does_not() {
+    if !has("gpg") || !ssh() {
+        eprintln!("skipped: no gpg");
+        return;
+    }
+    let home = tempfile::tempdir().unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        fs::set_permissions(home.path(), fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    let gpg = |args: &[&str]| {
+        std::process::Command::new("gpg")
+            .arg("--homedir")
+            .arg(home.path())
+            .args(["--batch", "--pinentry-mode", "loopback", "--passphrase", ""])
+            .args(args)
+            .output()
+            .unwrap()
+    };
+    let made = gpg(&[
+        "--quick-gen-key",
+        "Ada <ada@example.com>",
+        "ed25519",
+        "sign",
+        "never",
+    ]);
+    assert!(
+        made.status.success(),
+        "{}",
+        String::from_utf8_lossy(&made.stderr)
+    );
+    let listed =
+        String::from_utf8_lossy(&gpg(&["--list-secret-keys", "--with-colons"]).stdout).into_owned();
+    let fpr = listed
+        .lines()
+        .find_map(|l| {
+            l.strip_prefix("fpr:")
+                .map(|f| f.trim_matches(':').to_owned())
+        })
+        .unwrap();
+    // git (and speccoder's signer) reach this keyring through a wrapper.
+    let wrapper = home.path().join("gpg.sh");
+    fs::write(
+        &wrapper,
+        format!("#!/bin/sh\nexec gpg --homedir '{}' --batch --pinentry-mode loopback --passphrase '' \"$@\"\n", home.path().display()),
+    )
+    .unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        fs::set_permissions(&wrapper, fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    let r = Repo::new(2);
+    r.git(&["config", "gpg.format", "openpgp"]);
+    r.git(&["config", "user.signingKey", &fpr]);
+    r.git(&["config", "gpg.program", &wrapper.display().to_string()]);
+    let t1 = r.tick("T001", "verified", Sign::Configured);
+    let allowed = r.allowed.display().to_string();
+    let verify = || {
+        let out = std::process::Command::new(support::verifier())
+            .args(["check", "--json", "--allowed-signers", &allowed])
+            .current_dir(r.path())
+            .env("GNUPGHOME", home.path())
+            .output()
+            .unwrap();
+        let v: Value = serde_json::from_slice(&out.stdout).unwrap();
+        (out.status.code(), v)
+    };
+    let (code, v) = verify();
+    assert_eq!(code, Some(0), "{v}");
+    assert_eq!(v["data"]["ticks"][0]["signer"]["kind"], "openpgp");
+    r.tamper(&t1, |p| p["tree"] = json!("0000"));
+    let (code, v) = verify();
+    assert_eq!(code, Some(1));
+    assert_eq!(outcomes(&v), [row("T001", "unverifiable", "bad_signature")]);
+}

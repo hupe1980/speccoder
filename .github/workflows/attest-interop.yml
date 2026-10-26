@@ -21,6 +21,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: stable
+      - run: pip install --user jsonschema
       - run: scripts/attest-interop.sh
 
   # Keyless Sigstore end to end: the job's own OIDC identity signs a tick's

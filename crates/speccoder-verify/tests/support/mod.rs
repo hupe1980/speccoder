@@ -105,6 +105,9 @@ pub enum Sign {
     Stranger,
     /// Not at all.
     No,
+    /// With whatever git's configuration in the repository says (an
+    /// OpenPGP key, say).
+    Configured,
 }
 
 /// A fixture repository on branch `feature`, forked from `main`.
@@ -424,8 +427,19 @@ impl Repo {
         let key = match sign {
             Sign::Trusted => Some(&self.key),
             Sign::Stranger => Some(&self.stranger),
-            Sign::No => None,
+            Sign::No | Sign::Configured => None,
         };
+        if sign == Sign::Configured {
+            let signer = speccoder_runtime::attest::sign::signer(
+                self.path(),
+                &speccoder_runtime::substrate::run_config::AttestConfig::default(),
+            )
+            .unwrap();
+            assert_eq!(
+                speccoder_runtime::attest::sign_all(&mut lines, &signer),
+                None
+            );
+        }
         if let Some(key) = key {
             self.git(&["config", "user.signingKey", &key.display().to_string()]);
             let signer = speccoder_runtime::attest::sign::signer(
