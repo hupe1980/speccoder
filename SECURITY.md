@@ -13,7 +13,7 @@ speccoder is pre-release (0.x). Fixes go into the latest release only.
 speccoder lets a language model change code and run commands, so it assumes the code it runs is untrusted. In short:
 
 - **Isolation.** All work happens on `speccoder/<feature>` in its own git worktree; your checkout is never touched. speccoder pushes only through `speccoder pr`, after you confirm, and never merges.
-- **Policy.** Every tool call is classified before it runs: allowed, needs your approval, or denied. The spec, check configuration, `.git`, secrets, privilege escalation and git remotes are denied, and no approval lifts a denial.
+- **Policy.** Every tool call is classified before it runs: allowed, needs your approval, or denied. The spec, check configuration, `.git`, secrets, privilege escalation and git remotes are denied in any letter case, and no approval lifts a denial. An approval covers exactly the file, command or tool you saw and ends with the run.
 - **OS sandbox.** Every command speccoder starts runs in Seatbelt (macOS) or Landlock and seccomp (Linux): writes only to the worktree, no credentials, no network beyond loopback.
 - **Secrets.** API keys come from the environment only; commands get an environment without secret-looking variables.
 - **Provenance.** Everything the model reads is labelled by its real source, and the runtime refuses mutating calls shaped by sources outside a closed set.
@@ -26,7 +26,7 @@ The full model — what each layer enforces, what it does not protect against, a
 
 ## Verifying a release
 
-Each release on GitHub lists `SHA256SUMS` and a build-provenance attestation per archive, made by `.github/workflows/release.yml` from the tagged commit:
+Each release on GitHub lists `SHA256SUMS` and a build-provenance attestation per archive (`speccoder` and `speccoder-verify`), made by `.github/workflows/release.yml` from the tagged commit:
 
 ```sh
 shasum -a 256 -c SHA256SUMS --ignore-missing
