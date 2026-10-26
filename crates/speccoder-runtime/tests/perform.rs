@@ -1,0 +1,585 @@
+//! One dispatcher: every runnable kind, taken with the same input on the
+//! same project, gives the result it gave before the dispatcher moved out
+//! of the web host. The goldens under `tests/fixtures/perform/` were
+//! recorded through a verbatim copy of that host's mapping
+//! (`SPECCODER_BLESS=1` writes them); a golden diff means behaviour
+//! changed — fix the code, not the golden.
+
+// Test code: panicking on unexpected input is the failure report.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::process::Command;
+use std::sync::Arc;
+
+use agentplane::model::ModelProvider;
+use agentplane::model::fake::FakeProvider;
+use serde_json::{Value, json};
+use speccoder_core::actions::Runnable;
+use speccoder_core::{CommandResult, CommandStatus};
+
+const CONFIG: &str = "[model]\nprovider = \"openai\"\nmodel = \"gpt-5.4-mini\"\n\n[checks.has-ok]\nargv = [\"grep\", \"-q\", \"fn ok\", \"src/lib.rs\"]\n\n[acceptance]\ngenerate = false\n";
+
+const SPEC: &str = "# Spec\n\n### User Story 1 - Login\n\nUsers log in.\n\n## Requirements\n\n- **FR-001**: Users MUST log in.\n- **FR-002**: Sessions MUST expire after [NEEDS CLARIFICATION: how long?].\n";
+
+fn git(dir: &Path, args: &[&str]) -> String {
+    let out = Command::new("git")
+        .args([
+            "-c",
+            "user.name=Dana Example",
+            "-c",
+            "user.email=d@example.com",
+            "-c",
+            "commit.gpgsign=false",
+            "-c",
+            "init.defaultBranch=main",
+            "-c",
+            "core.hooksPath=/dev/null",
+        ])
+        .args(args)
+        .current_dir(dir)
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "git {args:?}: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    String::from_utf8_lossy(&out.stdout).into_owned()
+}
+
+/// A committed Spec Kit project (the graph fixture: T001–T004 ticked,
+/// T005–T011 open) whose spec has two requirements and an open question.
+fn repo() -> tempfile::TempDir {
+    let dir = tempfile::tempdir().unwrap();
+    let r = dir.path();
+    let fixture =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../speccoder-speckit/tests/fixtures/graph");
+    assert!(
+        Command::new("cp")
+            .arg("-R")
+            .arg(fixture.join("."))
+            .arg(r)
+            .status()
+            .unwrap()
+            .success()
+    );
+    fs::write(r.join("specs/001-graph/spec.md"), SPEC).unwrap();
+    fs::create_dir_all(r.join("src")).unwrap();
+    fs::write(r.join("src/lib.rs"), "pub fn ok() {}\n").unwrap();
+    fs::write(r.join("speccoder.toml"), CONFIG).unwrap();
+    git(r, &["init", "-q"]);
+    git(r, &["config", "user.name", "Dana Example"]);
+    git(r, &["config", "user.email", "d@example.com"]);
+    git(r, &["add", "-A"]);
+    git(r, &["commit", "-q", "-m", "init"]);
+    dir
+}
+
+/// T005's attempt stops on a write that needs a person: a waiting call.
+fn wait_on_t005(r: &Path, state: &Path) {
+    let f = FakeProvider::new();
+    f.will_call_tool(
+        "c1",
+        "write_file",
+        json!({ "path": "package.json", "content": "{}\n" }),
+    );
+    let d: Arc<dyn ModelProvider> = f;
+    let first = speccoder_runtime::run_with(r, None, "T005", state, d, None);
+    assert_eq!(
+        first.status(),
+        CommandStatus::NeedsHuman,
+        "{}",
+        first.message()
+    );
+}
+
+/// Today's web job mapping (`speccoder-web/src/jobs.rs`, `execute`, at
+/// `90439f4`), copied verbatim but for the state directory, which is
+/// passed in (a test cannot set the environment) — and, through it, the
+/// approvals' `decide` as `decide_with`.
+#[allow(dead_code)]
+fn oracle(
+    root: &Path,
+    feature: Option<&str>,
+    run: &Runnable,
+    input: Option<&str>,
+    state: Option<&Path>,
+) -> CommandResult {
+    use speccoder_runtime::approvals::{Choice, Verb, decide_with};
+    let decide = |root: &Path, feature: Option<&str>, verb: Verb<'_>| match state {
+        Some(s) => decide_with(root, feature, verb, s),
+        None => CommandResult::new(
+            "approvals",
+            CommandStatus::ConfigError,
+            "no state directory (set SPECCODER_STATE_DIR or HOME)",
+        )
+        .with_code("NO-STATE-DIR"),
+    };
+    let needs = |what: &str| {
+        CommandResult::new(
+            "job",
+            CommandStatus::UsageError,
+            &format!("{what} is needed"),
+        )
+    };
+    let options = speccoder_runtime::RunOptions::default();
+    let text = input.map(str::trim).filter(|t| !t.is_empty());
+    match run {
+        Runnable::Skill { name, arguments } => {
+            let args = text.map_or_else(|| arguments.clone(), str::to_owned);
+            speccoder_runtime::hosting::run(root, feature, name, &args, &options)
+        }
+        Runnable::Run { task: Some(t) } => speccoder_runtime::run(root, feature, t, &options),
+        Runnable::Run { task: None } => {
+            speccoder_runtime::run_feature(root, feature, &options, false)
+        }
+        Runnable::Converge => speccoder_runtime::run_feature(root, feature, &options, true),
+        Runnable::Commit { paths } => {
+            speccoder_runtime::hosting::commit_planning(root, feature, paths)
+        }
+        Runnable::Approve { task } => {
+            decide(root, feature, Verb::Decide(Choice::approve(task, text)))
+        }
+        Runnable::Reject { task } => match text {
+            Some(why) => decide(root, feature, Verb::Decide(Choice::reject(task, why))),
+            None => needs("a reason"),
+        },
+        Runnable::Accept { task } => match (text, &state) {
+            (Some(why), Some(s)) => {
+                speccoder_runtime::controls::accept_in(root, feature, task, why, s, false)
+            }
+            (None, _) => needs("a reason"),
+            (_, None) => {
+                CommandResult::new("job", CommandStatus::ConfigError, "no state directory")
+            }
+        },
+        Runnable::Skip { task } => match text {
+            Some(why) => speccoder_runtime::controls::skip(root, feature, task, Some(why)),
+            None => needs("a reason"),
+        },
+        Runnable::Nudge { task } => match (text, &state) {
+            (Some(note), Some(s)) => {
+                speccoder_runtime::controls::nudge_with(root, feature, task, Some(note), s)
+            }
+            (None, _) => needs("a note"),
+            (_, None) => {
+                CommandResult::new("job", CommandStatus::ConfigError, "no state directory")
+            }
+        },
+        Runnable::FixSetup => speccoder_runtime::code::fix_setup(root, feature),
+        Runnable::KeepSetAside { task } => {
+            speccoder_runtime::controls::restore(root, feature, task)
+        }
+        Runnable::DropSetAside { task } => {
+            speccoder_runtime::controls::drop_set_aside(root, feature, task)
+        }
+        Runnable::QuickChange {
+            request,
+            checks,
+            run,
+        } => speccoder_runtime::quick::change(root, request, checks, *run, "web", &options),
+        Runnable::IssueComment { issue, assign } => speccoder_runtime::github::comment(
+            &speccoder_runtime::github::Ctx::from_env(),
+            root,
+            feature,
+            &issue.to_string(),
+            *assign,
+        ),
+        Runnable::Review { ids, verdict } => match (verdict.as_str(), ids.first(), text) {
+            ("answer", Some(q), Some(t)) => speccoder_runtime::review::answer(root, feature, q, t),
+            ("edit" | "edit-approve", Some(id), Some(t)) => speccoder_runtime::review::edit(
+                root,
+                feature,
+                id,
+                t,
+                verdict == "edit-approve",
+                "web",
+            ),
+            ("answer" | "edit" | "edit-approve", _, _) => needs("the words"),
+            _ => speccoder_runtime::review::decide(root, feature, ids, verdict, text, "web"),
+        },
+        Runnable::Rule { task } => match (text, &state) {
+            (Some(why), Some(s)) => {
+                speccoder_runtime::controls::rule(root, feature, task, why, None, s)
+            }
+            (None, _) => needs("a reason"),
+            (_, None) => {
+                CommandResult::new("job", CommandStatus::ConfigError, "no state directory")
+            }
+        },
+        Runnable::Feature => match text {
+            Some(name) => speccoder_runtime::current::switch(root, name),
+            None => needs("a feature"),
+        },
+        Runnable::PullRequest => speccoder_runtime::handoff::pr(
+            root,
+            feature,
+            &speccoder_runtime::handoff::PrOptions {
+                remote: "origin",
+                base: None,
+                open: true,
+                force: false,
+                github: &speccoder_runtime::github::Ctx::from_env(),
+            },
+        ),
+    }
+}
+
+/// One case: its golden's name, what runs, the person's input, and
+/// whether a state directory is there.
+struct Case {
+    name: &'static str,
+    run: Runnable,
+    input: Option<&'static str>,
+    state: bool,
+}
+
+fn case(name: &'static str, run: Runnable, input: Option<&'static str>) -> Case {
+    Case {
+        name,
+        run,
+        input,
+        state: true,
+    }
+}
+
+fn task(t: &str) -> String {
+    t.to_owned()
+}
+
+fn review(ids: &[&str], verdict: &str) -> Runnable {
+    Runnable::Review {
+        ids: ids.iter().map(|s| (*s).to_owned()).collect(),
+        verdict: verdict.to_owned(),
+    }
+}
+
+/// Every case, in the order they run on one project. The cases of a kind
+/// that runs the model (skill, run, converge, a quick change that runs)
+/// read the state directory from the environment, which a test cannot
+/// set; the web host's job test covers them (`speccoder/tests/jobs.rs`).
+fn cases() -> Vec<Case> {
+    let no_state = |mut c: Case| {
+        c.state = false;
+        c
+    };
+    vec![
+        case(
+            "approve-unreadable",
+            Runnable::Approve { task: task("T005") },
+            None,
+        ),
+        case(
+            "reject-unreadable",
+            Runnable::Reject { task: task("T005") },
+            Some("no new files"),
+        ),
+        case(
+            "reject-empty",
+            Runnable::Reject { task: task("T005") },
+            None,
+        ),
+        case(
+            "reject-blank",
+            Runnable::Reject { task: task("T005") },
+            Some("   "),
+        ),
+        case(
+            "approve-none",
+            Runnable::Approve { task: task("T006") },
+            None,
+        ),
+        no_state(case(
+            "approve-no-state",
+            Runnable::Approve { task: task("T005") },
+            None,
+        )),
+        case(
+            "reject-waiting",
+            Runnable::Reject { task: task("T005") },
+            Some("  no new files  "),
+        ),
+        case(
+            "accept-empty",
+            Runnable::Accept { task: task("T006") },
+            None,
+        ),
+        case(
+            "accept-blank",
+            Runnable::Accept { task: task("T006") },
+            Some(" \n"),
+        ),
+        no_state(case(
+            "accept-no-state",
+            Runnable::Accept { task: task("T006") },
+            Some("done by hand"),
+        )),
+        case(
+            "accept-reason",
+            Runnable::Accept { task: task("T006") },
+            Some("done by hand"),
+        ),
+        case("skip-empty", Runnable::Skip { task: task("T007") }, None),
+        case(
+            "skip-reason",
+            Runnable::Skip { task: task("T007") },
+            Some("not this release"),
+        ),
+        case("nudge-empty", Runnable::Nudge { task: task("T008") }, None),
+        no_state(case(
+            "nudge-no-state",
+            Runnable::Nudge { task: task("T008") },
+            Some("use the existing session type"),
+        )),
+        case(
+            "nudge-note",
+            Runnable::Nudge { task: task("T008") },
+            Some("use the existing session type"),
+        ),
+        case("rule-empty", Runnable::Rule { task: task("T009") }, None),
+        no_state(case(
+            "rule-no-state",
+            Runnable::Rule { task: task("T009") },
+            Some("the tests are right"),
+        )),
+        case(
+            "rule-reason",
+            Runnable::Rule { task: task("T009") },
+            Some("the tests are right"),
+        ),
+        case("review-answer-empty", review(&["Q1"], "answer"), None),
+        case(
+            "review-answer-no-id",
+            review(&[], "answer"),
+            Some("thirty minutes"),
+        ),
+        case(
+            "review-answer",
+            review(&["Q1"], "answer"),
+            Some("thirty minutes"),
+        ),
+        case("review-edit-empty", review(&["FR-001"], "edit"), Some(" ")),
+        case(
+            "review-edit",
+            review(&["FR-001"], "edit"),
+            Some("Users MUST log in with a passkey."),
+        ),
+        case(
+            "review-edit-approve",
+            review(&["FR-002"], "edit-approve"),
+            Some("Sessions MUST expire after thirty minutes."),
+        ),
+        case("review-request-empty", review(&["FR-001"], "request"), None),
+        case(
+            "review-request",
+            review(&["FR-001"], "request"),
+            Some("say which passkeys"),
+        ),
+        case("review-clear", review(&["FR-001"], "clear"), None),
+        case(
+            "review-approve",
+            review(&[], "approve"),
+            Some("looks right"),
+        ),
+        case(
+            "commit",
+            Runnable::Commit {
+                paths: vec!["specs/001-graph/review.json".to_owned()],
+            },
+            None,
+        ),
+        case(
+            "keep-set-aside-none",
+            Runnable::KeepSetAside { task: task("T010") },
+            None,
+        ),
+        case(
+            "drop-set-aside-none",
+            Runnable::DropSetAside { task: task("T010") },
+            None,
+        ),
+        case("fix-setup-nothing", Runnable::FixSetup, None),
+        case(
+            "quick-change-recorded",
+            Runnable::QuickChange {
+                request: "Log every sign-in".to_owned(),
+                checks: vec!["a sign-in is logged".to_owned()],
+                run: false,
+            },
+            None,
+        ),
+        case(
+            "issue-comment-no-remote",
+            Runnable::IssueComment {
+                issue: 42,
+                assign: true,
+            },
+            None,
+        ),
+        case("pull-request-no-remote", Runnable::PullRequest, None),
+        case("feature-empty", Runnable::Feature, Some("")),
+        case("feature-name", Runnable::Feature, Some("001-graph")),
+    ]
+}
+
+/// Placeholders for what differs between runs: the project's and the
+/// state's paths, commit ids, times.
+struct Norm {
+    paths: Vec<(String, &'static str)>,
+}
+
+impl Norm {
+    fn new(root: &Path, state: &Path) -> Self {
+        let mut paths = Vec::new();
+        for (p, name) in [(root, "<root>"), (state, "<state>")] {
+            if let Ok(c) = fs::canonicalize(p) {
+                paths.push((c.display().to_string(), name));
+            }
+            paths.push((p.display().to_string(), name));
+        }
+        // The longest first, so a path is not replaced by its prefix.
+        paths.sort_by(|a, b| b.0.len().cmp(&a.0.len()));
+        Self { paths }
+    }
+
+    fn text(&self, s: &str) -> String {
+        let mut s = s.to_owned();
+        for (p, name) in &self.paths {
+            s = s.replace(p.as_str(), name);
+        }
+        hex(&s)
+    }
+
+    fn value(&self, v: &Value) -> Value {
+        match v {
+            Value::String(s) => Value::String(self.text(s)),
+            Value::Array(a) => Value::Array(a.iter().map(|x| self.value(x)).collect()),
+            Value::Object(o) => Value::Object(
+                o.iter()
+                    .map(|(k, x)| {
+                        let x = match x {
+                            // Seconds or milliseconds since the epoch.
+                            Value::Number(n) if n.as_u64().is_some_and(|n| n > 1_000_000_000) => {
+                                json!(0)
+                            }
+                            x => self.value(x),
+                        };
+                        (k.clone(), x)
+                    })
+                    .collect(),
+            ),
+            v => v.clone(),
+        }
+    }
+}
+
+/// Runs of 7 or more hex digits with a letter and a digit (commit ids,
+/// run ids) as `<hex>`.
+fn hex(s: &str) -> String {
+    let mut out = String::new();
+    let mut run = String::new();
+    let flush = |run: &mut String, out: &mut String| {
+        let letters = run.chars().any(|c| c.is_ascii_alphabetic());
+        let digits = run.chars().any(|c| c.is_ascii_digit());
+        if run.len() >= 7 && letters && digits {
+            out.push_str("<hex>");
+        } else {
+            out.push_str(run);
+        }
+        run.clear();
+    };
+    for c in s.chars() {
+        if matches!(c, '0'..='9' | 'a'..='f') {
+            run.push(c);
+        } else if c.is_ascii_alphanumeric() {
+            // Part of a longer word: not an id.
+            out.push_str(&run);
+            run.clear();
+            out.push(c);
+        } else {
+            flush(&mut run, &mut out);
+            out.push(c);
+        }
+    }
+    flush(&mut run, &mut out);
+    out
+}
+
+/// The result and what it left behind: the last commit's subject, the
+/// checkout's status, the review record.
+fn observed(r: &Path, result: &CommandResult, norm: &Norm) -> Value {
+    let review = fs::read_to_string(r.join("specs/001-graph/review.json"))
+        .ok()
+        .and_then(|t| serde_json::from_str::<Value>(&t).ok());
+    json!({
+        "result": norm.value(&serde_json::to_value(result).unwrap()),
+        "head": git(r, &["log", "-1", "--format=%s"]).trim(),
+        "status": norm.text(&git(r, &["status", "--porcelain", "--untracked-files=all"])),
+        "review": review.map(|v| norm.value(&v)),
+    })
+}
+
+fn golden_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/perform")
+}
+
+/// Every case through `dispatch`, each against its golden.
+fn against_goldens(
+    dispatch: impl Fn(&Path, Option<&str>, &Runnable, Option<&str>, Option<&Path>) -> CommandResult,
+) {
+    let r = repo();
+    let state = tempfile::tempdir().unwrap();
+    wait_on_t005(r.path(), state.path());
+    let norm = Norm::new(r.path(), state.path());
+    let journal = speccoder_runtime::worktree::project_state_dir(
+        state.path(),
+        &fs::canonicalize(r.path()).unwrap(),
+    )
+    .join("journal.redb");
+    let bless = std::env::var_os("SPECCODER_BLESS").is_some();
+    let dir = golden_dir();
+    let mut differ = Vec::new();
+    let mut held = None;
+    for c in cases() {
+        // Another holder of the journal, as another speccoder would be.
+        if c.name.ends_with("-unreadable") {
+            if held.is_none() {
+                held = Some(agentplane::store::RedbStore::open(&journal).unwrap());
+            }
+        } else {
+            held = None;
+        }
+        let s = c.state.then(|| state.path());
+        let result = dispatch(r.path(), None, &c.run, c.input, s);
+        let got = observed(r.path(), &result, &norm);
+        let text = format!("{}\n", serde_json::to_string_pretty(&got).unwrap());
+        let file = dir.join(format!("{}.json", c.name));
+        if bless {
+            fs::create_dir_all(&dir).unwrap();
+            fs::write(&file, text).unwrap();
+        } else if fs::read_to_string(&file).ok().as_deref() != Some(text.as_str()) {
+            differ.push(format!("{}:\n{text}", c.name));
+        }
+    }
+    drop(held);
+    assert!(
+        differ.is_empty(),
+        "results differ from the goldens (run with SPECCODER_BLESS=1 only for an intended change):\n{}",
+        differ.join("\n")
+    );
+}
+
+#[test]
+fn every_kind_gives_the_result_it_gave_before() {
+    against_goldens(oracle);
+}
+
+#[test]
+fn the_normaliser_replaces_ids_and_keeps_words() {
+    assert_eq!(
+        hex("committed 1a2b3c4d5e as deadbeef1; feed facade 1234567"),
+        "committed <hex> as <hex>; feed facade 1234567"
+    );
+}

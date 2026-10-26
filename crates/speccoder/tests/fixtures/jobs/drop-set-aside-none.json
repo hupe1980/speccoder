@@ -1,0 +1,15 @@
+{
+  "head": "spec(001-graph): review.json",
+  "result": {
+    "code": "NOT-FOUND",
+    "command": "drop",
+    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#not-found",
+    "exit_code": 15,
+    "fix": [
+      "speccoder report"
+    ],
+    "message": "nothing was set aside before T010's run",
+    "schema_version": 2,
+    "status": "not_found"
+  }
+}

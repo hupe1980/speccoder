@@ -1,0 +1,33 @@
+{
+  "head": "spec(001-graph): review.json",
+  "result": {
+    "command": "feature",
+    "data": {
+      "action": "switched",
+      "current": "001-graph",
+      "features": [
+        {
+          "artifacts": [
+            "spec",
+            "tasks"
+          ],
+          "current": true,
+          "dir": "specs/001-graph",
+          "done": 5,
+          "name": "001-graph",
+          "number": 1,
+          "tasks": 11,
+          "title": "Spec"
+        }
+      ],
+      "reason": "recorded",
+      "reason_text": "recorded in .specify/feature.json",
+      "unit": "feature"
+    },
+    "exit_code": 0,
+    "message": "switched to 001-graph, 5/11 tasks done (recorded in .specify/feature.json: Spec Kit's scripts and the /speckit-* commands in your editor read it too)",
+    "payload": "features",
+    "schema_version": 2,
+    "status": "ok"
+  }
+}

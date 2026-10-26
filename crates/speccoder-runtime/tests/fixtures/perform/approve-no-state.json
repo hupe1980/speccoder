@@ -1,0 +1,17 @@
+{
+  "head": "init",
+  "result": {
+    "code": "NO-STATE-DIR",
+    "command": "approvals",
+    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#no-state-dir",
+    "exit_code": 13,
+    "fix": [
+      "export SPECCODER_STATE_DIR=\"$PWD/.speccoder-state\""
+    ],
+    "message": "no state directory (set SPECCODER_STATE_DIR or HOME)",
+    "schema_version": 2,
+    "status": "config_error"
+  },
+  "review": null,
+  "status": ""
+}

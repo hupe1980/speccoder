@@ -260,6 +260,22 @@ mod tests {
     }
 
     #[test]
+    fn a_step_the_terminal_does_not_take_is_refused_before_it_runs() {
+        let dir = tempfile::tempdir().unwrap_or_else(|e| panic!("{e}"));
+        let mut a = commit();
+        a.run = Some(Runnable::PullRequest);
+        let r = take(dir.path(), None, &a, crate::progress::Verbosity::Normal);
+        assert_eq!(
+            (r.command(), r.status(), r.message()),
+            (
+                "next",
+                CommandStatus::UsageError,
+                "not a step speccoder takes here"
+            )
+        );
+    }
+
+    #[test]
     fn the_offer_shows_the_journey_the_card_and_one_question() {
         let q = crate::style::with(crate::style::Look::PLAIN, || question(&commit(), &steps()));
         for needle in [

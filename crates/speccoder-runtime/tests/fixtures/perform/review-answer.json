@@ -1,0 +1,68 @@
+{
+  "head": "init",
+  "result": {
+    "command": "review",
+    "data": {
+      "changes": [
+        {
+          "id": "FR-002",
+          "now": "- **FR-002**: Sessions MUST expire after thirty minutes.",
+          "then": "- **FR-002**: Sessions MUST expire after [NEEDS CLARIFICATION: how long?]."
+        }
+      ],
+      "feature": "001-graph",
+      "file": "specs/001-graph/review.json",
+      "history": [
+        {
+          "added": [
+            "FR-001",
+            "FR-002"
+          ],
+          "author": "Dana Example",
+          "commit": "<hex>",
+          "date": "2026-10-26",
+          "removed": [],
+          "reworded": [],
+          "subject": "init"
+        }
+      ],
+      "questions": [],
+      "requirements": [
+        {
+          "at": null,
+          "by": null,
+          "comment": null,
+          "decided_on": null,
+          "id": "FR-001",
+          "state": "open",
+          "text": "Users MUST log in."
+        },
+        {
+          "at": null,
+          "by": null,
+          "comment": null,
+          "decided_on": null,
+          "id": "FR-002",
+          "state": "open",
+          "text": "Sessions MUST expire after thirty minutes."
+        }
+      ],
+      "revise_with": null,
+      "revision": null,
+      "totals": {
+        "approved": 0,
+        "changes_requested": 0,
+        "lapsed": 0,
+        "open": 2,
+        "questions": 0
+      }
+    },
+    "exit_code": 0,
+    "message": "answered Q1 in specs/001-graph/spec.md — 0/2 requirements approved; 2 to review",
+    "payload": "review",
+    "schema_version": 2,
+    "status": "ok"
+  },
+  "review": null,
+  "status": " M specs/001-graph/spec.md\n"
+}

@@ -1,0 +1,16 @@
+{
+  "head": "spec(002-quick-changes): quick change: Log every sign-in",
+  "result": {
+    "command": "do",
+    "exit_code": 0,
+    "message": "recorded \"Log every sign-in\" as FR-001 and T001 in 002-quick-changes; run it: speccoder run --feature 002-quick-changes --task T001",
+    "next": [
+      {
+        "command": "speccoder run --feature 002-quick-changes --task T001",
+        "why": "the change, judged on evidence"
+      }
+    ],
+    "schema_version": 2,
+    "status": "ok"
+  }
+}
