@@ -78,6 +78,31 @@ pub(super) fn record(root: &Path, triad: &Triad) -> Result<RecordedBug, BugRefus
         spec.push('\n');
     }
     spec.push_str(&block);
+    // The person's words read back from what is about to be written,
+    // exactly, or nothing is written.
+    let faithful = parse(&spec, &requirement, String::new()).is_ok_and(|back| {
+        back.current == [triad.current.text.clone()]
+            && back.expected
+                == triad
+                    .expected
+                    .iter()
+                    .map(|s| s.text.clone())
+                    .collect::<Vec<_>>()
+            && back.unchanged
+                == triad
+                    .unchanged
+                    .iter()
+                    .map(|s| s.text.clone())
+                    .collect::<Vec<_>>()
+    });
+    if !faithful {
+        return Err(BugRefusal::new(
+            "BUG-ASSESSMENT-DRIFT",
+            format!(
+                "{requirement} would not read back exactly your words; nothing is written — reword it"
+            ),
+        ));
+    }
     if !proposal.ends_with('\n') {
         proposal.push('\n');
     }
@@ -131,6 +156,11 @@ pub(super) fn read(root: &Path, key: &str) -> Result<ReadBug, BugRefusal> {
     let file = format!("{DIR}/specs/{CHANGE}/spec.md");
     let text = std::fs::read_to_string(root.join(&file))
         .map_err(|_| BugRefusal::new("BUG-NO-UNIT", format!("{file} is missing")))?;
+    parse(&text, key, file)
+}
+
+/// [`read`] of the spec's `text`.
+fn parse(text: &str, key: &str, file: String) -> Result<ReadBug, BugRefusal> {
     let head = format!("### Requirement: {key} ");
     let mut r = ReadBug {
         current: Vec::new(),

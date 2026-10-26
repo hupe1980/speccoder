@@ -40,16 +40,36 @@ fn key(task: &str) -> String {
     task.replace([':', '/'], "-")
 }
 
+/// Whether `unit` and `task` name a place under the state's `bugs/`: each
+/// part of the unit a plain name (no `..`, no root, no backslash), the task
+/// one too — a name from an interface or a commit never becomes a path out.
+#[must_use]
+pub fn names_a_bug(unit: &str, task: &str) -> bool {
+    let plain =
+        |p: &str| !p.is_empty() && p != "." && p != ".." && !p.contains('\\') && !p.contains('\0');
+    !unit.starts_with('/') && unit.split('/').all(plain) && plain(&key(task))
+}
+
 /// A bug's directory.
 #[must_use]
 pub fn dir(plane: &Path, unit: &str, task: &str) -> PathBuf {
     plane.join("bugs").join(unit).join(key(task))
 }
 
+/// [`dir`], refused for a name that is not one.
+fn dir_checked(plane: &Path, unit: &str, task: &str) -> Result<PathBuf, String> {
+    if names_a_bug(unit, task) {
+        Ok(dir(plane, unit, task))
+    } else {
+        Err(format!("`{unit}/{task}` does not name a bug"))
+    }
+}
+
 /// The bug of `unit`'s `task`, if speccoder recorded one.
 #[must_use]
 pub fn load(plane: &Path, unit: &str, task: &str) -> Option<BugReport> {
-    let text = std::fs::read_to_string(dir(plane, unit, task).join("bug.json")).ok()?;
+    let text =
+        std::fs::read_to_string(dir_checked(plane, unit, task).ok()?.join("bug.json")).ok()?;
     serde_json::from_str(&text).ok()
 }
 
@@ -85,7 +105,7 @@ pub fn all(plane: &Path) -> Vec<BugReport> {
 
 /// Saves the bug.
 pub fn save(plane: &Path, bug: &BugReport) -> Result<(), String> {
-    let d = dir(plane, &bug.unit, &bug.task);
+    let d = dir_checked(plane, &bug.unit, &bug.task)?;
     std::fs::create_dir_all(&d).map_err(|e| format!("{}: {e}", d.display()))?;
     let text = serde_json::to_string_pretty(bug).map_err(|e| e.to_string())?;
     let tmp = d.join("bug.json.tmp");
@@ -96,15 +116,16 @@ pub fn save(plane: &Path, bug: &BugReport) -> Result<(), String> {
 /// What the bug was recorded with.
 #[must_use]
 pub fn extra(plane: &Path, unit: &str, task: &str) -> Extra {
-    std::fs::read_to_string(dir(plane, unit, task).join("extra.json"))
+    dir_checked(plane, unit, task)
         .ok()
+        .and_then(|d| std::fs::read_to_string(d.join("extra.json")).ok())
         .and_then(|t| serde_json::from_str(&t).ok())
         .unwrap_or_default()
 }
 
 /// Saves what the bug was recorded with.
 pub fn save_extra(plane: &Path, unit: &str, task: &str, extra: &Extra) -> Result<(), String> {
-    let d = dir(plane, unit, task);
+    let d = dir_checked(plane, unit, task)?;
     std::fs::create_dir_all(&d).map_err(|e| format!("{}: {e}", d.display()))?;
     let text = serde_json::to_string_pretty(extra).map_err(|e| e.to_string())?;
     std::fs::write(d.join("extra.json"), text).map_err(|e| e.to_string())
@@ -117,9 +138,12 @@ pub fn save_repro(
     task: &str,
     files: &[(String, String)],
 ) -> Result<(), String> {
-    let d = dir(plane, unit, task).join("repro");
+    let d = dir_checked(plane, unit, task)?.join("repro");
     let _ = std::fs::remove_dir_all(&d);
     for (path, content) in files {
+        if crate::tools::paths::normalise(path).ok().as_deref() != Some(path.as_str()) {
+            return Err(format!("`{path}` is not a project-relative path"));
+        }
         let file = d.join(path);
         if let Some(parent) = file.parent() {
             std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
@@ -132,9 +156,12 @@ pub fn save_repro(
 /// The reproductions' contents, for `paths`.
 #[must_use]
 pub fn repro(plane: &Path, unit: &str, task: &str, paths: &[String]) -> Vec<(String, String)> {
-    let d = dir(plane, unit, task).join("repro");
+    let Ok(d) = dir_checked(plane, unit, task).map(|d| d.join("repro")) else {
+        return Vec::new();
+    };
     paths
         .iter()
+        .filter(|p| crate::tools::paths::normalise(p).ok().as_deref() == Some(p.as_str()))
         .filter_map(|p| {
             std::fs::read_to_string(d.join(p))
                 .ok()
@@ -203,5 +230,14 @@ mod tests {
             repro(plane.path(), "bugs/x", "bug:x", &["tests/a.rs".to_owned()]),
             [("tests/a.rs".to_owned(), "t".to_owned())]
         );
+        // A name that would leave the state's `bugs/` is no bug.
+        assert_eq!(find(plane.path(), "bugs/../../x/bug:x"), None);
+        assert_eq!(find(plane.path(), "../T001"), None);
+        let mut out = bug;
+        out.unit = "bugs/../../outside".to_owned();
+        assert!(save(plane.path(), &out).is_err());
+        assert!(!plane.path().join("outside").exists());
+        assert!(names_a_bug("007-bugfixes", "T001") && names_a_bug("bugs/x", "bug:x"));
+        assert!(!names_a_bug("/etc", "T001") && !names_a_bug("a", ".."));
     }
 }

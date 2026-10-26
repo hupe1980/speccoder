@@ -72,26 +72,50 @@ fn bug_trailers(repo: &Git, base: &str, branch: &str) -> Vec<(String, String, St
             let [task, bug, fixes] = f[..] else {
                 return None;
             };
-            let task = task.trim().rsplit('/').next()?.to_owned();
-            (!task.is_empty() && !fixes.trim().is_empty())
+            // The whole `<unit>/<task>`: a bare id collides across units.
+            let task = task.trim().to_owned();
+            (task.contains('/') && !fixes.trim().is_empty())
                 .then(|| (task, bug.trim().to_owned(), fixes.trim().to_owned()))
         })
         .collect()
 }
 
 /// The issues the branch's bug fixes close: a `Fixes: #N` trailer on a
-/// commit whose `Bug:` outcome is `fixed`, for a task that is still
-/// verified or attested (a task the status does not list — a trailer-only
-/// bug task — stands on its trailers). Each issue once, in order.
+/// commit whose `Bug:` outcome is `fixed`, for a task of the status's unit
+/// that is still verified or attested, or a trailer-only bug task
+/// (`bugs/<slug>/bug:<slug>`, which no task list holds). A task of another
+/// unit, or one the status does not list, closes nothing. Each issue once,
+/// in order.
 #[must_use]
 pub fn bug_fixes(status: &StatusReport, trailers: &[(String, String, String)]) -> Vec<u64> {
+    let states: Vec<(&str, &str)> = status
+        .tasks
+        .iter()
+        .map(|t| (t.id.as_str(), t.state.as_str()))
+        .collect();
+    closes(&status.feature, &states, trailers)
+}
+
+/// [`bug_fixes`] for unit `feature` whose tasks are in `states`.
+fn closes(
+    feature: &str,
+    states: &[(&str, &str)],
+    trailers: &[(String, String, String)],
+) -> Vec<u64> {
     let mut out = Vec::new();
-    for (task, bug, fixes) in trailers {
-        let holds = status
-            .tasks
-            .iter()
-            .find(|t| t.id == *task)
-            .is_none_or(|t| matches!(t.state.as_str(), "verified" | "attested"));
+    for (claim, bug, fixes) in trailers {
+        let Some((unit, task)) = claim.rsplit_once('/') else {
+            continue;
+        };
+        let trailer_only = task.strip_prefix("bug:").is_some_and(|slug| {
+            speccoder_core::bug::valid_slug(slug) && unit == format!("bugs/{slug}")
+        });
+        let holds = trailer_only
+            || (unit == feature
+                && states
+                    .iter()
+                    .find(|(id, _)| *id == task)
+                    .is_some_and(|(_, state)| matches!(*state, "verified" | "attested")));
         if !bug.starts_with("fixed ") || !holds {
             continue;
         }
@@ -651,6 +675,33 @@ mod tests {
             evidence_workflow(d.path()).as_deref(),
             Some(".github/workflows/evidence.yaml")
         );
+    }
+
+    #[test]
+    fn only_the_units_own_held_bug_tasks_close_issues() {
+        let t = |claim: &str, n: u32| {
+            (
+                claim.to_owned(),
+                "fixed (standing_speckit) triad=sha256:x".to_owned(),
+                format!("#{n}"),
+            )
+        };
+        let states = [("T001", "verified"), ("T002", "ready")];
+        let trailers = [
+            t("001-bugfixes/T001", 1),
+            // Another unit's T001: the bare id collides, the unit does not.
+            t("002-other/T001", 2),
+            // Not held any more.
+            t("001-bugfixes/T002", 3),
+            // Not listed by the status at all.
+            t("001-bugfixes/T009", 4),
+            // A trailer-only bug task stands on its trailers…
+            t("bugs/empty-title/bug:empty-title", 5),
+            // …only when its unit is its slug's.
+            t("bugs/other/bug:empty-title", 6),
+            t("bugs/../x/bug:..", 7),
+        ];
+        assert_eq!(closes("001-bugfixes", &states, &trailers), [1, 5]);
     }
 
     #[test]

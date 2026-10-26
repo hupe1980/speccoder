@@ -202,27 +202,53 @@ fn settings(root: &Path) -> crate::substrate::run_config::RunConfig {
         .unwrap_or_default()
 }
 
-/// The person-given statements `read` (the format's own file) lacks.
+/// How `read` (the format's file) differs from the person's `triad`: each
+/// statement of theirs it lacks, and each it carries that they did not give
+/// (an extra line, a longer or reworded one). Empty: exactly their words
+/// (whitespace-normalised), the same statements in the same order.
 fn drift(triad: &Triad, read: &crate::format::ReadBug) -> Vec<String> {
-    let has = |list: &[String], s: &str| {
-        list.iter()
-            .any(|x| speccoder_core::bug::normalise(x).contains(&speccoder_core::bug::normalise(s)))
+    let norm = |v: &[String]| -> Vec<String> {
+        v.iter()
+            .map(|x| speccoder_core::bug::normalise(x))
+            .collect()
     };
-    let mut missing = Vec::new();
-    if !has(&read.current, &triad.current.text) {
-        missing.push(format!("Current: {}", triad.current.text));
-    }
-    for e in &triad.expected {
-        if !has(&read.expected, &e.text) {
-            missing.push(format!("Expected: {}", e.text));
+    let side = |label: &str, given: Vec<String>, found: Vec<String>| -> Vec<String> {
+        let mut out: Vec<String> = given
+            .iter()
+            .filter(|g| !found.contains(g))
+            .map(|g| format!("missing {label}: {g}"))
+            .chain(
+                found
+                    .iter()
+                    .filter(|f| !given.contains(f))
+                    .map(|f| format!("not yours {label}: {f}")),
+            )
+            .collect();
+        if out.is_empty() && given != found {
+            out.push(format!(
+                "{label}: {} statement(s) given, {} read back (another order or a repeat)",
+                given.len(),
+                found.len()
+            ));
         }
-    }
-    for u in &triad.unchanged {
-        if !has(&read.unchanged, &u.text) {
-            missing.push(format!("Unchanged: {}", u.text));
-        }
-    }
-    missing
+        out
+    };
+    let mut out = side(
+        "Current",
+        vec![triad.current.text.clone()],
+        norm(&read.current),
+    );
+    out.extend(side(
+        "Expected",
+        triad.expected.iter().map(|s| s.text.clone()).collect(),
+        norm(&read.expected),
+    ));
+    out.extend(side(
+        "Unchanged",
+        triad.unchanged.iter().map(|s| s.text.clone()).collect(),
+        norm(&read.unchanged),
+    ));
+    out
 }
 
 fn triad_of(read: &crate::format::ReadBug) -> Result<Triad, BugRefusal> {
@@ -262,6 +288,9 @@ pub fn bug_with(
 
     // Continue a bug the format's own bug step created.
     if let Some(slug) = req.slug.as_deref() {
+        if !speccoder_core::bug::valid_slug(slug) {
+            return invalid_slug(slug);
+        }
         let Some((dir, unit)) = format.bug_dir(&home, slug) else {
             return CommandResult::new(
                 "bug",
@@ -300,7 +329,11 @@ pub fn bug_with(
                     if !missing.is_empty() {
                         return refuse(&BugRefusal::new(
                             "BUG-ASSESSMENT-DRIFT",
-                            format!("{} does not carry: {}", read.file, missing.join("; ")),
+                            format!(
+                                "{} does not carry exactly your words: {}",
+                                read.file,
+                                missing.join("; ")
+                            ),
                         ));
                     }
                 }
@@ -470,12 +503,17 @@ pub fn bug_with(
                     body: i.body,
                 });
             }
-            Err(_) => {
-                issue_ref = Some(speccoder_core::bug::IssueRef {
-                    number: n,
-                    repo,
-                    context_digest: None,
-                });
+            // An issue never read is not the bug's origin, and its number
+            // must never close it: nothing is recorded.
+            Err(e) => {
+                return CommandResult::new(
+                    "bug",
+                    CommandStatus::Error,
+                    &format!(
+                        "issue #{n} could not be read ({e}); nothing is recorded — check the number, or record the bug without --issue"
+                    ),
+                )
+                .with_code("GITHUB-FAILED");
             }
         }
     }
@@ -544,7 +582,7 @@ pub fn bug_with(
             return refuse(&BugRefusal::new(
                 "BUG-ASSESSMENT-DRIFT",
                 format!(
-                    "{} does not carry your words verbatim: {}; speccoder bug --slug {slug} once it does",
+                    "{} does not carry exactly your words: {}; speccoder bug --slug {slug} once it does",
                     read.file,
                     missing.join("; ")
                 ),
@@ -600,6 +638,30 @@ pub fn bug_with(
             Ok(r) => r,
             Err(r) => return refuse(&r),
         };
+        // Read back as written: exactly the person's words, or nothing is
+        // committed (constitution I/VII).
+        match format.read_bug(&root, &home, &rec.requirement) {
+            Ok(read) if drift(&triad, &read).is_empty() => {}
+            Ok(read) => {
+                return refuse(&BugRefusal::new(
+                    "BUG-ASSESSMENT-DRIFT",
+                    format!(
+                        "{} does not read back exactly your words ({}); nothing is committed — look at the uncommitted lines",
+                        read.file,
+                        drift(&triad, &read).join("; ")
+                    ),
+                ));
+            }
+            Err(r) => {
+                return refuse(&BugRefusal::new(
+                    "BUG-ASSESSMENT-DRIFT",
+                    format!(
+                        "{} ({}); nothing is committed — look at the uncommitted lines",
+                        r.message, r.code
+                    ),
+                ));
+            }
+        }
         // The person's own words: approved as they wrote them (where the
         // format has requirement identifiers to review).
         if format.requirements_file().is_some() {
@@ -654,6 +716,19 @@ pub fn bug_with(
     finish_record(
         &root, &plane, bug, files, extra, via, state, provider, secret, req.run, options,
     )
+}
+
+/// The refusal of a slug that is not one.
+fn invalid_slug(slug: &str) -> CommandResult {
+    CommandResult::new(
+        "bug",
+        CommandStatus::UsageError,
+        &format!(
+            "`{slug}` is not a bug slug: lowercase letters, digits and `-`, at most {} long",
+            speccoder_core::bug::MAX_SLUG
+        ),
+    )
+    .with_code("USAGE")
 }
 
 fn repo_prefix(root: &Path) -> (PathBuf, String) {
@@ -751,11 +826,24 @@ fn finish_record(
             context_sha256: i.context_digest.clone(),
         });
     }
-    let _ = crate::ladder::record_origin(
-        plane,
-        &speccoder_core::ladder::subject(&bug.unit, &bug.requirement),
-        origins,
-    );
+    // Exactly one origin (FR-002b): one already there for the same words
+    // (a bug read in again) stands; any other failure is said.
+    let subject = speccoder_core::ladder::subject(&bug.unit, &bug.requirement);
+    if let Err(e) = crate::ladder::record_origin(plane, &subject, origins) {
+        let same = crate::ladder::of(plane, &subject).iter().any(
+            |o| matches!(o, Origin::Bug { triad_sha256, .. } if *triad_sha256 == bug.triad.digest),
+        );
+        if !same {
+            return CommandResult::new(
+                "bug",
+                CommandStatus::Error,
+                &format!(
+                    "the bug's origin could not be written ({e}); its words are committed ({}), nothing else is kept",
+                    bug.recorded_commit.as_deref().unwrap_or("not yet")
+                ),
+            );
+        }
+    }
     bug.stage = Stage::Reproduce;
     let saved = state::save(plane, &bug)
         .and_then(|()| state::save_extra(plane, &bug.unit, &bug.task, &extra))
@@ -885,6 +973,9 @@ pub fn run_with(
         Ok(x) => x,
         Err(r) => return *r,
     };
+    if let Some(s) = slug.filter(|s| !speccoder_core::bug::valid_slug(s)) {
+        return invalid_slug(s);
+    }
     let plane = crate::worktree::project_state_dir(state, &root);
     let found = match (slug, task) {
         (Some(s), _) => format
