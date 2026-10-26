@@ -38,7 +38,9 @@ adheres to [Semantic Versioning](https://semver.org/).
 - **Reading a project no longer creates a journal.** `task show --account`
   and a strict replay on a project speccoder never ran created an empty
   journal in the state directory, and `doctor` created the state directory
-  itself; now only a run or a decision creates them.
+  itself; now only a run or a decision creates them. `doctor` still fails a
+  state directory that cannot be made, because its path or a parent is a
+  file.
 - The test suite no longer writes to your real state directory
   (`~/.local/state/speccoder`): every test runs against a throwaway one.
 

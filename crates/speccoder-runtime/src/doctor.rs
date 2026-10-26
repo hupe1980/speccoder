@@ -257,9 +257,13 @@ pub fn checks(
     out.push(match crate::worktree::state_dir() {
         Some(dir) => {
             // Probed without creating it: a check writes nothing of its
-            // own — the directory, or the nearest folder it would be made in.
-            let existing = dir.ancestors().find(|a| a.is_dir());
-            let writable = existing.is_some_and(|a| tempfile::tempfile_in(a).is_ok());
+            // own — the directory, or the nearest folder it would be made
+            // in. The nearest path that exists must be a folder: a file
+            // there (the directory itself, or a parent) blocks creating it.
+            let existing = dir.ancestors().find(|a| a.exists());
+            let writable = existing
+                .filter(|a| a.is_dir())
+                .is_some_and(|a| tempfile::tempfile_in(a).is_ok());
             if writable {
                 check("state", DoctorLevel::Pass, dir.display().to_string())
             } else {

@@ -1143,3 +1143,30 @@ fn reading_a_fresh_project_creates_no_state() {
         );
     }
 }
+
+/// `doctor` fails a state directory that cannot be made: its path, or a
+/// folder it would be made in, is a file.
+#[test]
+fn doctor_fails_a_state_path_that_is_a_file() {
+    let dir = make_project();
+    let state = tempfile::tempdir().unwrap();
+    let file = state.path().join("file");
+    std::fs::write(&file, "").unwrap();
+    for path in [file.clone(), file.join("speccoder")] {
+        let out = speccoder()
+            .args(["--json", "doctor", "-C"])
+            .arg(dir.path())
+            .env("SPECCODER_STATE_DIR", &path)
+            .output()
+            .unwrap();
+        let v = support::result(&out.stdout);
+        let check = v["data"]["checks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["check"] == "state")
+            .cloned()
+            .unwrap();
+        assert_eq!(check["level"], "fail", "{}: {check}", path.display());
+    }
+}
