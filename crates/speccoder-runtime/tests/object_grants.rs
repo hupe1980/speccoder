@@ -1,4 +1,4 @@
-//! Object-bound grants and the asking budget (spec 099), end to end with a
+//! Object-bound grants and the asking budget, end to end with a
 //! scripted model: each widening the grants once allowed is shown closed —
 //! a symlinked directory, a changed executable, a longer argv, the
 //! network, a grant carried into a later run, an approval that widened to

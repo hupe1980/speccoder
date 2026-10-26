@@ -7,7 +7,7 @@ weight = 120
 group = "Reference"
 +++
 
-speccoder is configured by `speccoder.toml` at the project root. speccoder reads only the **committed** file, so a change is reviewed like code. `speccoder init` writes a commented one. Unknown sections and keys are errors.
+speccoder is configured by `speccoder.toml` at the project root. It reads only the **committed** file, so a change is reviewed like code. `speccoder init` writes a commented one. Unknown sections and keys are errors (`CONFIG-INVALID`).
 
 ```toml
 [checks.test]
@@ -31,7 +31,7 @@ network_allow = [["cargo", "fetch"]]
 
 ## Changing it
 
-Edit the file, or use `speccoder config`. Its edits are checked by every parser before they are written, and keep the file's comments, order and layout:
+Edit the file, or use `speccoder config` (or **Settings** in the [web interface](@/docs/web.md#settings)). Its edits are checked by every parser before they are written, and keep the file's comments, order and layout. A change takes effect once committed.
 
 ```sh
 speccoder config                                   # every key: its value, or its default
@@ -39,18 +39,14 @@ speccoder config get budget.max_turns
 speccoder config set budget.max_turns 40
 speccoder config set format.argv cargo fmt         # words, read by the key's kind
 speccoder config set commands.allow '[["cargo", "check"]]'   # or JSON
-speccoder config coverage commands.allow_prefix npm run    # what a prefix would newly allow
-speccoder config set commands.allow_prefix '[["npm", "run"]]'  # shows that, asks to confirm (--yes)
-speccoder config set checks.lint.argv -- cargo clippy -- -D warnings
+speccoder config set checks.lint.argv -- cargo clippy -- -D warnings   # words starting with - after --
 speccoder config unset budget.max_turns            # back to the default
 speccoder config commit                            # commits speccoder.toml, and nothing else
 ```
 
-**Settings** in the [web interface](@/docs/web.md#settings) does the same. Either way, a change takes effect once committed.
-
 ## `[checks.<name>]`
 
-The commands that decide whether nothing regressed. A check's command up to its first option is also something the model may run (`cargo nextest run …` allows `cargo nextest run`); a check that starts with an option allows only itself.
+The commands that decide whether nothing regressed. A check's command up to its first option is also a prefix the model may run (`cargo nextest run …` allows `cargo nextest run` with any arguments); when that leaves only the program (`python3 -m pytest …`), the check allows exactly itself.
 
 | Key | Default | Meaning |
 |---|---|---|
@@ -58,50 +54,60 @@ The commands that decide whether nothing regressed. A check's command up to its 
 | `cwd` | `"."` | Working directory, relative to the project root |
 | `when_exists` | — | Run only if this path exists; otherwise the check is skipped, never passed |
 | `tier` | `"fast"` | `fast` judges every task; `full` (slow linters, audits) runs once after a run ticks the feature's last task, and with `speccoder verify` |
-| `timeout_secs` | `600` | Deadline for the whole process group |
+| `timeout_secs` | `600` | Deadline for the whole process group (1–86400) |
 | `junit` | — | A JUnit XML report the check writes, for per-test results and regression detection |
 
 ## `[model]`
 
 | Key | Default | Meaning |
 |---|---|---|
-| `provider` | required | `anthropic`, `openai`, or `openai-compatible` (Ollama, vLLM, llama.cpp, LM Studio, TGI, …) |
-| `model` | required | For example `claude-sonnet-5-5` or `gpt-5.4-mini` |
-| `reasoning_summary` | `true` | Show the model's summary of its reasoning on attempt turns, as its account (never evidence); providers without a way to ask give none |
-| `max_output_tokens` | `4096` | Per model turn |
-| `max_run_tokens` | `200000` | Per attempt |
-| `cache_ttl` | `"5m"` | Anthropic prompt-cache lifetime: `5m` or `1h` |
+| `provider` | required | `anthropic`, `openai`, or `openai-compatible` (Ollama, vLLM, llama.cpp, LM Studio, …) |
+| `model` | required | For example `claude-sonnet-5-5` |
+| `reasoning_summary` | `true` | Show the model's summary of its reasoning, as its account (never evidence); providers without one give none |
+| `max_output_tokens` | `4096` | Output tokens per model turn |
+| `max_run_tokens` | `200000` | Tokens per attempt |
+| `cache_ttl` | `"5m"` | Anthropic's prompt-cache lifetime: `5m` or `1h` |
 | `base_url` | — | Required for `openai-compatible` (e.g. `http://localhost:11434/v1`); for `openai`, a gateway in front of the Responses API |
 | `api_key_env` | — | `openai-compatible` only: the variable holding the server's key, if it needs one |
 | `structured` | `"native"` | `openai-compatible` only: `native` structured output, or `tool` (a forced tool call) |
-| `price_input_per_mtok`, `price_output_per_mtok`, `price_cache_read_per_mtok` | — | USD per million tokens, for `speccoder report --cost` and live cost |
+| `price_input_per_mtok`, `price_output_per_mtok` | — | USD per million tokens, for `speccoder report --cost` and live cost; without both, cost is tokens only |
+| `price_cache_read_per_mtok` | the input price | USD per million tokens read from the cache |
 | `price_cache_write_per_mtok`, `price_cache_write_1h_per_mtok` | Anthropic: 1.25× and 2× input; others: input | USD per million tokens written to the five-minute and the one-hour cache |
 
-The API key comes from `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`, never from this file. A local model must support tool calls and structured output; the [evaluation suite](@/docs/evaluation.md) tells whether it is good enough.
+The API key comes from the environment, never from this file. A local model must support tool calls and structured output; the [evaluation suite](@/docs/evaluation.md) tells whether it is good enough.
 
 ## `[budget]`
 
 | Key | Default | Meaning |
 |---|---|---|
-| `max_turns` | `30` | Model turns per attempt |
+| `max_turns` | `30` | Model turns per attempt (1–1000) |
 | `max_tool_calls` | `100` | Tool calls per attempt |
-| `max_attempts` | `2` | Attempts per task run; a failed verdict is retried with the verifier's facts |
-| `best_of` | `1` | Independent samples per task, the best by evidence kept (at most 10) |
+| `max_attempts` | `2` | Attempts per task run (1–20); a failed verdict is retried with the verifier's facts |
+| `best_of` | `1` | Independent samples per task, the best by evidence kept (1–10) |
 
 ## `[commands]`, `[approvals]`, `[tests]`, `[spec]`
 
 | Key | Default | Meaning |
 |---|---|---|
-| `[commands] allow` | `[]` | Exact commands the model may run without approval, besides the checks, e.g. `[["cargo", "check"]]`: `cargo check --all` still asks. Always Allow adds to it |
-| `[commands] allow_prefix` | `[]` | Command prefixes of two elements or more whose every extension runs without asking, e.g. `[["npm", "run"]]`. Saved only from its [coverage preview](#prefix-lists); a bare program is refused |
+| `[commands] allow` | `[]` | Exact commands the model may run without asking, besides the checks, e.g. `[["cargo", "check"]]`: `cargo check --all` still asks. Always Allow adds to it |
+| `[commands] allow_prefix` | `[]` | Prefixes of two elements or more whose every extension runs without asking, e.g. `[["npm", "run"]]`. Saved only from its [coverage preview](#prefix-lists) |
 | `[approvals] wait` | `"7d"` | How long a call waits for a person (`m`, `h` or `d`) before it is denied as expired; recorded as an expiry, not as anyone's decision |
 | `[approvals] budget` | `12` | Prompts a run shows you (`0`–`100`); after them, calls wait together in [Needs You](@/docs/approvals.md#the-asking-budget). `0` never prompts |
 | `[tests] frozen` | `"ask"` | Tests that existed before an attempt: `ask` before any change, or `additions` (new lines need no approval; changing or removing lines does) |
-| `[spec] format` | detected | `speckit`, `openspec` or `kiro`; `--format` and `SPECCODER_FORMAT` override it. Kiro is recognised and refused as unsupported |
+| `[spec] format` | detected | `speckit`, `openspec` or `kiro`; `--format` and `SPECCODER_FORMAT` override it. Kiro is recognised and refused |
 
 ### Prefix lists
 
-`[commands] allow` and `[sandbox] network_allow` match exact argvs. A prefix — every command that starts with it runs without asking — lives in `allow_prefix` / `network_allow_prefix`, and no approval ever writes it. To add one, speccoder first lists every distinct command the project's journal recorded that the prefix would newly allow: how often, when last, how it was decided then, and which a fixed rule (shells, privilege, network tools, remote git) keeps asking for or denying. The prefix is saved only as the confirmation of that list, and not at all while the journal cannot be read in full (another speccoder holds it): the preview then says what it could not read. A prefix added by hand is shown in Settings with the same list. Removing an entry is always possible.
+`[commands] allow` and `[sandbox] network_allow` match exact argvs. A prefix in `allow_prefix` / `network_allow_prefix` lets every command that starts with it run without asking, including commands nobody has seen, so no approval ever writes one and a bare program is refused.
+
+```sh
+speccoder config coverage commands.allow_prefix npm run     # the preview only
+speccoder config set commands.allow_prefix npm run          # shows it, then: type yes
+```
+
+- `config coverage KEY PREFIX…` lists every distinct command the project's journal recorded that the prefix would newly allow: how often, when last, how it was decided, and which a fixed rule (shells, privilege, network tools, remote git) still asks for or denies.
+- `config set` (and **Save Prefix** in Settings) saves the prefix only as the confirmation of that list: `yes` at a terminal, `--yes` without asking; otherwise it exits needing a person. It is refused when the preview changed since it was shown, and while the journal cannot be read in full (another speccoder holds it).
+- A prefix added by hand shows the same list in Settings (**Coverage**). Removing an entry needs no preview.
 
 ## `[context]`
 
@@ -114,28 +120,27 @@ The API key comes from `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`, never from this 
 | Key | Default | Meaning |
 |---|---|---|
 | `[acceptance] generate` | `true` | Derive acceptance tests from the spec before each attempt |
-| `[acceptance] held_out` | `true` | Also write [held-out tests](@/docs/evidence.md#held-out-tests) the implementer never sees; `verified` needs them to pass. Needs `generate`. Costs one author call per task and one run per held-out file |
+| `[acceptance] held_out` | `true` | Also write [held-out tests](@/docs/evidence.md#held-out-tests) the implementer never sees; `verified` needs them to pass. Needs `generate`; costs one author call per task and one run per held-out file |
 | `[acceptance] strength` | `true` | Measure the [acceptance strength](@/docs/evidence.md#acceptance-strength) of every `verified` task: one model call and one test run per variant |
 | `[acceptance] min_strength` | — | `0.0`–`1.0`: below it the set is strengthened once, then the task stops for you; unset, strength never changes a verdict |
 | `[acceptance] near_miss` | `2` | Wrong variants to try (`0`–`3`) |
 | `[acceptance] permitted` | `1` | Spec-permitted alternatives to try (`0`–`2`); `0` turns off the [over-strict check](@/docs/evidence.md#over-strict-tests) |
-| `[acceptance] strength_timeout_secs` | `900` | Budget for the whole measurement; a measurement cut off is recorded as partial and meets no `min_strength` |
-| `[converge] max_rounds` | `3` | Convergence phases a feature may get |
-| `[review] required` | `false` | A run waits until every requirement is [approved](@/docs/planning.md#review-the-spec) on its current wording (`REVIEW-PENDING`), and no requirement is read two ways (`REVIEW-AMBIGUOUS`) |
-| `[review] oracle_samples` | `2` | Independent author calls [Write Tests](@/docs/planning.md#review-the-tests) makes: two are compared for ambiguity, `1` turns the comparison off |
+| `[acceptance] strength_timeout_secs` | `900` | Budget for the whole measurement; a measurement cut off is partial and meets no `min_strength` |
+| `[converge] max_rounds` | `3` | Convergence phases a feature may get (1–20) |
+| `[review] required` | `false` | A run waits until every requirement is [approved](@/docs/planning.md#review-the-spec) on its current wording (`REVIEW-PENDING`) and none is read two ways (`REVIEW-AMBIGUOUS`) |
+| `[review] oracle_samples` | `2` | Independent author calls [writing tests at review](@/docs/planning.md#review-the-tests) makes: two are compared for ambiguity, `1` turns the comparison off |
 | `[monitor] enabled` | `false` | Review every passing attempt with the [gaming monitor](@/docs/evidence.md#the-gaming-monitor) |
 | `[git] commit` | `"per-task"` | `per-task` commits each passed task; `none` leaves changes uncommitted |
-| `[format] argv` | — | A formatter run after each attempt (e.g. `["cargo", "fmt"]`); its changes are part of the attempt and audited. The spec format is `[spec] format` |
+| `[format] argv` | — | A formatter run after each attempt (e.g. `["cargo", "fmt"]`); its changes are part of the attempt and audited |
 
 ## `[bug]`
 
-```toml
-[bug]
-reproduce_tries = 3                     # 1–5: tries before a bug is "cannot reproduce" (a rejection counts)
-test = ["./check.sh", "--", "{file}"]   # how one named test (--test PATH::NAME) runs; default: the toolchain's runner
-```
+[`speccoder bug`](@/docs/bugs.md). Project settings only: the same keys in your user config are ignored, with a warning naming them.
 
-A project setting only: the same keys in your user config are ignored, with a warning naming them. See [bug fixes](@/docs/bugs.md).
+| Key | Default | Meaning |
+|---|---|---|
+| `reproduce_tries` | `3` | Tries of the reproduction author (`1`–`5`) before the bug goes to you as cannot reproduce; a rejection counts as one |
+| `test` | the toolchain's runner | How one named test (`--test PATH::NAME`) runs, with `{file}` and `{name}` filled in, e.g. `["./check.sh", "--", "{file}"]` |
 
 ## `[sandbox]`
 
@@ -144,7 +149,7 @@ A project setting only: the same keys in your user config are ignored, with a wa
 | `mode` | `"auto"` | `auto` sandboxes where the OS supports it and says when it cannot; `required` refuses to run commands unsandboxed; `off` |
 | `network` | `"loopback"` | `off`, `loopback` (local test servers work; on Linux the same as `off`), or `on` |
 | `network_allow` | `[]` | Exact commands that get the network, e.g. `[["cargo", "fetch"]]` |
-| `network_allow_prefix` | `[]` | Prefixes (two elements or more) whose extensions get the network; saved only from its coverage preview |
+| `network_allow_prefix` | `[]` | Prefixes (two elements or more) whose extensions get the network; saved only from its [coverage preview](#prefix-lists) |
 | `writable` | `[]` | Extra writable paths (`~` is your home directory), e.g. `["~/.m2"]` for Maven |
 
 What the sandbox allows: [the OS sandbox](@/docs/security.md#the-os-sandbox).
@@ -158,7 +163,7 @@ Signed [attestations](@/docs/attestations.md) of every tick. The signer is part 
 | `enabled` | `true` | Write the statements as a git note on each tick commit |
 | `signer` | `"git"` | `git` signs with your git signing key (SSH or OpenPGP), `sigstore` keyless with `cosign`, `none` leaves them unsigned |
 | `sign_at` | `"tick"` | `tick` signs as each task is ticked; `later` leaves it to `speccoder attest sign` (for keys that need a touch or a passphrase) |
-| `[attest.sigstore] identity`, `issuer` | — | The identity and OIDC issuer you sign with, printed in `speccoder pr`'s verify command. A suggestion for the reviewer: `attest verify` trusts only its own flags |
+| `[attest.sigstore] identity`, `issuer` | — | The identity and OIDC issuer you sign with, suggested in `speccoder pr`'s verify command; `attest verify` trusts only its own flags |
 
 ## `[mutation]`
 
@@ -187,7 +192,7 @@ Who makes the attempts; see [external agents](@/docs/integrations.md#external-ag
 
 | Key | Default | Meaning |
 |---|---|---|
-| `command` | required | A stdio MCP server, started in the worktree for each task |
+| `command` | required | A stdio MCP server's program and arguments, started in the worktree for each task |
 | `allow` | `[]` | Tools called without approval |
 | `deny` | `[]` | Tools never offered |
 
@@ -212,7 +217,7 @@ command = []           # with method = "command": program and arguments; the mes
 stall_after = "15m"    # Ns | Nm | Nh, at least 30s
 ```
 
-- **Themes:** `auto` uses the terminal's 16 colours and so follows its palette; `dark` and `light` are fixed 24-bit palettes; `daltonized` uses blue and orange instead of green and red; `mono` uses only bold, dim, underline and reverse. Every state also has a word or mark.
+- **Themes:** `auto` uses the terminal's 16 colours, following its palette; `dark` and `light` are fixed 24-bit palettes; `daltonized` uses blue and orange instead of green and red; `mono` uses only bold, dim, underline and reverse.
 - **Notifications:** `auto` sends a desktop notification where the terminal shows one, a bell elsewhere. `command` runs without a shell, for at most five seconds (e.g. `["terminal-notifier", "-title", "speccoder", "-message"]`).
 - A value speccoder does not understand is a warning; the default applies.
 
@@ -227,6 +232,6 @@ stall_after = "15m"    # Ns | Nm | Nh, at least 30s
 | `SPECCODER_FORMAT` | The spec format, like `--format` |
 | `NO_COLOR`, `FORCE_COLOR`, `CLICOLOR_FORCE`, `CLICOLOR`, `TERM` | Colour, after `--color` and `[ui] color`: `NO_COLOR` (non-empty) turns it off; `FORCE_COLOR` or `CLICOLOR_FORCE` turns it on, also when piped; `CLICOLOR=0` or `TERM=dumb` turns it off; otherwise a terminal gets colour |
 | `COLUMNS` | The width when the output is not a terminal (default 100) |
-| `LC_ALL`, `LC_CTYPE`, `LANG` | A locale that is set and not UTF-8 means ASCII marks |
+| `LC_ALL`, `LC_CTYPE`, `LANG` | A locale that is set and not UTF-8 means ASCII marks, unless `[ui] ascii` says otherwise |
 | `SPECCODER_SCREEN_READER` | Screen-reader mode, like `--screen-reader` |
 | `SPECCODER_CALL_ID` | Set *for* commands the model runs: the call's id, stable across a resume |

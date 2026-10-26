@@ -447,7 +447,7 @@ pub enum Command {
 /// `speccoder task` verbs; the task comes first after the verb.
 #[derive(Debug, Subcommand)]
 pub enum TaskAction {
-    /// Approve the call the task stopped for (its class for the task, by default).
+    /// Approve the call the task stopped for (that object for the rest of the task, by default).
     Approve {
         /// The task, e.g. T005.
         #[arg(required_unless_present = "all")]
@@ -959,9 +959,9 @@ pub enum TierArg {
 pub enum ScopeArg {
     /// This call only.
     Once,
-    /// This call's class for the rest of the task.
+    /// This call's object (that file, command or tool) for the rest of the task.
     Task,
-    /// This call's class for every task of the run.
+    /// This call's object for every task of the run.
     Run,
 }
 

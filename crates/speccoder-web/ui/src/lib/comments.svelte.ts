@@ -1,4 +1,4 @@
-// The comment tray of the current feature (spec 093): the host keeps the
+// The comment tray of the current feature: the host keeps the
 // drafts in its state directory, so they survive a reload and the terminal
 // lists them too. Every change is an action through the job endpoint; the
 // tray reads the host's list again when a job ends.

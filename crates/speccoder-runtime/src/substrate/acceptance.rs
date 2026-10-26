@@ -310,7 +310,7 @@ pub fn held_out_input(
     ])
 }
 
-/// What the test author is told at review (spec 093): the same author,
+/// What the test author is told at review: the same author,
 /// for one requirement before any task exists, stating per scenario what it
 /// asserts so two independent answers can be compared.
 #[must_use]
@@ -388,7 +388,7 @@ pub fn review_schema() -> Value {
     })
 }
 
-/// What a review-time author call is given (spec 093). The requirement,
+/// What a review-time author call is given. The requirement,
 /// its scenarios and the person's notes are the person's; the file list is
 /// the checkout's.
 #[derive(Debug, Clone)]

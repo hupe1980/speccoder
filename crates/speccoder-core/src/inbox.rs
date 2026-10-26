@@ -1,10 +1,10 @@
 //! The kinds of Needs You items: one registry, each kind with its group
-//! (D-118) and urgency rank. A feature adds a kind here, never a free
+//! and urgency rank. A feature adds a kind here, never a free
 //! string; the runtime's list is derived from it.
 
 use serde::{Deserialize, Serialize};
 
-/// Where an item puts the work (D-118).
+/// Where an item puts the work.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Group {
@@ -73,7 +73,7 @@ pub enum Kind {
     /// The spec leaves questions open.
     Question,
     /// Two independent test authors read a requirement differently: the
-    /// person says which reading is meant, or rewords it (spec 093).
+    /// person says which reading is meant, or rewords it.
     Ambiguous,
     /// Requirements not approved on their current wording.
     Review,
@@ -82,7 +82,7 @@ pub enum Kind {
     /// The last attempt did not pass.
     Stuck,
     /// An autopilot run refused calls it would have asked about: listed
-    /// for the person afterwards (spec 093).
+    /// for the person afterwards.
     AutopilotDenied,
     /// A bug is already fixed: keep its reproduction, or drop it.
     BugAlreadySatisfied,

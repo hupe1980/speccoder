@@ -77,7 +77,7 @@ class AppState {
   /** Where the model's latest reasoning summary landed, its last line: a claim. */
   thinking = $state<string | null>(null);
   usage = $state<{ in: number; out: number; usd: number | null }>({ in: 0, out: 0, usd: null });
-  /** Writing a requirement's tests at review: the stage it is in (spec 093). */
+  /** Writing a requirement's tests at review: the stage it is in. */
   oracleStage = $state<{ requirement: string; stage: string; n: number; of: number } | null>(null);
   waiting = $state<Waiting | null>(null);
   toasts = $state<Toast[]>([]);

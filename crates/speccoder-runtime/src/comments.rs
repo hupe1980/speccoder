@@ -1,4 +1,4 @@
-//! Anchored review comments (spec 093, F-108): the person comments on a
+//! Anchored review comments: the person comments on a
 //! passage of a feature document, a line of the spec's changes, a line of a
 //! shown visible test or a finding; the drafts collect in a tray in the
 //! state directory (`<state>/comments/<unit>.json`, never browser storage,

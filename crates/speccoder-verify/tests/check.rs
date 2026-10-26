@@ -89,7 +89,7 @@ fn every_kind_of_tick_gets_its_outcome_and_the_branch_fails() {
     );
     // The unknown fields are tolerated and named, never deciding.
     assert_eq!(d["newer_fields"], json!(["provenance", "revision 9"]));
-    assert_eq!(d["not_evaluated"], json!(["d121_regressions"]));
+    assert_eq!(d["not_evaluated"], json!(["earlier_task_regressions"]));
     assert_eq!(d["skipped"][0]["task"], "T010");
     assert_eq!(d["totals"]["skipped"], 1);
     assert_eq!(d["ticks"][2]["decider"], "Ada");

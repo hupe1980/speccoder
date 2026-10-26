@@ -1,5 +1,5 @@
 <script lang="ts">
-  // One requirement's tests at review (spec 093): the visible acceptance
+  // One requirement's tests at review: the visible acceptance
   // tests the run would use, written on the person's request, red-checked
   // on the current code, shaped here — reject, ask again, edit — and frozen
   // when the spec is approved. Of the held-out tests only their number is

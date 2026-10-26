@@ -185,7 +185,7 @@ pub fn who_in(dir: &Path) -> String {
         .unwrap_or_else(|| "unknown".to_owned())
 }
 
-/// The object-bound grants (F-125) a person approved earlier for this
+/// The object-bound grants a person approved earlier for this
 /// feature's tasks — distinct, by grant id, in the order first decided —
 /// with the objects themselves: what an autopilot run may be given.
 #[must_use]
@@ -709,8 +709,8 @@ pub trait Approver: Send + Sync + std::fmt::Debug {
     /// The person's answer to the presented call.
     fn ask(&self, p: &Presentation) -> Answer;
 
-    /// The person's free-text answer to a question a hosted skill asks
-    ///; `None` when nobody can answer.
+    /// The person's free-text answer to a question a hosted skill asks;
+    /// `None` when nobody can answer.
     fn answer(&self, question: &str) -> Option<String> {
         let _ = question;
         None

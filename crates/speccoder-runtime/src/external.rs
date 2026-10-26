@@ -156,7 +156,9 @@ pub fn argv(
                 .into_iter()
                 .map(str::to_owned)
                 .collect::<Vec<_>>();
-            tools.extend(allow.iter().map(|p| format!("Bash({}:*)", p.join(" "))));
+            // Exact commands, as speccoder allows them: Claude Code reads
+            // `Bash(cmd:*)` as a prefix, `Bash(cmd)` as the command alone.
+            tools.extend(allow.iter().map(|p| format!("Bash({})", p.join(" "))));
             let mut a = vec![
                 "claude".to_owned(),
                 "-p".to_owned(),
@@ -365,7 +367,7 @@ mod tests {
             None,
         );
         assert!(
-            a.contains(&"Read,Edit,Write,MultiEdit,Glob,Grep,LS,Bash(cargo test:*)".to_owned()),
+            a.contains(&"Read,Edit,Write,MultiEdit,Glob,Grep,LS,Bash(cargo test)".to_owned()),
             "{a:?}"
         );
         assert!(a.ends_with(&["--model".to_owned(), "sonnet".to_owned()]));

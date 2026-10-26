@@ -7,7 +7,7 @@
   import Source from "./Source.svelte";
   import { language } from "../lib/highlight";
   /** `only`: show this file alone (the Code view picks one). */
-  /** `comment`: a line comment of the Code view (spec 093) — the gutter
+  /** `comment`: a line comment of the Code view — the gutter
    *  offers one on each line of the new side; `frozen`: test files frozen at
    *  review, whose lines are commented on in Review › Tests instead. */
   let {

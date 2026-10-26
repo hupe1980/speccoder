@@ -1,5 +1,5 @@
-//! The ladder (D-103): where a unit of work came from. One provenance
-//! record per subject, written once (D-126). This build knows the variants
+//! The ladder: where a unit of work came from. One provenance
+//! record per subject, written once. This build knows the variants
 //! a bug writes; later rungs add theirs as variants.
 
 use serde::{Deserialize, Serialize};
@@ -57,16 +57,16 @@ impl Origin {
     }
 }
 
-/// The rung a unit stands on (D-103): a quick change (L1), a bug (L2) or
+/// The rung a unit stands on: a quick change (L1), a bug (L2) or
 /// a feature. A quick-change or bug unit's pipeline authors and confirms
-/// its own acceptance, so the review writes no tests for it (D-126).
+/// its own acceptance, so the review writes no tests for it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Rung {
-    /// A quick change's standing unit (`speccoder do`, spec 084).
+    /// A quick change's standing unit (`speccoder do`).
     Quick,
     /// A bug's home: a standing bug-fix unit or a bug of the format's own
-    /// bug structure (spec 090).
+    /// bug structure.
     Bug,
     /// Any other unit.
     Feature,

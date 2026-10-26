@@ -7,33 +7,27 @@ weight = 30
 group = "Start"
 +++
 
-Every task goes through the same six steps, each against a specific way an unsupervised agent goes wrong. The [run page](@/docs/running.md) covers the commands.
+Every task goes through six steps. Commands are on the [run page](@/docs/running.md).
 
 ## 1. Is the task ready?
 
-speccoder reads `tasks.md` the way Spec Kit writes it: phases, `[P]` (parallel) markers, user-story labels and references such as `depends on T012`. A task is **ready** when everything it depends on is ticked. Edges come only from that structure and from task IDs written in the text — nothing is inferred. `speccoder inspect` shows the graph and what blocks what.
+speccoder reads `tasks.md` as Spec Kit writes it: phases, `[P]` markers, user-story labels and references such as `depends on T012`. A task is **ready** when everything it depends on is ticked. Edges come only from that structure and from task IDs in the text; nothing is inferred. `speccoder inspect` shows the graph.
 
 ## 2. Baseline
 
-Your **checks** — the test, lint and type-check commands in `speccoder.toml` — run on the untouched worktree. A check that already fails is not blamed on the change, and with JUnit reports speccoder compares test by test, so a pre-existing failure stays pre-existing.
+Your **checks** (the test, lint and type-check commands in `speccoder.toml`) run on the untouched worktree. A check that already fails is not blamed on the change; with JUnit reports the comparison is test by test.
 
 ## 3. Acceptance tests, red first
 
-If the task's user story has acceptance examples, a **separate model call with no tools** writes tests from them, in the project's test layout. They must **fail** now: a test that already passes demonstrates nothing about the change. From then on they are frozen — the implementing model cannot change them — so the evidence comes from the spec, not from code the implementer wrote to suit itself.
+If the task's user story has acceptance examples, a **separate model call with no tools** writes tests from them. They must **fail** now, since a test that already passes demonstrates nothing, and are then frozen so the implementing model cannot change them. A second set, [held out](@/docs/evidence.md#held-out-tests) from the model, checks the same scenarios with other inputs.
 
 ## 4. The attempt
 
-The implementing model works in the worktree with a small set of tools — read, list, search, write, edit, run a command, look at git. **Every call is classified before it runs:**
-
-- **allowed** — reading the project, writing source files, running your checks and commands you allowed;
-- **needs a person** — dependency manifests, existing tests, shells, network tools, unlisted commands, MCP tools you have not allowed;
-- **denied** — the spec, your check configuration, `.git`, secrets, privilege escalation, git remotes, anything outside the worktree.
-
-A person decides the middle class inline, in an editor, or later ([approvals](@/docs/approvals.md)); the full rules are in [the policy](@/docs/security.md#the-policy). Three denied calls in a row end the attempt. Every command runs inside the [OS sandbox](@/docs/security.md). If the model concludes the task cannot be done as written — the spec contradicts itself, a test is wrong — it stops with a reason (`blocked`) instead of bending the code.
+The implementing model works in the worktree with a small set of tools: read, list, search, write, edit, run a command, git status and diff. Every call is classified before it runs as allowed, needing a person ([approvals](@/docs/approvals.md)) or denied ([the policy](@/docs/security.md#the-policy)). Three denied calls in a row end the attempt. Every command runs in the [OS sandbox](@/docs/security.md#the-os-sandbox). If the task cannot be done as written (the spec contradicts itself, a test is wrong), the model stops with a reason (`blocked`) instead of bending the code.
 
 ## 5. Judgement
 
-speccoder diffs the worktree and audits it: deleted or weakened tests, new skip markers and changed check configuration fail the verdict whatever the checks say. Then it runs the checks and the acceptance tests itself.
+speccoder [audits the diff](@/docs/evidence.md#the-diff-audit) (deleted or weakened tests, new skip markers, changed check configuration fail the verdict whatever the checks say), then runs the checks and the acceptance tests itself.
 
 | Verdict | Means |
 |---|---|
@@ -41,18 +35,18 @@ speccoder diffs the worktree and audits it: deleted or weakened tests, new skip 
 | `regression_only` | Nothing regressed, but there was nothing task-specific to show (no acceptance examples). |
 | `failed` | A check or an acceptance test failed, or the audit found something. |
 
-Optionally, [mutation testing](@/docs/evidence.md#mutation-testing) checks that the new tests really test the change, and a [gaming monitor](@/docs/evidence.md#the-gaming-monitor) looks for results that were hard-coded rather than computed.
+Optionally, [mutation testing](@/docs/evidence.md#mutation-testing) checks that the tests test the change, and a [gaming monitor](@/docs/evidence.md#the-gaming-monitor) looks for hard-coded results.
 
 ## 6. Outcome
 
-- **Passed** — speccoder ticks the task in `tasks.md` (never the model) and commits on `speccoder/<feature>` with trailers recording the verdict, the run and the tokens used.
-- **Failed** — it is retried once by default, with the verifier's facts (what failed, which test, the output) rather than the model's transcript ([retries](@/docs/running.md#retries)).
-- **Anything else** — blocked, needing approval, suspected gaming — the attempt is saved under `refs/speccoder/attempts/<feature>/<task>/<run>`, undone in the worktree, and the run stops with what it needs from you.
+- **Passed**: speccoder (never the model) ticks the task in `tasks.md` and commits on `speccoder/<feature>`, with trailers recording the verdict, the run and the tokens.
+- **Failed**: [retried](@/docs/running.md#retries) with the verifier's facts, not the model's transcript.
+- **Anything else** (blocked, needs approval, suspected gaming): the attempt is saved under `refs/speccoder/attempts/<feature>/<task>/<run>`, undone in the worktree, and the run stops with what it needs from you.
 
 ## After the last task: convergence
 
-Every task can be ticked while the spec is still unmet. `speccoder converge` (or `run --converge`) asks a read-only model call to compare the code with the spec, plan and tasks, the way Spec Kit's `/speckit-converge` does, and appends what remains as a new phase of tasks. A convergence task only changes code once its acceptance tests fail first — a model's finding is a claim until a test demonstrates it.
+All tasks can be ticked while the spec is still unmet. [Convergence](@/docs/running.md#convergence) has a read-only model call compare the code with the spec and appends what remains as new tasks, each of which changes code only once its acceptance tests fail first.
 
 ## What speccoder does not decide
 
-Whether the feature is right. `verified` is strong evidence that the code does what the spec's examples say; it is not a review of the design, the security of the code, or the parts the spec did not mention. Review the branch like any contribution.
+Whether the feature is right. `verified` is strong evidence that the code does what the spec's examples say, not a review of the design, the security of the code, or what the spec does not mention. Review the branch like any contribution.

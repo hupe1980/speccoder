@@ -1,7 +1,7 @@
 //! The four renderers of a call needing a person — the terminal prompt,
 //! the dashboard overlay, the editor (ACP) and the web sheet — hold to one
 //! presentation: the same object lines, the same source lines and the same
-//! choices in the same order (spec 099, SC-007). An option that exists in
+//! choices in the same order. An option that exists in
 //! one interface and not in another is a hole.
 
 // Test code: panicking on unexpected input is the failure report.

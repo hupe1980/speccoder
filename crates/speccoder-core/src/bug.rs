@@ -729,7 +729,7 @@ pub fn bug_verdict(
             _ => "the reproduction does not discriminate the fix: with the change undone the reproductions still pass".to_owned(),
         });
     }
-    // At least one special case per reproducing statement (FR-017): a
+    // At least one special case per reproducing statement: a
     // statement without one has no evidence the reproduction is strong.
     let mut reproducing: Vec<&str> = d
         .reproductions

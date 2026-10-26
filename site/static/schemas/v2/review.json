@@ -266,7 +266,7 @@
       "type": "object"
     },
     "OfferedGrant": {
-      "description": "A grant an autopilot run may hold, offered on the approve sheet: one\nobject-bound grant (F-125) a person decided earlier for this feature.",
+      "description": "A grant an autopilot run may hold, offered on the approve sheet: one\nobject-bound grant a person decided earlier for this feature.",
       "properties": {
         "class": {
           "description": "`write`, `command`, `network` or `mcp`.",
@@ -1072,7 +1072,7 @@
     },
     "oracle": {
       "default": [],
-      "description": "One per requirement with scenarios (`US1`), beside the decision\nlines: the tests the run would use, as written at review (D-117).",
+      "description": "One per requirement with scenarios (`US1`), beside the decision\nlines: the tests the run would use, as written at review.",
       "items": {
         "$ref": "#/$defs/OracleView"
       },

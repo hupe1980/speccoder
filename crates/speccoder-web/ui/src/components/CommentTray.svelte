@@ -1,5 +1,5 @@
 <script lang="ts">
-  // The comment tray (spec 093): the person's comments on the spec, its
+  // The comment tray: the person's comments on the spec, its
   // changes, its tests and its findings, collected and sent as one revision
   // limited to the sections they touch — then kept, or undone byte for byte.
   import { app } from "../lib/app.svelte";

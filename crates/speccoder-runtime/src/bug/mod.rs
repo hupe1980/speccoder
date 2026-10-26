@@ -184,7 +184,7 @@ pub fn bug(
     }
 }
 
-/// The project root at `path`, or why there is none (Kiro names F-052).
+/// The project root at `path`, or why there is none (for Kiro: not yet supported).
 fn root_of(
     path: &Path,
 ) -> Result<(PathBuf, &'static dyn crate::format::Adapter), Box<CommandResult>> {
@@ -835,7 +835,7 @@ fn finish_record(
             context_sha256: i.context_digest.clone(),
         });
     }
-    // Exactly one origin (FR-002b): one already there for the same words
+    // Exactly one origin: one already there for the same words
     // (a bug read in again) stands; any other failure is said.
     let subject = speccoder_core::ladder::subject(&bug.unit, &bug.requirement);
     if let Err(e) = crate::ladder::record_origin(plane, &subject, origins) {

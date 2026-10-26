@@ -3,7 +3,7 @@
 //! carries its evidence and checked with `attest verify`'s own rules
 //! ([`super::verify::object`]), plus what only a branch can show: a tick
 //! with no evidence at all, a task line edited after its tick, a cited
-//! requirement changed since (D-091), a commit a squash merge lost.
+//! requirement changed since, a commit a squash merge lost.
 //!
 //! Everything is read from git objects of the repository at the given
 //! head, never from a working tree, and trust comes only from the caller:
@@ -935,7 +935,7 @@ fn run(
         trace: Vec::new(),
         share: None,
         open_no_claim: Vec::new(),
-        not_evaluated: vec![verify_branch::D121_REGRESSIONS.to_owned()],
+        not_evaluated: vec![verify_branch::EARLIER_TASK_REGRESSIONS.to_owned()],
         newer_fields: Vec::new(),
     };
     let history = history(
@@ -1133,7 +1133,7 @@ fn run(
         report.ticks.extend(reports);
     }
     // Trailer-only tasks: a bug of the format's own bug structure, closed by
-    // its verdict commit and anchored on its triad (spec 090 FR-002a).
+    // its verdict commit and anchored on its triad.
     for claim in &history.bug_claims {
         let Some(tick) = trailer_only(format, &project, &prefix, claim) else {
             // A claim whose home this build cannot read is not proof.

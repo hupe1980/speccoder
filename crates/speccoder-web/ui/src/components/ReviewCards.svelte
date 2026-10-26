@@ -86,7 +86,7 @@
   const commit = $derived(byKind(app.actions, "commit")[0]);
   const how = (then: string | null, now: string | null) => (!then ? "Added" : !now ? "Removed" : "Reworded");
   const plain = (l: string | null) => (l ?? "").replace(/^\s*-\s*\*\*[A-Z]+-\d+\*\*:?\s*/, "");
-  // Approve and Run (spec 093): the sheet with the three choices.
+  // Approve and Run: the sheet with the three choices.
   let approving = $state(false);
   let menu = $state(false);
   const blockedBy = $derived(r?.sheet?.blocked ?? []);

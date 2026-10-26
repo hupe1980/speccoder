@@ -385,7 +385,7 @@ fn words(line: &str) -> Vec<String> {
     out
 }
 
-/// Every speccoder command a person is told to run parses (SC-002).
+/// Every speccoder command a person is told to run parses.
 fn parses(line: &str) {
     // `<task>`-style blanks a person fills in.
     let filled = line

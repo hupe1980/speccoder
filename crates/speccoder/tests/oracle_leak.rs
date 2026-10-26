@@ -1,4 +1,4 @@
-//! `oracle_leak` (spec 093, SC-003, FR-022/FR-023): with a requirement's
+//! `oracle_leak`: with a requirement's
 //! tests written and frozen at review and a held-out set sealed beside
 //! them, no response of the web host — every read endpoint, a job's result
 //! and its event stream — carries a held-out path or literal; the file and

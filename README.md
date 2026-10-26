@@ -32,9 +32,9 @@ Coding agents are good at writing code and too good at declaring victory. specco
 
 - 🧪 **Evidence decides.** The spec's acceptance examples become tests that must fail before the attempt and pass after it; your checks must not regress; the diff is audited for weakened tests; and plausible wrong versions of the change must fail the tests (the acceptance strength on every tick).
 - 🔒 **Isolated and sandboxed.** Work happens on `speccoder/<feature>` in a worktree of its own. Every command runs in an OS sandbox (Seatbelt on macOS, Landlock and seccomp on Linux): writes only to the worktree, no credentials, no network beyond loopback.
-- 🚦 **Every call governed.** Each tool call is allowed, sent to a person, or denied before it runs. An approval covers the exact object you saw — the file a write reaches, the argv and the program it runs, the MCP tool as defined now — and ends with the run; arguments copied from what the model read can be approved once only. Decisions record who made them — at the terminal, in an editor over ACP, or later.
+- 🚦 **Every call governed.** Each tool call is allowed, sent to you, or denied before it runs. An approval covers exactly what you saw — that file, that command, that tool — and ends with the run. Every decision records who made it.
 - 💾 **Durable and replayable.** Every model and tool call is journaled. A killed run resumes without repeating finished calls; a recorded run replays offline.
-- 🧾 **Proof a maintainer can check.** Every tick leaves signed in-toto statements in git. `speccoder-verify` — a small static binary, no model key, no network, nothing from the pull request executed — checks each `[X]` against them with the maintainer's trust, and its GitHub Action publishes the result on every push as the `speccoder / evidence` check, which a repository can make required ([proof in pull requests](https://hupe1980.github.io/speccoder/docs/verifier/)).
+- 🧾 **Proof a maintainer can check.** Every tick leaves signed in-toto statements in git. `speccoder-verify` (no model, no network) checks each `[X]` against them, and its GitHub Action posts the result as the `speccoder / evidence` check ([proof in pull requests](https://hupe1980.github.io/speccoder/docs/verifier/)).
 - 🤖 **Your model, or your agent.** Anthropic, OpenAI, any OpenAI-compatible server (Ollama, vLLM, …), or Claude Code and Codex making the attempts under speccoder's judgement.
 
 ## 🚀 Quickstart
@@ -53,12 +53,10 @@ speccoder init                       # detects your checks, runs them, offers to
 speccoder run                        # works through the feature's tasks
 speccoder do "make the login button blue"   # a small change, judged like any other
 speccoder bug "saving an empty title crashes" --expected "an empty title is refused"
-                                     # a bug: reproduced first, confirmed by you once, fixed on evidence
-speccoder review                     # sign off the spec, requirement by requirement
-speccoder review tests US1 --write   # see the tests the run would use, red now, before any code
-speccoder review approve --run ask   # approve, freeze those tests and start the run
-speccoder inbox                      # what waits for your decision, in every feature
-speccoder actions                    # what you can do now, each with its command (--json for scripts)
+                                     # reproduced first, confirmed by you, fixed on evidence
+speccoder review tests US1 --write   # the tests the run will use, red now, before any code
+speccoder review approve --run ask   # approve the spec, freeze those tests, start the run
+speccoder inbox                      # what waits for your decision
 speccoder report                     # every task and the evidence behind its tick
 git merge speccoder/001-my-feature   # after reviewing the branch
 ```
@@ -113,7 +111,7 @@ Then, as you need them:
 5. ⚖️ **Judgement** — `verified` when the acceptance tests went red → green and nothing regressed; `regression_only` when nothing task-specific was shown; `failed` otherwise. A verified task's tests then meet wrong variants of the change: how many they reject is its acceptance strength.
 6. 🏁 **Outcome** — a verified task is ticked and committed by speccoder. A failed one is retried once with the verifier's facts. Anything else is saved under `refs/speccoder/attempts/…`, undone, and handed to a person.
 
-🐞 **A bug** (`speccoder bug`) adds one rule each way: a test-blind author writes one reproduction per expected behaviour that must fail on the untouched code by an assertion, you confirm it once, and the fix is `verified` only if undoing it makes a reproduction fail again. A bug that cannot be reproduced comes back to you; one that already passes is never ticked. With Spec Kit's `bug` extension the bug lives in its own `.specify/bugs/<slug>/`. ([Bug fixes](https://hupe1980.github.io/speccoder/docs/bugs/))
+🐞 **A bug** (`speccoder bug`) must first be reproduced: one test per expected behaviour that fails by an assertion, confirmed by you. The fix is `verified` only if undoing it makes a reproduction fail again; a bug that cannot be reproduced comes back to you ([bug fixes](https://hupe1980.github.io/speccoder/docs/bugs/)).
 
 🔄 Change the spec later and the ticks that cite a changed requirement say they were proven against the earlier wording; `speccoder run --converge` checks the code against the spec as it is now.
 
@@ -136,7 +134,7 @@ Early (0.x): it works end to end on small projects with OpenAI, Anthropic and lo
 | `speccoder` | The CLI (and the desktop window, feature `app`) |
 
 - ✅ `just ci` runs every gate CI runs: formatting, clippy, tests, cargo-deny, layering, docs, a package dry run, the cold-start budget and the release scripts' tests. It needs `just`, `cargo-nextest` and `cargo-deny`; the toolchain is pinned in `rust-toolchain.toml`.
-- 🎨 `just ui` rebuilds the web interface into its committed bundle (needs Node).
+- 🎨 `just ui` checks, tests and rebuilds the web interface into its committed bundle (needs Node).
 - 🌐 `just site` serves the documentation site (needs [Zola](https://www.getzola.org/)).
 - 🎯 [`evals/`](https://github.com/hupe1980/speccoder/tree/main/evals) holds spec projects with hidden oracles and impossible tasks that measure whether completions are really correct.
 

@@ -242,7 +242,7 @@ pub fn worktree_view(root: &Path, feature: Option<&str>) -> WorktreeView {
             "--ignored=matching",
         ])
         .unwrap_or_default();
-    // Held-out files overlaid for a judge run are never listed (D-081):
+    // Held-out files overlaid for a judge run are never listed:
     // with a marker that cannot be read, nothing untracked is.
     let overlaid = crate::held_out::overlaid(&wt);
     let entries = crate::git::nul_fields(&out)

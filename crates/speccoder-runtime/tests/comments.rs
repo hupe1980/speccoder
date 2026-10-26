@@ -1,4 +1,4 @@
-//! Anchored comments (spec 093, US5–US6): drafts in the tray, one scoped
+//! Anchored comments: drafts in the tray, one scoped
 //! revision turn of the revising skill, sections outside the comments
 //! flagged, a byte-exact undo, and Code-view comments as one nudge.
 

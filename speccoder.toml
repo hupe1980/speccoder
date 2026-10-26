@@ -1,5 +1,5 @@
-# speccoder's own checks: `speccoder verify` runs them (and later, so does
-# every task speccoder implements on itself).
+# speccoder's own checks: `speccoder verify` runs them, and so does every
+# task speccoder implements on itself.
 
 [checks.test]
 argv = ["cargo", "nextest", "run", "--workspace", "--all-features", "--profile", "speccoder"]
@@ -19,7 +19,7 @@ timeout_secs = 900
 argv = ["cargo", "deny", "check"]
 tier = "full"
 
-# The model `speccoder propose` (and later the agent loop) calls. The API key
+# The model speccoder calls. The API key
 # comes only from the environment (OPENAI_API_KEY for openai,
 # ANTHROPIC_API_KEY for anthropic); speccoder never reads key files. With a
 # gitignored .env:  set -a; . ./.env; set +a

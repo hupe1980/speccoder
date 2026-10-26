@@ -7,31 +7,31 @@ weight = 140
 group = "Reference"
 +++
 
-Every failure names a [code](@/docs/codes.md) and the command that fixes it — `speccoder explain CODE` says more, offline.
+Every failure names a [code](@/docs/codes.md) and the command that fixes it; `speccoder explain CODE` says more, offline.
 
 | Symptom | Cause and fix |
 |---|---|
-| `error[SETUP-INCOMPLETE]` | The worktree lacks setup your checkout never committed (`.config/nextest.toml`, `speccoder.toml`), or the checks leave a lockfile or build output there on every run. At a terminal, `speccoder run` offers the fix and runs again on a yes; in the app, **Commit and Run Again**; else `speccoder fix` (`--dry-run` shows the commands). Undo: `git reset --soft HEAD~1`. |
-| `error[CHECK-BROKEN]` before any model call | A check fails on the untouched worktree without running a test; the message quotes the check's own error and, when known, its fix. When the first task creates the project, run with `--allow-failing-baseline`. |
-| No colour | Output is not a terminal, `NO_COLOR` or `TERM=dumb` is set, or screen-reader mode is on. `--color always` forces it. |
-| Odd symbols or boxes | The font lacks them: `--ascii`, or `[ui] ascii = true` in [your settings](@/docs/configuration.md#your-settings). |
-| `error[CONFIG-MISSING]` — the worktree has no speccoder.toml (13) | speccoder reads committed files. Commit `speccoder.toml`. |
-| `error[UNCOMMITTED-INTENT]` — … are not committed (14) | Commit the feature's Spec Kit files and `.specify/`. |
-| `error[KEY-MISSING]` — OPENAI_API_KEY is not set (13) | Export the key in this shell, e.g. `set -a; . ./.env; set +a`. |
-| `unknown section [budgett]` (13) | A typo in `speccoder.toml`; the message lists the known sections. |
-| Every attempt stops for `cargo test` (or similar) | Add the prefix to `[commands] allow`; `init` does this for toolchains it knows. |
+| `error[SETUP-INCOMPLETE]` (14) | The worktree lacks setup your checkout never committed, or the checks leave a lockfile or build output there. At a terminal, `speccoder run` offers the fix and runs again on a yes; the web interface offers a button; else [`speccoder fix`](@/docs/running.md#when-the-setup-stops-a-run). |
+| `error[CHECK-BROKEN]` (13) before any model call | A check fails on the untouched worktree without running a test; the message quotes the check's own error. When the first task creates the project, run with `--allow-failing-baseline`. |
+| `error[CONFIG-MISSING]` (13) | No `speccoder.toml`: run `speccoder init`. "The worktree has no speccoder.toml": commit it, since speccoder reads committed files. |
+| `error[CONFIG-INVALID]` (13), e.g. ``unknown section `[budgett]` `` | A typo or a wrong value in `speccoder.toml`; the message names the line and lists what is known. |
+| `error[UNCOMMITTED-INTENT]` (14) | Commit the feature's spec files, or run with `--in-place`. |
+| `error[KEY-MISSING]` (13) | Export the variable the message names in this shell, e.g. `set -a; . ./.env; set +a`. |
+| Every attempt stops for the same command | `[commands] allow` matches exact commands: add the command there, or a prefix to `[commands] allow_prefix` after `speccoder config coverage` ([prefix lists](@/docs/configuration.md#prefix-lists)). |
+| `… is not an allowed command` (acceptance skipped) | The acceptance tests' command must be allowed: add it to `[commands] allow`. |
 | The baseline fails on a project without tests | For nextest add `--no-tests=warn`, as `init` does. |
 | A build cannot download dependencies | The sandbox has no network. Fetch first (`cargo fetch`, `npm ci`, `uv sync`) or add the fetch command to `[sandbox] network_allow`. |
 | A tool writes outside the project and fails | Add its cache to `[sandbox] writable`, e.g. `["~/.m2"]` or `["~/.gradle"]`. |
-| `commands run unsandboxed: …` | The OS offers no sandbox (Linux without Landlock, another OS). Use `[sandbox] mode = "required"` to refuse instead. |
-| `error[TASK-NOT-READY]`, `TASK-BLOCKED` — no task can run (16) | `speccoder inspect` shows what blocks what; a skipped task blocks its dependents. |
-| `stopped[BUDGET-EXHAUSTED]` | Raise `[budget] max_turns` or split the task in `tasks.md`. |
-| `acceptance skipped: … is not an allowed command` | The acceptance tests' command must be allowed: add its prefix to `[commands] allow`. |
-| `stopped[ACCEPTANCE-UNWRITTEN]` or `PROVIDER-REFUSED` — refused the request: … credit_balance_exhausted (or quota, billing, an API key) | The provider refuses the account, not the request; nothing is retried. Top it up or fix the key, and run again. |
-| `another speccoder is working on this project` | A second process found the journal in use. Wait for the first, or check `speccoder report --live`. |
+| `commands run unsandboxed: …` | The OS offers no sandbox (Linux without Landlock, another OS). Set `[sandbox] mode = "required"` to refuse instead. |
+| `error[TASK-NOT-READY]` or `TASK-BLOCKED` (16) | `speccoder inspect` shows what blocks what; a skipped task blocks its dependents. |
+| `stopped[BUDGET-EXHAUSTED]` (23) | Raise the `[budget]` limit it hit, or split the task in `tasks.md`. |
+| `error[PROVIDER-REFUSED]` (21) or `stopped[ACCEPTANCE-UNWRITTEN]` (23), e.g. `credit_balance_exhausted` | The provider refuses the account, not the request; nothing is retried. Top it up or fix the key, and run again. |
+| `another speccoder is working on this project` | A second process holds the journal. Wait for it, or watch it with `speccoder report --live`. |
 | `MCP tool … changed since it was allowed` | The server changed a tool you allowed. Read it again; approving one call records it as it is now. |
+| No colour | Output is not a terminal, `NO_COLOR` or `TERM=dumb` is set, or screen-reader mode is on. `--color always` forces it (not in screen-reader mode). |
+| Odd symbols or boxes | The font lacks them: `--ascii`, or `[ui] ascii = true` in [your settings](@/docs/configuration.md#your-settings). |
 | A run seems stuck | `speccoder report --live` from another terminal shows the step and the last tool call. |
 
 ## Getting help
 
-Search the [issues](https://github.com/hupe1980/speccoder/issues) or open one with what you ran (`speccoder --version`, the command, `--json` output if possible) and what you expected. Report security problems privately through [security advisories](https://github.com/hupe1980/speccoder/security/advisories/new).
+Search the [issues](https://github.com/hupe1980/speccoder/issues) or open one with `speccoder doctor --bug-report`, the command you ran (with `--json` output if possible) and what you expected. Report security problems privately through [security advisories](https://github.com/hupe1980/speccoder/security/advisories/new).

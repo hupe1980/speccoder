@@ -236,7 +236,7 @@ impl Adapter for SpecKit {
             .collect()
     }
 
-    /// `NNN-quick-changes` (spec 084) and `NNN-bugfixes` (spec 090).
+    /// `NNN-quick-changes` and `NNN-bugfixes`.
     fn standing_units(&self, root: &Path) -> Vec<(String, speccoder_core::ladder::Rung)> {
         use speccoder_core::ladder::Rung;
         let mut out: Vec<(String, Rung)> =

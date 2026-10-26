@@ -8,7 +8,7 @@ group = "Use"
 nav = "OpenSpec projects"
 +++
 
-speccoder runs [OpenSpec](https://github.com/Fission-AI/OpenSpec) changes the way it runs Spec Kit features. The judge is the same: a task is ticked only when tests derived from the spec went from red to green, nothing regressed and no test was weakened. What differs is where the spec lives and what a unit of work is called.
+speccoder runs [OpenSpec](https://github.com/Fission-AI/OpenSpec) changes under the same [judge](@/docs/how-it-works.md) as Spec Kit features. What differs:
 
 | | Spec Kit | OpenSpec |
 |---|---|---|
@@ -18,7 +18,7 @@ speccoder runs [OpenSpec](https://github.com/Fission-AI/OpenSpec) changes the wa
 | Order | phases, `[P]` runs, `depends on` | a chain: groups in order, tasks in order |
 | Intent the model cannot edit | `.specify/`, `specs/` | all of `openspec/` |
 
-speccoder supports OpenSpec 1.0 and newer with the default `spec-driven` schema, in the repository's own `openspec/` directory.
+Supported: OpenSpec 1.0 and newer, the default `spec-driven` schema, in the repository's own `openspec/` directory.
 
 ## Running a change
 
@@ -29,15 +29,13 @@ speccoder run --change add-x      # when more than one change is active
 speccoder run --task 1.2          # one task
 ```
 
-The format is detected: the nearest `openspec/` (with `config.yaml`, `specs/` or `changes/`) or `.specify/` decides. When a directory has both, choose with `--format openspec` (or `SPECCODER_FORMAT`, or `[spec] format` in `speccoder.toml`). `--change` is the same option as `--feature`.
+The format is detected: the nearest `openspec/` (with `config.yaml`, `specs/` or `changes/`) or `.specify/` decides. When a directory has both, choose with `--format openspec`, `SPECCODER_FORMAT` or `[spec] format`. `--change` is an alias of `--feature`.
 
-Commit the change's files before a run: the worktree on `speccoder/<change-id>` is built from commits. A task that was ticked before speccoder ran it is reported as ticked without evidence.
-
-Each attempt sees `config.yaml`'s `context` (as the project's rules), `proposal.md` and `design.md` (as the plan), and every delta of the change in full — OpenSpec does not link a task to a requirement, so the acceptance tests are derived from all of the change's scenarios that the task concerns. The archive is never shown.
+Commit the change's files before a run; the work happens on `speccoder/<change-id>`. A task ticked before speccoder ran it is reported as ticked without evidence. Each attempt sees `config.yaml`'s `context` (as the project's rules), `proposal.md` and `design.md` (as the plan), and every delta of the change in full. OpenSpec does not link a task to a requirement, so acceptance tests come from the change's scenarios that the task concerns. The archive is never shown.
 
 ## Caught before any model call
 
-`openspec validate --strict` accepts some deltas that `openspec archive` later refuses — after the work is done. speccoder checks the change itself first and refuses to run while any of these hold:
+`openspec validate --strict` accepts some deltas that `openspec archive` later refuses, so speccoder refuses to run while any of these hold:
 
 | Code | Meaning |
 |---|---|
@@ -62,17 +60,17 @@ Warnings do not stop a run:
 | `unnumbered_section` | a group heading without a number; its tasks run after everything before them |
 | `extension_dependency` | `depends on 1.2` is speccoder's extension; OpenSpec ignores it |
 
-When `openspec` is on your PATH, `speccoder run` also asks it — `validate --strict --json` and `instructions apply --json`, read-only, sandboxed, telemetry off. Its validation errors (`crosscheck_error`) and a different task count (`crosscheck_mismatch`) stop the run. Without `openspec`, the cross-check is skipped.
+When `openspec` is on your PATH, `speccoder run` also runs `openspec validate --strict --json` and `openspec instructions apply --json` (read-only, sandboxed, telemetry off). Its validation errors (`crosscheck_error`) and a different task count (`crosscheck_mismatch`) stop the run. Without `openspec`, this cross-check is skipped.
 
 ## What the model may run
 
-| `openspec …` | in an attempt | in a hosted planning skill |
+| `openspec …` (also via `npx`) | in an attempt | in a hosted planning skill |
 |---|---|---|
 | `list`, `show`, `view`, `status`, `instructions`, `validate`, `schemas`, `templates`, `context`, `--version`, `--help` | allowed | allowed |
 | `new change` | refused | allowed |
 | `archive`, `sync`, `init`, `update`, `config`, `store`, `schema` | refused | refused |
 
-Every command in an OpenSpec project runs with `OPENSPEC_TELEMETRY=0`, `DO_NOT_TRACK=1` and `OPENSPEC_NO_UPDATE_CHECK=1`. Writes under `openspec/` are refused during implementation; a command that changes them fails the verdict. OpenSpec's per-tool commands and skills (`.claude/commands/opsx/`, `.claude/skills/openspec-*/`, …) are agent configuration, protected like every other.
+Every command in an OpenSpec project runs with `OPENSPEC_TELEMETRY=0`, `DO_NOT_TRACK=1` and `OPENSPEC_NO_UPDATE_CHECK=1`. Writes under `openspec/` are refused during implementation; a command that changes them fails the verdict. OpenSpec's per-tool commands and skills (`.claude/commands/opsx/`, `.claude/skills/openspec-*/`, …) are [agent configuration](@/docs/security.md#the-policy), protected like any other.
 
 ## Planning
 
@@ -83,11 +81,11 @@ speccoder spec explore
 speccoder spec update-change
 ```
 
-These are OpenSpec's own skills, run by speccoder's model with the planning policy: they may write active changes (`openspec/changes/`, never the archive) and run `openspec new change` and the read commands. `apply-change` is speccoder's job (`speccoder run`); `sync-specs` and `archive-change` merge a change into the main specs, which is yours.
+OpenSpec's own skills, run by speccoder's model under the planning policy: they may write active changes (`openspec/changes/`, never the archive) and run `openspec new change` and the read commands. Not hosted: `apply-change` (use `speccoder run`), `sync-specs` and `archive-change` (merging into the main specs is yours: `speccoder spec archive`).
 
 ## Archiving
 
-Archiving rewrites the main specs, so a person does it:
+Archiving rewrites the main specs, so you do it:
 
 ```sh
 speccoder spec archive add-x
@@ -103,4 +101,4 @@ Run it in your checkout, typically after merging `speccoder/<id>`.
 
 ## Not supported
 
-Shared stores, custom schemas, running tasks in parallel (a change is a chain: `--parallel` has nothing to do), and absence checks for REMOVED requirements.
+Shared stores, custom schemas, parallel tasks (a change is a chain), and absence checks for REMOVED requirements.

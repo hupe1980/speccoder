@@ -148,7 +148,7 @@ pub fn bug_refusal_unsupported(start: &Path) -> Option<BugRefusal> {
     Detect::root(&stubs::KIRO, start).map(|_| BugRefusal::new("BUG-NO-UNIT", stubs::KIRO_BUGS))
 }
 
-/// A requirement a review writes tests for (spec 093): the format's
+/// A requirement a review writes tests for: the format's
 /// requirement (`US1`) with the scenario ids its tests cite (`US1-1`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OracleRequirement {
@@ -281,7 +281,7 @@ pub trait Adapter: Send + Sync + std::fmt::Debug {
         None
     }
 
-    /// Where a bug lives (D-123): the format's own bug structure when it
+    /// Where a bug lives: the format's own bug structure when it
     /// has one, else its standing bug-fix unit. `Err`: neither
     /// (`BUG-NO-UNIT`).
     ///

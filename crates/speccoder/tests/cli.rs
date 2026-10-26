@@ -539,7 +539,7 @@ fn a_format_is_chosen_by_flag_or_environment() {
 }
 
 /// Colour follows the flag, then the environment; machine output never has
-/// it (SC-002).
+/// it.
 #[test]
 fn escape_codes_appear_only_when_colour_is_wanted() {
     let esc = |args: &[&str], env: &[(&str, &str)]| {

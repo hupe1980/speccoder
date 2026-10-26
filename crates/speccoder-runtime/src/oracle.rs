@@ -1,4 +1,4 @@
-//! The oracle at review (spec 093, D-117): per requirement, the visible
+//! The oracle at review: per requirement, the visible
 //! acceptance tests the run would use, written on the person's request —
 //! two independent author calls whose stated expectations are compared for
 //! ambiguity, the first one's citing tests red-checked on the checkout's
@@ -552,7 +552,7 @@ pub fn view(
 ///
 /// # Errors
 /// A stored draft was tampered with or cannot be read: whether it holds an
-/// open reading is unknown, never "none" (FR-009).
+/// open reading is unknown, never "none".
 pub fn open_ambiguities(
     project_state: &Path,
     unit: &str,
@@ -1122,7 +1122,7 @@ impl<'a> Author<'a> {
 /// untestable, by the requirement's own scenario ids (case aside). `Err`:
 /// an answer the comparison cannot read — not parseable, naming a scenario
 /// the requirement does not have, or saying nothing of any scenario — is
-/// an author failure, never "no ambiguity" (FR-008).
+/// an author failure, never "no ambiguity".
 fn expectations(
     answer: &Value,
     req: &OracleRequirement,
@@ -1183,7 +1183,7 @@ impl Bench {
         let (runner, notice) = sandbox::runner(&scratch.path, &ctx.sandbox)
             .map_err(|e| Box::new(refuse(CommandStatus::ConfigError, "CONFIG", &e)))?;
         // Model-written tests and model-chosen commands run here, before
-        // anyone approved them: only confined by the OS sandbox (FR-005).
+        // anyone approved them: only confined by the OS sandbox.
         if !runner.is_sandboxed() {
             return Err(Box::new(
                 refuse(
@@ -1226,7 +1226,7 @@ impl Bench {
         (files, manifest)
     }
 
-    /// Red-checks each test alone (FR-005): only its own file is in the
+    /// Red-checks each test alone: only its own file is in the
     /// scratch tree while its command runs — first without it, then twice
     /// with it — so a failure is its own, never a neighbour's. A command
     /// that is red without the file (a failing suite, a command that runs
@@ -1501,7 +1501,7 @@ fn write(
 }
 
 /// The held-out set at review, after a red visible set: authored as at
-/// run time (D-081), red by overlay, sealed under `(unit, REQ)`; only its
+/// run time, red by overlay, sealed under `(unit, REQ)`; only its
 /// count and digest come back.
 fn held_out(
     ctx: &Ctx,

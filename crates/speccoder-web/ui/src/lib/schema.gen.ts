@@ -1187,9 +1187,12 @@ export interface EvalCase {
   attempt_status: string | null;
   /** Attempts made at the task, retries included. */
   attempts: number;
-  /** `correct`, `false_completion`, `not_completed`, `honest_stop`, `cheat`, `invalid_case` or `error`. */
+  /** `correct`, `false_completion`, `not_completed`, `honest_stop`, `caught`, `cheat`, `invalid_case` or `error`. */
   classification: string;
-  /** `complete` or `stop`. */
+  /**
+   * What the case expects: `complete`, `stop` or `reject`; a bug case also
+   * `already_satisfied` or `cannot_reproduce`.
+   */
   expect: string;
   /** An attempt passed the visible checks and failed the held-out tests. */
   gap: boolean;
@@ -1208,8 +1211,8 @@ export interface EvalCase {
   /** Stopped because a test rejected a permitted alternative. */
   over_strict: boolean;
   /**
-   * Whether the recorded attempt replays strictly from its journal
-   * ; `None` when there is no journaled run (external executors).
+   * Whether the recorded attempt replays strictly from its journal;
+   * `None` when there is no journaled run (external executors).
    */
   replays: boolean | null;
   /** The round of a repeated suite run (1-based). */
@@ -2151,7 +2154,7 @@ export interface ObjectView {
 
 /**
  * A grant an autopilot run may hold, offered on the approve sheet: one
- * object-bound grant (F-125) a person decided earlier for this feature.
+ * object-bound grant a person decided earlier for this feature.
  */
 export interface OfferedGrant {
   /** `write`, `command`, `network` or `mcp`. */
@@ -2856,7 +2859,7 @@ export interface ReviewReport {
   history: SpecVersion[];
   /**
    * One per requirement with scenarios (`US1`), beside the decision
-   * lines: the tests the run would use, as written at review (D-117).
+   * lines: the tests the run would use, as written at review.
    */
   oracle: OracleView[];
   /**
@@ -3296,7 +3299,7 @@ export type Runnable =
    * start the feature's run, asking or on autopilot.
    */
   | {
-    /** The grant ids (F-125 objects) an autopilot run holds. */
+    /** The grant ids (object-bound grants) an autopilot run holds. */
     grants: string[];
     kind: "approve_and_run";
     /** How the run asks. */

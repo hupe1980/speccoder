@@ -4,7 +4,7 @@
 //! the confirmed reproductions are then reused at the checkpoint as the
 //! visible acceptance set. After an attempt that passed: every reproduction
 //! green, the pass-to-pass set green by name, the revert rejected, and each
-//! special case rejected (D-111). The rules are `speccoder_core::bug`'s.
+//! special case rejected. The rules are `speccoder_core::bug`'s.
 
 use std::path::Path;
 use std::time::Instant;
@@ -1589,7 +1589,7 @@ pub(crate) fn judge(c: &Ctx<'_>, fix: &mut Fix, j: &Judging<'_>) -> Result<Judge
         }
     }
     // Held-out: every sealed variant — a regenerated one too — runs on the
-    // final tree and must pass there (FR-016, FR-019).
+    // final tree and must pass there.
     let held = match fix.bug.held_out_sealed.clone() {
         Some(sealed) => {
             let (m, contents) = held_out::open_sealed(c.state, &fix.bug.unit, &sealed)
@@ -1824,7 +1824,7 @@ pub(crate) fn trailers(
     out
 }
 
-/// The predicate's `bug` and `acceptance` fields (spec 094's shape).
+/// The predicate's `bug` and `acceptance` fields.
 pub(crate) fn predicate_fields(
     bug: &BugReport,
     record: &speccoder_core::acceptance::PreFrozenAcceptance,

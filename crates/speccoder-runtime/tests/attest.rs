@@ -237,7 +237,7 @@ fn a_tick_leaves_signed_statements_that_verify() {
     for s in &all {
         assert_eq!(s["subject"][0]["digest"]["gitCommit"], commit.as_str());
         assert_eq!(s["subject"][0]["name"], "001-graph/T005");
-        // No absolute local path, no secret (SC-006).
+        // No absolute local path, no secret.
         let text = s.to_string();
         for leak in ["/Users/", "/private/", "/home/", "/var/folders/", "/tmp/"] {
             assert!(!text.contains(leak), "{leak} in {text}");

@@ -4,7 +4,7 @@
 //! committed, and the task is accepted as `attested`, the commit naming the
 //! outcome. In a standing unit its task line is ticked; in the format's own
 //! bug structure (`bug:<slug>`) nothing of the format's is touched and the
-//! commit is the trailer-only task's evidence (FR-022, FR-002a).
+//! commit is the trailer-only task's evidence.
 
 use std::path::{Path, PathBuf};
 

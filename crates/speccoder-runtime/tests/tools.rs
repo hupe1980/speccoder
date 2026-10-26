@@ -624,7 +624,7 @@ fn every_tool_and_answer_schema_is_strict_for_both_providers() {
     }
 }
 
-/// Spec 093 (FR-031): what the person writes at review stays theirs — the
+/// Spec 093: what the person writes at review stays theirs — the
 /// model reaches neither `review.json` (its oracle and approval keys) nor
 /// the state directory where drafts, frozen sets, held-out sets and comment
 /// drafts live.

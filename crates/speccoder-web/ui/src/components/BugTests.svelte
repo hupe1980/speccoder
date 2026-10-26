@@ -1,5 +1,5 @@
 <script lang="ts">
-  // A bug unit's Tests tab (spec 093): its reproductions as the person
+  // A bug unit's Tests tab: its reproductions as the person
   // confirmed them, read only — a bug's tests are written and confirmed by
   // its own pipeline, never at review.
   import type { BugTests } from "../lib/schema.gen";

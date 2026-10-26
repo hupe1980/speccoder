@@ -829,7 +829,7 @@ pub(crate) fn strengthen(
 }
 
 /// Whether `task` completes its story: the last task carrying its story
-/// label, in a story with at least two scenarios (US4).
+/// label, in a story with at least two scenarios.
 pub(crate) fn story_checkpoint(
     tasks: Option<&speccoder_core::snapshot::ParsedTasks>,
     task: &str,
@@ -995,7 +995,7 @@ pub(crate) struct ReusedTest {
 }
 
 /// Where a reused set's sealed held-out tests are red-checked: overlaid on
-/// the checkpoint, run and removed (D-081).
+/// the checkpoint, run and removed.
 pub(crate) struct SealedCheck<'a> {
     /// The project's state directory.
     pub(crate) state: &'a Path,

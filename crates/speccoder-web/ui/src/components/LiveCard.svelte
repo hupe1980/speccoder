@@ -58,7 +58,7 @@
       {#if interrupted}
         <button class="btn small tinted" onclick={resume}><Icon name="play" size={11} /> Resume</button>
       {:else}
-        <span class="hint muted small">It holds this project: runs here wait until it finishes.</span>
+        <span class="hint muted small">It holds this project: another run here is refused until it finishes.</span>
       {/if}
     </footer>
   </div>

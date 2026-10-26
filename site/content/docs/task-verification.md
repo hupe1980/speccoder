@@ -7,7 +7,7 @@ weight = 97
 group = "Trust"
 +++
 
-speccoder's own in-toto predicate: *this task of this spec was verified, by this evidence, against the spec text its commit holds*. It is written so that anyone can check it — and write their own verifier — without speccoder. The structure follows in-toto's [predicate template](https://github.com/in-toto/attestation/blob/main/spec/predicates/template.md).
+speccoder's in-toto predicate: *this task of this spec was verified, by this evidence, against the spec text its commit holds*. A reviewer or CI job checks a ticked task (`[X]` in `tasks.md`, a task of an OpenSpec change) with it, against their own trust, with or without speccoder. The structure follows in-toto's [predicate template](https://github.com/in-toto/attestation/blob/main/spec/predicates/template.md).
 
 ## Predicate type and versioning
 
@@ -15,14 +15,10 @@ speccoder's own in-toto predicate: *this task of this spec was verified, by this
 
 Within v0 the predicate only grows: an added field raises **`revision`** (an integer; absent means 1). Removing a field or changing what one means is a new predicate type, `…/v1`.
 
-- **Verifiers** MUST tolerate fields they do not know and higher revisions within v0: keep the signed bytes as they are, ignore those fields for the outcome, and say that they were not shown. A predicate of another major version is reported as malformed (`predicate …/v1 not supported by this verifier`), never guessed at.
-- **Producers** MUST NOT make a reserved field required.
+- **Verifiers** MUST tolerate unknown fields and higher revisions within v0: keep the signed bytes as they are, ignore those fields for the outcome, and name them as not evaluated. A predicate of another major version is reported as malformed (`predicate …/v1 not supported by this verifier`), never guessed at.
+- **Producers** MUST NOT make an [opaque field](#opaque-fields) required.
 
 This page describes revision **2**.
-
-## Purpose
-
-A reviewer or a CI job checks that a ticked task (`[X]` in `tasks.md`, a task of an OpenSpec change) was verified by speccoder against the spec its commit holds — which tests failed first and passed after, what regressed, how strong the tests are, who decided otherwise — with signatures they check against their own trust.
 
 ## Prerequisites
 
@@ -45,7 +41,7 @@ The task commit's trailers repeat what a reader needs without the note: `Spec-Ta
 
 ## Fields
 
-The [JSON Schema](/schemas/task-verification-v0.json) is generated from the type speccoder serializes (`TaskVerificationV0`); every statement speccoder writes validates against it.
+The [JSON Schema](https://hupe1980.github.io/speccoder/schemas/task-verification-v0.json) is generated from the type speccoder serializes (`TaskVerificationV0`); every statement speccoder writes validates against it.
 
 | Field | Type | Required | Meaning |
 |---|---|---|---|
@@ -67,17 +63,16 @@ The [JSON Schema](/schemas/task-verification-v0.json) is generated from the type
 | `time` | string | yes | RFC 3339, UTC |
 | `red` | object | no (revision 2) | the red run's output: `kind` (`assertion`, `missing_symbol`), `excerpt` (its last ≤ 2048 bytes, or `null`), `excerpt_sha256`, `output_sha256`, `withheld` |
 
-### Reserved fields
+### Opaque fields
 
-Other speccoder specifications extend the predicate. Their fields are reserved now — **optional and opaque** (any JSON value, kept in the signed bytes, shown as recorded, never deciding an outcome here) — and each owner types its field with a `revision` bump. The list is frozen once all of them have landed.
+These fields are **optional and opaque** to a verifier: any JSON value, kept in the signed bytes, shown as recorded, never deciding an outcome.
 
-| Field | Owner | Intended shape |
+| Field | Written by speccoder | Shape |
 |---|---|---|
-| `red` | this page (revision 2) | typed above |
-| `bug` | bug fixing (spec 090) | `{home, triad_sha256, outcome, reproductions[], special_case[], pass_to_pass}`; for a trailer-only task, `triad_sha256` is the anchor |
-| `acceptance` | review-time tests (spec 093), bug confirmation (spec 090) | `{source: authored\|review\|bug_confirmation\|person_test\|kept_regression_test, pre_frozen}` |
-| `context` | the context manifest (spec 098), with provider digests (spec 095) | entries `{kind, source, reference, sha256, bytes, cut}` |
-| `dependencies` | dependency checks (D-122) | `[{name, version, registry, checksum_matched, first_seen, suggested_by}]` |
+| `bug` | a bug task's tick | `{home, triad_sha256, outcome, reproductions[], special_case[], pass_to_pass}`; for a trailer-only task, `triad_sha256` is the anchor |
+| `acceptance` | a bug task's tick, a kept bug test | `{source, pre_frozen}`; `source` is one of `authored`, `review`, `bug_confirmation`, `person_test`, `kept_regression_test` (speccoder writes the last three) |
+| `context` | no (reserved) | what reached the model, by digest |
+| `dependencies` | no (reserved) | dependencies the change added, with their registry checksums |
 
 ## Parsing and evaluation
 
@@ -89,13 +84,13 @@ A verifier applies, per ticked task (as [`speccoder-verify`](@/docs/verifier.md)
 4. **Agreement** with the commit: trailers, tree, the task line at the commit and at the head (`task.line_hash`), the requirement text (`spec.section_hash`), the summary naming exactly the other lines at the verdict's level, the policy recomputed at the parent (`mismatch`). A decision carries no verification lines.
 5. **Signedness**: unsigned statements are `unsigned`, unverifiable unless the verifier's caller accepts them explicitly (and says so).
 6. **Drift**: a requirement the task cites whose line at the head differs from its line in the commit's tree makes the tick `stale` — the verdict is for the earlier wording (for a trailer-only bug task: the triad digest).
-7. **Reserved outcome** `regressed`: a later signed checkpoint marking an earlier task regressed fails like `unverifiable`; no producer exists yet, and a verifier says it did not evaluate it.
+7. **Reserved outcome** `regressed`: a later signed checkpoint marking an earlier task regressed fails like `unverifiable`. speccoder writes no such checkpoint; a verifier says it did not evaluate it.
 
 **Trailer-only tasks.** A format home with no task list (Spec Kit's bug extension, `.specify/bugs/<slug>/`) is closed by a verdict commit with `Spec-Task: <unit>/bug:<slug>`; it is checked with the same rules. A verifier that cannot read such homes MUST fail a branch whose range holds one, saying so — a claim it cannot check is not proof.
 
 **The red excerpt** is cut from the end of the captured output and signed only when clean: no absolute local path, no URL with credentials, nothing key-shaped. Otherwise `excerpt` is `null` and `withheld` true.
 
-**Held-out publication.** `refs/speccoder/held-out/<unit>` carries exactly the held-out sets whose manifest digest a task closed on the pushed head names in its `held_out` phase — never an open task's set — each at `<key>/manifest.json` and `<key>/files/…`. The ref only grows.
+**Held-out publication.** `refs/speccoder/held-out/<unit>` carries the held-out sets whose manifest digest a closed task names in its `held_out` phase, each at `<key>/manifest.json` and `<key>/files/…` ([where the sets are kept](@/docs/evidence.md#where-they-are-kept)).
 
 ## Example
 

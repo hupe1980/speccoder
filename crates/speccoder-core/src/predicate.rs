@@ -204,21 +204,20 @@ pub struct TaskVerificationV0 {
     /// The red run's output excerpt (revision 2).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub red: Option<Red>,
-    /// Reserved (spec 090, bugs): home, triad digest, outcome, the
-    /// reproductions' discrimination, special-case rejections,
-    /// pass-to-pass. Opaque here; its owner types it with a revision bump.
+    /// A bug task's evidence: where the bug lives, its triad's digest, the
+    /// outcome, the reproductions' discrimination, special-case rejections
+    /// and the pass-to-pass set. Opaque to the verifier.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bug: Option<Value>,
-    /// Reserved (specs 093, 090): where the acceptance tests were decided —
+    /// Where the acceptance tests were decided —
     /// `{ source: authored|review|bug_confirmation|person_test, pre_frozen }`.
     /// Opaque here.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub acceptance: Option<Value>,
-    /// Reserved (spec 098): the context manifest (with spec 095's provider
-    /// digests). Opaque here.
+    /// Reserved: what reached the model, by digest. Opaque here.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context: Option<Value>,
-    /// Reserved (D-122): dependencies the change added, with their
+    /// Reserved: dependencies the change added, with their
     /// registry checksums. Opaque here.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dependencies: Option<Value>,
