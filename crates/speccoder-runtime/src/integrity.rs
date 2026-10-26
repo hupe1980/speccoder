@@ -142,6 +142,34 @@ const TEST_MARKERS: &str = r"#\[(tokio::)?test\b|^\s*def test_|^\s*(async\s+)?fn
 /// Markers that skip a test.
 const SKIP_MARKERS: &str = r"#\[ignore\b|@pytest\.mark\.(skip|xfail)|\.skip\s*\(|\bx(it|describe|test)\s*\(|@Disabled\b|@Ignore\b|\bt\.Skip(Now)?\s*\(|@unittest\.skip|\.todo\s*\(";
 
+/// Test definitions with their names: Rust `#[test] fn`, Python `def
+/// test_`, Go `func Test`, JavaScript `it("…")` / `test("…")`.
+const TEST_NAMES: &str = r#"(?m)#\[(?:tokio::)?test\b[^\]]*\]\s*(?:#\[[^\]]*\]\s*)*(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?fn\s+(\w+)|^\s*(?:async\s+)?def\s+(test_\w+)|^\s*func\s+(Test\w+)|\b(?:it|test)\s*\(\s*['"`]([^'"`]+)['"`]"#;
+
+/// The tests `before` defines that `after` no longer does, in order.
+#[must_use]
+pub fn removed_tests(before: &str, after: &str) -> Vec<String> {
+    let Ok(re) = Regex::new(TEST_NAMES) else {
+        return Vec::new();
+    };
+    let names = |text: &str| -> Vec<String> {
+        re.captures_iter(text)
+            .filter_map(|c| {
+                c.iter()
+                    .skip(1)
+                    .flatten()
+                    .next()
+                    .map(|m| m.as_str().to_owned())
+            })
+            .collect()
+    };
+    let kept: BTreeSet<String> = names(after).into_iter().collect();
+    let mut gone = names(before);
+    gone.retain(|n| !kept.contains(n));
+    gone.dedup();
+    gone
+}
+
 /// Whether every line of `old` survives, unchanged and in order, in `new`:
 /// the change only adds lines (`[tests] frozen = "additions"`).
 #[must_use]
@@ -210,6 +238,7 @@ pub fn audit_in(
         return findings;
     };
     let mut tests: BTreeMap<String, (usize, usize)> = BTreeMap::new(); // (added, removed)
+    let mut text: BTreeMap<String, (String, String)> = BTreeMap::new(); // (added, removed)
     let mut skips: BTreeSet<String> = BTreeSet::new();
     let mut file = String::new();
     for line in patch.lines() {
@@ -223,16 +252,22 @@ pub fn audit_in(
         } else if line.starts_with("+++ ") || line.starts_with("--- ") {
             // File headers; the name came from `diff --git`.
         } else if let Some(added) = line.strip_prefix('+') {
+            let t = text.entry(file.clone()).or_default();
+            t.0.push_str(added);
+            t.0.push('\n');
             if test.is_match(added) {
                 tests.entry(file.clone()).or_default().0 += 1;
             }
             if skip.is_match(added) {
                 skips.insert(file.clone());
             }
-        } else if let Some(removed) = line.strip_prefix('-')
-            && test.is_match(removed)
-        {
-            tests.entry(file.clone()).or_default().1 += 1;
+        } else if let Some(removed) = line.strip_prefix('-') {
+            let t = text.entry(file.clone()).or_default();
+            t.1.push_str(removed);
+            t.1.push('\n');
+            if test.is_match(removed) {
+                tests.entry(file.clone()).or_default().1 += 1;
+            }
         }
     }
     let deleted: BTreeSet<&str> = changes
@@ -243,8 +278,17 @@ pub fn audit_in(
     for (path, (added, removed)) in tests {
         // A deleted file is reported as such (frozen) or is new work undone.
         if removed > added && !deleted.contains(path.as_str()) {
+            let names = text
+                .get(&path)
+                .map(|(a, r)| removed_tests(r, a))
+                .unwrap_or_default();
+            let named = if names.is_empty() {
+                String::new()
+            } else {
+                format!(": {}", names.join(", "))
+            };
             findings.push(format!(
-                "test removed in {path} ({removed} removed, {added} added)"
+                "test removed in {path} ({removed} removed, {added} added){named}"
             ));
         }
     }
@@ -293,6 +337,16 @@ mod tests {
     }
 
     #[test]
+    fn removed_tests_are_named_across_languages() {
+        let before = "#[cfg(test)]\nmod tests {\n    #[test]\n    fn it_works() {}\n    #[tokio::test]\n    async fn later() {}\n}\ndef test_py(): pass\nfunc TestGo(t *testing.T) {}\nit('greets', () => {})\n";
+        assert_eq!(
+            removed_tests(before, "#[test]\nfn later() {}\n"),
+            ["it_works", "test_py", "TestGo", "greets"]
+        );
+        assert!(removed_tests(before, before).is_empty());
+    }
+
+    #[test]
     fn flags_tampering_and_passes_clean_diffs() {
         let frozen: BTreeSet<String> = ["tests/api.rs".to_owned()].into();
         let patch = "diff --git a/src/lib.rs b/src/lib.rs\n--- a/src/lib.rs\n+++ b/src/lib.rs\n@@ -1 +1 @@\n-    #[test]\n+    #[ignore]\n+    #[test]\n";
@@ -318,7 +372,7 @@ mod tests {
         let removed = "diff --git a/src/lib.rs b/src/lib.rs\n--- a/src/lib.rs\n+++ b/src/lib.rs\n@@ -5,4 +4,0 @@\n-    #[test]\n-    fn a() {}\n";
         assert_eq!(
             audit(&[], removed, &BTreeSet::new(), false, &BTreeSet::new()),
-            ["test removed in src/lib.rs (1 removed, 0 added)"]
+            ["test removed in src/lib.rs (1 removed, 0 added): a"]
         );
 
         let clean = "diff --git a/src/lib.rs b/src/lib.rs\n--- a/src/lib.rs\n+++ b/src/lib.rs\n@@ -1 +1,4 @@\n+pub fn add() {}\n+    #[test]\n+    fn adds() {}\n";
