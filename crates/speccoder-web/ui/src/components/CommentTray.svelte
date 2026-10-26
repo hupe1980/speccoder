@@ -5,6 +5,7 @@
   import { app } from "../lib/app.svelte";
   import { comments } from "../lib/comments.svelte";
   import { grouped, place, quoteOf, touched } from "../lib/review";
+  import { diffWords } from "../lib/words";
   import Icon from "./Icon.svelte";
 
   // The host's list again whenever a job ends or the feature changes.
@@ -42,7 +43,9 @@
   });
 </script>
 
-{#if drafts.length || turn}
+{#if comments.error}
+  <aside class="tray glass" role="alert" aria-label="Comments"><p class="warn small"><Icon name="exclaim" size={11} /> The comment tray cannot be read: {comments.error}</p></aside>
+{:else if drafts.length || turn}
   <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
   <aside class="tray glass" id="comment-tray" tabindex="-1" aria-label="Comments" onkeydown={key}>
     {#if !comments.open}
@@ -85,6 +88,16 @@
           <p><strong>Revised {turn.changed.length} {turn.changed.length === 1 ? "section" : "sections"}</strong>{#if turn.outside.length} · <span class="warn">{turn.outside.length} outside your comments</span>{/if} <span class="muted">({turn.outcome})</span></p>
           {#if turn.outside.length}<ul class="outside">{#each turn.outside as o (o)}<li><Icon name="exclaim" size={10} /> {o}</li>{/each}</ul>{/if}
           {#if turn.asked_again.length}<p class="muted small">Tests asked again: {turn.asked_again.join(", ")}</p>{/if}
+          {#if turn.beside.length}<p class="warn small"><Icon name="exclaim" size={10} /> Changed beside the revision while it ran (Undo will not overwrite it): {turn.beside.join(", ")}</p>{/if}
+          {#if pendingTurn && turn.diffs.length}
+            <!-- Each changed section, word by word: a bar green inside your comments, amber outside them. -->
+            {#each turn.diffs as d, n (n)}
+              <section class="sdiff" class:out={d.outside} aria-label="{d.heading || d.path}{d.outside ? ', outside your comments' : ''}">
+                <h4>{d.heading || d.path.split("/").pop()}{#if d.outside} <span class="badge">outside your comments</span>{/if}</h4>
+                <p class="words">{#each diffWords(d.before, d.after) as w, i (i)}<span class={w.kind}>{w.text}</span>{/each}</p>
+              </section>
+            {/each}
+          {/if}
           {#if pendingTurn}
             <div class="acts">
               <button class="btn small" disabled={running} onclick={() => comments.keep(turn.id)}>Keep</button>
@@ -116,4 +129,9 @@
   .result p { margin: 0; }
   .warn { color: var(--attention); font-weight: 600; }
   .outside { margin: 0; padding-left: 0.2rem; list-style: none; font-size: 0.78rem; color: var(--attention); }
+  .sdiff { border-left: 3px solid var(--verified-fill); padding: 0.1rem 0 0.1rem 0.5rem; }
+  .sdiff.out { border-left-color: var(--attention-fill); }
+  .words { margin: 0; font-size: 0.78rem; white-space: pre-wrap; max-height: 9rem; overflow: auto; }
+  .words .gone { text-decoration: line-through; color: var(--danger); }
+  .words .new { background: var(--verified-bg); color: var(--verified); }
 </style>

@@ -6879,6 +6879,60 @@
       ],
       "type": "object"
     },
+    "ReviewChange": {
+      "description": "A requirement changed in the checkout since the last commit of the\nspec, with where its line is — a comment anchors to it (`diff_line`).",
+      "properties": {
+        "id": {
+          "description": "`FR-003`.",
+          "type": "string"
+        },
+        "now": {
+          "description": "Its line now; `None`: it was removed.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "now_line": {
+          "description": "Its line number (1-based) now.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "path": {
+          "description": "The document it is in (project-relative).",
+          "type": "string"
+        },
+        "then": {
+          "description": "Its line at the last commit; `None`: it did not exist yet.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "then_line": {
+          "description": "Its line number (1-based) at the last commit.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "then",
+        "now",
+        "path",
+        "then_line",
+        "now_line"
+      ],
+      "type": "object"
+    },
     "ReviewItem": {
       "description": "One requirement and its review.",
       "properties": {
@@ -6954,7 +7008,7 @@
         "changes": {
           "description": "Requirements changed in the checkout since the last commit of the\nspec: what a commit would record.",
           "items": {
-            "$ref": "#/$defs/RequirementDrift"
+            "$ref": "#/$defs/ReviewChange"
           },
           "type": "array"
         },
@@ -7143,6 +7197,14 @@
           },
           "type": "array"
         },
+        "diffs": {
+          "default": [],
+          "description": "While it waits to be kept or undone: each changed section, before\nand after, for the word diff.",
+          "items": {
+            "$ref": "#/$defs/SectionDiff"
+          },
+          "type": "array"
+        },
         "files": {
           "description": "Files it changed (project-relative).",
           "items": {
@@ -7187,7 +7249,8 @@
         "outcome",
         "files",
         "asked_again",
-        "beside"
+        "beside",
+        "diffs"
       ],
       "type": "object"
     },
@@ -8454,6 +8517,39 @@
         "key",
         "manifest_sha256",
         "count"
+      ],
+      "type": "object"
+    },
+    "SectionDiff": {
+      "description": "One section a revision changed, before and after (each cut to 4000\ncharacters).",
+      "properties": {
+        "after": {
+          "description": "After it (empty: it was removed).",
+          "type": "string"
+        },
+        "before": {
+          "description": "The section's text before the revision (empty: it was added).",
+          "type": "string"
+        },
+        "heading": {
+          "description": "Its heading path (`Spec › Requirements`; empty before the first).",
+          "type": "string"
+        },
+        "outside": {
+          "description": "No comment touched it.",
+          "type": "boolean"
+        },
+        "path": {
+          "description": "The document (project-relative).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "heading",
+        "before",
+        "after",
+        "outside"
       ],
       "type": "object"
     },

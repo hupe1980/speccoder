@@ -529,35 +529,6 @@
       ],
       "type": "object"
     },
-    "RequirementDrift": {
-      "description": "One cited requirement, as the tick saw it and as the spec has it now.",
-      "properties": {
-        "id": {
-          "description": "`FR-003`.",
-          "type": "string"
-        },
-        "now": {
-          "description": "Its line now; `None`: it was removed.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "then": {
-          "description": "Its line when the task was ticked; `None`: it did not exist yet.",
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "id",
-        "then",
-        "now"
-      ],
-      "type": "object"
-    },
     "Resolution": {
       "description": "The person's choice on an ambiguous scenario.",
       "properties": {
@@ -615,6 +586,60 @@
         "by",
         "via",
         "at"
+      ],
+      "type": "object"
+    },
+    "ReviewChange": {
+      "description": "A requirement changed in the checkout since the last commit of the\nspec, with where its line is — a comment anchors to it (`diff_line`).",
+      "properties": {
+        "id": {
+          "description": "`FR-003`.",
+          "type": "string"
+        },
+        "now": {
+          "description": "Its line now; `None`: it was removed.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "now_line": {
+          "description": "Its line number (1-based) now.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "path": {
+          "description": "The document it is in (project-relative).",
+          "type": "string"
+        },
+        "then": {
+          "description": "Its line at the last commit; `None`: it did not exist yet.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "then_line": {
+          "description": "Its line number (1-based) at the last commit.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "then",
+        "now",
+        "path",
+        "then_line",
+        "now_line"
       ],
       "type": "object"
     },
@@ -890,7 +915,7 @@
     "changes": {
       "description": "Requirements changed in the checkout since the last commit of the\nspec: what a commit would record.",
       "items": {
-        "$ref": "#/$defs/RequirementDrift"
+        "$ref": "#/$defs/ReviewChange"
       },
       "type": "array"
     },

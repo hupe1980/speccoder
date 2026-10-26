@@ -309,7 +309,7 @@ pub struct ReviewReport {
     pub questions: Vec<OpenQuestion>,
     /// Requirements changed in the checkout since the last commit of the
     /// spec: what a commit would record.
-    pub changes: Vec<RequirementDrift>,
+    pub changes: Vec<ReviewChange>,
     /// The spec's versions in git, newest first (the last twelve).
     pub history: Vec<SpecVersion>,
     /// One per requirement with scenarios (`US1`), beside the decision
@@ -331,6 +331,24 @@ pub struct ReviewReport {
     /// read as "nothing decided" by a write.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+}
+
+/// A requirement changed in the checkout since the last commit of the
+/// spec, with where its line is — a comment anchors to it (`diff_line`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct ReviewChange {
+    /// `FR-003`.
+    pub id: String,
+    /// Its line at the last commit; `None`: it did not exist yet.
+    pub then: Option<String>,
+    /// Its line now; `None`: it was removed.
+    pub now: Option<String>,
+    /// The document it is in (project-relative).
+    pub path: String,
+    /// Its line number (1-based) at the last commit.
+    pub then_line: Option<u32>,
+    /// Its line number (1-based) now.
+    pub now_line: Option<u32>,
 }
 
 /// A question a document leaves open, to answer in place.

@@ -2754,6 +2754,25 @@ export interface ReviewApproval {
   via: Via;
 }
 
+/**
+ * A requirement changed in the checkout since the last commit of the
+ * spec, with where its line is — a comment anchors to it (`diff_line`).
+ */
+export interface ReviewChange {
+  /** `FR-003`. */
+  id: string;
+  /** Its line now; `None`: it was removed. */
+  now: string | null;
+  /** Its line number (1-based) now. */
+  now_line: number | null;
+  /** The document it is in (project-relative). */
+  path: string;
+  /** Its line at the last commit; `None`: it did not exist yet. */
+  then: string | null;
+  /** Its line number (1-based) at the last commit. */
+  then_line: number | null;
+}
+
 /** One requirement and its review. */
 export interface ReviewItem {
   /** When (Unix seconds). */
@@ -2789,7 +2808,7 @@ export interface ReviewReport {
    * Requirements changed in the checkout since the last commit of the
    * spec: what a commit would record.
    */
-  changes: RequirementDrift[];
+  changes: ReviewChange[];
   /**
    * Why the review record (`review.json`) cannot be read: shown, never
    * read as "nothing decided" by a write.
@@ -2869,6 +2888,11 @@ export interface RevisionView {
   changed: string[];
   /** The comments it was sent with. */
   comments: string[];
+  /**
+   * While it waits to be kept or undone: each changed section, before
+   * and after, for the word diff.
+   */
+  diffs: SectionDiff[];
   /** Files it changed (project-relative). */
   files: string[];
   /** `t1`, `t2`, … */
@@ -3360,6 +3384,23 @@ export interface SealedRef {
   key: string;
   /** The manifest's hash. */
   manifest_sha256: string;
+}
+
+/**
+ * One section a revision changed, before and after (each cut to 4000
+ * characters).
+ */
+export interface SectionDiff {
+  /** After it (empty: it was removed). */
+  after: string;
+  /** The section's text before the revision (empty: it was added). */
+  before: string;
+  /** Its heading path (`Spec › Requirements`; empty before the first). */
+  heading: string;
+  /** No comment touched it. */
+  outside: boolean;
+  /** The document (project-relative). */
+  path: string;
 }
 
 /** How the feature was selected. */

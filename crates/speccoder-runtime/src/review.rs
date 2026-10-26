@@ -278,6 +278,40 @@ fn requirements_at(u: &Unit, rev: &str) -> Option<Vec<(String, String)>> {
     Some(u.format.requirements_in(&String::from_utf8_lossy(&text)))
 }
 
+/// The requirements changed in the checkout since the spec's last commit,
+/// each with its line number on both sides.
+fn changes_since_head(u: &Unit) -> Vec<speccoder_core::ReviewChange> {
+    let Some(file) = u.format.requirements_file() else {
+        return Vec::new();
+    };
+    let Some(then) = requirements_at(u, "HEAD") else {
+        return Vec::new();
+    };
+    let path = format!("{}/{file}", u.dir.trim_end_matches('/'));
+    let old_text = crate::git::Git::at(&u.root)
+        .run(&["show", &format!("HEAD:./{path}")])
+        .map(|b| String::from_utf8_lossy(&b).into_owned())
+        .unwrap_or_default();
+    let new_text = std::fs::read_to_string(u.root.join(&path)).unwrap_or_default();
+    let line_of = |text: &str, line: &Option<String>| {
+        let line = line.as_deref()?.trim_end();
+        text.lines()
+            .position(|l| l.trim_end() == line)
+            .and_then(|i| u32::try_from(i + 1).ok())
+    };
+    compare(&then, &u.requirements())
+        .into_iter()
+        .map(|d| speccoder_core::ReviewChange {
+            then_line: line_of(&old_text, &d.then),
+            now_line: line_of(&new_text, &d.now),
+            path: path.clone(),
+            id: d.id,
+            then: d.then,
+            now: d.now,
+        })
+        .collect()
+}
+
 /// What changed from `before` to `after`, requirement by requirement.
 fn compare(before: &[(String, String)], after: &[(String, String)]) -> Vec<RequirementDrift> {
     let mut ids: Vec<&String> = after.iter().map(|(id, _)| id).collect();
@@ -395,9 +429,7 @@ fn report_of(u: &Unit, full: bool) -> ReviewReport {
     let totals = totals(&items, open.len());
     let revision = (totals.changes_requested > 0).then(|| revision_request(&items));
     let changes = if full {
-        requirements_at(u, "HEAD")
-            .map(|then| compare(&then, &u.requirements()))
-            .unwrap_or_default()
+        changes_since_head(u)
     } else {
         Vec::new()
     };

@@ -213,6 +213,22 @@ fn us5_drafts_persist_go_out_as_one_scoped_turn_and_undo_restores_bytes() {
         "{turn:?}"
     );
     assert!(turn.beside.is_empty(), "{turn:?}");
+    // The word diff's material: each changed section before and after.
+    let req = turn
+        .diffs
+        .iter()
+        .find(|d| d.heading == "Spec › Requirements")
+        .unwrap_or_else(|| panic!("{turn:?}"));
+    assert!(
+        req.before.contains("Users MUST log in.")
+            && req.after.contains("Registered users MUST log in.")
+    );
+    assert!(!req.outside);
+    assert!(
+        turn.diffs
+            .iter()
+            .any(|d| d.outside && d.heading.starts_with("Spec › User Story 1"))
+    );
     assert_eq!(turn.files, ["specs/001-graph/spec.md"]);
     // A second send of the same drafts is refused.
     let again = comments::send_with(
@@ -728,4 +744,36 @@ fn us6_a_frozen_test_is_known_by_its_code_view_path_in_a_project_below_the_top()
         "{}",
         res.message()
     );
+}
+
+#[test]
+fn a_comment_anchors_to_a_line_changed_since_the_last_commit() {
+    // T063: the Review's "since the last commit" lines carry their place.
+    let r = repo();
+    let state = tempfile::tempdir().unwrap();
+    let spec = r.path().join("specs/001-graph/spec.md");
+    fs::write(
+        &spec,
+        SPEC.replace("Users MUST log in.", "Users MUST sign in."),
+    )
+    .unwrap();
+    let rv = speccoder_runtime::review::report_in(r.path(), None, Some(state.path()));
+    let Some(CommandData::Review(rv)) = rv.data() else {
+        panic!("{}", rv.message())
+    };
+    let c = rv.changes.iter().find(|c| c.id == "FR-001").unwrap();
+    assert_eq!(c.path, "specs/001-graph/spec.md");
+    assert_eq!((c.then_line, c.now_line), (Some(13), Some(13)));
+    let added = add(
+        r.path(),
+        state.path(),
+        CommentAnchor::DiffLine {
+            path: c.path.clone(),
+            side: "new".to_owned(),
+            line: c.now_line.unwrap() as usize,
+            quote: c.now.clone().unwrap(),
+        },
+        "sign in or log in?",
+    );
+    assert_eq!(added.status(), CommandStatus::Ok, "{}", added.message());
 }

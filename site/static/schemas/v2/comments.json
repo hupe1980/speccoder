@@ -251,6 +251,14 @@
           },
           "type": "array"
         },
+        "diffs": {
+          "default": [],
+          "description": "While it waits to be kept or undone: each changed section, before\nand after, for the word diff.",
+          "items": {
+            "$ref": "#/$defs/SectionDiff"
+          },
+          "type": "array"
+        },
         "files": {
           "description": "Files it changed (project-relative).",
           "items": {
@@ -295,7 +303,41 @@
         "outcome",
         "files",
         "asked_again",
-        "beside"
+        "beside",
+        "diffs"
+      ],
+      "type": "object"
+    },
+    "SectionDiff": {
+      "description": "One section a revision changed, before and after (each cut to 4000\ncharacters).",
+      "properties": {
+        "after": {
+          "description": "After it (empty: it was removed).",
+          "type": "string"
+        },
+        "before": {
+          "description": "The section's text before the revision (empty: it was added).",
+          "type": "string"
+        },
+        "heading": {
+          "description": "Its heading path (`Spec › Requirements`; empty before the first).",
+          "type": "string"
+        },
+        "outside": {
+          "description": "No comment touched it.",
+          "type": "boolean"
+        },
+        "path": {
+          "description": "The document (project-relative).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "heading",
+        "before",
+        "after",
+        "outside"
       ],
       "type": "object"
     }

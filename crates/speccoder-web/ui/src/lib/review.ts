@@ -4,7 +4,7 @@
 // Markdown, and the Code view's nudge lines. Pure: the components render
 // what these say, the tests hold them.
 
-import type { ApproveSheet, CodeComment, CommentAnchor, CommentDraft, OracleView, RunMode } from "./schema.gen";
+import type { ApproveSheet, CodeComment, CommentAnchor, CommentDraft, OracleView, ReviewChange, RevisionView, RunMode } from "./schema.gen";
 
 /** What approving freezes for a requirement, as the sheet says it (the
  *  host's `OracleView::freezes`). */
@@ -105,9 +105,33 @@ export function grouped(drafts: CommentDraft[]): { section: string; drafts: Comm
   return out;
 }
 
-/** The sections a send would revise (passages only; tests are asked again). */
+/** The sections a send would revise (passages and changed lines; tests are
+ *  asked again), each by its document and heading as the host keys them —
+ *  the same heading in two documents is two sections. */
 export function touched(drafts: CommentDraft[]): string[] {
-  return [...new Set(drafts.filter((d) => d.anchor.kind === "passage" || d.anchor.kind === "diff_line").map((d) => sectionOf(d.anchor)))];
+  const key = (a: CommentAnchor) => (a.kind === "passage" ? `${a.path}: ${a.section || "(before the first heading)"}` : a.kind === "diff_line" ? `${a.path}:${a.line}` : "");
+  return [...new Set(drafts.filter((d) => d.anchor.kind === "passage" || d.anchor.kind === "diff_line").map((d) => key(d.anchor)))];
+}
+
+/** A comment's anchor on a line changed since the last commit: the line as
+ *  it reads now (or, removed, as it read), with its number on that side. */
+export function driftAnchor(c: ReviewChange): CommentAnchor | null {
+  if (c.now != null && c.now_line != null) return { kind: "diff_line", path: c.path, side: "new", line: c.now_line, quote: c.now };
+  if (c.then != null && c.then_line != null) return { kind: "diff_line", path: c.path, side: "old", line: c.then_line, quote: c.then };
+  return null;
+}
+
+/** The headings of document `path` a pending revision changed: inside the
+ *  comments (`false`) or outside them (`true`), by the heading's own words. */
+export function revisedHeadings(turn: RevisionView | null | undefined, path: string): Map<string, boolean> {
+  const out = new Map<string, boolean>();
+  if (!turn || turn.outcome !== "pending") return out;
+  for (const d of turn.diffs) {
+    if (d.path !== path || !d.heading) continue;
+    const words = d.heading.split(" › ").pop() ?? d.heading;
+    out.set(words, (out.get(words) ?? false) || d.outside);
+  }
+  return out;
 }
 
 /** One Code-view comment as the nudge says it (the host's `nudge_line`). */

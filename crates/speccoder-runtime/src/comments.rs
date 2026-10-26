@@ -495,7 +495,56 @@ fn current(u: &Unit, anchor: &CommentAnchor) -> bool {
     }
 }
 
-fn turn_view(t: &Turn) -> RevisionView {
+/// Each section a pending turn changed, before (its snapshot) and after
+/// (the document now).
+fn section_diffs(u: &Unit, t: &Turn) -> Vec<speccoder_core::oracle::SectionDiff> {
+    const CUT: usize = 4000;
+    let cut = |s: &str| s.chars().take(CUT).collect::<String>();
+    if t.outcome != "pending" || t.after.is_empty() {
+        return Vec::new();
+    }
+    let snap = snapshot_dir(&u.plane, &u.feature, &t.id);
+    let mut out = Vec::new();
+    let paths: BTreeSet<&str> = t.after.iter().map(|f| f.path.as_str()).collect();
+    for path in paths {
+        if !document_path(u, path) {
+            continue;
+        }
+        let before = std::fs::read_to_string(snap.join(path)).unwrap_or_default();
+        let after = read(u, path).unwrap_or_default();
+        if before == after {
+            continue;
+        }
+        let (a, b) = (sections(&before), sections(&after));
+        for key in changed_sections(path, &before, &after) {
+            let heading = key
+                .strip_prefix(&format!("{path}: "))
+                .unwrap_or(&key)
+                .to_owned();
+            let heading = if heading == "(before the first heading)" {
+                String::new()
+            } else {
+                heading
+            };
+            let body = |v: &[(String, String)]| {
+                v.iter()
+                    .find(|(h, _)| *h == heading)
+                    .map(|(_, t)| cut(t.trim_end()))
+                    .unwrap_or_default()
+            };
+            out.push(speccoder_core::oracle::SectionDiff {
+                path: path.to_owned(),
+                outside: t.outside.contains(&key),
+                before: body(&a),
+                after: body(&b),
+                heading,
+            });
+        }
+    }
+    out
+}
+
+fn turn_view(u: &Unit, t: &Turn) -> RevisionView {
     let files: Vec<String> = t
         .before
         .iter()
@@ -524,6 +573,7 @@ fn turn_view(t: &Turn) -> RevisionView {
         files,
         asked_again: t.asked_again.clone(),
         beside: t.beside.clone(),
+        diffs: section_diffs(u, t),
     }
 }
 
@@ -544,7 +594,7 @@ fn view_of(u: &Unit, tray: &Tray) -> CommentsView {
                 d
             })
             .collect(),
-        turn: tray.turns.last().map(turn_view),
+        turn: tray.turns.last().map(|t| turn_view(u, t)),
         revise_with: u.format.planning().revises.map(str::to_owned),
     }
 }

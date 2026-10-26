@@ -10,7 +10,7 @@
   import CommentTray from "./CommentTray.svelte";
   import { comments } from "../lib/comments.svelte";
   import { get, q } from "../lib/api";
-  import { passage, plain } from "../lib/review";
+  import { passage, plain, revisedHeadings } from "../lib/review";
   const docs = $derived(app.documents);
   // Review is offered when the spec names requirements to review.
   const reviewable = $derived(!!app.report?.data?.review);
@@ -143,6 +143,20 @@
       }
     }
   });
+  // After a revision, until it is kept or undone: its changed sections with
+  // a left bar — green inside the comments, amber outside them.
+  $effect(() => {
+    void html;
+    const changed = revisedHeadings(comments.view?.turn, shown?.path ?? "");
+    if (!article) return;
+    for (const h of article.querySelectorAll<HTMLElement>("h1, h2, h3, h4")) {
+      const outside = changed.get(h.textContent?.trim() ?? "");
+      h.classList.toggle("rev-in", outside === false);
+      h.classList.toggle("rev-out", outside === true);
+      if (outside !== undefined) h.title = outside ? "Revised outside your comments" : "Revised from your comments";
+      else h.removeAttribute("title");
+    }
+  });
   function key(e: KeyboardEvent) {
     if (e.key === "c" && !e.metaKey && !e.ctrlKey && picked && !composing && !(e.target as HTMLElement)?.closest("input, textarea, select")) {
       e.preventDefault();
@@ -248,6 +262,8 @@
   .bar { position: sticky; top: 0; height: 3px; margin: -2.25rem -2.75rem 2rem; border-radius: var(--radius-lg) var(--radius-lg) 0 0; overflow: hidden; background: transparent; z-index: 1; }
   .bar span { display: block; height: 100%; background: var(--accent); transition: width 120ms linear; }
   .prose :global(h2[id]), .prose :global(h3[id]) { scroll-margin-top: 1.25rem; }
+  .prose :global(.rev-in), .prose :global(.rev-out) { border-left: 3px solid var(--verified-fill); padding-left: 0.5rem; margin-left: -0.8rem; }
+  .prose :global(.rev-out) { border-left-color: var(--attention-fill); }
   nav .count { float: right; min-width: 1.2rem; padding: 0 0.35rem; border-radius: 999px; background: var(--attention-fill); color: #fff; font: 700 0.68rem/1.2rem var(--rounded); text-align: center; }
   .prose {
     background: var(--surface); border-radius: var(--radius-lg); box-shadow: var(--shadow); padding: 2.25rem 2.75rem 2.75rem;

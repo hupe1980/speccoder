@@ -529,6 +529,26 @@ pub struct RevisionView {
     /// (the person's own edit): *Undo Revision* never overwrites them.
     #[serde(default)]
     pub beside: Vec<String>,
+    /// While it waits to be kept or undone: each changed section, before
+    /// and after, for the word diff.
+    #[serde(default)]
+    pub diffs: Vec<SectionDiff>,
+}
+
+/// One section a revision changed, before and after (each cut to 4000
+/// characters).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct SectionDiff {
+    /// The document (project-relative).
+    pub path: String,
+    /// Its heading path (`Spec › Requirements`; empty before the first).
+    pub heading: String,
+    /// The section's text before the revision (empty: it was added).
+    pub before: String,
+    /// After it (empty: it was removed).
+    pub after: String,
+    /// No comment touched it.
+    pub outside: bool,
 }
 
 /// Result of `speccoder review comments`: the tray and the last turn.
