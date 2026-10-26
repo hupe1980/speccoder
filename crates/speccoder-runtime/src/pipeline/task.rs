@@ -808,7 +808,21 @@ pub(crate) fn run_task(
         .and_then(|m| m.acceptance.clone())
         .and_then(|a| serde_json::from_value::<PreparedAcceptance>(a).ok())
     {
-        // The interrupted attempt's tests, already in the worktree.
+        // The interrupted attempt's tests, already in the worktree. A bug
+        // task's held-out set is the one its pre-frozen record seals now: a
+        // special case's regeneration re-sealed it after the marker was kept.
+        let mut prepared = prepared;
+        if let Some(sealed) = bug_fix
+            .as_ref()
+            .and_then(|f| f.record.held_out_sealed.as_ref())
+        {
+            prepared.held_out = Some(sealed.manifest_sha256.clone());
+            prepared.report["held_out"] = serde_json::json!({
+                "state": "on",
+                "manifest": format!("sha256:{}", sealed.manifest_sha256),
+                "kept": sealed.count,
+            });
+        }
         Some(prepared)
     } else if let Some(f) = &bug_fix {
         stage(&*live, task, Stage::Red, StageState::Started, None, None);
@@ -2132,6 +2146,7 @@ pub(crate) fn run_task(
                             .as_ref()
                             .map(super::outcome::verdict_word)
                             .unwrap_or_default(),
+                        &crate::strength::rulings(&strength_dir),
                     )
                 })
                 .unwrap_or_default(),
@@ -2267,7 +2282,9 @@ pub(crate) fn run_task(
             checklists_overridden: false,
             extra: bug_fix
                 .as_ref()
-                .map(|f| super::bug::trailers(f, &verdict))
+                .map(|f| {
+                    super::bug::trailers(f, &verdict, &crate::strength::rulings(&strength_dir))
+                })
                 .unwrap_or_default(),
         });
         match commit_attempt(&wt_root, &message) {

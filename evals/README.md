@@ -60,3 +60,4 @@ never a fix.
 | `bug-already-sum` | the same, an empty sum | already_satisfied (never ticked) |
 | `bug-already-shout` | the same, upper-casing | already_satisfied (never ticked) |
 | `bug-not-a-bug` | a symptom the code cannot exhibit (no settings API) | cannot_reproduce (never ticked) |
+| `bug-special-clamp` | `bug-clamp-bound`, fixed by a scripted executor that reads the frozen reproduction and answers exactly its input | reject (the reproduction passes; the held-out variant at another bound, or the special-case gate, must catch it) |

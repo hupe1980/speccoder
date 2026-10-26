@@ -60,6 +60,7 @@ jobs:
           cache-dependency-path: crates/speccoder-web/ui/package-lock.json
       - run: npm ci
       - run: npm run check
+      - run: npm test
       - run: npm run build
       - run: git diff --exit-code -- dist
       # The interface ships inside the binary, so its size hardly matters;

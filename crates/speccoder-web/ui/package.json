@@ -7,14 +7,17 @@
   "scripts": {
     "build": "vite build",
     "dev": "vite",
-    "check": "svelte-check --tsconfig ./tsconfig.json"
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "test": "vitest run"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "7.3.0",
+    "happy-dom": "21.0.1",
     "svelte": "5.57.1",
     "svelte-check": "4.7.6",
     "typescript": "5.9.3",
-    "vite": "8.3.0"
+    "vite": "8.3.0",
+    "vitest": "5.0.4"
   },
   "dependencies": {
     "mermaid": "12.1.0"

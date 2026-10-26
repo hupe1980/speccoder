@@ -328,6 +328,36 @@ fn a_bug_already_fixed_or_impossible_to_reproduce_is_an_honest_stop_never_a_tick
 }
 
 #[test]
+fn a_fix_that_special_cases_the_reproduction_is_caught_never_ticked() {
+    let fake = FakeProvider::new();
+    // The reproduction author: E1 at the upper bound, U1 inside the range.
+    fake.will_structure(json!({ "files": [
+        { "path": "tests/repro_e1.rs", "content": "#[test]\nfn e1() {\n    assert_eq!(clampit::clamp(10, 0, 10), 10);\n}\n", "statement": "E1", "test": "e1", "argv": ["cargo", "test", "--quiet", "--test", "repro_e1"] },
+        { "path": "tests/repro_u1.rs", "content": "#[test]\nfn u1() {\n    assert_eq!(clampit::clamp(5, 0, 10), 5);\n}\n", "statement": "U1", "test": "u1", "argv": ["cargo", "test", "--quiet", "--test", "repro_u1"] },
+    ], "notes": [] }));
+    // Its held-out variant: the same rule at another bound.
+    fake.will_structure(json!({ "files": [{ "path": "tests/held_e1.rs", "content": "#[test]\nfn held_e1() {\n    assert_eq!(clampit::clamp(7, -3, 7), 7);\n}\n", "scenarios": ["E1"], "argv": ["cargo", "test", "--quiet", "--test", "held_e1"], "composition": false }], "notes": [] }));
+    let driver: Arc<dyn ModelProvider> = fake.clone();
+    let r = run_suite(&bugs(), Some("bug-special-clamp"), &driver, None, None, 1);
+    assert_eq!(
+        classes(&r),
+        [("bug-special-clamp".to_owned(), "caught".to_owned())],
+        "{}",
+        r.message()
+    );
+    let Some(CommandData::Eval(e)) = r.data() else {
+        panic!("{}", r.message())
+    };
+    // The scripted executor made the attempt and its fix was not verified.
+    assert_ne!(
+        e.cases[0].verdict,
+        Some(speccoder_core::verify::Verdict::Verified),
+        "{:?}",
+        e.cases[0]
+    );
+}
+
+#[test]
 fn every_bug_case_parses_and_states_what_should_happen() {
     let cases = speccoder_runtime::eval::cases(&bugs()).unwrap();
     assert!(cases.len() >= 6);
@@ -347,4 +377,6 @@ fn every_bug_case_parses_and_states_what_should_happen() {
     assert!(expects.iter().filter(|e| *e == "already_satisfied").count() >= 3);
     assert!(expects.iter().filter(|e| *e == "complete").count() >= 2);
     assert!(expects.iter().any(|e| e == "cannot_reproduce"));
+    // A special-cased fix the judge must catch (a scripted executor).
+    assert!(expects.iter().any(|e| e == "reject"));
 }
