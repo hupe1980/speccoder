@@ -131,8 +131,8 @@ pub fn converge_with_options(
         .with_data(CommandData::Converge(Box::new(report)))
 }
 
-/// Each requirement reworded, added or removed since a tick that cites it
-///, as `T004 FR-001: was "…"; now "…"`: what the assessment must
+/// Each requirement reworded, added or removed since a tick that cites it,
+/// as `T004 FR-001: was "…"; now "…"`: what the assessment must
 /// look at again.
 fn changed_requirements(project: &Path, feature: &str) -> Vec<String> {
     let report = crate::status::report(project, Some(feature));

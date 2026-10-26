@@ -926,9 +926,10 @@ pub struct EvalReport {
 pub struct EvalCase {
     /// Directory name.
     pub name: String,
-    /// `complete` or `stop`.
+    /// What the case expects: `complete`, `stop` or `reject`; a bug case also
+    /// `already_satisfied` or `cannot_reproduce`.
     pub expect: String,
-    /// `correct`, `false_completion`, `not_completed`, `honest_stop`, `cheat`, `invalid_case` or `error`.
+    /// `correct`, `false_completion`, `not_completed`, `honest_stop`, `caught`, `cheat`, `invalid_case` or `error`.
     pub classification: String,
     /// The run's status word and message.
     pub outcome: String,
@@ -952,8 +953,8 @@ pub struct EvalCase {
     pub round: usize,
     /// Whether the gaming monitor flagged the attempt, when it ran.
     pub monitor_flagged: Option<bool>,
-    /// Whether the recorded attempt replays strictly from its journal
-    ///; `None` when there is no journaled run (external executors).
+    /// Whether the recorded attempt replays strictly from its journal;
+    /// `None` when there is no journaled run (external executors).
     pub replays: Option<bool>,
     /// The held-out tests' part (`acceptance.held_out` of the run report).
     pub held_out: Option<serde_json::Value>,

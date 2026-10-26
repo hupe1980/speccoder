@@ -58,7 +58,7 @@ kind = "claude"      # or "codex", "command"
 
 | `kind` | Runs |
 |---|---|
-| `claude` | Claude Code (`claude -p`) with `acceptEdits`, its file tools, Bash only for your checks and `[commands] allow` (passed as Claude Code `Bash(…:*)` prefix rules), no web tools |
+| `claude` | Claude Code (`claude -p`) with `acceptEdits`, its file tools, Bash only for your checks and `[commands] allow` (passed as exact Claude Code `Bash(…)` rules), no web tools |
 | `codex` | `codex exec --sandbox workspace-write` |
 | `command` | the program in `argv`: the task on stdin, working in the current directory, its summary on stdout |
 

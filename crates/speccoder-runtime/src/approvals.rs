@@ -709,8 +709,8 @@ pub trait Approver: Send + Sync + std::fmt::Debug {
     /// The person's answer to the presented call.
     fn ask(&self, p: &Presentation) -> Answer;
 
-    /// The person's free-text answer to a question a hosted skill asks
-    ///; `None` when nobody can answer.
+    /// The person's free-text answer to a question a hosted skill asks;
+    /// `None` when nobody can answer.
     fn answer(&self, question: &str) -> Option<String> {
         let _ = question;
         None

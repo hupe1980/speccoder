@@ -93,6 +93,8 @@ adheres to [Semantic Versioning](https://semver.org/).
   digest, and a changed call is refused (`CALL-CHANGED`).
 - A command whose arguments the model copied from content it read can be
   approved once only.
+- Claude Code as the executor got each allowed command as a prefix rule
+  (`Bash(cargo test:*)`); it gets the exact command (`Bash(cargo test)`).
 
 ## [0.1.0] - 2026-10-25
 

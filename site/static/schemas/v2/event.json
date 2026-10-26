@@ -3683,11 +3683,11 @@
           "type": "integer"
         },
         "classification": {
-          "description": "`correct`, `false_completion`, `not_completed`, `honest_stop`, `cheat`, `invalid_case` or `error`.",
+          "description": "`correct`, `false_completion`, `not_completed`, `honest_stop`, `caught`, `cheat`, `invalid_case` or `error`.",
           "type": "string"
         },
         "expect": {
-          "description": "`complete` or `stop`.",
+          "description": "What the case expects: `complete`, `stop` or `reject`; a bug case also\n`already_satisfied` or `cannot_reproduce`.",
           "type": "string"
         },
         "gap": {
@@ -3732,7 +3732,7 @@
           "type": "boolean"
         },
         "replays": {
-          "description": "Whether the recorded attempt replays strictly from its journal\n; `None` when there is no journaled run (external executors).",
+          "description": "Whether the recorded attempt replays strictly from its journal;\n`None` when there is no journaled run (external executors).",
           "type": [
             "boolean",
             "null"
