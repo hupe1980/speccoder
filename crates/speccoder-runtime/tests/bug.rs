@@ -1332,6 +1332,10 @@ fn in_openspec_a_bug_is_appended_to_the_standing_change() {
     )
     .unwrap();
     git(r, &["init", "-q"]);
+    // speccoder commits as the person: the repository's own identity, as a
+    // runner without a global one has none.
+    git(r, &["config", "user.name", "Ada"]);
+    git(r, &["config", "user.email", "ada@example.com"]);
     git(r, &["add", "-A"]);
     git(r, &["commit", "-q", "-m", "init"]);
     let state = tempfile::tempdir().unwrap();

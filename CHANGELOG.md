@@ -74,6 +74,8 @@ adheres to [Semantic Versioning](https://semver.org/).
   speccoder held the journal or the decisions could not be read; they now
   say the calls are unknown, and why.
 - An OpenSpec project without a change was offered no first step.
+- With `CARGO_TARGET_DIR` set, every Rust check failed in the sandbox (it may
+  not write outside the worktree); checks build in the worktree instead.
 - The app refused its own concurrent journal reads.
 - `attest verify` reported a missing `cosign` as an untrusted signer.
 

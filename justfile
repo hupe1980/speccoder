@@ -22,9 +22,11 @@ lint:
     # The verifier alone resolves the runtime without `engine`: its read half lints clean too.
     cargo clippy -p speccoder-verify --all-targets -- -D warnings
 
+# On Linux the sandbox re-runs the speccoder binary as its helper; the
+# runtime crate's tests find it here (built by the same nextest run).
 test:
     @echo "==> gate: test"
-    cargo nextest run --workspace -E 'not binary(layering)'
+    SPECCODER_SANDBOX_HELPER="${CARGO_TARGET_DIR:-$PWD/target}/debug/speccoder" cargo nextest run --workspace -E 'not binary(layering)'
     cargo test --workspace --doc
 
 deny:

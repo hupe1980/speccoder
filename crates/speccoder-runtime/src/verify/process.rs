@@ -171,8 +171,8 @@ fn capture(mut stream: impl Read, cap: usize) -> Captured {
     captured
 }
 
-/// The child environment: everything except secret-looking variables, plus
-/// `CI=1` and `GIT_TERMINAL_PROMPT=0`. Not a security boundary — that is
+/// The child environment: everything except secret-looking variables and
+/// build-output redirections, plus `CI=1` and `GIT_TERMINAL_PROMPT=0`. Not a security boundary — that is
 /// the OS sandbox (`crate::sandbox`).
 #[must_use]
 pub fn scrubbed_env(vars: impl IntoIterator<Item = (String, String)>) -> Vec<(String, String)> {
@@ -180,6 +180,7 @@ pub fn scrubbed_env(vars: impl IntoIterator<Item = (String, String)>) -> Vec<(St
         .into_iter()
         .filter(|(k, _)| !is_secret(k))
         .filter(|(k, _)| !OURS.contains(&k.as_str()) && !FORCES_COLOUR.contains(&k.as_str()))
+        .filter(|(k, _)| !BUILD_ELSEWHERE.contains(&k.as_str()))
         .collect();
     env.push(("CI".to_owned(), "1".to_owned()));
     env.push(("GIT_TERMINAL_PROMPT".to_owned(), "0".to_owned()));
@@ -193,6 +194,10 @@ pub fn scrubbed_env(vars: impl IntoIterator<Item = (String, String)>) -> Vec<(St
 
 /// Set by [`scrubbed_env`] itself.
 const OURS: &[&str] = &["CI", "GIT_TERMINAL_PROMPT", "CARGO_TERM_COLOR", "NO_COLOR"];
+
+/// Variables that send build output outside the worktree, where the sandbox
+/// lets nothing write (and where it would mix with the checkout's builds).
+const BUILD_ELSEWHERE: &[&str] = &["CARGO_TARGET_DIR", "CARGO_BUILD_TARGET_DIR"];
 
 /// Variables that force colour on whatever the output goes to.
 const FORCES_COLOUR: &[&str] = &["FORCE_COLOR", "CLICOLOR_FORCE", "PY_COLORS"];
@@ -231,6 +236,8 @@ mod tests {
             ("RUSTUP_HOME", "/r"),
             ("CARGO_TERM_COLOR", "always"),
             ("FORCE_COLOR", "1"),
+            ("CARGO_TARGET_DIR", "/elsewhere"),
+            ("CARGO_BUILD_TARGET_DIR", "/elsewhere"),
         ]
         .map(|(k, v)| (k.to_owned(), v.to_owned()));
         let keys: Vec<_> = scrubbed_env(vars)

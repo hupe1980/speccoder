@@ -349,6 +349,10 @@ fn run_case(
                 .map_err(|e| e.to_string())
         })
         .and_then(|()| git(&repo, &["init", "-q"]))
+        // What speccoder commits as the person (a bug, a quick change) needs
+        // an identity in the case's own repository, global config or not.
+        .and_then(|()| git(&repo, &["config", "user.name", "speccoder-eval"]))
+        .and_then(|()| git(&repo, &["config", "user.email", "eval@speccoder.invalid"]))
         .and_then(|()| git(&repo, &["add", "-A"]))
         .and_then(|()| git(&repo, &["commit", "-q", "-m", "eval case"]));
     if let Err(e) = prepared {
