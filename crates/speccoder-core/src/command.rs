@@ -330,14 +330,17 @@ pub struct InboxReport {
 /// One decision waiting for a person.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct InboxItem {
-    /// What kind, in the order of urgency: `approval` (a run waits on it),
+    /// What kind, in the order of urgency: `unknown` (the calls waiting in
+    /// the feature's journal could not be read — some may wait for you),
+    /// `approval` (a run waits on it),
     /// `ruling` (a verified attempt is held: its tests reject an
     /// alternative the spec allows), `gaming` (the monitor suspects a
     /// shortcut), `stale` (proven against an earlier wording), `question`
     /// (the spec leaves questions open), `review`
     /// (requirements not approved on their current wording), `revise`
     /// (changes requested on the spec), `stuck` (the
-    /// last attempt did not pass), `commit` (planning files a run cannot
+    /// last attempt did not pass), `aside` (changes a run set aside),
+    /// `commit` (planning files a run cannot
     /// read yet), `handoff` (every task done: review and hand it off).
     pub kind: String,
     /// The feature.
@@ -1203,6 +1206,10 @@ pub struct ApprovalsReport {
     pub pending: Vec<PendingCall>,
     /// Decisions recorded for the feature's tasks.
     pub decided: Vec<DecidedCall>,
+    /// Why the calls waiting in the journal could not be read (another
+    /// speccoder holds it, …): `pending` may then be incomplete — unknown,
+    /// never "nothing waiting".
+    pub unreadable: Option<String>,
 }
 
 /// A call that stopped an attempt for approval, or a question, waiting for

@@ -687,22 +687,28 @@ fn decided(feature: &str, decisions: &Decisions) -> Vec<DecidedCall> {
 
 /// Calls of `feature` waiting for a person on a human task, oldest
 /// first: the attempt is suspended and resumes once they are decided.
+///
+/// `Err` says why they could not be read: an unreadable journal means the
+/// calls waiting are unknown, never that none wait. A project without a
+/// journal has none, and a read never creates one.
 fn waiting_tasks(
     root: &Path,
     dir: &Path,
     feature: &str,
-) -> Vec<(PendingCall, agentplane::core::Task)> {
-    let Ok(rt) = crate::tokio_runtime() else {
-        return Vec::new();
-    };
-    let Ok(plane) = crate::substrate::Plane::open_for_decisions(dir) else {
-        return Vec::new();
-    };
+) -> Result<Vec<(PendingCall, agentplane::core::Task)>, String> {
+    if !dir.join(crate::substrate::JOURNAL).exists() {
+        return Ok(Vec::new());
+    }
+    let rt = crate::tokio_runtime()?;
+    let plane = crate::substrate::Plane::open_for_decisions(dir).map_err(|e| e.0)?;
     // A call past its deadline is denied as expired before it is listed.
     let _ = rt.block_on(plane.expire_due(agentplane::core::Timestamp::now_utc()));
-    let open = rt.block_on(plane.open_tasks()).unwrap_or_default();
+    let open = rt
+        .block_on(plane.open_tasks())
+        .map_err(|e| format!("listing the waiting calls: {}", e.0))?;
     let prefix = format!("{feature}/");
-    open.into_iter()
+    Ok(open
+        .into_iter()
         .filter(|t| t.kind == tasks::APPROVAL)
         .filter_map(|t| {
             let request = tasks::request_of(&t.justification.proposed_action)?;
@@ -727,7 +733,7 @@ fn waiting_tasks(
                 t,
             ))
         })
-        .collect()
+        .collect())
 }
 
 /// Denies, as expired, every call in the journal at `dir` whose deadline
@@ -749,7 +755,10 @@ pub fn waiting_elsewhere(
     feature: &str,
     task: &str,
 ) -> Option<(String, String)> {
+    // Unreadable: the run that would wait opens the journal itself and
+    // stops there with the reason, so nothing is hidden by `None` here.
     waiting_tasks(root, dir, feature)
+        .ok()?
         .into_iter()
         .map(|(c, _)| c)
         .find(|c| c.task != task && c.source == "task")
@@ -764,7 +773,7 @@ pub fn withdraw_waiting(
     feature: &str,
     reason: &str,
 ) -> Result<usize, String> {
-    let rows = waiting_tasks(root, dir, feature);
+    let rows = waiting_tasks(root, dir, feature)?;
     if rows.is_empty() {
         return Ok(0);
     }
@@ -894,7 +903,10 @@ pub fn decide_with(
             .collect(),
         _ => Vec::new(),
     };
-    let tasks_waiting = waiting_tasks(&root, &dir, &feature);
+    let (tasks_waiting, unreadable) = match waiting_tasks(&root, &dir, &feature) {
+        Ok(rows) => (rows, None),
+        Err(e) => (Vec::new(), Some(e)),
+    };
     let waiting = pending(&root, &feature, &open, &decisions);
 
     // A call waiting on a task is decided there: who, how known, bound to
@@ -906,6 +918,13 @@ pub fn decide_with(
         Verb::Reject(t, r) => Some(Choice::reject(t, r)),
         Verb::Decide(c) => Some(c),
     };
+    if let (Some(_), Some(why)) = (choice, &unreadable) {
+        return CommandResult::new(
+            command,
+            CommandStatus::Error,
+            &format!("the calls waiting for a decision could not be read: {why}"),
+        );
+    }
     if let Some(c) = choice {
         let matching: Vec<&(PendingCall, agentplane::core::Task)> = tasks_waiting
             .iter()
@@ -972,6 +991,7 @@ pub fn decide_with(
             let report = ApprovalsReport {
                 decided: decided(&feature, &decisions),
                 pending: waiting_tasks(&root, &dir, &feature)
+                    .unwrap_or_default()
                     .into_iter()
                     .map(|(c, _)| c)
                     .chain(
@@ -981,6 +1001,7 @@ pub fn decide_with(
                     )
                     .collect(),
                 feature,
+                unreadable: None,
             };
             return CommandResult::new(
                 command,
@@ -1016,10 +1037,13 @@ pub fn decide_with(
         // Mapped onto the verbs above before this point.
         Verb::List | Verb::Decide(_) => {
             let n = waiting.len() + tasks_waiting.len();
-            if n == 0 {
-                "nothing awaits a decision".to_owned()
-            } else {
-                format!("{n} call(s) await a decision")
+            match (&unreadable, n) {
+                (Some(why), 0) => format!("the calls waiting for a decision are unknown: {why}"),
+                (Some(why), n) => {
+                    format!("{n} call(s) await a decision; others may wait unseen: {why}")
+                }
+                (None, 0) => "nothing awaits a decision".to_owned(),
+                (None, n) => format!("{n} call(s) await a decision"),
             }
         }
         Verb::Approve(task) | Verb::ApproveNoted(task, _) | Verb::Reject(task, _) => {
@@ -1086,6 +1110,7 @@ pub fn decide_with(
             )
             .collect(),
         feature,
+        unreadable,
     };
     CommandResult::new(command, CommandStatus::Ok, &message)
         .with_data(CommandData::Approvals(Box::new(report)))

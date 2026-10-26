@@ -11,7 +11,7 @@ adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 
 - **The model's reasoning.** Each attempt turn asks the provider for a
-  summary of the model's reasoning (Anthropic, OpenAI Responses, Gemini;
+  summary of the model's reasoning (Anthropic, OpenAI Responses;
   `[model] reasoning_summary = false` turns it off). It is shown as the
   model's account, never as evidence: `∴` lines in the terminal, a live
   thinking line in the app, ACP thoughts, the `reasoning` event, and per
@@ -63,6 +63,11 @@ adheres to [Semantic Versioning](https://semver.org/).
   removed tests. Before, the removal failed the attempt afterwards.
 - A feature run reports the code of the task that stopped it
   (`CHECK-BROKEN`, not `CONFIG`).
+- Calls waiting in a journal another speccoder holds were listed as
+  "nothing awaits a decision". Needs You, `inbox`, `report --approvals` and
+  `status` now say the calls are unknown and why (`unreadable` in the
+  `approvals` payload, the `unknown` kind in `inbox`), and a decision is not
+  made blind. A read no longer creates an empty journal.
 
 ## [0.1.0] - 2026-10-25
 

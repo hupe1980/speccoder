@@ -1465,7 +1465,7 @@ pub fn inbox(r: &speccoder_core::InboxReport, look: &crate::style::Look) -> Vec<
     let mut out = Vec::new();
     for i in &r.items {
         let g = match i.kind.as_str() {
-            "approval" | "ruling" | "gaming" | "stale" | "aside" => Glyph::Attention,
+            "unknown" | "approval" | "ruling" | "gaming" | "stale" | "aside" => Glyph::Attention,
             "stuck" => Glyph::Failed,
             "handoff" => Glyph::Verified,
             _ => Glyph::Ready,

@@ -846,6 +846,7 @@ fn with_primary(mut snap: Snapshot, path: &Path, feature: Option<&str>) -> Snaps
                     feature: String::new(),
                     pending: Vec::new(),
                     decided: Vec::new(),
+                    unreadable: Some("the journal was busy".to_owned()),
                 }),
         ),
     ))

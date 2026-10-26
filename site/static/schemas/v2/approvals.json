@@ -274,12 +274,20 @@
         "$ref": "#/$defs/PendingCall"
       },
       "type": "array"
+    },
+    "unreadable": {
+      "description": "Why the calls waiting in the journal could not be read (another\nspeccoder holds it, …): `pending` may then be incomplete — unknown,\nnever \"nothing waiting\".",
+      "type": [
+        "string",
+        "null"
+      ]
     }
   },
   "required": [
     "feature",
     "pending",
-    "decided"
+    "decided",
+    "unreadable"
   ],
   "title": "approvals: calls waiting and decisions made",
   "type": "object"

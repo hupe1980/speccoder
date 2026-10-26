@@ -17,9 +17,9 @@ use crate::actions::action;
 
 /// The kinds, most urgent first: what blocks a run, what questions the
 /// evidence, what stops a task, what blocks a hand-off.
-pub const KINDS: [&str; 11] = [
-    "approval", "ruling", "gaming", "stale", "question", "review", "revise", "stuck", "aside",
-    "commit", "handoff",
+pub const KINDS: [&str; 12] = [
+    "unknown", "approval", "ruling", "gaming", "stale", "question", "review", "revise", "stuck",
+    "aside", "commit", "handoff",
 ];
 
 /// `speccoder inbox [--feature]`: the decisions waiting in every feature of
@@ -88,6 +88,10 @@ fn count(n: usize, one: &str, many: &str) -> String {
 /// A kind counted in words: `2 approvals`, `1 open question`.
 fn counted(kind: &str, n: usize) -> String {
     let (one, many) = match kind {
+        "unknown" => (
+            "feature whose waiting calls could not be read",
+            "features whose waiting calls could not be read",
+        ),
         "approval" => ("approval", "approvals"),
         "ruling" => ("ruling", "rulings"),
         "gaming" => ("suspected shortcut", "suspected shortcuts"),
@@ -175,6 +179,18 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
         .flat_map(|a| &a.pending)
         .map(|p| p.task.as_str())
         .collect();
+
+    // The journal could not be read: what waits there is unknown, and the
+    // person is told so rather than shown an empty list.
+    if let Some(why) = approvals.as_ref().and_then(|a| a.unreadable.as_ref()) {
+        out.push(item(
+            "unknown",
+            None,
+            format!("Calls waiting in {feature} could not be read"),
+            format!("{why} — some may be waiting for you"),
+            Vec::new(),
+        ));
+    }
 
     // A run waits on these.
     for p in approvals.iter().flat_map(|a| &a.pending) {

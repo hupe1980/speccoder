@@ -445,3 +445,55 @@ fn a_resumed_attempt_that_fails_is_undone_to_where_the_task_started() {
         String::from_utf8_lossy(&status.stdout)
     );
 }
+
+#[test]
+fn calls_waiting_in_a_journal_another_process_holds_are_unknown_never_none() {
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    write_manifest(&f, "c1");
+    let first = speccoder_runtime::run_with(r.path(), None, "T005", state.path(), d, None);
+    assert_eq!(
+        first.status(),
+        CommandStatus::NeedsHuman,
+        "{}",
+        first.message()
+    );
+    assert_eq!(pending(r.path(), state.path()).len(), 1);
+
+    // Another holder of the journal (as another speccoder process would be).
+    let held =
+        agentplane::store::RedbStore::open(plane_dir(r.path(), state.path()).join("journal.redb"))
+            .unwrap();
+    let listed = decide_with(r.path(), None, Verb::List, state.path());
+    let Some(CommandData::Approvals(a)) = listed.data() else {
+        panic!("{listed:?}");
+    };
+    assert!(a.pending.is_empty());
+    assert!(
+        a.unreadable.is_some(),
+        "an unreadable journal was reported as nothing waiting"
+    );
+    assert!(listed.message().contains("unknown"), "{}", listed.message());
+    let inbox = speccoder_runtime::inbox::inbox_with(r.path(), None, Some(state.path()));
+    let Some(CommandData::Inbox(i)) = inbox.data() else {
+        panic!("{inbox:?}");
+    };
+    assert_eq!(
+        i.items.first().map(|i| i.kind.as_str()),
+        Some("unknown"),
+        "{:?}",
+        i.items
+    );
+    // A decision cannot be made blind.
+    let approve = decide_with(r.path(), None, Verb::Approve("T005"), state.path());
+    assert_eq!(
+        approve.status(),
+        CommandStatus::Error,
+        "{}",
+        approve.message()
+    );
+
+    drop(held);
+    assert_eq!(pending(r.path(), state.path()).len(), 1);
+}

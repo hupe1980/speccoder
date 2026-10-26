@@ -494,16 +494,22 @@ fn waiting_lines(plane_dir: &Path) -> Vec<String> {
     if !plane_dir.join(crate::substrate::JOURNAL).exists() {
         return Vec::new();
     }
-    let Ok(rt) = crate::tokio_runtime() else {
-        return Vec::new();
+    // Unreadable is said, never shown as nothing waiting.
+    let unknown = |why: String| vec![format!("waiting for a person: unknown — {why}")];
+    let rt = match crate::tokio_runtime() {
+        Ok(rt) => rt,
+        Err(e) => return unknown(e),
     };
-    let Ok(plane) = crate::substrate::Plane::open_for_decisions(plane_dir) else {
-        return Vec::new();
+    let plane = match crate::substrate::Plane::open_for_decisions(plane_dir) {
+        Ok(p) => p,
+        Err(e) => return unknown(e.0),
     };
     let now = agentplane::core::Timestamp::now_utc();
-    rt.block_on(plane.open_tasks())
-        .unwrap_or_default()
-        .into_iter()
+    let open = match rt.block_on(plane.open_tasks()) {
+        Ok(open) => open,
+        Err(e) => return unknown(e.0),
+    };
+    open.into_iter()
         .filter_map(|t| {
             let request = crate::approvals::tasks::request_of(&t.justification.proposed_action)?;
             let since = (now - t.created_at).whole_minutes().max(0);

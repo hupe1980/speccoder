@@ -97,6 +97,7 @@ fn snapshot() -> Snapshot {
                 ..PendingCall::default()
             }],
             decided: Vec::new(),
+            unreadable: None,
         }),
         problem: None,
         next: Some(speccoder_core::next::NextStep {

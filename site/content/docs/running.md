@@ -30,7 +30,7 @@ Each turn, the model's summary of its reasoning and its words beside its calls a
 - **editor (ACP):** the reasoning as the agent's thoughts, the words as its message;
 - **afterwards:** `speccoder task show T005 --account`, from the journal.
 
-It is a claim: a verdict never rests on it. The summary is the provider's (Anthropic, OpenAI Responses, Gemini; an OpenAI-compatible server gives none). It is asked for on the attempt's turns only; `[model] reasoning_summary = false` turns it off. On the OpenAI Responses API a model's words beside its calls are not passed on, so with OpenAI models only its reasoning shows.
+It is a claim: a verdict never rests on it. The summary is the provider's (Anthropic, OpenAI Responses; an OpenAI-compatible server gives none). It is asked for on the attempt's turns only; `[model] reasoning_summary = false` turns it off. On the OpenAI Responses API a model's words beside its calls are not passed on, so with OpenAI models only its reasoning shows.
 
 ## Quick changes
 

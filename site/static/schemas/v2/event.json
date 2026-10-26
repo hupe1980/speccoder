@@ -224,12 +224,20 @@
             "$ref": "#/$defs/PendingCall"
           },
           "type": "array"
+        },
+        "unreadable": {
+          "description": "Why the calls waiting in the journal could not be read (another\nspeccoder holds it, …): `pending` may then be incomplete — unknown,\nnever \"nothing waiting\".",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
         "feature",
         "pending",
-        "decided"
+        "decided",
+        "unreadable"
       ],
       "type": "object"
     },
@@ -2649,7 +2657,7 @@
           "type": "string"
         },
         "kind": {
-          "description": "What kind, in the order of urgency: `approval` (a run waits on it),\n`ruling` (a verified attempt is held: its tests reject an\nalternative the spec allows), `gaming` (the monitor suspects a\nshortcut), `stale` (proven against an earlier wording), `question`\n(the spec leaves questions open), `review`\n(requirements not approved on their current wording), `revise`\n(changes requested on the spec), `stuck` (the\nlast attempt did not pass), `commit` (planning files a run cannot\nread yet), `handoff` (every task done: review and hand it off).",
+          "description": "What kind, in the order of urgency: `unknown` (the calls waiting in\nthe feature's journal could not be read — some may wait for you),\n`approval` (a run waits on it),\n`ruling` (a verified attempt is held: its tests reject an\nalternative the spec allows), `gaming` (the monitor suspects a\nshortcut), `stale` (proven against an earlier wording), `question`\n(the spec leaves questions open), `review`\n(requirements not approved on their current wording), `revise`\n(changes requested on the spec), `stuck` (the\nlast attempt did not pass), `aside` (changes a run set aside),\n`commit` (planning files a run cannot\nread yet), `handoff` (every task done: review and hand it off).",
           "type": "string"
         },
         "since": {
