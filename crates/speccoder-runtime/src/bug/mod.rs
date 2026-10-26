@@ -532,7 +532,12 @@ pub fn bug_with(
         }
         let read = match format.read_bug(&root, &home, &slug) {
             Ok(r) => r,
-            Err(r) => return refuse(&r),
+            Err(r) => {
+                return refuse(&BugRefusal::new(
+                    r.code,
+                    format!("{} (the format's bug step: {})", r.message, ran.message()),
+                ));
+            }
         };
         let missing = drift(&triad, &read);
         if !missing.is_empty() {

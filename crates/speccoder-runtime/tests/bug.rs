@@ -861,3 +861,230 @@ fn the_issue_is_context_and_its_number_closes_it_only_on_a_verified_fix() {
             .any(|o| matches!(o, speccoder_core::ladder::Origin::Issue { number: 42, .. }))
     );
 }
+
+/// Spec Kit with its `bug` extension (the captured fixture) holding the
+/// seeded code.
+fn extension_repo() -> tempfile::TempDir {
+    let dir = tempfile::tempdir().unwrap();
+    let r = dir.path();
+    let ext = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../speccoder-speckit/tests/fixtures/compat/1.1.3-bug-ext");
+    let seeded = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/bug/seeded");
+    for from in [&ext, &seeded] {
+        assert!(
+            Command::new("cp")
+                .arg("-R")
+                .arg(from.join("."))
+                .arg(r)
+                .status()
+                .unwrap()
+                .success()
+        );
+    }
+    git(r, &["init", "-q"]);
+    git(r, &["config", "user.name", "Ada"]);
+    git(r, &["config", "user.email", "ada@example.com"]);
+    git(r, &["add", "-A"]);
+    git(r, &["commit", "-q", "-m", "init"]);
+    dir
+}
+
+const ASSESSMENT: &str = "# Bug Assessment: Saving an empty title crashes\n\n- **Slug**: saving-an-empty-title\n- **Created**: 2026-10-26\n- **Source**: pasted text\n- **Verdict**: likely valid, needs reproduction\n- **Severity**: medium\n\n## Report (verbatim or summarized)\n\n> Current: saving an empty title crashes\n> Expected: an empty title is refused with a message\n> Unchanged: a title is saved\n\n## Symptom\n\nSaving an empty title panics.\n\n## Reproduction\n\n1. save(\"\")\n";
+
+#[test]
+fn with_spec_kits_bug_extension_the_bug_is_the_extensions_own_and_its_fix_a_trailer_only_task() {
+    let r = extension_repo();
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    // The extension's own assess skill writes the assessment, with the
+    // person's words verbatim.
+    f.will_call_tool("w", "write_file", json!({ "path": ".specify/bugs/saving-an-empty-title/assessment.md", "content": ASSESSMENT }));
+    f.will_structure(
+        json!({ "summary": "assessed", "status": "done", "files_written": [], "questions": [] }),
+    );
+    f.will_structure(reproductions());
+    f.will_structure(held_out("refuses_blank"));
+    fix(&f, FIXED);
+    special_case(&f);
+    let options = RunOptions {
+        approver: Some(Arc::new(Confirms)),
+        ..RunOptions::default()
+    };
+    let res = bug::bug_with(
+        r.path(),
+        &request(
+            &["an empty title is refused with a message"],
+            &["a title is saved"],
+            true,
+        ),
+        Via::Terminal,
+        state.path(),
+        Some(d),
+        None,
+        &options,
+    );
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let b = the_bug(&res);
+    assert_eq!(b.home.kind, speccoder_core::bug::HomeKind::NativeSpeckitBug);
+    assert_eq!(
+        (b.unit.as_str(), b.task.as_str()),
+        ("bugs/saving-an-empty-title", "bug:saving-an-empty-title")
+    );
+    assert!(!r.path().join("specs").exists(), "no standing unit");
+    assert_eq!(
+        git(r.path(), &["log", "-1", "--format=%s", "main"]).trim(),
+        "bug: saving an empty title crashes"
+    );
+    assert_eq!(b.verdict, Some(Verdict::Verified));
+    let commit = b.commit.clone().unwrap();
+    let message = git(r.path(), &["log", "-1", "--format=%B", &commit]);
+    assert!(
+        message.contains("Spec-Task: bugs/saving-an-empty-title/bug:saving-an-empty-title"),
+        "{message}"
+    );
+    assert!(
+        message.contains("Bug: fixed (native_speckit_bug)"),
+        "{message}"
+    );
+    // Nothing in the extension's files is ticked or edited by the engine.
+    let at_fix = git(
+        r.path(),
+        &[
+            "show",
+            &format!("{commit}:.specify/bugs/saving-an-empty-title/assessment.md"),
+        ],
+    );
+    assert_eq!(at_fix, ASSESSMENT);
+    // A verifier finds the trailer-only task and checks it like a tick.
+    let checked = speccoder_runtime::attest::branch::recorded(
+        r.path(),
+        &commit,
+        "bugs/saving-an-empty-title",
+    )
+    .unwrap_or_else(|e| panic!("{e:?}"));
+    let t = checked
+        .report
+        .ticks
+        .iter()
+        .find(|t| t.tick.task == "bug:saving-an-empty-title")
+        .unwrap_or_else(|| panic!("{:#?}", checked.report));
+    assert_eq!(
+        t.tick.kind,
+        speccoder_core::verify_branch::TickKind::TrailerOnly
+    );
+    assert_eq!(
+        t.outcome,
+        speccoder_core::verify_branch::TickOutcome::Evidenced,
+        "{t:?}"
+    );
+    assert!(
+        !checked
+            .report
+            .not_evaluated
+            .iter()
+            .any(|n| n == "trailer_only_tasks")
+    );
+}
+
+#[test]
+fn an_assessment_that_drops_the_persons_words_stops_before_reproduce() {
+    let r = extension_repo();
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    let paraphrased = ASSESSMENT.replace(
+        "> Expected: an empty title is refused with a message\n",
+        "> Expected: titles are validated\n",
+    );
+    f.will_call_tool("w", "write_file", json!({ "path": ".specify/bugs/saving-an-empty-title/assessment.md", "content": paraphrased }));
+    f.will_structure(
+        json!({ "summary": "assessed", "status": "done", "files_written": [], "questions": [] }),
+    );
+    let res = bug::bug_with(
+        r.path(),
+        &request(
+            &["an empty title is refused with a message"],
+            &["a title is saved"],
+            false,
+        ),
+        Via::Terminal,
+        state.path(),
+        Some(d),
+        None,
+        &RunOptions::default(),
+    );
+    assert_eq!(
+        res.code().map(|c| c.name),
+        Some("BUG-ASSESSMENT-DRIFT"),
+        "{}",
+        res.message()
+    );
+    assert!(
+        res.message()
+            .contains("an empty title is refused with a message"),
+        "{}",
+        res.message()
+    );
+    // The bug the person assessed with the extension continues by slug.
+    let res = bug::bug_with(
+        r.path(),
+        &Request {
+            slug: Some("empty-title-crash".to_owned()),
+            ..Request::default()
+        },
+        Via::Terminal,
+        state.path(),
+        None,
+        None,
+        &RunOptions::default(),
+    );
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let b = the_bug(&res);
+    assert_eq!(
+        b.triad.expected[0].text,
+        "an empty title is refused with a message"
+    );
+    assert_eq!(b.unit, "bugs/empty-title-crash");
+}
+
+#[test]
+fn the_bugfix_overlay_replaces_the_extensions_test_step_and_comes_off_again() {
+    let r = extension_repo();
+    let on = speccoder_runtime::workflow::install_overlay(r.path(), "bugfix", false);
+    assert_eq!(on.status(), CommandStatus::Ok, "{}", on.message());
+    let text = fs::read_to_string(
+        r.path()
+            .join(".specify/workflows/overlays/bugfix/speccoder.yml"),
+    )
+    .unwrap();
+    assert!(
+        text.contains("extends: bugfix")
+            && text.contains("- replace: test")
+            && text.contains("type: speccoder"),
+        "{text}"
+    );
+    assert!(
+        r.path()
+            .join(".specify/workflows/steps/speccoder/__init__.py")
+            .exists()
+    );
+    assert_eq!(
+        speccoder_runtime::workflow::install_overlay(r.path(), "bugfix", false).status(),
+        CommandStatus::ConfigError
+    );
+    assert_eq!(
+        speccoder_runtime::workflow::install_overlay(r.path(), "nope", false).status(),
+        CommandStatus::UsageError
+    );
+    let off = speccoder_runtime::workflow::uninstall_overlay(r.path(), "bugfix");
+    assert_eq!(off.status(), CommandStatus::Ok, "{}", off.message());
+    assert!(!r.path().join(".specify/workflows/overlays/bugfix").exists());
+    // Without the extension the overlay is refused.
+    let plain = repo("seeded");
+    let refused = speccoder_runtime::workflow::install_overlay(plain.path(), "bugfix", false);
+    assert_eq!(
+        refused.status(),
+        CommandStatus::ConfigError,
+        "{}",
+        refused.message()
+    );
+}

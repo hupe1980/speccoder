@@ -271,13 +271,16 @@ fn run_unguarded(
         Ok(t) => Arc::new(t.with_runner(runner).with_env(env)),
         Err(e) => return refuse(CommandStatus::Error, e.to_string()),
     };
-    let input = substrate::host::input(
+    let mut input = substrate::host::input(
         &skill.name,
         &instruction,
         &canonical.display().to_string(),
         (budget.max_turns, budget.max_tool_calls),
         options.approver.is_some(),
     );
+    if scoped.is_some() {
+        input["settings"]["scope"] = serde_json::json!("bug");
+    }
     let outcome = rt.block_on(async {
         let plane = substrate::Plane::open_with(
             &s.plane_dir,

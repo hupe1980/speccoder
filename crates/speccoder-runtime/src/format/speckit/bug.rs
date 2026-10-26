@@ -464,3 +464,29 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+mod policy_tests {
+    #[test]
+    fn the_assess_step_writes_its_bug_directory_only() {
+        let p = crate::tools::policy::Policy::new(&[], &[])
+            .rules(&super::ASSESS_RULES)
+            .authoring();
+        let d = |path: &str| {
+            p.classify(
+                "write_file",
+                &serde_json::json!({ "path": path, "content": "x" }),
+                None,
+            )
+        };
+        assert_eq!(
+            d(".specify/bugs/x/assessment.md"),
+            crate::tools::policy::Decision::Allow
+        );
+        assert_ne!(d("src/lib.rs"), crate::tools::policy::Decision::Allow);
+        assert_ne!(
+            d("specs/001-x/spec.md"),
+            crate::tools::policy::Decision::Allow
+        );
+    }
+}
