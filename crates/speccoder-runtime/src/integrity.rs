@@ -325,6 +325,17 @@ pub fn sha256_hex(bytes: &[u8]) -> String {
         .collect()
 }
 
+/// The bytes with every `[x]`/`[X]` checkbox read as `[ ]`.
+pub(crate) fn untick(bytes: &[u8]) -> Vec<u8> {
+    let mut out = bytes.to_vec();
+    for i in 1..out.len().saturating_sub(1) {
+        if out[i - 1] == b'[' && out[i + 1] == b']' && matches!(out[i], b'x' | b'X') {
+            out[i] = b' ';
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

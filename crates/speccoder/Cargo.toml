@@ -26,7 +26,7 @@ path = "src/main.rs"
 
 [dependencies]
 speccoder-core.workspace = true
-speccoder-runtime.workspace = true
+speccoder-runtime = { workspace = true, features = ["engine"] }
 speccoder-web.workspace = true
 clap.workspace = true
 clap_complete.workspace = true
@@ -53,6 +53,7 @@ app = ["dep:tauri"]
 
 [dev-dependencies]
 assert_cmd.workspace = true
+base64.workspace = true
 jsonschema.workspace = true
 tempfile.workspace = true
 serde_json.workspace = true

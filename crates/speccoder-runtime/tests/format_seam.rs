@@ -371,7 +371,22 @@ fn every_adapter_states_its_skills_roles() {
     fs::create_dir_all(openspec.path().join("openspec/specs")).unwrap();
     let p = speccoder_runtime::format::at(openspec.path()).planning();
     assert_eq!(p.prefix, "openspec-", "not detected as OpenSpec");
-    // OpenSpec states no skill that creates a unit or checks the planning.
-    assert_eq!(p.role_of("propose"), SkillRole::TowardTasks);
-    assert!(p.creates.is_empty() && p.checks.is_none());
+    // `propose` creates a change; OpenSpec states no skill that checks
+    // the planning.
+    assert_eq!(p.role_of("propose"), SkillRole::Create);
+    assert_eq!(p.creates, ["propose"]);
+    assert!(p.checks.is_none());
+}
+
+#[test]
+fn an_openspec_project_without_a_change_is_offered_propose_first() {
+    let openspec = tempfile::tempdir().unwrap();
+    fs::create_dir_all(openspec.path().join("openspec/changes")).unwrap();
+    fs::create_dir_all(openspec.path().join("openspec/specs")).unwrap();
+    let listed = speccoder_runtime::actions::list(openspec.path(), None, None);
+    let Some(speccoder_core::CommandData::Actions(a)) = listed.data() else {
+        panic!("{listed:?}");
+    };
+    let first = speccoder_core::actions::primary(&a.actions).unwrap_or_else(|| panic!("{a:?}"));
+    assert_eq!(first.command, "speccoder spec propose \"…\"", "{a:?}");
 }

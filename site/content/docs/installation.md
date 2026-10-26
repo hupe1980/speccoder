@@ -77,6 +77,18 @@ gh attestation verify speccoder-0.1.0-aarch64-apple-darwin.tar.gz --repo hupe198
 
 The attestation names the repository, `.github/workflows/release.yml`, the tag and the commit the archive was built from.
 
+## The verifier
+
+[`speccoder-verify`](@/docs/verifier.md), for maintainers checking evidence, ships from the same release: `speccoder-verify-<version>-<target>.tar.gz` for `x86_64-unknown-linux-musl` and `aarch64-unknown-linux-musl` (statically linked: it runs on any Linux) and `aarch64-apple-darwin`, in the same `SHA256SUMS` and with the same build provenance:
+
+```sh
+gh release download v0.2.0 --repo hupe1980/speccoder --pattern 'speccoder-verify-0.2.0-x86_64-unknown-linux-musl.tar.gz' --pattern SHA256SUMS
+gh attestation verify speccoder-verify-0.2.0-x86_64-unknown-linux-musl.tar.gz --repo hupe1980/speccoder
+shasum -a 256 -c SHA256SUMS --ignore-missing
+```
+
+Or `cargo install speccoder-verify --locked` (`cargo binstall speccoder-verify` takes the archive). It needs `git`, and `ssh-keygen`, `gpg` or `cosign` for the signatures it meets — no model key. On GitHub, the [action](@/docs/github.md#evidence-check) does all of this.
+
 ## API keys
 
 speccoder reads keys **only from the environment** — `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` — never from files, and never writes them to its journal or output. To keep a key in a gitignored `.env` file, load it into the shell first:

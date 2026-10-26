@@ -13,8 +13,9 @@
   import Drift from "./Drift.svelte";
   import Code from "./Code.svelte";
   import Icon from "./Icon.svelte";
+  import Tour from "./Tour.svelte";
 
-  let tab = $state<"evidence" | "diff">("evidence");
+  let tab = $state<"evidence" | "tour" | "diff">("evidence");
   let data = $state<{ task: Task; banner: { mark: string; words: string }; rows: Row[] } | null>(null);
   let patch = $state("");
   let loadingPatch = $state(false);
@@ -133,6 +134,7 @@
     {/if}
     <div class="tabs" role="tablist">
       <button role="tab" aria-selected={tab === "evidence"} class:on={tab === "evidence"} onclick={() => (tab = "evidence")}>Evidence</button>
+      <button role="tab" aria-selected={tab === "tour"} class:on={tab === "tour"} disabled={!data.task.commit} title={data.task.commit ? "The evidence, step by step" : "No commit carries this task's evidence"} onclick={() => (tab = "tour")}>Tour</button>
       <button role="tab" aria-selected={tab === "diff"} class:on={tab === "diff"} disabled={!source} title={source ? "" : "No code yet: the task has no commit and no attempt"} onclick={() => (tab = "diff")}>{source?.label ?? "Changes"}</button>
     </div>
     {#if tab === "evidence"}
@@ -147,6 +149,8 @@
       {#if data.task.commit}
         <p class="note"><Icon name="shield" size={13} /><span>Every row comes from the commit's attestation — <code>speccoder attest verify</code> checks it.</span></p>
       {/if}
+    {:else if tab === "tour" && app.selected}
+      <Tour feature={app.feature ?? undefined} task={app.selected} />
     {:else}
       {#if source?.label === "Set Aside"}<p class="note"><Icon name="info" size={13} /> What the worktree held when the run started, set aside: not on the branch until you keep it.</p>{/if}
       {#if source?.label === "Last Attempt"}<p class="note"><Icon name="info" size={13} /> The attempt did not pass; its code is kept for you to read, never merged.</p>{/if}
@@ -207,7 +211,7 @@
   .verdict .sym { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; background: var(--fill-c); color: #fff; flex: none; }
   .verdict strong { display: block; font-weight: 650; }
   .words { display: block; font-size: 0.84rem; color: var(--text-2); }
-  .tabs { display: grid; grid-template-columns: 1fr 1fr; padding: 2px; border-radius: 9px; background: var(--fill); }
+  .tabs { display: grid; grid-template-columns: 1fr 1fr 1fr; padding: 2px; border-radius: 9px; background: var(--fill); }
   .tabs button { height: 26px; border: 0; background: none; border-radius: 7px; cursor: pointer; font-weight: 500; font-size: 0.86rem; color: var(--text-2); }
   .tabs button.on { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12); }
   .tabs button[disabled] { opacity: 0.4; cursor: default; }

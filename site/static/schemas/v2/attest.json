@@ -133,6 +133,11 @@
           "const": "malformed",
           "description": "A line does not parse.",
           "type": "string"
+        },
+        {
+          "const": "tool_missing",
+          "description": "The signature's tool (`ssh-keygen`, `gpg`, `cosign`) cannot run:\nnothing can be said about it.",
+          "type": "string"
         }
       ]
     },

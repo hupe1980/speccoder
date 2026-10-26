@@ -181,6 +181,9 @@ struct RawCommands {
     allow_prefix: Vec<Vec<String>>,
 }
 
+/// `[approvals] budget` unless configured: prompts a run shows a person.
+pub const DEFAULT_BUDGET: u32 = 12;
+
 /// Limits and command allowances for an attempt.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RunConfig {
@@ -241,7 +244,7 @@ impl Default for RunConfig {
             best_of: 1,
             allow: Vec::new(),
             allow_prefix: Vec::new(),
-            approval_budget: super::attempt::DEFAULT_BUDGET,
+            approval_budget: DEFAULT_BUDGET,
             commit_per_task: true,
             acceptance: true,
             held_out: true,

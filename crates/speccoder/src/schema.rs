@@ -76,6 +76,10 @@ const fn describe(payload: &str) -> &'static str {
         b"auth" => "auth: who speccoder is on a GitHub host, and where its token comes from",
         b"actions" => "actions: what a person can do now, and the feature's journey",
         b"policy_coverage" => "config coverage: what a prefix entry would newly allow",
+        b"branch_verify" => {
+            "attest verify --branch, speccoder-verify: every tick of a branch and what its evidence comes to"
+        }
+        b"evidence_tour" => "speccoder-verify tour, /api/tour: one task's evidence, step by step",
         _ => "",
     }
 }
@@ -88,6 +92,9 @@ macro_rules! published {
         /// The schema `name`, if speccoder publishes one by that name.
         #[must_use]
         pub fn get(name: &str) -> Option<Value> {
+            if name == PREDICATE_NAME {
+                return Some(predicate());
+            }
             let title = names().into_iter().find(|(n, _)| *n == name)?.1;
             Some(match name {
                 $($name => generate::<$ty>(name, title),)*
@@ -139,6 +146,39 @@ published! {
     "auth", "AuthReport" => core::AuthReport,
     "actions", "ActionsReport" => core::ActionsReport,
     "policy_coverage", "PolicyCoverage" => core::PolicyCoverage,
+    "branch_verify", "BranchReport" => core::verify_branch::BranchReport,
+    "evidence_tour", "EvidenceTour" => core::tour::EvidenceTour,
+}
+
+/// The predicate schema's name (`speccoder schema task-verification-v0`).
+pub const PREDICATE_NAME: &str = "task-verification-v0";
+
+/// Where the task-verification predicate's schema is published (beside
+/// the payloads, not under `v2/`: it is the predicate's own version).
+pub const PREDICATE: &str =
+    "https://hupe1980.github.io/speccoder/schemas/task-verification-v0.json";
+
+/// The schema of the `task-verification` predicate body (v0), published as
+/// part of its open specification.
+#[must_use]
+pub fn predicate() -> Value {
+    let generator = SchemaSettings::draft2020_12().into_generator();
+    let mut schema = serde_json::to_value(
+        generator.into_root_schema_for::<core::predicate::TaskVerificationV0>(),
+    )
+    .unwrap_or_default();
+    if let Some(o) = schema.as_object_mut() {
+        o.insert("$id".to_owned(), Value::String(PREDICATE.to_owned()));
+        o.insert(
+            "title".to_owned(),
+            Value::String(format!(
+                "{} (revision {})",
+                core::predicate::TYPE,
+                core::predicate::REVISION
+            )),
+        );
+    }
+    schema
 }
 
 /// `speccoder schema [NAME]`.

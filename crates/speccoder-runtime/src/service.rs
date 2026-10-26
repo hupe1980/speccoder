@@ -48,6 +48,40 @@ pub mod evidence {
     pub use crate::evidence::{account_of, banner, rows, statements};
 }
 
+/// A task's evidence tour (`evidence_tour`), read as recorded.
+pub mod tour {
+    use std::path::Path;
+
+    use speccoder_core::{CommandData, CommandResult, CommandStatus};
+
+    /// The tour of `task` of `feature` (default: the selected feature) at
+    /// `HEAD`: [`crate::tour::command`] without trust, so it shows what the
+    /// statements and the commit say.
+    #[must_use]
+    pub fn of_task(root: &Path, feature: Option<&str>, task: &str) -> CommandResult {
+        let selected = || match crate::inspect(root, None).data() {
+            Some(CommandData::Inspect(snap)) => {
+                snap.feature.as_ref().map(|f| f.feature.name.clone())
+            }
+            _ => None,
+        };
+        let Some(feature) = feature.map(str::to_owned).or_else(selected) else {
+            return CommandResult::new(
+                "tour",
+                CommandStatus::SelectionNeeded,
+                "no feature selected",
+            );
+        };
+        crate::tour::command(
+            root,
+            &feature,
+            task,
+            &crate::attest::branch::Options::default(),
+            "tour",
+        )
+    }
+}
+
 /// The feature's documents.
 pub mod documents {
     pub use crate::documents::{of_feature, render};

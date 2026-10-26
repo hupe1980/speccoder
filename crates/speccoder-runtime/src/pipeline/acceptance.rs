@@ -192,7 +192,14 @@ pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance 
     report["argv"] = json!(argv);
     report["red"] = json!(red);
     report["red_class"] = json!(class);
-    if !red {
+    if red {
+        // What the attestation's red excerpt is cut from (clean-checked there).
+        report["red_output"] = json!(
+            format!("{}\n{}", first.stdout_tail, first.stderr_tail)
+                .trim()
+                .to_owned()
+        );
+    } else {
         report["note"] = json!(match class {
             RedClass::Passed => "the acceptance tests already pass before the attempt, so they are no evidence for it".to_owned(),
             RedClass::Flaky => "the acceptance tests failed once and passed when run again: not demonstrated".to_owned(),

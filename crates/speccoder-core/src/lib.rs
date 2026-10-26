@@ -11,14 +11,18 @@ mod command;
 pub mod evidence;
 pub mod graph;
 pub mod next;
+pub mod predicate;
 pub mod retry;
 pub mod scope;
 pub mod snapshot;
 pub mod spec;
 pub mod stage;
 pub mod strength;
+pub mod tour;
 pub mod verify;
+pub mod verify_branch;
 pub mod words;
+pub mod workflow;
 
 pub use command::{
     ActionsReport, ApprovalView, ApprovalsReport, ArchiveReport, AttestReport, AuthReport,

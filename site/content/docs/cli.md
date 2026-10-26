@@ -80,7 +80,7 @@ Every stop and finish ends with a `Next:` block of copy-pasteable commands (`nex
 | `speccoder report --cost` | Tokens per task, and money when `[model]` has prices |
 | `speccoder report --markdown` | The report as Markdown, for pull requests and CI summaries |
 | `speccoder ui [--port N] [--no-open] [--window]` | The [web interface](@/docs/web.md) on 127.0.0.1, or a desktop window (`--window`: built in on macOS and Windows, elsewhere with `--features app`) |
-| `speccoder pr [--remote R] [--base B] [--yes] [--dry-run] [--force]` | Push the branch and its attestation notes and open a draft pull request with the evidence; `--force` hands off although the full-tier checks failed |
+| `speccoder pr [--remote R] [--base B] [--yes] [--dry-run] [--force]` | Push the branch, its attestation notes and the held-out tests of the tasks closed on it, and open a draft pull request with the evidence and each task's tour; `--force` hands off although the full-tier checks failed |
 
 ## Advanced
 
@@ -91,6 +91,7 @@ Listed by `speccoder help advanced`.
 | `speccoder actions [--task T]` | What you can do now, by group — the same list the dashboard, the app and an editor offer: each action's command, why it is blocked, what it asks for. With `--json`, scripts read it (payload `actions`): every action has an `id` (`kind` and `subject`) to find it by, and a planning skill its `role` (`create`, `toward_tasks`, `revise`, `check`) |
 | `speccoder fix [--dry-run]` | Commit what in the project's setup stops a run (an uncommitted `.config/nextest.toml`, a lockfile the checks write, build output not ignored) in your checkout as `speccoder: setup` |
 | `speccoder attest verify [REV\|RANGE] [--allowed-signers FILE] [--certificate-identity I --certificate-oidc-issuer O] [--require-signed]` | Re-check every tick's [attestation](@/docs/attestations.md) against its commit, and its signatures against your trust |
+| `speccoder attest verify --branch [REV] [--base B] [--allowed-signers FILE \| --allowed-signers-rev REV:PATH] [--require-signed]` | Check every tick of the branch at `REV` (default `HEAD`) as [`speccoder-verify`](@/docs/verifier.md) does: payload `branch_verify` |
 | `speccoder attest sign [REV\|RANGE]` | Sign the statements ticks left unsigned |
 | `speccoder verify [--tier fast\|full] [--against FILE]` | Run the configured checks; compare with a saved `--json` result |
 | `speccoder converge [--in-place]` | Assess a finished feature against its spec and append what remains |
@@ -106,6 +107,18 @@ Listed by `speccoder help advanced`.
 | `speccoder schema [NAME]` | The JSON Schema of an output: `result`, `event`, or a payload (`run`, `report`, `doctor`, …); without a name, the list |
 | `speccoder completion bash\|zsh\|fish\|elvish\|powershell` | A shell completion script, e.g. `speccoder completion zsh > ~/.zfunc/_speccoder` |
 | `speccoder tui` | The dashboard (what bare `speccoder` opens at a terminal) |
+
+## speccoder-verify
+
+The [verifier](@/docs/verifier.md) is a binary of its own (no model key, no network). Every subcommand takes `--json`.
+
+| Command | What it does |
+|---|---|
+| `speccoder-verify [check] [--repo DIR] [--head REV] [--base REV] [--all] TRUST [--require-signed=BOOL] [--require-verified] [--json] [--markdown FILE] [--github-check FILE] [--allow-neutral] [--github-annotations]` | Every tick of the units the branch touches against its signed evidence; payload `branch_verify`. Exit 0 success, 1 failure or refusal, 78 neutral |
+| `speccoder-verify tour --feature F --task T [--head REV] [TRUST] [--json]` | One task's evidence tour, six steps; payload `evidence_tour` |
+| `speccoder-verify badge [--head REV] TRUST [--svg FILE] [--endpoint FILE] [--json]` | The share of ticks with verifying evidence over every unit |
+
+`TRUST` is `--allowed-signers FILE`, `--allowed-signers-rev REV:PATH` (read from git at that revision) and/or `--certificate-identity I --certificate-oidc-issuer O`; `check` and `badge` refuse without it.
 
 ## JSON output
 

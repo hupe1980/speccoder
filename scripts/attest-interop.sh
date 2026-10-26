@@ -87,3 +87,26 @@ GO
 else
   echo "go: not installed; the statements were not checked with in-toto's library" >&2
 fi
+
+# The task-verification predicate against its published schema (the open
+# specification, site/static/schemas/task-verification-v0.json).
+schema="$root/site/static/schemas/task-verification-v0.json"
+if python3 -c 'import jsonschema' 2>/dev/null; then
+  python3 -I - "$schema" "$work"/body.* <<'PY'
+import json, sys
+import jsonschema
+schema = json.load(open(sys.argv[1]))
+checked = 0
+for path in sys.argv[2:]:
+    s = json.load(open(path))
+    if s.get("predicateType") != "https://speccoder.dev/task-verification/v0":
+        continue
+    jsonschema.validate(s["predicate"], schema, cls=jsonschema.Draft202012Validator)
+    checked += 1
+if checked == 0:
+    sys.exit("no task-verification statement in the bundle")
+print(f"task-verification-v0.json: {checked} predicate(s) valid")
+PY
+else
+  echo "python3 jsonschema: not installed; the predicate was not checked against its schema" >&2
+fi

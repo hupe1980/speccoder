@@ -8,6 +8,9 @@ use crate::git::Git;
 /// The notes ref attestations live under.
 pub const REF: &str = "refs/notes/speccoder";
 
+/// Where skips live: one ref per skipped task, its note the decision.
+pub const SKIPPED: &str = "refs/speccoder/skipped";
+
 const IDENTITY: [&str; 6] = [
     "-c",
     "user.name=speccoder",

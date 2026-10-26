@@ -874,7 +874,7 @@ impl Default for Asking {
 }
 
 /// `[approvals] budget` unless configured.
-pub const DEFAULT_BUDGET: u32 = 12;
+pub use super::run_config::DEFAULT_BUDGET;
 
 /// The governed tool loop shared by attempts and convergence: every call is
 /// classified first (deny → refused and told; approval → stop; allow →

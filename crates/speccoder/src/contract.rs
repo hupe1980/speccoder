@@ -190,6 +190,22 @@ fn the_hand_written_ui_types_declare_nothing_the_schemas_generate() {
 }
 
 #[test]
+fn the_published_predicate_schema_is_what_the_code_generates() {
+    let schema = crate::schema::predicate();
+    let text = format!("{}\n", serde_json::to_string_pretty(&schema).unwrap());
+    let file = site().join("static/schemas/task-verification-v0.json");
+    if bless() {
+        std::fs::write(&file, text).unwrap();
+    } else {
+        assert_eq!(
+            std::fs::read_to_string(&file).ok().as_deref(),
+            Some(text.as_str()),
+            "task-verification-v0.json differs from the code; run with SPECCODER_BLESS=1"
+        );
+    }
+}
+
+#[test]
 fn the_codes_page_is_the_catalog_and_the_cli_reference_lists_every_status() {
     let file = site().join("content/docs/codes.md");
     let page = crate::explain::page();

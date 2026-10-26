@@ -9,6 +9,9 @@ use serde_json::Value;
 
 use super::paths::{Protected, normalise};
 
+/// The prefix of an MCP tool's name as the model sees it (`crate::mcp`).
+pub const MCP_PREFIX: &str = "mcp__";
+
 /// What the engine does with a call.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Decision {
@@ -568,7 +571,7 @@ impl Policy {
                 return format!("grant {} for the task", object.describe());
             }
         }
-        if tool.starts_with(crate::mcp::PREFIX) {
+        if tool.starts_with(MCP_PREFIX) {
             let entry = self.mcp.get(tool).map_or("unlisted", String::as_str);
             return format!("[mcp] {entry}");
         }
@@ -605,7 +608,7 @@ impl Policy {
     }
 
     fn base_of(&self, tool: &str, args: &Value) -> Decision {
-        if tool.starts_with(crate::mcp::PREFIX) {
+        if tool.starts_with(MCP_PREFIX) {
             return match self.mcp.get(tool).map(String::as_str) {
                 Some("allow") => Decision::Allow,
                 Some("deny") => Decision::Deny(format!("`{tool}` is denied in [mcp]")),

@@ -527,6 +527,23 @@ pub enum AttestAction {
         /// Fail on unsigned statements too.
         #[arg(long)]
         require_signed: bool,
+        /// Check every ticked task of the branch instead (what
+        /// `speccoder-verify` checks): `REV` is the head (default `HEAD`).
+        #[arg(long)]
+        branch: bool,
+        /// With `--branch`: only the units touched since the merge base
+        /// with this revision.
+        #[arg(long, value_name = "REV", requires = "branch")]
+        base: Option<String>,
+        /// With `--branch`: the allowed-signers file read from git at a
+        /// revision, `<rev>:<path>` (the base's, never the head's).
+        #[arg(
+            long,
+            value_name = "REV:PATH",
+            requires = "branch",
+            conflicts_with = "allowed_signers"
+        )]
+        allowed_signers_rev: Option<String>,
     },
     /// Sign the unsigned statements of the feature's task commits (for
     /// `[attest] sign_at = "later"`, or a key that was not set up).

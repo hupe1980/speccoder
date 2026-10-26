@@ -42,6 +42,12 @@ awk -v v="$version" '
   { print }
 ' Cargo.toml > "$tmp" && mv "$tmp" Cargo.toml
 cargo update --workspace --quiet
+# The verifier action downloads the release it is cut with.
+action=packaging/speccoder-verify-action/action.yml
+if [ -f "$action" ]; then
+  tmp="$(mktemp)"
+  sed -E "s/^(    default: )\"[^\"]*\"( # the release this action is cut with.*)$/\1\"$version\"\2/" "$action" > "$tmp" && mv "$tmp" "$action"
+fi
 
 if [[ "$version" != *-* ]]; then
   today="$(date -u +%Y-%m-%d)"

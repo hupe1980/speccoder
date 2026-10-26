@@ -7,7 +7,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
-use speccoder_core::{Drift, RequirementDrift, TaskStatus};
+#[cfg(feature = "engine")]
+use speccoder_core::TaskStatus;
+use speccoder_core::{Drift, RequirementDrift};
 
 use crate::format::Adapter;
 use crate::git::Git;
@@ -19,6 +21,7 @@ use crate::tools::policy::Policy;
 /// path in the repository (`""` at the top, else ending in `/`). `false`, nothing marked:
 /// `HEAD` does not hold the feature's intent (it is not in git, or not on
 /// this branch), so git cannot say what the spec is now.
+#[cfg(feature = "engine")]
 pub(crate) fn mark(
     root: &Path,
     format: &dyn Adapter,
@@ -29,13 +32,40 @@ pub(crate) fn mark(
     if tasks.iter().all(|t| t.commit.is_none()) {
         return true;
     }
+    let asked: Vec<(&str, Option<&str>)> = tasks
+        .iter()
+        .map(|t| (t.title.as_str(), t.commit.as_deref()))
+        .collect();
+    let Some(found) = at(root, format, feature_dir, prefix, "HEAD", &asked) else {
+        return false;
+    };
+    for (t, drift) in tasks.iter_mut().zip(found) {
+        if drift.is_some() {
+            t.drift = drift;
+        }
+    }
+    true
+}
+
+/// What changed between each task's commit (`(title, commit)`) and `rev`:
+/// the intent files that differ, and the requirements the title cites whose
+/// line changed. `None` per task: nothing changed (or no commit); `None` in
+/// all: `rev` does not hold the unit's intent. Read from git objects only.
+pub(crate) fn at(
+    root: &Path,
+    format: &dyn Adapter,
+    feature_dir: &str,
+    prefix: &str,
+    rev: &str,
+    tasks: &[(&str, Option<&str>)],
+) -> Option<Vec<Option<Drift>>> {
     let git = Git::at(root);
-    let now = intent_now(&git, format, feature_dir, prefix);
+    let now = intent_now(&git, format, feature_dir, prefix, rev);
     let unit = format!("{}/", feature_dir.trim_end_matches('/'));
     if !now.keys().any(|p| p.starts_with(&unit)) {
-        return false;
+        return None;
     }
-    let commits: BTreeSet<&str> = tasks.iter().filter_map(|t| t.commit.as_deref()).collect();
+    let commits: BTreeSet<&str> = tasks.iter().filter_map(|t| t.1).collect();
     let then = intent_then(&git, &commits, &now, prefix);
     let spec = format.requirements_file().map(|f| format!("{unit}{f}"));
     // The requirements file's text, then and now, read once per blob.
@@ -53,41 +83,42 @@ pub(crate) fn mark(
             .unwrap_or_default()
     };
     let now_reqs = requirements(spec.as_ref().and_then(|s| now.get(s)));
-    for t in tasks.iter_mut() {
-        let Some(files) = t.commit.as_deref().and_then(|c| then.get(c)) else {
-            continue;
-        };
-        let changed: Vec<String> = now
-            .iter()
-            .filter(|(path, blob)| files.get(*path) != Some(*blob))
-            .map(|(path, _)| path.clone())
-            .collect();
-        if changed.is_empty() {
-            continue;
-        }
-        let then_reqs = requirements(spec.as_ref().and_then(|s| files.get(s)));
-        let ids: BTreeSet<&String> = then_reqs.keys().chain(now_reqs.keys()).collect();
-        let requirements: Vec<RequirementDrift> = ids
-            .into_iter()
-            .filter(|id| crate::attest::cites(&t.title, id))
-            .filter(|id| {
-                then_reqs.get(*id).map(|l| l.trim()) != now_reqs.get(*id).map(|l| l.trim())
+    let out = tasks
+        .iter()
+        .map(|(title, commit)| {
+            let files = commit.and_then(|c| then.get(c))?;
+            let changed: Vec<String> = now
+                .iter()
+                .filter(|(path, blob)| files.get(*path) != Some(*blob))
+                .map(|(path, _)| path.clone())
+                .collect();
+            if changed.is_empty() {
+                return None;
+            }
+            let then_reqs = requirements(spec.as_ref().and_then(|s| files.get(s)));
+            let ids: BTreeSet<&String> = then_reqs.keys().chain(now_reqs.keys()).collect();
+            let requirements: Vec<RequirementDrift> = ids
+                .into_iter()
+                .filter(|id| crate::attest::cites(title, id))
+                .filter(|id| {
+                    then_reqs.get(*id).map(|l| l.trim()) != now_reqs.get(*id).map(|l| l.trim())
+                })
+                .map(|id| RequirementDrift {
+                    id: id.clone(),
+                    then: then_reqs.get(id).cloned(),
+                    now: now_reqs.get(id).cloned(),
+                })
+                .collect();
+            Some(Drift {
+                requirements,
+                files: changed,
             })
-            .map(|id| RequirementDrift {
-                id: id.clone(),
-                then: then_reqs.get(id).cloned(),
-                now: now_reqs.get(id).cloned(),
-            })
-            .collect();
-        t.drift = Some(Drift {
-            requirements,
-            files: changed,
-        });
-    }
-    true
+        })
+        .collect();
+    Some(out)
 }
 
-/// The intent files at `HEAD` that speak for the feature (its own
+/// The intent files at `rev` that speak for the feature (its own
 /// documents and the format's shared ones, such as a constitution; not the
 /// task list, not other units, not the current-unit pointer), each with its
 /// blob, by project-relative path.
@@ -96,8 +127,9 @@ fn intent_now(
     format: &dyn Adapter,
     feature_dir: &str,
     prefix: &str,
+    rev: &str,
 ) -> BTreeMap<String, String> {
-    let Ok(out) = git.run(&["ls-tree", "-r", "-z", "--full-name", "HEAD", "--", "."]) else {
+    let Ok(out) = git.run(&["ls-tree", "-r", "-z", "--full-name", rev, "--", "."]) else {
         return BTreeMap::new();
     };
     let rules = format.rules();
