@@ -208,6 +208,10 @@ pub enum Runnable {
         mode: crate::oracle::RunMode,
         /// The grant ids (F-125 objects) an autopilot run holds.
         grants: Vec<String>,
+        /// The sheet's `sha256`: what the person saw approved and frozen.
+        /// Required from every interface but a terminal command.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        sheet: Option<String>,
     },
     /// Add, delete or keep a review comment (the input: its words).
     Comment {
@@ -562,6 +566,7 @@ impl ActionKind {
             Self::ApproveAndRun => Runnable::ApproveAndRun {
                 mode: crate::oracle::RunMode::Ask,
                 grants: Vec::new(),
+                sheet: None,
             },
             Self::Comment => Runnable::Comment {
                 op: CommentOp::Delete,

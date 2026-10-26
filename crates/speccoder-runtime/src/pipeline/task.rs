@@ -231,8 +231,14 @@ pub(crate) fn run_task(
     let head_now = git::Git::at(&wt_root)
         .line(&["rev-parse", "HEAD"])
         .unwrap_or_default();
-    let interrupted = resume::load(&marker_path)
-        .filter(|m| m.head == head_now && options.lane.is_none() && !head_now.is_empty());
+    // An autopilot run has exactly the grants ticked on its sheet (FR-014):
+    // it resumes no interrupted attempt — whose journal holds an earlier
+    // run's grants and answers — but sets it aside like any leftover, and
+    // adopts no answer kept for the task.
+    let autopilot = options.mode == speccoder_core::oracle::RunMode::Autopilot;
+    let interrupted = resume::load(&marker_path).filter(|m| {
+        m.head == head_now && options.lane.is_none() && !head_now.is_empty() && !autopilot
+    });
     // A resumed attempt continues its run: this invocation adopts the
     // run's id, its asking count and its grants.
     if let Some(m) = &interrupted {
@@ -427,11 +433,23 @@ pub(crate) fn run_task(
     // Two test authors read a requirement two ways: the person says which
     // is meant before a gated run (spec 093).
     if run_config.review_required {
-        let ambiguous = crate::oracle::open_ambiguities(
+        let ambiguous = match crate::oracle::open_ambiguities(
             &s.plane_dir,
             &feature_name,
             &format.oracle_requirements(&snap),
-        );
+        ) {
+            Ok(a) => a,
+            Err(t) => {
+                return refuse(
+                    CommandStatus::NeedsHuman,
+                    format!(
+                        "{}: whether it is read two ways is unknown and [review] required is on",
+                        t.0
+                    ),
+                )
+                .with_code("ORACLE-TAMPERED");
+            }
+        };
         if let Some((req, scenario)) = ambiguous.first() {
             return refuse(
                 CommandStatus::NeedsHuman,
@@ -518,15 +536,20 @@ pub(crate) fn run_task(
     let (decisions, task_grants) = match approvals::Decisions::load(&s.plane_dir) {
         Ok(mut d) => {
             // Decisions on a call a lane stopped belong to the run that
-            // now attempts the task.
-            if d.claim(&feature_name, task, this_run.as_str())
+            // now attempts the task (an autopilot run claims none).
+            if !autopilot
+                && d.claim(&feature_name, task, this_run.as_str())
                 && let Err(e) = d.save(&s.plane_dir)
             {
                 return refuse(CommandStatus::Error, e);
             }
             (
                 d.for_task(&feature_name, task),
-                d.for_run(&feature_name, task, this_run.as_str()),
+                if autopilot {
+                    Vec::new()
+                } else {
+                    d.for_run(&feature_name, task, this_run.as_str())
+                },
             )
         }
         Err(e) => return refuse(CommandStatus::ConfigError, e),
@@ -841,6 +864,9 @@ pub(crate) fn run_task(
     if bug_fix.is_none() && run_config.acceptance && !options.fresh_acceptance {
         match crate::oracle::for_task(&s.plane_dir, &project, &wt_root, format, &snap, &scenarios) {
             Some(r @ crate::oracle::TaskReuse::Ready { .. }) => review_reuse = Some(r),
+            Some(crate::oracle::TaskReuse::Reused { req }) => notices.push(format!(
+                "{req}'s frozen tests were reused by an earlier task of this run: this task's acceptance tests are authored"
+            )),
             Some(crate::oracle::TaskReuse::Elsewhere { req }) => {
                 notices.push(format!("{req}: frozen oracle not present here — authoring"))
             }
@@ -869,6 +895,13 @@ pub(crate) fn run_task(
                     format!("{why}: the task stops for a person, nothing is ticked"),
                 )
                 .with_code("ORACLE-TAMPERED");
+            }
+            Some(crate::oracle::TaskReuse::Unreadable(why)) => {
+                return fail(
+                    CommandStatus::NeedsHuman,
+                    format!("{why}: whether its tests are frozen is unknown, so the task stops for a person, nothing is ticked"),
+                )
+                .with_code("REVIEW-UNREADABLE");
             }
             None => {}
         }
@@ -1197,6 +1230,9 @@ pub(crate) fn run_task(
             // journaled. Decisions that cannot be read stop the task — the
             // grants read when it began may hold one rejected since.
             let (task_grants, approved_once) = match approvals::Decisions::load(&s.plane_dir) {
+                // Autopilot: only the ticked grants (`run_grants`) — no
+                // answer kept for the task, no once-grant is taken.
+                Ok(_) if autopilot => (Vec::new(), Vec::new()),
                 Ok(mut d) => {
                     let once = d.take_once(&feature_name, task, this_run.as_str());
                     if !once.is_empty()

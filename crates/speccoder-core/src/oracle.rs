@@ -345,6 +345,11 @@ pub struct OfferedGrant {
 /// and run now, and what autopilot would hold.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct ApproveSheet {
+    /// The approval digest *Approve and Run* would record now (decision
+    /// lines and frozen manifests): the click sends it back and is refused
+    /// when it no longer matches. `None`: it cannot be computed here.
+    #[serde(default)]
+    pub sha256: Option<String>,
     /// Decision lines the approval records.
     pub approves: Vec<String>,
     /// Why *Approve and Run* is disabled now (each a line naming its
@@ -520,6 +525,60 @@ pub struct RevisionView {
     /// Requirements whose tests were asked again from test comments.
     #[serde(default)]
     pub asked_again: Vec<String>,
+    /// Documents changed while it ran by something other than the skill
+    /// (the person's own edit): *Undo Revision* never overwrites them.
+    #[serde(default)]
+    pub beside: Vec<String>,
+    /// While it waits to be kept or undone: each changed section, before
+    /// and after, for the word diff.
+    #[serde(default)]
+    pub diffs: Vec<SectionDiff>,
+}
+
+/// A bug's confirmed reproductions as a bug unit's Tests tab shows them,
+/// read only: a bug's tests are written and confirmed by its own pipeline.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct BugTests {
+    /// The bug's task (`T001`).
+    pub task: String,
+    /// Its title.
+    pub title: String,
+    /// The person's confirmation of the reproductions.
+    pub confirmation: crate::bug::Confirmation,
+    /// The reproductions, in the order confirmed.
+    pub reproductions: Vec<BugTest>,
+}
+
+/// One confirmed reproduction.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct BugTest {
+    /// The statement it reproduces (`E1`) or guards (`U1`).
+    pub statement: String,
+    /// Project-relative test file.
+    pub file: String,
+    /// The test's name.
+    pub test: String,
+    /// Its class on the untouched code (`assertion`).
+    pub red_class: String,
+    /// Its content as confirmed; `None` when the kept copy is missing or no
+    /// longer matches its digest.
+    pub content: Option<String>,
+}
+
+/// One section a revision changed, before and after (each cut to 4000
+/// characters).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct SectionDiff {
+    /// The document (project-relative).
+    pub path: String,
+    /// Its heading path (`Spec › Requirements`; empty before the first).
+    pub heading: String,
+    /// The section's text before the revision (empty: it was added).
+    pub before: String,
+    /// After it (empty: it was removed).
+    pub after: String,
+    /// No comment touched it.
+    pub outside: bool,
 }
 
 /// Result of `speccoder review comments`: the tray and the last turn.

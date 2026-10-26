@@ -67,6 +67,9 @@ pub struct Turn {
     /// Requirements asked again from test comments.
     #[serde(default)]
     pub asked_again: Vec<String>,
+    /// Documents changed while the turn ran, not (only) by the skill.
+    #[serde(default)]
+    pub beside: Vec<String>,
 }
 
 /// The tray of one unit.
@@ -92,12 +95,23 @@ fn snapshot_dir(project_state: &Path, unit: &str, turn: &str) -> PathBuf {
 }
 
 /// The tray of `unit` (empty when none was written).
-#[must_use]
-pub fn load(project_state: &Path, unit: &str) -> Tray {
-    std::fs::read_to_string(file(project_state, unit))
-        .ok()
-        .and_then(|t| serde_json::from_str(&t).ok())
-        .unwrap_or_default()
+///
+/// # Errors
+/// The tray exists but cannot be read: never read as empty — the next
+/// write would drop every draft and the pending turn's record.
+pub fn load(project_state: &Path, unit: &str) -> Result<Tray, String> {
+    let f = file(project_state, unit);
+    match std::fs::read_to_string(&f) {
+        Ok(t) => serde_json::from_str(&t)
+            .map_err(|e| format!("the comment tray {} cannot be read: {e}", f.display())),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Tray::default()),
+        Err(e) => Err(format!("{}: {e}", f.display())),
+    }
+}
+
+/// The refusal for a tray that cannot be read.
+fn unreadable(e: &str) -> CommandResult {
+    refuse(CommandStatus::NeedsHuman, "REVIEW-UNREADABLE", e)
 }
 
 fn save(project_state: &Path, unit: &str, tray: &Tray) -> Result<(), String> {
@@ -137,6 +151,20 @@ impl Lock {
             .open(&path)
             .map(|_| Self(path))
             .map_err(|_| "the comments are being sent from elsewhere right now".to_owned())
+    }
+
+    /// [`Lock::take`], waiting a few seconds for a short writer (an add)
+    /// to finish: a turn's record is never written without the lock.
+    fn wait(project_state: &Path, unit: &str) -> Result<Self, String> {
+        let mut last = String::new();
+        for _ in 0..100 {
+            match Self::take(project_state, unit) {
+                Ok(l) => return Ok(l),
+                Err(e) => last = e,
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        Err(last)
     }
 }
 
@@ -467,7 +495,56 @@ fn current(u: &Unit, anchor: &CommentAnchor) -> bool {
     }
 }
 
-fn turn_view(t: &Turn) -> RevisionView {
+/// Each section a pending turn changed, before (its snapshot) and after
+/// (the document now).
+fn section_diffs(u: &Unit, t: &Turn) -> Vec<speccoder_core::oracle::SectionDiff> {
+    const CUT: usize = 4000;
+    let cut = |s: &str| s.chars().take(CUT).collect::<String>();
+    if t.outcome != "pending" || t.after.is_empty() {
+        return Vec::new();
+    }
+    let snap = snapshot_dir(&u.plane, &u.feature, &t.id);
+    let mut out = Vec::new();
+    let paths: BTreeSet<&str> = t.after.iter().map(|f| f.path.as_str()).collect();
+    for path in paths {
+        if !document_path(u, path) {
+            continue;
+        }
+        let before = std::fs::read_to_string(snap.join(path)).unwrap_or_default();
+        let after = read(u, path).unwrap_or_default();
+        if before == after {
+            continue;
+        }
+        let (a, b) = (sections(&before), sections(&after));
+        for key in changed_sections(path, &before, &after) {
+            let heading = key
+                .strip_prefix(&format!("{path}: "))
+                .unwrap_or(&key)
+                .to_owned();
+            let heading = if heading == "(before the first heading)" {
+                String::new()
+            } else {
+                heading
+            };
+            let body = |v: &[(String, String)]| {
+                v.iter()
+                    .find(|(h, _)| *h == heading)
+                    .map(|(_, t)| cut(t.trim_end()))
+                    .unwrap_or_default()
+            };
+            out.push(speccoder_core::oracle::SectionDiff {
+                path: path.to_owned(),
+                outside: t.outside.contains(&key),
+                before: body(&a),
+                after: body(&b),
+                heading,
+            });
+        }
+    }
+    out
+}
+
+fn turn_view(u: &Unit, t: &Turn) -> RevisionView {
     let files: Vec<String> = t
         .before
         .iter()
@@ -495,6 +572,8 @@ fn turn_view(t: &Turn) -> RevisionView {
         outcome: t.outcome.clone(),
         files,
         asked_again: t.asked_again.clone(),
+        beside: t.beside.clone(),
+        diffs: section_diffs(u, t),
     }
 }
 
@@ -515,7 +594,7 @@ fn view_of(u: &Unit, tray: &Tray) -> CommentsView {
                 d
             })
             .collect(),
-        turn: tray.turns.last().map(turn_view),
+        turn: tray.turns.last().map(|t| turn_view(u, t)),
         revise_with: u.format.planning().revises.map(str::to_owned),
     }
 }
@@ -532,7 +611,10 @@ pub fn list(path: &Path, feature: Option<&str>, state: Option<&Path>) -> Command
         Ok(u) => u,
         Err(r) => return *r,
     };
-    let tray = load(&u.plane, &u.feature);
+    let tray = match load(&u.plane, &u.feature) {
+        Ok(t) => t,
+        Err(e) => return unreadable(&e),
+    };
     let view = view_of(&u, &tray);
     let outdated = view
         .drafts
@@ -578,7 +660,10 @@ pub fn comment(
         Ok(l) => l,
         Err(e) => return usage(&e),
     };
-    let mut tray = load(&u.plane, &u.feature);
+    let mut tray = match load(&u.plane, &u.feature) {
+        Ok(t) => t,
+        Err(e) => return unreadable(&e),
+    };
     let message = match op {
         CommentOp::Add => {
             let Some(anchor) = anchor else {
@@ -692,6 +777,16 @@ fn digests(u: &Unit, docs: &[String]) -> Vec<FileDigest> {
         .collect()
 }
 
+/// A section by its document and heading path — the same heading in two
+/// documents is two sections.
+fn section_key(path: &str, heading: &str) -> String {
+    if heading.is_empty() {
+        format!("{path}: (before the first heading)")
+    } else {
+        format!("{path}: {heading}")
+    }
+}
+
 /// The sections changed between `before` and `after` of one document.
 fn changed_sections(path: &str, before: &str, after: &str) -> Vec<String> {
     let (a, b) = (sections(before), sections(after));
@@ -705,14 +800,80 @@ fn changed_sections(path: &str, before: &str, after: &str) -> Vec<String> {
             let y = b.iter().find(|(n, _)| n == h).map(|(_, t)| t.trim_end());
             x != y
         })
-        .map(|h| {
-            if h.is_empty() {
-                format!("{path} (before the first heading)")
-            } else {
-                h
-            }
-        })
+        .map(|h| section_key(path, &h))
         .collect()
+}
+
+/// A tool call's path as project-relative (`./a`, `<root>/a` → `a`).
+fn rel_path(u: &Unit, p: &str) -> String {
+    let p = p.trim_start_matches("./");
+    let path = Path::new(p);
+    if path.is_absolute() {
+        let canonical = std::fs::canonicalize(&u.root).unwrap_or_else(|_| u.root.clone());
+        for root in [&canonical, &u.root] {
+            if let Ok(rel) = path.strip_prefix(root) {
+                return rel.to_string_lossy().replace('\\', "/");
+            }
+        }
+    }
+    p.to_owned()
+}
+
+/// The documents a turn changed that the skill's own writes do not
+/// account for: each one replayed from its text before the turn through
+/// the skill's `write_file` and `edit_file` calls differs from the file
+/// now — someone else (the person, a command) changed it while it ran.
+fn changed_beside(
+    u: &Unit,
+    before: &[(String, Option<String>)],
+    docs: &[String],
+    calls: &[serde_json::Value],
+) -> Vec<String> {
+    docs.iter()
+        .filter(|d| {
+            let mut expected = before
+                .iter()
+                .find(|(p, _)| p == *d)
+                .and_then(|(_, t)| t.clone());
+            for c in calls.iter().filter(|c| {
+                c["decision"] == "allow"
+                    && c["ok"] != false
+                    && c["arguments"]["path"]
+                        .as_str()
+                        .is_some_and(|p| rel_path(u, p) == **d)
+            }) {
+                let a = &c["arguments"];
+                match c["tool"].as_str() {
+                    Some("write_file") => {
+                        expected = a["content"].as_str().map(str::to_owned);
+                    }
+                    Some("edit_file") => {
+                        let (old, new) = (
+                            a["old_string"].as_str().unwrap_or_default(),
+                            a["new_string"].as_str().unwrap_or_default(),
+                        );
+                        expected = expected.map(|t| t.replace(old, new));
+                    }
+                    _ => {}
+                }
+            }
+            read(u, d) != expected
+        })
+        .cloned()
+        .collect()
+}
+
+/// Whether a path a tray names is one of the unit's documents' places: a
+/// project-relative Markdown path under the unit's directory, nothing
+/// that climbs out (a tampered tray is never a way to write elsewhere).
+fn document_path(u: &Unit, p: &str) -> bool {
+    let path = Path::new(p);
+    path.is_relative()
+        && path
+            .components()
+            .all(|c| matches!(c, std::path::Component::Normal(_)))
+        && path.starts_with(&u.dir)
+        && path.extension().is_some_and(|x| x == "md")
 }
 
 /// *Send N Comments*: one revision turn of the format's revising skill,
@@ -738,7 +899,10 @@ pub fn send(
     };
     // Nothing to send is said before any model is opened.
     if let Ok(u) = unit(path, feature, Some(&st)) {
-        let tray = load(&u.plane, &u.feature);
+        let tray = match load(&u.plane, &u.feature) {
+            Ok(t) => t,
+            Err(e) => return unreadable(&e),
+        };
         let open: Vec<&CommentDraft> = tray
             .drafts
             .iter()
@@ -794,7 +958,10 @@ pub fn send_with(
             Ok(l) => l,
             Err(e) => return usage(&e),
         };
-        let mut tray = load(&u.plane, &u.feature);
+        let mut tray = match load(&u.plane, &u.feature) {
+            Ok(t) => t,
+            Err(e) => return unreadable(&e),
+        };
         let open: Vec<&CommentDraft> = tray
             .drafts
             .iter()
@@ -831,9 +998,7 @@ pub fn send_with(
         let sections: Vec<String> = chosen
             .iter()
             .filter_map(|d| match &d.anchor {
-                CommentAnchor::Passage { section, .. } if !section.is_empty() => {
-                    Some(section.clone())
-                }
+                CommentAnchor::Passage { path, section, .. } => Some(section_key(path, section)),
                 CommentAnchor::DiffLine {
                     path, line, side, ..
                 } => {
@@ -842,8 +1007,7 @@ pub fn send_with(
                     } else {
                         read(&u, path)
                     };
-                    text.map(|t| section_at(&t, *line))
-                        .filter(|s| !s.is_empty())
+                    text.map(|t| section_key(path, &section_at(&t, *line)))
                 }
                 _ => None,
             })
@@ -879,6 +1043,7 @@ pub fn send_with(
             outside: Vec::new(),
             outcome: "pending".to_owned(),
             asked_again: Vec::new(),
+            beside: Vec::new(),
         };
         for d in &mut tray.drafts {
             if turn.comments.contains(&d.id) {
@@ -897,10 +1062,9 @@ pub fn send_with(
         .cloned()
         .collect();
     let mut notes: Vec<String> = Vec::new();
-    let before_texts: Vec<(String, String)> = docs
-        .iter()
-        .map(|d| (d.clone(), read(&u, d).unwrap_or_default()))
-        .collect();
+    let before_texts: Vec<(String, Option<String>)> =
+        docs.iter().map(|d| (d.clone(), read(&u, d))).collect();
+    let mut calls: Vec<serde_json::Value> = Vec::new();
     if !for_skill.is_empty() {
         if turn.skill.is_empty() {
             notes.push(
@@ -919,6 +1083,9 @@ pub fn send_with(
                 options,
             );
             notes.push(ran.message().to_owned());
+            if let Some(CommandData::Skill(report)) = ran.data() {
+                calls.clone_from(&report.tool_calls);
+            }
         } else {
             notes.push("no model: the revision was not run".to_owned());
         }
@@ -936,7 +1103,7 @@ pub fn send_with(
         let before = before_texts
             .iter()
             .find(|(p, _)| p == d)
-            .map(|(_, t)| t.as_str())
+            .and_then(|(_, t)| t.as_deref())
             .unwrap_or_default();
         let now = read(&u, d).unwrap_or_default();
         if before != now {
@@ -948,10 +1115,15 @@ pub fn send_with(
         .filter(|c| !turn.sections.iter().any(|s| s == *c))
         .cloned()
         .collect();
+    // What changed while the turn ran that its own writes do not explain
+    // is not the turn's: Undo never overwrites it.
+    let beside = changed_beside(&u, &before_texts, &after_docs, &calls);
     // Test comments: one Ask Again per test, unless the revision lapsed
     // its requirement's tests.
     let mut asked_again = Vec::new();
-    let mut by_test: Vec<(String, String, Vec<String>)> = Vec::new();
+    // A test comment whose Ask Again did not run goes back to the tray.
+    let mut returned: Vec<String> = Vec::new();
+    let mut by_test: Vec<(String, String, Vec<String>, Vec<String>)> = Vec::new();
     for d in &sent {
         if let CommentAnchor::TestLine {
             req,
@@ -961,9 +1133,12 @@ pub fn send_with(
         } = &d.anchor
         {
             let line_note = format!("line {line} \"{}\": {}", normal(quote), d.text);
-            match by_test.iter_mut().find(|(r, q, _)| r == req && q == p) {
-                Some((_, _, n)) => n.push(line_note),
-                None => by_test.push((req.clone(), p.clone(), vec![line_note])),
+            match by_test.iter_mut().find(|(r, q, ..)| r == req && q == p) {
+                Some((_, _, n, ids)) => {
+                    n.push(line_note);
+                    ids.push(d.id.clone());
+                }
+                None => by_test.push((req.clone(), p.clone(), vec![line_note], vec![d.id.clone()])),
             }
         }
     }
@@ -971,7 +1146,7 @@ pub fn send_with(
         Some(CommandData::Inspect(s)) => u.format.oracle_requirements(s),
         _ => u.format.oracle_requirements(&u.snapshot),
     };
-    for (req, test, lines) in &by_test {
+    for (req, test, lines, ids) in &by_test {
         let lapsed = requirements.iter().find(|r| r.key == *req).is_none_or(|r| {
             crate::oracle::load(&u.plane, &u.feature, req)
                 .ok()
@@ -980,8 +1155,9 @@ pub fn send_with(
         });
         if lapsed {
             notes.push(format!(
-                "{req}'s tests lapsed with the revision: not asked again"
+                "{req}'s tests lapsed with the revision: not asked again — the comment is back in the tray"
             ));
+            returned.extend(ids.iter().cloned());
             continue;
         }
         let text = lines.join("; ");
@@ -1001,25 +1177,49 @@ pub fn send_with(
             provider.clone(),
             options,
         );
-        notes.push(r.message().to_owned());
-        if r.status() == CommandStatus::Ok && !asked_again.contains(req) {
-            asked_again.push(req.clone());
+        if r.status() == CommandStatus::Ok {
+            notes.push(r.message().to_owned());
+            if !asked_again.contains(req) {
+                asked_again.push(req.clone());
+            }
+        } else {
+            notes.push(format!("{} — the comment is back in the tray", r.message()));
+            returned.extend(ids.iter().cloned());
         }
     }
-    let _lock = Lock::take(&u.plane, &u.feature).ok();
-    let mut tray = load(&u.plane, &u.feature);
+    let _lock = match Lock::wait(&u.plane, &u.feature) {
+        Ok(l) => l,
+        Err(e) => {
+            return refuse(
+                CommandStatus::Error,
+                "INTERNAL",
+                &format!("revision {}'s outcome was not recorded: {e}", turn.id),
+            );
+        }
+    };
+    let mut tray = match load(&u.plane, &u.feature) {
+        Ok(t) => t,
+        Err(e) => return unreadable(&e),
+    };
     if let Some(t) = tray.turns.iter_mut().find(|t| t.id == turn.id) {
         t.after = after;
         t.changed.clone_from(&changed);
         t.outside.clone_from(&outside);
         t.asked_again.clone_from(&asked_again);
+        t.beside.clone_from(&beside);
+        t.comments.retain(|c| !returned.contains(c));
+    }
+    for d in &mut tray.drafts {
+        if returned.contains(&d.id) {
+            d.state = DraftState::Draft;
+        }
     }
     if let Err(e) = save(&u.plane, &u.feature, &tray) {
         return refuse(CommandStatus::Error, "INTERNAL", &e);
     }
     let message = format!(
-        "sent {} comment(s) as revision {}: {} section(s) changed{}{}",
-        sent.len(),
+        "sent {} comment(s) as revision {}: {} section(s) changed{}{}{}",
+        sent.len() - returned.len(),
         turn.id,
         changed.len(),
         if outside.is_empty() {
@@ -1029,6 +1229,14 @@ pub fn send_with(
                 ", {} outside your comments ({}) — keep or undo it",
                 outside.len(),
                 outside.join("; ")
+            )
+        },
+        if beside.is_empty() {
+            String::new()
+        } else {
+            format!(
+                "; {} changed beside the revision while it ran — Undo will not overwrite it",
+                beside.join(", ")
             )
         },
         if notes.is_empty() {
@@ -1059,7 +1267,10 @@ pub fn undo(
         Ok(l) => l,
         Err(e) => return usage(&e),
     };
-    let mut tray = load(&u.plane, &u.feature);
+    let mut tray = match load(&u.plane, &u.feature) {
+        Ok(t) => t,
+        Err(e) => return unreadable(&e),
+    };
     let Some(last) = tray.turns.last().cloned() else {
         return usage("no revision to undo");
     };
@@ -1073,6 +1284,34 @@ pub fn undo(
     }
     if last.outcome == "undone" {
         return usage(&format!("revision {} is undone already", last.id));
+    }
+    // Someone else changed a document while the turn ran: restoring the
+    // snapshot would revert their edit with the skill's.
+    if !last.beside.is_empty() {
+        return refuse(
+            CommandStatus::NeedsHuman,
+            "USAGE",
+            &format!(
+                "{} changed beside revision {} while it ran: undo would revert that edit too — nothing was restored",
+                last.beside.join(", "),
+                last.id
+            ),
+        );
+    }
+    if let Some(bad) = last
+        .before
+        .iter()
+        .chain(&last.after)
+        .find(|f| !document_path(&u, &f.path))
+    {
+        return refuse(
+            CommandStatus::NeedsHuman,
+            "REVIEW-UNREADABLE",
+            &format!(
+                "revision {} names {}, which is not a document of {}: nothing was restored",
+                last.id, bad.path, u.feature
+            ),
+        );
     }
     // Every document as the turn left it, or the undo is refused.
     let paths: Vec<String> = last
@@ -1193,18 +1432,35 @@ pub fn code_nudge(
             "a nudge needs at least one comment, each with its words",
         );
     }
-    let frozen: Vec<String> = u
-        .format
-        .oracle_requirements(&u.snapshot)
-        .iter()
-        .filter_map(|r| {
-            crate::pre_frozen::load(&u.plane, &u.feature, &r.key)
-                .ok()
-                .flatten()
-        })
-        .flat_map(|(rec, _)| rec.visible.into_iter().map(|v| v.path))
-        .collect();
-    if let Some(c) = comments.iter().find(|c| frozen.contains(&c.path)) {
+    // Which tests are frozen: a record that cannot be read leaves it
+    // unknown, so nothing becomes a nudge.
+    let mut frozen: Vec<String> = Vec::new();
+    for r in u.format.oracle_requirements(&u.snapshot) {
+        match crate::pre_frozen::load(&u.plane, &u.feature, &r.key) {
+            Ok(Some((rec, _))) => frozen.extend(rec.visible.into_iter().map(|v| v.path)),
+            Ok(None) => {}
+            Err(t) => {
+                return refuse(
+                    CommandStatus::NeedsHuman,
+                    "ORACLE-TAMPERED",
+                    &format!(
+                        "{}'s frozen set cannot be read ({}): whether a commented line is a frozen test is unknown, so no nudge was saved",
+                        r.key, t.0
+                    ),
+                );
+            }
+        }
+    }
+    // The Code view names a path from the repository's top; a frozen test
+    // is named from the project's directory, which may sit below it.
+    let prefix = crate::git::Git::at(&u.root)
+        .line(&["rev-parse", "--show-prefix"])
+        .unwrap_or_default();
+    let is_frozen = |p: &str| {
+        let p = p.trim_start_matches("./");
+        frozen.iter().any(|f| f == p || format!("{prefix}{f}") == p)
+    };
+    if let Some(c) = comments.iter().find(|c| is_frozen(&c.path)) {
         return refuse(
             CommandStatus::UsageError,
             "USAGE",
@@ -1247,6 +1503,23 @@ mod tests {
     const DOC: &str = "# Spec\n\nIntro.\n\n## Requirements\n\n### Functional\n\n- FR-001 a\n\n## Edge Cases\n\n- none\n";
 
     #[test]
+    fn the_turn_s_record_waits_for_a_short_writer_and_never_goes_without_the_lock() {
+        let state = tempfile::tempdir().unwrap_or_else(|e| panic!("{e}"));
+        let held = Lock::take(state.path(), "u").unwrap_or_else(|e| panic!("{e}"));
+        assert!(
+            Lock::take(state.path(), "u").is_err(),
+            "one writer at a time"
+        );
+        let releaser = std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            drop(held);
+        });
+        let waited = Lock::wait(state.path(), "u");
+        assert!(waited.is_ok(), "{:?}", waited.err());
+        releaser.join().unwrap_or_else(|_| panic!("joined"));
+    }
+
+    #[test]
     fn a_line_knows_its_section() {
         assert_eq!(section_at(DOC, 3), "Spec");
         assert_eq!(section_at(DOC, 9), "Spec › Requirements › Functional");
@@ -1259,11 +1532,19 @@ mod tests {
         let after = DOC.replace("- none", "- an empty name");
         assert_eq!(
             changed_sections("spec.md", DOC, &after),
-            ["Spec › Edge Cases"]
+            ["spec.md: Spec › Edge Cases"]
         );
         assert!(changed_sections("spec.md", DOC, DOC).is_empty());
         let added = format!("{DOC}\n## New\n\nx\n");
-        assert_eq!(changed_sections("spec.md", DOC, &added), ["Spec › New"]);
+        assert_eq!(
+            changed_sections("spec.md", DOC, &added),
+            ["spec.md: Spec › New"]
+        );
+        // The same heading in another document is another section.
+        assert_ne!(
+            changed_sections("plan.md", DOC, &after),
+            changed_sections("spec.md", DOC, &after)
+        );
     }
 
     #[test]

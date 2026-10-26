@@ -913,6 +913,7 @@ fn main() {
                             &speccoder_core::actions::Runnable::ApproveAndRun {
                                 mode,
                                 grants: grant.clone(),
+                                sheet: None,
                             },
                             None,
                         )

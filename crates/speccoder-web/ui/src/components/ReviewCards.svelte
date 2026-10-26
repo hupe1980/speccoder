@@ -14,9 +14,10 @@
   import Icon from "./Icon.svelte";
   import Code from "./Code.svelte";
   import OracleTests from "./OracleTests.svelte";
+  import BugTests from "./BugTests.svelte";
   import ApproveSheet from "./ApproveSheet.svelte";
   import { comments } from "../lib/comments.svelte";
-  import { testsCommand } from "../lib/review";
+  import { driftAnchor, testsCommand } from "../lib/review";
 
   let review = $state<Reply<Review> | null>(null);
   const fetchOf = latest();
@@ -102,6 +103,16 @@
     await comments.add({ kind: "finding", source: "review", id: finding.id, text: finding.text }, findingWords.trim());
     finding = null;
     findingWords = "";
+  }
+  // A line changed since the last commit, commented on from its gutter +.
+  let drift = $state<string | null>(null);
+  let driftWords = $state("");
+  async function addDrift(c: NonNullable<typeof r>["changes"][number]) {
+    const anchor = driftAnchor(c);
+    if (!anchor || !driftWords.trim()) return;
+    await comments.add(anchor, driftWords.trim());
+    drift = null;
+    driftWords = "";
   }
   // The menu bar's Review › Write Tests: the first requirement without tests.
   $effect(() => {
@@ -222,6 +233,7 @@
       <section class="tests" aria-label="Tests">
         <h3><Icon name="shield" size={13} weight={2} /> Tests</h3>
         <p class="muted">{r.tests_notice}</p>
+        {#if r.bug_tests?.length}<BugTests bugs={r.bug_tests} />{/if}
       </section>
     {:else if r.oracle.length}
       <section class="tests" aria-label="Tests">
@@ -235,9 +247,17 @@
           {#if commit}<button class="btn small primary" disabled={!!commit.blocked || !!app.job?.running} title={`$ ${commit.command}`} onclick={() => commit && app.perform(commit)}>Commit</button>{/if}
         </h3>
         {#each r.changes as c (c.id)}
-          <div class="change"><span class="id mono">{c.id}</span><span class="how">{how(c.then, c.now)}</span>
+          <div class="change"><span class="id mono">{#if driftAnchor(c)}<button class="add" aria-label="Comment on {c.id} as changed" title="Comment on this line" onclick={() => { drift = c.id; driftWords = ""; }}>+</button>{/if}{c.id}</span><span class="how">{how(c.then, c.now)}</span>
             <p class="text small">{#each diffWords(tokenised(plain(c.then)), tokenised(plain(c.now))) as s, n (n)}<span class={s.kind}>{s.text}</span>{/each}</p>
           </div>
+          {#if drift === c.id}
+            <form class="qform driftc" onsubmit={(e) => { e.preventDefault(); void addDrift(c); }}>
+              <!-- svelte-ignore a11y_autofocus -->
+              <input placeholder="Your comment on {c.id} as it reads now" bind:value={driftWords} autofocus aria-label="Comment on the change to {c.id}" onkeydown={(e) => { if (e.key === "Escape") drift = null; }} />
+              <button class="btn small primary" type="submit" disabled={!driftWords.trim()}>Add Comment</button>
+              <button class="btn small ghost" type="button" onclick={() => (drift = null)}>Cancel</button>
+            </form>
+          {/if}
         {/each}
       </section>
     {/if}
@@ -330,6 +350,10 @@
   .tests { display: grid; gap: 0.6rem; }
   .tests > p { margin: 0; }
   .addc { justify-self: start; }
+  .change .add { border: 0; background: none; color: var(--faint); cursor: pointer; padding: 0 0.3rem 0 0; font: inherit; }
+  .change:hover .add, .change .add:focus-visible { color: var(--accent-ink); }
+  .driftc { display: flex; gap: 0.4rem; align-items: center; }
+  .driftc input { flex: 1; }
   .center { display: grid; place-items: center; padding: 3rem; }
   .spinner { width: 20px; height: 20px; border-radius: 50%; border: 2.5px solid var(--fill-2); border-top-color: var(--muted); animation: spin 800ms linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }

@@ -4,7 +4,7 @@
 // Markdown, and the Code view's nudge lines. Pure: the components render
 // what these say, the tests hold them.
 
-import type { ApproveSheet, CodeComment, CommentAnchor, CommentDraft, OracleView, RunMode } from "./schema.gen";
+import type { ApproveSheet, CodeComment, CommentAnchor, CommentDraft, OracleView, ReviewChange, RevisionView, RunMode } from "./schema.gen";
 
 /** What approving freezes for a requirement, as the sheet says it (the
  *  host's `OracleView::freezes`). */
@@ -57,6 +57,8 @@ export function testsCommand(req: string, op: "write" | "reject" | "again" | "ed
 export function sheetBlocked(sheet: ApproveSheet | null, mode: RunMode | "refine", running: boolean): string[] {
   if (mode === "refine") return [];
   const out = [...(sheet?.blocked ?? [])];
+  // The click binds to what the sheet shows: without its digest, nothing.
+  if (!sheet?.sha256 && !out.length) out.push("the sheet cannot say what it would freeze: open it again");
   if (running && !out.some((b) => b.includes("run is active"))) out.push("a run is active");
   if (mode === "autopilot" && sheet?.autopilot_blocked) out.push(sheet.autopilot_blocked);
   return out;
@@ -103,9 +105,33 @@ export function grouped(drafts: CommentDraft[]): { section: string; drafts: Comm
   return out;
 }
 
-/** The sections a send would revise (passages only; tests are asked again). */
+/** The sections a send would revise (passages and changed lines; tests are
+ *  asked again), each by its document and heading as the host keys them —
+ *  the same heading in two documents is two sections. */
 export function touched(drafts: CommentDraft[]): string[] {
-  return [...new Set(drafts.filter((d) => d.anchor.kind === "passage" || d.anchor.kind === "diff_line").map((d) => sectionOf(d.anchor)))];
+  const key = (a: CommentAnchor) => (a.kind === "passage" ? `${a.path}: ${a.section || "(before the first heading)"}` : a.kind === "diff_line" ? `${a.path}:${a.line}` : "");
+  return [...new Set(drafts.filter((d) => d.anchor.kind === "passage" || d.anchor.kind === "diff_line").map((d) => key(d.anchor)))];
+}
+
+/** A comment's anchor on a line changed since the last commit: the line as
+ *  it reads now (or, removed, as it read), with its number on that side. */
+export function driftAnchor(c: ReviewChange): CommentAnchor | null {
+  if (c.now != null && c.now_line != null) return { kind: "diff_line", path: c.path, side: "new", line: c.now_line, quote: c.now };
+  if (c.then != null && c.then_line != null) return { kind: "diff_line", path: c.path, side: "old", line: c.then_line, quote: c.then };
+  return null;
+}
+
+/** The headings of document `path` a pending revision changed: inside the
+ *  comments (`false`) or outside them (`true`), by the heading's own words. */
+export function revisedHeadings(turn: RevisionView | null | undefined, path: string): Map<string, boolean> {
+  const out = new Map<string, boolean>();
+  if (!turn || turn.outcome !== "pending") return out;
+  for (const d of turn.diffs) {
+    if (d.path !== path || !d.heading) continue;
+    const words = d.heading.split(" › ").pop() ?? d.heading;
+    out.set(words, (out.get(words) ?? false) || d.outside);
+  }
+  return out;
 }
 
 /** One Code-view comment as the nudge says it (the host's `nudge_line`). */
@@ -171,6 +197,8 @@ export function discardWord(reason: string, req: string): string {
     not_a_new_test_file: "not a new test file",
     exists: "the file exists already",
     command_not_allowed: "its command is not allowed",
+    command_shared: "its command also runs another test",
+    red_without_it: "its command fails without it",
     limit: "more than four tests",
   };
   return words[reason] ?? reason.replaceAll("_", " ");

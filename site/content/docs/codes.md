@@ -30,6 +30,9 @@ Every result that is not plainly `ok` names a code — `error[CODE]`, `stopped[C
 | [`ACCEPTANCE-OFF`](#acceptance-off) | error | 13 | acceptance tests are turned off |
 | [`ORACLE-AUTHOR-FAILED`](#oracle-author-failed) | error | 21 | the test author could not write the tests |
 | [`ORACLE-TAMPERED`](#oracle-tampered) | stop | 23 | a frozen test no longer matches what was frozen |
+| [`ORACLE-FROZEN`](#oracle-frozen) | error | 2 | the requirement's tests are frozen with the approval |
+| [`REVIEW-CHANGED`](#review-changed) | stop | 23 | what the approval would freeze changed since it was shown |
+| [`REVIEW-UNREADABLE`](#review-unreadable) | stop | 23 | the review record cannot be read |
 | [`RUN-ACTIVE`](#run-active) | error | 14 | a run is active for this project |
 | [`AUTOPILOT-NEEDS-GRANT-OBJECTS`](#autopilot-needs-grant-objects) | error | 13 | autopilot needs object-bound grants |
 | [`FEATURE-UNKNOWN`](#feature-unknown) | error | 12 | no feature has that name or number |
@@ -255,6 +258,33 @@ A test frozen at review is stored in the state directory with its digest. The st
 
 - `speccoder review tests <REQ>`
 - Write and approve the tests again, or run without the frozen set
+
+### ORACLE-FROZEN
+
+The requirement's tests are frozen with the approval.
+
+*Approve and Run* froze these tests: they are what the run uses, sealed with their held-out set. Writing, rejecting, editing or choosing a reading now would change a set the approval names, so it is refused. A reworded requirement lapses its freeze; its tests are then written again.
+
+- `speccoder review`
+- Reword the requirement to lapse the freeze, then write its tests again
+
+### REVIEW-CHANGED
+
+What the approval would freeze changed since it was shown.
+
+*Approve and Run* binds to the sheet the person saw: the decision lines it approves and the tests it freezes, by digest. They changed in between — another tab asked again, a *Write Tests* finished — so approving now would freeze tests nobody saw. Nothing was approved.
+
+- `speccoder review`
+- Open the sheet again and approve what it shows
+
+### REVIEW-UNREADABLE
+
+The review record cannot be read.
+
+`review.json` (the decisions, the frozen tests and the approval) or a record beside it is not valid. Reading it as empty would drop every decision and freeze on the next write, and a run would author tests as if nothing were frozen — so speccoder stops until a person looks.
+
+- `git diff -- <unit>/review.json`
+- Restore it from git (`git checkout -- <unit>/review.json`) or fix the JSON
 
 ### RUN-ACTIVE
 

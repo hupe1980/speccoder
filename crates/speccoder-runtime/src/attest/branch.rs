@@ -489,7 +489,8 @@ fn skips(git: &Git) -> Result<BTreeSet<String>, Refusal> {
         String::from_utf8_lossy(&o)
             .lines()
             .filter_map(|r| r.strip_prefix(&format!("{}/", notes::SKIPPED)))
-            .map(str::to_owned)
+            // `bug:<slug>` is kept as `bug%3A<slug>` (no `:` in a ref).
+            .map(|r| r.replace("%3A", ":").replace("%25", "%"))
             .collect()
     })
     .map_err(|e| Refusal::internal(format!("git for-each-ref {}: {}", notes::SKIPPED, e.0)))

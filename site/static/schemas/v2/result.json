@@ -639,9 +639,18 @@
             "string",
             "null"
           ]
+        },
+        "sha256": {
+          "default": null,
+          "description": "The approval digest *Approve and Run* would record now (decision\nlines and frozen manifests): the click sends it back and is refused\nwhen it no longer matches. `None`: it cannot be computed here.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
+        "sha256",
         "approves",
         "blocked",
         "autopilot_blocked",
@@ -1545,6 +1554,73 @@
           "type": "string"
         }
       ]
+    },
+    "BugTest": {
+      "description": "One confirmed reproduction.",
+      "properties": {
+        "content": {
+          "description": "Its content as confirmed; `None` when the kept copy is missing or no\nlonger matches its digest.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "file": {
+          "description": "Project-relative test file.",
+          "type": "string"
+        },
+        "red_class": {
+          "description": "Its class on the untouched code (`assertion`).",
+          "type": "string"
+        },
+        "statement": {
+          "description": "The statement it reproduces (`E1`) or guards (`U1`).",
+          "type": "string"
+        },
+        "test": {
+          "description": "The test's name.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "statement",
+        "file",
+        "test",
+        "red_class",
+        "content"
+      ],
+      "type": "object"
+    },
+    "BugTests": {
+      "description": "A bug's confirmed reproductions as a bug unit's Tests tab shows them,\nread only: a bug's tests are written and confirmed by its own pipeline.",
+      "properties": {
+        "confirmation": {
+          "$ref": "#/$defs/Confirmation",
+          "description": "The person's confirmation of the reproductions."
+        },
+        "reproductions": {
+          "description": "The reproductions, in the order confirmed.",
+          "items": {
+            "$ref": "#/$defs/BugTest"
+          },
+          "type": "array"
+        },
+        "task": {
+          "description": "The bug's task (`T001`).",
+          "type": "string"
+        },
+        "title": {
+          "description": "Its title.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task",
+        "title",
+        "confirmation",
+        "reproductions"
+      ],
+      "type": "object"
     },
     "Candidate": {
       "description": "Someone else's fix, judged as the attempt.",
@@ -6749,6 +6825,60 @@
       ],
       "type": "object"
     },
+    "ReviewChange": {
+      "description": "A requirement changed in the checkout since the last commit of the\nspec, with where its line is — a comment anchors to it (`diff_line`).",
+      "properties": {
+        "id": {
+          "description": "`FR-003`.",
+          "type": "string"
+        },
+        "now": {
+          "description": "Its line now; `None`: it was removed.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "now_line": {
+          "description": "Its line number (1-based) now.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "path": {
+          "description": "The document it is in (project-relative).",
+          "type": "string"
+        },
+        "then": {
+          "description": "Its line at the last commit; `None`: it did not exist yet.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "then_line": {
+          "description": "Its line number (1-based) at the last commit.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "then",
+        "now",
+        "path",
+        "then_line",
+        "now_line"
+      ],
+      "type": "object"
+    },
     "ReviewItem": {
       "description": "One requirement and its review.",
       "properties": {
@@ -6821,12 +6951,26 @@
           "default": null,
           "description": "The approval that froze the oracle, when one is recorded."
         },
+        "bug_tests": {
+          "description": "A bug unit's confirmed reproductions, read only.",
+          "items": {
+            "$ref": "#/$defs/BugTests"
+          },
+          "type": "array"
+        },
         "changes": {
           "description": "Requirements changed in the checkout since the last commit of the\nspec: what a commit would record.",
           "items": {
-            "$ref": "#/$defs/RequirementDrift"
+            "$ref": "#/$defs/ReviewChange"
           },
           "type": "array"
+        },
+        "error": {
+          "description": "Why the review record (`review.json`) cannot be read: shown, never\nread as \"nothing decided\" by a write.",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "feature": {
           "description": "The feature.",
@@ -6984,6 +7128,14 @@
           },
           "type": "array"
         },
+        "beside": {
+          "default": [],
+          "description": "Documents changed while it ran by something other than the skill\n(the person's own edit): *Undo Revision* never overwrites them.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "changed": {
           "description": "Sections it changed.",
           "items": {
@@ -6995,6 +7147,14 @@
           "description": "The comments it was sent with.",
           "items": {
             "type": "string"
+          },
+          "type": "array"
+        },
+        "diffs": {
+          "default": [],
+          "description": "While it waits to be kept or undone: each changed section, before\nand after, for the word diff.",
+          "items": {
+            "$ref": "#/$defs/SectionDiff"
           },
           "type": "array"
         },
@@ -7041,7 +7201,9 @@
         "outside",
         "outcome",
         "files",
-        "asked_again"
+        "asked_again",
+        "beside",
+        "diffs"
       ],
       "type": "object"
     },
@@ -7988,6 +8150,13 @@
             "mode": {
               "$ref": "#/$defs/RunMode",
               "description": "How the run asks."
+            },
+            "sheet": {
+              "description": "The sheet's `sha256`: what the person saw approved and frozen.\nRequired from every interface but a terminal command.",
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           "required": [
@@ -8301,6 +8470,39 @@
         "key",
         "manifest_sha256",
         "count"
+      ],
+      "type": "object"
+    },
+    "SectionDiff": {
+      "description": "One section a revision changed, before and after (each cut to 4000\ncharacters).",
+      "properties": {
+        "after": {
+          "description": "After it (empty: it was removed).",
+          "type": "string"
+        },
+        "before": {
+          "description": "The section's text before the revision (empty: it was added).",
+          "type": "string"
+        },
+        "heading": {
+          "description": "Its heading path (`Spec › Requirements`; empty before the first).",
+          "type": "string"
+        },
+        "outside": {
+          "description": "No comment touched it.",
+          "type": "boolean"
+        },
+        "path": {
+          "description": "The document (project-relative).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "heading",
+        "before",
+        "after",
+        "outside"
       ],
       "type": "object"
     },

@@ -42,8 +42,8 @@ pub use command::{
     InitCheck, InitKey, InitReport, InitRun, InstructionFile, IssueEntry, IssuesReport,
     LastAttempt, MonitorScore, ObjectVerification, ObjectView, OpenQuestion, OperatorView,
     PAYLOADS, PendingCall, PolicyCoverage, PrReport, ProposeReport, RefusedPath, Remedy,
-    ReplayReport, RequirementDrift, ReviewItem, ReviewReport, ReviewTotals, RunReport,
-    SCHEMA_VERSION, SchemaName, SchemaReport, SetAside, SignerView, SkillEntry, SkillRunReport,
-    SkillsReport, SpecVersion, StatusReport, StatusTotals, TaskCost, TaskStatus, TraceRow,
-    UiReport, Usage, VerifyOutcome, VerifyReason, WorktreeReport,
+    ReplayReport, RequirementDrift, ReviewChange, ReviewItem, ReviewReport, ReviewTotals,
+    RunReport, SCHEMA_VERSION, SchemaName, SchemaReport, SetAside, SignerView, SkillEntry,
+    SkillRunReport, SkillsReport, SpecVersion, StatusReport, StatusTotals, TaskCost, TaskStatus,
+    TraceRow, UiReport, Usage, VerifyOutcome, VerifyReason, WorktreeReport,
 };

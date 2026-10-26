@@ -234,6 +234,39 @@ pub const CATALOG: &[Entry] = &[
         ]
     ),
     entry!(
+        "ORACLE-FROZEN",
+        E,
+        S::UsageError,
+        "the requirement's tests are frozen with the approval",
+        "*Approve and Run* froze these tests: they are what the run uses, sealed with their held-out set. Writing, rejecting, editing or choosing a reading now would change a set the approval names, so it is refused. A reworded requirement lapses its freeze; its tests are then written again.",
+        [
+            "speccoder review",
+            "→ reword the requirement to lapse the freeze, then write its tests again"
+        ]
+    ),
+    entry!(
+        "REVIEW-CHANGED",
+        P,
+        S::NeedsHuman,
+        "what the approval would freeze changed since it was shown",
+        "*Approve and Run* binds to the sheet the person saw: the decision lines it approves and the tests it freezes, by digest. They changed in between — another tab asked again, a *Write Tests* finished — so approving now would freeze tests nobody saw. Nothing was approved.",
+        [
+            "speccoder review",
+            "→ open the sheet again and approve what it shows"
+        ]
+    ),
+    entry!(
+        "REVIEW-UNREADABLE",
+        P,
+        S::NeedsHuman,
+        "the review record cannot be read",
+        "`review.json` (the decisions, the frozen tests and the approval) or a record beside it is not valid. Reading it as empty would drop every decision and freeze on the next write, and a run would author tests as if nothing were frozen — so speccoder stops until a person looks.",
+        [
+            "git diff -- <unit>/review.json",
+            "→ restore it from git (`git checkout -- <unit>/review.json`) or fix the JSON"
+        ]
+    ),
+    entry!(
         "RUN-ACTIVE",
         E,
         S::GitPrecondition,

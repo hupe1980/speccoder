@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { approveCommand, calls, coverage, discardWord, freezes, grouped, locate, nudgeLine, passage, place, sheetBlocked, stageLabel, testsCommand, touched } from "./review";
+import { approveCommand, calls, coverage, discardWord, driftAnchor, freezes, grouped, locate, nudgeLine, passage, place, revisedHeadings, sheetBlocked, stageLabel, testsCommand, touched } from "./review";
 import type { CommentDraft } from "./schema.gen";
 import { oracleView, review } from "../test/fixtures";
 
@@ -38,6 +38,8 @@ describe("the approve sheet", () => {
     expect(sheetBlocked(sheet, "ask", true)).toEqual(["a run is active"]);
     expect(sheetBlocked({ ...sheet!, autopilot_blocked: "autopilot needs the OS sandbox" }, "autopilot", false)).toEqual(["autopilot needs the OS sandbox"]);
     expect(sheetBlocked({ ...sheet!, blocked: ["US1: two readings of US1-2 disagree"] }, "refine", true)).toEqual([]);
+    // Without the digest the click could not bind to what is shown.
+    expect(sheetBlocked({ ...sheet!, sha256: null }, "ask", false)).toEqual(["the sheet cannot say what it would freeze: open it again"]);
     expect(approveCommand("autopilot", ["g-1", "g-2"])).toBe("speccoder review approve --run autopilot --grant g-1 --grant g-2");
     expect(approveCommand("ask", [])).toBe("speccoder review approve --run ask");
   });
@@ -54,7 +56,10 @@ describe("the tray", () => {
     expect(place(a.anchor)).toBe("specs/001/spec.md:40-42");
     expect(place(c.anchor)).toBe("specs/001/spec.md:50");
     expect(place(b.anchor)).toBe("US1 tests/a.rs:3");
-    expect(touched([a, b, c])).toEqual(["Requirements"]);
+    expect(touched([a, b, c])).toEqual(["specs/001/spec.md: Requirements"]);
+    // The same heading in another document is another section.
+    const d = draft("c4", { kind: "passage", path: "specs/001/plan.md", start_line: 5, end_line: 5, quote: "q", quote_sha256: "", section: "Requirements" });
+    expect(touched([a, d])).toHaveLength(2);
   });
 
   it("writes a nudge line as the host does", () => {
@@ -77,5 +82,29 @@ describe("discardWord", () => {
   it("says why a test was not kept, in words", () => {
     expect(discardWord("cites_no_scenario", "US1")).toBe("cites no scenario of US1");
     expect(discardWord("something_else", "US1")).toBe("something else");
+  });
+});
+
+describe("since the last commit and after a revision", () => {
+  it("anchors a comment to a changed line on the side it reads", () => {
+    const now = { id: "FR-001", then: "- **FR-001**: Users MUST log in.", now: "- **FR-001**: Users MUST sign in.", path: "specs/001/spec.md", then_line: 13, now_line: 14 };
+    expect(driftAnchor(now)).toEqual({ kind: "diff_line", path: "specs/001/spec.md", side: "new", line: 14, quote: "- **FR-001**: Users MUST sign in." });
+    const removed = { ...now, now: null, now_line: null };
+    expect(driftAnchor(removed)).toMatchObject({ side: "old", line: 13 });
+    expect(driftAnchor({ ...removed, then_line: null })).toBeNull();
+  });
+
+  it("names the headings a pending revision changed, inside or outside the comments", () => {
+    const turn = {
+      id: "t1", comments: ["c1"], sections: [], skill: "speckit-clarify", changed: [], outside: [], outcome: "pending", files: [], asked_again: [], beside: [],
+      diffs: [
+        { path: "specs/001/spec.md", heading: "Spec › Requirements", before: "a", after: "b", outside: false },
+        { path: "specs/001/spec.md", heading: "Spec › Edge Cases", before: "a", after: "c", outside: true },
+        { path: "specs/001/plan.md", heading: "Plan", before: "a", after: "c", outside: true },
+      ],
+    };
+    const h = revisedHeadings(turn, "specs/001/spec.md");
+    expect([...h]).toEqual([["Requirements", false], ["Edge Cases", true]]);
+    expect(revisedHeadings({ ...turn, outcome: "kept" }, "specs/001/spec.md").size).toBe(0);
   });
 });

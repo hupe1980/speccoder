@@ -197,15 +197,15 @@ fn revision(q: &FeatureQuery) -> Option<String> {
     ok.then(|| r.to_owned())
 }
 
-/// A project-relative path the file view may show.
+/// A project-relative path the file view may show: nothing absolute,
+/// nothing up. Where it leads on disk is checked where it is read — a link
+/// is never followed, the file must be inside the worktree.
 fn file_path_ok(path: &str) -> bool {
     let p = Path::new(path);
     !path.is_empty()
         && !p.is_absolute()
         && p.components()
             .all(|c| matches!(c, std::path::Component::Normal(_)))
-        && speccoder_runtime::service::worktree::state_dir()
-            .is_none_or(|s| !Path::new(path).starts_with(&s))
 }
 
 fn envelope(r: &CommandResult) -> Json<Value> {

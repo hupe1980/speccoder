@@ -374,8 +374,8 @@ fn oracle_leak_no_endpoint_or_event_carries_held_out_material() {
     );
     assert!(file.contains("not a project file"), "{file}");
 
-    // A job: the person rejects the frozen draft's test; its result and
-    // every event of it are clean too.
+    // A job: the person tries to reject the frozen set's test (refused: it
+    // is frozen); its result and every event of it are clean too.
     let start = json!({
         "run": { "kind": "oracle_tests", "req": "US1", "op": "reject", "path": "tests/acceptance_us1.txt", "scenario": null, "reading": null },
         "input": "asserts too little",
@@ -397,5 +397,5 @@ fn oracle_leak_no_endpoint_or_event_carries_held_out_material() {
         }
     }
     let done = done.expect("the job ended");
-    assert!(done.contains("rejected tests/acceptance_us1.txt"), "{done}");
+    assert!(done.contains("ORACLE-FROZEN"), "{done}");
 }

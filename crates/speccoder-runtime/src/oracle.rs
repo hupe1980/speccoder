@@ -473,7 +473,64 @@ pub fn view(
             v.frozen_by = Some(e.by.clone());
             v.frozen_at = Some(e.at);
             v.state = match crate::pre_frozen::load(project_state, unit, &req.key) {
-                Ok(Some(_)) => OracleState::Frozen,
+                Ok(Some((rec, files))) => {
+                    // The card shows what the run uses: the frozen set,
+                    // never a draft changed since (P4).
+                    let drafted = current.map(|(d, _)| d);
+                    v.tests = rec
+                        .visible
+                        .iter()
+                        .map(|t| {
+                            let same = drafted.and_then(|d| {
+                                d.tests
+                                    .iter()
+                                    .find(|x| x.path == t.path && x.sha256 == t.sha256)
+                            });
+                            OracleTest {
+                                path: t.path.clone(),
+                                content: files
+                                    .iter()
+                                    .find(|(p, _)| *p == t.path)
+                                    .map(|(_, c)| c.clone())
+                                    .unwrap_or_default(),
+                                scenarios: t.cites.clone(),
+                                red_class: same.map_or_else(
+                                    || crate::pipeline::class_word(RedClass::Assertion),
+                                    |x| crate::pipeline::class_word(x.red_class),
+                                ),
+                                red: true,
+                                authored_by: same.map_or(AuthoredBy::Model, |x| x.authored_by),
+                                edited_by: same.and_then(|x| x.edited_by.clone()),
+                            }
+                        })
+                        .collect();
+                    v.manifest_sha256 = Some(e.manifest_sha256.clone());
+                    let covered: Vec<&String> =
+                        rec.visible.iter().flat_map(|t| t.cites.iter()).collect();
+                    v.uncovered = req
+                        .scenarios
+                        .iter()
+                        .map(|s| s.id.clone())
+                        .filter(|s| !covered.contains(&s))
+                        .collect();
+                    if cfg.held_out {
+                        v.held_out = match &rec.held_out_sealed {
+                            Some(h) => HeldOutSummary {
+                                state: "kept".to_owned(),
+                                count: h.count,
+                                manifest_sha256: Some(format!("sha256:{}", h.manifest_sha256)),
+                                reason: None,
+                            },
+                            None => HeldOutSummary {
+                                state: "absent".to_owned(),
+                                count: 0,
+                                manifest_sha256: None,
+                                reason: Some("none_kept".to_owned()),
+                            },
+                        };
+                    }
+                    OracleState::Frozen
+                }
                 Ok(None) => OracleState::FrozenElsewhere,
                 Err(t) => {
                     v.error = Some(format!("the frozen set was tampered with: {}", t.0));
@@ -492,24 +549,29 @@ pub fn view(
 
 /// Requirements of the selected unit whose tests two authors read
 /// differently, with the scenario: `(REQ, scenario)`.
-#[must_use]
+///
+/// # Errors
+/// A stored draft was tampered with or cannot be read: whether it holds an
+/// open reading is unknown, never "none" (FR-009).
 pub fn open_ambiguities(
     project_state: &Path,
     unit: &str,
     requirements: &[OracleRequirement],
-) -> Vec<(String, String)> {
-    requirements
-        .iter()
-        .filter_map(|r| {
-            let (d, _) = load(project_state, unit, &r.key).ok().flatten()?;
-            (d.requirement.sha256 == r.digest()).then_some(d)
-        })
-        .flat_map(|d| {
+) -> Result<Vec<(String, String)>, Tampered> {
+    let mut out = Vec::new();
+    for r in requirements {
+        let Some((d, _)) = load(project_state, unit, &r.key)? else {
+            continue;
+        };
+        if d.requirement.sha256 != r.digest() {
+            continue;
+        }
+        out.extend(
             d.open_ambiguities()
-                .map(|a| (d.requirement.key.clone(), a.scenario.clone()))
-                .collect::<Vec<_>>()
-        })
-        .collect()
+                .map(|a| (d.requirement.key.clone(), a.scenario.clone())),
+        );
+    }
+    Ok(out)
 }
 
 /// The rung of the selected unit, by the format's standing units.
@@ -633,6 +695,43 @@ fn project_in(root: &Path, worktree_root: &Path) -> PathBuf {
     }
 }
 
+/// One writer of a unit's oracle at a time: *Write Tests* and its kin, and
+/// the freeze of *Approve and Run*. A holder elsewhere is refused, never
+/// waited for (a write runs model calls).
+pub(crate) struct UnitLock(PathBuf);
+
+impl UnitLock {
+    pub(crate) fn take(project_state: &Path, unit: &str) -> Result<Self, String> {
+        let path = project_state.join(DIR).join(format!("{unit}.lock"));
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
+        }
+        // A lock older than an hour is a crashed writer's.
+        if std::fs::metadata(&path)
+            .ok()
+            .and_then(|m| m.modified().ok())
+            .and_then(|m| m.elapsed().ok())
+            .is_some_and(|age| age.as_secs() > 3600)
+        {
+            let _ = std::fs::remove_file(&path);
+        }
+        std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+            .map(|_| Self(path))
+            .map_err(|_| {
+                format!("{unit}'s tests are being written or frozen elsewhere right now: look again when that ends")
+            })
+    }
+}
+
+impl Drop for UnitLock {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
+    }
+}
+
 /// What a progress sink is told: a stage, by name and count.
 fn stage(options: &crate::RunOptions, req: &str, stage: &str, n: u32, of: u32) {
     if let Some(p) = &options.progress {
@@ -708,6 +807,10 @@ pub fn tests_with(
     let req = match check(&ctx, request) {
         Ok(r) => r,
         Err(r) => return *r,
+    };
+    let _lock = match UnitLock::take(&ctx.plane_dir, &ctx.feature) {
+        Ok(l) => l,
+        Err(e) => return refuse(CommandStatus::GitPrecondition, "RUN-ACTIVE", &e),
     };
     let who = crate::approvals::Who::local_in(&ctx.root, via);
     let done = match request.op {
@@ -791,6 +894,23 @@ fn check(ctx: &Ctx, request: &Request<'_>) -> Result<OracleRequirement, Box<Comm
             &format!(
                 "{} has no acceptance scenarios to write tests from",
                 req.key
+            ),
+        )));
+    }
+    // A frozen set is what the run uses, sealed with its held-out set: it
+    // is not rewritten under the approval that names it (C4).
+    let (entries, _) = crate::review::oracle_entries(&ctx.root, &ctx.dir)
+        .map_err(|e| Box::new(refuse(CommandStatus::NeedsHuman, "REVIEW-UNREADABLE", &e)))?;
+    if let Some(e) = entries
+        .get(&req.key)
+        .filter(|e| e.requirement_sha256 == req.digest())
+    {
+        return Err(Box::new(refuse(
+            CommandStatus::UsageError,
+            "ORACLE-FROZEN",
+            &format!(
+                "{}'s tests were frozen with the approval by {}: the run uses them as frozen — reword {} to lapse the freeze, then write its tests again",
+                req.key, e.by, req.key
             ),
         )));
     }
@@ -998,21 +1118,51 @@ impl<'a> Author<'a> {
     }
 }
 
-fn expectations(answer: &Value, req: &OracleRequirement) -> (Vec<Expectation>, Vec<Untestable>) {
-    let known = |id: &str| req.scenarios.iter().any(|s| s.id == id);
-    let e: Vec<Expectation> =
-        serde_json::from_value::<Vec<Expectation>>(answer["expectations"].clone())
-            .unwrap_or_default()
-            .into_iter()
-            .filter(|e| known(&e.scenario))
-            .collect();
-    let u: Vec<Untestable> =
-        serde_json::from_value::<Vec<Untestable>>(answer["untestable"].clone())
-            .unwrap_or_default()
-            .into_iter()
-            .filter(|u| known(&u.scenario))
-            .collect();
-    (e, u)
+/// What one author states it expects of each scenario, and what it found
+/// untestable, by the requirement's own scenario ids (case aside). `Err`:
+/// an answer the comparison cannot read — not parseable, naming a scenario
+/// the requirement does not have, or saying nothing of any scenario — is
+/// an author failure, never "no ambiguity" (FR-008).
+fn expectations(
+    answer: &Value,
+    req: &OracleRequirement,
+) -> Result<(Vec<Expectation>, Vec<Untestable>), String> {
+    let canonical = |id: &str| {
+        req.scenarios
+            .iter()
+            .find(|s| s.id.eq_ignore_ascii_case(id.trim()))
+            .map(|s| s.id.clone())
+            .ok_or_else(|| {
+                format!(
+                    "the test author's expectations name `{id}`, which {} does not have",
+                    req.key
+                )
+            })
+    };
+    let list = |field: &str| -> Result<Value, String> {
+        match &answer[field] {
+            Value::Null => Ok(Value::Array(Vec::new())),
+            v @ Value::Array(_) => Ok(v.clone()),
+            _ => Err(format!("the test author's `{field}` is not a list")),
+        }
+    };
+    let mut e: Vec<Expectation> = serde_json::from_value(list("expectations")?)
+        .map_err(|x| format!("the test author's expectations cannot be read: {x}"))?;
+    let mut u: Vec<Untestable> = serde_json::from_value(list("untestable")?)
+        .map_err(|x| format!("the test author's untestable list cannot be read: {x}"))?;
+    for x in &mut e {
+        x.scenario = canonical(&x.scenario)?;
+    }
+    for x in &mut u {
+        x.scenario = canonical(&x.scenario)?;
+    }
+    if e.is_empty() && u.is_empty() {
+        return Err(
+            "the test author stated no expectation for any scenario: the readings cannot be compared"
+                .to_owned(),
+        );
+    }
+    Ok((e, u))
 }
 
 /// A scratch worktree of the checkout's `HEAD`, its project directory and
@@ -1030,8 +1180,25 @@ impl Bench {
         let scratch = worktree::scratch(&ctx.root, &tmp)
             .map_err(|e| failed(format!("the scratch worktree could not be made: {}", e.0)))?;
         let project = project_in(&ctx.root, &scratch.path);
-        let (runner, _) = sandbox::runner(&scratch.path, &ctx.sandbox)
+        let (runner, notice) = sandbox::runner(&scratch.path, &ctx.sandbox)
             .map_err(|e| Box::new(refuse(CommandStatus::ConfigError, "CONFIG", &e)))?;
+        // Model-written tests and model-chosen commands run here, before
+        // anyone approved them: only confined by the OS sandbox (FR-005).
+        if !runner.is_sandboxed() {
+            return Err(Box::new(
+                refuse(
+                    CommandStatus::ConfigError,
+                    "SANDBOX-UNAVAILABLE",
+                    &format!(
+                        "the red check runs model-written tests and needs the OS sandbox: {}",
+                        notice.unwrap_or_else(|| "commands would run unsandboxed".to_owned())
+                    ),
+                )
+                .with_fix(vec![
+                    "set [sandbox] mode = \"auto\" on a machine with a sandbox backend (speccoder doctor)".to_owned(),
+                ]),
+            ));
+        }
         Ok(Self {
             scratch,
             project,
@@ -1059,33 +1226,45 @@ impl Bench {
         (files, manifest)
     }
 
-    /// Writes every test, then runs each one's command twice: its class.
-    fn red(&self, tests: &[(String, String, Vec<String>)]) -> Result<Vec<RedClass>, String> {
-        for (path, content, _) in tests {
+    /// Red-checks each test alone (FR-005): only its own file is in the
+    /// scratch tree while its command runs — first without it, then twice
+    /// with it — so a failure is its own, never a neighbour's. A command
+    /// that is red without the file (a failing suite, a command that runs
+    /// more than the file) decides nothing about it: `Err("red_without_it")`.
+    fn red(
+        &self,
+        tests: &[(String, String, Vec<String>)],
+    ) -> Result<Vec<Result<RedClass, &'static str>>, String> {
+        let mut out = Vec::new();
+        for (path, content, argv) in tests {
             let full = self.project.join(path);
+            let _ = std::fs::remove_file(&full);
+            let run = || crate::pipeline::acceptance_run(&self.project, argv, &self.runner);
+            let (bare, summary) = run();
+            if classify_red(&bare, summary.as_ref()).is_red() {
+                out.push(Err("red_without_it"));
+                continue;
+            }
             if let Some(parent) = full.parent() {
                 std::fs::create_dir_all(parent).map_err(|e| format!("{path}: {e}"))?;
             }
             std::fs::write(&full, content).map_err(|e| format!("{path}: {e}"))?;
-        }
-        Ok(tests
-            .iter()
-            .map(|(_, _, argv)| {
-                let (first, summary) =
-                    crate::pipeline::acceptance_run(&self.project, argv, &self.runner);
-                let class = classify_red(&first, summary.as_ref());
-                if !class.is_red() {
-                    return class;
-                }
-                let (second, summary) =
-                    crate::pipeline::acceptance_run(&self.project, argv, &self.runner);
+            let (first, summary) = run();
+            let class = classify_red(&first, summary.as_ref());
+            let class = if !class.is_red() {
+                class
+            } else {
+                let (second, summary) = run();
                 if classify_red(&second, summary.as_ref()).is_red() {
                     class
                 } else {
                     RedClass::Flaky
                 }
-            })
-            .collect())
+            };
+            std::fs::remove_file(&full).map_err(|e| format!("{path}: {e}"))?;
+            out.push(Ok(class));
+        }
+        Ok(out)
     }
 }
 
@@ -1095,7 +1274,7 @@ fn keep(
     bench: &Bench,
     answer: &Value,
     req: &OracleRequirement,
-    taken: &[String],
+    taken: &[(String, Vec<String>)],
 ) -> (Vec<Kept>, Vec<OracleDiscarded>) {
     let (valid, refused) =
         crate::pipeline::validate_answer(answer, &bench.project, &ctx.policy, &req.scenarios);
@@ -1124,7 +1303,9 @@ fn keep(
             discard("cites_no_scenario");
             continue;
         }
-        if taken.contains(&f.path) || kept.iter().any(|(p, ..): &(String, _, _, _)| *p == f.path) {
+        if taken.iter().any(|(p, _)| *p == f.path)
+            || kept.iter().any(|(p, ..): &(String, _, _, _)| *p == f.path)
+        {
             discard("exists");
             continue;
         }
@@ -1133,6 +1314,16 @@ fn keep(
         } else {
             f.argv.clone()
         };
+        // One command per test: a command several tests share cannot say
+        // whose assertion failed (at the checkpoint they all exist).
+        if taken.iter().any(|(_, a)| *a == argv)
+            || kept
+                .iter()
+                .any(|(.., a): &(_, _, _, Vec<String>)| *a == argv)
+        {
+            discard("command_shared");
+            continue;
+        }
         if argv.is_empty()
             || ctx
                 .policy
@@ -1163,8 +1354,25 @@ fn write(
     let author = Author::open(ctx, req, provider, options)?;
     let bench = Bench::open(ctx)?;
     let (files, manifest) = bench.files();
-    // What the person said about earlier tests is told again.
-    let earlier = load(&ctx.plane_dir, &ctx.feature, &req.key).ok().flatten();
+    // What the person said about earlier tests is told again; a draft
+    // that cannot be read is not overwritten with its rejections lost.
+    let earlier = load(&ctx.plane_dir, &ctx.feature, &req.key).map_err(|t| {
+        Box::new(
+            refuse(
+                CommandStatus::NeedsHuman,
+                "ORACLE-TAMPERED",
+                &format!(
+                    "{}: writing anew would lose the rejections and notes it holds",
+                    t.0
+                ),
+            )
+            .with_fix(vec![format!(
+                "→ restore it, or remove {} to start {}'s tests over",
+                dir(&ctx.plane_dir, &ctx.feature, &req.key).display(),
+                req.key
+            )]),
+        )
+    })?;
     let (rejected, mut notes) = earlier
         .as_ref()
         .filter(|(d, _)| d.requirement.sha256 == req.digest())
@@ -1181,7 +1389,17 @@ fn write(
     let (first, run1, mut context) = author
         .call(req, &files, &manifest, &told, None, 1)
         .map_err(failed)?;
-    let (e1, u1) = expectations(&first, req);
+    // The comparison needs both readings; with one sample they are kept
+    // as stated, for the card.
+    let read = |answer: &Value| {
+        let got = expectations(answer, req);
+        if samples >= 2 {
+            got.map_err(failed)
+        } else {
+            Ok(got.unwrap_or_default())
+        }
+    };
+    let (e1, u1) = read(&first)?;
     let mut runs = vec![run1];
     let (mut e2, mut u2) = (Vec::new(), Vec::new());
     if samples >= 2 {
@@ -1189,7 +1407,7 @@ fn write(
         let (second, run2, more) = author
             .call(req, &files, &manifest, &told, None, 2)
             .map_err(failed)?;
-        (e2, u2) = expectations(&second, req);
+        (e2, u2) = read(&second)?;
         runs.push(run2);
         for c in more {
             if !context.contains(&c) {
@@ -1203,30 +1421,35 @@ fn write(
     } else {
         Vec::new()
     };
-    let (kept, discarded) = keep(ctx, &bench, &first, req, &[]);
+    let (kept, mut discarded) = keep(ctx, &bench, &first, req, &[]);
     stage(options, &req.key, "checking_red", 1, 1);
     let plan: Vec<(String, String, Vec<String>)> = kept
         .iter()
         .map(|(p, c, _, a)| (p.clone(), c.clone(), a.clone()))
         .collect();
     let classes = bench.red(&plan).map_err(failed)?;
-    let tests: Vec<DraftTest> = kept
-        .iter()
-        .zip(&classes)
-        .map(|((path, content, cited, argv), class)| DraftTest {
-            path: path.clone(),
-            sha256: digest_of(content),
-            scenarios: cited.clone(),
-            argv: argv.clone(),
-            red_class: *class,
-            authored_by: AuthoredBy::Model,
-            edited_by: None,
-        })
-        .collect();
-    let contents: Vec<(String, String)> = kept
-        .iter()
-        .map(|(p, c, ..)| (p.clone(), c.clone()))
-        .collect();
+    let mut tests: Vec<DraftTest> = Vec::new();
+    let mut contents: Vec<(String, String)> = Vec::new();
+    for ((path, content, cited, argv), class) in kept.into_iter().zip(classes) {
+        match class {
+            Ok(red_class) => {
+                tests.push(DraftTest {
+                    path: path.clone(),
+                    sha256: digest_of(&content),
+                    scenarios: cited,
+                    argv,
+                    red_class,
+                    authored_by: AuthoredBy::Model,
+                    edited_by: None,
+                });
+                contents.push((path, content));
+            }
+            Err(why) => discarded.push(OracleDiscarded {
+                path,
+                why: why.to_owned(),
+            }),
+        }
+    }
     let (held_out, sealed) = held_out(ctx, &author, &bench, req, &tests, options);
     let draft = Draft {
         requirement: DraftRequirement {
@@ -1402,19 +1625,18 @@ fn edit(ctx: &Ctx, req: &OracleRequirement, r: &Request<'_>, by: &str) -> Outcom
         return Err(usage(&format!("{} has no test {path}", req.key)));
     };
     let bench = Bench::open(ctx)?;
-    let mut plan: Vec<(String, String, Vec<String>)> = d
-        .tests
-        .iter()
-        .zip(&contents)
-        .map(|(t, (_, c))| (t.path.clone(), c.clone(), t.argv.clone()))
-        .collect();
-    plan[at].1 = content.to_owned();
-    let class = bench
+    let plan = [(
+        path.to_owned(),
+        content.to_owned(),
+        d.tests[at].argv.clone(),
+    )];
+    let checked = bench
         .red(&plan)
         .map_err(failed)?
-        .get(at)
-        .copied()
-        .unwrap_or(RedClass::Unclassified);
+        .pop()
+        .unwrap_or(Ok(RedClass::Unclassified));
+    // Red without the test: its command decides nothing about it.
+    let class = checked.unwrap_or(RedClass::Unclassified);
     let t = &mut d.tests[at];
     t.sha256 = digest_of(content);
     t.red_class = class;
@@ -1429,6 +1651,8 @@ fn edit(ctx: &Ctx, req: &OracleRequirement, r: &Request<'_>, by: &str) -> Outcom
         req.key,
         if class.is_red() {
             format!("red ({})", crate::pipeline::class_word(class))
+        } else if checked.is_err() {
+            "its command is red without it — it decides nothing about this test, which cannot be frozen".to_owned()
         } else {
             format!(
                 "not red ({}) — no evidence, it cannot be frozen",
@@ -1468,11 +1692,11 @@ fn rewrite(
             d.context.push(c);
         }
     }
-    let keep_paths: Vec<String> = d
+    let keep_paths: Vec<(String, Vec<String>)> = d
         .tests
         .iter()
-        .map(|t| t.path.clone())
-        .filter(|p| !replaced.contains(p))
+        .filter(|t| !replaced.contains(&t.path))
+        .map(|t| (t.path.clone(), t.argv.clone()))
         .collect();
     // The replaced test's own path may come back.
     let mut answer = answer;
@@ -1499,34 +1723,29 @@ fn rewrite(
     contents.retain(|(p, _)| !replaced.contains(p));
     d.discarded.extend(discarded);
     stage(options, &req.key, "checking_red", 1, 1);
-    let mut plan: Vec<(String, String, Vec<String>)> = d
-        .tests
+    // Each test is red-checked alone: the kept ones stand as checked.
+    let plan: Vec<(String, String, Vec<String>)> = new
         .iter()
-        .map(|t| {
-            let c = contents
-                .iter()
-                .find(|(p, _)| *p == t.path)
-                .map(|(_, c)| c.clone())
-                .unwrap_or_default();
-            (t.path.clone(), c, t.argv.clone())
-        })
+        .map(|(p, c, _, a)| (p.clone(), c.clone(), a.clone()))
         .collect();
-    let first_new = plan.len();
-    plan.extend(
-        new.iter()
-            .map(|(p, c, _, a)| (p.clone(), c.clone(), a.clone())),
-    );
     let classes = bench.red(&plan).map_err(failed)?;
     let mut written = Vec::new();
-    for (i, (path, content, cited, argv)) in new.into_iter().enumerate() {
+    for ((path, content, cited, argv), class) in new.into_iter().zip(classes) {
+        let red_class = match class {
+            Ok(c) => c,
+            Err(why) => {
+                d.discarded.push(OracleDiscarded {
+                    path,
+                    why: why.to_owned(),
+                });
+                continue;
+            }
+        };
         d.tests.push(DraftTest {
             sha256: digest_of(&content),
             scenarios: cited,
             argv,
-            red_class: classes
-                .get(first_new + i)
-                .copied()
-                .unwrap_or(RedClass::Unclassified),
+            red_class,
             authored_by: AuthoredBy::Model,
             edited_by: None,
             path: path.clone(),
@@ -1582,7 +1801,9 @@ fn again(
     Ok(format!(
         "wrote {path} of {} again: {}",
         req.key,
-        if red == written.len() {
+        if written.is_empty() {
+            "nothing kept — its command is red without it, so it decides nothing".to_owned()
+        } else if red == written.len() {
             "red".to_owned()
         } else {
             "not red — no evidence, it cannot be frozen".to_owned()
@@ -1781,6 +2002,11 @@ pub(crate) enum TaskReuse {
         /// The manifest digest the tick names.
         manifest: String,
     },
+    /// An earlier task reused it (its tick names the manifest).
+    Reused {
+        /// The requirement.
+        req: String,
+    },
     /// `review.json` names a frozen set this machine does not have.
     Elsewhere {
         /// The requirement.
@@ -1797,12 +2023,14 @@ pub(crate) enum TaskReuse {
     },
     /// The stored set no longer matches what was frozen.
     Tampered(String),
+    /// `review.json` cannot be read: whether anything is frozen is unknown.
+    Unreadable(String),
 }
 
 /// The frozen oracle `task` (citing `scenarios`) reuses, if any: the
 /// first requirement whose scenarios it cites and whose oracle `review.json`
-/// (in `project`, the worktree's committed copy) froze — unless its tests
-/// are in the worktree's `HEAD` already (an earlier task ticked them).
+/// (in `project`, the worktree's committed copy) froze — unless an earlier
+/// task's tick in the worktree's history names its manifest.
 pub(crate) fn for_task(
     project_state: &Path,
     project: &Path,
@@ -1813,7 +2041,11 @@ pub(crate) fn for_task(
 ) -> Option<TaskReuse> {
     let f = snapshot.feature.as_ref()?;
     let unit = f.feature.name.as_str();
-    let (entries, approval) = crate::review::oracle_entries(project, &f.feature.dir);
+    let (entries, approval) = match crate::review::oracle_entries(project, &f.feature.dir) {
+        Ok(x) => x,
+        // Unreadable is never "nothing frozen": the task stops for a person.
+        Err(e) => return Some(TaskReuse::Unreadable(e)),
+    };
     if entries.is_empty() {
         return None;
     }
@@ -1843,23 +2075,32 @@ pub(crate) fn for_task(
         }
         Err(t) => return Some(TaskReuse::Tampered(t.0)),
     };
-    // Committed by an earlier task's tick: later tasks author as today.
-    let git = crate::git::Git::at(wt_root);
-    let prefix = project
-        .strip_prefix(wt_root)
-        .map(|p| p.to_string_lossy().replace('\\', "/"))
-        .unwrap_or_default();
-    let in_head = record.visible.iter().any(|t| {
-        let rel = if prefix.is_empty() {
-            t.path.clone()
-        } else {
-            format!("{prefix}/{}", t.path)
-        };
-        git.succeeds(&["cat-file", "-e", &format!("HEAD:{rel}")])
-            .unwrap_or(false)
-    });
-    if in_head {
-        return None;
+    // Reused by an earlier task: its tick names the frozen manifest in the
+    // one `Acceptance:` trailer form, which only speccoder's commit writes —
+    // never decided by a file the implementer could commit (P2).
+    let needle = format!("Acceptance: review manifest={} ", entry.manifest_sha256);
+    let reused = crate::git::Git::at(wt_root)
+        .run(&[
+            "log",
+            "--format=%H",
+            "--fixed-strings",
+            &format!("--grep={needle}"),
+            "HEAD",
+        ])
+        .map(|out| !out.is_empty());
+    match reused {
+        Ok(true) => {
+            return Some(TaskReuse::Reused {
+                req: req.key.clone(),
+            });
+        }
+        Ok(false) => {}
+        Err(e) => {
+            return Some(TaskReuse::Unreadable(format!(
+                "the worktree's history cannot be read: {}",
+                e.0
+            )));
+        }
     }
     if !record.is_current(&digest) {
         return Some(TaskReuse::Lapsed {
@@ -1893,12 +2134,26 @@ pub(crate) fn for_task(
             req.key
         )));
     }
-    if approval
-        .as_deref()
-        .is_some_and(|a| a != record.approval_digest)
-    {
+    // Bound both ways (P3): the approval review.json records, and the
+    // held-out set it names — a record that dropped either is not reused.
+    if approval.as_deref() != Some(record.approval_digest.as_str()) {
         return Some(TaskReuse::Tampered(format!(
-            "{}'s frozen set names another approval than review.json",
+            "{}'s frozen set names another approval than review.json{}",
+            req.key,
+            if approval.is_none() {
+                " (which records none)"
+            } else {
+                ""
+            }
+        )));
+    }
+    let sealed = record
+        .held_out_sealed
+        .as_ref()
+        .map(|h| format!("sha256:{}", h.manifest_sha256));
+    if sealed != entry.held_out_sha256 {
+        return Some(TaskReuse::Tampered(format!(
+            "{}'s frozen held-out set is not the one review.json names",
             req.key
         )));
     }

@@ -56,6 +56,9 @@
     words = "";
   }
   const openAmbiguities = $derived(v.ambiguities.filter((a) => !a.resolution));
+  // Frozen with the approval: the run uses exactly these, so they are read
+  // only — rewording the requirement lapses the freeze.
+  const frozen = $derived(v.state === "frozen");
 </script>
 
 <article class="card" aria-labelledby="t-{v.req}">
@@ -64,7 +67,7 @@
     <span class="title">{v.title}</span>
     <span class="count" title="{v.tests.filter((t) => t.red).length} red tests">{v.tests.length || "—"}</span>
     {#if v.state === "frozen"}
-      <span class="chip s-ready"><Icon name="lock" size={10} weight={2.2} /> Frozen{#if v.frozen_by} by {v.frozen_by}{/if}{#if v.frozen_at} · {when(v.frozen_at)}{/if}</span>
+      <span class="chip s-ready"><Icon name="lock" size={10} weight={2.2} /> {`Frozen${v.frozen_by ? ` by ${v.frozen_by}` : ""}${v.frozen_at ? ` · ${when(v.frozen_at)}` : ""}`}</span>
     {:else if v.state === "lapsed"}
       <span class="chip s-needs_approval"><Icon name="exclaim" size={10} weight={2.2} /> Lapsed</span>
     {:else if v.state === "frozen_elsewhere"}
@@ -79,6 +82,8 @@
     <p class="note">Frozen on the earlier wording — the run writes tests anew unless you write and approve them again.{#if v.frozen_on}<span class="was mono">{v.frozen_on}</span>{/if}</p>
   {:else if v.state === "frozen_elsewhere"}
     <p class="note muted">Frozen on another machine: the run will write tests anew here.</p>
+  {:else if frozen}
+    <p class="note muted">Frozen with the approval: these are the tests the run uses, as they were frozen. Reword the requirement to lapse the freeze and write them again.</p>
   {/if}
 
   {#if openAmbiguities.length}
@@ -138,7 +143,7 @@
               {#each t.content.replace(/\n$/, "").split("\n") as line, n (n)}
                 <tr>
                   <td class="ln">{n + 1}</td>
-                  <td class="plus"><button class="add" aria-label="Comment on line {n + 1} of {t.path}" onclick={() => { commenting = { path: t.path, line: n + 1, quote: line }; words = ""; }}>+</button></td>
+                  <td class="plus">{#if !frozen}<button class="add" aria-label="Comment on line {n + 1} of {t.path}" onclick={() => { commenting = { path: t.path, line: n + 1, quote: line }; words = ""; }}>+</button>{/if}</td>
                   <td class="src"><Source {line} lang={language(t.path)} /></td>
                 </tr>
                 {#if commenting?.path === t.path && commenting.line === n + 1}
@@ -152,11 +157,13 @@
                 {/if}
               {/each}
             </tbody></table>
-            <div class="acts">
-              <button class="btn small" disabled={running} title={testsCommand(v.req, "reject", t.path)} onclick={() => reject(t.path)}><Icon name="xmark" size={10} weight={2.4} /> Reject…</button>
-              <button class="btn small" disabled={running} title={testsCommand(v.req, "again", t.path)} onclick={() => again(t.path)}><Icon name="sparkle" size={10} weight={2.2} /> Ask Again…</button>
-              <button class="btn small ghost" disabled={running} onclick={() => { editing = t.path; draft = t.content; }}><Icon name="doc" size={10} weight={2} /> Edit</button>
-            </div>
+            {#if !frozen}
+              <div class="acts">
+                <button class="btn small" disabled={running} title={testsCommand(v.req, "reject", t.path)} onclick={() => reject(t.path)}><Icon name="xmark" size={10} weight={2.4} /> Reject…</button>
+                <button class="btn small" disabled={running} title={testsCommand(v.req, "again", t.path)} onclick={() => again(t.path)}><Icon name="sparkle" size={10} weight={2.2} /> Ask Again…</button>
+                <button class="btn small ghost" disabled={running} onclick={() => { editing = t.path; draft = t.content; }}><Icon name="doc" size={10} weight={2} /> Edit</button>
+              </div>
+            {/if}
           {/if}
         {/if}
       </section>
@@ -171,10 +178,12 @@
         <ul>{#each v.rejected as r (r.path + r.at)}<li><span class="mono">{r.path}</span> — “{r.reason}” · {r.by}</li>{/each}</ul>
       </details>
     {/if}
-    <div class="acts">
-      <button class="btn small ghost" disabled={running} title={testsCommand(v.req, "write")} onclick={write}><Icon name="loop" size={10} weight={2.2} /> Write Again</button>
-      <span class="muted small">{calls(v)}</span>
-    </div>
+    {#if !frozen}
+      <div class="acts">
+        <button class="btn small ghost" disabled={running} title={testsCommand(v.req, "write")} onclick={write}><Icon name="loop" size={10} weight={2.2} /> Write Again</button>
+        <span class="muted small">{calls(v)}</span>
+      </div>
+    {/if}
   {/if}
 </article>
 

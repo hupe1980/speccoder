@@ -93,11 +93,10 @@ impl Unit {
             std::fs::read_to_string(self.root.join(&self.dir).join(file)).unwrap_or_default();
         self.format.requirements_in(&text)
     }
-    fn record(&self) -> Record {
-        std::fs::read_to_string(self.file())
-            .ok()
-            .and_then(|t| serde_json::from_str(&t).ok())
-            .unwrap_or_default()
+    /// The recorded review; none written yet is the empty record, one
+    /// that cannot be read is an `Err` (never read as empty).
+    fn record(&self) -> Result<Record, String> {
+        read_record(&self.file())
     }
     /// The requirements with scenarios a review writes tests for.
     fn oracle_requirements(&self) -> Vec<crate::format::OracleRequirement> {
@@ -279,6 +278,40 @@ fn requirements_at(u: &Unit, rev: &str) -> Option<Vec<(String, String)>> {
     Some(u.format.requirements_in(&String::from_utf8_lossy(&text)))
 }
 
+/// The requirements changed in the checkout since the spec's last commit,
+/// each with its line number on both sides.
+fn changes_since_head(u: &Unit) -> Vec<speccoder_core::ReviewChange> {
+    let Some(file) = u.format.requirements_file() else {
+        return Vec::new();
+    };
+    let Some(then) = requirements_at(u, "HEAD") else {
+        return Vec::new();
+    };
+    let path = format!("{}/{file}", u.dir.trim_end_matches('/'));
+    let old_text = crate::git::Git::at(&u.root)
+        .run(&["show", &format!("HEAD:./{path}")])
+        .map(|b| String::from_utf8_lossy(&b).into_owned())
+        .unwrap_or_default();
+    let new_text = std::fs::read_to_string(u.root.join(&path)).unwrap_or_default();
+    let line_of = |text: &str, line: &Option<String>| {
+        let line = line.as_deref()?.trim_end();
+        text.lines()
+            .position(|l| l.trim_end() == line)
+            .and_then(|i| u32::try_from(i + 1).ok())
+    };
+    compare(&then, &u.requirements())
+        .into_iter()
+        .map(|d| speccoder_core::ReviewChange {
+            then_line: line_of(&old_text, &d.then),
+            now_line: line_of(&new_text, &d.now),
+            path: path.clone(),
+            id: d.id,
+            then: d.then,
+            now: d.now,
+        })
+        .collect()
+}
+
 /// What changed from `before` to `after`, requirement by requirement.
 fn compare(before: &[(String, String)], after: &[(String, String)]) -> Vec<RequirementDrift> {
     let mut ids: Vec<&String> = after.iter().map(|(id, _)| id).collect();
@@ -368,14 +401,25 @@ pub fn totals_of(
         state: None,
     };
     let requirements = u.requirements();
-    (!requirements.is_empty())
-        .then(|| totals(&items(&requirements, &u.record()), questions(&u).len()))
+    // A record that cannot be read approves nothing: every line counts open.
+    (!requirements.is_empty()).then(|| {
+        totals(
+            &items(&requirements, &u.record().unwrap_or_default()),
+            questions(&u).len(),
+        )
+    })
 }
 
 /// The review; `full` adds what changed since the last commit and the
 /// history (git reads, for the review view — not for the inbox).
 fn report_of(u: &Unit, full: bool) -> ReviewReport {
-    let items = items(&u.requirements(), &u.record());
+    // Shown as it is: a record that cannot be read approves and freezes
+    // nothing, and the report says why.
+    let (record, error) = match u.record() {
+        Ok(r) => (r, None),
+        Err(e) => (Record::default(), Some(e)),
+    };
+    let items = items(&u.requirements(), &record);
     let skills = crate::skills::discover_with(&u.root, u.format.planning());
     let installed = |name: &str| {
         let full = format!("{}{name}", u.format.planning().prefix);
@@ -385,13 +429,10 @@ fn report_of(u: &Unit, full: bool) -> ReviewReport {
     let totals = totals(&items, open.len());
     let revision = (totals.changes_requested > 0).then(|| revision_request(&items));
     let changes = if full {
-        requirements_at(u, "HEAD")
-            .map(|then| compare(&then, &u.requirements()))
-            .unwrap_or_default()
+        changes_since_head(u)
     } else {
         Vec::new()
     };
-    let record = u.record();
     let rung = u.rung();
     let (oracle, tests_notice) = if rung == speccoder_core::ladder::Rung::Feature {
         let cfg = crate::oracle::ViewConfig::at(&u.root);
@@ -418,6 +459,14 @@ fn report_of(u: &Unit, full: bool) -> ReviewReport {
             Some("Tests for this unit are written and confirmed by its own pipeline".to_owned()),
         )
     };
+    let bug_tests = if rung == speccoder_core::ladder::Rung::Bug {
+        u.state
+            .as_deref()
+            .map(|plane| confirmed_reproductions(plane, &u.feature))
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
     let mut totals = totals;
     totals.ambiguous = oracle
         .iter()
@@ -442,9 +491,55 @@ fn report_of(u: &Unit, full: bool) -> ReviewReport {
             .map(str::to_owned),
         oracle,
         tests_notice,
+        bug_tests,
         approval: record.approval,
         sheet,
+        error,
     }
+}
+
+/// The confirmed reproductions of the bugs recorded in bug unit `unit`,
+/// each with the content kept when it was confirmed (digest checked).
+fn confirmed_reproductions(plane: &Path, unit: &str) -> Vec<speccoder_core::oracle::BugTests> {
+    let mut bugs: Vec<speccoder_core::bug::BugReport> = crate::bug::state::all(plane)
+        .into_iter()
+        .filter(|b| b.unit == unit && b.confirmation.is_some())
+        .collect();
+    bugs.sort_by(|a, b| a.task.cmp(&b.task));
+    bugs.into_iter()
+        .filter_map(|b| {
+            let paths: Vec<String> = b.reproductions.iter().map(|r| r.file.clone()).collect();
+            let kept = crate::bug::state::repro(plane, &b.unit, &b.task, &paths);
+            let reproductions = b
+                .reproductions
+                .iter()
+                .map(|r| speccoder_core::oracle::BugTest {
+                    statement: r.statement.clone(),
+                    file: r.file.clone(),
+                    test: r.test.clone(),
+                    red_class: r
+                        .baseline
+                        .last()
+                        .map(|c| crate::pipeline::class_word(*c))
+                        .unwrap_or_default(),
+                    content: kept
+                        .iter()
+                        .find(|(p, _)| *p == r.file)
+                        .filter(|(_, c)| {
+                            format!("sha256:{}", crate::integrity::sha256_hex(c.as_bytes()))
+                                == r.digest
+                        })
+                        .map(|(_, c)| c.clone()),
+                })
+                .collect();
+            Some(speccoder_core::oracle::BugTests {
+                task: b.task.clone(),
+                title: b.title.clone(),
+                confirmation: b.confirmation.clone()?,
+                reproductions,
+            })
+        })
+        .collect()
 }
 
 /// Whether a feature run holds this project now.
@@ -520,7 +615,26 @@ fn sheet(
     if run_active(u) {
         blocked.push("a run is active".to_owned());
     }
+    // What the approval would record: the click sends it back, and a
+    // change in between refuses it (REVIEW-CHANGED).
+    let sha256 = match (&u.state, u.record()) {
+        (Some(plane), Ok(record)) => {
+            match crate::oracle::freezable(plane, &u.feature, &u.oracle_requirements()) {
+                Ok(f) => Some(would_approve(&u.requirements(), &record, &f)),
+                Err(t) => {
+                    blocked.push(format!("a test draft cannot be read: {}", t.0));
+                    None
+                }
+            }
+        }
+        (_, Err(e)) => {
+            blocked.push(e);
+            None
+        }
+        (None, Ok(_)) => None,
+    };
     speccoder_core::oracle::ApproveSheet {
+        sha256,
         approves: items
             .iter()
             .filter(|i| matches!(i.state.as_str(), "open" | "lapsed"))
@@ -539,16 +653,31 @@ fn sheet(
 
 /// The frozen oracle entries and the approval digest `review.json` in
 /// `dir` (project-relative, under `root`) holds.
-#[must_use]
+///
+/// # Errors
+/// The record exists but cannot be read: never read as "nothing frozen".
 pub fn oracle_entries(
     root: &Path,
     dir: &str,
-) -> (BTreeMap<String, crate::oracle::OracleEntry>, Option<String>) {
-    let record: Record = std::fs::read_to_string(root.join(dir).join(REVIEW_FILE))
-        .ok()
-        .and_then(|t| serde_json::from_str(&t).ok())
-        .unwrap_or_default();
-    (record.oracle, record.approval.map(|a| a.sha256))
+) -> Result<(BTreeMap<String, crate::oracle::OracleEntry>, Option<String>), String> {
+    let record = read_record(&root.join(dir).join(REVIEW_FILE))?;
+    Ok((record.oracle, record.approval.map(|a| a.sha256)))
+}
+
+/// `review.json` at `file`: absent is the empty record; present and not
+/// valid is an error naming it.
+fn read_record(file: &Path) -> Result<Record, String> {
+    match std::fs::read_to_string(file) {
+        Ok(text) => serde_json::from_str(&text)
+            .map_err(|e| format!("{} is not a valid review record: {e}", file.display())),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Record::default()),
+        Err(e) => Err(format!("{}: {e}", file.display())),
+    }
+}
+
+/// The refusal for a review record that cannot be read.
+fn unreadable(e: &str) -> CommandResult {
+    CommandResult::new("review", CommandStatus::NeedsHuman, e).with_code("REVIEW-UNREADABLE")
 }
 
 fn message(r: &ReviewReport) -> String {
@@ -656,7 +785,10 @@ pub fn decide_in(
         .with_code("USAGE");
     }
     let requirements = u.requirements();
-    let mut record = u.record();
+    let mut record = match u.record() {
+        Ok(r) => r,
+        Err(e) => return unreadable(&e),
+    };
     let before = items(&requirements, &record);
     // A wording that still asks a question is not one to sign: approving
     // it is refused; approving "the rest" passes it by and says so.
@@ -826,6 +958,38 @@ pub fn decide_in(
         .with_data(CommandData::Review(Box::new(r)))
 }
 
+/// The approval digest *Approve and Run* records when it runs now: every
+/// decision line approved after it (each open or lapsed one approved on
+/// its wording), and the requirements it freezes — what the sheet shows,
+/// so the click binds to it.
+fn would_approve(
+    requirements: &[(String, String)],
+    record: &Record,
+    freezable: &[crate::oracle::Freezable],
+) -> String {
+    let before = items(requirements, record);
+    let approved: Vec<(String, String)> = requirements
+        .iter()
+        .filter_map(|(id, line)| {
+            let state = before.iter().find(|i| i.id == *id)?.state.as_str();
+            match state {
+                "open" | "lapsed" => Some((id.clone(), digest(line))),
+                _ => record
+                    .requirements
+                    .get(id)
+                    .filter(|d| d.verdict == "approved")
+                    .map(|d| (id.clone(), d.sha256.clone())),
+            }
+        })
+        .collect();
+    approval_digest(
+        approved.iter().map(|(a, b)| (a.as_str(), b.as_str())),
+        freezable
+            .iter()
+            .map(|f| (f.req.key.as_str(), f.manifest.as_str())),
+    )
+}
+
 /// The approval digest (research R6): SHA-256 over the approved decision
 /// lines (`ID=line digest`, sorted) and the frozen oracle entries
 /// (`REQ=manifest digest`, sorted).
@@ -865,6 +1029,7 @@ pub fn approve_and_run(
     feature: Option<&str>,
     mode: speccoder_core::oracle::RunMode,
     grants: &[String],
+    sheet: Option<&str>,
     via: speccoder_core::actions::Via,
     state: Option<&Path>,
     provider: Option<std::sync::Arc<dyn agentplane::model::ModelProvider>>,
@@ -895,6 +1060,11 @@ pub fn approve_and_run(
             ),
         );
     }
+    // Nothing writes the unit's tests while they are frozen.
+    let lock = match crate::oracle::UnitLock::take(&plane, &u.feature) {
+        Ok(l) => l,
+        Err(e) => return refuse(CommandStatus::GitPrecondition, "RUN-ACTIVE", e),
+    };
     let open = questions(&u);
     if !open.is_empty() {
         return refuse(
@@ -911,7 +1081,10 @@ pub fn approve_and_run(
         );
     }
     let named = u.oracle_requirements();
-    let ambiguous = crate::oracle::open_ambiguities(&plane, &u.feature, &named);
+    let ambiguous = match crate::oracle::open_ambiguities(&plane, &u.feature, &named) {
+        Ok(a) => a,
+        Err(t) => return refuse(CommandStatus::NeedsHuman, "ORACLE-TAMPERED", t.0),
+    };
     if !ambiguous.is_empty() {
         return refuse(
             CommandStatus::NeedsHuman,
@@ -979,7 +1152,10 @@ pub fn approve_and_run(
     };
     // The decision lines: every one open or lapsed is approved now.
     let requirements = u.requirements();
-    let mut record = u.record();
+    let mut record = match u.record() {
+        Ok(r) => r,
+        Err(e) => return unreadable(&e),
+    };
     let before = items(&requirements, &record);
     let who = crate::approvals::Who::local_in(&u.root, via);
     let at = std::time::SystemTime::now()
@@ -1021,6 +1197,24 @@ pub fn approve_and_run(
             .iter()
             .map(|f| (f.req.key.as_str(), f.manifest.as_str())),
     );
+    // A click binds to what its sheet showed; a terminal command acts on
+    // what it reads now.
+    if sheet.is_none() && via != speccoder_core::actions::Via::Terminal {
+        return refuse(
+            CommandStatus::UsageError,
+            "USAGE",
+            "Approve and Run names what its sheet showed (the sheet's sha256): open the sheet again".to_owned(),
+        );
+    }
+    if let Some(shown) = sheet
+        && shown != sha
+    {
+        return refuse(
+            CommandStatus::NeedsHuman,
+            "REVIEW-CHANGED",
+            "what Approve and Run would approve and freeze changed since the sheet showed it (another tab, a finished Write Tests): nothing was approved — look at the sheet again".to_owned(),
+        );
+    }
     record.oracle.clear();
     let mut frozen = Vec::new();
     for f in &freezable {
@@ -1106,6 +1300,7 @@ pub fn approve_and_run(
         },
         u.rel()
     );
+    drop(lock);
     let mut run_options = options.clone();
     run_options.mode = mode;
     if mode == RunMode::Autopilot {

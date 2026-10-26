@@ -1085,6 +1085,13 @@
             "mode": {
               "$ref": "#/$defs/RunMode",
               "description": "How the run asks."
+            },
+            "sheet": {
+              "description": "The sheet's `sha256`: what the person saw approved and frozen.\nRequired from every interface but a terminal command.",
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           "required": [

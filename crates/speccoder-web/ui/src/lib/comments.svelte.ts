@@ -13,13 +13,17 @@ class Comments {
   view = $state<CommentsView | null>(null);
   /** The tray is open (a chip otherwise). */
   open = $state(false);
+  /** Why the host could not read the tray: said, never shown as empty. */
+  error = $state<string | null>(null);
 
   async load() {
     try {
       const r = await get<Reply<CommentsView>>(`/api/review/comments${q({ feature: app.feature ?? undefined })}`);
       this.view = r.data ?? null;
-    } catch {
+      this.error = r.data || r.status === "ok" || r.status === "selection_needed" ? null : (r.message ?? null);
+    } catch (e) {
       this.view = null;
+      this.error = e instanceof Error ? e.message : String(e);
     }
   }
 
