@@ -180,9 +180,56 @@ pub struct Ran {
     pub result: Option<(CheckResult, Option<RunnerSummary>)>,
 }
 
+/// The marker a worktree carries while held-out files are overlaid on it:
+/// in its git admin directory (outside the tree), naming each overlaid
+/// path by its SHA-256 only — so a view of the worktree can hide them
+/// without the marker telling anyone what they are.
+const OVERLAY_MARKER: &str = "speccoder-held-out-overlay.json";
+
+fn overlay_marker(wt_root: &Path) -> Option<PathBuf> {
+    crate::git::Git::at(wt_root)
+        .line(&["rev-parse", "--absolute-git-dir"])
+        .ok()
+        .filter(|d| !d.is_empty())
+        .map(|d| PathBuf::from(d).join(OVERLAY_MARKER))
+}
+
+/// The digests of the worktree-relative paths overlaid on `wt_root` now:
+/// `Some(empty)` when nothing is; `None` when a marker exists that cannot
+/// be read (then nothing untracked may be shown).
+#[must_use]
+pub fn overlaid(wt_root: &Path) -> Option<Vec<String>> {
+    let Some(marker) = overlay_marker(wt_root) else {
+        return Some(Vec::new());
+    };
+    match std::fs::read_to_string(&marker) {
+        Ok(t) => serde_json::from_str(&t).ok(),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Some(Vec::new()),
+        Err(_) => None,
+    }
+}
+
+/// The SHA-256 a worktree-relative path is named by in the marker.
+#[must_use]
+pub fn overlay_key(rel: &str) -> String {
+    sha256_hex(rel.as_bytes())
+}
+
+/// Removes the marker when the overlay ends, however it ends.
+struct OverlayMarker(Option<PathBuf>);
+
+impl Drop for OverlayMarker {
+    fn drop(&mut self) {
+        if let Some(m) = &self.0 {
+            let _ = std::fs::remove_file(m);
+        }
+    }
+}
+
 /// Writes each held-out file over the worktree, runs its command, and puts
 /// the tree back exactly as it was: no file of the set, nothing a test wrote,
 /// no changed judge input survives — a later attempt can read none of it.
+/// While it runs, the worktree's marker hides the files from its views.
 pub fn overlay_run(
     wt_root: &Path,
     project: &Path,
@@ -193,6 +240,39 @@ pub fn overlay_run(
 ) -> Result<Vec<Ran>, String> {
     let before = worktree::checkpoint(wt_root, tmp).map_err(|e| e.0)?;
     let judged = JudgeSnapshot::take(wt_root, policy);
+    let prefix = {
+        let canonical = |p: &Path| std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+        canonical(project)
+            .strip_prefix(canonical(wt_root))
+            .map(|r| r.to_string_lossy().replace('\\', "/"))
+            .unwrap_or_default()
+    };
+    // Each file and each directory above it (a new directory is listed
+    // untracked as a whole).
+    let mut keys: Vec<String> = Vec::new();
+    for (f, _) in files {
+        let rel = if prefix.is_empty() {
+            f.path.clone()
+        } else {
+            format!("{prefix}/{}", f.path)
+        };
+        let mut at = rel.as_str();
+        loop {
+            let key = overlay_key(at);
+            if !keys.contains(&key) {
+                keys.push(key);
+            }
+            match at.rfind('/') {
+                Some(i) => at = &at[..i],
+                None => break,
+            }
+        }
+    }
+    let marker = OverlayMarker(overlay_marker(wt_root));
+    if let Some(m) = &marker.0 {
+        std::fs::write(m, serde_json::to_string(&keys).unwrap_or_default())
+            .map_err(|e| format!("the held-out overlay marker: {e}"))?;
+    }
     let mut out = Vec::new();
     for (f, content) in files {
         let full = project.join(&f.path);

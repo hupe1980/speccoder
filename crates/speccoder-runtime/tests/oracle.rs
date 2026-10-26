@@ -1438,3 +1438,82 @@ fn a_test_comment_whose_ask_again_failed_goes_back_to_the_tray() {
         sent.message()
     );
 }
+
+#[test]
+fn the_code_view_never_shows_a_held_out_file_or_follows_a_link_out_of_the_worktree() {
+    // C7: an untracked symlink into the held-out store; P5: the held-out
+    // files overlaid on the worktree while they are judged.
+    let r = repo();
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = written(r.path(), state.path());
+    write_lib(&f, "c1", "pub fn ok() {}\npub fn login() {}\n");
+    let res = speccoder_runtime::review::approve_and_run(
+        r.path(),
+        None,
+        RunMode::Ask,
+        &[],
+        Via::Web,
+        Some(state.path()),
+        Some(d),
+        &one_task(),
+    );
+    let Some(CommandData::Feature(fr)) = res.data() else {
+        panic!("{}", res.message())
+    };
+    let wt = PathBuf::from(&fr.attempts[0].worktree);
+    let plane = speccoder_runtime::worktree::project_state_dir(state.path(), r.path());
+    let sealed = speccoder_runtime::held_out::sealed_dir(&plane, "001-graph", "US1");
+    let target = sealed.join("files").join(HELD_OUT_PATH);
+    assert!(fs::read_to_string(&target).unwrap().contains(SECRET));
+    std::os::unix::fs::symlink(&target, wt.join("tests/link.txt")).unwrap();
+    let read = speccoder_runtime::service::code::worktree_file(r.path(), None, "tests/link.txt");
+    assert!(read.is_err(), "{read:?}");
+    fs::remove_file(wt.join("tests/link.txt")).unwrap();
+
+    // An overlay that runs a second: polled meanwhile, nothing of it shows.
+    let set = vec![(
+        speccoder_runtime::held_out::HeldOutFile {
+            path: "tests/held_out_overlay.txt".to_owned(),
+            sha256: String::new(),
+            scenarios: vec!["US1-1".to_owned()],
+            argv: vec!["sleep".to_owned(), "1".to_owned()],
+            composition: false,
+        },
+        format!("{SECRET}\n"),
+    )];
+    let tmp = tempfile::tempdir().unwrap();
+    let (wt2, tmp2) = (wt.clone(), tmp.path().to_path_buf());
+    let overlay = std::thread::spawn(move || {
+        speccoder_runtime::held_out::overlay_run(
+            &wt2,
+            &wt2,
+            &tmp2,
+            &set,
+            &speccoder_runtime::sandbox::Runner::Plain,
+            &speccoder_runtime::tools::policy::Policy::new(&[], &[]),
+        )
+    });
+    let mut seen_on_disk = false;
+    while !overlay.is_finished() {
+        if wt.join("tests/held_out_overlay.txt").exists() {
+            seen_on_disk = true;
+            let view = speccoder_runtime::service::code::worktree_view(r.path(), None);
+            assert!(
+                view.entries
+                    .iter()
+                    .all(|e| !e.path.contains("held_out_overlay")),
+                "{:?}",
+                view.entries
+            );
+            let read = speccoder_runtime::service::code::worktree_file(
+                r.path(),
+                None,
+                "tests/held_out_overlay.txt",
+            );
+            assert!(read.is_err(), "{read:?}");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    overlay.join().unwrap().unwrap();
+    assert!(seen_on_disk, "the overlay was polled while it ran");
+}

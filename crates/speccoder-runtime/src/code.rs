@@ -242,6 +242,9 @@ pub fn worktree_view(root: &Path, feature: Option<&str>) -> WorktreeView {
             "--ignored=matching",
         ])
         .unwrap_or_default();
+    // Held-out files overlaid for a judge run are never listed (D-081):
+    // with a marker that cannot be read, nothing untracked is.
+    let overlaid = crate::held_out::overlaid(&wt);
     let entries = crate::git::nul_fields(&out)
         .into_iter()
         .filter_map(|e| {
@@ -251,7 +254,11 @@ pub fn worktree_view(root: &Path, feature: Option<&str>) -> WorktreeView {
                 "!!" => "ignored",
                 _ => "modified",
             };
-            Some(WorktreeEntry { path, state })
+            let hidden = state != "modified"
+                && overlaid.as_ref().is_none_or(|keys| {
+                    keys.contains(&crate::held_out::overlay_key(path.trim_end_matches('/')))
+                });
+            (!hidden).then_some(WorktreeEntry { path, state })
         })
         .take(2000)
         .collect();
@@ -427,7 +434,35 @@ pub fn worktree_file(root: &Path, feature: Option<&str>, path: &str) -> Result<S
         return Err(format!("{path} is not an untracked file of the worktree"));
     }
     let wt = PathBuf::from(view.path.unwrap_or_default());
-    let bytes = std::fs::read(wt.join(path)).map_err(|e| e.to_string())?;
+    let full = wt.join(path);
+    // A link is never followed (it could point into the state directory,
+    // a frozen or held-out set): the file itself, inside the worktree.
+    let meta = std::fs::symlink_metadata(&full).map_err(|e| e.to_string())?;
+    if meta.file_type().is_symlink() {
+        return Err(format!("{path} is a symbolic link: not shown"));
+    }
+    let inside = match (std::fs::canonicalize(&wt), std::fs::canonicalize(&full)) {
+        (Ok(w), Ok(f)) => f.starts_with(&w) && f != w,
+        _ => false,
+    };
+    if !inside || !meta.is_file() {
+        return Err(format!("{path} is not a file of the worktree"));
+    }
+    let overlay = || crate::held_out::overlaid(&wt).is_none_or(|k| !k.is_empty());
+    if overlay() {
+        return Err(
+            "held-out tests are being checked in the worktree: look again when the check ends"
+                .to_owned(),
+        );
+    }
+    let bytes = std::fs::read(&full).map_err(|e| e.to_string())?;
+    // An overlay that began while the file was read: nothing is shown.
+    if overlay() {
+        return Err(
+            "held-out tests are being checked in the worktree: look again when the check ends"
+                .to_owned(),
+        );
+    }
     if bytes.len() > FILE_LIMIT {
         return Err(format!("{path} is larger than {} KB", FILE_LIMIT / 1024));
     }
