@@ -28,6 +28,17 @@
         "level": {
           "$ref": "#/$defs/DoctorLevel",
           "description": "Pass, warn or fail."
+        },
+        "remedy": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Remedy"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The fix speccoder can apply itself, on the person's yes."
         }
       },
       "required": [
@@ -61,6 +72,395 @@
           "const": "fail",
           "description": "A run would fail or judge wrongly.",
           "type": "string"
+        }
+      ]
+    },
+    "Remedy": {
+      "description": "The fix speccoder knows and can apply itself: what it does, the exact\ncommand it amounts to, how to take it back. An interface offers it as\none action (never applies it unasked); a script reads the command.",
+      "properties": {
+        "command": {
+          "description": "The same, as a command run in the checkout.",
+          "type": "string"
+        },
+        "effect": {
+          "description": "What it changes, in one line.",
+          "type": "string"
+        },
+        "history": {
+          "description": "It writes git history (a commit): an interface asks first.",
+          "type": "boolean"
+        },
+        "label": {
+          "description": "The action, a verb first (`Commit Cargo.lock`).",
+          "type": "string"
+        },
+        "run": {
+          "$ref": "#/$defs/Runnable",
+          "description": "How an interface applies it."
+        },
+        "undo": {
+          "description": "How to take it back once applied.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "label",
+        "effect",
+        "command",
+        "undo",
+        "history",
+        "run"
+      ],
+      "type": "object"
+    },
+    "Runnable": {
+      "description": "How an interface runs an action itself.",
+      "oneOf": [
+        {
+          "description": "A planning skill (`speccoder spec <name> <arguments>`).",
+          "properties": {
+            "arguments": {
+              "description": "Its arguments (the input, when one is asked for).",
+              "type": "string"
+            },
+            "kind": {
+              "const": "skill",
+              "type": "string"
+            },
+            "name": {
+              "description": "The skill.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "name",
+            "arguments"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "`speccoder run`, the feature or one task.",
+          "properties": {
+            "kind": {
+              "const": "run",
+              "type": "string"
+            },
+            "task": {
+              "description": "One task, or the feature's ready tasks.",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "task"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "`speccoder run --converge`: the ready tasks, then the assessment of\nthe code against the spec as it is now, appending what remains.",
+          "properties": {
+            "kind": {
+              "const": "converge",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Commit exactly these planning files.",
+          "properties": {
+            "kind": {
+              "const": "commit",
+              "type": "string"
+            },
+            "paths": {
+              "description": "Repository-relative paths.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "kind",
+            "paths"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Approve the task's waiting call.",
+          "properties": {
+            "kind": {
+              "const": "approve",
+              "type": "string"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Reject it (the input is the reason).",
+          "properties": {
+            "kind": {
+              "const": "reject",
+              "type": "string"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Tick the task on the person's word (the input is the reason).",
+          "properties": {
+            "kind": {
+              "const": "accept",
+              "type": "string"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Skip the task (the input is the reason).",
+          "properties": {
+            "kind": {
+              "const": "skip",
+              "type": "string"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Leave a note for the task's next attempts (the input is the note).",
+          "properties": {
+            "kind": {
+              "const": "nudge",
+              "type": "string"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Rule that a held attempt's tests are right (the input is the reason).",
+          "properties": {
+            "kind": {
+              "const": "rule",
+              "type": "string"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Record the person's review of requirements (the input is the\ncomment; required to request changes).",
+          "properties": {
+            "ids": {
+              "description": "The requirement identifiers; empty: every one not yet approved.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "kind": {
+              "const": "review",
+              "type": "string"
+            },
+            "verdict": {
+              "description": "`approve`, `request` (changes), `clear`; `answer` (ids: the\nquestion) and `edit` / `edit-approve` (ids: the requirement) take\nthe input as the words.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "ids",
+            "verdict"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Tell a GitHub issue it is being specified as the current feature.",
+          "properties": {
+            "assign": {
+              "description": "Also assign it to the person.",
+              "type": "boolean"
+            },
+            "issue": {
+              "description": "The issue's number.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "kind": {
+              "const": "issue_comment",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "issue",
+            "assign"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Record a quick change and, when `run`, run it.",
+          "properties": {
+            "checks": {
+              "description": "When it is done: its acceptance scenarios.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "kind": {
+              "const": "quick_change",
+              "type": "string"
+            },
+            "request": {
+              "description": "The change, in the person's words.",
+              "type": "string"
+            },
+            "run": {
+              "description": "Run it once recorded.",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "kind",
+            "request",
+            "checks",
+            "run"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Commit the changes set aside before the task's run onto the\nfeature's branch, as the person's own.",
+          "properties": {
+            "kind": {
+              "const": "keep_set_aside",
+              "type": "string"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Discard them.",
+          "properties": {
+            "kind": {
+              "const": "drop_set_aside",
+              "type": "string"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Commit the setup a run stops on (an uncommitted lockfile, build\noutput not ignored) in the checkout.",
+          "properties": {
+            "kind": {
+              "const": "fix_setup",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Pick the current feature.",
+          "properties": {
+            "kind": {
+              "const": "feature",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Push the feature's branch and open (or update) its draft pull request.",
+          "properties": {
+            "kind": {
+              "const": "pull_request",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
         }
       ]
     }

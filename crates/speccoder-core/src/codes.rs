@@ -273,6 +273,14 @@ pub const CATALOG: &[Entry] = &[
         ["git status"]
     ),
     entry!(
+        "SETUP-INCOMPLETE",
+        E,
+        S::GitPrecondition,
+        "the project's setup is not committed, so every run would trip over it",
+        "A run works in a worktree checked out from a commit. A file the checks need but the checkout never committed (`.config/nextest.toml`, `speccoder.toml`), a lockfile the checks write, or build output `.gitignore` does not list, is missing there or left behind on every run. `speccoder fix` commits the setup once in the checkout; the message shows the same as git commands.",
+        ["speccoder fix"]
+    ),
+    entry!(
         "NO-REPOSITORY",
         E,
         S::GitPrecondition,

@@ -21,6 +21,7 @@ fn check(name: &str, level: DoctorLevel, detail: impl Into<String>) -> DoctorChe
         detail: detail.into(),
         code: None,
         fix: Vec::new(),
+        remedy: None,
     }
 }
 
@@ -109,7 +110,8 @@ pub fn checks(
                 format!("{kind} at {}{feature}", o.snapshot.root),
             ));
             out.push(current_check(o.adapter, &o.snapshot));
-            if let Some(c) = untracked_check(Path::new(&o.snapshot.root)) {
+            let name = o.snapshot.feature.as_ref().map(|f| f.feature.name.as_str());
+            if let Some(c) = untracked_check(Path::new(&o.snapshot.root), name) {
                 out.push(c);
             }
             if let Some((tool, install)) = o.adapter.tool() {
@@ -423,7 +425,7 @@ pub fn run(path: &Path, feature: Option<&str>, look: Option<&str>) -> CommandRes
 /// Untracked configuration a worktree will not have: speccoder works on
 /// commits, so a check that reads `.config/nextest.toml` or an untracked
 /// `*.toml` passes here and cannot run there.
-fn untracked_check(root: &Path) -> Option<DoctorCheck> {
+fn untracked_check(root: &Path, feature: Option<&str>) -> Option<DoctorCheck> {
     let out = Git::at(root)
         .run(&["status", "--porcelain", "--untracked-files=normal", "."])
         .ok()?;
@@ -474,6 +476,8 @@ fn untracked_check(root: &Path) -> Option<DoctorCheck> {
         fix: vec![format!(
             "git add {list} && git commit -m \"Track project config\"   (if the checks need them)"
         )],
+        // What of it a run needs, speccoder commits itself.
+        remedy: crate::code::setup_remedy(root, feature),
         ..check(
             "untracked",
             DoctorLevel::Warn,

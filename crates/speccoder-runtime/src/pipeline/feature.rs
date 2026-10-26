@@ -450,7 +450,8 @@ pub fn run_feature_with(
                 attempts,
                 res.status(),
                 format!("{task}: {}", res.message()),
-            );
+            )
+            .caused_by(&res);
         }
     }
     finish(

@@ -430,6 +430,22 @@ fn main() {
             return;
         }
         Command::Inspect => speccoder_runtime::inspect(path, feature),
+        Command::Fix { dry_run: true } => {
+            match speccoder_runtime::code::setup_remedy(path, feature) {
+                Some(r) => speccoder_core::CommandResult::new(
+                    "fix",
+                    speccoder_core::CommandStatus::Ok,
+                    &format!("{} (dry run, nothing changed): {}", r.label, r.command),
+                )
+                .with_remedy(Some(r)),
+                None => speccoder_core::CommandResult::new(
+                    "fix",
+                    speccoder_core::CommandStatus::Ok,
+                    "nothing in the setup stops a run",
+                ),
+            }
+        }
+        Command::Fix { dry_run: false } => speccoder_runtime::code::fix_setup(path, feature),
         Command::Worktree => speccoder_runtime::worktree(path, feature),
         Command::Propose { task } => speccoder_runtime::propose(path, feature, task),
         Command::Doctor { bug_report } => {
@@ -873,6 +889,19 @@ fn finish(
         Ok(()) => result.exit_code(),
         Err(_) => ExitCode::INTERNAL,
     };
+    // A fix speccoder knows is offered, at a terminal, then the command
+    // runs again; never on its own, and never for a script.
+    if let Some(remedy) = result.remedy()
+        && offers_remedy(cli)
+        && follow::remedy(path, feature, remedy)
+    {
+        let again = std::env::current_exe().and_then(|exe| {
+            std::process::Command::new(exe)
+                .args(std::env::args_os().skip(1))
+                .status()
+        });
+        std::process::exit(again.ok().and_then(|s| s.code()).unwrap_or(1));
+    }
     // At a terminal, the next step is offered rather than only printed.
     let code = if result.status() == speccoder_core::CommandStatus::Ok && offers_next(cli) {
         follow::offer(path, feature, verbosity(cli), code)
@@ -880,6 +909,28 @@ fn finish(
         code
     };
     std::process::exit(i32::from(code.code()));
+}
+
+/// Whether a remedy is offered after this command: a run or a quick change
+/// that may ask, at a terminal, for a person.
+fn offers_remedy(cli: &Cli) -> bool {
+    use std::io::IsTerminal;
+    if cli.json || cli.events || !std::io::stdin().is_terminal() || !std::io::stderr().is_terminal()
+    {
+        return false;
+    }
+    matches!(
+        &cli.command,
+        Some(
+            Command::Run {
+                no_prompt: false,
+                ..
+            } | Command::Do {
+                no_prompt: false,
+                ..
+            }
+        )
+    )
 }
 
 /// Whether the next step is offered after this command: a planning step, a
@@ -1077,6 +1128,7 @@ fn command_name(command: Option<&Command>) -> &'static str {
         Some(c) => match c {
             C::Init { .. } => "init",
             C::Doctor { .. } => "doctor",
+            C::Fix { .. } => "fix",
             C::Spec { .. } => "spec",
             C::Feature { .. } => "feature",
             C::Ui { .. } => "ui",

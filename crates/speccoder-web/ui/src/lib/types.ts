@@ -83,11 +83,22 @@ export interface Report {
   review?: ReviewTotals | null;
 }
 
+/** A fix speccoder can apply itself, on the person's yes. */
+export interface Remedy {
+  label: string;
+  effect: string;
+  command: string;
+  undo: string | null;
+  history: boolean;
+  run: Runnable;
+}
+
 export interface Envelope<T = unknown> {
   status: string;
   message: string;
   code?: string;
   fix?: string[];
+  remedy?: Remedy;
   next?: { command: string; why: string }[];
   payload?: string;
   data?: T;

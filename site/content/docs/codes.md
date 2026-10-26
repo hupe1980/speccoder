@@ -35,6 +35,7 @@ Every result that is not plainly `ok` names a code — `error[CODE]`, `stopped[C
 | [`KEY-MISSING`](#key-missing) | error | 13 | the model provider's API key is not in the environment |
 | [`NO-CHECKS`](#no-checks) | error | 13 | no check applies, so nothing could show that nothing regressed |
 | [`GIT`](#git) | error | 14 | git is not in the state this command needs |
+| [`SETUP-INCOMPLETE`](#setup-incomplete) | error | 14 | the project's setup is not committed, so every run would trip over it |
 | [`NO-REPOSITORY`](#no-repository) | error | 14 | speccoder needs a git repository with at least one commit |
 | [`UNCOMMITTED-INTENT`](#uncommitted-intent) | error | 14 | the spec has uncommitted changes the run would not see |
 | [`NO-REMOTE`](#no-remote) | error | 14 | there is no git remote to push to |
@@ -270,6 +271,14 @@ Git is not in the state this command needs.
 A git precondition does not hold; the message names it.
 
 - `git status`
+
+### SETUP-INCOMPLETE
+
+The project's setup is not committed, so every run would trip over it.
+
+A run works in a worktree checked out from a commit. A file the checks need but the checkout never committed (`.config/nextest.toml`, `speccoder.toml`), a lockfile the checks write, or build output `.gitignore` does not list, is missing there or left behind on every run. `speccoder fix` commits the setup once in the checkout; the message shows the same as git commands.
+
+- `speccoder fix`
 
 ### NO-REPOSITORY
 

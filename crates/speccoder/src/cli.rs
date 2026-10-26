@@ -129,6 +129,13 @@ pub enum Command {
         #[arg(long)]
         yes: bool,
     },
+    /// Fix what in the project's setup stops a run: commit it in your checkout.
+    #[command(hide = true)]
+    Fix {
+        /// Show what it would do, and change nothing.
+        #[arg(long)]
+        dry_run: bool,
+    },
     /// Check git, the sandbox, the model key, the spec tools and the config; changes nothing.
     Doctor {
         /// A redacted Markdown bundle to paste into an issue.

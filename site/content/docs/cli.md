@@ -88,6 +88,7 @@ Listed by `speccoder help advanced`.
 
 | Command | What it does |
 |---|---|
+| `speccoder fix [--dry-run]` | Commit what in the project's setup stops a run (an uncommitted `.config/nextest.toml`, a lockfile the checks write, build output not ignored) in your checkout as `speccoder: setup` |
 | `speccoder attest verify [REV\|RANGE] [--allowed-signers FILE] [--certificate-identity I --certificate-oidc-issuer O] [--require-signed]` | Re-check every tick's [attestation](@/docs/attestations.md) against its commit, and its signatures against your trust |
 | `speccoder attest sign [REV\|RANGE]` | Sign the statements ticks left unsigned |
 | `speccoder verify [--tier fast\|full] [--against FILE]` | Run the configured checks; compare with a saved `--json` result |
@@ -121,6 +122,7 @@ With `--json` every command prints exactly one object on stdout and no progress 
 
 - `status` is the exit code's name in `snake_case`.
 - `code`, `fix` and `docs` are present on every result that is not plainly `ok`, and on an `ok` with less evidence (`REGRESSION-ONLY`). Branch on `code`, never on `message`.
+- `remedy`, when present, is a fix speccoder can apply itself: `label`, `effect`, the exact `command`, `undo`, and whether it writes git `history`. Nothing applies it unasked: at a terminal `speccoder run` offers it (`[y/N]`) and runs again on a yes; the app shows it as a card; an editor gets a permission request.
 - `payload` names the schema `data` follows.
 - `--help` and `--version` always print text.
 
