@@ -5,11 +5,17 @@
 //! in the `speccoder` crate keeps its dependency closure free of IO and async
 //! crates.
 
+pub mod acceptance;
 pub mod actions;
+pub mod bug;
 pub mod codes;
 mod command;
+pub mod context;
+pub mod event;
 pub mod evidence;
 pub mod graph;
+pub mod inbox;
+pub mod ladder;
 pub mod next;
 pub mod predicate;
 pub mod retry;

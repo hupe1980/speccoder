@@ -363,6 +363,45 @@ pub fn classify_red(result: &CheckResult, summary: Option<&RunnerSummary>) -> Re
     }
 }
 
+/// The class of each test in `wanted` from a run's JUnit report: a test
+/// matches by its id or its last `::` segments; one the report does not
+/// name was not collected. `None` when the run has no per-test report —
+/// then each test is run on its own, by name.
+#[must_use]
+pub fn classify_red_each(
+    result: &CheckResult,
+    wanted: &[String],
+) -> Option<Vec<(String, RedClass)>> {
+    if result.status == CheckStatus::TimedOut {
+        return Some(
+            wanted
+                .iter()
+                .map(|w| (w.clone(), RedClass::Timeout))
+                .collect(),
+        );
+    }
+    let tests = result.tests.as_ref()?;
+    Some(
+        wanted
+            .iter()
+            .map(|w| {
+                let found = tests.iter().find(|t| {
+                    t.id == *w
+                        || t.id.ends_with(&format!("::{w}"))
+                        || t.id.ends_with(&format!(".{w}"))
+                });
+                let class = match found.map(|t| t.outcome) {
+                    Some(TestOutcome::Failed) => RedClass::Assertion,
+                    Some(TestOutcome::Error) => RedClass::CollectionError,
+                    Some(TestOutcome::Passed) => RedClass::Passed,
+                    Some(TestOutcome::Skipped) | None => RedClass::NoTests,
+                };
+                (w.clone(), class)
+            })
+            .collect(),
+    )
+}
+
 /// How strong the evidence for a task is.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case", tag = "verdict")]
@@ -454,6 +493,50 @@ pub fn with_held_out(verdict: Verdict, held_out: &HeldOut) -> Verdict {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn each_test_gets_its_own_red_class() {
+        let mut r = check("acceptance", CheckStatus::Failed, Some(&[]));
+        r.tests = Some(vec![
+            TestResult {
+                id: "title::empty_title_is_refused".to_owned(),
+                outcome: TestOutcome::Failed,
+            },
+            TestResult {
+                id: "tests.test_title.test_long".to_owned(),
+                outcome: TestOutcome::Passed,
+            },
+            TestResult {
+                id: "setup_broken".to_owned(),
+                outcome: TestOutcome::Error,
+            },
+        ]);
+        let wanted: Vec<String> = [
+            "empty_title_is_refused",
+            "test_long",
+            "setup_broken",
+            "gone",
+        ]
+        .iter()
+        .map(|s| (*s).to_owned())
+        .collect();
+        let classes: Vec<RedClass> = classify_red_each(&r, &wanted)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(_, c)| c)
+            .collect();
+        assert_eq!(
+            classes,
+            [
+                RedClass::Assertion,
+                RedClass::Passed,
+                RedClass::CollectionError,
+                RedClass::NoTests
+            ]
+        );
+        r.tests = None;
+        assert!(classify_red_each(&r, &wanted).is_none(), "by name instead");
+    }
 
     fn check(
         name: &str,

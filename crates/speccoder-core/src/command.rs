@@ -202,6 +202,8 @@ pub enum CommandData {
     EvidenceTour(Box<crate::tour::EvidenceTour>),
     /// `actions`: what can be done now.
     Actions(Box<ActionsReport>),
+    /// `bug`: a bug, its reproductions and how far it got.
+    Bug(Box<crate::bug::BugReport>),
 }
 
 /// Result of `speccoder actions`: what a person can do now in the
@@ -359,8 +361,13 @@ pub struct InboxItem {
     /// (changes requested on the spec), `stuck` (the
     /// last attempt did not pass), `aside` (changes a run set aside),
     /// `commit` (planning files a run cannot
-    /// read yet), `handoff` (every task done: review and hand it off).
+    /// read yet), `handoff` (every task done: review and hand it off) —
+    /// and a bug's `bug_confirm`, `bug_cannot_reproduce`,
+    /// `bug_unchanged_not_holding`, `bug_repro_weak`,
+    /// `bug_already_satisfied` (the registry: `speccoder_core::inbox::Kind`).
     pub kind: String,
+    /// Its group: `blocked_on_you` or `ready_to_review`.
+    pub group: String,
     /// The feature.
     pub feature: String,
     /// The task, when it is about one.
@@ -630,6 +637,7 @@ impl CommandData {
             Self::BranchVerify(_) => "branch_verify",
             Self::EvidenceTour(_) => "evidence_tour",
             Self::Actions(_) => "actions",
+            Self::Bug(_) => "bug",
         }
     }
 }
@@ -671,6 +679,7 @@ pub const PAYLOADS: &[&str] = &[
     "branch_verify",
     "evidence_tour",
     "actions",
+    "bug",
 ];
 
 /// A repository instructions file given to an attempt.
@@ -1003,6 +1012,10 @@ pub struct RunReport {
     /// The acceptance set's strength: after a `verified` verdict.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub strength: Option<crate::strength::AcceptanceStrength>,
+    /// A bug task: the bug as this run left it (reproduce, confirm, the
+    /// fix's discrimination).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bug: Option<Box<crate::bug::BugReport>>,
 }
 
 /// A failed attempt that was undone and retried.
