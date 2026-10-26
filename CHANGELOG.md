@@ -41,7 +41,8 @@ adheres to [Semantic Versioning](https://semver.org/).
   `speccoder workflow install --overlay bugfix` lets Spec Kit's `bugfix`
   workflow run speccoder for its test step. JSON payload `bug`, `bug.*`
   events (with public projections of the domain events), `BUG-*` codes, the
-  `[bug]` settings, and six bug cases in `evals/bugs`.
+  `[bug]` settings, and seven bug cases in `evals/bugs` (one a scripted
+  executor that special-cases the reproduction).
 - **The model's reasoning.** Each attempt turn asks the provider for a
   summary of the model's reasoning (Anthropic, OpenAI Responses;
   `[model] reasoning_summary = false` turns it off). It is shown as the
