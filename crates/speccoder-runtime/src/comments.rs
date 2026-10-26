@@ -1453,6 +1453,20 @@ mod tests {
     const DOC: &str = "# Spec\n\nIntro.\n\n## Requirements\n\n### Functional\n\n- FR-001 a\n\n## Edge Cases\n\n- none\n";
 
     #[test]
+    fn the_turn_s_record_waits_for_a_short_writer_and_never_goes_without_the_lock() {
+        let state = tempfile::tempdir().unwrap_or_else(|e| panic!("{e}"));
+        let held = Lock::take(state.path(), "u").unwrap_or_else(|e| panic!("{e}"));
+        assert!(Lock::take(state.path(), "u").is_err(), "one writer at a time");
+        let releaser = std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            drop(held);
+        });
+        let waited = Lock::wait(state.path(), "u");
+        assert!(waited.is_ok(), "{:?}", waited.err());
+        releaser.join().unwrap_or_else(|_| panic!("joined"));
+    }
+
+    #[test]
     fn a_line_knows_its_section() {
         assert_eq!(section_at(DOC, 3), "Spec");
         assert_eq!(section_at(DOC, 9), "Spec › Requirements › Functional");
