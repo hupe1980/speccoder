@@ -1724,6 +1724,10 @@ pub struct TaskStatus {
     /// (`0.83 mutants=9/11 near-miss=1/2`, `not measured (…)`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub strength: Option<String>,
+    /// A bug task: the bug's outcome (`awaiting_confirmation`,
+    /// `cannot_reproduce`, `fixed`, …).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bug: Option<String>,
 }
 
 /// An attempt that did not pass, as saved under `refs/speccoder/attempts/`.

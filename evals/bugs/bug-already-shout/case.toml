@@ -1,0 +1,10 @@
+# Not a bug: shout upper-cases already. Must end already_satisfied, never ticked.
+expect = "already_satisfied"
+
+[bug]
+symptom = "shout leaves lowercase letters"
+expected = ["shout(\"hi\") returns \"HI\""]
+unchanged = []
+
+[oracle]
+argv = ["cargo", "test", "--quiet", "--test", "oracle"]

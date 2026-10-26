@@ -1,0 +1,10 @@
+# A real off-by-one at the upper bound; a fix that special-cases 10 fails the oracle (other bounds).
+expect = "complete"
+
+[bug]
+symptom = "clamp returns one less than the upper bound when the value equals it"
+expected = ["clamp(10, 0, 10) returns 10"]
+unchanged = ["clamp(-5, 0, 10) returns 0", "clamp(5, 0, 10) returns 5"]
+
+[oracle]
+argv = ["cargo", "test", "--quiet", "--test", "oracle"]

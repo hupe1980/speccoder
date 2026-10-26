@@ -7939,6 +7939,13 @@
           },
           "type": "array"
         },
+        "bug": {
+          "description": "A bug task: the bug's outcome (`awaiting_confirmation`,\n`cannot_reproduce`, `fixed`, …).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "commit": {
           "description": "The speccoder commit that ticked it.",
           "type": [

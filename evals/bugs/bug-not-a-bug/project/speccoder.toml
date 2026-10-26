@@ -1,0 +1,4 @@
+[checks.test]
+argv = ["cargo", "test", "--quiet"]
+when_exists = "Cargo.toml"
+timeout_secs = 300

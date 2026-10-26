@@ -1,0 +1,10 @@
+# Not a bug in this code: there is no settings API, so no test of the existing code can fail on an assertion. Must end cannot_reproduce, never ticked.
+expect = "cannot_reproduce"
+
+[bug]
+symptom = "the greeting ignores the language in the user's settings"
+expected = ["greet uses the language from the user's settings"]
+unchanged = []
+
+[oracle]
+argv = ["cargo", "test", "--quiet", "--test", "oracle"]

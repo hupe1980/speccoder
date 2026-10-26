@@ -600,19 +600,30 @@ pub fn bug_with(
             Ok(r) => r,
             Err(r) => return refuse(&r),
         };
-        // The person's own words: approved as they wrote them.
-        let approved = crate::review::decide(
-            &root,
-            Some(&rec.unit),
-            std::slice::from_ref(&rec.requirement),
-            "approve",
-            None,
-            via,
-        );
-        if approved.status() != CommandStatus::Ok {
-            return CommandResult::carried("bug", &approved);
+        // The person's own words: approved as they wrote them (where the
+        // format has requirement identifiers to review).
+        if format.requirements_file().is_some() {
+            let approved = crate::review::decide(
+                &root,
+                Some(&rec.unit),
+                std::slice::from_ref(&rec.requirement),
+                "approve",
+                None,
+                via,
+            );
+            if approved.status() != CommandStatus::Ok {
+                return CommandResult::carried("bug", &approved);
+            }
         }
-        let files = crate::hosting::uncommitted(&root, Some(&rec.unit));
+        // A unit the person never committed before: its new files too.
+        let files = {
+            let mut f = crate::hosting::uncommitted(&root, Some(&rec.unit));
+            if f.is_empty() {
+                let (_, prefix) = repo_prefix(&root);
+                f = rec.files.iter().map(|p| format!("{prefix}{p}")).collect();
+            }
+            f
+        };
         let committed =
             crate::hosting::commit_exactly(&root, &files, &format!("bug: {}", rec.title));
         if committed.status() != CommandStatus::Ok {

@@ -3155,6 +3155,11 @@ export interface TaskStatus {
   attestation: string | null;
   /** Open dependencies of a blocked task. */
   blocked_by: string[];
+  /**
+   * A bug task: the bug's outcome (`awaiting_confirmation`,
+   * `cannot_reproduce`, `fixed`, …).
+   */
+  bug?: string | null;
   /** The speccoder commit that ticked it. */
   commit: string | null;
   /**

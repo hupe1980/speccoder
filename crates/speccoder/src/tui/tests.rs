@@ -25,6 +25,7 @@ fn task(id: &str, state: &str) -> TaskStatus {
         note: None,
         attestation: None,
         strength: None,
+        bug: None,
     }
 }
 

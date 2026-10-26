@@ -1088,3 +1088,59 @@ fn the_bugfix_overlay_replaces_the_extensions_test_step_and_comes_off_again() {
         refused.message()
     );
 }
+
+#[test]
+fn in_openspec_a_bug_is_appended_to_the_standing_change() {
+    let dir = tempfile::tempdir().unwrap();
+    let r = dir.path();
+    let sample = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../speccoder-openspec/tests/fixtures/1.14.3/sample");
+    assert!(
+        Command::new("cp")
+            .arg("-R")
+            .arg(sample.join("."))
+            .arg(r)
+            .status()
+            .unwrap()
+            .success()
+    );
+    fs::write(
+        r.join("speccoder.toml"),
+        "[model]\nprovider = \"openai\"\nmodel = \"gpt-5.4-mini\"\n",
+    )
+    .unwrap();
+    git(r, &["init", "-q"]);
+    git(r, &["add", "-A"]);
+    git(r, &["commit", "-q", "-m", "init"]);
+    let state = tempfile::tempdir().unwrap();
+    let res = bug::bug_with(
+        r,
+        &request(&["an empty title is refused with a message"], &[], false),
+        Via::Terminal,
+        state.path(),
+        None,
+        None,
+        &RunOptions::default(),
+    );
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let b = the_bug(&res);
+    assert_eq!(b.home.kind, speccoder_core::bug::HomeKind::StandingOpenspec);
+    assert_eq!(
+        (b.unit.as_str(), b.requirement.as_str(), b.task.as_str()),
+        ("bugfixes", "B1", "1.1")
+    );
+    assert_eq!(
+        git(r, &["log", "-1", "--format=%s"]).trim(),
+        "bug: saving an empty title crashes"
+    );
+    assert!(
+        git(r, &["status", "--porcelain", "openspec/changes/bugfixes"])
+            .trim()
+            .is_empty()
+    );
+    let tasks = fs::read_to_string(r.join("openspec/changes/bugfixes/tasks.md")).unwrap();
+    assert!(
+        tasks.contains("- [ ] 1.1 Fix: saving an empty title crashes (B1)"),
+        "{tasks}"
+    );
+}
