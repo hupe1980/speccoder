@@ -16,6 +16,8 @@ env:
   CARGO_TERM_COLOR: always
   # The sandbox escape suite fails instead of skipping where there is no sandbox.
   SPECCODER_REQUIRE_SANDBOX: "1"
+  # Every failing test of a run is reported, not only the first.
+  NEXTEST_PROFILE: ci
 
 # One job per OS, each running exactly `just ci`, so a green local `just ci`
 # predicts a green run here. Nothing in this workflow publishes.

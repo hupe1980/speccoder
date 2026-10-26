@@ -4,7 +4,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use serde_json::{Value, json};
@@ -180,11 +180,15 @@ fn a_write_through_a_symlinked_directory_is_judged_on_the_file_it_reaches() {
         json!({"tool": "run_command", "arguments": {"argv": ["true", "x"], "cwd": "src"}}),
     );
     assert_eq!(cmd["object"]["cwd"], "src", "{cmd}");
-    assert!(
-        cmd["object"]["executable"]
-            .as_str()
-            .unwrap()
-            .ends_with("/true"),
+    // The program `PATH` resolves to, by its real path (on Ubuntu
+    // `/usr/bin/true` links to `gnutrue`).
+    let on_path = std::env::split_paths(&std::env::var_os("PATH").unwrap())
+        .map(|d| d.join("true"))
+        .find(|p| p.is_file())
+        .unwrap();
+    assert_eq!(
+        cmd["object"]["executable"].as_str().map(PathBuf::from),
+        Some(fs::canonicalize(on_path).unwrap()),
         "{cmd}"
     );
     let none = call(
