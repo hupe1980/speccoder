@@ -169,6 +169,54 @@ fn only_verified_ticks_succeed_and_nothing_to_check_is_neutral() {
     assert_eq!(v["data"]["conclusion"], "failure");
 }
 
+/// A head the check cannot read, or one that drops the spec project its
+/// base holds, is an error (exit 1, no check payload): never `neutral`,
+/// which `--allow-neutral` would pass.
+#[test]
+fn a_head_that_cannot_be_read_is_an_error_never_neutral() {
+    let r = Repo::new(2);
+    r.hand_tick("T001");
+    let commit = |r: &Repo, what: &str| {
+        r.git(&["add", "-A"]);
+        r.git(&["commit", "-qm", what]);
+    };
+    // The project's marker removed: the ticks are still there, unread.
+    r.git(&["rm", "-rq", ".specify"]);
+    commit(&r, "drop the marker");
+    for extra in [&[][..], &["--allow-neutral"][..]] {
+        let mut args = vec!["--base", "main"];
+        args.extend_from_slice(extra);
+        let (code, v) = check(&r, &args);
+        assert_eq!(code, 1, "{v}");
+        assert!(v["data"].is_null(), "{v}");
+        assert!(
+            v["message"]
+                .as_str()
+                .unwrap()
+                .contains("holds no spec project"),
+            "{v}"
+        );
+    }
+    r.git(&["reset", "-q", "--hard", "HEAD~1"]);
+    // A file and a directory equal but for case (on macOS, the tree
+    // cannot be written out whole).
+    let blob = r.git(&["hash-object", "-w", "--stdin"]);
+    r.git(&[
+        "update-index",
+        "--add",
+        "--cacheinfo",
+        &format!("100644,{blob},Specs"),
+    ]);
+    r.git(&["commit", "-qm", "a case collision"]);
+    let (code, v) = check(&r, &["--base", "main", "--allow-neutral"]);
+    assert_eq!(code, 1, "{v}");
+    assert_eq!(v["status"], "error", "{v}");
+    assert!(
+        v["message"].as_str().unwrap().contains("letter case"),
+        "{v}"
+    );
+}
+
 #[test]
 fn no_trust_is_always_refused() {
     let r = Repo::new(1);

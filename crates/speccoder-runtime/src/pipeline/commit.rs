@@ -32,6 +32,11 @@ pub(crate) fn monitor_summary(monitor: Option<&serde_json::Value>) -> String {
 /// Inline "for this task" approvals become task decisions of this run, as
 /// if made with `speccoder task approve`, so a retry or a later attempt of
 /// the run is not asked again — and a later run is.
+///
+/// # Errors
+///
+/// The decisions file cannot be read or written: the attempt's decisions
+/// are not recorded (later attempts ask again), and the caller says so.
 pub(crate) fn record_inline_approvals(
     dir: &Path,
     feature: &str,
@@ -39,7 +44,7 @@ pub(crate) fn record_inline_approvals(
     calls: &[serde_json::Value],
     run_grants: &std::sync::Mutex<Vec<tools::policy::Object>>,
     run: &str,
-) {
+) -> Result<(), String> {
     // Every decision a person made in this attempt, with who made it and how
     // far it reaches; calls an earlier decision allowed (`*-grant`) are not
     // new decisions.
@@ -72,39 +77,38 @@ pub(crate) fn record_inline_approvals(
         })
         .collect();
     if decided.is_empty() {
-        return;
+        return Ok(());
     }
-    if let Ok(mut d) = approvals::Decisions::load(dir) {
-        for decision in decided {
-            match (decision.verb.as_str(), decision.scope.as_str()) {
-                // For the task: it joins the task's approvals, for later attempts.
-                ("approve", "task") => {
-                    let Some(object) = decision.object.clone() else {
-                        continue;
-                    };
-                    d.approve(feature, task, object, Some(run), &decision.by);
-                    if let Some(last) = d
-                        .tasks
-                        .get_mut(&format!("{feature}/{task}"))
-                        .and_then(|t| t.decided.last_mut())
-                    {
-                        last.note.clone_from(&decision.note);
-                    }
+    let mut d = approvals::Decisions::load(dir)?;
+    for decision in decided {
+        match (decision.verb.as_str(), decision.scope.as_str()) {
+            // For the task: it joins the task's approvals, for later attempts.
+            ("approve", "task") => {
+                let Some(object) = decision.object.clone() else {
+                    continue;
+                };
+                d.approve(feature, task, object, Some(run), &decision.by);
+                if let Some(last) = d
+                    .tasks
+                    .get_mut(&format!("{feature}/{task}"))
+                    .and_then(|t| t.decided.last_mut())
+                {
+                    last.note.clone_from(&decision.note);
                 }
-                // For this run: every later task of the run; the history only.
-                ("approve", "run") => {
-                    if let (Ok(mut g), Some(object)) = (run_grants.lock(), &decision.object)
-                        && !g.contains(object)
-                    {
-                        g.push(object.clone());
-                    }
-                    d.note(feature, task, decision);
-                }
-                _ => d.note(feature, task, decision),
             }
+            // For this run: every later task of the run; the history only.
+            ("approve", "run") => {
+                if let (Ok(mut g), Some(object)) = (run_grants.lock(), &decision.object)
+                    && !g.contains(object)
+                {
+                    g.push(object.clone());
+                }
+                d.note(feature, task, decision);
+            }
+            _ => d.note(feature, task, decision),
         }
-        let _ = d.save(dir);
     }
+    d.save(dir)
 }
 
 /// Sums two token usage objects key by key.
@@ -332,7 +336,7 @@ mod tests {
 
     #[test]
     fn trailers_are_read_by_their_exact_key() {
-        let m = "speccoder: T001 fix\n\nSpec-Task: 007-bugfixes/T001\nVerdict: verified\nAcceptance-Strength: 1.00 near-miss=1/1\nAcceptance: bug_confirmation manifest=sha256:m approval=sha256:a wording=sha256:w by=Ada\nBug: fixed (standing_speckit) triad=sha256:t\nFixes #42\n";
+        let m = "speccoder: T001 fix\n\nSpec-Task: 007-bugfixes/T001\nVerdict: verified\nAcceptance-Strength: 1.00 near-miss=1/1\nAcceptance: bug_confirmation manifest=sha256:m approval=sha256:a wording=sha256:w by=Ada\nBug: fixed (standing_speckit) triad=sha256:t\nFixes: #42\n";
         assert_eq!(
             trailer(m, "Acceptance"),
             Some("bug_confirmation manifest=sha256:m approval=sha256:a wording=sha256:w by=Ada")
@@ -346,6 +350,7 @@ mod tests {
             Some("fixed (standing_speckit) triad=sha256:t")
         );
         assert_eq!(trailer(m, "Spec-Task"), Some("007-bugfixes/T001"));
+        assert_eq!(trailer(m, "Fixes"), Some("#42"));
         assert_eq!(trailer(m, "Acceptance-Str"), None);
     }
 }

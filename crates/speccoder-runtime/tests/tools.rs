@@ -195,6 +195,64 @@ fn a_write_through_a_symlinked_directory_is_judged_on_the_file_it_reaches() {
     assert_eq!(none, json!({"ok": true, "object": null}));
 }
 
+/// Letter case does not take a write out of the protected set: on a
+/// case-insensitive volume (macOS by default) `Speccoder.toml` is
+/// `speccoder.toml`, and a new `.CURSOR/` is the agent's `.cursor/`.
+#[test]
+fn a_write_in_another_letter_case_is_judged_on_the_protected_file() {
+    let w = worktree();
+    write(w.path(), "Makefile", "all:\n");
+    let t = tools(w.path());
+    for path in [
+        "Speccoder.toml",
+        "makefile",
+        ".CURSOR/rules.json",
+        ".CLAUDE/settings.json",
+        "Specs/001-x/tasks.md",
+    ] {
+        let out = call(&t, "write_file", json!({"path": path, "content": "x"}));
+        assert!(err(&out).contains("protected"), "{path}: {out}");
+    }
+    assert_eq!(
+        fs::read_to_string(w.path().join("speccoder.toml")).unwrap(),
+        "[checks.t]\nargv = [\"true\"]\n"
+    );
+    assert_eq!(
+        fs::read_to_string(w.path().join("Makefile")).unwrap(),
+        "all:\n"
+    );
+}
+
+/// A write allowed by the rules on the path as asked never lands on
+/// another file: through a symlinked directory a frozen test would be
+/// written without its approval, so the write is refused by name.
+#[cfg(unix)]
+#[test]
+fn a_write_that_reaches_another_file_is_refused_by_name() {
+    let w = worktree();
+    write(w.path(), "tests/existing.rs", "#[test]\nfn a() {}\n");
+    std::os::unix::fs::symlink(w.path().join("tests"), w.path().join("alias")).unwrap();
+    let t = tools(w.path());
+    let out = call(
+        &t,
+        "write_file",
+        json!({"path": "alias/existing.rs", "content": "#[test]\nfn a() {}\n// x\n"}),
+    );
+    assert!(err(&out).contains("reaches `tests/existing.rs`"), "{out}");
+    assert!(
+        !fs::read_to_string(w.path().join("tests/existing.rs"))
+            .unwrap()
+            .contains("// x")
+    );
+    // By its own name it is written (the rules judged that spelling).
+    let ok = call(
+        &t,
+        "write_file",
+        json!({"path": "tests/existing.rs", "content": "#[test]\nfn a() {}\n// x\n"}),
+    );
+    assert_eq!(ok["ok"], true, "{ok}");
+}
+
 // ── US2: writing ────────────────────────────────────────────────────────────
 
 /// Every optional argument the schema declares nullable is readable as

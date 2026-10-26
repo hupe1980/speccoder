@@ -103,7 +103,7 @@
       "description": "A run whose asking budget is used, with its waiting calls by class.",
       "properties": {
         "digest": {
-          "description": "SHA-256 over the sorted ids of every call listed: a decision names\nit and is refused when the list changed.",
+          "description": "SHA-256 over the sorted digests of every call listed\n([`PendingCall::digest`]): a decision names it and is refused when\nthe list, or the object of a call in it, changed.",
           "type": "string"
         },
         "groups": {
@@ -316,6 +316,10 @@
             "null"
           ]
         },
+        "digest": {
+          "description": "SHA-256 over its id and the object a decision covers: a decision\nnames it and is refused when another call (or another object) waits\nnow.",
+          "type": "string"
+        },
         "kind": {
           "description": "`approval` or `question`.",
           "type": "string"
@@ -409,7 +413,8 @@
         "deadline",
         "object",
         "run",
-        "batched"
+        "batched",
+        "digest"
       ],
       "type": "object"
     }

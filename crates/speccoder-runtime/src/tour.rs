@@ -85,6 +85,7 @@ fn requirement(
 ) -> TourStep {
     let read = crate::attest::tree::intent_tops(repo, commit)
         .and_then(|tops| crate::attest::tree::materialize(repo, commit, Some(&tops)))
+        .ok()
         .and_then(|dir| {
             let at = dir.path().join(prefix);
             let format = crate::format::at(&at);

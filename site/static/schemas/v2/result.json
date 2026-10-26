@@ -783,7 +783,7 @@
       "description": "A run whose asking budget is used, with its waiting calls by class.",
       "properties": {
         "digest": {
-          "description": "SHA-256 over the sorted ids of every call listed: a decision names\nit and is refused when the list changed.",
+          "description": "SHA-256 over the sorted digests of every call listed\n([`PendingCall::digest`]): a decision names it and is refused when\nthe list, or the object of a call in it, changed.",
           "type": "string"
         },
         "groups": {
@@ -4918,6 +4918,10 @@
             "null"
           ]
         },
+        "digest": {
+          "description": "SHA-256 over its id and the object a decision covers: a decision\nnames it and is refused when another call (or another object) waits\nnow.",
+          "type": "string"
+        },
         "kind": {
           "description": "`approval` or `question`.",
           "type": "string"
@@ -5011,7 +5015,8 @@
         "deadline",
         "object",
         "run",
-        "batched"
+        "batched",
+        "digest"
       ],
       "type": "object"
     },
@@ -6274,8 +6279,16 @@
           "type": "object"
         },
         {
-          "description": "Approve the task's waiting call.",
+          "description": "Approve the task's waiting call: the one that was shown, refused\nwhen another waits now.",
           "properties": {
+            "call": {
+              "description": "The call's id ([`crate::PendingCall::id`]).",
+              "type": "string"
+            },
+            "digest": {
+              "description": "The digest of the call that was shown ([`crate::PendingCall::digest`]).",
+              "type": "string"
+            },
             "kind": {
               "const": "approve",
               "type": "string"
@@ -6287,13 +6300,23 @@
           },
           "required": [
             "kind",
-            "task"
+            "task",
+            "call",
+            "digest"
           ],
           "type": "object"
         },
         {
-          "description": "Reject it (the input is the reason).",
+          "description": "Reject it (the input is the reason), bound the same way.",
           "properties": {
+            "call": {
+              "description": "The call's id ([`crate::PendingCall::id`]).",
+              "type": "string"
+            },
+            "digest": {
+              "description": "The digest of the call that was shown ([`crate::PendingCall::digest`]).",
+              "type": "string"
+            },
             "kind": {
               "const": "reject",
               "type": "string"
@@ -6305,7 +6328,9 @@
           },
           "required": [
             "kind",
-            "task"
+            "task",
+            "call",
+            "digest"
           ],
           "type": "object"
         },

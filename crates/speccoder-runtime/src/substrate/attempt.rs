@@ -213,6 +213,7 @@ pub fn input(
         ("approved", trusted(json!(settings.approved))),
         ("rejected", trusted(json!(settings.rejected))),
         ("run_approved", trusted(json!(settings.run_approved))),
+        ("approved_once", trusted(json!(settings.approved_once))),
         ("nudges", trusted(json!(settings.nudges))),
         ("mcp", mcp),
         ("root", trusted(json!(settings.root))),
@@ -309,6 +310,9 @@ pub struct Settings<'a> {
     pub rejected: &'a [crate::tools::policy::Rejection],
     /// Objects a person approved for every task of this run.
     pub run_approved: &'a [Object],
+    /// Objects a person approved for one call each (a call a lane stopped,
+    /// decided in its run's batch): this attempt may make each one time.
+    pub approved_once: &'a [Object],
     /// A person's notes for this task (`nudge`).
     pub nudges: &'a [String],
     /// The project's MCP tools for this run.
@@ -413,6 +417,20 @@ fn argvs(v: &Value) -> Vec<Vec<String>> {
         .unwrap_or_default()
 }
 
+/// A person's decisions of the journaled input at `key`: none when absent,
+/// an error when present and unreadable — never read as "no decisions",
+/// which would drop rejections.
+fn decisions_of<T: serde::de::DeserializeOwned>(
+    settings: &Value,
+    key: &str,
+) -> Result<Vec<T>, SkillError> {
+    match &settings[key] {
+        Value::Null => Ok(Vec::new()),
+        v => serde_json::from_value(v.clone())
+            .map_err(|e| SkillError::Input(format!("settings.{key}: {e}"))),
+    }
+}
+
 #[async_trait]
 impl Skill for Attempt {
     fn descriptor(&self) -> SkillDescriptor {
@@ -443,11 +461,8 @@ impl Skill for Attempt {
                     .collect()
             })
             .unwrap_or_default();
-        let decisions = |key: &str| settings[key].clone();
-        let approved: Vec<Object> =
-            serde_json::from_value(decisions("approved")).unwrap_or_default();
-        let rejected: Vec<crate::tools::policy::Rejection> =
-            serde_json::from_value(decisions("rejected")).unwrap_or_default();
+        let approved: Vec<Object> = decisions_of(&settings, "approved")?;
+        let rejected: Vec<crate::tools::policy::Rejection> = decisions_of(&settings, "rejected")?;
         let told = rejected.clone();
         let mcp: Vec<crate::mcp::McpTool> =
             serde_json::from_value(settings["mcp"].clone()).unwrap_or_default();
@@ -580,8 +595,8 @@ impl Skill for Attempt {
                 ..self.present.clone()
             },
         );
-        let remembered: Vec<Object> =
-            serde_json::from_value(settings["run_approved"].clone()).unwrap_or_default();
+        let remembered: Vec<Object> = decisions_of(&settings, "run_approved")?;
+        let once: Vec<Object> = decisions_of(&settings, "approved_once")?;
         // Untrusted text the prompt itself carries.
         let mut parts = Vec::new();
         let given: Vec<crate::instructions::Instruction> =
@@ -620,6 +635,7 @@ impl Skill for Attempt {
                 frozen_additions: settings["frozen_additions"] == true,
                 ask,
                 run_approved: remembered,
+                once,
                 run: settings["run_id"].as_str().map(str::to_owned),
                 asking: Asking {
                     asked: number("asked", 0),
@@ -852,6 +868,9 @@ pub(crate) struct LoopSpec {
     pub ask: Option<Asker>,
     /// Objects a person approved for this run: allowed without asking.
     pub run_approved: Vec<Object>,
+    /// Objects a person approved for one call each: the first call of
+    /// each is allowed without asking, later ones ask again.
+    pub once: Vec<Object>,
     /// Live progress: the task ID and where to report.
     pub observer: Option<(String, std::sync::Arc<dyn crate::progress::Progress>)>,
     /// The run the attempt belongs to (`run-<secs>-<hex>`).
@@ -912,6 +931,7 @@ pub(crate) async fn tool_loop(
         finish,
         ask,
         run_approved,
+        mut once,
         observer,
         run,
         asking,
@@ -1243,6 +1263,20 @@ pub(crate) async fn tool_loop(
                 }));
             }
             let mut note: Option<String> = None;
+            // An object a person approved for one call: this one.
+            if matches!(decision, Decision::Approval(_))
+                && let Some(at) = object
+                    .as_ref()
+                    .and_then(|o| once.iter().position(|r| r == o))
+            {
+                once.remove(at);
+                person = Some(json!({
+                    "approved_by": "person",
+                    "scope": "once-grant",
+                    "grant": { "scope": "once", "run": run },
+                }));
+                decision = Decision::Allow;
+            }
             // An object a person already approved for this run or task.
             if matches!(decision, Decision::Approval(_))
                 && let Some((_, scope)) = object

@@ -3440,15 +3440,31 @@ fn the_inbox_lists_a_waiting_call_and_a_task_that_did_not_pass() {
     let approval = &i.items[0];
     assert!(approval.detail.contains("touch"), "{}", approval.detail);
     assert!(approval.since.is_some());
+    // Each decision names the call it shows and that call's digest.
+    let listed = speccoder_runtime::approvals::list_with(r.path(), None, state.path());
+    let Some(CommandData::Approvals(a)) = listed.data() else {
+        panic!("{}", listed.message())
+    };
+    let bound = a
+        .pending
+        .iter()
+        .find(|p| p.task == "T005")
+        .map(|p| (p.id(), p.digest.clone()))
+        .unwrap();
+    assert_eq!(bound.1.len(), 64);
     let runs: Vec<_> = approval.actions.iter().map(|a| a.run.clone()).collect();
     assert_eq!(
         runs,
         [
             Some(speccoder_core::actions::Runnable::Approve {
-                task: "T005".to_owned()
+                task: "T005".to_owned(),
+                call: bound.0.clone(),
+                digest: bound.1.clone(),
             }),
             Some(speccoder_core::actions::Runnable::Reject {
-                task: "T005".to_owned()
+                task: "T005".to_owned(),
+                call: bound.0.clone(),
+                digest: bound.1.clone(),
             }),
         ]
     );

@@ -14,7 +14,12 @@ inputs:
     description: The speccoder-verify release to run (verified by build provenance and sha256 before it runs).
     default: "0.2.0" # the release this action is cut with; scripts/release/bump.sh sets it
   allowed-signers:
-    description: SSH allowed-signers file, read from the base revision (never from the pull request).
+    description: >-
+      SSH allowed-signers file, read from a commit the checked one did not
+      write: a pull request's base; on a push to the default branch, the
+      commit before it; on any other push or event, the default branch's tip.
+      Never the checked commit's own; where there is no such commit (the push
+      that creates the default branch), the job fails.
     default: .github/speccoder/allowed_signers
   certificate-identity:
     description: Sigstore certificate identity to trust (installs cosign when set).

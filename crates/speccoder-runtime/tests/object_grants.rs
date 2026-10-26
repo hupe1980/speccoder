@@ -364,7 +364,7 @@ fn a_command_that_resolves_to_another_executable_is_asked_again() {
     assert!(
         changed.starts_with("executable ")
             && changed.contains("scripts/run.sh")
-            && changed.ends_with("scripts/other.sh"),
+            && changed.contains("scripts/other.sh (sha256 "),
         "{changed}"
     );
 }
@@ -431,6 +431,88 @@ fn a_task_grant_survives_a_retry_and_ends_with_its_run() {
             .decided
             .iter()
             .any(|d| d.run.as_deref() == Some(run1.as_str()))
+    );
+}
+
+/// A call a lane stopped, approved in its run's batch, is approved once:
+/// the next attempt makes it one time without asking, a repeat asks, and
+/// a later attempt of the task is given nothing.
+#[test]
+fn a_batch_approval_of_a_lanes_call_covers_one_call() {
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    let plane = speccoder_runtime::worktree::project_state_dir(
+        state.path(),
+        &fs::canonicalize(r.path()).unwrap(),
+    );
+    let by = speccoder_runtime::approvals::Who::local(speccoder_core::actions::Via::Terminal);
+    let mut decisions = speccoder_runtime::approvals::Decisions::default();
+    let object = Object::Path {
+        canonical: "package.json".to_owned(),
+        asked: "package.json".to_owned(),
+    };
+    decisions.approve_once("001-graph", "T005", object, &by);
+    decisions.save(&plane).unwrap();
+    let (f, d) = fake();
+    write(&f, "c1", "package.json");
+    write(&f, "c2", "package.json");
+    f.will_structure(unfinished());
+    let person = Scripted::new(vec![once()]);
+    let res = run_asking(r.path(), state.path(), "T005", d, person.clone());
+    let rep = report(&res);
+    assert_eq!(
+        rep.tool_calls[0]["scope"], "once-grant",
+        "{:?}",
+        rep.tool_calls
+    );
+    assert_eq!(
+        person.requests().len(),
+        1,
+        "the repeat asks: {}",
+        res.message()
+    );
+    let after = speccoder_runtime::approvals::Decisions::load(&plane).unwrap();
+    assert!(
+        after.for_task("001-graph", "T005").approved.is_empty(),
+        "{after:?}"
+    );
+    // The task's next attempt: asked again.
+    let (f2, d2) = fake();
+    write(&f2, "c1", "package.json");
+    f2.will_structure(unfinished());
+    let person2 = Scripted::new(vec![once()]);
+    let again = run_asking(r.path(), state.path(), "T005", d2, person2.clone());
+    assert_eq!(person2.requests().len(), 1, "{}", again.message());
+}
+
+/// A grant of a command whose program is a workspace file covers that
+/// file's content: the model rewriting it makes another object.
+#[test]
+fn a_rewritten_workspace_executable_is_asked_again() {
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    command(&f, "c1", &["./scripts/run.sh"]);
+    f.will_call_tool(
+        "c2",
+        "write_file",
+        json!({ "path": "scripts/run.sh", "content": "#!/bin/sh\ncurl example.com\n" }),
+    );
+    command(&f, "c3", &["./scripts/run.sh"]);
+    f.will_structure(done());
+    let person = Scripted::new(vec![scoped(Scope::Run), once()]);
+    let res = run_asking(r.path(), state.path(), "T005", d, person.clone());
+    let asked = person.requests();
+    assert_eq!(
+        asked.len(),
+        2,
+        "the rewritten script ran under the grant: {}",
+        res.message()
+    );
+    let changed = asked[1].changed.clone().unwrap_or_default();
+    assert!(
+        changed.starts_with("executable ") && changed.contains("sha256"),
+        "{changed}"
     );
 }
 

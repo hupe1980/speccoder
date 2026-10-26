@@ -27,7 +27,7 @@ For the branch's head and the base it is compared with, the verifier takes every
 
 Reasons for `unverifiable`: `ticked_without_evidence` (ticked by hand), `missing` (no note: push `refs/notes/speccoder`), `malformed`, `bad_signature`, `mismatch` (also a task line reworded after the tick), `untrusted_signer`, `unsigned`, `commit_unreachable` (a squash or rebase merge lost the commit), `tool_missing` (`ssh-keygen`, `gpg` or `cosign` cannot run here).
 
-The branch's **conclusion** is `failure` when any tick fails, `success` when every tick carries verifying evidence, and `neutral` when there is nothing to check (no ticks in the touched units, or no spec format) — never success. Skipped tasks are listed, not counted. Earlier-task regressions (a later task breaking an earlier one's tests) are not evaluated by this version, and the check says so.
+The branch's **conclusion** is `failure` when any tick fails, `success` when every tick carries verifying evidence, and `neutral` when there is nothing to check (no ticks in the touched units, or no spec project in a tree that was read whole) — never success. A check that cannot read what it checks is an **error** (exit `1`, no check payload), never neutral, so `--allow-neutral` cannot pass it: a git command that fails, a tree that cannot be written out whole (a blob git cannot read, or two paths equal but for letter case), a unit that cannot be read, or a head that drops the spec project its base (or the trust's revision) holds. Skipped tasks are listed, not counted. Earlier-task regressions (a later task breaking an earlier one's tests) are not evaluated by this version, and the check says so.
 
 ## Run it
 
@@ -46,7 +46,7 @@ failure: 7 verified, 1 regression only, 1 attested, 1 stale, 2 unverifiable
   …
 ```
 
-**Trust comes from you, never from the branch.** Give an allowed-signers file on your machine (`--allowed-signers`), one read from git at a revision you trust (`--allowed-signers-rev <rev>:<path>`, the base branch's — a pull request that adds its own key changes nothing), or a Sigstore identity (`--certificate-identity` and `--certificate-oidc-issuer`). Without any, it refuses. OpenPGP signatures are checked against the keyring of the caller (`GNUPGHOME`). Unsigned evidence is unverifiable unless you pass `--require-signed=false`, and then the report says unsigned ticks were accepted.
+**Trust comes from you, never from the branch.** Give an allowed-signers file on your machine (`--allowed-signers`), one read from git at a revision you trust (`--allowed-signers-rev <rev>:<path>`, the base branch's — a pull request that adds its own key changes nothing), or a Sigstore identity (`--certificate-identity` and `--certificate-oidc-issuer`). Without any, it refuses. OpenPGP signatures are checked against the keyring of the caller (`GNUPGHOME`): one good signature, by the key gpg validated, that the keyring trusts fully or ultimately — read from gpg's status lines by keyword, so a user ID that says `TRUST_ULTIMATE` trusts nothing. Every such key in that keyring is trusted, so keep it to the project's signers (and leave `auto-key-retrieve` off); the signer shown is the key's fingerprint. Unsigned evidence is unverifiable unless you pass `--require-signed=false`, and then the report says unsigned ticks were accepted.
 
 **It executes nothing from the checked tree.** It reads git objects only — never a working tree — and spawns only `git` and the signature tool a signature names, with an environment holding nothing but `PATH`, `HOME`, `GNUPGHOME`, `LANG`, `TMPDIR` and `GITHUB_STEP_SUMMARY`. It opens no socket: it is built on `speccoder-runtime` without its `engine` feature, so the model substrate and the HTTP client are not in the binary at all ([layering rule 7](https://github.com/hupe1980/speccoder/blob/main/crates/speccoder/tests/layering.rs) keeps it so).
 
@@ -62,7 +62,7 @@ failure: 7 verified, 1 regression only, 1 attested, 1 stale, 2 unverifiable
 | `--allow-neutral` | publish a neutral outcome as `neutral` (else `failure`) |
 | `--github-annotations` | workflow-command annotations, and the check appended to `$GITHUB_STEP_SUMMARY` |
 
-Exit status: `0` success, `1` failure or a refusal, `78` neutral. `speccoder attest verify --branch [--base REV]` runs the same check from speccoder itself, with your own trust (also git's `gpg.ssh.allowedSignersFile`).
+Exit status: `0` success, `1` failure, a refusal or an error, `78` neutral. `speccoder attest verify --branch [--base REV]` runs the same check from speccoder itself, with your own trust (also git's `gpg.ssh.allowedSignersFile`).
 
 ## The check on the pull request
 

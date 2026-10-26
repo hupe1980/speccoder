@@ -93,9 +93,11 @@ pub struct Cli {
     pub verbose: bool,
 
     /// The spec format (speckit, openspec, kiro), instead of `[spec] format` or detection.
+    /// Rarely needed (the format is detected), so only `--help` lists it.
     #[arg(
         long,
         global = true,
+        hide_short_help = true,
         value_enum,
         env = "SPECCODER_FORMAT",
         value_name = "FORMAT"

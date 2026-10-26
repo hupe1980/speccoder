@@ -66,7 +66,7 @@ When an argument of the call — the whole command line, a written path, an argv
 
 No "for the task", "for this run" or Always Allow: planted repository text never becomes a standing rule. Your committed spec, plan, tasks and constitution are trusted and never mark an argument. The sources are part of the recorded question, so a replay rebuilds them exactly.
 
-The dashboard's overlay takes the same keys, one keystroke each: `tab` adds a note before `y`, `t` or `r`, and `↑ ↓` scroll the body. In the [web interface](@/docs/web.md#when-a-run-needs-you) the call opens as a sheet with the same keys and the same choices; an editor gets them as ACP permission options (Always Allow is an `allow_always` option named "Always allow exactly this command"). Always Allow writes `speccoder.toml` through the same action in every interface; commit it to put it in force. Calls stopped earlier are approved or rejected from the web interface's Report.
+The dashboard's overlay takes the same keys, one keystroke each: `tab` adds a note before `y`, `t` or `r`, and `↑ ↓` scroll the body. In the [web interface](@/docs/web.md#when-a-run-needs-you) the call opens as a sheet with the same keys and the same choices; an editor gets them as ACP permission options (Always Allow is an `allow_always` option named "Always allow exactly this command"). Always Allow writes `speccoder.toml` through the same action in every interface; commit it to put it in force. Calls stopped earlier are approved or rejected from the web interface's Report. Every interface's Approve and Reject name the call they show and its object: when that call has expired, been decided, or another waits now, the decision is refused (`CALL-CHANGED`) and nothing is decided.
 
 The attempt continues in the same turn, and a "for the task" or "for this run" answer also covers the same object later in the run. A waiting prompt costs the run nothing.
 
@@ -80,7 +80,7 @@ speccoder approvals batch run-… approve --digest D [--call ID…] [--resume-as
 speccoder approvals batch run-… reject --digest D --reason "…"
 ```
 
-Each listed call is approved **once** (never for the task or the run) and recorded on its own. A decision on a list that changed since you saw it is refused. Without `--resume-asking` the run keeps its count, so a resumed run waits again at its next call; with it, the run prompts again. The web Needs You item and the dashboard (`B` on a batched call) decide it too. Calls allowed by a rule or a grant never count; a `--no-prompt` run counts nothing.
+Each listed call is approved **once** (never for the task or the run) and recorded on its own. The digest covers every listed call's object, so a decision on a list that changed since you saw it is refused — a call that left or joined it, or a lane's newer attempt stopped on another object. A lane's stopped call approved here is given to the next attempt of its task alone, which may make it one time; a repeat asks again. Without `--resume-asking` the run keeps its count, so a resumed run waits again at its next call; with it, the run prompts again. The web Needs You item and the dashboard (`B` on a batched call) decide it too. Calls allowed by a rule or a grant never count; a `--no-prompt` run counts nothing.
 
 ## Later
 
@@ -115,7 +115,9 @@ The object is resolved by a recorded step before you are asked, and checked agai
 
 **Every grant ends with its run** — "for the task" too. A `speccoder run` is one run from its start; a later invocation that resumes a suspended attempt continues that run (and its grants and asking count). A retry within the run keeps the task's grants; the next run asks again. Earlier decisions stay in the history. Decisions travel in each attempt's recorded input, so a replay sees what the live run saw and asks nobody. A rejection for the task and every policy denial win over any grant.
 
-`approvals.json` from an earlier version (grants by class) is refused by name; `speccoder doctor` says so — remove it to start afresh.
+`approvals.json` from an earlier version (grants by class) is refused by name; `speccoder doctor` says so — remove it to start afresh. Until then the calls a lane stopped are listed as unknown (never as none waiting) and nothing is decided, and a run stops rather than attempt the task with the grants it read before.
+
+A command whose program is a file in the workspace is named with the digest of its content: the model rewriting the script makes another object, asked again. A file without an execute bit is never the program named — the one `PATH` finds after it is, as for the system.
 
 ## Who decided
 

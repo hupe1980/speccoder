@@ -148,10 +148,11 @@ pub enum Action {
     None,
     /// Leave.
     Quit,
-    /// Approve the waiting call of this task (the queue).
-    Approve(String),
-    /// Reject it with a reason (the queue).
-    Reject(String, String),
+    /// Approve the waiting call shown (the queue): a
+    /// [`Runnable::Approve`] naming the call and its digest.
+    Approve(Runnable),
+    /// Reject it with a reason (the queue): a [`Runnable::Reject`].
+    Reject(Runnable, String),
     /// Approve every call of a run's batch once (`B` on a batched call).
     Batch(Runnable),
     /// Answer the hosted run's waiting call.
@@ -262,11 +263,26 @@ impl App {
     }
 
     fn pending_task(&self) -> Option<String> {
+        self.pending_call().map(|p| p.task.clone())
+    }
+
+    fn pending_call(&self) -> Option<&speccoder_core::PendingCall> {
         self.snap
             .approvals
             .as_ref()
             .and_then(|a| a.pending.get(self.approval))
-            .map(|p| p.task.clone())
+    }
+
+    /// The selected call's decision, bound to it: refused when another
+    /// call waits by the time it is taken.
+    fn decide_shown(&self, approve: bool) -> Option<Runnable> {
+        let p = self.pending_call()?;
+        let (task, call, digest) = (p.task.clone(), p.id(), p.digest.clone());
+        Some(if approve {
+            Runnable::Approve { task, call, digest }
+        } else {
+            Runnable::Reject { task, call, digest }
+        })
     }
 
     /// The batch decision for the selected call's run, if it waits in one.
@@ -485,8 +501,8 @@ impl App {
                 self.answered();
                 Action::Reply((!text.is_empty()).then_some(text))
             }
-            Typing::QueueReason => match (self.pending_task(), text.is_empty()) {
-                (Some(task), false) => Action::Reject(task, text),
+            Typing::QueueReason => match (self.decide_shown(false), text.is_empty()) {
+                (Some(run), false) => Action::Reject(run, text),
                 _ => {
                     self.flash = Some("a rejection needs a reason".to_owned());
                     Action::None
@@ -785,7 +801,8 @@ impl App {
                 }
             },
             KeyCode::Char('a') if self.focus == Focus::Approvals && self.screen == Screen::Run => {
-                self.pending_task().map_or(Action::None, Action::Approve)
+                self.decide_shown(true)
+                    .map_or(Action::None, Action::Approve)
             }
             // A call waiting in its run's batch: the whole batch, each once.
             KeyCode::Char('B') if self.focus == Focus::Approvals && self.screen == Screen::Run => {
@@ -945,13 +962,13 @@ fn perform(app: &mut App, action: Action, path: &Path, chosen: &mut Option<Strin
                 app.snap = load(path, chosen.as_deref(), state);
             }
         }
-        Action::Approve(task) => {
-            let r = take(path, feature, &Runnable::Approve { task }, None);
+        Action::Approve(run) => {
+            let r = take(path, feature, &run, None);
             app.flash = Some(r.message().to_owned());
             app.snap = load(path, feature, state);
         }
-        Action::Reject(task, why) => {
-            let r = take(path, feature, &Runnable::Reject { task }, Some(&why));
+        Action::Reject(run, why) => {
+            let r = take(path, feature, &run, Some(&why));
             app.flash = Some(r.message().to_owned());
             app.snap = load(path, feature, state);
         }

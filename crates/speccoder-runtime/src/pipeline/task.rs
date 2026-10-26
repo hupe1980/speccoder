@@ -879,7 +879,21 @@ pub(crate) fn run_task(
         .and_then(|m| m.acceptance.clone())
         .and_then(|a| serde_json::from_value::<PreparedAcceptance>(a).ok())
     {
-        // The interrupted attempt's tests, already in the worktree.
+        // The interrupted attempt's tests, already in the worktree. A bug
+        // task's held-out set is the one its pre-frozen record seals now: a
+        // special case's regeneration re-sealed it after the marker was kept.
+        let mut prepared = prepared;
+        if let Some(sealed) = bug_fix
+            .as_ref()
+            .and_then(|f| f.record.held_out_sealed.as_ref())
+        {
+            prepared.held_out = Some(sealed.manifest_sha256.clone());
+            prepared.report["held_out"] = serde_json::json!({
+                "state": "on",
+                "manifest": format!("sha256:{}", sealed.manifest_sha256),
+                "kept": sealed.count,
+            });
+        }
         Some(prepared)
     } else if let Some(f) = &bug_fix {
         stage(&*live, task, Stage::Red, StageState::Started, None, None);
@@ -1181,11 +1195,22 @@ pub(crate) fn run_task(
                 .and_then(|s| s.lock().ok().map(|s| s.hidden.clone()))
                 .unwrap_or_default();
             // The task's grants of this run as they stand now (an earlier
-            // attempt's "for the task" answers included): journaled.
-            let task_grants: Vec<crate::tools::policy::Object> =
-                approvals::Decisions::load(&s.plane_dir)
-                    .map(|d| d.for_run(&feature_name, task, this_run.as_str()))
-                    .unwrap_or_else(|_| task_grants.clone());
+            // attempt's "for the task" answers included), and the calls a
+            // person approved once, which this attempt alone is given:
+            // journaled. Decisions that cannot be read stop the task — the
+            // grants read when it began may hold one rejected since.
+            let (task_grants, approved_once) = match approvals::Decisions::load(&s.plane_dir) {
+                Ok(mut d) => {
+                    let once = d.take_once(&feature_name, task, this_run.as_str());
+                    if !once.is_empty()
+                        && let Err(e) = d.save(&s.plane_dir)
+                    {
+                        return fail(CommandStatus::Error, e);
+                    }
+                    (d.for_run(&feature_name, task, this_run.as_str()), once)
+                }
+                Err(e) => return fail(CommandStatus::ConfigError, e),
+            };
             // This run's grants as they stand now: journaled with the input.
             let run_approved: Vec<crate::tools::policy::Object> = options
                 .run_grants
@@ -1206,6 +1231,7 @@ pub(crate) fn run_task(
                     approved: &task_grants,
                     rejected: &decisions.rejected,
                     run_approved: &run_approved,
+                    approved_once: &approved_once,
                     nudges: &decisions.nudges,
                     mcp: &connected.tools,
                     root: &wt_root_canonical,
@@ -1516,14 +1542,18 @@ pub(crate) fn run_task(
                 notices: notices.clone(),
                 ..bare_report(&feature_name, task, &wt_path, &attempt_status)
             };
-            record_inline_approvals(
+            if let Err(e) = record_inline_approvals(
                 &s.plane_dir,
                 &feature_name,
                 task,
                 &report.tool_calls,
                 &options.run_grants,
                 this_run.as_str(),
-            );
+            ) {
+                report.notices.push(format!(
+                    "the decisions made in this attempt were not recorded ({e}): later attempts ask again"
+                ));
+            }
             // A person approving an MCP call reviewed the tool as it is now.
             for c in report
                 .tool_calls
@@ -2253,6 +2283,7 @@ pub(crate) fn run_task(
                             .as_ref()
                             .map(super::outcome::verdict_word)
                             .unwrap_or_default(),
+                        &crate::strength::rulings(&strength_dir),
                     )
                 })
                 // A set frozen at review: the one pre-frozen trailer form.
@@ -2390,7 +2421,9 @@ pub(crate) fn run_task(
             checklists_overridden: false,
             extra: bug_fix
                 .as_ref()
-                .map(|f| super::bug::trailers(f, &verdict))
+                .map(|f| {
+                    super::bug::trailers(f, &verdict, &crate::strength::rulings(&strength_dir))
+                })
                 .unwrap_or_default(),
         });
         match commit_attempt(&wt_root, &message) {

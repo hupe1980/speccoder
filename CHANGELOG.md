@@ -33,13 +33,16 @@ adheres to [Semantic Versioning](https://semver.org/).
   and `already_satisfied`. `--test PATH::NAME` brings the person's own
   failing test; `--candidate PATCH|pr:N` judges someone else's fix without
   an implementer or retries; `--issue N` adds the issue as untrusted context
-  and `Fixes #N` on a verified fix. A bug in the extension's layout is a
+  and, on a verified or attested fix only, a `Fixes: #N` trailer and a
+  `Fixes #N` line in the body of the pull request `speccoder pr` opens, so
+  merging it closes the issue. A bug in the extension's layout is a
   trailer-only task (`Spec-Task: bugs/<slug>/bug:<slug>`) that `attest verify
   --branch` and `speccoder-verify` check, stale when its triad changes;
   `speccoder workflow install --overlay bugfix` lets Spec Kit's `bugfix`
   workflow run speccoder for its test step. JSON payload `bug`, `bug.*`
   events (with public projections of the domain events), `BUG-*` codes, the
-  `[bug]` settings, and six bug cases in `evals/bugs`.
+  `[bug]` settings, and seven bug cases in `evals/bugs` (one a scripted
+  executor that special-cases the reproduction).
 - **The model's reasoning.** Each attempt turn asks the provider for a
   summary of the model's reasoning (Anthropic, OpenAI Responses;
   `[model] reasoning_summary = false` turns it off). It is shown as the
@@ -193,6 +196,13 @@ adheres to [Semantic Versioning](https://semver.org/).
   `status` now say the calls are unknown and why (`unreadable` in the
   `approvals` payload, the `unknown` kind in `inbox`), and a decision is not
   made blind. A read no longer creates an empty journal.
+- A decisions file (`approvals.json`) that could not be read did the same:
+  the calls a lane stopped are now unknown in Needs You and `report
+  --approvals`, a decision after another reports what still waits or why it
+  is unknown, a run stops instead of attempting a task with the grants it
+  read when it began, and an attempt's recorded approvals and rejections
+  that cannot be read fail it instead of reading as none. Decisions made in
+  an attempt that cannot be recorded are reported, not dropped.
 
 ### Security
 
@@ -206,6 +216,36 @@ adheres to [Semantic Versioning](https://semver.org/).
   approved once only — planted text never becomes a standing rule.
 - A write through a symlinked directory into a protected path (the spec,
   CI configuration) is refused: protection is judged on the file reached.
+- On a case-insensitive volume (macOS, Windows) another letter case reached
+  a protected file (`Speccoder.toml`, `makefile`, `.CURSOR/rules.json`) and a
+  new `.CLAUDE/settings.json` was not judged as agent configuration. The
+  protected set, the frozen tests and the integrity snapshot now match in
+  any letter case, an existing file is named as the volume stores it, and a
+  write allowed on its asked name that reaches another file (a symlinked
+  directory, another case) is refused by that name.
+- Approve and Reject from the app, the dashboard and the inbox decided
+  whatever call waited on the task when they were taken — a replacement for
+  an expired call too. They now name the call shown and its digest, and a
+  call that changed is refused (`CALL-CHANGED`). A batch's digest covers
+  every listed call's object, and a lane's stopped call approved in a batch
+  is approved once, as the batch says, not for every repeat in the run.
+- A command whose program is a workspace file is bound to its content (a
+  rewritten script is asked again), and a file without an execute bit is no
+  longer named as the program `PATH` resolves to.
+- The held-out tests `speccoder pr` publishes were written into the
+  project's repository mid-feature (`refs/speccoder/held-out/<unit>`), where
+  a later attempt could `git show` them. They are built in a private
+  repository in the state directory and pushed from it; a ref an earlier
+  version left in the project is moved there.
+- The planning commit no longer takes a path that leaves the unit
+  (`specs/001-x/../../src/x`).
+- `speccoder-verify` and the Action: a verifier error (a git failure, a tree
+  that cannot be written out, a unit that cannot be read, a head that drops
+  the spec project) is an error, never `neutral` that `allow-neutral`
+  passes; gpg's status lines are parsed exactly, so trust words in a
+  signer's user ID are not trust; and on a push the Action takes
+  `allowed_signers` from the commit before it or the default branch, never
+  from the pushed commit itself.
 
 ## [0.1.0] - 2026-10-25
 

@@ -397,13 +397,102 @@ pub fn select_closed(
     out
 }
 
-/// Publishes `selection` as one commit under
-/// `refs/speccoder/held-out/<unit>`: `<key>/manifest.json` and
-/// `<key>/files/…` of every set, parented on `tip` (the pushed branch) and
-/// on the ref's previous commit, so the ref only grows and every push of
-/// it is a fast-forward. `Ok(None)` when nothing is selected.
-pub fn publish_closed(
+/// The private repository publications are built in: a bare repository
+/// in the project's state directory that borrows the project's objects
+/// (`objects/info/alternates`), so the tip a publication is parented on
+/// resolves there while the held-out tests themselves never enter the
+/// project's repository. Every attempt can read that repository's refs
+/// and objects (`git show`, `git fsck --unreachable`, a script a check
+/// runs); none can read the state directory.
+///
+/// # Errors
+///
+/// The repository cannot be created, or the project's objects not found.
+pub fn publication_store(project_state: &Path, repo: &Path) -> Result<PathBuf, String> {
+    let dir = project_state.join("held-out.git");
+    if !dir.join("HEAD").is_file() {
+        std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+        Git::at(&dir)
+            .run(&["init", "-q", "--bare"])
+            .map_err(|e| e.0)?;
+    }
+    let common = Git::at(repo)
+        .line(&["rev-parse", "--path-format=absolute", "--git-common-dir"])
+        .map_err(|e| e.0)?;
+    let info = dir.join("objects/info");
+    std::fs::create_dir_all(&info).map_err(|e| format!("{}: {e}", info.display()))?;
+    std::fs::write(
+        info.join("alternates"),
+        format!("{}\n", Path::new(&common).join("objects").display()),
+    )
+    .map_err(|e| format!("{}: {e}", info.display()))?;
+    // A publication an earlier version left in the project moves here:
+    // later pushes still fast-forward it, and no attempt finds it by name.
+    let project = Git::at(repo);
+    let legacy = project
+        .line(&[
+            "for-each-ref",
+            "--format=%(refname) %(objectname)",
+            REF_PREFIX,
+        ])
+        .map_err(|e| e.0)?;
+    let private = Git::at(&dir);
+    for line in legacy.lines() {
+        let Some((name, commit)) = line.split_once(' ') else {
+            continue;
+        };
+        if !private
+            .succeeds(&["rev-parse", "--verify", "-q", name])
+            .unwrap_or(false)
+        {
+            private
+                .run(&["update-ref", name, commit])
+                .map_err(|e| e.0)?;
+        }
+        project.run(&["update-ref", "-d", name]).map_err(|e| e.0)?;
+    }
+    Ok(dir)
+}
+
+/// Pushes `commit` (built in `store`) to `remote`'s
+/// `refs/speccoder/held-out/<unit>` from `repo`, reading the store's
+/// objects as alternates: nothing is written to `repo`, no local ref
+/// either.
+///
+/// # Errors
+///
+/// The push failed (not a fast-forward, no access).
+pub fn push(
     repo: &Path,
+    store: &Path,
+    remote: &str,
+    unit: &str,
+    commit: &str,
+) -> Result<(), String> {
+    let objects = store.join("objects");
+    Git::at(repo)
+        .run_with_env(
+            &[
+                "push",
+                "--quiet",
+                remote,
+                &format!("{commit}:{REF_PREFIX}/{unit}"),
+            ],
+            &[("GIT_ALTERNATE_OBJECT_DIRECTORIES", objects.as_os_str())],
+        )
+        .map(|_| ())
+        .map_err(|e| e.0)
+}
+
+/// Publishes `selection` as one commit under
+/// `refs/speccoder/held-out/<unit>` of the private `store`
+/// ([`publication_store`]):
+/// `<key>/manifest.json` and `<key>/files/…` of every set, parented on
+/// `tip` (the pushed branch) and on the ref's previous commit, so the ref
+/// only grows and every push of it is a fast-forward. `Ok(None)` when
+/// nothing is selected.
+pub fn publish_closed(
+    store: &Path,
     unit: &str,
     tip: &str,
     selection: &Selection,
@@ -431,7 +520,7 @@ pub fn publish_closed(
         return Ok(None);
     }
     files.sort();
-    let git = Git::at(repo);
+    let git = Git::at(store);
     std::fs::create_dir_all(tmp).map_err(|e| e.to_string())?;
     let index = tmp.join(format!("held-out-index-{}", std::process::id()));
     let _ = std::fs::remove_file(&index);
@@ -495,10 +584,10 @@ pub fn publish_closed(
     Ok(Some(commit))
 }
 
-/// Publishes a finished feature's held-out sets locally (every task is
-/// closed then): [`publish_closed`] over the tasks the branch tip closes.
-/// Never pushed here; `speccoder pr` pushes the ref. `Ok(None)` when no
-/// closed task names a stored set.
+/// Publishes a finished feature's held-out sets in the private store
+/// (every task is closed then): [`publish_closed`] over the tasks the
+/// branch tip closes. Never pushed here; `speccoder pr` pushes it.
+/// `Ok(None)` when no closed task names a stored set.
 pub fn publish(
     repo: &Path,
     project_state: &Path,
@@ -511,7 +600,16 @@ pub fn publish(
         .map_err(|e| e.0)?;
     let closed = closed_on(repo, &tip, feature);
     let selection = select_closed(project_state, feature, &closed);
-    publish_closed(repo, feature, &tip, &selection, tmp)
+    if selection.sets.is_empty() {
+        return Ok(None);
+    }
+    publish_closed(
+        &publication_store(project_state, repo)?,
+        feature,
+        &tip,
+        &selection,
+        tmp,
+    )
 }
 
 /// The tasks of `unit` closed on `head` (ticked, with the commit carrying

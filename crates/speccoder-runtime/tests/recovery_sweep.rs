@@ -97,6 +97,7 @@ fn every_crash_point_of_an_attempt_resumes_honestly() {
         approved: &[],
         rejected: &[],
         run_approved: &[],
+        approved_once: &[],
         nudges: &[],
         mcp: &[],
         root: &root,
