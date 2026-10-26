@@ -1690,3 +1690,155 @@ fn a_frozen_card_shows_the_frozen_set_not_a_draft_changed_since() {
     assert_eq!(v.tests[0].content, "checks fn login\n", "{v:?}");
     assert_eq!(v.held_out.count, 1);
 }
+
+/// The calls a test author (visible or held out) was asked.
+fn author_calls(f: &FakeProvider) -> usize {
+    f.asked()
+        .iter()
+        .filter(|a| {
+            let p = serde_json::to_string(&a.prompt).unwrap();
+            p.contains("You are the test author") || p.contains("HELD-OUT")
+        })
+        .count()
+}
+
+fn report_of(res: &CommandResult) -> &speccoder_core::RunReport {
+    match res.data() {
+        Some(CommandData::Run(r)) => r,
+        other => panic!("{} → {other:?}", res.message()),
+    }
+}
+
+#[test]
+fn us4_a_frozen_set_already_passing_is_not_demonstrated_and_nothing_is_authored() {
+    // 4.2: the behaviour landed after the tests were written.
+    let r = repo();
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = written(r.path(), state.path());
+    fs::write(
+        r.path().join("src/lib.rs"),
+        "pub fn ok() {}\npub fn login() {}\n",
+    )
+    .unwrap();
+    git(r.path(), &["commit", "-qam", "login landed"]);
+    freeze_only(r.path(), state.path(), d.clone());
+    let before = author_calls(&f);
+    write_lib(&f, "c1", "pub fn ok() {}\npub fn login() {}\n// again\n");
+    let run = speccoder_runtime::run_with(r.path(), None, "T005", state.path(), d, None);
+    let rep = report_of(&run);
+    let acc = rep
+        .acceptance
+        .as_ref()
+        .unwrap_or_else(|| panic!("{}", run.message()));
+    assert_eq!(acc["red"], false, "{acc}");
+    assert!(
+        acc["note"]
+            .as_str()
+            .is_some_and(|n| n.contains("already passing")),
+        "{acc}"
+    );
+    assert_eq!(acc["source"], "review");
+    assert_ne!(rep.verdict, Some(speccoder_core::verify::Verdict::Verified));
+    assert_eq!(author_calls(&f), before, "no author call");
+}
+
+#[test]
+fn us4_a_lapsed_or_absent_frozen_set_is_authored_as_today_with_one_author_call() {
+    // 4.3 and 4.5.
+    for case in ["lapsed", "elsewhere"] {
+        let r = repo();
+        let state = tempfile::tempdir().unwrap();
+        let (f, d) = written(r.path(), state.path());
+        freeze_only(r.path(), state.path(), d.clone());
+        if case == "lapsed" {
+            fs::write(
+                r.path().join("specs/001-graph/spec.md"),
+                SPEC.replace("they are told so", "they are told to wait"),
+            )
+            .unwrap();
+            git(r.path(), &["commit", "-qam", "reword"]);
+        } else {
+            let plane = speccoder_runtime::worktree::project_state_dir(state.path(), r.path());
+            fs::remove_dir_all(speccoder_runtime::pre_frozen::dir(
+                &plane,
+                "001-graph",
+                "US1",
+            ))
+            .unwrap();
+        }
+        let before = author_calls(&f);
+        f.will_structure(json!({
+            "files": [file("tests/acceptance_t005.txt", &["US1-1"], "fn login")],
+            "argv": ["./accept.sh", "--", "tests/acceptance_t005.txt", "fn login"],
+            "notes": [],
+        }));
+        f.will_structure(held_out("fn login"));
+        write_lib(&f, "c1", "pub fn ok() {}\npub fn login() {}\n");
+        let run = speccoder_runtime::run_with(r.path(), None, "T005", state.path(), d, None);
+        let rep = report_of(&run);
+        let said = if case == "lapsed" {
+            "the frozen oracle lapsed — authoring"
+        } else {
+            "frozen oracle not present here — authoring"
+        };
+        assert!(
+            rep.notices.iter().any(|n| n.contains(said)),
+            "{case}: {:?}",
+            rep.notices
+        );
+        let visible = f
+            .asked()
+            .iter()
+            .skip(before)
+            .filter(|a| {
+                serde_json::to_string(&a.prompt)
+                    .unwrap()
+                    .contains("You are the test author")
+            })
+            .count();
+        assert_eq!(visible, 1, "{case}: one visible author call");
+        assert_ne!(
+            rep.acceptance.as_ref().unwrap()["source"],
+            "review",
+            "{case}"
+        );
+    }
+}
+
+#[test]
+fn a_crash_between_writing_the_frozen_files_and_the_red_check_resumes_without_an_author_call() {
+    // T062 (fault injection): the process dies after the frozen tests were
+    // written into the worktree, before they were red-checked.
+    let r = repo();
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = written(r.path(), state.path());
+    freeze_only(r.path(), state.path(), d.clone());
+    let made = speccoder_runtime::worktree_with(r.path(), None, state.path());
+    let Some(CommandData::Worktree(w)) = made.data() else {
+        panic!("{}", made.message())
+    };
+    let wt = PathBuf::from(w.path.clone().unwrap());
+    fs::create_dir_all(wt.join("tests")).unwrap();
+    fs::write(
+        wt.join("tests/acceptance_us1_login.txt"),
+        "checks fn login\n",
+    )
+    .unwrap();
+    let before = author_calls(&f);
+    write_lib(&f, "c1", "pub fn ok() {}\npub fn login() {}\n");
+    let run = speccoder_runtime::run_with(r.path(), None, "T005", state.path(), d, None);
+    let rep = report_of(&run);
+    assert_eq!(
+        rep.verdict,
+        Some(speccoder_core::verify::Verdict::Verified),
+        "{}",
+        run.message()
+    );
+    let acc = rep.acceptance.as_ref().unwrap();
+    assert_eq!(
+        (acc["source"].as_str(), acc["red"].as_bool()),
+        (Some("review"), Some(true)),
+        "{acc}"
+    );
+    assert_eq!(author_calls(&f), before, "no author call after the crash");
+}

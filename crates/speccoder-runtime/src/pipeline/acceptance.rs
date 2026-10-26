@@ -872,6 +872,100 @@ mod tests {
         assert!(!story_checkpoint(Some(&tasks), "T006", &two[..1]));
         assert!(!story_checkpoint(None, "T006", &two));
     }
+
+    /// One pre-frozen record of `producer` naming `tests/a.txt`.
+    fn record(
+        producer: speccoder_core::acceptance::Producer,
+        content: &str,
+    ) -> speccoder_core::acceptance::PreFrozenAcceptance {
+        speccoder_core::acceptance::PreFrozenAcceptance {
+            unit: "001-x".to_owned(),
+            requirement: "US1".to_owned(),
+            wording_digest: "sha256:w".to_owned(),
+            approval_digest: "sha256:a".to_owned(),
+            visible: vec![speccoder_core::acceptance::VisibleTest {
+                path: "tests/a.txt".to_owned(),
+                sha256: format!(
+                    "sha256:{}",
+                    crate::integrity::sha256_hex(content.as_bytes())
+                ),
+                cites: vec!["US1-1".to_owned()],
+            }],
+            held_out_sealed: None,
+            producer,
+            decided: speccoder_core::acceptance::Decided {
+                by: "Ada".to_owned(),
+                via: speccoder_core::actions::Via::Terminal,
+                at: 0,
+            },
+        }
+    }
+
+    #[test]
+    fn a_review_s_and_a_bug_s_frozen_sets_go_through_the_one_reuse_each_with_its_red_rule() {
+        use speccoder_core::acceptance::Producer;
+        let summary = |passed: u8, failed: u8| {
+            format!(
+                "echo 'test result: {}. {passed} passed; {failed} failed; 0 ignored; 0 measured; 0 filtered out'; exit {}",
+                if failed > 0 { "FAILED" } else { "ok" },
+                if failed > 0 { 101 } else { 0 }
+            )
+        };
+        let content = "checks\n";
+        for (producer, rule) in [
+            (Producer::Review, RedRule::RunTime),
+            (Producer::BugConfirmation, RedRule::BugAssertionOnly),
+        ] {
+            let rec = record(producer, content);
+            let files = vec![("tests/a.txt".to_owned(), content.to_owned())];
+            let run = |script: String| {
+                let dir = tempfile::tempdir().unwrap_or_else(|e| panic!("{e}"));
+                let tests = [ReusedTest {
+                    path: "tests/a.txt".to_owned(),
+                    cites: vec!["US1-1".to_owned()],
+                    argv: vec!["sh".to_owned(), "-c".to_owned(), script],
+                    green: false,
+                }];
+                let got = reuse_pre_frozen(
+                    dir.path(),
+                    &rec,
+                    &files,
+                    &tests,
+                    &sandbox::Runner::Plain,
+                    rule,
+                    None,
+                );
+                assert!(
+                    dir.path().join("tests/a.txt").is_file(),
+                    "written at the checkpoint"
+                );
+                got
+            };
+            // Red by one assertion, twice: reused, the source the producer's.
+            let red = run(summary(0, 1)).unwrap_or_else(|e| panic!("{producer:?}: {e}"));
+            assert!(red.red);
+            assert_eq!(red.report["source"], serde_json::json!(producer.source()));
+            // Already passing: a review's set is not demonstrated, a bug's
+            // reproduction no longer reproduces — the person looks.
+            let passing = run(summary(1, 0));
+            match rule {
+                RedRule::RunTime => {
+                    let p = passing.unwrap_or_else(|e| panic!("{e}"));
+                    assert!(!p.red);
+                    assert!(
+                        p.report["note"]
+                            .as_str()
+                            .is_some_and(|n| n.contains("already passing"))
+                    );
+                }
+                RedRule::BugAssertionOnly => assert!(passing.is_err()),
+            }
+            // A failure of more than one test is a bug's no reproduction.
+            if rule == RedRule::BugAssertionOnly {
+                assert!(run(summary(1, 1)).is_err(), "one test's assertion only");
+            }
+        }
+    }
 }
 
 /// How a reused set must be red at the checkpoint.
