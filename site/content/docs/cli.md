@@ -61,6 +61,9 @@ Every stop and finish ends with a `Next:` block of copy-pasteable commands (`nex
 | `speccoder run --allow-failing-baseline` | Attempt although a check cannot run on the untouched code (`CHECK-BROKEN`); that check can never judge the task |
 | `speccoder run --in-place [--return]` | The same in your checkout on `speccoder/<feature>`, switching back at the end; `--return` leaves an interrupted in-place run |
 | `speccoder do "…" [--check "…"]… [--no-run] [--no-prompt]` | A small change: a story, an approved requirement and a task, committed, then run ([quick changes](@/docs/running.md#quick-changes)) |
+| `speccoder bug "…" --expected "…"… [--unchanged "…"]… [--issue N] [--test PATH::NAME]… [--candidate PATCH\|pr:N] [--slug S] [--no-run] [--no-prompt]` | A bug in your words: reproduced by a test that fails by an assertion first, confirmed by you once, fixed with the revert rejected ([bug fixes](@/docs/bugs.md)) |
+| `speccoder bug confirm <unit>/<task> [--digest D] [--reject --reason R] [--no-run]` | Confirm a bug's reproductions (bound to the digest shown), or reject them with a reason |
+| `speccoder bug run (--task <unit>/<task> \| --slug S)` | Reproduce a bug again, or run its confirmed fix |
 | `speccoder task approve [T] [--call ID] [--all] [--scope once\|task\|run] [--note "…"]` | Approve a waiting call (default scope: its object for the task, in its run); the next `run` continues from it. `--all` without `T`: every waiting call of the feature |
 | `speccoder task reject [T] [--call ID] [--all] --reason R` | Reject it; the attempt continues and the model is told why |
 | `speccoder task accept T --reason R [--in-place]` | Tick a task on your word (`attested`) |
@@ -163,7 +166,9 @@ With `--events` stdout carries only JSON Lines as the command works; stderr stay
 | `session.started` | First line: version, command, `capabilities` (feature-detect on these) |
 | `run.started` | A feature run begins, with its plan |
 | `task.started`, `task.resumed`, `task.finished` | A task's run begins, picks up a killed attempt, ends (outcome, run id, tokens) |
-| `stage.started`, `stage.finished` | `baseline`, `red`, `attempt`, `verify`, `audit`, `mutation`, `strength`, `monitor`, `commit` |
+| `stage.started`, `stage.finished` | `baseline`, `red`, `attempt`, `verify`, `audit`, `mutation`, `strength`, `monitor`, `commit` — and a bug's `reproduce`, `confirm`, `unchanged` |
+| `bug.recorded`, `bug.confirmed`, `bug.confirm_rejected`, `bug.outcome` | A bug's records (public projections: [schemas](https://hupe1980.github.io/speccoder/schemas/v2/events/bug.outcome.json)) |
+| `bug.reproduce_try`, `bug.reproduced`, `bug.confirm_waiting`, `bug.unchanged_selected`, `bug.discrimination` | A bug's progress |
 | `tool_call` | A call the model made, with the policy's decision |
 | `approval.requested`, `approval.decided` | A call waits for a person; who decided, how, and the scope |
 | `usage` | Tokens so far (at most once a second per task) |

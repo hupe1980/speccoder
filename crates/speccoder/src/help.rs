@@ -11,7 +11,7 @@ use crate::cli::Cli;
 pub const GROUPS: &[(&str, &[&str])] = &[
     ("Start", &["init", "doctor", "config", "auth"]),
     ("Plan", &["feature", "spec", "review", "issue"]),
-    ("Work", &["run", "do", "task"]),
+    ("Work", &["run", "do", "bug", "task"]),
     ("Review", &["inbox", "report", "ui", "pr"]),
 ];
 
@@ -126,7 +126,8 @@ mod tests {
     fn the_top_level_help_is_short_and_grouped() {
         let help = command().render_help().to_string();
         let lines = help.lines().count();
-        assert!(lines <= 40, "{lines} lines:\n{help}");
+        // One screen: the daily commands (with `bug`, the L2 rung) and the options.
+        assert!(lines <= 41, "{lines} lines:\n{help}");
         for (title, names) in GROUPS {
             assert!(help.contains(&format!("{title}\n")), "{help}");
             for n in *names {

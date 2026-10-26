@@ -492,6 +492,7 @@ mod look_tests {
             note: None,
             attestation: None,
             strength: None,
+            bug: None,
         }
     }
 

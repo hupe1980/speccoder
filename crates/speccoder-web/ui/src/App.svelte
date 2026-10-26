@@ -19,6 +19,7 @@
   import StatusBar from "./components/StatusBar.svelte";
   import ContextMenu from "./components/ContextMenu.svelte";
   import QuickSheet from "./components/QuickSheet.svelte";
+  import BugSheet from "./components/BugSheet.svelte";
   import Settings from "./components/Settings.svelte";
   import CodeView from "./components/CodeView.svelte";
   import Setup from "./components/Setup.svelte";
@@ -63,6 +64,7 @@
     if (typing || app.waiting || app.input || app.palette) return;
     if (e.key === ",") go("settings");
     if (e.key === "q") app.quick = true;
+    if (e.key === "B" && e.shiftKey) app.bugSheet = {};
     const v = views.find((x) => x.key === e.key);
     if (v) go(v.v);
     if (e.key === "n" && app.primary) app.perform(app.primary);
@@ -93,6 +95,7 @@
         });
       }
       case "file.quick": app.quick = true; return;
+      case "file.bug": app.bugSheet = {}; return;
       case "file.commit": return run(byKind(app.actions, "commit")[0], "Nothing to commit: the planning files are committed");
       case "run.feature": return run(byKind(app.actions, "run_feature")[0], "No task is ready to run");
       case "run.task": return run(byKind(app.actions, "run_task")[0], "Select a ready task first");
@@ -250,6 +253,7 @@
 {#if app.palette}<Palette />{/if}
 {#if app.context}<ContextMenu />{/if}
 {#if app.quick}<QuickSheet />{/if}
+{#if app.bugSheet}<BugSheet />{/if}
 <Toasts />
 
 <style>

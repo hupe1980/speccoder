@@ -119,6 +119,28 @@ impl Api {
         self.rest(reqwest::Method::GET, path, None)
     }
 
+    /// `GET path` as a unified diff (a pull request's `.diff` media type):
+    /// read-only, never a checkout.
+    ///
+    /// # Errors
+    ///
+    /// As [`Api::rest`].
+    pub fn get_diff(&self, path: &str) -> Result<String, String> {
+        let url = format!("{}{path}", self.rest);
+        let req = self
+            .request(reqwest::Method::GET, &url)?
+            .header(reqwest::header::ACCEPT, "application/vnd.github.diff");
+        let body = block(async move {
+            let resp = req.send().await.map_err(|e| unreachable(&self.host, &e))?;
+            answer(&self.host, path, resp).await
+        })?;
+        Ok(match body {
+            Value::String(s) => s,
+            Value::Null => String::new(),
+            other => other.to_string(),
+        })
+    }
+
     /// One GraphQL document: its `data`.
     ///
     /// # Errors

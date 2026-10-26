@@ -37,6 +37,117 @@ pub struct Recorded {
     pub title: String,
 }
 
+/// An installed extension of the format, as its inventory lists it.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Extension {
+    /// Its id (`bug`).
+    pub id: String,
+    /// Its version.
+    pub version: String,
+    /// Enabled (a disabled one counts as not installed).
+    pub enabled: bool,
+    /// Where it was installed from, as the format says (`local`, a catalog).
+    pub source: String,
+}
+
+/// Which source the inventory was read from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum InventorySource {
+    /// The format's own command-line tool.
+    Cli,
+    /// The format's registry files.
+    Files,
+}
+
+/// The format's installed extensions.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Inventory {
+    /// What was read.
+    pub source: InventorySource,
+    /// Every extension listed.
+    pub entries: Vec<Extension>,
+}
+
+impl Inventory {
+    /// The extension `id`, if installed and enabled.
+    #[must_use]
+    pub fn enabled(&self, id: &str) -> Option<&Extension> {
+        self.entries.iter().find(|e| e.id == id && e.enabled)
+    }
+}
+
+/// Why a bug cannot be recorded or read here.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BugRefusal {
+    /// The catalog code (`BUG-NO-UNIT`, `BUG-ASSESSMENT-DRIFT`, …).
+    pub code: &'static str,
+    /// What the person is told.
+    pub message: String,
+}
+
+impl BugRefusal {
+    /// A refusal with `code`.
+    #[must_use]
+    pub fn new(code: &'static str, message: impl Into<String>) -> Self {
+        Self {
+            code,
+            message: message.into(),
+        }
+    }
+}
+
+/// A bug the adapter recorded in a standing unit.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecordedBug {
+    /// The unit (`007-bugfixes`).
+    pub unit: String,
+    /// The unit's directory, project-relative.
+    pub dir: String,
+    /// The requirement (`FR-003`).
+    pub requirement: String,
+    /// The task (`T003`).
+    pub task: String,
+    /// The title.
+    pub title: String,
+    /// The files it wrote, project-relative.
+    pub files: Vec<String>,
+}
+
+/// How a format's own bug step is run: the hosted skill, its arguments
+/// and what it may write.
+#[derive(Debug, Clone, Copy)]
+pub struct BugStep {
+    /// The installed skill that creates a bug.
+    pub skill: &'static str,
+    /// Its arguments: the person's labelled triad and the slug.
+    pub arguments: fn(&speccoder_core::bug::Triad, &str) -> String,
+    /// The policy's rules while it runs: it writes only the bug directory.
+    pub rules: &'static Rules,
+}
+
+/// The triad as a format's own bug file holds it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReadBug {
+    /// Current statements (the first is the symptom).
+    pub current: Vec<String>,
+    /// Expected statements.
+    pub expected: Vec<String>,
+    /// Unchanged statements.
+    pub unchanged: Vec<String>,
+    /// The title the file gives.
+    pub title: Option<String>,
+    /// The file it was read from, project-relative.
+    pub file: String,
+}
+
+/// Why a project in a format this build detects but does not run has no
+/// place for a bug (`BUG-NO-UNIT`), if it is one.
+#[must_use]
+pub fn bug_refusal_unsupported(start: &Path) -> Option<BugRefusal> {
+    Detect::root(&stubs::KIRO, start).map(|_| BugRefusal::new("BUG-NO-UNIT", stubs::KIRO_BUGS))
+}
+
 /// One spec format the runtime can run.
 pub trait Adapter: Send + Sync + std::fmt::Debug {
     /// Which format.
@@ -135,6 +246,81 @@ pub trait Adapter: Send + Sync + std::fmt::Debug {
         _checks: &[String],
     ) -> Result<Recorded, String> {
         Err("this spec format has no place for quick changes: write a spec for it".to_owned())
+    }
+
+    /// The format's installed extensions, from its own inventory (`None`:
+    /// the format has none, or none could be read). The only reader of the
+    /// format's extension files.
+    fn extensions(&self, _root: &Path) -> Option<Inventory> {
+        None
+    }
+
+    /// Where a bug lives (D-123): the format's own bug structure when it
+    /// has one, else its standing bug-fix unit. `Err`: neither
+    /// (`BUG-NO-UNIT`).
+    ///
+    /// # Errors
+    ///
+    /// The format has no place for a bug.
+    fn bug_unit(&self, _root: &Path) -> Result<speccoder_core::bug::BugHome, BugRefusal> {
+        Err(BugRefusal::new(
+            "BUG-NO-UNIT",
+            "this spec format has no place for a bug: write a spec for the fix, or `speccoder do` for a change without a reproduction",
+        ))
+    }
+
+    /// Records `triad` as a story, an approved-to-be requirement and a task
+    /// in the standing bug-fix unit `home` names (appends only, verified at
+    /// write time).
+    ///
+    /// # Errors
+    ///
+    /// The home is not a standing unit, or the files changed meanwhile.
+    fn record_bug(
+        &self,
+        _root: &Path,
+        _home: &speccoder_core::bug::BugHome,
+        _triad: &speccoder_core::bug::Triad,
+    ) -> Result<RecordedBug, BugRefusal> {
+        Err(BugRefusal::new(
+            "BUG-NO-UNIT",
+            "this spec format has no standing unit for bugs",
+        ))
+    }
+
+    /// The format's own bug step, for a native home.
+    fn bug_step(&self) -> Option<BugStep> {
+        None
+    }
+
+    /// A native home's directory for `slug`, project-relative, and its
+    /// unit name.
+    fn bug_dir(
+        &self,
+        _home: &speccoder_core::bug::BugHome,
+        _slug: &str,
+    ) -> Option<(String, String)> {
+        None
+    }
+
+    /// A new slug for `title` that no bug of `home` has yet.
+    fn bug_slug(&self, _root: &Path, _home: &speccoder_core::bug::BugHome, _title: &str) -> String {
+        String::new()
+    }
+
+    /// The triad as the home holds it: the bug `key` (a native home's slug,
+    /// a standing unit's requirement). Pure: no model, no tool.
+    ///
+    /// # Errors
+    ///
+    /// The file is missing or not in a shape the adapter reads.
+    fn read_bug(
+        &self,
+        _root: &Path,
+        _home: &speccoder_core::bug::BugHome,
+        _key: &str,
+    ) -> Result<ReadBug, BugRefusal> {
+        Err(BugRefusal::new("BUG-NO-UNIT", "no bug home"))
     }
 
     /// The unit's requirement identifiers, each with the hash of the line

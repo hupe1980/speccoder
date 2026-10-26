@@ -1,0 +1,10 @@
+# Not a bug: an empty sum is 0 already. Must end already_satisfied, never ticked.
+expect = "already_satisfied"
+
+[bug]
+symptom = "the sum of an empty list panics"
+expected = ["sum(&[]) returns 0"]
+unchanged = []
+
+[oracle]
+argv = ["cargo", "test", "--quiet", "--test", "oracle"]

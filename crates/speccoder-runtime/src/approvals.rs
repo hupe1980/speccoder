@@ -621,6 +621,53 @@ pub trait Approver: Send + Sync + std::fmt::Debug {
     fn client(&self) -> Option<String> {
         None
     }
+
+    /// The person's decision on a bug's reproductions, bound to the digest
+    /// shown; `None` when nobody can decide here (the bug waits in the
+    /// inbox for `speccoder bug confirm`).
+    fn confirm(&self, request: &ConfirmRequest) -> Option<ConfirmAnswer> {
+        let _ = request;
+        None
+    }
+}
+
+/// One reproduction as a person is shown it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ShownReproduction {
+    /// The statement it reproduces, with its words.
+    pub statement: String,
+    /// The statement's words.
+    pub words: String,
+    /// The test file.
+    pub file: String,
+    /// The test's name.
+    pub test: String,
+    /// How it failed on the untouched code (up to 20 lines).
+    pub excerpt: String,
+    /// The test's content.
+    pub content: String,
+}
+
+/// A bug's reproductions, waiting for the person's one confirmation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConfirmRequest {
+    /// `<unit>/<task>`.
+    pub bug: String,
+    /// The bug's title.
+    pub title: String,
+    /// What a confirmation is bound to.
+    pub digest: String,
+    /// The reproductions.
+    pub reproductions: Vec<ShownReproduction>,
+}
+
+/// The person's answer.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ConfirmAnswer {
+    /// They show the bug: freeze them and fix it.
+    Confirm,
+    /// They do not; the reason goes to the author's next try.
+    Reject(String),
 }
 
 /// The kind of call, from the call alone (it is part of the journaled

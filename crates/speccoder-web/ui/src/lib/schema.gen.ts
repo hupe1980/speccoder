@@ -1,5 +1,16 @@
 // Generated from site/static/schemas/v2 by `SPECCODER_BLESS=1 cargo test -p speccoder ui_types`. Do not edit.
 
+/** What the fix's visible acceptance set came from. */
+export interface AcceptanceRef {
+  /** The record it reused. */
+  pre_frozen: PreFrozenRef;
+  /** `bug_confirmation` or `person_test`. */
+  source: AcceptanceSource;
+}
+
+/** Where a task's visible acceptance set came from. */
+export type AcceptanceSource = "authored" | "review" | "bug_confirmation" | "person_test";
+
 /** The acceptance set's strength, as recorded with a verdict. */
 export interface AcceptanceStrength {
   /**
@@ -87,7 +98,7 @@ export interface ActionId {
  * kind arrives with its `Runnable` variant (the *adding a kind* contract
  * of `speccoder_runtime::actions::perform`).
  */
-export type ActionKind = "skill" | "run_task" | "run_feature" | "converge" | "commit" | "approve" | "reject" | "accept" | "skip" | "nudge" | "rule" | "review" | "issue_comment" | "quick_change" | "keep_set_aside" | "drop_set_aside" | "fix_setup" | "feature" | "pull_request" | "allow_always" | "widen_policy" | "decide_batch" | "command";
+export type ActionKind = "skill" | "run_task" | "run_feature" | "converge" | "commit" | "approve" | "reject" | "accept" | "skip" | "nudge" | "rule" | "review" | "issue_comment" | "quick_change" | "keep_set_aside" | "drop_set_aside" | "fix_setup" | "feature" | "pull_request" | "bug_fix" | "bug_confirm" | "bug_run" | "allow_always" | "widen_policy" | "decide_batch" | "command";
 
 /**
  * Result of `speccoder actions`: what a person can do now in the
@@ -232,6 +243,17 @@ export interface AuthReport {
   source: string | null;
 }
 
+/** The author's own words, kept only as a labelled claim. */
+export interface AuthorClaim {
+  /** Always `author`. */
+  by: string;
+  /** The words. */
+  text: string;
+}
+
+/** How the person decided the reproductions. */
+export type Basis = "shown" | "named_test";
+
 /** One class of a batch. */
 export interface BatchGroup {
   /** The waiting calls' ids. */
@@ -326,6 +348,114 @@ export interface BranchTotals {
   verified: number;
 }
 
+/** The bug's home, as the format adapter chose it. */
+export interface BugHome {
+  /** Which structure. */
+  kind: HomeKind;
+  /** Project-relative directory (or file). */
+  location: string;
+  /** Why this one, as shown and recorded. */
+  reason: string;
+}
+
+/** The bug's outcome; distinct from a task's verdict. */
+export type BugOutcome = "recorded" | "awaiting_confirmation" | "cannot_reproduce" | "already_satisfied" | "unchanged_not_holding" | "fixed" | "failed";
+
+/**
+ * A bug: where it lives, the person's triad, the reproductions and how
+ * far it got. The `bug` payload, and what speccoder keeps of it.
+ */
+export interface BugReport {
+  /** What the fix's acceptance set came from. */
+  acceptance: AcceptanceRef | null;
+  /** Someone else's fix, judged. */
+  candidate: Candidate | null;
+  /** The code of the last stop or refusal. */
+  code: string | null;
+  /** The verdict commit. */
+  commit: string | null;
+  /** The digest waiting for the person's confirmation. */
+  confirm_digest: string | null;
+  /** The confirmation. */
+  confirmation: Confirmation | null;
+  /** The engine's hand-off, when it stopped. */
+  handoff: Handoff | null;
+  /** The held-out variants (never their content or path). */
+  held_out: HeldOutVariant[];
+  /** The sealed set holding them. */
+  held_out_sealed: SealedRef | null;
+  /** Where the format keeps it. */
+  home: BugHome;
+  /** The issue it came from. */
+  issue: IssueRef | null;
+  /** At most this many tries. */
+  max_tries: number;
+  /** How it stands. */
+  outcome: BugOutcome;
+  /** The tests selected to stay green. */
+  pass_to_pass: PassToPass | null;
+  /** The planning commit that recorded it. */
+  recorded_commit: string | null;
+  /** Rejections of earlier reproductions. */
+  rejections: Rejection[];
+  /** The reproductions (and *Unchanged* tests). */
+  reproductions: Reproduction[];
+  /** The requirement (`FR-003`, or `bug:<slug>`). */
+  requirement: string;
+  /** The revert candidate. */
+  revert: RevertResult | null;
+  /** The last run. */
+  run_id: string | null;
+  /** The special-case candidates. */
+  special_case: SpecialCase[];
+  /** Where it is. */
+  stage: BugStage;
+  /** The task (`T003`, or `bug:<slug>`). */
+  task: string;
+  /** A short title. */
+  title: string;
+  /** The person's words. */
+  triad: Triad;
+  /** The reproduce tries. */
+  tries: ReproduceTry[];
+  /** The unit, as the adapter names it (`007-bugfixes`, `bugs/<slug>`). */
+  unit: string;
+  /** The fix's verdict, once judged. */
+  verdict: Verdict | null;
+}
+
+/** Where the bug is. */
+export type BugStage = "record" | "reproduce" | "confirm" | "unchanged" | "fix" | "ship" | "done";
+
+/** Someone else's fix, judged as the attempt. */
+export interface Candidate {
+  /** It was applied as the attempt. */
+  applied: boolean;
+  /** `sha256:<hex>` of the diff. */
+  digest: string;
+  /** The pull request's head commit. */
+  head_sha?: string | null;
+  /** The pull request's number. */
+  number?: number | null;
+  /** A patch or a pull request. */
+  origin: CandidateOrigin;
+  /** The patch file, as given. */
+  path?: string | null;
+  /** Why it was not. */
+  refused?: CandidateRefusal | null;
+}
+
+/** Where a foreign fix came from. */
+export type CandidateOrigin = "patch" | "pr";
+
+/** Why a candidate was refused before it was applied. */
+export interface CandidateRefusal {
+  /** `BUG-CANDIDATE-JUDGE` or `BUG-CANDIDATE-APPLY`. */
+  code: string;
+  /** The judge paths it touches, or the hunks that did not apply. */
+  paths: string[];
+}
+
 /** One check run. */
 export interface CheckResult {
   /** The command, as run. */
@@ -395,7 +525,7 @@ export interface CodeInfo {
 }
 
 /** Command-specific payload of a result. */
-export type CommandData = ProjectSnapshot | VerifyReport | WorktreeReport | ProposeReport | ReplayReport | RunReport | EvalReport | FeatureReport | ConvergeReport | StatusReport | ApprovalsReport | ControlReport | CostReport | PrReport | BenchReport | InitReport | SkillsReport | SkillRunReport | ChecklistStatus[] | ArchiveReport | InPlaceReport | AttestReport | ExplainReport | SchemaReport | DoctorReport | FeaturesReport | UiReport | ConfigReport | IssuesReport | InboxReport | ReviewReport | AuthReport | BranchReport | EvidenceTour | ActionsReport | PolicyCoverage;
+export type CommandData = ProjectSnapshot | VerifyReport | WorktreeReport | ProposeReport | ReplayReport | RunReport | EvalReport | FeatureReport | ConvergeReport | StatusReport | ApprovalsReport | ControlReport | CostReport | PrReport | BenchReport | InitReport | SkillsReport | SkillRunReport | ChecklistStatus[] | ArchiveReport | InPlaceReport | AttestReport | ExplainReport | SchemaReport | DoctorReport | FeaturesReport | UiReport | ConfigReport | IssuesReport | InboxReport | ReviewReport | AuthReport | BranchReport | EvidenceTour | ActionsReport | BugReport | PolicyCoverage;
 
 /**
  * The envelope as it is serialised — the schema of [`CommandResult`]
@@ -530,6 +660,25 @@ export interface ConfigTable {
   keys: ConfigKey[];
   /** Its name, e.g. `test`. */
   name: string;
+}
+
+/** The person's one confirmation, bound to what they saw. */
+export interface Confirmation {
+  /** Unix seconds. */
+  at: number;
+  /** Seen or named. */
+  basis: Basis;
+  /** Who. */
+  by: string;
+  /**
+   * `sha256:<hex>` over the reproductions shown (their files and
+   * statement ids).
+   */
+  digest: string;
+  /** The triad's digest when confirmed: a different one lapses this. */
+  triad_digest: string;
+  /** Through what. */
+  via: Via;
 }
 
 /** State of the project constitution. */
@@ -1131,6 +1280,110 @@ export type EventLine = {
     text: string;
     type: "notice";
   }
+  /** A bug's triad was recorded. */
+  | {
+    /** The home's kind. */
+    home: string;
+    /** The requirement. */
+    requirement: string;
+    /** Its task. */
+    task: string;
+    /** The triad's digest. */
+    triad_digest: string;
+    type: "bug.recorded";
+    /** The unit. */
+    unit: string;
+    /** Through what. */
+    via: string;
+  }
+  /** One reproduce try ended. */
+  | {
+    /** The try. */
+    n: number;
+    /** Of at most. */
+    of: number;
+    /** Each statement's class. */
+    per_statement: StatementClass[];
+    /** Its task. */
+    task: string;
+    type: "bug.reproduce_try";
+  }
+  /** Every statement is reproduced. */
+  | {
+    /** The reproductions (never their content). */
+    reproductions: ShownReproduction[];
+    /** Its task. */
+    task: string;
+    type: "bug.reproduced";
+  }
+  /** The reproductions wait for the person. */
+  | {
+    /** The digest to confirm. */
+    digest: string;
+    /** The command. */
+    next: string;
+    /** Its task. */
+    task: string;
+    type: "bug.confirm_waiting";
+  }
+  /** The person confirmed them. */
+  | {
+    /** `shown` or `named_test`. */
+    basis: string;
+    /** Who. */
+    by: string;
+    /** The digest confirmed. */
+    digest: string;
+    /** Its task. */
+    task: string;
+    type: "bug.confirmed";
+    /** Through what. */
+    via: string;
+  }
+  /** The person rejected them. */
+  | {
+    /** The digest rejected. */
+    digest: string;
+    /** The person's reason. */
+    reason: string;
+    /** Its task. */
+    task: string;
+    type: "bug.confirm_rejected";
+  }
+  /** The pass-to-pass set was chosen. */
+  | {
+    /** Members. */
+    count: number;
+    /** `selected` or `none_selected`. */
+    state: string;
+    /** Its task. */
+    task: string;
+    type: "bug.unchanged_selected";
+  }
+  /** The revert and the special cases were judged. */
+  | {
+    /** `rejected`, `survived`, `unviable`. */
+    revert: string;
+    /** The special cases. */
+    special_case: ShownSpecialCase[];
+    /** Its task. */
+    task: string;
+    type: "bug.discrimination";
+  }
+  /** The bug's outcome. */
+  | {
+    /** The stop's code. */
+    code: string | null;
+    /** What to do next. */
+    next: string[];
+    /** `awaiting_confirmation`, `cannot_reproduce`, `fixed`, … */
+    outcome: string;
+    /** Its task. */
+    task: string;
+    type: "bug.outcome";
+    /** The fix's verdict. */
+    verdict: string | null;
+  }
   /** The last line: the command's result, as `--json` prints it. */
   | {
     /** The result envelope. */
@@ -1264,6 +1517,9 @@ export interface FeaturesReport {
   unit: string;
 }
 
+/** A reproduction on the final tree. */
+export type FinalState = "passed" | "failed" | "not_run";
+
 /** A spec-driven format. */
 export type FormatKind = "speckit" | "openspec" | "kiro";
 
@@ -1282,6 +1538,27 @@ export interface FullTier {
 /** The `min_strength` gate. */
 export type Gate = "off" | "met" | "regenerated_met" | "failed";
 
+/**
+ * The hand-off of a stopped bug, composed by the engine from the journal
+ * (never written by a model).
+ */
+export interface Handoff {
+  /** The author's last words, labelled as its claim. */
+  claim?: AuthorClaim | null;
+  /** Tokens the tries spent. */
+  cost?: unknown;
+  /** How long reproduce took. */
+  elapsed_ms: number;
+  /** What the person can do. */
+  next: NextStep[];
+  /** The outcome it hands off. */
+  outcome: BugOutcome;
+  /** Per statement. */
+  statements: StatementsShown;
+  /** The tries made. */
+  tries: ReproduceTry[];
+}
+
 /** Visible passes the held-out tests caught. */
 export interface HeldOutGap {
   /** Of those, the ones the held-out tests failed. */
@@ -1299,6 +1576,19 @@ export interface HeldOutOracle {
   /** The oracle failed: the held-out tests missed something. */
   disagree: number;
 }
+
+/** A held-out variant, as the payload shows it: never its content or path. */
+export interface HeldOutVariant {
+  /** On the untouched code. */
+  baseline: RedClass;
+  /** On the final tree. */
+  final: FinalState;
+  /** The statement it covers. */
+  statement: string;
+}
+
+/** Where the format keeps the bug. */
+export type HomeKind = "native_speckit_bug" | "native_kiro_bugfix" | "standing_speckit" | "standing_openspec";
 
 /** Why an in-place run refused or stopped. */
 export interface InPlaceReport {
@@ -1320,6 +1610,8 @@ export interface InboxItem {
   detail: string;
   /** The feature. */
   feature: string;
+  /** Its group: `blocked_on_you` or `ready_to_review`. */
+  group: string;
   /**
    * What kind, in the order of urgency: `unknown` (the calls waiting in
    * the feature's journal could not be read — some may wait for you),
@@ -1332,7 +1624,10 @@ export interface InboxItem {
    * (changes requested on the spec), `stuck` (the
    * last attempt did not pass), `aside` (changes a run set aside),
    * `commit` (planning files a run cannot
-   * read yet), `handoff` (every task done: review and hand it off).
+   * read yet), `handoff` (every task done: review and hand it off) —
+   * and a bug's `bug_confirm`, `bug_cannot_reproduce`,
+   * `bug_unchanged_not_holding`, `bug_repro_weak`,
+   * `bug_already_satisfied` (the registry: `speccoder_core::inbox::Kind`).
    */
   kind: string;
   /** Waiting since (Unix seconds), when known. */
@@ -1444,6 +1739,19 @@ export interface IssueEntry {
   url: string;
 }
 
+/** The issue a bug was recorded from. */
+export interface IssueRef {
+  /**
+   * The digest of its context-manifest entry (title and body as given
+   * to the reproduction author).
+   */
+  context_digest?: string | null;
+  /** Its number. */
+  number: number;
+  /** `owner/repo`, when known. */
+  repo?: string | null;
+}
+
 /**
  * Result of `speccoder issue`: the repository's open GitHub issues, read
  * through GitHub's API as the person.
@@ -1483,6 +1791,9 @@ export interface LastAttempt {
   /** The agentplane run, when there was one. */
   run_id: string | null;
 }
+
+/** A pass-to-pass member on the final tree. */
+export type MemberFinal = "passed" | "failed" | "missing" | "not_run";
 
 /** Which units a check covers. */
 export type Mode = "touched" | "all";
@@ -1632,6 +1943,32 @@ export interface ParsedTasks {
   totals: Totals;
 }
 
+/** The tests that passed before the fix and must pass after it. */
+export interface PassToPass {
+  /** The members. */
+  members: PassToPassMember[];
+  /** Selected, or nothing was. */
+  state: PassToPassState;
+}
+
+/** One test that must stay green. */
+export interface PassToPassMember {
+  /** Its file. */
+  file: string;
+  /** On the final tree. */
+  final: MemberFinal;
+  /**
+   * How it was selected: `same_file`, `references:<module>`,
+   * `imports:<path>`, `package:<pkg>`, `unchanged:U<n>`.
+   */
+  rule: string;
+  /** The test id, as the runner reports it. */
+  test: string;
+}
+
+/** Whether anything was selected for pass-to-pass. */
+export type PassToPassState = "selected" | "none_selected";
+
 /**
  * A call that stopped an attempt for approval, or a question, waiting for
  * a person.
@@ -1776,6 +2113,16 @@ export interface PrReport {
   url: string | null;
 }
 
+/** Where the confirmed reproductions are kept, as recorded with the fix. */
+export interface PreFrozenRef {
+  /** The confirmation's digest. */
+  approval: string;
+  /** `sha256:<hex>` over the visible set. */
+  manifest: string;
+  /** The triad's digest. */
+  wording: string;
+}
+
 /** Everything discovered about one Spec Kit project. */
 export interface ProjectSnapshot {
   /** State of `.specify/memory/constitution.md`. */
@@ -1817,6 +2164,62 @@ export interface ProposeReport {
   usage: unknown;
 }
 
+/** `bug.confirm_rejected`, as published. */
+export interface PublicBugConfirmRejected {
+  /** The digest rejected. */
+  digest: string;
+  /** The person's reason. */
+  reason: string;
+}
+
+/** `bug.confirmed`, as published. */
+export interface PublicBugConfirmed {
+  /** `shown` or `named_test`. */
+  basis: string;
+  /** Who. */
+  by: string;
+  /** The digest confirmed. */
+  digest: string;
+  /** Through what. */
+  via: string;
+}
+
+/** `bug.outcome`, as published. */
+export interface PublicBugOutcome {
+  /** The stop's code. */
+  code: string | null;
+  /** What to do next. */
+  next: string[];
+  /** `awaiting_confirmation`, `cannot_reproduce`, `fixed`, … */
+  outcome: string;
+  /** The fix's verdict. */
+  verdict: string | null;
+}
+
+/** `bug.recorded`, as published: ids and digests only. */
+export interface PublicBugRecorded {
+  /** The home's kind. */
+  home: string;
+  /** The requirement. */
+  requirement: string;
+  /** The triad's digest. */
+  triad_digest: string;
+  /** The unit. */
+  unit: string;
+  /** Through what. */
+  via: string;
+}
+
+/**
+ * What a red run of acceptance tests showed.
+ *
+ * Only [`RedClass::Assertion`] and [`RedClass::Absent`] are red: a test was
+ * collected and failed on an assertion, or the tests could not build only
+ * because symbols the task is to introduce do not exist yet. Everything
+ * else is not demonstrated.
+ */
+export type RedClass = "assertion" | "absent" | "build_error" | "collection_error" | "timeout" | "no_tests" | "flaky" | "unclassified" | "passed";
+
 /** A path that blocks worktree mode. */
 export interface RefusedPath {
   /** Repository-relative path. */
@@ -1831,6 +2234,23 @@ export interface Regression {
   id: string;
   /** `failed`, `skipped`, or `missing`. */
   now: string;
+}
+
+/**
+ * The person rejected the reproductions shown; the reason goes to the
+ * author's next try.
+ */
+export interface Rejection {
+  /** Unix seconds. */
+  at: number;
+  /** Who. */
+  by: string;
+  /** The digest rejected. */
+  digest: string;
+  /** Why. */
+  reason: string;
+  /** Through what. */
+  via: Via;
 }
 
 /**
@@ -1863,6 +2283,50 @@ export interface ReplayReport {
   run_id: string;
 }
 
+/** One try of the reproduction author. */
+export interface ReproduceTry {
+  /** Why the whole try was discarded (`wrote outside tests`, …). */
+  discarded?: string | null;
+  /** 1, 2, … */
+  n: number;
+  /** Per statement. */
+  per_statement: TryStatement[];
+  /** The person's reason for rejecting the reproductions before it. */
+  rejection?: string | null;
+  /** The author's run. */
+  run_id?: string | null;
+  /** Its tokens. */
+  usage?: unknown;
+}
+
+/** One reproduction test. */
+export interface Reproduction {
+  /** The command that runs only it. */
+  argv: string[];
+  /** Its class on the untouched code, run twice. */
+  baseline: RedClass[];
+  /** `sha256:<hex>` of its content. */
+  digest: string;
+  /** Project-relative test file. */
+  file: string;
+  /** On the final tree. */
+  final: FinalState;
+  /** Against the revert candidate. */
+  revert: RevertOutcome;
+  /** Who wrote it. */
+  source: ReproductionSource;
+  /**
+   * The statement it reproduces (`E1`) — or, for a test of an
+   * *Unchanged* statement, that one (`U1`).
+   */
+  statement: string;
+  /** The test's name. */
+  test: string;
+}
+
+/** Who wrote a reproduction. */
+export type ReproductionSource = "author" | "person";
+
 /** One cited requirement, as the tick saw it and as the spec has it now. */
 export interface RequirementDrift {
   /** `FR-003`. */
@@ -1871,6 +2335,17 @@ export interface RequirementDrift {
   now: string | null;
   /** Its line when the task was ticked; `None`: it did not exist yet. */
   then: string | null;
+}
+
+/** A reproduction against the revert candidate (the fix undone). */
+export type RevertOutcome = "rejected" | "survived" | "unviable" | "not_run";
+
+/** The revert candidate's result. */
+export interface RevertResult {
+  /** The gravest outcome over the reproductions. */
+  outcome: RevertOutcome;
+  /** The statements whose reproduction failed on an assertion. */
+  rejected_by: string[];
 }
 
 /** One requirement and its review. */
@@ -1974,6 +2449,11 @@ export interface RunReport {
    * missing, signer, reason }`.
    */
   attestation?: unknown;
+  /**
+   * A bug task: the bug as this run left it (reproduce, confirm, the
+   * fix's discrimination).
+   */
+  bug?: BugReport | null;
   /** Paths changed between the checkpoints: `added` / `modified` / `deleted`. */
   changes: ([string, string])[];
   /** The commit on `speccoder/<feature>` holding the attempt and the tick. */
@@ -2169,6 +2649,53 @@ export type Runnable =
     kind: "pull_request";
   }
   /**
+   * Record a bug in the person's words (`speccoder bug`) and, when
+   * `run`, reproduce it.
+   */
+  | {
+    /** Someone else's fix to judge: a patch file or `pr:N`. */
+    candidate: string | null;
+    /** What should happen instead (one or more). */
+    expected: string[];
+    /** The GitHub issue it comes from. */
+    issue: number | null;
+    kind: "bug_fix";
+    /** Reproduce it once recorded. */
+    run: boolean;
+    /** Continue a bug the format's own bug step created. */
+    slug: string | null;
+    /** What happens (the symptom). */
+    symptom: string;
+    /**
+     * The person's own reproduction tests, one per expected statement
+     * (`PATH::NAME`).
+     */
+    tests: string[];
+    /** What must keep working (zero or more). */
+    unchanged: string[];
+  }
+  /**
+   * Confirm (or, with `reject`, reject: the input is the reason) a
+   * bug's reproductions, bound to the digest shown.
+   */
+  | {
+    /** The digest the person saw. */
+    digest: string;
+    kind: "bug_confirm";
+    /** Reject instead. */
+    reject: boolean;
+    /** `<unit>/<task>`. */
+    task: string;
+  }
+  /** Continue a bug: reproduce again, or run its confirmed fix. */
+  | {
+    kind: "bug_run";
+    /** A bug of the format's own bug structure, by slug. */
+    slug: string | null;
+    /** Or `<unit>/<task>`. */
+    task: string | null;
+  }
+  /**
    * Always Allow: approve the waiting command once and add exactly its
    * argv to `[commands] allow` (or `[sandbox] network_allow`).
    */
@@ -2265,6 +2792,16 @@ export interface ScopeFinding {
   stated: boolean;
 }
 
+/** A sealed held-out set: kept in the state directory, never shown. */
+export interface SealedRef {
+  /** Files in it. */
+  count: number;
+  /** The requirement it is keyed by. */
+  key: string;
+  /** The manifest's hash. */
+  manifest_sha256: string;
+}
+
 /** How the feature was selected. */
 export interface Selection {
   /** Name of the selected feature. */
@@ -2286,6 +2823,26 @@ export interface SetAside {
 
 /** Diagnostic severity. */
 export type Severity = "error" | "warning" | "info";
+
+/** A reproduction as the stream shows it. */
+export interface ShownReproduction {
+  /** Its content's digest. */
+  digest: string;
+  /** Its file. */
+  file: string;
+  /** Its statement. */
+  statement: string;
+  /** Its test. */
+  test: string;
+}
+
+/** A special case as the stream shows it. */
+export interface ShownSpecialCase {
+  /** Rejected (or ruled). */
+  rejected: boolean;
+  /** The statement it targets. */
+  statement: string;
+}
 
 /** Who signed. */
 export interface SignerView {
@@ -2382,6 +2939,23 @@ export interface SpecVersion {
   subject: string;
 }
 
+/**
+ * One special-case candidate: a fix that recognises a reproduction's
+ * literal inputs.
+ */
+export interface SpecialCase {
+  /** `sha256:<hex>` of its files: what a ruling is bound to. */
+  digest: string;
+  /** Its statement's held-out variant was written again once, told it. */
+  regenerated: boolean;
+  /** The combined set (reproductions and held-out variants) rejected it. */
+  rejected: boolean;
+  /** A person ruled the tests right about it. */
+  ruled: boolean;
+  /** The statement whose reproduction it targets. */
+  statement: string;
+}
+
 /** Spec Kit metadata from `.specify/*.json`; each field is `None` when absent. */
 export interface SpeckitMeta {
   /** `feature_directory` from `feature.json`, as recorded. */
@@ -2397,13 +2971,42 @@ export interface SpeckitMeta {
 }
 
 /** A stage of a task, in pipeline order. */
-export type Stage = "baseline" | "red" | "attempt" | "verify" | "audit" | "mutation" | "strength" | "monitor" | "commit";
+export type Stage = "baseline" | "reproduce" | "confirm" | "red" | "attempt" | "verify" | "unchanged" | "audit" | "mutation" | "strength" | "monitor" | "commit";
 
 /** Where a stage is. */
 export type StageState = "started" | "passed" | "failed" | "skipped";
 
 /** How far a measurement got. */
 export type State = "measured" | "partial" | "not_measured" | "not_applicable";
+
+/** One statement of the triad, in the person's words. */
+export interface Statement {
+  /**
+   * `C` (current), `E1`, `E2`, … (expected), `U1`, … (unchanged):
+   * positional, stable within the requirement.
+   */
+  id: string;
+  /** The words, whitespace-normalised. */
+  text: string;
+}
+
+/** One statement's class in a reproduce try. */
+export interface StatementClass {
+  /** `assertion`, `passed`, `build_error`, … */
+  class: string;
+  /** `E1`, `U1`. */
+  statement: string;
+}
+
+/** Statements, by what the tries showed. */
+export interface StatementsShown {
+  /** Neither red nor passing. */
+  not_reproduced: string[];
+  /** Red by assertion in some try. */
+  reproduced: string[];
+  /** Passed on every try. */
+  satisfied: string[];
+}
 
 /** Result of `speccoder report`: what the branch's history shows. */
 export interface StatusReport {
@@ -2552,6 +3155,11 @@ export interface TaskStatus {
   attestation: string | null;
   /** Open dependencies of a blocked task. */
   blocked_by: string[];
+  /**
+   * A bug task: the bug's outcome (`awaiting_confirmation`,
+   * `cannot_reproduce`, `fixed`, …).
+   */
+  bug?: string | null;
   /** The speccoder commit that ticked it. */
   commit: string | null;
   /**
@@ -2707,6 +3315,34 @@ export interface TraceRow {
   verdict: string | null;
 }
 
+/** The person's three statements about a bug. */
+export interface Triad {
+  /** What happens now (the symptom). */
+  current: Statement;
+  /**
+   * `sha256:<hex>` over the normalised statements: a different digest
+   * lapses a confirmation.
+   */
+  digest: string;
+  /** What should happen instead; at least one. */
+  expected: Statement[];
+  /** What must keep working as it does. */
+  unchanged: Statement[];
+}
+
+/** One statement's class in one try. */
+export interface TryStatement {
+  /**
+   * What its test did on the untouched code (`assertion` only when both
+   * runs failed on one).
+   */
+  class: RedClass;
+  /** Up to 20 lines of the run, when it was not red. */
+  excerpt?: string | null;
+  /** `E1`, `U1`. */
+  statement: string;
+}
+
 /**
  * Result of `speccoder ui`, printed once the host listens (under `--json`
  * the only result: the host keeps serving after it).
@@ -2782,6 +3418,14 @@ export interface VerifyReport {
   /** `fast` or `full`. */
   tier: string;
 }
+
+/**
+ * The interface a person acted through, as a write records it (`via`):
+ * one vocabulary for every record. Records written before it named
+ * `cli`, `tui` or `dashboard` (read as [`Via::Terminal`]) and
+ * `editor <name>` (read as [`Via::Acp`], the name a separate client).
+ */
+export type Via = "terminal" | "web" | "window" | "acp" | "phone" | "ci" | "mcp";
 
 /** Result of `speccoder worktree`. */
 export interface WorktreeReport {

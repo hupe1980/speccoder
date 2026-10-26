@@ -14,6 +14,9 @@ pub struct Kiro;
 /// The Kiro detector.
 pub static KIRO: Kiro = Kiro;
 
+/// Why a bug in a Kiro project is not recorded (until F-052).
+pub const KIRO_BUGS: &str = "Kiro's bugfix.md is the home for this project's bugs, and speccoder has no Kiro adapter yet (F-052): nothing was written";
+
 fn upward(start: &Path, marks: impl Fn(&Path) -> bool) -> Option<PathBuf> {
     let start = std::fs::canonicalize(start).ok()?;
     start.ancestors().find(|d| marks(d)).map(Path::to_path_buf)

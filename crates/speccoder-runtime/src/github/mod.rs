@@ -361,6 +361,28 @@ pub fn issue(ctx: &Ctx, root: &Path, reference: &str) -> Result<Issue, String> {
     })
 }
 
+/// A pull request's diff against its merge base and its head commit,
+/// fetched read-only (no checkout of the contributor's branch, no CI
+/// token): what `speccoder bug --candidate pr:N` judges.
+///
+/// # Errors
+///
+/// No repository, not signed in, or GitHub's reason.
+pub fn pull_diff(ctx: &Ctx, root: &Path, number: u64) -> Result<(String, String), String> {
+    let r = repo(root, None)?;
+    let api = ctx.signed_in(&r.host)?;
+    let pull = api.get(&format!("/repos/{}/pulls/{number}", r.slug()))?;
+    let head = pull["head"]["sha"].as_str().unwrap_or_default().to_owned();
+    let diff = api.get_diff(&format!("/repos/{}/pulls/{number}", r.slug()))?;
+    Ok((diff, head))
+}
+
+/// The repository's `owner/repo`, if it has a GitHub remote.
+#[must_use]
+pub fn slug_of(root: &Path) -> Option<String> {
+    repo(root, None).ok().map(|r| r.slug())
+}
+
 /// What a feature started from `issue` is asked to specify: its title, its
 /// text, and its address — which the spec keeps, so `pr` can close it.
 #[must_use]

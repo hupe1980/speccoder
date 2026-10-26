@@ -1,0 +1,10 @@
+# A real bug: an empty title panics. The fix must turn it into an error, keep other titles, and its reproduction must fail without the fix (the revert rejected).
+expect = "complete"
+
+[bug]
+symptom = "saving an empty title panics"
+expected = ["save_title(\"\") returns an error instead of panicking"]
+unchanged = ["save_title(\"Notes\") returns Ok(\"Notes\")"]
+
+[oracle]
+argv = ["cargo", "test", "--quiet", "--test", "oracle"]

@@ -794,6 +794,79 @@ fn main() {
             }
             result
         }
+        Command::Bug {
+            action,
+            symptom,
+            expected,
+            unchanged,
+            issue,
+            tests,
+            candidate,
+            slug,
+            no_run,
+            no_prompt,
+        } => {
+            // A run without a terminal (CI) is recorded as such.
+            let via = if std::env::var_os("CI").is_some() && !interactive(false) {
+                speccoder_core::actions::Via::Ci
+            } else {
+                speccoder_core::actions::Via::Terminal
+            };
+            let ask = |no_prompt: bool| interactive(no_prompt) && !cli.events;
+            let (progress, attention) = live_progress(&cli, &notify, events.as_ref());
+            let options = |no_prompt: bool| speccoder_runtime::RunOptions {
+                approver: ask(no_prompt).then(|| std::sync::Arc::new(prompt::Terminal) as _),
+                progress: progress.clone(),
+                ..speccoder_runtime::RunOptions::default()
+            };
+            let result = match action {
+                Some(cli::BugAction::Confirm {
+                    task,
+                    digest,
+                    reject,
+                    reason,
+                    no_run,
+                }) => bug_confirm(
+                    path,
+                    task,
+                    digest.as_deref(),
+                    reject.then_some(reason.as_deref().unwrap_or_default()),
+                    !*no_run,
+                    via,
+                    &options(false),
+                    ask(false),
+                ),
+                Some(cli::BugAction::Run {
+                    slug,
+                    task,
+                    no_prompt,
+                }) => speccoder_runtime::bug::run(
+                    path,
+                    slug.as_deref(),
+                    task.as_deref(),
+                    None,
+                    &options(*no_prompt),
+                ),
+                None => {
+                    let req = speccoder_runtime::bug::Request {
+                        symptom: symptom.clone().unwrap_or_default(),
+                        expected: expected.clone(),
+                        unchanged: unchanged.clone(),
+                        issue: *issue,
+                        tests: tests.clone(),
+                        candidate: candidate.clone(),
+                        slug: slug.clone(),
+                        run: !*no_run,
+                        github: None,
+                    };
+                    speccoder_runtime::bug::bug(path, &req, via, None, &options(*no_prompt))
+                }
+            };
+            if let Some(a) = &attention {
+                a.finish(&result);
+            }
+            result
+        }
         Command::Inbox => speccoder_runtime::inbox::inbox(path, feature),
         Command::Actions { task } => {
             speccoder_runtime::actions::list(path, feature, task.as_deref())
@@ -940,8 +1013,22 @@ fn main() {
             (None, false) => speccoder_runtime::current::list(path, feature),
         },
         Command::Workflow {
-            action: cli::WorkflowAction::Install { force },
+            action:
+                cli::WorkflowAction::Install {
+                    force,
+                    overlay: None,
+                },
         } => speccoder_runtime::workflow::install(path, *force),
+        Command::Workflow {
+            action:
+                cli::WorkflowAction::Install {
+                    force,
+                    overlay: Some(name),
+                },
+        } => speccoder_runtime::workflow::install_overlay(path, name, *force),
+        Command::Workflow {
+            action: cli::WorkflowAction::Uninstall { overlay },
+        } => speccoder_runtime::workflow::uninstall_overlay(path, overlay),
         Command::Attest {
             action:
                 cli::AttestAction::Verify {
@@ -1225,9 +1312,70 @@ fn offers_remedy(cli: &Cli) -> bool {
             } | Command::Do {
                 no_prompt: false,
                 ..
+            } | Command::Bug {
+                no_prompt: false,
+                ..
             }
         )
     )
+}
+
+/// `speccoder bug confirm`: with the digest given, the decision; without
+/// it, at a terminal, the reproductions are shown and the person answers.
+#[allow(clippy::too_many_arguments)]
+fn bug_confirm(
+    path: &std::path::Path,
+    task: &str,
+    digest: Option<&str>,
+    reject: Option<&str>,
+    run: bool,
+    via: speccoder_core::actions::Via,
+    options: &speccoder_runtime::RunOptions,
+    ask: bool,
+) -> speccoder_core::CommandResult {
+    use speccoder_runtime::approvals::{Approver, ConfirmAnswer};
+    if let Some(d) = digest {
+        return speccoder_runtime::bug::confirm(path, task, d, reject, run, via, None, options);
+    }
+    let shown = speccoder_runtime::worktree::state_dir().and_then(|state| {
+        let root = speccoder_runtime::format::at(path).detect(path)?;
+        speccoder_runtime::bug::shown(&state, &root, task)
+    });
+    let (Some(request), true) = (shown, ask) else {
+        return speccoder_core::CommandResult::new(
+            "bug",
+            speccoder_core::CommandStatus::UsageError,
+            &format!("pass --digest: the one shown with the reproductions (`speccoder inbox`, or `speccoder bug confirm {task}` at a terminal)"),
+        )
+        .with_code("USAGE");
+    };
+    match prompt::Terminal.confirm(&request) {
+        Some(ConfirmAnswer::Confirm) => speccoder_runtime::bug::confirm(
+            path,
+            task,
+            &request.digest,
+            None,
+            run,
+            via,
+            None,
+            options,
+        ),
+        Some(ConfirmAnswer::Reject(why)) => speccoder_runtime::bug::confirm(
+            path,
+            task,
+            &request.digest,
+            Some(&why),
+            run,
+            via,
+            None,
+            options,
+        ),
+        None => speccoder_core::CommandResult::new(
+            "bug",
+            speccoder_core::CommandStatus::NeedsHuman,
+            &format!("{task}'s reproductions still wait for you"),
+        ),
+    }
 }
 
 /// Whether the next step is offered after this command: a planning step, a
@@ -1433,6 +1581,7 @@ fn command_name(command: Option<&Command>) -> &'static str {
             C::Approvals { .. } => "approvals",
             C::Issue { .. } => "issue",
             C::Do { .. } => "do",
+            C::Bug { .. } => "bug",
             C::Inbox => "inbox",
             C::Actions { .. } => "actions",
             C::Auth { .. } => "auth",

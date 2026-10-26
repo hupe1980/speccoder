@@ -65,7 +65,7 @@ fn the_published_schemas_are_what_the_code_generates() {
         let text = format!("{}\n", serde_json::to_string_pretty(&schema).unwrap());
         let file = dir.join(format!("{name}.json"));
         if bless() {
-            std::fs::create_dir_all(&dir).unwrap();
+            std::fs::create_dir_all(file.parent().unwrap()).unwrap();
             std::fs::write(&file, text).unwrap();
         } else if std::fs::read_to_string(&file).ok().as_deref() != Some(text.as_str()) {
             stale.push(name);

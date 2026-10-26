@@ -88,8 +88,6 @@ pub fn worktree(path: &Path, feature: Option<&str>) -> CommandResult {
 #[cfg(feature = "engine")]
 /// [`worktree()`] with an explicit state directory.
 pub fn worktree_with(path: &Path, feature: Option<&str>, state: &Path) -> CommandResult {
-    use speccoder_core::{RefusedPath, WorktreeReport};
-
     let inspected = inspect(path, feature);
     let snapshot = match inspected.data() {
         Some(CommandData::Inspect(s)) => s.clone(),
@@ -102,8 +100,22 @@ pub fn worktree_with(path: &Path, feature: Option<&str>, state: &Path) -> Comman
             inspected.message(),
         );
     };
-    let format = crate::format::of(&snapshot);
-    let name = f.feature.name.clone();
+    worktree_of(&snapshot, &f.feature.name, &f.feature.dir, state)
+}
+
+#[cfg(feature = "engine")]
+/// The worktree of the unit `name` whose files are under `unit_dir`
+/// (project-relative): a feature, or a home the format's tasks do not list
+/// (a bug in the format's own bug structure).
+pub fn worktree_of(
+    snapshot: &speccoder_core::snapshot::ProjectSnapshot,
+    name: &str,
+    unit_dir: &str,
+    state: &Path,
+) -> CommandResult {
+    use speccoder_core::{RefusedPath, WorktreeReport};
+    let format = crate::format::of(snapshot);
+    let name = name.to_owned();
     let mut report = WorktreeReport {
         feature: name.clone(),
         path: None,
@@ -144,7 +156,7 @@ pub fn worktree_with(path: &Path, feature: Option<&str>, state: &Path) -> Comman
         let s = joined.to_string_lossy().replace('\\', "/");
         if s.is_empty() { ".".to_owned() } else { s }
     };
-    let precondition = format.commit_precondition(project, &join, &f.feature.dir);
+    let precondition = format.commit_precondition(project, &join, unit_dir);
 
     match crate::worktree::ensure_worktree(&repo_root, state, &name, precondition) {
         Ok(wt) => {

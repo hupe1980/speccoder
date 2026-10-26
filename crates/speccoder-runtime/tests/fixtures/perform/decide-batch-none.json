@@ -1,5 +1,5 @@
 {
-  "head": "spec(002-quick-changes): quick change: Log every sign-in",
+  "head": "bug: signing in twice logs out",
   "result": {
     "code": "NOT-FOUND",
     "command": "approvals",

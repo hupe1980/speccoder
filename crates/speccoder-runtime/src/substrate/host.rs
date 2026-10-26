@@ -136,7 +136,16 @@ impl Skill for Host {
                 // The account is shown for attempts; these read as documents.
                 reasoning: false,
                 tools,
-                policy: Policy::new(&[], &[]).rules(self.format.rules()).authoring(),
+                // A format's own bug step writes only its bug's directory.
+                policy: Policy::new(&[], &[])
+                    .rules(if settings["scope"] == "bug" {
+                        self.format
+                            .bug_step()
+                            .map_or(self.format.rules(), |s| s.rules)
+                    } else {
+                        self.format.rules()
+                    })
+                    .authoring(),
                 max_turns: limit("max_turns", 30).max(1),
                 max_tool_calls: limit("max_tool_calls", 100),
                 schema: schema(),

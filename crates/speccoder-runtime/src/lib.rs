@@ -15,6 +15,8 @@ pub mod attest;
 #[cfg(feature = "engine")]
 pub mod bench;
 #[cfg(feature = "engine")]
+pub mod bug;
+#[cfg(feature = "engine")]
 pub mod code;
 pub mod commands;
 pub mod context;
@@ -53,6 +55,7 @@ pub mod init;
 #[cfg(feature = "engine")]
 pub mod instructions;
 pub mod integrity;
+pub mod ladder;
 #[cfg(feature = "engine")]
 pub mod mcp;
 #[cfg(feature = "engine")]
@@ -61,6 +64,8 @@ pub mod mutation;
 pub mod next;
 #[cfg(feature = "engine")]
 pub mod pipeline;
+#[cfg(feature = "engine")]
+pub mod pre_frozen;
 #[cfg(feature = "engine")]
 pub mod progress;
 #[cfg(feature = "engine")]

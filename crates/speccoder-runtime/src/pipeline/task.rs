@@ -90,6 +90,24 @@ pub fn run_with_approver(
     run_task(path, feature, task, state, provider, secret, &options)
 }
 
+/// Runs a bug of the format's own bug structure: a unit no task list
+/// names, its task `bug:<slug>`, ticked nowhere.
+#[must_use]
+pub fn run_native_bug(
+    root: &Path,
+    bug: &speccoder_core::bug::BugReport,
+    state: &Path,
+    provider: Arc<dyn agentplane::model::ModelProvider>,
+    secret: Option<&str>,
+    options: &RunOptions,
+) -> CommandResult {
+    let options = RunOptions {
+        bug_home: Some(Arc::new(super::bug::NativeBug::of(bug))),
+        ..options.clone()
+    };
+    run_task(root, None, &bug.task, state, provider, secret, &options)
+}
+
 #[allow(clippy::too_many_lines)] // one linear procedure, kept in reading order
 pub(crate) fn run_task(
     path: &Path,
@@ -118,13 +136,18 @@ pub(crate) fn run_task(
         Ok(s) => s,
         Err(r) => return *r,
     };
-    let Some(f) = s.snapshot.feature.as_ref() else {
-        return refuse(
-            CommandStatus::SelectionNeeded,
-            "no feature selected; pass --feature".to_owned(),
-        );
+    // A bug in the format's own bug structure: a unit no task list names.
+    let native = options.bug_home.clone();
+    let feature_name = match (&native, s.snapshot.feature.as_ref()) {
+        (Some(n), _) => n.unit.clone(),
+        (None, Some(f)) => f.feature.name.clone(),
+        (None, None) => {
+            return refuse(
+                CommandStatus::SelectionNeeded,
+                "no feature selected; pass --feature".to_owned(),
+            );
+        }
     };
-    let feature_name = f.feature.name.clone();
     // A lane keeps its own journal and live state; a person's
     // decisions are the feature's.
     let plane_dir = match &options.lane {
@@ -139,7 +162,10 @@ pub(crate) fn run_task(
     ));
 
     // 2. The worktree.
-    let wt = workspace(path, Some(&feature_name), state, options);
+    let wt = match &native {
+        Some(n) => crate::commands::worktree_of(&s.snapshot, &n.unit, &n.dir, state),
+        None => workspace(path, Some(&feature_name), state, options),
+    };
     let Some(CommandData::Worktree(w)) = wt.data() else {
         return CommandResult::carried("run", &wt);
     };
@@ -277,49 +303,71 @@ pub(crate) fn run_task(
 
     // 3. Spec, checks and policy as committed in the worktree.
     let format = crate::format::at(&project);
-    let Some(snap) = format.inspect(&project, Some(&feature_name)) else {
+    let Some(snap) = format.inspect(
+        &project,
+        if native.is_some() {
+            None
+        } else {
+            Some(&feature_name)
+        },
+    ) else {
         return refuse(
             CommandStatus::NotAProject,
             format.messages().no_project_in_worktree.to_owned(),
         );
     };
+    if native.is_some()
+        && crate::bug::state::load(&s.plane_dir, &feature_name, task)
+            .is_some_and(|b| b.outcome == speccoder_core::bug::Outcome::Fixed)
+    {
+        return refuse(
+            CommandStatus::TaskNotReady,
+            format!("{task} is already fixed"),
+        )
+        .with_code("TASK-DONE");
+    }
     // The task must exist and be ready in the worktree, where progress
     // (ticks committed on speccoder/<feature>) lives.
-    let Some(st) = snap
-        .feature
-        .as_ref()
-        .and_then(|f| f.schedule.as_ref())
-        .and_then(|sch| sch.tasks.iter().find(|t| t.id == task))
-    else {
-        return refuse(
-            CommandStatus::NotFound,
-            format!("no task {task} in {feature_name}"),
-        );
-    };
-    match st.state {
-        TaskState::Done => {
+    if native.is_none() {
+        let Some(st) = snap
+            .feature
+            .as_ref()
+            .and_then(|f| f.schedule.as_ref())
+            .and_then(|sch| sch.tasks.iter().find(|t| t.id == task))
+        else {
             return refuse(
-                CommandStatus::TaskNotReady,
-                format!("{task} is already done"),
-            )
-            .with_code("TASK-DONE");
+                CommandStatus::NotFound,
+                format!("no task {task} in {feature_name}"),
+            );
+        };
+        match st.state {
+            TaskState::Done => {
+                return refuse(
+                    CommandStatus::TaskNotReady,
+                    format!("{task} is already done"),
+                )
+                .with_code("TASK-DONE");
+            }
+            TaskState::Blocked => {
+                return refuse(
+                    CommandStatus::TaskNotReady,
+                    format!("{task} is blocked by {}", st.blocked_by.join(", ")),
+                )
+                .with_code("TASK-BLOCKED");
+            }
+            TaskState::Ready => {}
         }
-        TaskState::Blocked => {
-            return refuse(
-                CommandStatus::TaskNotReady,
-                format!("{task} is blocked by {}", st.blocked_by.join(", ")),
-            )
-            .with_code("TASK-BLOCKED");
-        }
-        TaskState::Ready => {}
     }
     // Unfinished checklists stop the task before any model call (the
     // committed checklists in the worktree are what counts).
-    let checklists_overridden =
+    let checklists_overridden = if native.is_some() {
+        false
+    } else {
         match checklist_gate(&project, Some(&feature_name), options.ignore_checklists) {
             Ok(overridden) => overridden,
             Err(stop) => return *stop,
-        };
+        }
+    };
     let parsed_task = snap
         .feature
         .as_ref()
@@ -331,7 +379,11 @@ pub(crate) fn run_task(
         .and_then(|f| f.tasks.as_ref())
         .map(|t| project.join(&t.path));
 
-    let bundle = match format.bundle(&snap, task) {
+    let bundle = match native
+        .as_ref()
+        .map(|n| n.bundle(&project))
+        .map_or_else(|| format.bundle(&snap, task), Ok)
+    {
         Ok(b) => b,
         Err(_) => {
             return refuse(
@@ -706,7 +758,51 @@ pub(crate) fn run_task(
     let began = std::time::Instant::now();
     // 4b. Acceptance tests derived from the spec, written before the
     //     attempt so they are frozen, and required to be red now.
-    let scenarios = format.scenarios(&snap, task);
+    // 4a. A bug task: reproduce (and the person's confirmation) before
+    //     anything else; once confirmed, its reproductions are the visible set.
+    let bug_ctx = super::bug::Ctx {
+        rt: &rt,
+        plane: &plane,
+        project: &project,
+        wt_root: &wt_root,
+        wt_path: &wt_path,
+        tmp: &tmp,
+        policy: &policy,
+        runner: &runner,
+        state: &s.plane_dir,
+        feature: &feature_name,
+        task,
+        bundle: &bundle_value,
+        instructions: &instructions,
+        live: &*live,
+        approver: approver.as_deref(),
+        held_out: run_config.held_out,
+        max_tries: run_config.reproduce_tries,
+        start: &start,
+    };
+    let mut bug_fix = match super::bug::phase(&s.plane_dir, &feature_name, task, &project, format) {
+        Err(e) => return fail(CommandStatus::NeedsHuman, e),
+        Ok(None) => None,
+        Ok(Some(super::bug::Phase::Fix(f))) => Some(*f),
+        Ok(Some(super::bug::Phase::Reproduce(b))) if interrupted.is_none() => {
+            match super::bug::reproduce(&bug_ctx, *b) {
+                Ok(f) => Some(f),
+                Err(stop) => return *stop,
+            }
+        }
+        Ok(Some(super::bug::Phase::Reproduce(_))) => None,
+    };
+    let bug_candidate = bug_fix.as_ref().and_then(|f| {
+        f.bug.candidate.clone().and_then(|c| {
+            crate::bug::state::extra(&s.plane_dir, &f.bug.unit, &f.bug.task)
+                .candidate_patch
+                .map(|d| (d, c))
+        })
+    });
+    let scenarios = match &bug_fix {
+        Some(f) => super::bug::scenarios(&f.bug),
+        None => format.scenarios(&snap, task),
+    };
     let mut acceptance = if let Some(prepared) = interrupted
         .as_ref()
         .and_then(|m| m.acceptance.clone())
@@ -714,6 +810,23 @@ pub(crate) fn run_task(
     {
         // The interrupted attempt's tests, already in the worktree.
         Some(prepared)
+    } else if let Some(f) = &bug_fix {
+        stage(&*live, task, Stage::Red, StageState::Started, None, None);
+        match super::bug::reuse(&bug_ctx, f) {
+            Ok(a) => Some(a),
+            Err(e) => {
+                let _ = worktree::restore(&wt_root, &tmp, &start);
+                stage(
+                    &*live,
+                    task,
+                    Stage::Red,
+                    StageState::Failed,
+                    Some(e.clone()),
+                    Some(began),
+                );
+                return fail(CommandStatus::NeedsHuman, e);
+            }
+        }
     } else if run_config.acceptance && format.acceptance_testable(&bundle) {
         stage(&*live, task, Stage::Red, StageState::Started, None, None);
         Some(prepare_acceptance(&AcceptanceSetup {
@@ -735,7 +848,10 @@ pub(crate) fn run_task(
     };
     // 4c. The held-out set: written after a red visible set, kept in
     //     the state directory, never shown to the implementer.
-    let held_out_store = crate::held_out::dir(&s.plane_dir, &feature_name, task);
+    let held_out_store = match &bug_fix {
+        Some(f) => crate::held_out::sealed_dir(&s.plane_dir, &f.bug.unit, &f.bug.requirement),
+        None => crate::held_out::dir(&s.plane_dir, &feature_name, task),
+    };
     if let Some(a) = acceptance
         .as_mut()
         .filter(|a| a.report.get("held_out").is_none())
@@ -910,6 +1026,8 @@ pub(crate) fn run_task(
     let mut samples: Vec<(RunReport, String, worktree::Checkpoint, serde_json::Value)> = Vec::new();
     // Each judged attempt's held-out outcome, across samples and retries.
     let mut held_out_log: Vec<serde_json::Value> = Vec::new();
+    // A special case that survived a bug task's reproductions.
+    let mut bug_weak: Option<speccoder_core::strength::Permitted> = None;
     let (mut report, attempt_status) = loop {
         let mut earlier: Vec<speccoder_core::EarlierAttempt> = Vec::new();
         let mut digest: Option<serde_json::Value> = None;
@@ -1000,7 +1118,25 @@ pub(crate) fn run_task(
             let judged_before = integrity::JudgeSnapshot::take(&wt_root, &policy);
             // The attempt itself: speccoder's governed loop, or an external
             // agent whose result is judged from the diff alike.
-            let (run_id, succeeded, mut output) = if let Some(exec) = &executor {
+            let (run_id, succeeded, mut output) = if let Some((diff, cand)) = &bug_candidate {
+                let held: Vec<String> = bug_fix
+                    .as_ref()
+                    .and_then(|f| {
+                        f.bug
+                            .held_out_sealed
+                            .clone()
+                            .map(|h| (f.bug.unit.clone(), h))
+                    })
+                    .and_then(|(unit, h)| {
+                        crate::held_out::open_sealed(&s.plane_dir, &unit, &h).ok()
+                    })
+                    .map(|(m, _)| m.files.into_iter().map(|f| f.path).collect())
+                    .unwrap_or_default();
+                match super::bug::apply_candidate(&bug_ctx, diff, cand, &frozen, &held) {
+                    Ok(x) => x,
+                    Err(stop) => return *stop,
+                }
+            } else if let Some(exec) = &executor {
                 let allow: Vec<Vec<String>> = check_argvs
                     .iter()
                     .chain(&run_config.allow)
@@ -1155,6 +1291,11 @@ pub(crate) fn run_task(
                 }
                 (outcome.run_id.to_string(), succeeded, output)
             };
+            if bug_candidate.is_some()
+                && let Some(c) = bug_fix.as_mut().and_then(|f| f.bug.candidate.as_mut())
+            {
+                c.applied = true;
+            }
             // The configured formatter, run by speccoder (not the model) on the
             // attempt's result; its changes are part of the attempt and audited.
             if let Some(argv) = run_config.format.as_ref().filter(|_| {
@@ -1419,6 +1560,50 @@ pub(crate) fn run_task(
                     }
                 }
             }
+            // 7.6 A bug task: red → green per reproduction, the pass-to-pass
+            //     set, the revert and the special cases.
+            if let Some(fix) = bug_fix.as_mut().filter(|_| {
+                attempt_status == "completed"
+                    && findings.is_empty()
+                    && matches!(
+                        report.verdict,
+                        Some(
+                            speccoder_core::verify::Verdict::Verified
+                                | speccoder_core::verify::Verdict::RegressionOnly
+                        )
+                    )
+            }) {
+                let keep = crate::strength::dir(&s.plane_dir, &feature_name, task);
+                let judging = super::bug::Judging {
+                    before: &before,
+                    baseline: &baseline,
+                    verification: report.verification.as_ref(),
+                    base: report
+                        .verdict
+                        .clone()
+                        .unwrap_or(speccoder_core::verify::Verdict::RegressionOnly),
+                    keep: &keep,
+                };
+                match super::bug::judge(&bug_ctx, fix, &judging) {
+                    Ok(j) => {
+                        report.verdict = Some(j.verdict);
+                        if let Some(weak) = j.weak {
+                            report.reason = Some(format!(
+                                "reproduction too weak: a fix that special-cases {}'s input passes ({}); `speccoder task rule {task} --tests-right --reason …` if the tests are right",
+                                weak.scenario, weak.rationale
+                            ));
+                            bug_weak = Some(weak);
+                            attempt_status = "repro_weak".to_owned();
+                        }
+                    }
+                    Err(e) => {
+                        report.integrity.push(e.clone());
+                        report.reason = Some(e);
+                        report.verdict = None;
+                        attempt_status = "integrity".to_owned();
+                    }
+                }
+            }
             if let Some(h) = report
                 .acceptance
                 .as_mut()
@@ -1513,14 +1698,18 @@ pub(crate) fn run_task(
             let discarded: Vec<String> = report.changes.iter().map(|(p, _)| p.clone()).collect();
             let d = speccoder_core::retry::digest(attempt_no, &reasons, verification, &discarded);
             let fingerprint = speccoder_core::retry::fingerprint(&d);
-            let stop = retry_stop(
-                &findings,
-                verification,
-                earlier.last().map(|e| e.fingerprint.as_str()),
-                &fingerprint,
-                attempt_no,
-                run_config.max_attempts,
-            );
+            let stop = if bug_candidate.is_some() {
+                Some("a candidate is judged, never retried".to_owned())
+            } else {
+                retry_stop(
+                    &findings,
+                    verification,
+                    earlier.last().map(|e| e.fingerprint.as_str()),
+                    &fingerprint,
+                    attempt_no,
+                    run_config.max_attempts,
+                )
+            };
             if let Some(stop) = stop {
                 report.retry_stop = Some(stop);
                 break (report, attempt_status);
@@ -1917,6 +2106,19 @@ pub(crate) fn run_task(
                 .as_ref()
                 .and_then(|a| a.red_class.filter(|c| a.red && c.is_red())),
             checklists_overridden,
+            extra: bug_fix
+                .as_ref()
+                .map(|f| {
+                    super::bug::trailers(
+                        f,
+                        &report
+                            .verdict
+                            .as_ref()
+                            .map(super::outcome::verdict_word)
+                            .unwrap_or_default(),
+                    )
+                })
+                .unwrap_or_default(),
         });
         match &options.session {
             // Worktree: tick, then commit the tick with the evidence.
@@ -2000,13 +2202,17 @@ pub(crate) fn run_task(
                     "network": format!("{:?}", sandbox_config.network).to_lowercase(),
                 }),
                 executor: serde_json::json!({
-                    "kind": executor.as_ref().map_or_else(|| "native".to_owned(), |e| match &e.kind {
+                    "kind": if bug_candidate.is_some() { "candidate".to_owned() } else { executor.as_ref().map_or_else(|| "native".to_owned(), |e| match &e.kind {
                         external::Kind::Claude => "claude".to_owned(),
                         external::Kind::Codex => "codex".to_owned(),
                         external::Kind::Command(_) => "command".to_owned(),
-                    }),
+                    }) },
+                    "candidate": bug_candidate.as_ref().map(|(_, c)| serde_json::json!({ "origin": c.origin, "digest": c.digest, "head_sha": c.head_sha })),
                 }),
                 model: serde_json::json!({ "provider": s.model.provider, "model": s.model.model }),
+                bug: bug_fix
+                    .as_ref()
+                    .map(|f| super::bug::predicate_fields(&f.bug, &f.record)),
             };
             report.attestation = Some(crate::attest::record_tick(&tick, &report));
         }
@@ -2024,18 +2230,101 @@ pub(crate) fn run_task(
             Some(began),
         );
     }
+    // 8'. A bug in the format's own bug structure: nothing is ticked; its
+    //     verdict commit carries the evidence (a trailer-only task).
+    if passed && let Some(n) = &native {
+        let began = std::time::Instant::now();
+        stage(&*live, task, Stage::Commit, StageState::Started, None, None);
+        let verdict = report
+            .verdict
+            .as_ref()
+            .map(super::outcome::verdict_word)
+            .unwrap_or_default();
+        let message = tick_message(&TickFacts {
+            feature: &feature_name,
+            task,
+            title: &n.title,
+            report: &report,
+            red: acceptance
+                .as_ref()
+                .and_then(|a| a.red_class.filter(|c| a.red && c.is_red())),
+            checklists_overridden: false,
+            extra: bug_fix
+                .as_ref()
+                .map(|f| super::bug::trailers(f, &verdict))
+                .unwrap_or_default(),
+        });
+        match commit_attempt(&wt_root, &message) {
+            Ok(id) => report.commit = Some(id),
+            Err(e) => report.integrity.push(format!("commit failed: {e}")),
+        }
+        if let Some(commit) = report.commit.clone().filter(|_| run_config.attest.enabled) {
+            let sandboxed = sandbox_config.mode != sandbox::Mode::Off && sandbox::backend().is_ok();
+            let tick = crate::attest::Tick {
+                repo: &wt_root,
+                config: &config_text,
+                attest: &run_config.attest,
+                format: &format!("{:?}", format.kind()).to_lowercase(),
+                feature: &feature_name,
+                feature_dir: &n.dir,
+                task,
+                title: &n.title,
+                line_hash: "",
+                section: None,
+                section_text: &n.story,
+                requirements: &[],
+                commit: &commit,
+                verdict: &verdict,
+                sandbox: serde_json::json!({
+                    "mode": format!("{:?}", sandbox_config.mode).to_lowercase(),
+                    "backend": sandboxed.then_some(if cfg!(target_os = "macos") { "seatbelt" } else { "landlock" }),
+                    "network": format!("{:?}", sandbox_config.network).to_lowercase(),
+                }),
+                executor: serde_json::json!({
+                    "kind": if bug_candidate.is_some() { "candidate" } else if executor.is_some() { "external" } else { "native" },
+                }),
+                model: serde_json::json!({ "provider": s.model.provider, "model": s.model.model }),
+                bug: bug_fix
+                    .as_ref()
+                    .map(|f| super::bug::predicate_fields(&f.bug, &f.record)),
+            };
+            report.attestation = Some(crate::attest::record_tick(&tick, &report));
+        }
+        stage(
+            &*live,
+            task,
+            Stage::Commit,
+            if report.commit.is_some() {
+                StageState::Passed
+            } else {
+                StageState::Failed
+            },
+            report.commit.as_ref().map(|c| c.chars().take(7).collect()),
+            Some(began),
+        );
+    }
 
     // 9. An attempt whose tests reject what the spec appears to allow is
     //    held for a person, as a waiting call is: its tree and resume marker
     //    stay, and after a ruling the next run judges it again from the
     //    journal, repeating no model call.
-    if attempt_status == "over_strict" {
+    if attempt_status == "repro_weak"
+        && let Some(weak) = &bug_weak
+        && let Err(e) = crate::strength::hold(&strength_dir, &[weak])
+    {
+        report
+            .integrity
+            .push(format!("holding the attempt failed: {e}"));
+    }
+    if attempt_status == "over_strict" || attempt_status == "repro_weak" {
         let findings = report
             .strength
             .as_ref()
             .map(|a| speccoder_core::strength::over_strict(&a.permitted))
             .unwrap_or_default();
-        if let Err(e) = crate::strength::hold(&strength_dir, &findings) {
+        if attempt_status == "over_strict"
+            && let Err(e) = crate::strength::hold(&strength_dir, &findings)
+        {
             report
                 .integrity
                 .push(format!("holding the attempt failed: {e}"));
@@ -2044,7 +2333,7 @@ pub(crate) fn run_task(
     }
     // 9. An attempt that did not pass is saved under an attempt ref and
     //    undone: the next attempt starts where this one did.
-    if !passed && attempt_status != "over_strict" {
+    if !passed && attempt_status != "over_strict" && attempt_status != "repro_weak" {
         let (outcome, reason) = saved_outcome(&report, &attempt_status, suspected);
         let run = (!report.run_id.is_empty()).then_some(report.run_id.as_str());
         let reason = redact(&reason, secret);
@@ -2066,6 +2355,17 @@ pub(crate) fn run_task(
     }
 
     let (status, message) = status_and_message(&report, &attempt_status, suspected);
+    if let Some(fix) = bug_fix.as_mut() {
+        return super::bug::finished(
+            &bug_ctx,
+            fix,
+            report,
+            &attempt_status,
+            passed,
+            status,
+            redact(&message, secret),
+        );
+    }
     live.event(&finished_event(
         task,
         &report,

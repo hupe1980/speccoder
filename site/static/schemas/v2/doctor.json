@@ -493,6 +493,136 @@
           "type": "object"
         },
         {
+          "description": "Record a bug in the person's words (`speccoder bug`) and, when\n`run`, reproduce it.",
+          "properties": {
+            "candidate": {
+              "description": "Someone else's fix to judge: a patch file or `pr:N`.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "expected": {
+              "description": "What should happen instead (one or more).",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "issue": {
+              "description": "The GitHub issue it comes from.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "kind": {
+              "const": "bug_fix",
+              "type": "string"
+            },
+            "run": {
+              "description": "Reproduce it once recorded.",
+              "type": "boolean"
+            },
+            "slug": {
+              "description": "Continue a bug the format's own bug step created.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "symptom": {
+              "description": "What happens (the symptom).",
+              "type": "string"
+            },
+            "tests": {
+              "description": "The person's own reproduction tests, one per expected statement\n(`PATH::NAME`).",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "unchanged": {
+              "description": "What must keep working (zero or more).",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "kind",
+            "symptom",
+            "expected",
+            "unchanged",
+            "issue",
+            "tests",
+            "candidate",
+            "slug",
+            "run"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Confirm (or, with `reject`, reject: the input is the reason) a\nbug's reproductions, bound to the digest shown.",
+          "properties": {
+            "digest": {
+              "description": "The digest the person saw.",
+              "type": "string"
+            },
+            "kind": {
+              "const": "bug_confirm",
+              "type": "string"
+            },
+            "reject": {
+              "description": "Reject instead.",
+              "type": "boolean"
+            },
+            "task": {
+              "description": "`<unit>/<task>`.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task",
+            "digest",
+            "reject"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Continue a bug: reproduce again, or run its confirmed fix.",
+          "properties": {
+            "kind": {
+              "const": "bug_run",
+              "type": "string"
+            },
+            "slug": {
+              "description": "A bug of the format's own bug structure, by slug.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "task": {
+              "description": "Or `<unit>/<task>`.",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "slug",
+            "task"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Always Allow: approve the waiting command once and add exactly its\nargv to `[commands] allow` (or `[sandbox] network_allow`).",
           "properties": {
             "call": {

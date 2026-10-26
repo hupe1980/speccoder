@@ -1,0 +1,51 @@
+{
+  "schema_version": 2,
+  "command": "inspect",
+  "status": "ok",
+  "exit_code": 0,
+  "message": "0 features, none selected; 0 errors, 3 warnings",
+  "payload": "inspect",
+  "data": {
+    "root": "<repo>/crates/speccoder-speckit/tests/fixtures/compat/1.1.3-bug-ext",
+    "speckit": {
+      "version": "1.1.3",
+      "integration": "claude",
+      "script": "sh",
+      "feature_numbering": "sequential",
+      "current_feature": null
+    },
+    "constitution": "unfilled",
+    "features": [],
+    "selection": {
+      "reason": "none",
+      "feature": null
+    },
+    "feature": null,
+    "diagnostics": [
+      {
+        "severity": "warning",
+        "code": "discover.constitution-unfilled",
+        "path": ".specify/memory/constitution.md",
+        "line": null,
+        "message": "the constitution is still the Spec Kit template",
+        "hint": "speccoder spec constitution fills it in (/speckit-constitution in your editor)"
+      },
+      {
+        "severity": "warning",
+        "code": "discover.no-specs-dir",
+        "path": null,
+        "line": null,
+        "message": "no specs/ directory",
+        "hint": "speccoder spec specify \"…\" creates the first feature (/speckit-specify in your editor)"
+      },
+      {
+        "severity": "warning",
+        "code": "select.no-features",
+        "path": null,
+        "line": null,
+        "message": "the project has no features yet",
+        "hint": "speccoder spec specify \"…\" creates one (/speckit-specify in your editor)"
+      }
+    ]
+  }
+}

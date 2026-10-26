@@ -1063,3 +1063,46 @@ fn issue_lists_through_the_api_and_says_how_to_sign_in() {
     assert_eq!(v["code"], "GITHUB-AUTH", "{v}");
     assert_eq!(v["fix"][0], "speccoder auth login --with-token", "{v}");
 }
+
+#[test]
+fn bug_refuses_missing_words_before_writing_and_a_symptom_named_run_follows_two_dashes() {
+    let dir = tempfile::tempdir().unwrap();
+    let r = dir.path();
+    std::fs::create_dir_all(r.join(".specify/memory")).unwrap();
+    std::fs::write(r.join(".specify/init-options.json"), "{}\n").unwrap();
+    let state = tempfile::tempdir().unwrap();
+    // No --expected: refused, nothing written.
+    let out = speccoder()
+        .env("SPECCODER_STATE_DIR", state.path())
+        .args(["--json", "-C"])
+        .arg(r)
+        .args(["bug", "saving an empty title crashes", "--no-run"])
+        .output()
+        .unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(v["code"], "BUG-NO-EXPECTED", "{v}");
+    assert!(!r.join("specs").exists());
+    // `bug -- run` is a symptom, not the subcommand.
+    let out = speccoder()
+        .env("SPECCODER_STATE_DIR", state.path())
+        .args(["--json", "-C"])
+        .arg(r)
+        .args(["bug", "--no-run", "--", "run"])
+        .output()
+        .unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(
+        v["code"], "BUG-NO-EXPECTED",
+        "a symptom without --expected: {v}"
+    );
+    // `bug run` without a bug names what is needed.
+    let out = speccoder()
+        .env("SPECCODER_STATE_DIR", state.path())
+        .args(["--json", "-C"])
+        .arg(r)
+        .args(["bug", "run"])
+        .output()
+        .unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(v["status"], "usage_error", "{v}");
+}

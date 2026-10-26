@@ -288,6 +288,51 @@ fn cases() -> Vec<Case> {
             None,
         ),
         case("pull-request-no-remote", Runnable::PullRequest, None),
+        case(
+            "bug-fix-empty",
+            Runnable::BugFix {
+                symptom: "signing in twice logs out".to_owned(),
+                expected: Vec::new(),
+                unchanged: Vec::new(),
+                issue: None,
+                tests: Vec::new(),
+                candidate: None,
+                slug: None,
+                run: false,
+            },
+            None,
+        ),
+        case(
+            "bug-fix-recorded",
+            Runnable::BugFix {
+                symptom: "signing in twice logs out".to_owned(),
+                expected: vec!["a second sign-in keeps the session".to_owned()],
+                unchanged: vec!["signing out ends the session".to_owned()],
+                issue: None,
+                tests: Vec::new(),
+                candidate: None,
+                slug: None,
+                run: false,
+            },
+            None,
+        ),
+        case(
+            "bug-confirm-unknown",
+            Runnable::BugConfirm {
+                task: "002-bugfixes/T009".to_owned(),
+                digest: "sha256:0".to_owned(),
+                reject: false,
+            },
+            None,
+        ),
+        case(
+            "bug-run-unknown",
+            Runnable::BugRun {
+                slug: None,
+                task: Some("002-bugfixes/T009".to_owned()),
+            },
+            None,
+        ),
         case("feature-empty", Runnable::Feature, Some("")),
         case("feature-name", Runnable::Feature, Some("001-graph")),
         case(

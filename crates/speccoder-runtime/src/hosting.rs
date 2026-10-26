@@ -95,7 +95,7 @@ pub fn run_in(
 ) -> CommandResult {
     let reviews = crate::review::snapshot(path);
     let result = run_unguarded(
-        path, feature, name, arguments, state, provider, secret, options,
+        path, feature, name, arguments, state, provider, secret, options, None,
     );
     let restored = crate::review::restore(&reviews);
     if restored.is_empty() {
@@ -110,6 +110,35 @@ pub fn run_in(
     result.reworded(status, &message)
 }
 
+/// A format's own step (a bug's assess skill) under `rules` instead of the
+/// format's planning rules: what it may write is narrowed to its own files.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn run_scoped(
+    path: &Path,
+    name: &str,
+    arguments: &str,
+    state: &Path,
+    provider: Arc<dyn ModelProvider>,
+    secret: Option<&str>,
+    options: &RunOptions,
+    rules: &'static crate::format::Rules,
+) -> CommandResult {
+    let reviews = crate::review::snapshot(path);
+    let result = run_unguarded(
+        path,
+        None,
+        name,
+        arguments,
+        state,
+        provider,
+        secret,
+        options,
+        Some(rules),
+    );
+    let _ = crate::review::restore(&reviews);
+    result
+}
+
 #[allow(clippy::too_many_arguments)]
 fn run_unguarded(
     path: &Path,
@@ -120,6 +149,7 @@ fn run_unguarded(
     provider: Arc<dyn ModelProvider>,
     secret: Option<&str>,
     options: &RunOptions,
+    scoped: Option<&'static crate::format::Rules>,
 ) -> CommandResult {
     let refuse = |status, m: String| CommandResult::new("skill", status, &redact(&m, secret));
     let s = match crate::setup(path, feature, state, "skill") {
@@ -235,19 +265,22 @@ fn run_unguarded(
     let server = match tools::WorkspaceTools::new(
         &root,
         tools::policy::Policy::new(&[], &[])
-            .rules(s.format.rules())
+            .rules(scoped.unwrap_or_else(|| s.format.rules()))
             .authoring(),
     ) {
         Ok(t) => Arc::new(t.with_runner(runner).with_env(env)),
         Err(e) => return refuse(CommandStatus::Error, e.to_string()),
     };
-    let input = substrate::host::input(
+    let mut input = substrate::host::input(
         &skill.name,
         &instruction,
         &canonical.display().to_string(),
         (budget.max_turns, budget.max_tool_calls),
         options.approver.is_some(),
     );
+    if scoped.is_some() {
+        input["settings"]["scope"] = serde_json::json!("bug");
+    }
     let outcome = rt.block_on(async {
         let plane = substrate::Plane::open_with(
             &s.plane_dir,
@@ -667,6 +700,33 @@ pub fn commit_planning_as(
                 CommandStatus::Ok,
                 &format!("committed {} file(s) as {id} \"{message}\"", paths.len()),
             )
+        }
+        Err(e) => refuse(
+            CommandStatus::GitPrecondition,
+            &format!("commit failed: {}", e.0),
+        ),
+    }
+}
+
+/// Commits exactly `paths` (repository-relative) in the repository of
+/// `root` with `message` as given: a person-commanded write's own commit.
+/// Returns the commit id as the message.
+#[must_use]
+pub fn commit_exactly(root: &Path, paths: &[String], message: &str) -> CommandResult {
+    let refuse = |status, m: &str| CommandResult::new("commit", status, m);
+    if paths.is_empty() {
+        return refuse(CommandStatus::NotFound, "nothing to commit");
+    }
+    let (top, _) = repo_dir(root, "");
+    let git = crate::git::Git::at(&top);
+    let mut add = vec!["add", "--"];
+    add.extend(paths.iter().map(String::as_str));
+    let mut commit = vec!["commit", "-q", "-m", message, "--"];
+    commit.extend(paths.iter().map(String::as_str));
+    match git.run(&add).and_then(|_| git.run(&commit)) {
+        Ok(_) => {
+            let id = git.line(&["rev-parse", "HEAD"]).unwrap_or_default();
+            CommandResult::new("commit", CommandStatus::Ok, &id)
         }
         Err(e) => refuse(
             CommandStatus::GitPrecondition,

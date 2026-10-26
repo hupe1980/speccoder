@@ -1,0 +1,1 @@
+[{"id": "bug", "name": "Bug Triage Workflow", "description": "Assess, fix, and validate bug reports against the codebase with per-bug reports stored under .specify/bugs/<slug>/", "version": "1.0.1", "author": "spec-kit-core", "priority": 10, "enabled": true, "source": {"kind": "local"}, "provides": {"commands": 3, "templates": 0, "scripts": 0, "hooks": 0}}]

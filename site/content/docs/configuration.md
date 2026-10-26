@@ -126,6 +126,16 @@ The API key comes from `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`, never from this 
 | `[git] commit` | `"per-task"` | `per-task` commits each passed task; `none` leaves changes uncommitted |
 | `[format] argv` | — | A formatter run after each attempt (e.g. `["cargo", "fmt"]`); its changes are part of the attempt and audited. The spec format is `[spec] format` |
 
+## `[bug]`
+
+```toml
+[bug]
+reproduce_tries = 3                     # 1–5: tries before a bug is "cannot reproduce" (a rejection counts)
+test = ["./check.sh", "--", "{file}"]   # how one named test (--test PATH::NAME) runs; default: the toolchain's runner
+```
+
+A project setting only: the same keys in your user config are ignored, with a warning naming them. See [bug fixes](@/docs/bugs.md).
+
 ## `[sandbox]`
 
 | Key | Default | Meaning |

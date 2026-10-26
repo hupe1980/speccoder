@@ -18,6 +18,7 @@
     ["theme.auto", "appearance: automatic", "follow the system"],
     ["view.sidebar", "toggle the sidebar"],
     ["view.statusbar", "toggle the status bar"],
+    ["file.bug", "report a bug", "reproduced, confirmed by you once, fixed on evidence"],
   ] as [string, string, string?][]).map(([id, label, why]) => ({ ...offer(null, { group: "page", label, why: why ?? "", command: "" }), menu: id }));
   const isMenu = (a?: Entry) => !!a?.menu;
   const matched = $derived(

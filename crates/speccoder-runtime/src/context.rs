@@ -89,9 +89,76 @@ pub(crate) fn cap(text: &str) -> String {
     )
 }
 
+/// The one builder of a call's context manifest (constitution VIII): every
+/// part handed to a model call is pushed here, hashed and labelled once.
+#[derive(Debug, Default, Clone)]
+pub struct Manifest {
+    entries: Vec<speccoder_core::context::ContextEntry>,
+}
+
+impl Manifest {
+    /// An empty manifest.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Adds a part: what it is, where it came from, a reference to it and
+    /// its exact bytes (an empty part is not added).
+    pub fn push(
+        &mut self,
+        kind: speccoder_core::context::ContextKind,
+        source: &str,
+        reference: &str,
+        bytes: &[u8],
+    ) -> &mut Self {
+        if bytes.is_empty() {
+            return self;
+        }
+        self.entries.push(speccoder_core::context::ContextEntry {
+            kind,
+            source: source.to_owned(),
+            reference: reference.to_owned(),
+            sha256: crate::integrity::sha256_hex(bytes),
+            bytes: u64::try_from(bytes.len()).unwrap_or(u64::MAX),
+            cut: bytes.len() > PART_LIMIT,
+        });
+        self
+    }
+
+    /// The finished manifest, sorted, with its digest.
+    #[must_use]
+    pub fn finish(&self) -> speccoder_core::context::ContextManifest {
+        speccoder_core::context::ContextManifest::of(
+            self.entries.clone(),
+            crate::integrity::sha256_hex,
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_manifest_recomputes_from_what_it_lists() {
+        use speccoder_core::context::ContextKind;
+        let mut m = Manifest::new();
+        m.push(ContextKind::Issue, "github:o/r#42", "#42", b"title\nbody")
+            .push(ContextKind::Story, "person", "/triad", b"C\tx\n")
+            .push(ContextKind::Plan, "worktree", "/bundle/plan", b"");
+        let done = m.finish();
+        assert_eq!(done.entries.len(), 2, "an empty part is not listed");
+        let again = speccoder_core::context::ContextManifest::of(
+            done.entries.clone(),
+            crate::integrity::sha256_hex,
+        );
+        assert_eq!(again.digest, done.digest);
+        assert_eq!(
+            done.entries[0].sha256,
+            crate::integrity::sha256_hex(b"C\tx\n")
+        );
+    }
 
     #[test]
     fn cap_marks_the_cut() {

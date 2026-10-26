@@ -677,6 +677,156 @@ pub const CATALOG: &[Entry] = &[
         "The run was recorded by a build whose skills or effects this one does not have.",
         ["→ replay with the speccoder version that recorded the run"]
     ),
+    // ── bug fixes ─────────────────────────────────────────────────────
+    entry!(
+        "BUG-NO-UNIT",
+        E,
+        S::UsageError,
+        "this spec format has no place for a bug",
+        "A bug lives in the format's own bug structure (Spec Kit's `bug` extension) or in its standing bug-fix unit (Spec Kit's `NNN-bugfixes`, an OpenSpec standing change). Kiro's `bugfix.md` runs once speccoder has a Kiro adapter (F-052); until then nothing is written.",
+        [
+            "→ write a spec for the change and run it",
+            "→ a change without a reproduction: speccoder do \"…\""
+        ]
+    ),
+    entry!(
+        "BUG-EMPTY",
+        E,
+        S::UsageError,
+        "the symptom and every statement need words",
+        "`speccoder bug` records the person's own words: an empty symptom, `--expected` or `--unchanged` is refused before anything is written.",
+        ["speccoder bug \"<what happens>\" --expected \"<what should>\""]
+    ),
+    entry!(
+        "BUG-NO-EXPECTED",
+        E,
+        S::UsageError,
+        "a bug needs at least one --expected statement",
+        "A reproduction asserts what should happen; speccoder never infers it from the symptom or an issue. Give one `--expected` per behaviour.",
+        ["speccoder bug \"<what happens>\" --expected \"<what should>\""]
+    ),
+    entry!(
+        "BUG-ASSESSMENT-DRIFT",
+        P,
+        S::NeedsHuman,
+        "the bug's assessment does not carry your words",
+        "The format's own bug step wrote `assessment.md`, and at least one of your Current, Expected or Unchanged statements is not in it verbatim (whitespace aside). The reproductions are written from your words only, so the bug stops before reproduce.",
+        [
+            "→ edit the assessment so it carries each statement as a `Current:` / `Expected:` / `Unchanged:` line",
+            "speccoder bug --slug <slug>"
+        ]
+    ),
+    entry!(
+        "BUG-ASSESSMENT-UNREADABLE",
+        P,
+        S::NeedsHuman,
+        "the bug's assessment is not in a shape speccoder reads",
+        "speccoder reads `assessment.md` in the layout of the `bug` extension version it was built against, and refuses rather than guesses on any other shape.",
+        [
+            "specify extension list --json",
+            "→ add `Current:` and `Expected:` lines to the assessment's Report section"
+        ]
+    ),
+    entry!(
+        "BUG-TEST-NOT-FOUND",
+        E,
+        S::UsageError,
+        "the test named with --test is not found",
+        "`--test PATH::NAME` must name an existing test file and a test in it that the runner collects.",
+        ["→ give the test as PATH::NAME, as the runner lists it"]
+    ),
+    entry!(
+        "BUG-TEST-NOT-RED",
+        E,
+        S::UsageError,
+        "the named test does not fail on an assertion",
+        "A reproduction must fail on the untouched code by an assertion, twice. A build or collection error, a timeout, an absent symbol or a flaky failure shows nothing about the bug.",
+        ["→ fix the test so it fails on an assertion, then run `speccoder bug` again"]
+    ),
+    entry!(
+        "BUG-TEST-PASSES",
+        E,
+        S::UsageError,
+        "the named test passes on the untouched code",
+        "A test that passes before any fix cannot show the bug. Perhaps it is fixed already.",
+        ["→ check the behaviour by hand; if it is fixed, there is nothing to record"]
+    ),
+    entry!(
+        "BUG-TEST-COVERAGE",
+        E,
+        S::UsageError,
+        "each --expected statement needs its own --test",
+        "Each stated behaviour gets its own reproduction: repeat `--test` once per `--expected`, in the same order.",
+        [
+            "speccoder bug \"…\" --expected \"<e1>\" --test <file>::<test1> --expected \"<e2>\" --test <file>::<test2>"
+        ]
+    ),
+    entry!(
+        "BUG-CANNOT-REPRODUCE",
+        P,
+        S::NeedsHuman,
+        "the bug could not be reproduced: nothing is fixed",
+        "Every try of the reproduction author ended without a test of each Expected statement failing on an assertion. A fix without a failing reproduction would be a guess, so the bug stops for you with the tries made and what each showed.",
+        [
+            "speccoder bug run --task {feature}/{task}",
+            "speccoder bug \"…\" --expected \"…\" --test <file>::<test>",
+            "speccoder task drop {task}"
+        ]
+    ),
+    entry!(
+        "BUG-ALREADY-SATISFIED",
+        W,
+        S::Ok,
+        "the reproductions already pass: nothing to fix",
+        "Every reproduction passed on the untouched code on every try. Nothing is ticked; keep a reproduction as a regression test or drop the task.",
+        [
+            "speccoder task accept {task} --reason \"kept as a regression test\"",
+            "speccoder task drop {task}"
+        ]
+    ),
+    entry!(
+        "BUG-UNCHANGED-NOT-HOLDING",
+        P,
+        S::NeedsHuman,
+        "an Unchanged statement does not hold today",
+        "The test of an Unchanged statement fails on the untouched code, so the statement is not true now and cannot guard the fix. The bug stops before any fix.",
+        ["→ reword or remove the statement, then `speccoder bug run`"]
+    ),
+    entry!(
+        "BUG-NOT-DISCRIMINATING",
+        E,
+        S::VerificationFailed,
+        "the reproduction does not tell the fix from no fix",
+        "With the attempt's source changes undone (its tests kept), no reproduction failed on an assertion: passing them proves nothing about the fix. The retry is told which statement.",
+        ["speccoder run --task {task}"]
+    ),
+    entry!(
+        "BUG-REPRO-WEAK",
+        P,
+        S::NeedsHuman,
+        "a fix that special-cases the reproduction's input passes",
+        "A candidate fix that only recognises the reproduction's literal inputs passed the reproductions and the held-out variants, even after one variant was written again. The tests are too weak for a verified fix.",
+        [
+            "speccoder task rule {task} --tests-right --reason \"…\"",
+            "speccoder bug \"…\" --expected \"…\" --test <file>::<test>"
+        ]
+    ),
+    entry!(
+        "BUG-CANDIDATE-APPLY",
+        E,
+        S::GitPrecondition,
+        "the candidate patch does not apply",
+        "`--candidate` applies the patch on the untouched code with `git apply --check` first; some hunks did not apply.",
+        ["→ rebase the patch on HEAD"]
+    ),
+    entry!(
+        "BUG-CANDIDATE-JUDGE",
+        E,
+        S::UsageError,
+        "the candidate patch touches what judges it",
+        "A candidate must not change a frozen reproduction, a held-out path or another judge input (checks, configuration, the intent). It is refused before it is applied.",
+        ["→ remove those hunks from the patch"]
+    ),
     entry!(
         "EVAL-FAILED",
         E,
