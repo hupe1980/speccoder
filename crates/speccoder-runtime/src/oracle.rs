@@ -1030,8 +1030,25 @@ impl Bench {
         let scratch = worktree::scratch(&ctx.root, &tmp)
             .map_err(|e| failed(format!("the scratch worktree could not be made: {}", e.0)))?;
         let project = project_in(&ctx.root, &scratch.path);
-        let (runner, _) = sandbox::runner(&scratch.path, &ctx.sandbox)
+        let (runner, notice) = sandbox::runner(&scratch.path, &ctx.sandbox)
             .map_err(|e| Box::new(refuse(CommandStatus::ConfigError, "CONFIG", &e)))?;
+        // Model-written tests and model-chosen commands run here, before
+        // anyone approved them: only confined by the OS sandbox (FR-005).
+        if !runner.is_sandboxed() {
+            return Err(Box::new(
+                refuse(
+                    CommandStatus::ConfigError,
+                    "SANDBOX-UNAVAILABLE",
+                    &format!(
+                        "the red check runs model-written tests and needs the OS sandbox: {}",
+                        notice.unwrap_or_else(|| "commands would run unsandboxed".to_owned())
+                    ),
+                )
+                .with_fix(vec![
+                    "set [sandbox] mode = \"auto\" on a machine with a sandbox backend (speccoder doctor)".to_owned(),
+                ]),
+            ));
+        }
         Ok(Self {
             scratch,
             project,
@@ -1059,33 +1076,45 @@ impl Bench {
         (files, manifest)
     }
 
-    /// Writes every test, then runs each one's command twice: its class.
-    fn red(&self, tests: &[(String, String, Vec<String>)]) -> Result<Vec<RedClass>, String> {
-        for (path, content, _) in tests {
+    /// Red-checks each test alone (FR-005): only its own file is in the
+    /// scratch tree while its command runs — first without it, then twice
+    /// with it — so a failure is its own, never a neighbour's. A command
+    /// that is red without the file (a failing suite, a command that runs
+    /// more than the file) decides nothing about it: `Err("red_without_it")`.
+    fn red(
+        &self,
+        tests: &[(String, String, Vec<String>)],
+    ) -> Result<Vec<Result<RedClass, &'static str>>, String> {
+        let mut out = Vec::new();
+        for (path, content, argv) in tests {
             let full = self.project.join(path);
+            let _ = std::fs::remove_file(&full);
+            let run = || crate::pipeline::acceptance_run(&self.project, argv, &self.runner);
+            let (bare, summary) = run();
+            if classify_red(&bare, summary.as_ref()).is_red() {
+                out.push(Err("red_without_it"));
+                continue;
+            }
             if let Some(parent) = full.parent() {
                 std::fs::create_dir_all(parent).map_err(|e| format!("{path}: {e}"))?;
             }
             std::fs::write(&full, content).map_err(|e| format!("{path}: {e}"))?;
-        }
-        Ok(tests
-            .iter()
-            .map(|(_, _, argv)| {
-                let (first, summary) =
-                    crate::pipeline::acceptance_run(&self.project, argv, &self.runner);
-                let class = classify_red(&first, summary.as_ref());
-                if !class.is_red() {
-                    return class;
-                }
-                let (second, summary) =
-                    crate::pipeline::acceptance_run(&self.project, argv, &self.runner);
+            let (first, summary) = run();
+            let class = classify_red(&first, summary.as_ref());
+            let class = if !class.is_red() {
+                class
+            } else {
+                let (second, summary) = run();
                 if classify_red(&second, summary.as_ref()).is_red() {
                     class
                 } else {
                     RedClass::Flaky
                 }
-            })
-            .collect())
+            };
+            std::fs::remove_file(&full).map_err(|e| format!("{path}: {e}"))?;
+            out.push(Ok(class));
+        }
+        Ok(out)
     }
 }
 
@@ -1095,7 +1124,7 @@ fn keep(
     bench: &Bench,
     answer: &Value,
     req: &OracleRequirement,
-    taken: &[String],
+    taken: &[(String, Vec<String>)],
 ) -> (Vec<Kept>, Vec<OracleDiscarded>) {
     let (valid, refused) =
         crate::pipeline::validate_answer(answer, &bench.project, &ctx.policy, &req.scenarios);
@@ -1124,7 +1153,9 @@ fn keep(
             discard("cites_no_scenario");
             continue;
         }
-        if taken.contains(&f.path) || kept.iter().any(|(p, ..): &(String, _, _, _)| *p == f.path) {
+        if taken.iter().any(|(p, _)| *p == f.path)
+            || kept.iter().any(|(p, ..): &(String, _, _, _)| *p == f.path)
+        {
             discard("exists");
             continue;
         }
@@ -1133,6 +1164,16 @@ fn keep(
         } else {
             f.argv.clone()
         };
+        // One command per test: a command several tests share cannot say
+        // whose assertion failed (at the checkpoint they all exist).
+        if taken.iter().any(|(_, a)| *a == argv)
+            || kept
+                .iter()
+                .any(|(.., a): &(_, _, _, Vec<String>)| *a == argv)
+        {
+            discard("command_shared");
+            continue;
+        }
         if argv.is_empty()
             || ctx
                 .policy
@@ -1203,30 +1244,35 @@ fn write(
     } else {
         Vec::new()
     };
-    let (kept, discarded) = keep(ctx, &bench, &first, req, &[]);
+    let (kept, mut discarded) = keep(ctx, &bench, &first, req, &[]);
     stage(options, &req.key, "checking_red", 1, 1);
     let plan: Vec<(String, String, Vec<String>)> = kept
         .iter()
         .map(|(p, c, _, a)| (p.clone(), c.clone(), a.clone()))
         .collect();
     let classes = bench.red(&plan).map_err(failed)?;
-    let tests: Vec<DraftTest> = kept
-        .iter()
-        .zip(&classes)
-        .map(|((path, content, cited, argv), class)| DraftTest {
-            path: path.clone(),
-            sha256: digest_of(content),
-            scenarios: cited.clone(),
-            argv: argv.clone(),
-            red_class: *class,
-            authored_by: AuthoredBy::Model,
-            edited_by: None,
-        })
-        .collect();
-    let contents: Vec<(String, String)> = kept
-        .iter()
-        .map(|(p, c, ..)| (p.clone(), c.clone()))
-        .collect();
+    let mut tests: Vec<DraftTest> = Vec::new();
+    let mut contents: Vec<(String, String)> = Vec::new();
+    for ((path, content, cited, argv), class) in kept.into_iter().zip(classes) {
+        match class {
+            Ok(red_class) => {
+                tests.push(DraftTest {
+                    path: path.clone(),
+                    sha256: digest_of(&content),
+                    scenarios: cited,
+                    argv,
+                    red_class,
+                    authored_by: AuthoredBy::Model,
+                    edited_by: None,
+                });
+                contents.push((path, content));
+            }
+            Err(why) => discarded.push(OracleDiscarded {
+                path,
+                why: why.to_owned(),
+            }),
+        }
+    }
     let (held_out, sealed) = held_out(ctx, &author, &bench, req, &tests, options);
     let draft = Draft {
         requirement: DraftRequirement {
@@ -1402,19 +1448,18 @@ fn edit(ctx: &Ctx, req: &OracleRequirement, r: &Request<'_>, by: &str) -> Outcom
         return Err(usage(&format!("{} has no test {path}", req.key)));
     };
     let bench = Bench::open(ctx)?;
-    let mut plan: Vec<(String, String, Vec<String>)> = d
-        .tests
-        .iter()
-        .zip(&contents)
-        .map(|(t, (_, c))| (t.path.clone(), c.clone(), t.argv.clone()))
-        .collect();
-    plan[at].1 = content.to_owned();
-    let class = bench
+    let plan = [(
+        path.to_owned(),
+        content.to_owned(),
+        d.tests[at].argv.clone(),
+    )];
+    let checked = bench
         .red(&plan)
         .map_err(failed)?
-        .get(at)
-        .copied()
-        .unwrap_or(RedClass::Unclassified);
+        .pop()
+        .unwrap_or(Ok(RedClass::Unclassified));
+    // Red without the test: its command decides nothing about it.
+    let class = checked.unwrap_or(RedClass::Unclassified);
     let t = &mut d.tests[at];
     t.sha256 = digest_of(content);
     t.red_class = class;
@@ -1429,6 +1474,8 @@ fn edit(ctx: &Ctx, req: &OracleRequirement, r: &Request<'_>, by: &str) -> Outcom
         req.key,
         if class.is_red() {
             format!("red ({})", crate::pipeline::class_word(class))
+        } else if checked.is_err() {
+            "its command is red without it — it decides nothing about this test, which cannot be frozen".to_owned()
         } else {
             format!(
                 "not red ({}) — no evidence, it cannot be frozen",
@@ -1468,11 +1515,11 @@ fn rewrite(
             d.context.push(c);
         }
     }
-    let keep_paths: Vec<String> = d
+    let keep_paths: Vec<(String, Vec<String>)> = d
         .tests
         .iter()
-        .map(|t| t.path.clone())
-        .filter(|p| !replaced.contains(p))
+        .filter(|t| !replaced.contains(&t.path))
+        .map(|t| (t.path.clone(), t.argv.clone()))
         .collect();
     // The replaced test's own path may come back.
     let mut answer = answer;
@@ -1499,34 +1546,29 @@ fn rewrite(
     contents.retain(|(p, _)| !replaced.contains(p));
     d.discarded.extend(discarded);
     stage(options, &req.key, "checking_red", 1, 1);
-    let mut plan: Vec<(String, String, Vec<String>)> = d
-        .tests
+    // Each test is red-checked alone: the kept ones stand as checked.
+    let plan: Vec<(String, String, Vec<String>)> = new
         .iter()
-        .map(|t| {
-            let c = contents
-                .iter()
-                .find(|(p, _)| *p == t.path)
-                .map(|(_, c)| c.clone())
-                .unwrap_or_default();
-            (t.path.clone(), c, t.argv.clone())
-        })
+        .map(|(p, c, _, a)| (p.clone(), c.clone(), a.clone()))
         .collect();
-    let first_new = plan.len();
-    plan.extend(
-        new.iter()
-            .map(|(p, c, _, a)| (p.clone(), c.clone(), a.clone())),
-    );
     let classes = bench.red(&plan).map_err(failed)?;
     let mut written = Vec::new();
-    for (i, (path, content, cited, argv)) in new.into_iter().enumerate() {
+    for ((path, content, cited, argv), class) in new.into_iter().zip(classes) {
+        let red_class = match class {
+            Ok(c) => c,
+            Err(why) => {
+                d.discarded.push(OracleDiscarded {
+                    path,
+                    why: why.to_owned(),
+                });
+                continue;
+            }
+        };
         d.tests.push(DraftTest {
             sha256: digest_of(&content),
             scenarios: cited,
             argv,
-            red_class: classes
-                .get(first_new + i)
-                .copied()
-                .unwrap_or(RedClass::Unclassified),
+            red_class,
             authored_by: AuthoredBy::Model,
             edited_by: None,
             path: path.clone(),
@@ -1582,7 +1624,9 @@ fn again(
     Ok(format!(
         "wrote {path} of {} again: {}",
         req.key,
-        if red == written.len() {
+        if written.is_empty() {
+            "nothing kept — its command is red without it, so it decides nothing".to_owned()
+        } else if red == written.len() {
             "red".to_owned()
         } else {
             "not red — no evidence, it cannot be frozen".to_owned()

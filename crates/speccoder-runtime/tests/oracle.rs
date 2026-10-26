@@ -22,8 +22,9 @@ use speccoder_runtime::oracle::{Request, tests_with};
 
 const CONFIG: &str = "[model]\nprovider = \"openai\"\nmodel = \"gpt-5.4-mini\"\n\n[checks.has-ok]\nargv = [\"grep\", \"-q\", \"fn ok\", \"src/lib.rs\"]\n\n[commands]\nallow_prefix = [[\"grep\", \"-q\"], [\"./accept.sh\", \"--\"]]\n";
 
-/// One test: "the pattern is in src/lib.rs", with libtest's summary line.
-const ACCEPT_SH: &str = "#!/bin/sh\n[ \"$1\" = -- ] && shift\nif grep -q \"$1\" src/lib.rs; then\n  echo 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out'\nelse\n  echo 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out'\n  exit 101\nfi\n";
+/// One test: its file must exist, then "the pattern is in src/lib.rs",
+/// with libtest's summary line.
+const ACCEPT_SH: &str = "#!/bin/sh\n[ \"$1\" = -- ] && shift\n[ -f \"$1\" ] || { echo \"error: no test file $1\" >&2; exit 2; }\nshift\nif grep -q \"$1\" src/lib.rs; then\n  echo 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out'\nelse\n  echo 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out'\n  exit 101\nfi\n";
 
 const SPEC: &str = "# Spec\n\n### User Story 1 - Login (Priority: P1)\n\nUsers log in.\n\n**Acceptance Scenarios**:\n\n1. **Given** a user, **When** they log in, **Then** a `login` function exists.\n2. **Given** an empty password, **When** they log in, **Then** they are refused.\n3. **Given** a locked account, **When** they log in, **Then** they are told so.\n\n### User Story 2 - Profile (Priority: P2)\n\nProfiles, without scenarios.\n\n## Requirements\n\n- **FR-001**: Users MUST log in.\n- **FR-002**: Users MUST be refused with an empty password.\n";
 
@@ -98,7 +99,7 @@ fn file(path: &str, scenarios: &[&str], pattern: &str) -> Value {
         "path": path,
         "content": format!("checks {pattern}\n"),
         "scenarios": scenarios,
-        "argv": ["./accept.sh", "--", pattern],
+        "argv": ["./accept.sh", "--", path, pattern],
     })
 }
 
@@ -106,7 +107,7 @@ fn file(path: &str, scenarios: &[&str], pattern: &str) -> Value {
 fn answer(files: Vec<Value>, us1_2: &str) -> Value {
     json!({
         "files": files,
-        "argv": ["./accept.sh", "--", "fn login"],
+        "argv": ["./accept.sh", "--", "tests/acceptance_us1.txt", "fn login"],
         "notes": [],
         "expectations": [
             { "scenario": "US1-1", "given": "a user", "expect": "a login function" },
@@ -121,7 +122,7 @@ fn held_out(pattern: &str) -> Value {
         "path": HELD_OUT_PATH,
         "content": format!("login with a token \"{SECRET}\" ({pattern})\n"),
         "scenarios": ["US1-1"],
-        "argv": ["./accept.sh", "--", pattern],
+        "argv": ["./accept.sh", "--", HELD_OUT_PATH, pattern],
         "composition": false,
     }], "notes": [] })
 }
@@ -861,9 +862,14 @@ fn us3_autopilot_refuses_what_would_ask_and_lists_it() {
 
 #[test]
 fn autopilot_without_a_sandbox_is_refused() {
-    let r = repo_with(SPEC, "\n[sandbox]\nmode = \"off\"\n");
+    let r = repo();
     let state = tempfile::tempdir().unwrap();
     let (_, d) = written(r.path(), state.path());
+    fs::write(
+        r.path().join("speccoder.toml"),
+        format!("{CONFIG}\n[sandbox]\nmode = \"off\"\n"),
+    )
+    .unwrap();
     let res = speccoder_runtime::review::approve_and_run(
         r.path(),
         None,
@@ -984,4 +990,79 @@ fn us5_a_test_comment_asks_again_and_no_model_input_but_the_held_out_author_s_ho
     for n in d.for_task("001-graph", "T005").nudges {
         assert_no_held_out(&n);
     }
+}
+
+#[test]
+fn the_review_red_check_refuses_to_run_without_the_os_sandbox() {
+    // C2: model-written tests and commands run before anyone approved them.
+    let r = repo_with(SPEC, "\n[sandbox]\nmode = \"off\"\n");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_structure(answer(standard(), "refused"));
+    f.will_structure(answer(standard(), "refused"));
+    let res = write(r.path(), state.path(), d);
+    assert_eq!(code(&res), Some("SANDBOX-UNAVAILABLE"), "{}", res.message());
+    assert!(
+        res.message().contains("mode = \"off\""),
+        "{}",
+        res.message()
+    );
+    assert!(f.asked().is_empty(), "no author call either");
+    let v = us1(&speccoder_runtime::review::report_in(
+        r.path(),
+        None,
+        Some(state.path()),
+    ));
+    assert_eq!(v.state, OracleState::None);
+}
+
+#[test]
+fn us1_red_is_each_test_s_own_never_a_neighbour_s() {
+    // C1: a passing test sharing a failing test's command is not red, and a
+    // command red without its test decides nothing about it.
+    let r = repo();
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    let shared = |path: &str, scenarios: &[&str]| {
+        json!({
+            "path": path,
+            "content": "checks\n",
+            "scenarios": scenarios,
+            "argv": ["./accept.sh", "--", "tests/acceptance_us1_login.txt", "fn login"],
+        })
+    };
+    let files = vec![
+        file("tests/acceptance_us1_login.txt", &["US1-1"], "fn login"),
+        // Same command as the red one: it would be "red" by the other's failure.
+        shared("tests/acceptance_us1_true.txt", &["US1-2"]),
+        // Red whether it exists or not: its command runs something else.
+        json!({
+            "path": "tests/acceptance_us1_bare.txt",
+            "content": "checks\n",
+            "scenarios": ["US1-3"],
+            "argv": ["./accept.sh", "--", "src/lib.rs", "fn locked"],
+        }),
+    ];
+    f.will_structure(answer(files.clone(), "refused"));
+    f.will_structure(answer(files, "refused"));
+    f.will_structure(held_out("fn login"));
+    let res = write(r.path(), state.path(), d);
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let v = us1(&res);
+    let kept: Vec<&str> = v.tests.iter().map(|t| t.path.as_str()).collect();
+    assert_eq!(kept, ["tests/acceptance_us1_login.txt"], "{v:?}");
+    let why: Vec<(&str, &str)> = v
+        .discarded
+        .iter()
+        .map(|d| (d.path.as_str(), d.why.as_str()))
+        .collect();
+    assert!(
+        why.contains(&("tests/acceptance_us1_true.txt", "command_shared")),
+        "{why:?}"
+    );
+    assert!(
+        why.contains(&("tests/acceptance_us1_bare.txt", "red_without_it")),
+        "{why:?}"
+    );
+    assert_eq!(v.uncovered, ["US1-2", "US1-3"]);
 }

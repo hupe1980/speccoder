@@ -171,6 +171,8 @@ export function discardWord(reason: string, req: string): string {
     not_a_new_test_file: "not a new test file",
     exists: "the file exists already",
     command_not_allowed: "its command is not allowed",
+    command_shared: "its command also runs another test",
+    red_without_it: "its command fails without it",
     limit: "more than four tests",
   };
   return words[reason] ?? reason.replaceAll("_", " ");
