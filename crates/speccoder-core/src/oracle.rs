@@ -520,6 +520,10 @@ pub struct RevisionView {
     /// Requirements whose tests were asked again from test comments.
     #[serde(default)]
     pub asked_again: Vec<String>,
+    /// Documents changed while it ran by something other than the skill
+    /// (the person's own edit): *Undo Revision* never overwrites them.
+    #[serde(default)]
+    pub beside: Vec<String>,
 }
 
 /// Result of `speccoder review comments`: the tray and the last turn.

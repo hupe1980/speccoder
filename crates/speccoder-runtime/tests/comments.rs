@@ -202,14 +202,17 @@ fn us5_drafts_persist_go_out_as_one_scoped_turn_and_undo_restores_bytes() {
     let turn = v.turn.clone().unwrap();
     assert_eq!(turn.outcome, "pending");
     assert!(
-        turn.changed.iter().any(|c| c == "Spec › Requirements"),
+        turn.changed
+            .iter()
+            .any(|c| c == "specs/001-graph/spec.md: Spec › Requirements"),
         "{turn:?}"
     );
     assert_eq!(
         turn.outside,
-        ["Spec › User Story 1 - Login (Priority: P1)"],
+        ["specs/001-graph/spec.md: Spec › User Story 1 - Login (Priority: P1)"],
         "{turn:?}"
     );
+    assert!(turn.beside.is_empty(), "{turn:?}");
     assert_eq!(turn.files, ["specs/001-graph/spec.md"]);
     // A second send of the same drafts is refused.
     let again = comments::send_with(
@@ -406,4 +409,323 @@ fn us6_code_comments_are_one_nudge_with_their_anchors() {
     );
     let empty = comments::code_nudge(r.path(), None, "T005", &[], Some(state.path()));
     assert_eq!(empty.status(), CommandStatus::UsageError);
+}
+
+/// The scripted model, and a person who edits a document while the
+/// revision runs: before the model's `at`-th answer, `edit` is applied.
+#[derive(Debug)]
+struct EditsMidTurn {
+    inner: Arc<FakeProvider>,
+    at: usize,
+    seen: std::sync::Mutex<usize>,
+    file: PathBuf,
+    append: &'static str,
+}
+
+#[agentplane::prelude::async_trait]
+impl ModelProvider for EditsMidTurn {
+    async fn complete(
+        &self,
+        request: agentplane::model::Request<'_>,
+    ) -> Result<agentplane::model::Completion, agentplane::model::ModelError> {
+        let n = {
+            let mut seen = self.seen.lock().unwrap();
+            *seen += 1;
+            *seen
+        };
+        if n == self.at {
+            let now = fs::read_to_string(&self.file).unwrap_or_default();
+            fs::write(&self.file, format!("{now}{}", self.append)).unwrap();
+        }
+        self.inner.complete(request).await
+    }
+
+    fn gen_ai_provider(&self) -> Option<&str> {
+        None
+    }
+}
+
+fn revise_spec(f: &FakeProvider, content: &str) {
+    f.will_call_tool(
+        "w",
+        "write_file",
+        json!({ "path": "specs/001-graph/spec.md", "content": content }),
+    );
+    f.will_structure(
+        json!({ "summary": "revised", "status": "done", "files_written": [], "questions": [] }),
+    );
+}
+
+#[test]
+fn us5_undo_never_reverts_what_the_person_wrote_while_the_revision_ran() {
+    // P6: the person edits the spec (after the skill's write) and the plan
+    // while the turn runs: those edits are not the turn's.
+    for (file, at) in [
+        ("specs/001-graph/spec.md", 2),
+        ("specs/001-graph/plan.md", 1),
+    ] {
+        let r = repo();
+        let state = tempfile::tempdir().unwrap();
+        assert_eq!(
+            add(
+                r.path(),
+                state.path(),
+                passage(13, "Users MUST log in."),
+                "who?"
+            )
+            .status(),
+            CommandStatus::Ok
+        );
+        let f = FakeProvider::new();
+        revise_spec(
+            &f,
+            &SPEC.replace("Users MUST log in.", "Users MUST sign in."),
+        );
+        let d: Arc<dyn ModelProvider> = Arc::new(EditsMidTurn {
+            inner: f.clone(),
+            at,
+            seen: std::sync::Mutex::new(0),
+            file: r.path().join(file),
+            append: "\nMy own note.\n",
+        });
+        let sent = comments::send_with(
+            r.path(),
+            None,
+            &[],
+            Via::Web,
+            state.path(),
+            Some(d),
+            None,
+            &RunOptions::default(),
+        );
+        assert_eq!(sent.status(), CommandStatus::Ok, "{}", sent.message());
+        let turn = view(&sent).turn.clone().unwrap();
+        assert_eq!(turn.beside, [file], "{file}: {turn:?}");
+        assert!(
+            sent.message().contains("changed beside the revision"),
+            "{}",
+            sent.message()
+        );
+        let mine = fs::read_to_string(r.path().join(file)).unwrap();
+        assert!(mine.contains("My own note."));
+        let undo = comments::undo(r.path(), None, None, Some(state.path()));
+        assert_eq!(
+            undo.status(),
+            CommandStatus::NeedsHuman,
+            "{}",
+            undo.message()
+        );
+        assert_eq!(
+            fs::read_to_string(r.path().join(file)).unwrap(),
+            mine,
+            "{file}: the person's edit was reverted"
+        );
+    }
+}
+
+#[test]
+fn us5_a_heading_is_a_section_of_its_own_document() {
+    // P6: the plan gains a section named like the commented one in the spec.
+    let r = repo();
+    let state = tempfile::tempdir().unwrap();
+    assert_eq!(
+        add(
+            r.path(),
+            state.path(),
+            passage(13, "Users MUST log in."),
+            "who?"
+        )
+        .status(),
+        CommandStatus::Ok
+    );
+    let f = FakeProvider::new();
+    f.will_call_tool(
+        "w",
+        "write_file",
+        json!({ "path": "specs/001-graph/plan.md", "content": "# Spec\n\n## Requirements\n\nRewritten.\n" }),
+    );
+    f.will_structure(
+        json!({ "summary": "revised", "status": "done", "files_written": [], "questions": [] }),
+    );
+    let d: Arc<dyn ModelProvider> = f.clone();
+    let sent = comments::send_with(
+        r.path(),
+        None,
+        &[],
+        Via::Web,
+        state.path(),
+        Some(d),
+        None,
+        &RunOptions::default(),
+    );
+    let turn = view(&sent).turn.clone().unwrap();
+    assert!(
+        turn.outside
+            .iter()
+            .any(|s| s == "specs/001-graph/plan.md: Spec › Requirements"),
+        "{turn:?}"
+    );
+}
+
+#[test]
+fn an_unreadable_tray_is_refused_never_read_as_empty() {
+    // C6: a corrupt tray is not overwritten by the next add.
+    let r = repo();
+    let state = tempfile::tempdir().unwrap();
+    assert_eq!(
+        add(
+            r.path(),
+            state.path(),
+            passage(13, "Users MUST log in."),
+            "who?"
+        )
+        .status(),
+        CommandStatus::Ok
+    );
+    let plane = speccoder_runtime::worktree::project_state_dir(state.path(), r.path());
+    let tray = plane.join("comments/001-graph.json");
+    fs::write(&tray, "{ not json").unwrap();
+    for res in [
+        comments::list(r.path(), None, Some(state.path())),
+        add(
+            r.path(),
+            state.path(),
+            passage(18, "An empty name is refused."),
+            "x",
+        ),
+        comments::undo(r.path(), None, None, Some(state.path())),
+    ] {
+        assert_eq!(
+            res.code().map(|c| c.name),
+            Some("REVIEW-UNREADABLE"),
+            "{}",
+            res.message()
+        );
+    }
+    assert_eq!(fs::read_to_string(&tray).unwrap(), "{ not json");
+}
+
+#[test]
+fn undo_writes_only_the_unit_s_documents_a_tampered_tray_names() {
+    // P6: a tray naming another file (here: src/lib.rs, "absent" before)
+    // never makes Undo delete or write it.
+    let r = repo();
+    let state = tempfile::tempdir().unwrap();
+    assert_eq!(
+        add(
+            r.path(),
+            state.path(),
+            passage(13, "Users MUST log in."),
+            "who?"
+        )
+        .status(),
+        CommandStatus::Ok
+    );
+    let f = FakeProvider::new();
+    revise_spec(
+        &f,
+        &SPEC.replace("Users MUST log in.", "Users MUST sign in."),
+    );
+    let d: Arc<dyn ModelProvider> = f.clone();
+    let sent = comments::send_with(
+        r.path(),
+        None,
+        &[],
+        Via::Web,
+        state.path(),
+        Some(d),
+        None,
+        &RunOptions::default(),
+    );
+    assert_eq!(sent.status(), CommandStatus::Ok, "{}", sent.message());
+    let plane = speccoder_runtime::worktree::project_state_dir(state.path(), r.path());
+    let file = plane.join("comments/001-graph.json");
+    let mut tray: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&file).unwrap()).unwrap();
+    let lib = fs::read(r.path().join("src/lib.rs")).unwrap();
+    let digest = format!("sha256:{}", speccoder_runtime::integrity::sha256_hex(&lib));
+    let turn = &mut tray["turns"][0];
+    turn["before"] = json!([{ "path": "src/lib.rs", "sha256": "absent" }]);
+    turn["after"] = json!([{ "path": "src/lib.rs", "sha256": digest }]);
+    fs::write(&file, serde_json::to_string(&tray).unwrap()).unwrap();
+    let undo = comments::undo(r.path(), None, None, Some(state.path()));
+    assert_ne!(undo.status(), CommandStatus::Ok, "{}", undo.message());
+    assert_eq!(fs::read(r.path().join("src/lib.rs")).unwrap(), lib);
+}
+
+#[test]
+fn us6_a_frozen_test_is_known_by_its_code_view_path_in_a_project_below_the_top() {
+    // P7: the project sits in `app/` of its repository; the Code view names
+    // `app/tests/…`, the frozen record `tests/…`.
+    let top = tempfile::tempdir().unwrap();
+    let app = top.path().join("app");
+    let fixture =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../speccoder-speckit/tests/fixtures/graph");
+    fs::create_dir_all(&app).unwrap();
+    assert!(
+        Command::new("cp")
+            .arg("-R")
+            .arg(fixture.join("."))
+            .arg(&app)
+            .status()
+            .unwrap()
+            .success()
+    );
+    fs::write(app.join("specs/001-graph/spec.md"), SPEC).unwrap();
+    fs::write(
+        app.join("speccoder.toml"),
+        "[model]\nprovider = \"openai\"\nmodel = \"gpt-5.4-mini\"\n",
+    )
+    .unwrap();
+    git(top.path(), &["init", "-q"]);
+    git(top.path(), &["add", "-A"]);
+    git(top.path(), &["commit", "-q", "-m", "init"]);
+    let state = tempfile::tempdir().unwrap();
+    let plane = speccoder_runtime::worktree::project_state_dir(state.path(), &app);
+    let content = "checks fn login\n".to_owned();
+    let record = speccoder_core::acceptance::PreFrozenAcceptance {
+        unit: "001-graph".to_owned(),
+        requirement: "US1".to_owned(),
+        wording_digest: "sha256:w".to_owned(),
+        approval_digest: "sha256:a".to_owned(),
+        visible: vec![speccoder_core::acceptance::VisibleTest {
+            path: "tests/acceptance_us1.txt".to_owned(),
+            sha256: format!(
+                "sha256:{}",
+                speccoder_runtime::integrity::sha256_hex(content.as_bytes())
+            ),
+            cites: vec!["US1-1".to_owned()],
+        }],
+        held_out_sealed: None,
+        producer: speccoder_core::acceptance::Producer::Review,
+        decided: speccoder_core::acceptance::Decided {
+            by: "Ada".to_owned(),
+            via: Via::Web,
+            at: 0,
+        },
+    };
+    speccoder_runtime::pre_frozen::store(
+        &plane,
+        &record,
+        &[("tests/acceptance_us1.txt".to_owned(), content)],
+    )
+    .unwrap();
+    let res = comments::code_nudge(
+        &app,
+        None,
+        "T005",
+        &[CodeComment {
+            path: "app/tests/acceptance_us1.txt".to_owned(),
+            line: 1,
+            quote: "checks fn login".to_owned(),
+            text: "loosen it".to_owned(),
+        }],
+        Some(state.path()),
+    );
+    assert_eq!(res.status(), CommandStatus::UsageError, "{}", res.message());
+    assert!(
+        res.message().contains("is a frozen test"),
+        "{}",
+        res.message()
+    );
 }
