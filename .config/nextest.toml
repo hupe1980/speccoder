@@ -5,3 +5,7 @@ fail-fast = false
 
 [profile.speccoder.junit]
 path = "junit.xml"
+
+# CI reports every failing test of a run, not only the first.
+[profile.ci]
+fail-fast = false
