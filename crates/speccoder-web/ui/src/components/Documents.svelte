@@ -7,6 +7,10 @@
   import { diagrams } from "../lib/mermaid";
   import { outline, type Section } from "../lib/outline";
   import ReviewCards from "./ReviewCards.svelte";
+  import CommentTray from "./CommentTray.svelte";
+  import { comments } from "../lib/comments.svelte";
+  import { get, q } from "../lib/api";
+  import { passage, plain } from "../lib/review";
   const docs = $derived(app.documents);
   // Review is offered when the spec names requirements to review.
   const reviewable = $derived(!!app.report?.data?.review);
@@ -83,7 +87,68 @@
     app.section = null;
     article?.closest("main")?.scrollTo({ top: 0 });
   }
+  // A passage selected in the rendered document: a Comment button beside
+  // it (or `c`), then a popover for the words (spec 093).
+  let picked = $state<{ text: string; x: number; y: number } | null>(null);
+  let composing = $state(false);
+  let words = $state("");
+  function selected() {
+    const sel = window.getSelection();
+    const text = sel?.toString().trim() ?? "";
+    if (!sel || !text || !article || !sel.rangeCount || !article.contains(sel.anchorNode)) {
+      if (!composing) picked = null;
+      return;
+    }
+    const rect = sel.getRangeAt(0).getBoundingClientRect();
+    const box = article.getBoundingClientRect();
+    picked = { text, x: rect.right - box.left, y: rect.bottom - box.top + 6 };
+  }
+  async function addComment() {
+    if (!picked || !words.trim() || !shown) return;
+    const file = await get<{ text?: string; error?: string }>(`/api/file${q({ feature: app.feature ?? undefined, path: shown.path })}`).catch(() => ({ error: "unreadable" }) as { text?: string; error?: string });
+    const anchor = file.text ? passage(shown.path, file.text, picked.text) : null;
+    if (!anchor) {
+      app.toast({ tone: "warn", text: "That selection is not one passage of the document", detail: file.error });
+      return;
+    }
+    await comments.add(anchor, words.trim());
+    composing = false;
+    picked = null;
+    words = "";
+    window.getSelection()?.removeAllRanges();
+  }
+  // The passages already commented on: underlined, with a margin dot.
+  $effect(() => {
+    void html;
+    const here = (comments.view?.drafts ?? []).filter((d) => d.anchor.kind === "passage" && d.anchor.path === shown?.path);
+    if (!article) return;
+    for (const m of article.querySelectorAll("mark.cmark")) m.replaceWith(...m.childNodes);
+    for (const d of here) {
+      if (d.anchor.kind !== "passage") continue;
+      const needle = plain(d.anchor.quote.split("\n")[0] ?? "").slice(0, 60);
+      if (needle.length < 4) continue;
+      const walk = document.createTreeWalker(article, NodeFilter.SHOW_TEXT);
+      for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+        const t = n as Text;
+        const at = t.data.indexOf(needle.slice(0, Math.min(needle.length, t.data.length)));
+        if (at < 0 || !t.data.trim() || needle.slice(0, 12) !== t.data.slice(at, at + 12)) continue;
+        const range = document.createRange();
+        range.setStart(t, at);
+        range.setEnd(t, Math.min(t.data.length, at + needle.length));
+        const mark = document.createElement("mark");
+        mark.className = "cmark";
+        mark.title = `${d.id}: ${d.text}`;
+        range.surroundContents(mark);
+        break;
+      }
+    }
+  });
   function key(e: KeyboardEvent) {
+    if (e.key === "c" && !e.metaKey && !e.ctrlKey && picked && !composing && !(e.target as HTMLElement)?.closest("input, textarea, select")) {
+      e.preventDefault();
+      composing = true;
+      return;
+    }
     if ((e.target as HTMLElement)?.closest("input, textarea, select") || reviewing || !sections.length) return;
     if (e.key !== "[" && e.key !== "]") return;
     e.preventDefault();
@@ -130,7 +195,19 @@
     {#if reviewing}
       <ReviewCards />
     {:else}
-      <article class="prose" bind:this={article} use:diagrams={html}>
+      <!-- A selection's Comment button; the keyboard's is `c`. -->
+      <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+      <article class="prose" bind:this={article} use:diagrams={html} onmouseup={selected} onkeyup={selected}>
+        {#if picked && !composing}
+          <button class="cbtn" style="left:{picked.x}px;top:{picked.y}px" onclick={() => (composing = true)} title="Comment on the selection (c)">Comment <kbd>c</kbd></button>
+        {:else if picked && composing}
+          <form class="cpop" style="left:{Math.max(0, picked.x - 260)}px;top:{picked.y}px" onsubmit={(e) => { e.preventDefault(); void addComment(); }}>
+            <p class="cq muted">“{picked.text.slice(0, 120)}{picked.text.length > 120 ? "…" : ""}”</p>
+            <!-- svelte-ignore a11y_autofocus -->
+            <textarea rows="3" bind:value={words} autofocus aria-label="Your comment" onkeydown={(e) => { if (e.key === "Escape") { composing = false; picked = null; } if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void addComment(); } }}></textarea>
+            <div class="crow"><button class="btn small primary" type="submit" disabled={!words.trim()}>Add Comment <kbd>⌘↵</kbd></button><button class="btn small ghost" type="button" onclick={() => { composing = false; picked = null; }}>Cancel</button></div>
+          </form>
+        {/if}
         <div class="bar" aria-hidden="true"><span style="width:{read * 100}%"></span></div>
         <p class="path mono muted">{shown?.path}</p>
         <!-- Rendered by the host from Markdown; raw HTML in the file is shown as text. -->
@@ -138,6 +215,7 @@
       </article>
     {/if}
   </div>
+  <CommentTray />
 {/if}
 
 <style>
@@ -200,6 +278,15 @@
   .prose :global(.diagram-error) { color: var(--danger); font-size: 0.82rem; text-align: left; margin: 0.5rem 0 0; }
   .prose :global(.req.uncited) { background: var(--regression-bg); color: var(--regression); }
   .empty { padding: 3rem; text-align: center; }
+  .prose { position: relative; }
+  .cbtn { position: absolute; z-index: 3; transform: translateX(-100%); border: 0; cursor: pointer; padding: 0.3rem 0.65rem; border-radius: 999px; background: var(--accent); color: #fff; font-weight: 600; font-size: 0.8rem; box-shadow: var(--shadow-lg); }
+  .cbtn kbd, .cpop kbd { font: 0.66rem var(--mono); padding: 0 0.25rem; border-radius: 4px; background: rgba(255, 255, 255, 0.2); }
+  .cpop { position: absolute; z-index: 3; width: 300px; display: grid; gap: 0.4rem; padding: 0.6rem; border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow-lg); }
+  .cpop textarea { width: 100%; box-sizing: border-box; border-radius: 8px; border: 0.5px solid var(--separator); background: var(--surface-2); color: var(--text); padding: 0.4rem 0.55rem; font: inherit; font-size: 0.88rem; }
+  .cq { margin: 0; font-size: 0.76rem; }
+  .crow { display: flex; gap: 0.4rem; }
+  .prose :global(mark.cmark) { background: transparent; color: inherit; text-decoration: underline 2px; text-decoration-color: var(--attention-fill); position: relative; }
+  .prose :global(mark.cmark)::before { content: "●"; position: absolute; left: -1.6rem; color: var(--attention-fill); font-size: 0.6rem; }
   @media (max-width: 1040px) { .docs { grid-template-columns: 12rem minmax(0, 1fr); gap: 1.25rem; } }
   @media (max-width: 900px) { .docs { grid-template-columns: 1fr; } nav { grid-auto-flow: column; overflow-x: auto; position: static; max-height: none; } .outline, .keys { display: none; } .prose { padding: 1.5rem 1.25rem; } .bar { margin: -1.5rem -1.25rem 1.25rem; } }
 </style>
