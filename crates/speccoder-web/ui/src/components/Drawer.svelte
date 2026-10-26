@@ -6,7 +6,8 @@
   const evidenceOf = latest();
   const patchOf = latest();
   import { phaseLabel, symbol, word } from "../lib/marks";
-  import type { Row, Task } from "../lib/types";
+  import type { AccountTurn, Row, Task } from "../lib/types";
+  import Account from "./Account.svelte";
   import Diff from "./Diff.svelte";
   import Drift from "./Drift.svelte";
   import Code from "./Code.svelte";
@@ -18,8 +19,13 @@
   let loadingPatch = $state(false);
   // The change to show: the commit that ticked the task, else the last
   // attempt's code (kept under an attempt ref when it failed or was held).
+  // Changes set aside before the task's run, when the person asks to see them.
+  let showAside = $state(false);
+  const aside = $derived(data?.task.set_aside ?? null);
   const source = $derived(
-    data?.task.commit
+    showAside && aside
+      ? { q: { ref: aside.reference }, label: "Set Aside" }
+      : data?.task.commit
       ? { q: { commit: data.task.commit }, label: "Changes" }
       : data?.task.last_attempt?.reference?.startsWith("refs/")
         ? { q: { ref: data.task.last_attempt.reference }, label: "Last Attempt" }
@@ -29,6 +35,7 @@
   $effect(() => {
     const id = app.selected;
     const feature = app.feature ?? undefined;
+    showAside = false;
     void app.report; // refetch when the report changes
     data = null;
     patch = "";
@@ -68,15 +75,32 @@
   const drift = $derived(app.report?.data?.tasks.find((t) => t.id === app.selected)?.drift ?? null);
   // The attempt whose narration the journal holds: the tick's, else the last.
   const run = $derived(data?.task.run_id ?? data?.task.last_attempt?.run_id ?? null);
-  let account = $state<string[] | null>(null);
+  let account = $state<AccountTurn[] | null>(null);
   let accountOf = $state<string | null>(null);
+  let accountError = $state<string | null>(null);
   async function loadAccount() {
     if (!run || accountOf === run) return;
     accountOf = run;
     account = null;
-    const r = await get<{ turns?: string[]; error?: string }>(`/api/narration${q({ run })}`).catch(() => ({ turns: [] as string[] }));
+    accountError = null;
+    const r = await get<{ turns?: AccountTurn[]; error?: string }>(`/api/account${q({ run })}`).catch((e) => ({ turns: undefined, error: String(e) }));
+    accountError = r.error ?? null;
+    // An error is said as one, never shown as a model that said nothing;
+    // closing and reopening the section asks again.
+    if (accountError) accountOf = null;
     account = r.turns ?? [];
   }
+  // Open unless the person closed it once (a per-viewer preference).
+  const read = () => { try { return localStorage.getItem("speccoder-account") !== "closed"; } catch { return true; } };
+  let accountOpen = $state(read());
+  function toggled(e: Event) {
+    accountOpen = (e.currentTarget as HTMLDetailsElement).open;
+    try { localStorage.setItem("speccoder-account", accountOpen ? "open" : "closed"); } catch { /* storage off */ }
+    if (accountOpen) void loadAccount();
+  }
+  $effect(() => {
+    if (accountOpen && run) void loadAccount();
+  });
   const icons: Record<string, string> = { run: "play", accept: "check", skip: "skip", nudge: "sparkle", approve: "check", reject: "xmark" };
 </script>
 
@@ -94,6 +118,22 @@
       <span><strong>{verdictTitle}</strong>{#if verdictWords}<span class="words">{verdictWords}</span>{/if}</span>
     </div>
     {#if drift}<Drift {drift} />{/if}
+    {#if aside && app.selected}
+      {@const id = app.selected}
+      <section class="aside-card" aria-label="Changes set aside">
+        <span class="glyph"><Icon name="tray" size={16} weight={2} /></span>
+        <div class="what">
+          <strong>Changes set aside</strong>
+          <p>{aside.files.length} {aside.files.length === 1 ? "file was" : "files were"} changed in the worktree when this task's run started — your edits, or an interrupted run's. They are not on the branch yet.</p>
+          <ul class="files mono">{#each aside.files.slice(0, 5) as f (f)}<li>{f}</li>{/each}{#if aside.files.length > 5}<li class="more">+{aside.files.length - 5} more</li>{/if}</ul>
+          <div class="row">
+            <button class="btn small" onclick={() => { showAside = true; tab = "diff"; }}><Icon name="doc" size={12} /> Show Changes</button>
+            <button class="btn small tinted" disabled={!!app.job?.running} onclick={() => app.perform({ group: "task", label: `keep the changes set aside before ${id}`, why: "committed onto the feature's branch as yours", command: `speccoder task restore ${id}`, run: { kind: "keep_set_aside", task: id }, blocked: null, input: null })}><Icon name="check" size={12} weight={2.4} /> Keep on the Branch</button>
+            <button class="btn small ghost danger" disabled={!!app.job?.running} onclick={() => app.perform({ group: "task", label: `discard the changes set aside before ${id}`, why: "deleted; the branch stays as it is", command: `speccoder task drop ${id}`, run: { kind: "drop_set_aside", task: id }, blocked: null, input: null, confirm: `Discard the ${aside.files.length} changed file(s) set aside before ${id}? They are deleted, not kept anywhere.` })}>Discard…</button>
+          </div>
+        </div>
+      </section>
+    {/if}
     <div class="tabs" role="tablist">
       <button role="tab" aria-selected={tab === "evidence"} class:on={tab === "evidence"} onclick={() => (tab = "evidence")}>Evidence</button>
       <button role="tab" aria-selected={tab === "diff"} class:on={tab === "diff"} disabled={!source} title={source ? "" : "No code yet: the task has no commit and no attempt"} onclick={() => (tab = "diff")}>{source?.label ?? "Changes"}</button>
@@ -111,16 +151,18 @@
         <p class="note"><Icon name="shield" size={13} /><span>Every row comes from the commit's attestation — <code>speccoder attest verify</code> checks it.</span></p>
       {/if}
     {:else}
+      {#if source?.label === "Set Aside"}<p class="note"><Icon name="info" size={13} /> What the worktree held when the run started, set aside: not on the branch until you keep it.</p>{/if}
       {#if source?.label === "Last Attempt"}<p class="note"><Icon name="info" size={13} /> The attempt did not pass; its code is kept for you to read, never merged.</p>{/if}
       <Diff {patch} loading={loadingPatch} />
     {/if}
     {#if run}
-      <details class="account" ontoggle={(e) => (e.currentTarget as HTMLDetailsElement).open && loadAccount()}>
-        <summary><Icon name="sparkle" size={12} weight={2.2} /> The Model's Account <span class="muted">— what it said it was doing; a claim, not evidence</span></summary>
-        {#if account === null}<p class="muted small">Reading the journal…</p>
-        {:else if !account.length}<p class="muted small">The model said nothing beside its calls in this attempt.</p>
+      <details class="account" open={accountOpen} ontoggle={toggled}>
+        <summary><Icon name="sparkle" size={12} weight={2.2} /> The Model's Account <span class="muted">— its reasoning and its words; a claim, not evidence</span></summary>
+        {#if accountError}<p class="muted small">The journal could not be read: {accountError}</p>
+        {:else if account === null}<p class="muted small">Reading the journal…</p>
+        {:else if !account.length}<p class="muted small">The model neither reasoned aloud nor said anything beside its calls in this attempt.</p>
         {:else}
-          <ol>{#each account as said, i (i)}<li><span class="turn mono">{i + 1}</span><p>{said}</p></li>{/each}</ol>
+          <Account turns={account} />
         {/if}
       </details>
     {/if}
@@ -140,6 +182,18 @@
 </aside>
 
 <style>
+  .aside-card {
+    display: grid; grid-template-columns: auto 1fr; gap: 0.7rem; padding: 0.8rem 0.9rem; border-radius: var(--radius);
+    background: color-mix(in srgb, var(--attention, #ff9f0a) 9%, var(--surface)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--attention, #ff9f0a) 28%, transparent);
+  }
+  .aside-card .glyph { width: 2rem; height: 2rem; border-radius: 9px; display: grid; place-items: center; color: #fff; background: var(--attention, #ff9f0a); }
+  .aside-card .what { display: grid; gap: 0.35rem; min-width: 0; }
+  .aside-card p { margin: 0; font-size: 0.84rem; color: var(--text-2); line-height: 1.4; }
+  .aside-card .files { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.3rem; font-size: 0.74rem; }
+  .aside-card .files li { padding: 0.1rem 0.45rem; border-radius: 6px; background: var(--fill); color: var(--text-2); }
+  .aside-card .files .more { color: var(--muted); }
+  .aside-card .row { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.15rem; }
+  .danger { color: var(--danger); }
   .inspector {
     position: fixed; top: 64px; right: 10px; bottom: 10px; width: min(500px, calc(100vw - 20px)); z-index: 12;
     border-radius: var(--radius-lg); background: var(--glass-strong); box-shadow: var(--shadow-lg), var(--glass-edge);
@@ -171,10 +225,6 @@
   .account { border-radius: var(--radius); background: var(--surface); padding: 0.6rem 0.85rem; }
   .account summary { cursor: pointer; font-weight: 600; font-size: 0.88rem; display: flex; gap: 0.35rem; align-items: center; flex-wrap: wrap; }
   .account summary .muted { font-weight: 500; font-size: 0.78rem; }
-  .account ol { list-style: none; margin: 0.6rem 0 0; padding: 0; display: grid; gap: 0.5rem; max-height: 40vh; overflow: auto; }
-  .account li { display: grid; grid-template-columns: 1.6rem 1fr; gap: 0.4rem; }
-  .account .turn { color: var(--faint); font-size: 0.72rem; padding-top: 0.15rem; }
-  .account p { margin: 0; font-size: 0.86rem; font-style: italic; color: var(--text-2); white-space: pre-wrap; }
   .small { font-size: 0.82rem; margin: 0.4rem 0 0; }
   .acts { display: flex; flex-wrap: wrap; gap: 0.4rem; }
   .loading { display: grid; place-items: center; padding: 3rem; }

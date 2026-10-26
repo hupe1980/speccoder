@@ -11,6 +11,8 @@ export type Runnable =
   | { kind: "review"; ids: string[]; verdict: "approve" | "request" | "clear" | "answer" | "edit" | "edit-approve" }
   | { kind: "issue_comment"; issue: number; assign: boolean }
   | { kind: "quick_change"; request: string; checks: string[]; run: boolean }
+  | { kind: "keep_set_aside"; task: string }
+  | { kind: "drop_set_aside"; task: string }
   | { kind: "pull_request" };
 
 export interface Action {
@@ -21,7 +23,7 @@ export interface Action {
   run: Runnable | null;
   blocked: string | null;
   input: string | null;
-  /** It leaves the machine: say this in a confirmation before running it. */
+  /** It leaves the machine or cannot be undone: say this in a confirmation first. */
   confirm?: string | null;
 }
 
@@ -42,6 +44,8 @@ export interface Task {
   attestation: string | null;
   strength?: string | null;
   last_attempt?: { outcome: string; reason: string; reference: string; run_id?: string | null } | null;
+  /** Changes found in the worktree when the task's run started, set aside. */
+  set_aside?: { reference: string; files: string[] } | null;
   /** The intent changed since the tick. */
   drift?: Drift | null;
 }
@@ -236,7 +240,7 @@ export interface GitHubState {
 
 /** One decision waiting for the person. */
 export interface InboxItem {
-  kind: "approval" | "ruling" | "gaming" | "stale" | "stuck" | "commit" | "handoff" | string;
+  kind: "approval" | "ruling" | "gaming" | "stale" | "stuck" | "aside" | "commit" | "handoff" | string;
   feature: string;
   task: string | null;
   title: string;
@@ -300,4 +304,11 @@ export interface Review {
   questions: OpenQuestion[];
   changes: RequirementDrift[];
   history: SpecVersion[];
+}
+
+/** One model turn of an attempt, as its account: reasoning and words (a claim). */
+export interface AccountTurn {
+  turn: number;
+  reasoning: string | null;
+  said: string | null;
 }

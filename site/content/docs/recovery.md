@@ -20,7 +20,7 @@ speccoder records every model call and tool call in a local journal before it ac
 | While a tool call was running | Nobody knows whether that call finished, so it is not run again: the attempt is saved under its ref and undone, the run stops (`interrupted`) for you to look, and the next run starts a fresh attempt |
 | After the attempt finished, before the tick | Reads the finished attempt back, judges it and ticks it, without calling the model |
 
-**Edits by hand** in the worktree, without an interrupted attempt, are saved under an attempt ref and set aside; the task starts from the branch tip.
+**Edits by hand** in the worktree, without an interrupted attempt, are saved under an attempt ref and set aside; the task starts from the branch tip. They wait in **Needs You** and on the task's card: `speccoder task restore T005` commits them onto `speccoder/<feature>` as yours (merged when the branch moved since; refused, with nothing changed, when they conflict), `speccoder task drop T005` discards them.
 
 **`SPECCODER_CALL_ID`** is set for every command the model runs. A resumed call has the same id, so a script with side effects can tell a repeat from a new call.
 

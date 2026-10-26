@@ -15,7 +15,7 @@
           "type": "string"
         },
         "confirm": {
-          "description": "It leaves the machine (a push, a pull request): what an interface\nsays in a confirmation before it runs it.",
+          "description": "It leaves the machine (a push, a pull request) or cannot be undone\n(a discard): what an interface says in a confirmation before it runs it.",
           "type": [
             "string",
             "null"
@@ -386,6 +386,42 @@
             "request",
             "checks",
             "run"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Commit the changes set aside before the task's run onto the\nfeature's branch, as the person's own.",
+          "properties": {
+            "kind": {
+              "const": "keep_set_aside",
+              "type": "string"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Discard them.",
+          "properties": {
+            "kind": {
+              "const": "drop_set_aside",
+              "type": "string"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task"
           ],
           "type": "object"
         },

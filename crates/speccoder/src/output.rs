@@ -481,6 +481,7 @@ mod look_tests {
             commit: None,
             run_id: None,
             last_attempt: None,
+            set_aside: None,
             note: None,
             attestation: None,
             strength: None,

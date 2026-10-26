@@ -161,6 +161,7 @@ mod tests {
             blocked_by: Vec::new(),
             commit: None,
             run_id: None,
+            set_aside: None,
             last_attempt: last.map(|o| LastAttempt {
                 outcome: o.to_owned(),
                 reason: "the model's words".to_owned(),

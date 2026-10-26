@@ -37,7 +37,7 @@ A project without `speccoder.toml` opens in the **setup assistant** instead: wha
 
 <figure class="shot"><img class="shot-light" src="../../screenshots/inbox-light.webp" alt="Needs You: a call waiting for approval, an open question and requirements to review, across two features" width="1440" height="900" loading="lazy" decoding="async"><img class="shot-dark" src="../../screenshots/inbox-dark.webp" alt="Needs You: a call waiting for approval, an open question and requirements to review, across two features" width="1440" height="900" loading="lazy" decoding="async"></figure>
 
-- Groups: Waiting for Approval, Rule on the Tests, Suspected Shortcuts, The Spec Changed, Open Questions, Review the Spec, Change Requests, Did Not Pass, Plans to Commit, Ready to Hand Off.
+- Groups: Waiting for Approval, Rule on the Tests, Suspected Shortcuts, The Spec Changed, Open Questions, Review the Spec, Change Requests, Did Not Pass, Changes Set Aside, Plans to Commit, Ready to Hand Off.
 - Each row decides in place, in its own feature, or **Open** shows it with its evidence. An action that cannot run now says why.
 - The tab and the page title carry the count. With nothing waiting, the page offers the next step.
 - **Quick Change** (or `q`) opens a sheet for a small change and when it is done ([quick changes](@/docs/running.md#quick-changes)).
@@ -64,7 +64,8 @@ Click a card to open the **inspector**:
 - The verdict and the evidence rows: acceptance, held-out, checks, attestation, the last attempt.
 - The code: the commit that ticked the task, or the code of a failed or held attempt (kept, never merged), with old and new line numbers.
 - **Accept**, **Skip**, **Nudge** and **Run**.
-- **The Model's Account**: what the model said it was doing, turn by turn — a claim, not evidence.
+- **Changes set aside**, when the worktree held changes as the task's run started: the files, **Show Changes**, **Keep on the Branch** (committed as yours) and **Discard…** ([recovery](@/docs/recovery.md)).
+- **The Model's Account**: turn by turn, its reasoning (the conclusion first, **Show all of it** for the rest) and its words — a claim, not evidence.
 - For a stale tick, the requirement then and now, word by word.
 
 ### Code

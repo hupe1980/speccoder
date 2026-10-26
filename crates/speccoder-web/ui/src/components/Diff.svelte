@@ -2,6 +2,7 @@
   // A change as code: the commit's message, then each file as a card with
   // its additions and removals, old and new line numbers in the gutter, and
   // hunks as dividers. Long lines scroll; wrapping is a toggle.
+  import FileIcon from "./FileIcon.svelte";
   import Icon from "./Icon.svelte";
   import Source from "./Source.svelte";
   import { language } from "../lib/highlight";
@@ -84,6 +85,7 @@
       <section class="file">
         <button class="fhead" onclick={() => (folded = { ...folded, [f.name]: !folded[f.name] })} aria-expanded={!folded[f.name]}>
           <Icon name={folded[f.name] ? "chevron" : "down"} size={12} weight={2.2} />
+          <FileIcon path={f.name} size={15} />
           <span class="fname mono" title={f.name}>{f.name}</span>
           {#if f.status !== "modified"}<span class="badge {f.status}">{f.status}</span>{/if}
           <span class="stat"><span class="a">+{f.add}</span><span class="d">−{f.del}</span>

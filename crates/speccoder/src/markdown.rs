@@ -276,6 +276,7 @@ mod tests {
             commit: None,
             run_id: None,
             last_attempt: None,
+            set_aside: None,
             note: None,
             attestation: Some("signed ssh SHA256:x".to_owned()),
             strength: None,

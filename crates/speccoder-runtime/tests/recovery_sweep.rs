@@ -91,6 +91,7 @@ fn every_crash_point_of_an_attempt_resumes_honestly() {
         allow: &allow,
         max_turns: 8,
         max_tool_calls: 8,
+        reasoning: false,
         frozen: &[],
         approved: &[],
         rejected: &[],

@@ -859,6 +859,7 @@ pub(crate) fn run_task(
                     allow: &run_config.allow,
                     max_turns: run_config.max_turns,
                     max_tool_calls: run_config.max_tool_calls,
+                    reasoning: s.model.reasoning_summary,
                     frozen: &frozen,
                     approved: &decisions.approved,
                     rejected: &decisions.rejected,

@@ -133,6 +133,8 @@ impl Skill for Host {
             cx,
             &prompt,
             LoopSpec {
+                // The account is shown for attempts; these read as documents.
+                reasoning: false,
                 tools,
                 policy: Policy::new(&[], &[]).rules(self.format.rules()).authoring(),
                 max_turns: limit("max_turns", 30).max(1),

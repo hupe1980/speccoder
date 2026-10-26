@@ -29,7 +29,7 @@ sha2 = "0.11"
 base64 = "0.22"
 toml = { version = "1", features = ["preserve_order"] }
 quick-xml = "0.42"
-agentplane = { version = "=0.52.0", default-features = false, features = ["embed"] }
+agentplane = { version = "=0.53.0", default-features = false, features = ["embed"] }
 async-trait = "0.1"
 globset = "0.4"
 ignore = "0.4"

@@ -145,14 +145,16 @@ fn statuses(
                     .filter(|e| t.done && !e.run.is_empty())
                     .map(|e| e.run.clone()),
                 // Newest first: the first saved attempt of an open task.
-                last_attempt: saved.iter().find(|a| !t.done && a.task == t.id).map(|a| {
-                    speccoder_core::LastAttempt {
+                last_attempt: saved
+                    .iter()
+                    .find(|a| !t.done && a.task == t.id && a.outcome != crate::controls::SET_ASIDE)
+                    .map(|a| speccoder_core::LastAttempt {
                         outcome: a.outcome.clone(),
                         reason: a.reason.clone(),
                         run_id: a.run_id.clone(),
                         reference: a.reference.clone(),
-                    }
-                }),
+                    }),
+                set_aside: None,
                 note: if t.done {
                     found.map(|e| e.reason.clone()).filter(|r| !r.is_empty())
                 } else {
@@ -393,6 +395,22 @@ pub fn report(path: &Path, feature: Option<&str>) -> CommandResult {
     let saved = crate::attempts::list(root, &name);
     let skipped = crate::controls::skipped(root, &name);
     let mut tasks = statuses(&parsed, &evidence, &lines, &saved, &skipped);
+    // Changes a run set aside, newest first: the person decides on them,
+    // whatever became of the task.
+    for a in saved
+        .iter()
+        .filter(|a| a.outcome == crate::controls::SET_ASIDE)
+    {
+        if let Some(t) = tasks
+            .iter_mut()
+            .find(|t| t.id == a.task && t.set_aside.is_none())
+        {
+            t.set_aside = Some(speccoder_core::SetAside {
+                reference: a.reference.clone(),
+                files: crate::controls::changed_files(root, &a.commit),
+            });
+        }
+    }
     // What each committed tick's note says (signatures are `attest verify`'s).
     for t in tasks.iter_mut() {
         if let Some(commit) = t.commit.as_deref() {
@@ -648,6 +666,7 @@ mod tests {
             commit: None,
             run_id: None,
             last_attempt: None,
+            set_aside: None,
             note: None,
             attestation: None,
             strength: None,

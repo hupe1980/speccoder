@@ -294,21 +294,24 @@ pub fn rows(task: &TaskStatus, statements: &[Value], run: Option<&RunReport>) ->
     out
 }
 
-/// What the model said in each turn of `run`, read from the
-/// project's journal: its account of the attempt — a claim, shown beside
-/// the evidence, never as it.
+/// The model's account of `run`, turn by turn, read from the project's
+/// journal: its reasoning and its words — a claim, shown beside the
+/// evidence, never as it.
 ///
 /// # Errors
 ///
 /// No project or state directory, or the journal cannot be read.
-pub fn narration_of(path: &std::path::Path, run: &str) -> Result<Vec<String>, String> {
+pub fn account_of(
+    path: &std::path::Path,
+    run: &str,
+) -> Result<Vec<crate::substrate::AccountTurn>, String> {
     let root = crate::format::at(path)
         .detect(path)
         .ok_or_else(|| "not a spec project".to_owned())?;
     let state = crate::worktree::state_dir().ok_or_else(|| "no state directory".to_owned())?;
     let plane = crate::worktree::project_state_dir(&state, &root);
     crate::pipeline::tokio_runtime()?
-        .block_on(crate::substrate::narration(&plane, run))
+        .block_on(crate::substrate::account(&plane, run))
         .map_err(|e| e.0)
 }
 
@@ -328,6 +331,7 @@ mod tests {
             commit: Some("abc".to_owned()),
             run_id: None,
             last_attempt: None,
+            set_aside: None,
             note: None,
             attestation: Some("signed ssh SHA256:x".to_owned()),
             strength: None,

@@ -17,9 +17,9 @@ use crate::actions::action;
 
 /// The kinds, most urgent first: what blocks a run, what questions the
 /// evidence, what stops a task, what blocks a hand-off.
-pub const KINDS: [&str; 10] = [
-    "approval", "ruling", "gaming", "stale", "question", "review", "revise", "stuck", "commit",
-    "handoff",
+pub const KINDS: [&str; 11] = [
+    "approval", "ruling", "gaming", "stale", "question", "review", "revise", "stuck", "aside",
+    "commit", "handoff",
 ];
 
 /// `speccoder inbox [--feature]`: the decisions waiting in every feature of
@@ -85,7 +85,29 @@ fn count(n: usize, one: &str, many: &str) -> String {
     format!("{n} {}", if n == 1 { one } else { many })
 }
 
-/// `3 decisions waiting in 2 features: 1 approval, 2 stuck`.
+/// A kind counted in words: `2 approvals`, `1 open question`.
+fn counted(kind: &str, n: usize) -> String {
+    let (one, many) = match kind {
+        "approval" => ("approval", "approvals"),
+        "ruling" => ("ruling", "rulings"),
+        "gaming" => ("suspected shortcut", "suspected shortcuts"),
+        "stale" => (
+            "tick the spec changed under",
+            "ticks the spec changed under",
+        ),
+        "question" => ("open question", "open questions"),
+        "review" => ("spec to review", "specs to review"),
+        "revise" => ("change request", "change requests"),
+        "stuck" => ("task that did not pass", "tasks that did not pass"),
+        "aside" => ("set-aside change", "set-aside changes"),
+        "commit" => ("plan to commit", "plans to commit"),
+        "handoff" => ("branch to hand off", "branches to hand off"),
+        k => (k, k),
+    };
+    count(n, one, many)
+}
+
+/// `3 decisions waiting in 2 features: 1 approval, 2 tasks that did not pass`.
 fn summary(items: &[InboxItem], features: usize) -> String {
     if items.is_empty() {
         return format!(
@@ -100,7 +122,7 @@ fn summary(items: &[InboxItem], features: usize) -> String {
         .iter()
         .filter_map(|k| {
             let n = items.iter().filter(|i| i.kind == *k).count();
-            (n > 0).then(|| format!("{n} {k}"))
+            (n > 0).then(|| counted(k, n))
         })
         .collect();
     format!(
@@ -289,6 +311,41 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
             format!("{}'s last attempt: {}", t.id, a.outcome.replace('_', " ")),
             a.reason.clone(),
             actions,
+        ));
+    }
+
+    // Changes a run found and set aside: kept on the branch, or let go.
+    for t in &r.tasks {
+        let Some(a) = &t.set_aside else { continue };
+        let n = a.files.len();
+        let mut keep = action(
+            "task",
+            format!("keep the changes set aside before {}", t.id),
+            "committed onto the feature's branch as yours",
+            flag(format!("speccoder task restore {}", t.id)),
+        );
+        keep.run = Some(Runnable::KeepSetAside { task: t.id.clone() });
+        let mut drop = action(
+            "task",
+            format!("discard the changes set aside before {}", t.id),
+            "deleted; the branch stays as it is",
+            flag(format!("speccoder task drop {}", t.id)),
+        );
+        drop.run = Some(Runnable::DropSetAside { task: t.id.clone() });
+        drop.confirm = Some(format!(
+            "Discard the {n} changed file(s) set aside before {}? They are deleted, not kept anywhere.",
+            t.id
+        ));
+        out.push(item(
+            "aside",
+            Some(&t.id),
+            format!("Changes were set aside before {} ran", t.id),
+            format!(
+                "{n} file(s) were changed in the worktree when the run started — your edits, or an interrupted run's: {}",
+                a.files.iter().take(4).cloned().collect::<Vec<_>>().join(", ")
+                    + if n > 4 { ", …" } else { "" }
+            ),
+            vec![keep, drop],
         ));
     }
 

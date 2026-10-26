@@ -22,6 +22,7 @@ struct Raw {
     base_url: Option<String>,
     api_key_env: Option<String>,
     structured: Option<String>,
+    reasoning_summary: Option<bool>,
 }
 
 impl ModelConfig {
@@ -176,6 +177,10 @@ pub struct ModelConfig {
     /// (`structured = "native"`, the default); `"tool"` carries it in a
     /// forced tool instead, which works only for steps without tools.
     pub structured_native: bool,
+    /// Ask for a summary of the model's reasoning on each attempt turn
+    /// (`reasoning_summary`, default on): shown as its account, never as
+    /// evidence. Providers without a way to ask (Chat Completions) give none.
+    pub reasoning_summary: bool,
 }
 
 /// USD per million tokens.
@@ -271,6 +276,7 @@ pub fn parse(text: &str) -> Result<Option<ModelConfig>, String> {
     Ok(Some(ModelConfig {
         provider: raw.provider,
         model: raw.model,
+        reasoning_summary: raw.reasoning_summary.unwrap_or(true),
         max_output_tokens: raw.max_output_tokens.unwrap_or(4096),
         max_run_tokens: raw.max_run_tokens.unwrap_or(200_000),
         cache_ttl: raw.cache_ttl.unwrap_or(CacheTtl::FiveMinutes),

@@ -60,6 +60,8 @@ class AppState {
   calls = $state<string[]>([]);
   /** What the model said last, its first line: a claim. */
   said = $state<string | null>(null);
+  /** Where the model's latest reasoning summary landed, its last line: a claim. */
+  thinking = $state<string | null>(null);
   usage = $state<{ in: number; out: number; usd: number | null }>({ in: 0, out: 0, usd: null });
   waiting = $state<Waiting | null>(null);
   toasts = $state<Toast[]>([]);
@@ -188,6 +190,7 @@ class AppState {
         this.stages = [];
         this.calls = [];
         this.said = null;
+        this.thinking = null;
         this.usage = { in: 0, out: 0, usd: null };
         break;
       case "progress":
@@ -253,6 +256,15 @@ class AppState {
         if (first) {
           this.said = first.trim();
           this.calls = [...this.calls.slice(-199), `“${first.trim()}”`];
+        }
+        break;
+      }
+      case "reasoning": {
+        // Its reasoning, marked "therefore": the conclusion is shown.
+        const last = String(ev.text ?? "").split("\n").filter((l: string) => l.trim()).at(-1) ?? "";
+        if (last) {
+          this.thinking = last.trim();
+          this.calls = [...this.calls.slice(-199), `∴ ${last.trim()}`];
         }
         break;
       }

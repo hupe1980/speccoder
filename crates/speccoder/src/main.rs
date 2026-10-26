@@ -1094,6 +1094,8 @@ fn command_name(command: Option<&Command>) -> &'static str {
                 cli::TaskAction::Skip { .. } => "task skip",
                 cli::TaskAction::Nudge { .. } => "task nudge",
                 cli::TaskAction::Rule { .. } => "task rule",
+                cli::TaskAction::Restore { .. } => "task restore",
+                cli::TaskAction::Drop { .. } => "task drop",
                 cli::TaskAction::Show { .. } => "task show",
             },
             C::Report { .. } => "report",
@@ -1203,6 +1205,8 @@ fn task_action(
             ),
             None => no_state("task rule"),
         },
+        T::Restore { task } => speccoder_runtime::controls::restore(path, feature, task),
+        T::Drop { task } => speccoder_runtime::controls::drop_set_aside(path, feature, task),
         T::Show { task, account } => {
             let shown = speccoder_runtime::status::show(path, feature, task);
             if !*account {
@@ -1217,23 +1221,32 @@ fn task_action(
                 }),
                 _ => None,
             };
-            let said = match run
+            let account = match run
                 .as_deref()
-                .map(|r| speccoder_runtime::evidence::narration_of(path, r))
+                .map(|r| speccoder_runtime::evidence::account_of(path, r))
             {
                 Some(Ok(turns)) if !turns.is_empty() => turns
                     .iter()
-                    .enumerate()
-                    .map(|(i, t)| format!("  {:>2}  {}", i + 1, t.replace('\n', "\n      ")))
+                    .map(|t| {
+                        let block = |label: &str, text: &str| {
+                            format!("    {label:<9} {}", text.replace('\n', "\n              "))
+                        };
+                        let mut lines = vec![format!("  turn {}", t.turn)];
+                        lines.extend(t.reasoning.as_deref().map(|r| block("thinking", r)));
+                        lines.extend(t.said.as_deref().map(|w| block("says", &format!("“{w}”"))));
+                        lines.join("\n")
+                    })
                     .collect::<Vec<_>>()
                     .join("\n"),
-                Some(Ok(_)) => "  (it said nothing beside its calls)".to_owned(),
+                Some(Ok(_)) => {
+                    "  (it neither reasoned aloud nor said anything beside its calls)".to_owned()
+                }
                 Some(Err(e)) => format!("  (the journal cannot be read: {e})"),
                 None => "  (no attempt has run)".to_owned(),
             };
             let status = shown.status();
             let message = format!(
-                "{}\nThe model's account — what it said it was doing; a claim, not evidence:\n{said}",
+                "{}\nThe model's account — its reasoning and its words; a claim, not evidence:\n{account}",
                 shown.message()
             );
             shown.reworded(status, &message)

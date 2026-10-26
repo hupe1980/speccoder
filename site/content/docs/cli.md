@@ -66,7 +66,8 @@ Every stop and finish ends with a `Next:` block of copy-pasteable commands (`nex
 | `speccoder task skip T (--reason R \| --undo)` | Skip a task, or take the skip back; its dependents stay blocked |
 | `speccoder task nudge T (--note N \| --clear)` | Leave a note the next attempts read, or remove the notes |
 | `speccoder task rule T --tests-right --reason R [--variant ID]` | Rule that the tests are right about a rejected alternative; the next `run` ticks it ([over-strict tests](@/docs/evidence.md#over-strict-tests)) |
-| `speccoder task show T [--account]` | The task's state and evidence; `--account` adds what the model said in its last attempt, turn by turn (a claim) |
+| `speccoder task show T [--account]` | The task's state and evidence; `--account` adds the model's reasoning and words in its last attempt, turn by turn (a claim) |
+| `speccoder task restore T` / `task drop T` | Keep the changes set aside before T's run (committed onto the branch as yours), or discard them |
 
 ## Review
 
@@ -148,6 +149,7 @@ With `--events` stdout carries only JSON Lines as the command works; stderr stay
 | `approval.requested`, `approval.decided` | A call waits for a person; who decided, how, and the scope |
 | `usage` | Tokens so far (at most once a second per task) |
 | `said` | What the model said beside its calls in a turn (`task`, `turn`, `text`): a claim |
+| `reasoning` | The model's summary of its reasoning in a turn (`task`, `turn`, `text`): a claim |
 | `notice` | Anything else worth a line |
 | `result` | Last line, exactly once |
 

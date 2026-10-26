@@ -16,6 +16,7 @@
     review: { title: "Review the Spec", icon: "doc", tone: "ready", why: "The result will be judged against these words." },
     revise: { title: "Change Requests", icon: "sparkle", tone: "needs_approval", why: "Revise the spec as you asked, then review it again." },
     stuck: { title: "Did Not Pass", icon: "xoctagon", tone: "failed", why: "Decide: run again, leave a note, skip or accept." },
+    aside: { title: "Changes Set Aside", icon: "tray", tone: "needs_approval", why: "Found in the worktree when a run started — keep them on the branch, or let them go." },
     commit: { title: "Plans to Commit", icon: "doc", tone: "ready", why: "A run reads committed files only." },
     handoff: { title: "Ready to Hand Off", icon: "arrowup", tone: "verified", why: "Every task is done — review the branch." },
   };

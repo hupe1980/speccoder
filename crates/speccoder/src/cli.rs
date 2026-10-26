@@ -472,6 +472,16 @@ pub enum TaskAction {
         #[arg(long, value_name = "ID")]
         variant: Option<String>,
     },
+    /// Keep the changes set aside before the task's run: committed onto the feature's branch as yours.
+    Restore {
+        /// The task, e.g. T005.
+        task: String,
+    },
+    /// Discard the changes set aside before the task's run.
+    Drop {
+        /// The task, e.g. T005.
+        task: String,
+    },
     /// The task's state and the evidence behind it.
     Show {
         /// The task, e.g. T005.

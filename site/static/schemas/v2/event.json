@@ -101,7 +101,7 @@
           "type": "string"
         },
         "confirm": {
-          "description": "It leaves the machine (a push, a pull request): what an interface\nsays in a confirmation before it runs it.",
+          "description": "It leaves the machine (a push, a pull request) or cannot be undone\n(a discard): what an interface says in a confirmation before it runs it.",
           "type": [
             "string",
             "null"
@@ -4554,6 +4554,42 @@
           "type": "object"
         },
         {
+          "description": "Commit the changes set aside before the task's run onto the\nfeature's branch, as the person's own.",
+          "properties": {
+            "kind": {
+              "const": "keep_set_aside",
+              "type": "string"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Discard them.",
+          "properties": {
+            "kind": {
+              "const": "drop_set_aside",
+              "type": "string"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Pick the current feature.",
           "properties": {
             "kind": {
@@ -4787,6 +4823,27 @@
           "type": "string"
         }
       ]
+    },
+    "SetAside": {
+      "description": "Changes saved and set aside so a run could start from the branch tip.",
+      "properties": {
+        "files": {
+          "description": "The files they change, repository-relative.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "reference": {
+          "description": "The ref holding them.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "reference",
+        "files"
+      ],
+      "type": "object"
     },
     "Severity": {
       "description": "Diagnostic severity.",
@@ -5647,6 +5704,17 @@
             "string",
             "null"
           ]
+        },
+        "set_aside": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SetAside"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Changes found in the worktree when the task's run started (a person's\nedits, or an interrupted run's leftovers), saved and set aside."
         },
         "state": {
           "description": "`verified`, `regression_only` (ticked by speccoder with that verdict),\n`attested` (ticked by `speccoder task accept`), `ticked_without_evidence`\n(ticked, no speccoder commit), `evidence_without_tick` (in place: a\nverdict commit names the task, its local tick is missing),\n`skipped`, `ready` or `blocked`.",
@@ -6599,6 +6667,36 @@
         },
         "type": {
           "const": "said",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "task",
+        "turn",
+        "text"
+      ],
+      "type": "object"
+    },
+    {
+      "description": "The model's summary of its reasoning in a turn: its account, a claim.",
+      "properties": {
+        "task": {
+          "description": "Task ID.",
+          "type": "string"
+        },
+        "text": {
+          "description": "The summary.",
+          "type": "string"
+        },
+        "turn": {
+          "description": "Model turn (1-based).",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "reasoning",
           "type": "string"
         }
       },
