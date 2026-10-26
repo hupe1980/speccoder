@@ -202,7 +202,8 @@ pub fn input(
         )
     }));
     let trusted = |v: Value| Tainted::trusted(v);
-    let settings = Tainted::object([
+    let autopilot = settings.autopilot;
+    let settings = vec![
         ("checks", trusted(json!(settings.checks))),
         ("allow", trusted(json!(settings.allow))),
         ("max_turns", trusted(json!(settings.max_turns))),
@@ -233,7 +234,14 @@ pub fn input(
         ("wait_secs", trusted(json!(settings.wait_secs))),
         ("in_place", trusted(json!(settings.in_place))),
         ("hidden", trusted(json!(settings.hidden))),
-    ]);
+    ];
+    // Only an autopilot run carries the key: every other input reads as
+    // it was recorded before it existed.
+    let mut settings = settings;
+    if autopilot {
+        settings.push(("autopilot", trusted(json!(true))));
+    }
+    let settings = Tainted::object(settings);
     Tainted::object([
         ("bundle", Tainted::trusted(bundle)),
         ("digest", digest),
@@ -330,6 +338,8 @@ pub struct Settings<'a> {
     pub in_place: bool,
     /// In place: what git ignored at the run's start, hidden from the tools.
     pub hidden: &'a [String],
+    /// An autopilot run: a call that would ask is refused instead (spec 093).
+    pub autopilot: bool,
 }
 
 /// The calls consecutive denials of which end an attempt.
@@ -455,6 +465,11 @@ impl Skill for Attempt {
             );
         let policy = if settings["in_place"] == true {
             policy.in_place()
+        } else {
+            policy
+        };
+        let policy = if settings["autopilot"] == true {
+            policy.autopilot()
         } else {
             policy
         };
@@ -1241,6 +1256,9 @@ pub(crate) async fn tool_loop(
                 }));
                 decision = Decision::Allow;
             }
+            // On autopilot nobody is asked: what would wait for a person is
+            // refused for the run and listed for them afterwards.
+            decision = policy.settle(decision);
             // Still a person's: the question, with everything it is decided by.
             let request = match &decision {
                 Decision::Approval(reason) => Some(question(&Question {

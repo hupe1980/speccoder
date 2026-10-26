@@ -148,6 +148,32 @@ pub fn bug_refusal_unsupported(start: &Path) -> Option<BugRefusal> {
     Detect::root(&stubs::KIRO, start).map(|_| BugRefusal::new("BUG-NO-UNIT", stubs::KIRO_BUGS))
 }
 
+/// A requirement a review writes tests for (spec 093): the format's
+/// requirement (`US1`) with the scenario ids its tests cite (`US1-1`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OracleRequirement {
+    /// Stable within the unit (`US1`).
+    pub key: String,
+    /// Its title.
+    pub title: String,
+    /// Its whole text, scenarios included.
+    pub text: String,
+    /// The scenarios its tests cite, with the spec's words.
+    pub scenarios: Vec<ScenarioRef>,
+}
+
+impl OracleRequirement {
+    /// `sha256:<hex>` of `title + "\n" + text`: the wording a frozen oracle
+    /// is bound to; any change of title, body or scenario lapses it.
+    #[must_use]
+    pub fn digest(&self) -> String {
+        format!(
+            "sha256:{}",
+            crate::integrity::sha256_hex(format!("{}\n{}", self.title, self.text).as_bytes())
+        )
+    }
+}
+
 /// One spec format the runtime can run.
 pub trait Adapter: Send + Sync + std::fmt::Debug {
     /// Which format.
@@ -321,6 +347,19 @@ pub trait Adapter: Send + Sync + std::fmt::Debug {
         _key: &str,
     ) -> Result<ReadBug, BugRefusal> {
         Err(BugRefusal::new("BUG-NO-UNIT", "no bug home"))
+    }
+
+    /// The selected unit's requirements with their scenarios, in document
+    /// order: what a review writes tests for. None when the format yields
+    /// no requirement with scenarios.
+    fn oracle_requirements(&self, _snapshot: &ProjectSnapshot) -> Vec<OracleRequirement> {
+        Vec::new()
+    }
+
+    /// The project's standing units and their rungs (a quick change's, a
+    /// bug's): what `speccoder_core::ladder::rung_of` decides by.
+    fn standing_units(&self, _root: &Path) -> Vec<(String, speccoder_core::ladder::Rung)> {
+        Vec::new()
     }
 
     /// The unit's requirement identifiers, each with the hash of the line

@@ -177,7 +177,35 @@ pub fn run_feature_with(
     let parallel_lines: std::cell::RefCell<Vec<String>> = std::cell::RefCell::new(Vec::new());
     let full_tier: std::cell::RefCell<Option<speccoder_core::FullTier>> =
         std::cell::RefCell::new(None);
-    let finish = |name: Option<String>, attempts, status: CommandStatus, stop: String| {
+    let finish = |name: Option<String>,
+                  attempts: Vec<speccoder_core::RunReport>,
+                  status: CommandStatus,
+                  stop: String| {
+        // An autopilot run lists every call it refused instead of asking.
+        let autopilot_denied: Vec<speccoder_core::oracle::AutopilotDenial> =
+            if options.mode == speccoder_core::oracle::RunMode::Autopilot {
+                attempts
+                    .iter()
+                    .flat_map(|a| crate::oracle::autopilot_denials(&a.task, &a.tool_calls))
+                    .collect()
+            } else {
+                Vec::new()
+            };
+        if let Some(n) = name.as_deref() {
+            crate::oracle::record_denials(
+                &worktree::project_state_dir(state, path),
+                n,
+                &autopilot_denied,
+            );
+        }
+        let stop = if autopilot_denied.is_empty() {
+            stop
+        } else {
+            format!(
+                "{stop} — autopilot refused {} call(s) instead of asking; they are listed for you (speccoder inbox)",
+                autopilot_denied.len()
+            )
+        };
         CommandResult::new("run", status, &stop).with_data(CommandData::Feature(Box::new(
             FeatureReport {
                 feature: name.unwrap_or_default(),
@@ -187,6 +215,8 @@ pub fn run_feature_with(
                 hooks: hook_lines.borrow().clone(),
                 parallel: parallel_lines.borrow().clone(),
                 full_tier: full_tier.borrow().clone(),
+                mode: options.mode,
+                autopilot_denied,
             },
         )))
     };

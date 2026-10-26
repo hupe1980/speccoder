@@ -102,6 +102,42 @@ pub struct Worktree {
     pub created: bool,
 }
 
+/// A detached worktree of a checkout's `HEAD` for one check (the review's
+/// red check, spec 093): never the person's checkout, never the feature's
+/// worktree. Removed when dropped — on every way out.
+#[derive(Debug)]
+pub struct Scratch {
+    repo: PathBuf,
+    /// The worktree's root.
+    pub path: PathBuf,
+}
+
+/// A scratch worktree of `checkout`'s `HEAD` under `under`.
+pub fn scratch(checkout: &Path, under: &Path) -> Result<Scratch, GitError> {
+    let git = Git::at(checkout);
+    let top = git
+        .toplevel()?
+        .ok_or_else(|| GitError("not a git repository".to_owned()))?;
+    fs::create_dir_all(under).map_err(|e| GitError(format!("{}: {e}", under.display())))?;
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos());
+    let path = under.join(format!("scratch-{}-{nanos}", std::process::id()));
+    let path_str = path.display().to_string();
+    Git::at(&top).run(&["worktree", "add", "--quiet", "--detach", &path_str, "HEAD"])?;
+    Ok(Scratch { repo: top, path })
+}
+
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        let path = self.path.display().to_string();
+        let git = Git::at(&self.repo);
+        let _ = git.run(&["worktree", "remove", "--force", &path]);
+        let _ = fs::remove_dir_all(&self.path);
+        let _ = git.run(&["worktree", "prune"]);
+    }
+}
+
 /// Creates or reuses the worktree for `feature`.
 ///
 /// `repo_root` is the git working tree of the user's checkout; `committed`

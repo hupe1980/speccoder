@@ -213,6 +213,53 @@ impl Adapter for SpecKit {
         bundle.story.to_lowercase().contains("acceptance")
     }
 
+    /// Each user story with its scenarios, keyed `USn`, citing `USn-k`.
+    fn oracle_requirements(
+        &self,
+        snapshot: &ProjectSnapshot,
+    ) -> Vec<crate::format::OracleRequirement> {
+        let Some(f) = snapshot.feature.as_ref() else {
+            return Vec::new();
+        };
+        let spec = Workspace::at(Path::new(&snapshot.root))
+            .and_then(|ws| ws.read_text(&format!("{}/spec.md", f.feature.dir)).ok())
+            .unwrap_or_default();
+        let (stories, _) = speccoder_speckit::stories::requirements("spec.md", &spec);
+        stories
+            .into_iter()
+            .map(|r| crate::format::OracleRequirement {
+                scenarios: speccoder_speckit::stories::scenario_refs(&spec, Some(&r.key)),
+                key: r.key,
+                title: r.title,
+                text: r.text,
+            })
+            .collect()
+    }
+
+    /// `NNN-quick-changes` (spec 084) and `NNN-bugfixes` (spec 090).
+    fn standing_units(&self, root: &Path) -> Vec<(String, speccoder_core::ladder::Rung)> {
+        use speccoder_core::ladder::Rung;
+        let mut out: Vec<(String, Rung)> = std::fs::read_dir(root.join(speccoder_speckit::features::SPECS))
+            .into_iter()
+            .flatten()
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .filter(|n| speccoder_speckit::features::prefix(n).is_some())
+            .filter_map(|n| {
+                let rung = if n.ends_with("-quick-changes") {
+                    Rung::Quick
+                } else if n.ends_with("-bugfixes") {
+                    Rung::Bug
+                } else {
+                    return None;
+                };
+                Some((n, rung))
+            })
+            .collect();
+        out.push((".specify/bugs".to_owned(), Rung::Bug));
+        out
+    }
+
     /// A Convergence phase, appended by converge.
     fn is_convergence(&self, phase: &str) -> bool {
         phase.to_lowercase().contains("convergence")

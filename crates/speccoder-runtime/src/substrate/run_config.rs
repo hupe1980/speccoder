@@ -97,6 +97,7 @@ struct RawConverge {
 #[serde(deny_unknown_fields)]
 struct RawReview {
     required: Option<bool>,
+    oracle_samples: Option<i64>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -226,6 +227,10 @@ pub struct RunConfig {
     /// A run waits until every requirement is approved on its current
     /// wording (`[review] required`).
     pub review_required: bool,
+    /// Independent author calls *Write Tests* makes at review
+    /// (`[review] oracle_samples`, 1 or 2, default 2): two are compared for
+    /// ambiguity, one turns the comparison off.
+    pub oracle_samples: u8,
     /// Test files that existed before an attempt may gain lines without
     /// approval (`[tests] frozen = "additions"`; default `"ask"`).
     pub frozen_additions: bool,
@@ -264,6 +269,7 @@ impl Default for RunConfig {
             max_converge_rounds: 3,
             monitor: false,
             review_required: false,
+            oracle_samples: 2,
             frozen_additions: false,
             format: None,
             approval_wait: std::time::Duration::from_secs(7 * 24 * 3600),
@@ -466,6 +472,11 @@ pub fn parse(text: &str) -> Result<RunConfig, String> {
             .filter(|n| *n <= 100)
             .ok_or_else(|| format!("[approvals]: budget = {n} (a whole number from 0 to 100)"))?,
     };
+    let oracle_samples = match review.oracle_samples {
+        None => d.oracle_samples,
+        Some(n @ 1..=2) => u8::try_from(n).unwrap_or(d.oracle_samples),
+        Some(n) => return Err(format!("[review]: oracle_samples = {n} (1 or 2)")),
+    };
     if let Some(why) = commands
         .allow_prefix
         .iter()
@@ -492,6 +503,7 @@ pub fn parse(text: &str) -> Result<RunConfig, String> {
         max_converge_rounds: converge.max_rounds.unwrap_or(d.max_converge_rounds),
         monitor: monitor.enabled.unwrap_or(false),
         review_required: review.required.unwrap_or(false),
+        oracle_samples,
         frozen_additions,
         format: format.map(|f| f.argv),
         approval_wait,
@@ -585,6 +597,20 @@ mod tests {
         );
         for bad in ["min_strength = 1.5", "near_miss = 4", "permitted = 3"] {
             assert!(parse(&format!("[acceptance]\n{bad}\n")).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn oracle_samples_are_one_or_two() {
+        assert_eq!(parse("").unwrap().oracle_samples, 2);
+        assert_eq!(
+            parse("[review]\noracle_samples = 1\n")
+                .unwrap()
+                .oracle_samples,
+            1
+        );
+        for bad in ["0", "3", "-1"] {
+            assert!(parse(&format!("[review]\noracle_samples = {bad}\n")).is_err());
         }
     }
 

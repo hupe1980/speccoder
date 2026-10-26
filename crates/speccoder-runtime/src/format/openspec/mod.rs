@@ -189,6 +189,56 @@ impl Adapter for OpenSpec {
             .collect()
     }
 
+    /// Each ADDED or MODIFIED delta requirement with its scenarios, keyed
+    /// `<capability>: <requirement>`.
+    fn oracle_requirements(
+        &self,
+        snapshot: &ProjectSnapshot,
+    ) -> Vec<crate::format::OracleRequirement> {
+        let Some(f) = snapshot.feature.as_ref() else {
+            return Vec::new();
+        };
+        let schema = snapshot
+            .openspec
+            .as_ref()
+            .map_or(speccoder_openspec::discover::SCHEMA, |m| m.schema.as_str());
+        let (change, _) =
+            speccoder_openspec::load_change(Path::new(&snapshot.root), &f.feature.name, schema);
+        change
+            .deltas
+            .iter()
+            .flat_map(|d| {
+                d.requirements
+                    .iter()
+                    .filter(|r| {
+                        matches!(
+                            r.operation,
+                            speccoder_openspec::delta::Operation::Added
+                                | speccoder_openspec::delta::Operation::Modified
+                        )
+                    })
+                    .map(move |r| crate::format::OracleRequirement {
+                        key: format!("{}: {}", d.capability, r.name),
+                        title: r.name.clone(),
+                        text: r.text.clone(),
+                        scenarios: r
+                            .scenarios
+                            .iter()
+                            .map(|sc| ScenarioRef {
+                                id: format!("{}: {} / {}", d.capability, r.name, sc.name),
+                                text: sc.raw.clone(),
+                            })
+                            .collect(),
+                    })
+            })
+            .collect()
+    }
+
+    /// The standing bug-fix change (spec 090).
+    fn standing_units(&self, _root: &Path) -> Vec<(String, speccoder_core::ladder::Rung)> {
+        vec![("bugfixes".to_owned(), speccoder_core::ladder::Rung::Bug)]
+    }
+
     /// A delta with a `#### Scenario:`: the scenarios are the examples.
     fn acceptance_testable(&self, bundle: &Bundle) -> bool {
         bundle.story.contains("#### Scenario:")

@@ -448,14 +448,22 @@ pub const CATALOGUE: &[Section] = &[
     Section {
         name: "review",
         title: "Spec review",
-        about: "Whether a run waits for every requirement to be approved.",
+        about: "Whether a run waits for every requirement to be approved, and how tests are written at review.",
         named: false,
-        keys: &[k(
-            "required",
-            Kind::Bool,
-            Some("false"),
-            "A run waits until every requirement is approved on its current wording",
-        )],
+        keys: &[
+            k(
+                "required",
+                Kind::Bool,
+                Some("false"),
+                "A run waits until every requirement is approved on its current wording",
+            ),
+            k(
+                "oracle_samples",
+                Kind::Int(1, 2),
+                Some("2"),
+                "Independent author calls Write Tests makes; two are compared for ambiguity",
+            ),
+        ],
     },
     Section {
         name: "monitor",

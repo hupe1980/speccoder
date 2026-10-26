@@ -181,6 +181,34 @@ impl Object {
         }
     }
 
+    /// Its grant id (F-125): `g-<16 hex>` over what the object is — the
+    /// canonical path, every field of a command, a tool's name and digest —
+    /// so one id names one object and nothing else.
+    #[must_use]
+    pub fn grant_id(&self) -> String {
+        use sha2::{Digest as _, Sha256};
+        let identity = match self {
+            Self::Path { canonical, .. } => serde_json::json!({ "path": canonical }),
+            Self::Command {
+                argv,
+                argv_sha256,
+                cwd,
+                executable,
+                network,
+            } => serde_json::json!({
+                "argv": argv, "argv_sha256": argv_sha256, "cwd": cwd,
+                "executable": executable, "network": network,
+            }),
+            Self::Tool { name, digest } => serde_json::json!({ "tool": name, "digest": digest }),
+        };
+        let hex: String = Sha256::digest(identity.to_string().as_bytes())
+            .iter()
+            .take(8)
+            .map(|b| format!("{b:02x}"))
+            .collect();
+        format!("g-{hex}")
+    }
+
     /// The short form events and lists carry: the path, `argv#<12 hex>`,
     /// `<tool>@<12 hex>` — never more of the argv than the target shows.
     #[must_use]
@@ -316,7 +344,13 @@ pub struct Policy {
     /// In place: what git ignored at the run's start (directories end in
     /// `/`), invisible to the file tools unless protected.
     hidden: Vec<String>,
+    /// An autopilot run (spec 093): a call that would ask a person, and that
+    /// no grant covers, is refused for the run instead.
+    autopilot: bool,
 }
+
+/// Why an autopilot run refused a call that would have asked a person.
+pub const AUTOPILOT_DENIED: &str = "autopilot: not asked — listed for you";
 
 /// Whether `argv` starts with `prefix`, a prefix of at least two elements
 /// (a bare program allows any argument, so it is never a prefix).
@@ -443,6 +477,31 @@ impl Policy {
         self
     }
 
+    /// An autopilot run: nothing asks ([`Policy::settle`]).
+    #[must_use]
+    pub const fn autopilot(mut self) -> Self {
+        self.autopilot = true;
+        self
+    }
+
+    /// Whether it is an autopilot run's.
+    #[must_use]
+    pub const fn is_autopilot(&self) -> bool {
+        self.autopilot
+    }
+
+    /// What a decision comes to once every grant had its say: on
+    /// autopilot a call that would still ask a person is refused for the
+    /// run ([`AUTOPILOT_DENIED`]); every other decision stands — a denial,
+    /// a rejection or a protected path is never lifted.
+    #[must_use]
+    pub fn settle(&self, decision: Decision) -> Decision {
+        match decision {
+            Decision::Approval(_) if self.autopilot => Decision::Deny(AUTOPILOT_DENIED.to_owned()),
+            d => d,
+        }
+    }
+
     /// The planning profile: the format's artifacts and scripts are the
     /// work; its machinery, verification inputs and secrets stay denied;
     /// anything else — source code included — needs approval.
@@ -561,6 +620,9 @@ impl Policy {
     /// person's.
     #[must_use]
     pub fn rule(&self, tool: &str, args: &Value, object: Option<&Object>) -> String {
+        if self.autopilot && matches!(self.classify(tool, args, object), Decision::Approval(_)) {
+            return "autopilot".to_owned();
+        }
         if let Some(object) = object
             && matches!(self.base(tool, args), Decision::Approval(_))
         {
@@ -1398,6 +1460,69 @@ mod tests {
             r.classify("run_command", &cmd("git push origin"), None),
             Decision::Deny(_)
         ));
+    }
+
+    #[test]
+    fn autopilot_never_asks_never_lifts_a_denial_and_names_its_rule() {
+        let argv = |s: &str| s.split(' ').map(str::to_owned).collect::<Vec<_>>();
+        let p = Policy::new(&[], &[argv("cargo test")]).autopilot();
+        assert!(p.is_autopilot());
+        // Allowed stays allowed; asking becomes refusing; denied stays denied.
+        assert_eq!(
+            p.settle(p.classify("run_command", &cmd("cargo test"), None)),
+            Decision::Allow
+        );
+        assert_eq!(
+            p.settle(p.classify("run_command", &cmd("cargo add x"), None)),
+            Decision::Deny(AUTOPILOT_DENIED.to_owned())
+        );
+        assert_eq!(p.rule("run_command", &cmd("cargo add x"), None), "autopilot");
+        assert!(matches!(
+            p.settle(p.classify("run_command", &cmd("git push origin"), None)),
+            Decision::Deny(r) if r != AUTOPILOT_DENIED
+        ));
+        // Without autopilot nothing changes.
+        let q = Policy::new(&[], &[]);
+        assert!(matches!(
+            q.settle(q.classify("run_command", &cmd("cargo add x"), None)),
+            Decision::Approval(_)
+        ));
+        // A grant id names exactly one object.
+        let a = command("make check");
+        let mut b = a.clone();
+        if let Object::Command { cwd, .. } = &mut b {
+            *cwd = "sub".to_owned();
+        }
+        assert_ne!(a.grant_id(), b.grant_id());
+        assert_eq!(a.grant_id(), a.clone().grant_id());
+        assert_eq!(
+            path("src/b/x.rs", "src/a/x.rs").grant_id(),
+            path("src/b/x.rs", "src/b/x.rs").grant_id()
+        );
+        assert!(a.grant_id().starts_with("g-") && a.grant_id().len() == 18);
+    }
+
+    proptest::proptest! {
+        #[test]
+        fn on_autopilot_no_call_waits_for_a_person(words in proptest::collection::vec("[a-z]{1,6}", 1..4), tool in 0usize..4) {
+            let p = Policy::new(&[], &[]).autopilot();
+            let argv: Vec<String> = words.clone();
+            let (name, args) = match tool {
+                0 => ("run_command", json!({ "argv": argv })),
+                1 => ("write_file", json!({ "path": format!("src/{}.rs", words[0]), "content": "" })),
+                2 => ("write_file", json!({ "path": format!(".github/{}.yml", words[0]), "content": "" })),
+                _ => ("mcp__x__y", json!({})),
+            };
+            let before = Policy::new(&[], &[]).classify(name, &args, None);
+            let after = p.settle(p.classify(name, &args, None));
+            proptest::prop_assert!(!matches!(after, Decision::Approval(_)));
+            if matches!(before, Decision::Deny(_)) {
+                proptest::prop_assert!(matches!(after, Decision::Deny(_)));
+            }
+            if before == Decision::Allow {
+                proptest::prop_assert_eq!(after, Decision::Allow);
+            }
+        }
     }
 
     #[test]

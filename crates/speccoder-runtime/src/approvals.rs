@@ -181,6 +181,54 @@ pub fn who_in(dir: &Path) -> String {
         .unwrap_or_else(|| "unknown".to_owned())
 }
 
+/// The object-bound grants (F-125) a person approved earlier for this
+/// feature's tasks — distinct, by grant id, in the order first decided —
+/// with the objects themselves: what an autopilot run may be given.
+#[must_use]
+pub fn offered_objects(
+    project_state: &Path,
+    feature: &str,
+) -> Vec<(speccoder_core::oracle::OfferedGrant, Object)> {
+    let Ok(decisions) = Decisions::load(project_state) else {
+        return Vec::new();
+    };
+    let prefix = format!("{feature}/");
+    let mut out: Vec<(speccoder_core::oracle::OfferedGrant, Object)> = Vec::new();
+    for (_, task) in decisions.tasks.iter().filter(|(k, _)| k.starts_with(&prefix)) {
+        for d in task.decided.iter().filter(|d| d.verb == "approve") {
+            let Some(o) = &d.object else { continue };
+            let id = o.grant_id();
+            if out.iter().any(|(g, _)| g.id == id) {
+                continue;
+            }
+            let object = match o {
+                Object::Command { argv_sha256, .. } => {
+                    format!("{} · argv #{}", o.describe(), argv_sha256.get(..12).unwrap_or(argv_sha256))
+                }
+                _ => o.describe(),
+            };
+            out.push((
+                speccoder_core::oracle::OfferedGrant {
+                    id,
+                    class: o.class().as_str().to_owned(),
+                    object,
+                },
+                o.clone(),
+            ));
+        }
+    }
+    out
+}
+
+/// [`offered_objects`] as the sheet shows them.
+#[must_use]
+pub fn offered_grants(project_state: &Path, feature: &str) -> Vec<speccoder_core::oracle::OfferedGrant> {
+    offered_objects(project_state, feature)
+        .into_iter()
+        .map(|(g, _)| g)
+        .collect()
+}
+
 /// One decision, as it was made.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

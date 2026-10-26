@@ -21,6 +21,8 @@ pub mod code;
 pub mod commands;
 pub mod context;
 #[cfg(feature = "engine")]
+pub mod comments;
+#[cfg(feature = "engine")]
 pub mod controls;
 #[cfg(feature = "engine")]
 pub mod convergence;
@@ -62,6 +64,8 @@ pub mod mcp;
 pub mod mutation;
 #[cfg(feature = "engine")]
 pub mod next;
+#[cfg(feature = "engine")]
+pub mod oracle;
 #[cfg(feature = "engine")]
 pub mod pipeline;
 #[cfg(feature = "engine")]
