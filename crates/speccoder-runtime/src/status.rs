@@ -147,7 +147,7 @@ fn statuses(
                 // Newest first: the first saved attempt of an open task.
                 last_attempt: saved
                     .iter()
-                    .find(|a| !t.done && a.task == t.id && a.outcome != crate::controls::SET_ASIDE)
+                    .find(|a| !t.done && a.task == t.id && !crate::controls::is_set_aside(a))
                     .map(|a| speccoder_core::LastAttempt {
                         outcome: a.outcome.clone(),
                         reason: a.reason.clone(),
@@ -281,7 +281,7 @@ pub fn report(path: &Path, feature: Option<&str>) -> CommandResult {
                 if artifacts.is_empty() {
                     "nothing".to_owned()
                 } else {
-                    artifacts.join(" and ")
+                    speccoder_core::words::listed(&artifacts)
                 },
                 format.messages().tasks_file
             ),
@@ -397,10 +397,7 @@ pub fn report(path: &Path, feature: Option<&str>) -> CommandResult {
     let mut tasks = statuses(&parsed, &evidence, &lines, &saved, &skipped);
     // Changes a run set aside, newest first: the person decides on them,
     // whatever became of the task.
-    for a in saved
-        .iter()
-        .filter(|a| a.outcome == crate::controls::SET_ASIDE)
-    {
+    for a in saved.iter().filter(|a| crate::controls::is_set_aside(a)) {
         if let Some(t) = tasks
             .iter_mut()
             .find(|t| t.id == a.task && t.set_aside.is_none())

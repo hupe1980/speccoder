@@ -224,6 +224,27 @@ pub(crate) fn run_task(
         && options.session.is_none()
         && worktree::require_clean(&wt_root).is_err()
     {
+        // What the checks leave behind — build output not ignored, a
+        // lockfile never committed — is no one's edit: setting it aside
+        // would store it in git on every run. The setup is fixed once.
+        let left = worktree::leftovers(&wt_root);
+        if !left.is_empty() {
+            let mut what = Vec::new();
+            if !left.commit.is_empty() {
+                what.push(format!("{} is not committed", left.commit.join(", ")));
+            }
+            if !left.ignore.is_empty() {
+                what.push(format!("{} is not git-ignored", left.ignore.join(", ")));
+            }
+            return refuse(
+                CommandStatus::GitPrecondition,
+                format!(
+                    "{}: the checks write it on every run, so each run would find it in the worktree and set it aside — fix the setup once in your checkout: `{}`",
+                    what.join(" and "),
+                    left.fix(std::path::Path::new(&s.snapshot.root), &wt_root)
+                ),
+            );
+        }
         match set_aside_leftovers(&wt_root, &tmp, &feature_name, task) {
             Ok(reference) => set_aside = Some(reference),
             Err(e) => return refuse(CommandStatus::GitPrecondition, e),
@@ -463,10 +484,19 @@ pub(crate) fn run_task(
         );
         return fail(
             CommandStatus::ConfigError,
-            format!(
-                "check `{}` cannot run on the untouched code, so it could never judge {task}: {why} — fix the check (a file it needs may be uncommitted: `git status`), or run with --allow-failing-baseline",
-                c.name
-            ),
+            // A cause speccoder recognised comes with its fix; else the
+            // general one.
+            if why.contains("git add") || why.contains("--allow-failing-baseline") {
+                format!(
+                    "check `{}` cannot run on the untouched code, so it could never judge {task}: {why}",
+                    c.name
+                )
+            } else {
+                format!(
+                    "check `{}` cannot run on the untouched code, so it could never judge {task}: {why} — fix the check (a file it needs may be uncommitted: `git status`), or run with --allow-failing-baseline",
+                    c.name
+                )
+            },
         )
         .with_code("CHECK-BROKEN");
     }
@@ -1949,6 +1979,32 @@ pub(crate) fn run_task(
         .with_data(CommandData::Run(Box::new(report)))
 }
 
+/// `note`, with what the check itself said last (its own reason) and, for
+/// the causes that are known, the fix.
+fn with_cause(note: &str, c: &speccoder_core::verify::CheckResult) -> String {
+    let said = c
+        .stderr_tail
+        .lines()
+        .chain(c.stdout_tail.lines())
+        .map(str::trim)
+        .find(|l| l.starts_with("error"))
+        .map(|l| l.chars().take(200).collect::<String>());
+    let fix = match said.as_deref() {
+        Some(l) if l.contains("profile `speccoder` not found") => Some(
+            "`.config/nextest.toml` is not committed — `git add .config/nextest.toml && git commit -m \"speccoder: nextest profile\"`",
+        ),
+        Some(l) if l.contains("must be present") || l.contains("no targets") => Some(
+            "the project has nothing to build yet; if the first task creates it, run with --allow-failing-baseline",
+        ),
+        _ => None,
+    };
+    match (said, fix) {
+        (Some(s), Some(f)) => format!("{note} ({s}); {f}"),
+        (Some(s), None) => format!("{note} ({s})"),
+        _ => note.to_owned(),
+    }
+}
+
 /// Why a failing baseline check is broken rather than failing tests: it
 /// could not start, or it failed without any test result to show for it.
 /// `None`: it passed, or its tests ran and some failed.
@@ -1959,7 +2015,7 @@ pub fn broken(c: &speccoder_core::verify::CheckResult) -> Option<String> {
         return None;
     }
     if let Some(note) = &c.note {
-        return Some(note.clone());
+        return Some(with_cause(note, c));
     }
     if c.tests.as_ref().is_some_and(|t| !t.is_empty()) {
         return None;

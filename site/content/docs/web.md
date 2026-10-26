@@ -74,6 +74,7 @@ Click a card to open the **inspector**:
 
 - **Changes**: every commit on the feature's branch since it forked (one per ticked task, with its verdict), every file with lines added and removed, and the highlighted diff.
 - **Files**: the branch as a folder tree, changed files marked. Markdown opens as a preview (Mermaid drawn), with **Source** a click away.
+- **Worktree on disk**: also what git does not show — untracked files (**U**), modified ones (**M**), ignored files and folders (dimmed). When a file there would stop a run (a lockfile never committed, build output not ignored), it is shown with **Commit …**, which copies it into your checkout and commits exactly the setup files.
 - Keys: ↑ ↓ move in the tree, → ← open and close, typing jumps to a name; ⌘P (Ctrl+P) goes to a file; ⌘F (Ctrl+F) finds in the open file. Clicking a line number marks the line.
 - A link in a previewed Markdown file opens the linked file here; a web address opens in your browser.
 

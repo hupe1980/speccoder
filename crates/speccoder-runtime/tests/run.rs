@@ -1530,6 +1530,63 @@ fn a_conflicting_set_aside_change_is_refused_and_nothing_moves() {
     assert!(!git_out(r.path(), &["for-each-ref", &aside]).is_empty());
 }
 
+/// A lockfile the checks write, never committed, is no one's edit: the run
+/// stops with the fix instead of setting it aside every time; once the
+/// person commits it in the checkout, the next run brings it into the
+/// branch and works.
+#[test]
+fn an_uncommitted_lockfile_stops_the_run_with_its_fix_until_committed() {
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_call_tool("b", "report_blocked", json!({ "reason": "first" }));
+    let first = run(r.path(), state.path(), "T005", d);
+    let wt = PathBuf::from(&report(&first).worktree);
+    // What `cargo` would leave in the worktree.
+    fs::write(wt.join("Cargo.lock"), "# generated\nversion = 4\n").unwrap();
+    let (_f2, d2) = fake();
+    let res = run(r.path(), state.path(), "T005", d2);
+    assert_eq!(
+        res.status(),
+        CommandStatus::GitPrecondition,
+        "{}",
+        res.message()
+    );
+    assert!(
+        res.message().contains("Cargo.lock is not committed"),
+        "{}",
+        res.message()
+    );
+    assert!(
+        res.message().contains("git add Cargo.lock"),
+        "{}",
+        res.message()
+    );
+    assert!(
+        git_out(r.path(), &["for-each-ref", "refs/speccoder/attempts/"])
+            .lines()
+            .all(|l| !l.contains("set_aside"))
+    );
+    // The app's one click: copied into the checkout and committed.
+    let fixed = speccoder_runtime::code::fix_setup(r.path(), None);
+    assert_eq!(fixed.status(), CommandStatus::Ok, "{}", fixed.message());
+    assert_eq!(
+        git_out(r.path(), &["log", "-1", "--format=%s"]).trim(),
+        "speccoder: setup"
+    );
+    assert!(git_out(r.path(), &["ls-files", "Cargo.lock"]).contains("Cargo.lock"));
+    let (f3, d3) = fake();
+    f3.will_call_tool("b", "report_blocked", json!({ "reason": "third" }));
+    let res = run(r.path(), state.path(), "T005", d3);
+    assert_ne!(
+        res.status(),
+        CommandStatus::GitPrecondition,
+        "{}",
+        res.message()
+    );
+    assert!(git_out(&wt, &["ls-files", "Cargo.lock"]).contains("Cargo.lock"));
+}
+
 /// Set-aside changes the person lets go are deleted; the branch stays.
 #[test]
 fn set_aside_changes_can_be_discarded() {

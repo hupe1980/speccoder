@@ -11,6 +11,7 @@ export type Runnable =
   | { kind: "review"; ids: string[]; verdict: "approve" | "request" | "clear" | "answer" | "edit" | "edit-approve" }
   | { kind: "issue_comment"; issue: number; assign: boolean }
   | { kind: "quick_change"; request: string; checks: string[]; run: boolean }
+  | { kind: "fix_setup" }
   | { kind: "keep_set_aside"; task: string }
   | { kind: "drop_set_aside"; task: string }
   | { kind: "pull_request" };

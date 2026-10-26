@@ -899,7 +899,7 @@ fn init_at_a_terminal_commits_the_nextest_profile_with_the_config() {
     let out = child.wait_with_output().unwrap();
     let text = String::from_utf8_lossy(&out.stdout);
     assert!(
-        text.contains("Commit speccoder.toml and .config/nextest.toml?"),
+        text.contains("Commit speccoder.toml, .config/nextest.toml and .gitignore?"),
         "{text}"
     );
     let files = git(&["show", "--name-only", "--format=", "HEAD"]);
@@ -908,7 +908,12 @@ fn init_at_a_terminal_commits_the_nextest_profile_with_the_config() {
         .map(str::to_owned)
         .collect();
     files.sort();
-    assert_eq!(files, [".config/nextest.toml", "speccoder.toml"], "{text}");
+    // The build output the checks write is ignored from the start.
+    assert_eq!(
+        files,
+        [".config/nextest.toml", ".gitignore", "speccoder.toml"],
+        "{text}"
+    );
 }
 
 /// `speccoder config`: a key set from words keeps the file's

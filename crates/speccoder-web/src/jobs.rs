@@ -344,6 +344,7 @@ fn execute(
                 CommandResult::new("job", CommandStatus::ConfigError, "no state directory")
             }
         },
+        Runnable::FixSetup => speccoder_runtime::code::fix_setup(root, feature),
         Runnable::KeepSetAside { task } => {
             speccoder_runtime::controls::restore(root, feature, task)
         }

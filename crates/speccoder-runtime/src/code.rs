@@ -3,7 +3,7 @@
 //! never the caller's: it is the feature's branch, or `HEAD` before
 //! speccoder worked on it; a file is read only when the tree lists it.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
@@ -197,6 +197,156 @@ pub fn tree(root: &Path, feature: Option<&str>) -> (String, Vec<String>) {
         })
         .unwrap_or_default();
     (rev, files)
+}
+
+/// What git does not show at the feature's revision: the worktree's
+/// untracked, ignored and modified paths, and what of it would stop a run.
+#[derive(Debug, Clone, Default, serde::Serialize)]
+pub struct WorktreeView {
+    /// The feature's worktree, when there is one.
+    pub path: Option<String>,
+    /// `{path, state}`: `untracked`, `ignored` (a folder ends in `/`) or
+    /// `modified`, at most 2000.
+    pub entries: Vec<WorktreeEntry>,
+    /// Untracked lockfiles to commit, build output to ignore: a run stops
+    /// on them.
+    pub blocking: Vec<String>,
+    /// The command that fixes them, in the checkout.
+    pub fix: Option<String>,
+}
+
+/// One path of a [`WorktreeView`].
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct WorktreeEntry {
+    /// Worktree-relative.
+    pub path: String,
+    /// `untracked`, `ignored` or `modified`.
+    pub state: &'static str,
+}
+
+/// The feature's worktree as it is on disk, beyond what git committed.
+#[must_use]
+pub fn worktree_view(root: &Path, feature: Option<&str>) -> WorktreeView {
+    let Some(branch) = branch_of(root, feature) else {
+        return WorktreeView::default();
+    };
+    let Ok(Some(wt)) = crate::worktree::worktree_for(&Git::at(root), &branch) else {
+        return WorktreeView::default();
+    };
+    let out = Git::at(&wt)
+        .run(&[
+            "status",
+            "--porcelain=v1",
+            "-z",
+            "--untracked-files=normal",
+            "--ignored=matching",
+        ])
+        .unwrap_or_default();
+    let entries = crate::git::nul_fields(&out)
+        .into_iter()
+        .filter_map(|e| {
+            let (code, path) = (e.get(..2)?, e.get(3..)?.to_owned());
+            let state = match code {
+                "??" => "untracked",
+                "!!" => "ignored",
+                _ => "modified",
+            };
+            Some(WorktreeEntry { path, state })
+        })
+        .take(2000)
+        .collect();
+    let left = crate::worktree::leftovers(&wt);
+    WorktreeView {
+        path: Some(wt.display().to_string()),
+        entries,
+        blocking: left.commit.iter().chain(&left.ignore).cloned().collect(),
+        fix: (!left.is_empty()).then(|| left.fix(root, &wt)),
+    }
+}
+
+/// Fixes the setup [`worktree_view`] says stops a run, in the checkout at
+/// `root`, on the person's command: a lockfile only the worktree's checks
+/// wrote is copied over, build output is added to `.gitignore`, and exactly
+/// those files are committed (`speccoder: setup`).
+#[must_use]
+pub fn fix_setup(root: &Path, feature: Option<&str>) -> speccoder_core::CommandResult {
+    use speccoder_core::{CommandResult, CommandStatus};
+    let refuse = |status, m: String| CommandResult::new("setup", status, &m);
+    let Some(branch) = branch_of(root, feature) else {
+        return refuse(CommandStatus::NotFound, "no feature branch".to_owned());
+    };
+    let Ok(Some(wt)) = crate::worktree::worktree_for(&Git::at(root), &branch) else {
+        return refuse(
+            CommandStatus::NotFound,
+            "the feature has no worktree yet".to_owned(),
+        );
+    };
+    let left = crate::worktree::leftovers(&wt);
+    if left.is_empty() {
+        return CommandResult::new(
+            "setup",
+            CommandStatus::Ok,
+            "nothing in the worktree stops a run",
+        );
+    }
+    let mut paths = Vec::new();
+    for f in &left.commit {
+        let to = root.join(f);
+        if !to.exists()
+            && let Err(e) = std::fs::copy(wt.join(f), &to)
+        {
+            return refuse(CommandStatus::Error, format!("{f}: {e}"));
+        }
+        paths.push(f.clone());
+    }
+    if !left.ignore.is_empty() {
+        let ignore = root.join(".gitignore");
+        let existing = std::fs::read_to_string(&ignore).unwrap_or_default();
+        let sep = if existing.is_empty() || existing.ends_with('\n') {
+            ""
+        } else {
+            "\n"
+        };
+        let text = format!("{existing}{sep}{}\n", left.ignore.join("\n"));
+        if let Err(e) = std::fs::write(&ignore, text) {
+            return refuse(CommandStatus::Error, format!(".gitignore: {e}"));
+        }
+        paths.push(".gitignore".to_owned());
+    }
+    match crate::init::commit_written_as(root, &paths, "speccoder: setup") {
+        Ok(id) => CommandResult::new(
+            "setup",
+            CommandStatus::Ok,
+            &format!(
+                "committed {} as {id}; the next run takes it into the feature's branch",
+                paths.join(", ")
+            ),
+        ),
+        Err(e) => refuse(CommandStatus::GitPrecondition, e),
+    }
+}
+
+/// An untracked file of the feature's worktree, read from disk: its text,
+/// or why not. Only what [`worktree_view`] lists as untracked.
+///
+/// # Errors
+///
+/// Why the file is not shown.
+pub fn worktree_file(root: &Path, feature: Option<&str>, path: &str) -> Result<String, String> {
+    let view = worktree_view(root, feature);
+    if !view
+        .entries
+        .iter()
+        .any(|e| e.path == path && e.state == "untracked")
+    {
+        return Err(format!("{path} is not an untracked file of the worktree"));
+    }
+    let wt = PathBuf::from(view.path.unwrap_or_default());
+    let bytes = std::fs::read(wt.join(path)).map_err(|e| e.to_string())?;
+    if bytes.len() > FILE_LIMIT {
+        return Err(format!("{path} is larger than {} KB", FILE_LIMIT / 1024));
+    }
+    String::from_utf8(bytes).map_err(|_| format!("{path} is not text"))
 }
 
 /// One file at the feature's revision: its text, or why not (not in the

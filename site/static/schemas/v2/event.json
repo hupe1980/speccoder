@@ -4590,6 +4590,19 @@
           "type": "object"
         },
         {
+          "description": "Commit the setup a run stops on (an uncommitted lockfile, build\noutput not ignored) in the checkout.",
+          "properties": {
+            "kind": {
+              "const": "fix_setup",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Pick the current feature.",
           "properties": {
             "kind": {
