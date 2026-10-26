@@ -10,6 +10,46 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Review the oracle.** `speccoder review tests <REQ> --write` (Review ›
+  Tests in the app) writes, per requirement with scenarios, the acceptance
+  tests the run would use: two independent author calls (`[review]
+  oracle_samples`, default 2) whose stated expectations are compared — a
+  scenario read two ways is *ambiguous* (Needs You, `REVIEW-AMBIGUOUS` for a
+  gated run) until the person chooses a reading or rewords it — every test
+  citing a scenario (else discarded), red-checked twice on the checkout's
+  `HEAD` in a sandboxed scratch worktree, with a held-out set sealed beside
+  them of which only the count and digest are ever shown. The person rejects
+  (with a reason told to later calls), asks again, or edits a test. Not on a
+  quick-change or bug unit (`REVIEW-TESTS-OWN-PIPELINE`).
+- **Approve and Run.** The review's approve control is a three-way choice —
+  *Ask on Risky Calls*, *Autopilot*, *Keep Refining* (`speccoder review
+  approve --run ask|autopilot [--grant ID]…`). Approving records every open
+  decision line, freezes each requirement's red tests (`review.json` gains
+  `oracle` and `approval` digests; one `PreFrozenAcceptance`, producer
+  `review`), commits `review.json` and starts the run. The first task citing
+  the requirement writes the frozen tests at its checkpoint, red-checks them
+  and the sealed held-out set there, makes no author call, and ticks with
+  `Acceptance: review manifest=… approval=… wording=… by=…`; a changed
+  wording lapses them (`oracle.lapsed`), a tampered store stops the task
+  (`ORACLE-TAMPERED`), a checkout without the store authors as before.
+- **Autopilot runs** ask nobody: a call the policy would ask about is refused
+  for the run (`autopilot: not asked — listed for you`) unless an
+  object-bound grant the person ticked covers it; the denials are listed in
+  the run report (`autopilot_denied`) and Needs You. Needs the OS sandbox
+  (`SANDBOX-UNAVAILABLE`).
+- **Anchored comments.** Comments on passages of the spec, shown tests and
+  review findings collect in a tray (`speccoder review comments`, the app's
+  tray, `c` on a selection) and go out as one revision of the format's
+  revising skill limited to the sections they touch; sections changed outside
+  them are flagged; **Undo Revision** restores the documents byte for byte.
+  Code-view line comments are sent as one nudge for a task's next attempt.
+- New action kinds `oracle_tests`, `approve_and_run`, `comment`,
+  `comments_send`, `revision_undo`, `code_nudge`; payload `comments`; events
+  `oracle.stage`, `oracle.frozen`, `oracle.lapsed`; codes `REVIEW-AMBIGUOUS`,
+  `REVIEW-NO-SCENARIOS`, `REVIEW-TESTS-OWN-PIPELINE`, `ACCEPTANCE-OFF`,
+  `ORACLE-AUTHOR-FAILED`, `ORACLE-TAMPERED`, `RUN-ACTIVE`,
+  `AUTOPILOT-NEEDS-GRANT-OBJECTS`.
+
 - **Bug fixes: `speccoder bug`.** `speccoder bug "<what happens>" --expected
   "<what should>" [--unchanged "…"]…` records the person's triad where the
   format keeps bugs — Spec Kit's first-party `bug` extension
@@ -205,6 +245,10 @@ adheres to [Semantic Versioning](https://semver.org/).
   an attempt that cannot be recorded are reported, not dropped.
 
 ### Security
+
+- `/api/diff` shows only commits a branch, `HEAD` or a saved attempt
+  reaches, and `/api/file` refuses paths outside the project and the state
+  directory: no endpoint reaches a sealed or held-out object (spec 093).
 
 - Closed four ways an approval reached more than the person saw: an
   Always Allow that widened to a prefix (`npm run build` allowed `npm run

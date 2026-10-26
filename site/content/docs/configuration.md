@@ -121,7 +121,8 @@ The API key comes from `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`, never from this 
 | `[acceptance] permitted` | `1` | Spec-permitted alternatives to try (`0`–`2`); `0` turns off the [over-strict check](@/docs/evidence.md#over-strict-tests) |
 | `[acceptance] strength_timeout_secs` | `900` | Budget for the whole measurement; a measurement cut off is recorded as partial and meets no `min_strength` |
 | `[converge] max_rounds` | `3` | Convergence phases a feature may get |
-| `[review] required` | `false` | A run waits until every requirement is [approved](@/docs/planning.md#review-the-spec) on its current wording (`REVIEW-PENDING`) |
+| `[review] required` | `false` | A run waits until every requirement is [approved](@/docs/planning.md#review-the-spec) on its current wording (`REVIEW-PENDING`), and no requirement is read two ways (`REVIEW-AMBIGUOUS`) |
+| `[review] oracle_samples` | `2` | Independent author calls [Write Tests](@/docs/planning.md#review-the-tests) makes: two are compared for ambiguity, `1` turns the comparison off |
 | `[monitor] enabled` | `false` | Review every passing attempt with the [gaming monitor](@/docs/evidence.md#the-gaming-monitor) |
 | `[git] commit` | `"per-task"` | `per-task` commits each passed task; `none` leaves changes uncommitted |
 | `[format] argv` | — | A formatter run after each attempt (e.g. `["cargo", "fmt"]`); its changes are part of the attempt and audited. The spec format is `[spec] format` |
