@@ -340,7 +340,17 @@ fn a_command_grant_covers_exactly_its_argv() {
         argv_sha256,
         speccoder_runtime::tools::policy::argv_sha256(&["true".to_owned(), "core".to_owned()])
     );
-    assert!(executable.ends_with("/true"), "{executable}");
+    // The program `PATH` resolves to, by its real path: on some systems
+    // `/usr/bin/true` is a link (Ubuntu: to `gnutrue`).
+    let on_path = std::env::split_paths(&std::env::var_os("PATH").unwrap())
+        .map(|d| d.join("true"))
+        .find(|p| p.is_file())
+        .unwrap();
+    assert_eq!(
+        Path::new(&executable),
+        fs::canonicalize(on_path).unwrap(),
+        "{executable}"
+    );
     assert_eq!(cwd, ".");
 }
 
