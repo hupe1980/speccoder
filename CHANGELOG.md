@@ -28,10 +28,16 @@ adheres to [Semantic Versioning](https://semver.org/).
 - **OpenAI's words beside its calls are shown.** With the Responses API, the
   model's commentary appears as what it said — live, in waiting calls and in
   `task show --account` — as Anthropic's words already did.
-- **`speccoder eval` stops on a refused account by the provider's code**
-  (exhausted quota or credit, billing, a bad or expired key), as recorded in
-  the journal, not by words in the message. A refused request no longer
-  stops the suite because its message mentions "credit" or "quota".
+- **`speccoder eval` stops on a refused account by the provider's code**,
+  as recorded in the journal, not by words in the message: the codes
+  agentplane 0.54 classifies as the account's — OpenAI's
+  `insufficient_quota`, `billing_*` and `invalid_api_key`; Anthropic's
+  `authentication_error`, `billing_error` and `permission_error`; Gemini's
+  and Bedrock's refused or expired credentials. A refused request no longer
+  stops the suite because its message mentions "credit" or "quota". Not
+  yet recognised: Anthropic's "credit balance is too low", which it sends as
+  `invalid_request_error` — the suite goes on and each remaining case fails
+  as refused.
 
 ### Fixed
 
