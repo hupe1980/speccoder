@@ -1234,6 +1234,7 @@ pub(crate) fn reuse(c: &Ctx<'_>, fix: &Fix) -> Result<PreparedAcceptance, String
         &tests,
         c.runner,
         super::RedRule::BugAssertionOnly,
+        None,
     )
 }
 

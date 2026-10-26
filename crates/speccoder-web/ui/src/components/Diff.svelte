@@ -7,7 +7,24 @@
   import Source from "./Source.svelte";
   import { language } from "../lib/highlight";
   /** `only`: show this file alone (the Code view picks one). */
-  let { patch, loading = false, only = null, header = true }: { patch: string; loading?: boolean; only?: string | null; header?: boolean } = $props();
+  /** `comment`: a line comment of the Code view (spec 093) — the gutter
+   *  offers one on each line of the new side; `frozen`: test files frozen at
+   *  review, whose lines are commented on in Review › Tests instead. */
+  let {
+    patch,
+    loading = false,
+    only = null,
+    header = true,
+    comment = null,
+    frozen = new Set<string>(),
+  }: {
+    patch: string;
+    loading?: boolean;
+    only?: string | null;
+    header?: boolean;
+    comment?: ((c: { path: string; line: number; quote: string }) => void) | null;
+    frozen?: Set<string>;
+  } = $props();
 
   interface Line { kind: "add" | "del" | "ctx" | "hunk" | "note"; text: string; old: number | null; new: number | null }
   interface File { name: string; status: string; lines: Line[]; add: number; del: number }
@@ -104,7 +121,7 @@
                   {:else}
                     <tr class={l.kind}>
                       <td class="ln">{l.old ?? ""}</td>
-                      <td class="ln">{l.new ?? ""}</td>
+                      <td class="ln">{#if comment && l.new != null}<button class="plus" aria-label={frozen.has(f.name) ? `${f.name} is a frozen test` : `Comment on line ${l.new} of ${f.name}`} title={frozen.has(f.name) ? "This is a frozen test. Comment on it in Review › Tests" : "Comment on this line"} onclick={() => comment?.({ path: f.name, line: l.new ?? 0, quote: l.text })}>+</button>{/if}{l.new ?? ""}</td>
                       <td class="src"><span class="sign">{l.kind === "add" ? "+" : l.kind === "del" ? "−" : " "}</span><Source line={l.text} lang={language(f.name)} /></td>
                     </tr>
                   {/if}
@@ -155,6 +172,8 @@
   .ln { width: 1%; min-width: 3ch; padding: 0 0.5rem; text-align: right; color: var(--faint); user-select: none; font-variant-numeric: tabular-nums; }
   .src { padding: 0 0.9rem 0 0.25rem; white-space: pre; color: var(--text); }
   .wrap .src { white-space: pre-wrap; overflow-wrap: anywhere; }
+  .plus { border: 0; background: none; padding: 0 0.25rem 0 0; color: var(--accent-ink); cursor: pointer; opacity: 0; font: inherit; }
+  tr:hover .plus, .plus:focus-visible { opacity: 1; }
   .sign { display: inline-block; width: 1.3ch; color: var(--faint); user-select: none; }
   tr.add { background: var(--add-bg); }
   tr.add .sign, tr.add .ln { color: var(--add); }

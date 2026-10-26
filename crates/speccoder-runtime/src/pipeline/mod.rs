@@ -244,6 +244,10 @@ pub struct RunOptions {
     pub session: Option<Arc<std::sync::Mutex<crate::in_place::Session>>>,
     /// Run a bug of the format's own bug structure (no task list names it).
     pub bug_home: Option<Arc<bug::NativeBug>>,
+    /// How the run asks for a person (spec 093): `Ask` as today, or
+    /// `Autopilot` — nothing asks, a call that would is refused for the run
+    /// unless a grant in `run_grants` (the ones the person ticked) covers it.
+    pub mode: speccoder_core::oracle::RunMode,
 }
 
 /// Where a task runs, as `worktree` reports it: speccoder's worktree, or in

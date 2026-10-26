@@ -206,6 +206,8 @@ pub enum CommandData {
     Bug(Box<crate::bug::BugReport>),
     /// `config coverage`: what a prefix entry would newly allow.
     PolicyCoverage(Box<PolicyCoverage>),
+    /// `review comments`: the comment tray and the last revision turn.
+    Comments(Box<crate::oracle::CommentsView>),
 }
 
 /// What a prefix entry of `[commands] allow_prefix` or `[sandbox]
@@ -310,6 +312,21 @@ pub struct ReviewReport {
     pub changes: Vec<RequirementDrift>,
     /// The spec's versions in git, newest first (the last twelve).
     pub history: Vec<SpecVersion>,
+    /// One per requirement with scenarios (`US1`), beside the decision
+    /// lines: the tests the run would use, as written at review (D-117).
+    #[serde(default)]
+    pub oracle: Vec<crate::oracle::OracleView>,
+    /// Why the review writes no tests for this unit: its own pipeline
+    /// authors and confirms them (a quick change, a bug).
+    #[serde(default)]
+    pub tests_notice: Option<String>,
+    /// The approval that froze the oracle, when one is recorded.
+    #[serde(default)]
+    pub approval: Option<crate::oracle::ReviewApproval>,
+    /// What *Approve and Run* would do and what blocks it (the full review
+    /// only).
+    #[serde(default)]
+    pub sheet: Option<crate::oracle::ApproveSheet>,
 }
 
 /// A question a document leaves open, to answer in place.
@@ -381,6 +398,10 @@ pub struct ReviewTotals {
     /// Questions the documents leave open.
     #[serde(default)]
     pub questions: usize,
+    /// Requirements two test authors read differently, not yet resolved:
+    /// *Approve and Run* and a gated run wait on them.
+    #[serde(default)]
+    pub ambiguous: usize,
 }
 
 impl ReviewTotals {
@@ -694,6 +715,7 @@ impl CommandData {
             Self::Actions(_) => "actions",
             Self::Bug(_) => "bug",
             Self::PolicyCoverage(_) => "policy_coverage",
+            Self::Comments(_) => "comments",
         }
     }
 }
@@ -737,6 +759,7 @@ pub const PAYLOADS: &[&str] = &[
     "actions",
     "bug",
     "policy_coverage",
+    "comments",
 ];
 
 /// A repository instructions file given to an attempt.
@@ -1110,6 +1133,13 @@ pub struct FeatureReport {
     /// The `full` check tier, run once after the run ticked the last task.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub full_tier: Option<FullTier>,
+    /// How the run asked for a person: `ask` or `autopilot`.
+    #[serde(default)]
+    pub mode: crate::oracle::RunMode,
+    /// The calls an autopilot run refused instead of asking: listed for
+    /// the person.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub autopilot_denied: Vec<crate::oracle::AutopilotDenial>,
 }
 
 /// The `full` check tier at the end of a feature.

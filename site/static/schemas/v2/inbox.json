@@ -236,6 +236,36 @@
           "type": "string"
         },
         {
+          "const": "oracle_tests",
+          "description": "[`Runnable::OracleTests`].",
+          "type": "string"
+        },
+        {
+          "const": "approve_and_run",
+          "description": "[`Runnable::ApproveAndRun`].",
+          "type": "string"
+        },
+        {
+          "const": "comment",
+          "description": "[`Runnable::Comment`].",
+          "type": "string"
+        },
+        {
+          "const": "comments_send",
+          "description": "[`Runnable::CommentsSend`].",
+          "type": "string"
+        },
+        {
+          "const": "revision_undo",
+          "description": "[`Runnable::RevisionUndo`].",
+          "type": "string"
+        },
+        {
+          "const": "code_nudge",
+          "description": "[`Runnable::CodeNudge`].",
+          "type": "string"
+        },
+        {
           "const": "command",
           "description": "No runnable: the person runs the command.",
           "type": "string"
@@ -253,6 +283,208 @@
         {
           "const": "reject",
           "description": "Each listed call, with one reason.",
+          "type": "string"
+        }
+      ]
+    },
+    "CodeComment": {
+      "description": "One line comment of the Code view.",
+      "properties": {
+        "line": {
+          "description": "The line (1-based).",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "path": {
+          "description": "Project-relative path.",
+          "type": "string"
+        },
+        "quote": {
+          "description": "The code on that line.",
+          "type": "string"
+        },
+        "text": {
+          "description": "The person's words.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "line",
+        "quote",
+        "text"
+      ],
+      "type": "object"
+    },
+    "CommentAnchor": {
+      "description": "What an anchored comment points at.",
+      "oneOf": [
+        {
+          "description": "A passage of a feature document.",
+          "properties": {
+            "end_line": {
+              "description": "Last line.",
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "kind": {
+              "const": "passage",
+              "type": "string"
+            },
+            "path": {
+              "description": "Project-relative path.",
+              "type": "string"
+            },
+            "quote": {
+              "description": "The words selected.",
+              "type": "string"
+            },
+            "quote_sha256": {
+              "default": "",
+              "description": "`sha256:<hex>` of the quote (filled when the draft is stored).",
+              "type": "string"
+            },
+            "section": {
+              "default": "",
+              "description": "Its section's heading path (`Requirements › Functional`).",
+              "type": "string"
+            },
+            "start_line": {
+              "description": "First line (1-based).",
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "path",
+            "start_line",
+            "end_line",
+            "quote",
+            "quote_sha256",
+            "section"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A line of the spec's changes since the last commit.",
+          "properties": {
+            "kind": {
+              "const": "diff_line",
+              "type": "string"
+            },
+            "line": {
+              "description": "The line (1-based) on that side.",
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "path": {
+              "description": "Project-relative path.",
+              "type": "string"
+            },
+            "quote": {
+              "description": "The line's text.",
+              "type": "string"
+            },
+            "side": {
+              "description": "`old` or `new`.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "path",
+            "side",
+            "line",
+            "quote"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A line of a shown visible test.",
+          "properties": {
+            "kind": {
+              "const": "test_line",
+              "type": "string"
+            },
+            "line": {
+              "description": "The line (1-based).",
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "path": {
+              "description": "The test's path.",
+              "type": "string"
+            },
+            "quote": {
+              "description": "The line's text.",
+              "type": "string"
+            },
+            "req": {
+              "description": "The requirement.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "req",
+            "path",
+            "line",
+            "quote"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A finding the review shows.",
+          "properties": {
+            "id": {
+              "description": "Its id.",
+              "type": "string"
+            },
+            "kind": {
+              "const": "finding",
+              "type": "string"
+            },
+            "source": {
+              "description": "`analyze` or `review`.",
+              "type": "string"
+            },
+            "text": {
+              "description": "Its text.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "source",
+            "id",
+            "text"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "CommentOp": {
+      "description": "What a comment action does.",
+      "oneOf": [
+        {
+          "const": "add",
+          "description": "A new draft.",
+          "type": "string"
+        },
+        {
+          "const": "delete",
+          "description": "Remove a draft.",
+          "type": "string"
+        },
+        {
+          "const": "keep",
+          "description": "Keep an outdated draft.",
           "type": "string"
         }
       ]
@@ -316,6 +548,36 @@
       ],
       "type": "object"
     },
+    "OracleOp": {
+      "description": "What a change to a requirement's tests does.",
+      "oneOf": [
+        {
+          "const": "write",
+          "description": "Write the tests (the author calls, the comparison, the red check,\nthe held-out set).",
+          "type": "string"
+        },
+        {
+          "const": "reject",
+          "description": "Drop one test (the input is the reason, required).",
+          "type": "string"
+        },
+        {
+          "const": "again",
+          "description": "Write one test again (the input is the person's comment).",
+          "type": "string"
+        },
+        {
+          "const": "edit",
+          "description": "Replace one test's content with the person's (the input).",
+          "type": "string"
+        },
+        {
+          "const": "reading",
+          "description": "Say which reading of an ambiguous scenario is meant.",
+          "type": "string"
+        }
+      ]
+    },
     "PolicyList": {
       "description": "A prefix list in `speccoder.toml`.",
       "oneOf": [
@@ -327,6 +589,36 @@
         {
           "const": "network_prefix",
           "description": "`[sandbox] network_allow_prefix`.",
+          "type": "string"
+        }
+      ]
+    },
+    "Reading": {
+      "description": "One of the two readings of an ambiguous scenario.",
+      "oneOf": [
+        {
+          "const": "A",
+          "description": "The first author's.",
+          "type": "string"
+        },
+        {
+          "const": "B",
+          "description": "The second author's.",
+          "type": "string"
+        }
+      ]
+    },
+    "RunMode": {
+      "description": "How a run started from the review asks for a person.",
+      "oneOf": [
+        {
+          "const": "ask",
+          "description": "*Ask on Risky Calls*: a call the policy asks about is asked inline,\nas a run from the interface does.",
+          "type": "string"
+        },
+        {
+          "const": "autopilot",
+          "description": "*Autopilot*: nothing asks; a call the policy would ask about and no\nticked grant covers is refused for the run and listed afterwards.",
           "type": "string"
         }
       ]
@@ -937,6 +1229,189 @@
             "calls",
             "digest",
             "resume_asking"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Write, reject, ask again for, edit or settle a requirement's tests\nat review (the input: the reason, the comment or the content).",
+          "properties": {
+            "kind": {
+              "const": "oracle_tests",
+              "type": "string"
+            },
+            "op": {
+              "$ref": "#/$defs/OracleOp",
+              "description": "What to do."
+            },
+            "path": {
+              "description": "The test (reject, again, edit).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "reading": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Reading"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The reading meant (reading)."
+            },
+            "req": {
+              "description": "The requirement (`US1`).",
+              "type": "string"
+            },
+            "scenario": {
+              "description": "The ambiguous scenario (reading).",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "req",
+            "op",
+            "path",
+            "scenario",
+            "reading"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Approve every approvable decision line, freeze the written tests and\nstart the feature's run, asking or on autopilot.",
+          "properties": {
+            "grants": {
+              "description": "The grant ids (F-125 objects) an autopilot run holds.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "kind": {
+              "const": "approve_and_run",
+              "type": "string"
+            },
+            "mode": {
+              "$ref": "#/$defs/RunMode",
+              "description": "How the run asks."
+            }
+          },
+          "required": [
+            "kind",
+            "mode",
+            "grants"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Add, delete or keep a review comment (the input: its words).",
+          "properties": {
+            "anchor": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CommentAnchor"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "What a new comment is about."
+            },
+            "id": {
+              "description": "The draft (delete, keep).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "const": "comment",
+              "type": "string"
+            },
+            "op": {
+              "$ref": "#/$defs/CommentOp",
+              "description": "What to do."
+            }
+          },
+          "required": [
+            "kind",
+            "op",
+            "anchor",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Send the comments as one revision turn.",
+          "properties": {
+            "ids": {
+              "description": "The drafts the person saw (empty: every draft in the tray); a\ndraft sent already refuses the send.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "kind": {
+              "const": "comments_send",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "ids"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Undo the last revision turn: the documents back, byte for byte.",
+          "properties": {
+            "kind": {
+              "const": "revision_undo",
+              "type": "string"
+            },
+            "turn": {
+              "description": "The turn the person saw.",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "turn"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Code-view line comments as one nudge for the task's next attempt.",
+          "properties": {
+            "comments": {
+              "description": "The comments.",
+              "items": {
+                "$ref": "#/$defs/CodeComment"
+              },
+              "type": "array"
+            },
+            "kind": {
+              "const": "code_nudge",
+              "type": "string"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task",
+            "comments"
           ],
           "type": "object"
         }

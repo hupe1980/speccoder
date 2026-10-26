@@ -13,6 +13,10 @@
   import { diffWords, questions as asks, tokenised } from "../lib/words";
   import Icon from "./Icon.svelte";
   import Code from "./Code.svelte";
+  import OracleTests from "./OracleTests.svelte";
+  import ApproveSheet from "./ApproveSheet.svelte";
+  import { comments } from "../lib/comments.svelte";
+  import { testsCommand } from "../lib/review";
 
   let review = $state<Reply<Review> | null>(null);
   const fetchOf = latest();
@@ -81,6 +85,35 @@
   const commit = $derived(byKind(app.actions, "commit")[0]);
   const how = (then: string | null, now: string | null) => (!then ? "Added" : !now ? "Removed" : "Reworded");
   const plain = (l: string | null) => (l ?? "").replace(/^\s*-\s*\*\*[A-Z]+-\d+\*\*:?\s*/, "");
+  // Approve and Run (spec 093): the sheet with the three choices.
+  let approving = $state(false);
+  let menu = $state(false);
+  const blockedBy = $derived(r?.sheet?.blocked ?? []);
+  // Keep Refining: the comment tray, open and focused.
+  function refine() {
+    comments.open = true;
+    requestAnimationFrame(() => document.getElementById("comment-tray")?.focus());
+  }
+  // A finding the review shows, as a comment in the tray.
+  let finding = $state<{ id: string; text: string } | null>(null);
+  let findingWords = $state("");
+  async function addFinding() {
+    if (!finding || !findingWords.trim()) return;
+    await comments.add({ kind: "finding", source: "review", id: finding.id, text: finding.text }, findingWords.trim());
+    finding = null;
+    findingWords = "";
+  }
+  // The menu bar's Review › Write Tests: the first requirement without tests.
+  $effect(() => {
+    const on = (e: Event) => {
+      if ((e as CustomEvent<string>).detail !== "review.tests") return;
+      const v = r?.oracle.find((o) => o.tests.length === 0);
+      if (!v) return app.toast({ tone: "warn", text: "Every requirement has its tests" });
+      void app.perform(offer({ kind: "oracle_tests", req: v.req, op: "write", path: null, scenario: null, reading: null }, { group: "review", label: `write tests for ${v.req}`, why: "red-checked on the current code", command: testsCommand(v.req, "write") }));
+    };
+    window.addEventListener("speccoder:review", on);
+    return () => window.removeEventListener("speccoder:review", on);
+  });
   const when = (s: number | null) => (s ? new Date(s * 1000).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "");
 </script>
 
@@ -101,9 +134,19 @@
       </div>
     </header>
     <div class="bulk">
-      {#if pending.length}
-        <button class="btn small primary" disabled={!!app.job?.running} onclick={() => app.perform(act([], "approve", `approve ${pending.length} requirement(s)`))}><Icon name="check" size={11} weight={2.4} /> Approve {pending.length === total ? "All" : `${pending.length} More`}</button>
-      {/if}
+      <span class="split">
+        <button class="btn small primary" disabled={!!app.job?.running} title={blockedBy.length ? blockedBy.join("; ") : "speccoder review approve --run ask"} onclick={() => (approving = true)}><Icon name="check" size={11} weight={2.4} /> Approve and Run</button>
+        <button class="btn small primary more" aria-label="More ways to approve" aria-expanded={menu} disabled={!!app.job?.running} onclick={() => (menu = !menu)}>▾</button>
+        {#if menu}
+          <span class="menu" role="menu">
+            {#if pending.length}
+              <button role="menuitem" onclick={() => { menu = false; void app.perform(act([], "approve", `approve ${pending.length} requirement(s)`)); }}>Approve {pending.length === total ? "All Lines" : `${pending.length} More Lines`} Only</button>
+            {/if}
+            <button role="menuitem" onclick={() => { menu = false; approving = true; }}>Approve and Run…</button>
+          </span>
+        {/if}
+      </span>
+      {#if r.totals.ambiguous}<span class="amb"><Icon name="exclaim" size={11} /> {r.totals.ambiguous} read two ways</span>{/if}
       {#if r.totals.changes_requested && r.revise_with}
         <button class="btn small tinted" disabled={!!app.job?.running} onclick={reviseNow}><Icon name="sparkle" size={11} weight={2.2} /> Revise the Spec ({r.totals.changes_requested} {r.totals.changes_requested === 1 ? "request" : "requests"})</button>
       {/if}
@@ -118,6 +161,13 @@
           <div class="q">
             <div class="qtop"><span class="id mono">{q.id}</span><span class="where muted">{q.near ?? ""} · {q.file.split("/").pop()}:{q.line}</span></div>
             <p class="qtext">{q.text}</p>
+            <button class="btn small ghost addc" onclick={() => { finding = { id: q.id, text: q.text }; findingWords = ""; }}>Add to Comments</button>
+            {#if finding?.id === q.id}
+              <form class="qform" onsubmit={(e) => { e.preventDefault(); void addFinding(); }}>
+                <input placeholder="Your comment on {q.id}" bind:value={findingWords} aria-label="Comment on {q.id}" />
+                <button class="btn small primary" type="submit" disabled={!findingWords.trim()}>Add Comment</button>
+              </form>
+            {/if}
             <form class="qform" onsubmit={(e) => { e.preventDefault(); void answer(q.id); }}>
               <input placeholder="Your answer — it takes the question's place" bind:value={answers[q.id]} aria-label="Answer to {q.id}" />
               <button class="btn small primary" type="submit" disabled={!!app.job?.running || !(answers[q.id] ?? "").trim()}>Write In</button>
@@ -168,6 +218,17 @@
         </li>
       {/each}
     </ol>
+    {#if r.tests_notice}
+      <section class="tests" aria-label="Tests">
+        <h3><Icon name="shield" size={13} weight={2} /> Tests</h3>
+        <p class="muted">{r.tests_notice}</p>
+      </section>
+    {:else if r.oracle.length}
+      <section class="tests" aria-label="Tests">
+        <h3><Icon name="shield" size={13} weight={2} /> Tests <span class="muted">— what the run would use, written now and frozen when you approve</span></h3>
+        {#each r.oracle as v (v.req)}<OracleTests {v} />{/each}
+      </section>
+    {/if}
     {#if r.changes.length}
       <section class="since" aria-label="Since the last commit">
         <h3><Icon name="branch" size={13} weight={2} /> Since the last commit <span class="muted">— what a commit of the spec would record</span>
@@ -201,6 +262,7 @@
       </section>
     {/if}
   </section>
+  {#if approving && r}<ApproveSheet review={r} onclose={() => (approving = false)} onrefine={refine} />{/if}
 {/if}
 
 <style>
@@ -259,6 +321,15 @@
   .rm { background: var(--danger-bg, var(--fill)); color: var(--danger); }
   .by { margin-left: auto; font-size: 0.74rem; }
   .none { padding: 2rem; }
+  .split { position: relative; display: inline-flex; gap: 1px; }
+  .split .more { padding-inline: 0.45rem; }
+  .menu { position: absolute; top: calc(100% + 4px); left: 0; z-index: 5; display: grid; min-width: 14rem; padding: 0.3rem; border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow-lg); }
+  .menu button { border: 0; background: none; text-align: left; padding: 0.4rem 0.6rem; border-radius: 6px; cursor: pointer; color: var(--text); font: inherit; font-size: 0.86rem; }
+  .menu button:hover, .menu button:focus-visible { background: var(--fill); }
+  .amb { display: inline-flex; gap: 0.3rem; align-items: center; font-size: 0.8rem; font-weight: 600; color: var(--attention); }
+  .tests { display: grid; gap: 0.6rem; }
+  .tests > p { margin: 0; }
+  .addc { justify-self: start; }
   .center { display: grid; place-items: center; padding: 3rem; }
   .spinner { width: 20px; height: 20px; border-radius: 50%; border: 2.5px solid var(--fill-2); border-top-color: var(--muted); animation: spin 800ms linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }

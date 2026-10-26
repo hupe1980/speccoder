@@ -40,6 +40,12 @@ struct Decision {
 struct Record {
     #[serde(default)]
     requirements: BTreeMap<String, Decision>,
+    /// The frozen oracle, by requirement (`US1`): digests only (spec 093).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    oracle: BTreeMap<String, crate::oracle::OracleEntry>,
+    /// The approval that froze it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    approval: Option<speccoder_core::oracle::ReviewApproval>,
 }
 
 fn digest(line: &str) -> String {
@@ -64,6 +70,11 @@ struct Unit {
     root: PathBuf,
     dir: String,
     format: &'static dyn crate::format::Adapter,
+    /// The project as inspected (the requirements with scenarios come
+    /// from it); `None` for the run's gate, which reads decision lines only.
+    snapshot: Option<Box<speccoder_core::snapshot::ProjectSnapshot>>,
+    /// The project's state directory, when there is one.
+    state: Option<PathBuf>,
 }
 
 impl Unit {
@@ -88,9 +99,32 @@ impl Unit {
             .and_then(|t| serde_json::from_str(&t).ok())
             .unwrap_or_default()
     }
+    /// The requirements with scenarios a review writes tests for.
+    fn oracle_requirements(&self) -> Vec<crate::format::OracleRequirement> {
+        self.snapshot
+            .as_ref()
+            .map(|s| self.format.oracle_requirements(s))
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|r| !r.scenarios.is_empty())
+            .collect()
+    }
+    /// The unit's rung (a quick change's, a bug's, a feature's).
+    fn rung(&self) -> speccoder_core::ladder::Rung {
+        crate::oracle::rung(self.format, &self.root, &self.feature)
+    }
 }
 
 fn unit(command: &str, path: &Path, feature: Option<&str>) -> Result<Unit, Box<CommandResult>> {
+    unit_in(command, path, feature, None)
+}
+
+fn unit_in(
+    command: &str,
+    path: &Path,
+    feature: Option<&str>,
+    state: Option<&Path>,
+) -> Result<Unit, Box<CommandResult>> {
     let inspected = crate::inspect(path, feature);
     let Some(CommandData::Inspect(snapshot)) = inspected.data() else {
         return Err(Box::new(CommandResult::carried(command, &inspected)));
@@ -102,11 +136,18 @@ fn unit(command: &str, path: &Path, feature: Option<&str>) -> Result<Unit, Box<C
             inspected.message(),
         )));
     };
+    let root = PathBuf::from(&snapshot.root);
+    let state = state
+        .map(Path::to_path_buf)
+        .or_else(crate::worktree::state_dir)
+        .map(|s| crate::worktree::project_state_dir(&s, &root));
     Ok(Unit {
         feature: f.feature.name.clone(),
-        root: PathBuf::from(&snapshot.root),
+        root,
         dir: f.feature.dir.clone(),
         format: crate::format::of(snapshot),
+        snapshot: Some(snapshot.clone()),
+        state,
     })
 }
 
@@ -144,6 +185,7 @@ fn totals(items: &[ReviewItem], questions: usize) -> ReviewTotals {
         open: n("open"),
         lapsed: n("lapsed"),
         questions,
+        ambiguous: 0,
     }
 }
 
@@ -322,6 +364,8 @@ pub fn totals_of(
         root: root.to_path_buf(),
         dir: dir.to_owned(),
         format,
+        snapshot: None,
+        state: None,
     };
     let requirements = u.requirements();
     (!requirements.is_empty())
@@ -347,6 +391,40 @@ fn report_of(u: &Unit, full: bool) -> ReviewReport {
     } else {
         Vec::new()
     };
+    let record = u.record();
+    let rung = u.rung();
+    let (oracle, tests_notice) = if rung == speccoder_core::ladder::Rung::Feature {
+        let cfg = crate::oracle::ViewConfig::at(&u.root);
+        let views = u
+            .oracle_requirements()
+            .iter()
+            .map(|r| match &u.state {
+                Some(state) => {
+                    crate::oracle::view(state, &u.feature, r, record.oracle.get(&r.key), cfg)
+                }
+                None => crate::oracle::view(
+                    Path::new("/nonexistent-speccoder-state"),
+                    &u.feature,
+                    r,
+                    record.oracle.get(&r.key),
+                    cfg,
+                ),
+            })
+            .collect::<Vec<_>>();
+        (views, None)
+    } else {
+        (
+            Vec::new(),
+            Some("Tests for this unit are written and confirmed by its own pipeline".to_owned()),
+        )
+    };
+    let mut totals = totals;
+    totals.ambiguous = oracle
+        .iter()
+        .filter(|v| v.open_ambiguities().next().is_some())
+        .count();
+    // The approve sheet is the view's (`report`), never a decision's result.
+    let sheet = None;
     ReviewReport {
         feature: u.feature.clone(),
         file: u.rel(),
@@ -362,7 +440,115 @@ fn report_of(u: &Unit, full: bool) -> ReviewReport {
             .revises
             .filter(|s| installed(s))
             .map(str::to_owned),
+        oracle,
+        tests_notice,
+        approval: record.approval,
+        sheet,
     }
+}
+
+/// Whether a feature run holds this project now.
+fn run_active(u: &Unit) -> bool {
+    crate::worktree::state_dir()
+        .and_then(|s| crate::progress::read_live(&u.root, &s))
+        .is_some_and(|(live, running)| running && live.finished.is_none())
+}
+
+/// Why autopilot cannot run here: it needs the OS sandbox enforced.
+fn autopilot_blocked(root: &Path) -> Option<String> {
+    let text = crate::verify::find_config(root)
+        .and_then(|d| std::fs::read_to_string(d.join(crate::verify::config::FILE)).ok())
+        .unwrap_or_default();
+    let mode = crate::sandbox::parse(&text)
+        .map(|c| c.mode)
+        .unwrap_or(crate::sandbox::Mode::Auto);
+    if mode == crate::sandbox::Mode::Off {
+        return Some("autopilot needs the OS sandbox ([sandbox] mode = \"off\")".to_owned());
+    }
+    crate::sandbox::backend()
+        .err()
+        .map(|e| format!("autopilot needs the OS sandbox ({e})"))
+}
+
+/// The sandbox line of the approve sheet.
+fn sandbox_line(root: &Path) -> Option<String> {
+    let text = crate::verify::find_config(root)
+        .and_then(|d| std::fs::read_to_string(d.join(crate::verify::config::FILE)).ok())
+        .unwrap_or_default();
+    let config = crate::sandbox::parse(&text).ok()?;
+    let backend = crate::sandbox::backend().ok()?;
+    let network = match config.network {
+        crate::sandbox::Network::Off => "network off",
+        crate::sandbox::Network::Loopback => "loopback only",
+        crate::sandbox::Network::On => "network on",
+    };
+    let backend = match backend {
+        crate::sandbox::Backend::Seatbelt => "Seatbelt",
+        crate::sandbox::Backend::Landlock(_) => "Landlock+seccomp",
+    };
+    Some(format!("Sandbox: {backend}, {network}"))
+}
+
+/// What *Approve and Run* would approve, what blocks it, and what an
+/// autopilot run may hold.
+fn sheet(
+    u: &Unit,
+    items: &[ReviewItem],
+    questions: &[OpenQuestion],
+    oracle: &[speccoder_core::oracle::OracleView],
+) -> speccoder_core::oracle::ApproveSheet {
+    let mut blocked = Vec::new();
+    if !questions.is_empty() {
+        blocked.push(format!(
+            "{} open question(s): {}",
+            questions.len(),
+            questions
+                .iter()
+                .map(|q| q.near.clone().unwrap_or_else(|| q.id.clone()))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
+    for v in oracle {
+        for a in v.open_ambiguities() {
+            blocked.push(format!(
+                "{}: two readings of {} disagree — choose one, or reword",
+                v.req, a.scenario
+            ));
+        }
+    }
+    if run_active(u) {
+        blocked.push("a run is active".to_owned());
+    }
+    speccoder_core::oracle::ApproveSheet {
+        approves: items
+            .iter()
+            .filter(|i| matches!(i.state.as_str(), "open" | "lapsed"))
+            .map(|i| i.id.clone())
+            .collect(),
+        blocked,
+        autopilot_blocked: autopilot_blocked(&u.root),
+        sandbox: sandbox_line(&u.root),
+        grants: u
+            .state
+            .as_ref()
+            .map(|s| crate::approvals::offered_grants(s, &u.feature))
+            .unwrap_or_default(),
+    }
+}
+
+/// The frozen oracle entries and the approval digest `review.json` in
+/// `dir` (project-relative, under `root`) holds.
+#[must_use]
+pub fn oracle_entries(
+    root: &Path,
+    dir: &str,
+) -> (BTreeMap<String, crate::oracle::OracleEntry>, Option<String>) {
+    let record: Record = std::fs::read_to_string(root.join(dir).join(REVIEW_FILE))
+        .ok()
+        .and_then(|t| serde_json::from_str(&t).ok())
+        .unwrap_or_default();
+    (record.oracle, record.approval.map(|a| a.sha256))
 }
 
 fn message(r: &ReviewReport) -> String {
@@ -414,11 +600,18 @@ pub fn summary(path: &Path, feature: Option<&str>) -> Option<ReviewReport> {
 /// `speccoder review`: every requirement and its review.
 #[must_use]
 pub fn report(path: &Path, feature: Option<&str>) -> CommandResult {
-    let u = match unit("review", path, feature) {
+    report_in(path, feature, None)
+}
+
+/// [`report`] with the state directory given (`None`: the environment's).
+#[must_use]
+pub fn report_in(path: &Path, feature: Option<&str>, state: Option<&Path>) -> CommandResult {
+    let u = match unit_in("review", path, feature, state) {
         Ok(u) => u,
         Err(r) => return *r,
     };
-    let r = report_of(&u, true);
+    let mut r = report_of(&u, true);
+    r.sheet = Some(sheet(&u, &r.requirements, &r.questions, &r.oracle));
     CommandResult::new("review", CommandStatus::Ok, &message(&r))
         .with_data(CommandData::Review(Box::new(r)))
 }
@@ -435,7 +628,21 @@ pub fn decide(
     comment: Option<&str>,
     via: speccoder_core::actions::Via,
 ) -> CommandResult {
-    let u = match unit("review", path, feature) {
+    decide_in(path, feature, ids, verdict, comment, via, None)
+}
+
+/// [`decide`] with the state directory given (`None`: the environment's).
+#[must_use]
+pub fn decide_in(
+    path: &Path,
+    feature: Option<&str>,
+    ids: &[String],
+    verdict: &str,
+    comment: Option<&str>,
+    via: speccoder_core::actions::Via,
+    state: Option<&Path>,
+) -> CommandResult {
+    let u = match unit_in("review", path, feature, state) {
         Ok(u) => u,
         Err(r) => return *r,
     };
@@ -560,6 +767,12 @@ pub fn decide(
     record
         .requirements
         .retain(|id, _| requirements.iter().any(|(r, _)| r == id));
+    let named = u.oracle_requirements();
+    if u.snapshot.is_some() {
+        record
+            .oracle
+            .retain(|key, _| named.iter().any(|r| r.key == *key));
+    }
     let text = serde_json::to_string_pretty(&record).unwrap_or_default() + "\n";
     if let Err(e) = std::fs::write(u.file(), text) {
         return CommandResult::new("review", CommandStatus::Error, &format!("{}: {e}", u.rel()));
@@ -580,6 +793,21 @@ pub fn decide(
     } else {
         String::new()
     };
+    let ambiguous: Vec<String> = r
+        .oracle
+        .iter()
+        .filter(|v| v.open_ambiguities().next().is_some())
+        .map(|v| v.req.clone())
+        .collect();
+    let skipped = if verdict == "approve" && !ambiguous.is_empty() {
+        format!(
+            "{skipped}; {} {} ambiguous — Approve and Run stays blocked",
+            ambiguous.join(", "),
+            if ambiguous.len() == 1 { "is" } else { "are" }
+        )
+    } else {
+        skipped
+    };
     let message = if chosen.is_empty() {
         format!("nothing to decide{skipped}: {}", message(&r))
     } else {
@@ -596,6 +824,309 @@ pub fn decide(
     };
     CommandResult::new("review", CommandStatus::Ok, &message)
         .with_data(CommandData::Review(Box::new(r)))
+}
+
+/// The approval digest (research R6): SHA-256 over the approved decision
+/// lines (`ID=line digest`, sorted) and the frozen oracle entries
+/// (`REQ=manifest digest`, sorted).
+#[must_use]
+pub fn approval_digest<'a>(
+    decisions: impl IntoIterator<Item = (&'a str, &'a str)>,
+    oracle: impl IntoIterator<Item = (&'a str, &'a str)>,
+) -> String {
+    let mut lines: Vec<String> = decisions
+        .into_iter()
+        .map(|(id, sha)| format!("{id}={sha}"))
+        .collect();
+    lines.sort();
+    let mut frozen: Vec<String> = oracle
+        .into_iter()
+        .map(|(req, sha)| format!("{req}={sha}"))
+        .collect();
+    frozen.sort();
+    format!(
+        "sha256:{}",
+        crate::integrity::sha256_hex(
+            format!("{}\n{}", lines.join("\n"), frozen.join("\n")).as_bytes()
+        )
+    )
+}
+
+/// `speccoder review approve --run ask|autopilot [--grant …]` — *Approve
+/// and Run*: approves every decision line that is open or lapsed, freezes
+/// each requirement's red tests (one pre-frozen set each, `review.json`'s
+/// `oracle` and `approval`), commits `review.json` and starts the
+/// feature's run. Refused while a question is open, a requirement is read
+/// two ways, or a run is active.
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn approve_and_run(
+    path: &Path,
+    feature: Option<&str>,
+    mode: speccoder_core::oracle::RunMode,
+    grants: &[String],
+    via: speccoder_core::actions::Via,
+    state: Option<&Path>,
+    provider: Option<std::sync::Arc<dyn agentplane::model::ModelProvider>>,
+    options: &crate::RunOptions,
+) -> CommandResult {
+    use speccoder_core::oracle::RunMode;
+    let u = match unit_in("review", path, feature, state) {
+        Ok(u) => u,
+        Err(r) => return *r,
+    };
+    let Some(plane) = u.state.clone() else {
+        return CommandResult::new(
+            "review",
+            CommandStatus::ConfigError,
+            "no state directory (set SPECCODER_STATE_DIR or HOME)",
+        )
+        .with_code("NO-STATE-DIR");
+    };
+    let refuse =
+        |status, code: &str, m: String| CommandResult::new("review", status, &m).with_code(code);
+    if run_active(&u) {
+        return refuse(
+            CommandStatus::GitPrecondition,
+            "RUN-ACTIVE",
+            format!(
+                "a run is active for {}: approve and run when it ends",
+                u.feature
+            ),
+        );
+    }
+    let open = questions(&u);
+    if !open.is_empty() {
+        return refuse(
+            CommandStatus::NeedsHuman,
+            "REVIEW-PENDING",
+            format!(
+                "{} open question(s) first: {} — answer (`speccoder review answer Q1 \"…\"`) or reword",
+                open.len(),
+                open.iter()
+                    .map(|(q, _)| q.id.clone())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        );
+    }
+    let named = u.oracle_requirements();
+    let ambiguous = crate::oracle::open_ambiguities(&plane, &u.feature, &named);
+    if !ambiguous.is_empty() {
+        return refuse(
+            CommandStatus::NeedsHuman,
+            "REVIEW-AMBIGUOUS",
+            format!(
+                "Approve and Run waits: {} read two ways — choose a reading (`speccoder review tests {} --reading A|B {}`) or reword",
+                ambiguous
+                    .iter()
+                    .map(|(r, s)| format!("{r}/{s}"))
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                ambiguous[0].0,
+                ambiguous[0].1
+            ),
+        );
+    }
+    // Autopilot: an enforced sandbox, and only grants offered for this
+    // feature, by their grant id.
+    let mut objects = Vec::new();
+    if mode == RunMode::Autopilot {
+        if let Some(why) = autopilot_blocked(&u.root) {
+            return refuse(CommandStatus::ConfigError, "SANDBOX-UNAVAILABLE", why).with_fix(vec![
+                "speccoder review approve --run ask".to_owned(),
+                "→ or enable the OS sandbox ([sandbox] mode = \"auto\" on macOS or Linux 6.2+)"
+                    .to_owned(),
+            ]);
+        }
+        let offered = crate::approvals::offered_objects(&plane, &u.feature);
+        for id in grants {
+            match offered.iter().find(|(g, _)| g.id == *id) {
+                Some((_, o)) => objects.push(o.clone()),
+                None => {
+                    return refuse(
+                        CommandStatus::UsageError,
+                        "USAGE",
+                        format!(
+                            "{id} is not a grant offered for {}; offered: {}",
+                            u.feature,
+                            if offered.is_empty() {
+                                "none".to_owned()
+                            } else {
+                                offered
+                                    .iter()
+                                    .map(|(g, _)| format!("{} ({})", g.id, g.object))
+                                    .collect::<Vec<_>>()
+                                    .join(", ")
+                            }
+                        ),
+                    );
+                }
+            }
+        }
+    } else if !grants.is_empty() {
+        return refuse(
+            CommandStatus::UsageError,
+            "USAGE",
+            "--grant is for an autopilot run (--run autopilot)".to_owned(),
+        );
+    }
+    let freezable = match crate::oracle::freezable(&plane, &u.feature, &named) {
+        Ok(f) => f,
+        Err(t) => {
+            return refuse(CommandStatus::NeedsHuman, "ORACLE-TAMPERED", t.0);
+        }
+    };
+    // The decision lines: every one open or lapsed is approved now.
+    let requirements = u.requirements();
+    let mut record = u.record();
+    let before = items(&requirements, &record);
+    let who = crate::approvals::Who::local_in(&u.root, via);
+    let at = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
+    let mut approved_now = Vec::new();
+    for (id, line) in &requirements {
+        if before
+            .iter()
+            .any(|i| i.id == *id && matches!(i.state.as_str(), "open" | "lapsed"))
+        {
+            record.requirements.insert(
+                id.clone(),
+                Decision {
+                    verdict: "approved".to_owned(),
+                    line: line.trim_end().to_owned(),
+                    sha256: digest(line),
+                    by: who.name.clone(),
+                    via: who.via.clone(),
+                    at,
+                    comment: None,
+                },
+            );
+            approved_now.push(id.clone());
+        }
+    }
+    record
+        .requirements
+        .retain(|id, _| requirements.iter().any(|(r, _)| r == id));
+    let approved: Vec<(String, String)> = record
+        .requirements
+        .iter()
+        .filter(|(_, d)| d.verdict == "approved")
+        .map(|(id, d)| (id.clone(), d.sha256.clone()))
+        .collect();
+    let sha = approval_digest(
+        approved.iter().map(|(a, b)| (a.as_str(), b.as_str())),
+        freezable
+            .iter()
+            .map(|f| (f.req.key.as_str(), f.manifest.as_str())),
+    );
+    record.oracle.clear();
+    let mut frozen = Vec::new();
+    for f in &freezable {
+        let decided = speccoder_core::acceptance::Decided {
+            by: who.name.clone(),
+            via,
+            at,
+        };
+        match crate::oracle::freeze(&plane, &u.feature, f, &sha, decided) {
+            Ok(rec) => {
+                record.oracle.insert(
+                    f.req.key.clone(),
+                    crate::oracle::OracleEntry {
+                        requirement_sha256: f.draft.requirement.sha256.clone(),
+                        manifest_sha256: f.manifest.clone(),
+                        held_out_sha256: rec
+                            .held_out_sealed
+                            .as_ref()
+                            .map(|h| format!("sha256:{}", h.manifest_sha256)),
+                        by: who.name.clone(),
+                        via,
+                        at,
+                    },
+                );
+                frozen.push((f, rec));
+            }
+            Err(e) => return refuse(CommandStatus::NeedsHuman, "ORACLE-TAMPERED", e),
+        }
+    }
+    record.approval = Some(speccoder_core::oracle::ReviewApproval {
+        sha256: sha.clone(),
+        mode,
+        by: who.name.clone(),
+        via,
+        at,
+    });
+    let text = serde_json::to_string_pretty(&record).unwrap_or_default() + "\n";
+    if let Err(e) = std::fs::write(u.file(), text) {
+        return CommandResult::new("review", CommandStatus::Error, &format!("{}: {e}", u.rel()));
+    }
+    // The run reads the committed spec: the approval is committed with it.
+    let rel = {
+        let (top_prefix, rel) = (
+            crate::git::Git::at(&u.root)
+                .line(&["rev-parse", "--show-prefix"])
+                .unwrap_or_default(),
+            u.rel(),
+        );
+        format!("{top_prefix}{rel}")
+    };
+    let committed = crate::hosting::commit_exactly(
+        &u.root,
+        &[rel],
+        &format!("review: approve {} and freeze its tests", u.feature),
+    );
+    if committed.status() != CommandStatus::Ok {
+        return CommandResult::carried("review", &committed);
+    }
+    for (f, rec) in &frozen {
+        if let Some(p) = &options.progress {
+            p.event(&crate::progress::Event::Oracle {
+                step: crate::progress::OracleEvent::Frozen {
+                    unit: u.feature.clone(),
+                    requirement: f.req.key.clone(),
+                    manifest_sha256: f.manifest.clone(),
+                    approval_sha256: sha.clone(),
+                    visible_count: rec.visible.len(),
+                    held_out_count: rec.held_out_sealed.as_ref().map_or(0, |h| h.count),
+                    by: who.name.clone(),
+                    via: via.as_str().to_owned(),
+                },
+            });
+        }
+    }
+    let said = format!(
+        "approved {} decision line(s), froze tests for {} requirement(s){}; committed {}",
+        approved_now.len(),
+        frozen.len(),
+        if mode == RunMode::Autopilot {
+            format!(", autopilot with {} grant(s)", objects.len())
+        } else {
+            String::new()
+        },
+        u.rel()
+    );
+    let mut run_options = options.clone();
+    run_options.mode = mode;
+    if mode == RunMode::Autopilot {
+        // Nobody is asked: the ticked grants are the run's only grants.
+        run_options.approver = None;
+        run_options.run_grants = std::sync::Arc::new(std::sync::Mutex::new(objects));
+    }
+    let ran = match (state, provider) {
+        (Some(state), Some(provider)) => crate::pipeline::run_feature_with(
+            path,
+            Some(&u.feature),
+            state,
+            &provider,
+            None,
+            &run_options,
+        ),
+        _ => crate::run_feature(path, Some(&u.feature), &run_options, false),
+    };
+    let status = ran.status();
+    let message = format!("{said} — {}", ran.message());
+    ran.reworded(status, &message)
 }
 
 /// `speccoder review answer Q1 "…"`: writes the person's answer where the

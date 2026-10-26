@@ -1568,6 +1568,7 @@ pub fn review(r: &speccoder_core::ReviewReport, look: &crate::style::Look) -> Ve
             _ => {}
         }
     }
+    out.extend(oracle(r, look));
     if !r.changes.is_empty() {
         out.push(String::new());
         out.push(look.paint(Token::Accent, "Since the last commit"));
@@ -1602,6 +1603,173 @@ pub fn review(r: &speccoder_core::ReviewReport, look: &crate::style::Look) -> Ve
                 look.paint(Token::Muted, &what.join(", "))
             ));
         }
+    }
+    out
+}
+
+/// The review's Tests section: per requirement, what the run would use —
+/// red pills, the held-out count (never its content), the strength target.
+#[must_use]
+pub fn oracle(r: &speccoder_core::ReviewReport, look: &crate::style::Look) -> Vec<String> {
+    use crate::style::{Glyph, Token};
+    use speccoder_core::oracle::OracleState as S;
+    let mut out = Vec::new();
+    if let Some(n) = &r.tests_notice {
+        out.push(String::new());
+        out.push(look.paint(Token::Muted, &format!("Tests: {n}")));
+        return out;
+    }
+    if r.oracle.is_empty() {
+        return out;
+    }
+    out.push(String::new());
+    out.push(look.paint(Token::Accent, "Tests"));
+    for v in &r.oracle {
+        let (g, word) = match v.state {
+            S::None => (Glyph::Ready, "no tests yet".to_owned()),
+            S::Written => (Glyph::Verified, "written".to_owned()),
+            S::NotRed => (Glyph::Attention, "none red — nothing to freeze".to_owned()),
+            S::Failed => (Glyph::Attention, "writing failed".to_owned()),
+            S::Ambiguous => (Glyph::Attention, "read two ways".to_owned()),
+            S::Frozen => (
+                Glyph::Verified,
+                format!(
+                    "frozen{}",
+                    v.frozen_by
+                        .as_deref()
+                        .map(|b| format!(" by {b}"))
+                        .unwrap_or_default()
+                ),
+            ),
+            S::Lapsed => (
+                Glyph::Attention,
+                "lapsed — frozen on an earlier wording".to_owned(),
+            ),
+            S::FrozenElsewhere => (
+                Glyph::Ready,
+                "frozen on another machine — the run writes tests anew here".to_owned(),
+            ),
+        };
+        out.push(format!(
+            "{} {:<7} {}  {}",
+            look.cell(g),
+            v.req,
+            shorten(&v.title, 60),
+            look.paint(g.token(), &word)
+        ));
+        for t in &v.tests {
+            out.push(format!(
+                "            {}  {}  {}{}",
+                t.path,
+                t.scenarios.join(","),
+                if t.red {
+                    look.paint(Token::Verified, &format!("red: {}", t.red_class))
+                } else {
+                    look.paint(Token::Attention, &format!("{} — no evidence", t.red_class))
+                },
+                t.edited_by
+                    .as_deref()
+                    .map(|b| format!("  edited by {b}"))
+                    .unwrap_or_default()
+            ));
+        }
+        for a in v.open_ambiguities() {
+            out.push(look.paint(
+                Token::Attention,
+                &format!(
+                    "            Ambiguous: {} — reading A: given {}, expects {} · reading B: given {}, expects {}",
+                    a.scenario, a.a.given, a.a.expect, a.b.given, a.b.expect
+                ),
+            ));
+        }
+        for d in &v.discarded {
+            out.push(look.paint(
+                Token::Muted,
+                &format!(
+                    "            discarded {} — {}",
+                    d.path,
+                    d.why.replace('_', " ")
+                ),
+            ));
+        }
+        if v.state != S::None || !v.tests.is_empty() {
+            let held = match v.held_out.state.as_str() {
+                "kept" => format!("Held out: {}", v.held_out.count),
+                "off" => "Held out: off".to_owned(),
+                _ => "Held out: 0".to_owned(),
+            };
+            let target = v.strength_target.map_or_else(
+                || "Strength target: none set".to_owned(),
+                |t| format!("Strength target: {t}%"),
+            );
+            let covered = v.scenarios.len() - v.uncovered.len().min(v.scenarios.len());
+            out.push(look.paint(
+                Token::Muted,
+                &format!(
+                    "            {held} · {target} · {covered} of {} scenarios covered",
+                    v.scenarios.len()
+                ),
+            ));
+        } else {
+            out.push(look.paint(
+                Token::Accent,
+                &format!(
+                    "            → speccoder review tests {} --write  ({} author call{}{})",
+                    v.req,
+                    v.calls,
+                    if v.calls == 1 { "" } else { "s" },
+                    if v.ambiguity_check {
+                        ""
+                    } else {
+                        " · ambiguity check off"
+                    }
+                ),
+            ));
+        }
+        if let Some(e) = &v.error {
+            out.push(look.paint(Token::Attention, &format!("            {e}")));
+        }
+    }
+    out
+}
+
+/// `review comments`: the tray, then the last revision turn.
+#[must_use]
+pub fn comments(
+    c: &speccoder_core::oracle::CommentsView,
+    look: &crate::style::Look,
+) -> Vec<String> {
+    use crate::style::Token;
+    let mut out = Vec::new();
+    for d in &c.drafts {
+        out.push(format!(
+            "  {:<4} {}  {}{}",
+            d.id,
+            d.anchor.place(),
+            shorten(&d.text, 80),
+            if d.state == speccoder_core::oracle::DraftState::Outdated {
+                look.paint(Token::Attention, "  outdated")
+            } else {
+                String::new()
+            }
+        ));
+        out.push(look.paint(
+            Token::Muted,
+            &format!("       \"{}\"", shorten(d.anchor.quote(), 80)),
+        ));
+    }
+    if let Some(t) = &c.turn {
+        out.push(format!(
+            "Revision {} ({}): {} section(s) changed{}",
+            t.id,
+            t.outcome,
+            t.changed.len(),
+            if t.outside.is_empty() {
+                String::new()
+            } else {
+                format!(", outside your comments: {}", t.outside.join("; "))
+            }
+        ));
     }
     out
 }

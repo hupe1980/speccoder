@@ -55,6 +55,8 @@ speccoder do "make the login button blue"   # a small change, judged like any ot
 speccoder bug "saving an empty title crashes" --expected "an empty title is refused"
                                      # a bug: reproduced first, confirmed by you once, fixed on evidence
 speccoder review                     # sign off the spec, requirement by requirement
+speccoder review tests US1 --write   # see the tests the run would use, red now, before any code
+speccoder review approve --run ask   # approve, freeze those tests and start the run
 speccoder inbox                      # what waits for your decision, in every feature
 speccoder actions                    # what you can do now, each with its command (--json for scripts)
 speccoder report                     # every task and the evidence behind its tick

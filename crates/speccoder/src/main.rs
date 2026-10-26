@@ -878,9 +878,130 @@ fn main() {
         Command::Review { action } => {
             use cli::ReviewAction as R;
             use speccoder_runtime::review;
-            match action {
+            let ask = interactive(false) && !cli.events;
+            let (progress, attention) = live_progress(&cli, &notify, events.as_ref());
+            let options = speccoder_runtime::RunOptions {
+                approver: ask.then(|| std::sync::Arc::new(prompt::Terminal) as _),
+                progress: progress.clone(),
+                ..speccoder_runtime::RunOptions::default()
+            };
+            let perform = |run: &speccoder_core::actions::Runnable, input: Option<&str>| {
+                let mut d = speccoder_runtime::actions::Dispatch::new(
+                    run,
+                    speccoder_core::actions::Via::Terminal,
+                );
+                d.input = input;
+                d.options = options.clone();
+                speccoder_runtime::actions::perform(path, feature, d)
+            };
+            let result = match action {
                 None => review::report(path, feature),
-                Some(R::Approve { ids, comment }) => review::decide(
+                Some(R::Approve {
+                    run: Some(mode),
+                    grant,
+                    list_grants,
+                    ..
+                }) => {
+                    let mode = match mode {
+                        cli::RunModeArg::Ask => speccoder_core::oracle::RunMode::Ask,
+                        cli::RunModeArg::Autopilot => speccoder_core::oracle::RunMode::Autopilot,
+                    };
+                    if *list_grants {
+                        review_grants(path, feature)
+                    } else {
+                        perform(
+                            &speccoder_core::actions::Runnable::ApproveAndRun {
+                                mode,
+                                grants: grant.clone(),
+                            },
+                            None,
+                        )
+                    }
+                }
+                Some(R::Tests {
+                    req,
+                    write,
+                    reject,
+                    reason,
+                    again,
+                    comment,
+                    edit,
+                    from,
+                    reading,
+                }) => 'tests: {
+                    use speccoder_core::oracle::{OracleOp, Reading};
+                    let content = match from {
+                        Some(f) => match std::fs::read_to_string(f) {
+                            Ok(t) => Some(t),
+                            Err(e) => {
+                                break 'tests speccoder_core::CommandResult::new(
+                                    "review",
+                                    speccoder_core::CommandStatus::UsageError,
+                                    &format!("{}: {e}", f.display()),
+                                )
+                                .with_code("USAGE");
+                            }
+                        },
+                        None => None,
+                    };
+                    let (op, test, text, scenario, which) = if *write {
+                        (OracleOp::Write, None, None, None, None)
+                    } else if let Some(p) = reject {
+                        (
+                            OracleOp::Reject,
+                            Some(p.clone()),
+                            reason.clone(),
+                            None,
+                            None,
+                        )
+                    } else if let Some(p) = again {
+                        (
+                            OracleOp::Again,
+                            Some(p.clone()),
+                            comment.clone(),
+                            None,
+                            None,
+                        )
+                    } else if let Some(p) = edit {
+                        (OracleOp::Edit, Some(p.clone()), content, None, None)
+                    } else if let Some(r) = reading {
+                        let which = match r.first().map(String::as_str) {
+                            Some("A" | "a") => Reading::A,
+                            Some("B" | "b") => Reading::B,
+                            _ => {
+                                break 'tests speccoder_core::CommandResult::new(
+                                    "review",
+                                    speccoder_core::CommandStatus::UsageError,
+                                    "--reading takes A or B, then the scenario",
+                                )
+                                .with_code("USAGE");
+                            }
+                        };
+                        (
+                            OracleOp::Reading,
+                            None,
+                            None,
+                            r.get(1).cloned(),
+                            Some(which),
+                        )
+                    } else {
+                        break 'tests review::report(path, feature);
+                    };
+                    perform(
+                        &speccoder_core::actions::Runnable::OracleTests {
+                            req: req.clone(),
+                            op,
+                            path: test,
+                            scenario,
+                            reading: which,
+                        },
+                        text.as_deref(),
+                    )
+                }
+                Some(R::Comments { action }) => {
+                    review_comments(path, feature, action.as_ref(), &perform)
+                }
+                Some(R::Approve { ids, comment, .. }) => review::decide(
                     path,
                     feature,
                     ids,
@@ -919,7 +1040,11 @@ fn main() {
                     *approve,
                     speccoder_core::actions::Via::Terminal,
                 ),
+            };
+            if let Some(a) = &attention {
+                a.finish(&result);
             }
+            result
         }
         Command::Issue {
             action: None | Some(cli::IssueAction::List),
@@ -1321,6 +1446,147 @@ fn offers_remedy(cli: &Cli) -> bool {
             }
         )
     )
+}
+
+/// `speccoder review approve --run autopilot --list-grants`: the grants an
+/// autopilot run may hold, each in full, by its grant id.
+fn review_grants(path: &std::path::Path, feature: Option<&str>) -> speccoder_core::CommandResult {
+    let r = speccoder_runtime::review::report(path, feature);
+    let Some(speccoder_core::CommandData::Review(rv)) = r.data() else {
+        return r;
+    };
+    let grants = rv
+        .sheet
+        .as_ref()
+        .map(|s| s.grants.clone())
+        .unwrap_or_default();
+    let mut lines: Vec<String> = grants
+        .iter()
+        .map(|g| format!("{}  {}  {}", g.id, g.class, g.object))
+        .collect();
+    if lines.is_empty() {
+        lines
+            .push("no grants are offered for this feature: an autopilot run holds none".to_owned());
+    }
+    if let Some(why) = rv.sheet.as_ref().and_then(|s| s.autopilot_blocked.clone()) {
+        lines.push(why);
+    }
+    let message = lines.join("\n");
+    r.reworded(speccoder_core::CommandStatus::Ok, &message)
+}
+
+/// `speccoder review comments [add|delete|keep|send|undo]`.
+fn review_comments(
+    path: &std::path::Path,
+    feature: Option<&str>,
+    action: Option<&cli::CommentsAction>,
+    perform: &dyn Fn(
+        &speccoder_core::actions::Runnable,
+        Option<&str>,
+    ) -> speccoder_core::CommandResult,
+) -> speccoder_core::CommandResult {
+    use speccoder_core::actions::{CommentOp, Runnable};
+    use speccoder_core::oracle::CommentAnchor;
+    let usage = |m: &str| {
+        speccoder_core::CommandResult::new("review", speccoder_core::CommandStatus::UsageError, m)
+            .with_code("USAGE")
+    };
+    let keep = |op, id: &str| Runnable::Comment {
+        op,
+        anchor: None,
+        id: Some(id.to_owned()),
+    };
+    match action {
+        None => speccoder_runtime::comments::list(path, feature, None),
+        Some(cli::CommentsAction::Delete { id }) => perform(&keep(CommentOp::Delete, id), None),
+        Some(cli::CommentsAction::Keep { id }) => perform(&keep(CommentOp::Keep, id), None),
+        Some(cli::CommentsAction::Send) => {
+            perform(&Runnable::CommentsSend { ids: Vec::new() }, None)
+        }
+        Some(cli::CommentsAction::Undo) => perform(&Runnable::RevisionUndo { turn: None }, None),
+        Some(cli::CommentsAction::Add {
+            path: doc,
+            lines,
+            test,
+            finding,
+            text,
+        }) => {
+            let anchor = if let (Some(doc), Some(lines)) = (doc, lines) {
+                let (a, b) = lines.split_once('-').unwrap_or((lines, lines));
+                let (Ok(a), Ok(b)) = (a.trim().parse::<usize>(), b.trim().parse::<usize>()) else {
+                    return usage("--lines is `40` or `40-42`");
+                };
+                // The quote is taken from the file, as it reads now.
+                let root = speccoder_runtime::format::at(path)
+                    .detect(path)
+                    .unwrap_or_else(|| path.to_path_buf());
+                let quote = std::fs::read_to_string(root.join(doc))
+                    .unwrap_or_default()
+                    .lines()
+                    .skip(a.saturating_sub(1))
+                    .take(b.saturating_sub(a) + 1)
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                CommentAnchor::Passage {
+                    path: doc.clone(),
+                    start_line: a,
+                    end_line: b,
+                    quote,
+                    quote_sha256: String::new(),
+                    section: String::new(),
+                }
+            } else if let Some(t) = test {
+                let mut parts = t.splitn(3, ':');
+                let (Some(req), Some(file), Some(line)) =
+                    (parts.next(), parts.next(), parts.next())
+                else {
+                    return usage("--test is `US1:tests/a.rs:3`");
+                };
+                let Ok(line) = line.parse::<usize>() else {
+                    return usage("--test is `US1:tests/a.rs:3`");
+                };
+                let shown = speccoder_runtime::review::report(path, feature);
+                let quote = match shown.data() {
+                    Some(speccoder_core::CommandData::Review(r)) => r
+                        .oracle
+                        .iter()
+                        .find(|v| v.req == req)
+                        .and_then(|v| v.tests.iter().find(|x| x.path == file))
+                        .and_then(|x| x.content.lines().nth(line.saturating_sub(1)))
+                        .unwrap_or_default()
+                        .to_owned(),
+                    _ => String::new(),
+                };
+                CommentAnchor::TestLine {
+                    req: req.to_owned(),
+                    path: file.to_owned(),
+                    line,
+                    quote,
+                }
+            } else if let Some(f) = finding {
+                let Some((source, id)) = f.split_once(':') else {
+                    return usage("--finding is `analyze:A1` or `review:FR-001`");
+                };
+                CommentAnchor::Finding {
+                    source: source.to_owned(),
+                    id: id.to_owned(),
+                    text: text.clone(),
+                }
+            } else {
+                return usage(
+                    "say what the comment is about: --path P --lines 40-42, --test US1:PATH:LINE or --finding SRC:ID",
+                );
+            };
+            perform(
+                &Runnable::Comment {
+                    op: CommentOp::Add,
+                    anchor: Some(anchor),
+                    id: None,
+                },
+                Some(text),
+            )
+        }
+    }
 }
 
 /// `speccoder bug confirm`: with the digest given, the decision; without

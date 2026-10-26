@@ -66,6 +66,39 @@ speccoder spec clarify                                  # or let the format's sk
 
 The review is recorded in `review.json` beside the spec; commit it with the spec so the team, the pull request and every later run see the same sign-off. Only `speccoder review` writes it: a change to it by a planning skill is undone and reported. With `[review] required = true`, a run waits (`REVIEW-PENDING`) until every requirement is approved in the committed review. In the [app](@/docs/web.md), the same review is **Spec & Plan › Review**.
 
+## Review the tests
+
+Approving a spec can freeze an **oracle**: the acceptance tests the run will use, read and shaped by you before any code exists. Per requirement with scenarios (Spec Kit: a user story, `US1`), **Write Tests** — `speccoder review tests US1 --write` — asks the test author twice, independently, compares what each says it asserts per scenario, and checks the first author's tests fail on the checkout's `HEAD` in a scratch worktree (twice, sandboxed; the worktree is removed afterwards). A held-out set is written as at run time and sealed in the state directory: you see how many tests it holds and its digest, never a line of it.
+
+```sh
+speccoder review tests US1 --write                       # 2 author calls ([review] oracle_samples)
+speccoder review tests US1 --reject tests/a.rs --reason "asserts the wrong rounding"
+speccoder review tests US1 --again tests/a.rs --comment "check an empty name too"
+speccoder review tests US1 --edit tests/a.rs --from my_test.rs   # your words, red-checked
+speccoder review tests US1 --reading A US1-2             # which reading of a scenario is meant
+```
+
+- Every test must cite a scenario of its requirement; one that cites none is discarded and listed.
+- Only a test that is **red** now — on an assertion or an absent symbol — can be frozen; one that already passes is shown as *no evidence*.
+- A rejection's reason, a comment and a chosen reading are told to every later author call for that requirement.
+- **Ambiguous.** When the two authors state the same given with different outcomes for a scenario (or one finds it untestable), the requirement is *read two ways*: *Approve and Run* waits, a gated run refuses with `REVIEW-AMBIGUOUS`, and Needs You lists it until you choose a reading (B writes that scenario's tests again) or reword it.
+- A quick change's or a bug's unit writes no tests here: its own pipeline authors and confirms them (`REVIEW-TESTS-OWN-PIPELINE`).
+
+**Approve and Run** — `speccoder review approve --run ask|autopilot [--grant ID]…` — approves every decision line that is open or lapsed, freezes each requirement's red tests with the approval's digest (in `review.json`: `oracle` and `approval`, digests only), commits `review.json` and starts the run. *Ask on Risky Calls* asks inline as any run from the interface; *Autopilot* asks nobody (see [autopilot](@/docs/approvals.md#autopilot)). The first task citing a frozen requirement's scenarios writes those tests at its checkpoint, checks them red there with the sealed held-out set, and makes no author call; its tick carries `Acceptance: review manifest=… approval=… wording=… by=…`. When the requirement's wording changes the frozen tests **lapse** and the run writes tests anew; a checkout without the stored set (a teammate's) says *frozen oracle not present here* and does the same; a stored test that no longer matches its digest stops the task (`ORACLE-TAMPERED`).
+
+### Comments
+
+Comment on what you read instead of rewording it yourself: a passage of a spec document, a line of a shown test, a review finding. Comments wait in a tray (`speccoder review comments`), kept in the state directory, and go out together as **one** revision by the format's revising skill (Spec Kit: `clarify`), limited to the sections they touch:
+
+```sh
+speccoder review comments add --path specs/001-x/spec.md --lines 40-42 "say who may log in"
+speccoder review comments add --test US1:tests/a.rs:3 "check the error text too"
+speccoder review comments send      # one revision; sections it changed outside your comments are flagged
+speccoder review comments undo      # the documents back, byte for byte (refused if changed since)
+```
+
+A comment whose words moved is *outdated* and sent only if you keep it; a test-line comment asks the author again for that test after the revision (unless the revision lapsed its tests). A batch is sent once: a second send of the same comments is refused.
+
 ## The current feature
 
 Every command works on one feature, the **current feature**. speccoder keeps it where Spec Kit does — `.specify/feature.json`, a per-checkout file git ignores — so speccoder, Spec Kit's scripts and the `/speckit-*` commands in your editor agree.

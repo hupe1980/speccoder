@@ -472,7 +472,13 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::BugKeep
             | K::AllowAlways
             | K::WidenPolicy
-            | K::DecideBatch => Offer::Take,
+            | K::DecideBatch
+            | K::OracleTests
+            | K::ApproveAndRun
+            | K::Comment
+            | K::CommentsSend
+            | K::RevisionUndo
+            | K::CodeNudge => Offer::Take,
             K::Command => Offer::Refuse,
         },
         // Decisions belong to their own prompt; what leaves the machine
@@ -500,6 +506,12 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::AllowAlways
             | K::WidenPolicy
             | K::DecideBatch
+            | K::OracleTests
+            | K::ApproveAndRun
+            | K::Comment
+            | K::CommentsSend
+            | K::RevisionUndo
+            | K::CodeNudge
             | K::Command => Offer::Refuse,
         },
         // Its keys decide the queue's calls and switch the feature; `n`
@@ -527,6 +539,12 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::BugRun
             | K::BugKeep
             | K::WidenPolicy
+            | K::OracleTests
+            | K::ApproveAndRun
+            | K::Comment
+            | K::CommentsSend
+            | K::RevisionUndo
+            | K::CodeNudge
             | K::Command => Offer::Refuse,
         },
         Interface::CliRemedy | Interface::AcpRemedy => match kind {
@@ -556,6 +574,12 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::AllowAlways
             | K::WidenPolicy
             | K::DecideBatch
+            | K::OracleTests
+            | K::ApproveAndRun
+            | K::Comment
+            | K::CommentsSend
+            | K::RevisionUndo
+            | K::CodeNudge
             | K::Command => Offer::Refuse,
         },
     }
@@ -767,6 +791,49 @@ pub fn perform_in(
                 state,
                 via,
             )
+        }
+        Runnable::OracleTests {
+            req,
+            op,
+            path,
+            scenario,
+            reading,
+        } => crate::oracle::tests(
+            root,
+            feature,
+            &crate::oracle::Request {
+                req,
+                op: *op,
+                path: path.as_deref(),
+                scenario: scenario.as_deref(),
+                reading: *reading,
+                text: d.input.filter(|t| !t.trim().is_empty()),
+            },
+            via,
+            state,
+            options,
+        ),
+        Runnable::ApproveAndRun { mode, grants } => {
+            crate::review::approve_and_run(root, feature, *mode, grants, via, state, None, options)
+        }
+        Runnable::Comment { op, anchor, id } => crate::comments::comment(
+            root,
+            feature,
+            *op,
+            anchor.as_ref(),
+            id.as_deref(),
+            text,
+            via,
+            state,
+        ),
+        Runnable::CommentsSend { ids } => {
+            crate::comments::send(root, feature, ids, via, state, options)
+        }
+        Runnable::RevisionUndo { turn } => {
+            crate::comments::undo(root, feature, turn.as_deref(), state)
+        }
+        Runnable::CodeNudge { task, comments } => {
+            crate::comments::code_nudge(root, feature, task, comments, state)
         }
         // The interface has confirmed it (the action's `confirm`): push
         // and open.

@@ -9,7 +9,15 @@ import type { Envelope, FeatureEntry, IssueEntry as GitHubIssue } from "./schema
 
 export type {
   Action,
+  ApproveSheet,
   BugReport,
+  CodeComment,
+  CommentAnchor,
+  CommentDraft,
+  CommentsView,
+  OracleTest,
+  OracleView,
+  RunMode,
   ActionId,
   ActionKind,
   ConfigKey,

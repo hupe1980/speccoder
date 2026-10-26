@@ -98,7 +98,7 @@ export interface ActionId {
  * kind arrives with its `Runnable` variant (the *adding a kind* contract
  * of `speccoder_runtime::actions::perform`).
  */
-export type ActionKind = "skill" | "run_task" | "run_feature" | "converge" | "commit" | "approve" | "reject" | "accept" | "skip" | "nudge" | "rule" | "review" | "issue_comment" | "quick_change" | "keep_set_aside" | "drop_set_aside" | "fix_setup" | "feature" | "pull_request" | "bug_fix" | "bug_confirm" | "bug_run" | "bug_keep" | "allow_always" | "widen_policy" | "decide_batch" | "command";
+export type ActionKind = "skill" | "run_task" | "run_feature" | "converge" | "commit" | "approve" | "reject" | "accept" | "skip" | "nudge" | "rule" | "review" | "issue_comment" | "quick_change" | "keep_set_aside" | "drop_set_aside" | "fix_setup" | "feature" | "pull_request" | "bug_fix" | "bug_confirm" | "bug_run" | "bug_keep" | "allow_always" | "widen_policy" | "decide_batch" | "oracle_tests" | "approve_and_run" | "comment" | "comments_send" | "revision_undo" | "code_nudge" | "command";
 
 /**
  * Result of `speccoder actions`: what a person can do now in the
@@ -110,6 +110,18 @@ export interface ActionsReport {
   actions: Action[];
   /** The feature's journey (spec → plan → tasks → commit → run → review). */
   journey: JourneyStep[];
+}
+
+/** Two authors read a scenario differently. */
+export interface Ambiguity {
+  /** The first author's reading (its tests are the ones kept). */
+  a: ReadingText;
+  /** The second author's. */
+  b: ReadingText;
+  /** The person's choice; `None` while it is open. */
+  resolution: Resolution | null;
+  /** The scenario. */
+  scenario: string;
 }
 
 /** Where an annotation lands: a file and a 1-based line, at the head. */
@@ -168,6 +180,26 @@ export interface ApprovalsReport {
    * never "nothing waiting".
    */
   unreadable: string | null;
+}
+
+/**
+ * What the approve sheet shows besides the requirements: who can approve
+ * and run now, and what autopilot would hold.
+ */
+export interface ApproveSheet {
+  /** Decision lines the approval records. */
+  approves: string[];
+  /** Why autopilot is disabled (no enforced sandbox); `None`: it can run. */
+  autopilot_blocked: string | null;
+  /**
+   * Why *Approve and Run* is disabled now (each a line naming its
+   * cause); empty: it can run.
+   */
+  blocked: string[];
+  /** The grants autopilot may hold, none ticked by default. */
+  grants: OfferedGrant[];
+  /** The sandbox line (`Seatbelt, network off`). */
+  sandbox: string | null;
 }
 
 /** Result of `speccoder spec archive` (an OpenSpec change). */
@@ -249,6 +281,23 @@ export interface AuthorClaim {
   by: string;
   /** The words. */
   text: string;
+}
+
+/** Who wrote a shown test. */
+export type AuthoredBy = "model" | "person";
+
+/** One call an autopilot run refused instead of asking. */
+export interface AutopilotDenial {
+  /** `write`, `command`, `network`, `mcp` (empty: none resolved). */
+  class: string;
+  /** What it reached (`src/a.rs`, `cargo add x`). */
+  object: string;
+  /** `autopilot: not asked — listed for you`. */
+  reason: string;
+  /** The task. */
+  task: string;
+  /** The model turn. */
+  turn: number;
 }
 
 /** How the person decided the reproductions. */
@@ -510,6 +559,18 @@ export interface ChecklistStatus {
 
 export type Checklists = ChecklistStatus[];
 
+/** One line comment of the Code view. */
+export interface CodeComment {
+  /** The line (1-based). */
+  line: number;
+  /** Project-relative path. */
+  path: string;
+  /** The code on that line. */
+  quote: string;
+  /** The person's words. */
+  text: string;
+}
+
 /** One code, as `explain` shows it. */
 export interface CodeInfo {
   /** `NEEDS-APPROVAL`. */
@@ -531,7 +592,7 @@ export interface CodeInfo {
 }
 
 /** Command-specific payload of a result. */
-export type CommandData = ProjectSnapshot | VerifyReport | WorktreeReport | ProposeReport | ReplayReport | RunReport | EvalReport | FeatureReport | ConvergeReport | StatusReport | ApprovalsReport | ControlReport | CostReport | PrReport | BenchReport | InitReport | SkillsReport | SkillRunReport | ChecklistStatus[] | ArchiveReport | InPlaceReport | AttestReport | ExplainReport | SchemaReport | DoctorReport | FeaturesReport | UiReport | ConfigReport | IssuesReport | InboxReport | ReviewReport | AuthReport | BranchReport | EvidenceTour | ActionsReport | BugReport | PolicyCoverage;
+export type CommandData = ProjectSnapshot | VerifyReport | WorktreeReport | ProposeReport | ReplayReport | RunReport | EvalReport | FeatureReport | ConvergeReport | StatusReport | ApprovalsReport | ControlReport | CostReport | PrReport | BenchReport | InitReport | SkillsReport | SkillRunReport | ChecklistStatus[] | ArchiveReport | InPlaceReport | AttestReport | ExplainReport | SchemaReport | DoctorReport | FeaturesReport | UiReport | ConfigReport | IssuesReport | InboxReport | ReviewReport | AuthReport | BranchReport | EvidenceTour | ActionsReport | BugReport | PolicyCoverage | CommentsView;
 
 /**
  * The envelope as it is serialised — the schema of [`CommandResult`]
@@ -569,6 +630,92 @@ export interface CommandResult {
 
 /** Outcome class of a command. */
 export type CommandStatus = "ok" | "usage_error" | "error" | "not_a_project" | "diagnostics_error" | "selection_needed" | "config_error" | "verification_failed" | "git_precondition" | "not_found" | "run_failed" | "replay_diverged" | "task_not_ready" | "needs_human" | "eval_failed" | "not_replayable" | "attestation_failed";
+
+/** What an anchored comment points at. */
+export type CommentAnchor =
+  /** A passage of a feature document. */
+  | {
+    /** Last line. */
+    end_line: number;
+    kind: "passage";
+    /** Project-relative path. */
+    path: string;
+    /** The words selected. */
+    quote: string;
+    /** `sha256:<hex>` of the quote (filled when the draft is stored). */
+    quote_sha256: string;
+    /** Its section's heading path (`Requirements › Functional`). */
+    section: string;
+    /** First line (1-based). */
+    start_line: number;
+  }
+  /** A line of the spec's changes since the last commit. */
+  | {
+    kind: "diff_line";
+    /** The line (1-based) on that side. */
+    line: number;
+    /** Project-relative path. */
+    path: string;
+    /** The line's text. */
+    quote: string;
+    /** `old` or `new`. */
+    side: string;
+  }
+  /** A line of a shown visible test. */
+  | {
+    kind: "test_line";
+    /** The line (1-based). */
+    line: number;
+    /** The test's path. */
+    path: string;
+    /** The line's text. */
+    quote: string;
+    /** The requirement. */
+    req: string;
+  }
+  /** A finding the review shows. */
+  | {
+    /** Its id. */
+    id: string;
+    kind: "finding";
+    /** `analyze` or `review`. */
+    source: string;
+    /** Its text. */
+    text: string;
+  };
+
+/** One comment in the tray. */
+export interface CommentDraft {
+  /** What it is about. */
+  anchor: CommentAnchor;
+  /** Unix seconds. */
+  at: number;
+  /** Who. */
+  by: string;
+  /** `c1`, `c2`, … */
+  id: string;
+  /** The person kept it although its quote moved. */
+  kept: boolean;
+  /** Where it is. */
+  state: DraftState;
+  /** The person's words. */
+  text: string;
+}
+
+/** What a comment action does. */
+export type CommentOp = "add" | "delete" | "keep";
+
+/** Result of `speccoder review comments`: the tray and the last turn. */
+export interface CommentsView {
+  /** Every draft not yet sent, in order. */
+  drafts: CommentDraft[];
+  /** The feature. */
+  feature: string;
+  /** The skill a send runs (`speckit-clarify`), when the format has one. */
+  revise_with: string | null;
+  /** The last revision turn. */
+  turn: RevisionView | null;
+}
 
 /** What changed relative to a baseline (pass-to-pass). */
 export interface Comparison {
@@ -923,6 +1070,9 @@ export interface DoctorReport {
   /** speccoder's version. */
   speccoder: string;
 }
+
+/** Where a draft comment is. */
+export type DraftState = "draft" | "outdated" | "sent";
 
 /**
  * What changed since a tick: the tick's commit holds the intent
@@ -1390,6 +1540,50 @@ export type EventLine = {
     /** The fix's verdict. */
     verdict: string | null;
   }
+  /** Writing tests at review went one stage further. */
+  | {
+    /** This stage's step. */
+    n: number;
+    /** Of. */
+    of: number;
+    /** The requirement. */
+    requirement: string;
+    /** `writing`, `comparing`, `checking_red`, `held_out`. */
+    stage: string;
+    type: "oracle.stage";
+  }
+  /** An approval froze a requirement's tests. */
+  | {
+    /** The approval's digest. */
+    approval_sha256: string;
+    /** Who. */
+    by: string;
+    /** Held-out tests sealed with them. */
+    held_out_count: number;
+    /** The visible set's manifest digest. */
+    manifest_sha256: string;
+    /** The requirement. */
+    requirement: string;
+    type: "oracle.frozen";
+    /** The unit. */
+    unit: string;
+    /** Through what. */
+    via: string;
+    /** Visible tests frozen. */
+    visible_count: number;
+  }
+  /** A frozen oracle lapsed with its requirement's wording. */
+  | {
+    /** The wording now. */
+    current_wording_sha256: string;
+    /** The wording it was frozen on. */
+    frozen_wording_sha256: string;
+    /** The requirement. */
+    requirement: string;
+    type: "oracle.lapsed";
+    /** The unit. */
+    unit: string;
+  }
   /** The last line: the command's result, as `--json` prints it. */
   | {
     /** The result envelope. */
@@ -1478,6 +1672,11 @@ export interface FeatureRef {
 export interface FeatureReport {
   /** Every attempt, in order. */
   attempts: RunReport[];
+  /**
+   * The calls an autopilot run refused instead of asking: listed for
+   * the person.
+   */
+  autopilot_denied?: AutopilotDenial[];
   /** Convergence rounds between task runs (`run --converge`), in order. */
   converge: ConvergeReport[];
   /** Feature directory name. */
@@ -1486,6 +1685,8 @@ export interface FeatureReport {
   full_tier?: FullTier | null;
   /** Extension hooks run, offered or skipped around it. */
   hooks: string[];
+  /** How the run asked for a person: `ask` or `autopilot`. */
+  mode: RunMode;
   /** What parallel groups did: merged, conflicts, re-verification. */
   parallel: string[];
   /** Why the run stopped. */
@@ -1581,6 +1782,21 @@ export interface HeldOutOracle {
   agree: number;
   /** The oracle failed: the held-out tests missed something. */
   disagree: number;
+}
+
+/**
+ * The held-out set of a requirement as anyone may see it: a count, a
+ * state and a digest — never a path or a line of it.
+ */
+export interface HeldOutSummary {
+  /** Tests kept. */
+  count: number;
+  /** The sealed manifest's digest, when kept. */
+  manifest_sha256: string | null;
+  /** Why none was kept (`not_red`, `none_generated`, …). */
+  reason: string | null;
+  /** `kept`, `absent` or `off` (`[acceptance] held_out = false`). */
+  state: string;
 }
 
 /** A held-out variant, as the payload shows it: never its content or path. */
@@ -1895,6 +2111,19 @@ export interface ObjectView {
   short: string;
 }
 
+/**
+ * A grant an autopilot run may hold, offered on the approve sheet: one
+ * object-bound grant (F-125) a person decided earlier for this feature.
+ */
+export interface OfferedGrant {
+  /** `write`, `command`, `network` or `mcp`. */
+  class: string;
+  /** Its grant id: what `--grant` and the sheet's tick name. */
+  id: string;
+  /** The object in full (`run: cargo run --example demo · argv #3f…`). */
+  object: string;
+}
+
 /** A question a document leaves open, to answer in place. */
 export interface OpenQuestion {
   /** The document (project-relative). */
@@ -1930,6 +2159,95 @@ export interface OperatorView {
    * (reported by a client over its connection, e.g. an editor).
    */
   basis: string;
+}
+
+/** A test the author wrote that is not part of the set. */
+export interface OracleDiscarded {
+  /** Its path as given. */
+  path: string;
+  /** `cites_no_scenario`, `not_a_new_test_file`, `exists`. */
+  why: string;
+}
+
+/** What a change to a requirement's tests does. */
+export type OracleOp = "write" | "reject" | "again" | "edit" | "reading";
+
+/** A test the person rejected. */
+export interface OracleRejected {
+  /** Unix seconds. */
+  at: number;
+  /** Who. */
+  by: string;
+  /** Its path. */
+  path: string;
+  /** The person's reason (told to every later author call). */
+  reason: string;
+}
+
+/** Where a requirement's oracle is. */
+export type OracleState = "none" | "written" | "not_red" | "failed" | "ambiguous" | "frozen" | "lapsed" | "frozen_elsewhere";
+
+/** One visible test as the review shows it. */
+export interface OracleTest {
+  /** Who wrote it. */
+  authored_by: AuthoredBy;
+  /** Its content (a visible test: the implementer reads it too). */
+  content: string;
+  /** The person who edited it. */
+  edited_by: string | null;
+  /** Project-relative path. */
+  path: string;
+  /** Red: it can be frozen. */
+  red: boolean;
+  /**
+   * Its red class on the current tree (`assertion`, `absent_symbol`,
+   * `passed`, `build_error`, `flaky`, …).
+   */
+  red_class: string;
+  /** The scenarios it cites (never empty). */
+  scenarios: string[];
+}
+
+/** One requirement's oracle in the review: everything the Tests card shows. */
+export interface OracleView {
+  /** Readings that disagree. */
+  ambiguities: Ambiguity[];
+  /** With one call there is nothing to compare. */
+  ambiguity_check: boolean;
+  /** The author calls *Write Tests* makes (`[review] oracle_samples`). */
+  calls: number;
+  /** The tests not kept, and why. */
+  discarded: OracleDiscarded[];
+  /** Why writing failed, or why it cannot be written here. */
+  error: string | null;
+  /** When (Unix seconds). */
+  frozen_at: number | null;
+  /** Who froze it, when frozen. */
+  frozen_by: string | null;
+  /** For `lapsed`: the wording it was frozen on. */
+  frozen_on: string | null;
+  /** The held-out set: count and digest only. */
+  held_out: HeldOutSummary;
+  /** The visible set's manifest digest, when tests are written. */
+  manifest_sha256: string | null;
+  /** The tests the person rejected. */
+  rejected: OracleRejected[];
+  /** The requirement (`US1`). */
+  req: string;
+  /** Its scenarios: id and words. */
+  scenarios: ScenarioRef[];
+  /** Where it is. */
+  state: OracleState;
+  /** `[acceptance] min_strength` (0–100), `None` when none is set. */
+  strength_target: number | null;
+  /** The kept tests. */
+  tests: OracleTest[];
+  /** Its title. */
+  title: string;
+  /** Scenarios no red kept test covers. */
+  uncovered: string[];
+  /** Scenarios an author found untestable, with why. */
+  untestable: Untestable[];
 }
 
 /** What a candidate run showed. */
@@ -2222,6 +2540,49 @@ export interface PublicBugRecorded {
   via: string;
 }
 
+/** `oracle.frozen`, as published: digests and counts, never a test. */
+export interface PublicOracleFrozen {
+  /** The approval's digest. */
+  approval_sha256: string;
+  /** Who. */
+  by: string;
+  /** Held-out tests sealed with them. */
+  held_out_count: number;
+  /** The visible set's manifest digest. */
+  manifest_sha256: string;
+  /** The requirement. */
+  requirement: string;
+  /** The unit. */
+  unit: string;
+  /** Through what. */
+  via: string;
+  /** Visible tests frozen. */
+  visible_count: number;
+}
+
+/** `oracle.lapsed`, as published. */
+export interface PublicOracleLapsed {
+  /** The wording now. */
+  current_wording_sha256: string;
+  /** The wording it was frozen on. */
+  frozen_wording_sha256: string;
+  /** The requirement. */
+  requirement: string;
+  /** The unit. */
+  unit: string;
+}
+
+/** One of the two readings of an ambiguous scenario. */
+export type Reading = "A" | "B";
+
+/** One reading of a scenario: what one author expects. */
+export interface ReadingText {
+  /** The outcome (`untestable: …` when the author found none). */
+  expect: string;
+  /** The situation. */
+  given: string;
+}
+
 /**
  * What a red run of acceptance tests showed.
  *
@@ -2349,6 +2710,16 @@ export interface RequirementDrift {
   then: string | null;
 }
 
+/** The person's choice on an ambiguous scenario. */
+export interface Resolution {
+  /** Unix seconds. */
+  at: number;
+  /** Who chose. */
+  by: string;
+  /** The reading meant. */
+  reading: Reading;
+}
+
 /** A reproduction against the revert candidate (the fix undone). */
 export type RevertOutcome = "rejected" | "survived" | "unviable" | "not_run";
 
@@ -2358,6 +2729,23 @@ export interface RevertResult {
   outcome: RevertOutcome;
   /** The statements whose reproduction failed on an assertion. */
   rejected_by: string[];
+}
+
+/** The record of an approval that froze the oracle (in `review.json`). */
+export interface ReviewApproval {
+  /** Unix seconds. */
+  at: number;
+  /** Who approved. */
+  by: string;
+  /** The run's mode. */
+  mode: RunMode;
+  /**
+   * SHA-256 over the approved decision lines and the frozen oracle
+   * entries: what a tick that reused a frozen set names.
+   */
+  sha256: string;
+  /** Through what. */
+  via: Via;
 }
 
 /** One requirement and its review. */
@@ -2389,6 +2777,8 @@ export interface ReviewItem {
  * spec as a card, with the person's decision on its exact wording.
  */
 export interface ReviewReport {
+  /** The approval that froze the oracle, when one is recorded. */
+  approval: ReviewApproval | null;
   /**
    * Requirements changed in the checkout since the last commit of the
    * spec: what a commit would record.
@@ -2400,6 +2790,11 @@ export interface ReviewReport {
   file: string;
   /** The spec's versions in git, newest first (the last twelve). */
   history: SpecVersion[];
+  /**
+   * One per requirement with scenarios (`US1`), beside the decision
+   * lines: the tests the run would use, as written at review (D-117).
+   */
+  oracle: OracleView[];
   /**
    * The questions the documents leave open (`[NEEDS CLARIFICATION: …]`),
    * in reading order.
@@ -2417,12 +2812,27 @@ export interface ReviewReport {
    * request with its requirement.
    */
   revision: string | null;
+  /**
+   * What *Approve and Run* would do and what blocks it (the full review
+   * only).
+   */
+  sheet: ApproveSheet | null;
+  /**
+   * Why the review writes no tests for this unit: its own pipeline
+   * authors and confirms them (a quick change, a bug).
+   */
+  tests_notice: string | null;
   /** Counts by state. */
   totals: ReviewTotals;
 }
 
 /** Counts of [`ReviewItem::state`]. */
 export interface ReviewTotals {
+  /**
+   * Requirements two test authors read differently, not yet resolved:
+   * *Approve and Run* and a gated run wait on them.
+   */
+  ambiguous: number;
   /** Approved on their current wording. */
   approved: number;
   /** Changes requested. */
@@ -2433,6 +2843,28 @@ export interface ReviewTotals {
   open: number;
   /** Questions the documents leave open. */
   questions: number;
+}
+
+/** What a revision turn did. */
+export interface RevisionView {
+  /** Requirements whose tests were asked again from test comments. */
+  asked_again: string[];
+  /** Sections it changed. */
+  changed: string[];
+  /** The comments it was sent with. */
+  comments: string[];
+  /** Files it changed (project-relative). */
+  files: string[];
+  /** `t1`, `t2`, … */
+  id: string;
+  /** `pending` (the person keeps or undoes it), `kept`, `undone`. */
+  outcome: string;
+  /** Of those, the ones no comment touched. */
+  outside: string[];
+  /** The sections they touch. */
+  sections: string[];
+  /** The format's revising skill. */
+  skill: string;
 }
 
 /**
@@ -2449,6 +2881,9 @@ export interface Ruling {
   /** Its scenario. */
   scenario: string;
 }
+
+/** How a run started from the review asks for a person. */
+export type RunMode = "ask" | "autopilot";
 
 /** Result of `speccoder run`. */
 export interface RunReport {
@@ -2764,7 +3199,79 @@ export type Runnable =
     run: string;
     /** Approve or reject (the input is the reason). */
     verdict: BatchVerdict;
+  }
+  /**
+   * Write, reject, ask again for, edit or settle a requirement's tests
+   * at review (the input: the reason, the comment or the content).
+   */
+  | {
+    kind: "oracle_tests";
+    /** What to do. */
+    op: OracleOp;
+    /** The test (reject, again, edit). */
+    path: string | null;
+    /** The reading meant (reading). */
+    reading: Reading | null;
+    /** The requirement (`US1`). */
+    req: string;
+    /** The ambiguous scenario (reading). */
+    scenario: string | null;
+  }
+  /**
+   * Approve every approvable decision line, freeze the written tests and
+   * start the feature's run, asking or on autopilot.
+   */
+  | {
+    /** The grant ids (F-125 objects) an autopilot run holds. */
+    grants: string[];
+    kind: "approve_and_run";
+    /** How the run asks. */
+    mode: RunMode;
+  }
+  /** Add, delete or keep a review comment (the input: its words). */
+  | {
+    /** What a new comment is about. */
+    anchor: CommentAnchor | null;
+    /** The draft (delete, keep). */
+    id: string | null;
+    kind: "comment";
+    /** What to do. */
+    op: CommentOp;
+  }
+  /** Send the comments as one revision turn. */
+  | {
+    /**
+     * The drafts the person saw (empty: every draft in the tray); a
+     * draft sent already refuses the send.
+     */
+    ids: string[];
+    kind: "comments_send";
+  }
+  /** Undo the last revision turn: the documents back, byte for byte. */
+  | {
+    kind: "revision_undo";
+    /** The turn the person saw. */
+    turn: string | null;
+  }
+  /** Code-view line comments as one nudge for the task's next attempt. */
+  | {
+    /** The comments. */
+    comments: CodeComment[];
+    kind: "code_nudge";
+    /** The task. */
+    task: string;
   };
+
+/**
+ * A scenario a task's acceptance tests cite: `US1-2` (Spec Kit), or
+ * `capability: requirement / scenario` (OpenSpec), with the spec's words.
+ */
+export interface ScenarioRef {
+  /** Stable within the unit. */
+  id: string;
+  /** The scenario as written in the spec. */
+  text: string;
+}
 
 /** Which tasks can start now, and what blocks the rest. */
 export interface Schedule {
@@ -3386,6 +3893,14 @@ export interface UiReport {
   root: string;
   /** The address to open, with this start's key in its fragment. */
   url: string;
+}
+
+/** A scenario an author found untestable, and why. */
+export interface Untestable {
+  /** The scenario's id. */
+  scenario: string;
+  /** Why. */
+  why: string;
 }
 
 /** Why a tick's evidence does not verify. */

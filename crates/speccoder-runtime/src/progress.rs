@@ -200,6 +200,59 @@ pub enum Event {
         /// What happened.
         step: BugEvent,
     },
+    /// The oracle at review (`oracle.*` on the event stream): stage names,
+    /// counts and digests — never a test's content, never held-out material.
+    Oracle {
+        /// What happened.
+        step: OracleEvent,
+    },
+}
+
+/// A step of the oracle at review (spec 093).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum OracleEvent {
+    /// Writing tests went one stage further (progress).
+    Stage {
+        /// The requirement.
+        requirement: String,
+        /// `writing`, `comparing`, `checking_red`, `held_out`.
+        stage: String,
+        /// This stage's step.
+        n: u32,
+        /// Of.
+        of: u32,
+    },
+    /// The approval froze a requirement's tests (domain).
+    Frozen {
+        /// The unit.
+        unit: String,
+        /// The requirement.
+        requirement: String,
+        /// The visible set's manifest digest.
+        manifest_sha256: String,
+        /// The approval's digest.
+        approval_sha256: String,
+        /// Visible tests frozen.
+        visible_count: usize,
+        /// Held-out tests sealed with them.
+        held_out_count: usize,
+        /// Who.
+        by: String,
+        /// Through what.
+        via: String,
+    },
+    /// A frozen oracle lapsed with its requirement's wording (domain).
+    Lapsed {
+        /// The unit.
+        unit: String,
+        /// The requirement.
+        requirement: String,
+        /// The wording it was frozen on.
+        frozen_wording_sha256: String,
+        /// The wording now.
+        current_wording_sha256: String,
+    },
 }
 
 /// One statement's class in a reproduce try.
@@ -596,7 +649,10 @@ impl Progress for Live {
                 Event::TaskFinished {
                     outcome, message, ..
                 } => s.finished = Some(format!("{outcome}: {message}")),
-                Event::Notice { .. } | Event::RunStarted { .. } | Event::Bug { .. } => {}
+                Event::Notice { .. }
+                | Event::RunStarted { .. }
+                | Event::Bug { .. }
+                | Event::Oracle { .. } => {}
             }
             s.updated_at = now();
             self.write(&s);

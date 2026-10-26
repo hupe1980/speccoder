@@ -44,3 +44,57 @@ export function bugReport(over: Partial<BugReport> = {}): BugReport {
     ...over,
   };
 }
+
+import type { OracleView, ReviewReport } from "../lib/schema.gen";
+
+/** US1's tests as written at review, with `over` applied. */
+export function oracleView(over: Partial<OracleView> = {}): OracleView {
+  return {
+    req: "US1",
+    title: "Login",
+    scenarios: [
+      { id: "US1-1", text: "**Given** a user, **When** they log in, **Then** a `login` function exists." },
+      { id: "US1-2", text: "**Given** an empty password, **When** they log in, **Then** they are refused." },
+    ],
+    state: "written",
+    frozen_on: null,
+    frozen_by: null,
+    frozen_at: null,
+    tests: [
+      { path: "tests/acceptance_us1.rs", content: "#[test]\nfn login() {\n    assert!(app::login());\n}\n", scenarios: ["US1-1"], red_class: "assertion", red: true, authored_by: "model", edited_by: null },
+      { path: "tests/acceptance_us1_empty.rs", content: "#[test]\nfn empty() {}\n", scenarios: ["US1-2"], red_class: "passed", red: false, authored_by: "model", edited_by: null },
+    ],
+    discarded: [{ path: "tests/acceptance_none.rs", why: "cites_no_scenario" }],
+    rejected: [],
+    uncovered: ["US1-2"],
+    untestable: [],
+    ambiguities: [],
+    held_out: { state: "kept", count: 2, manifest_sha256: "sha256:ab", reason: null },
+    strength_target: 80,
+    calls: 2,
+    ambiguity_check: true,
+    manifest_sha256: "sha256:cd",
+    error: null,
+    ...over,
+  };
+}
+
+/** A review with one decision line and US1's tests, with `over` applied. */
+export function review(over: Partial<ReviewReport> = {}): ReviewReport {
+  return {
+    feature: "001-greet",
+    file: "specs/001-greet/review.json",
+    requirements: [{ id: "FR-001", text: "Users MUST log in.", state: "open", by: null, at: null, comment: null, decided_on: null }],
+    totals: { approved: 0, changes_requested: 0, open: 1, lapsed: 0, questions: 0, ambiguous: 0 },
+    revise_with: "clarify",
+    revision: null,
+    questions: [],
+    changes: [],
+    history: [],
+    oracle: [oracleView()],
+    tests_notice: null,
+    approval: null,
+    sheet: { approves: ["FR-001"], blocked: [], autopilot_blocked: null, sandbox: "Sandbox: Seatbelt, network off", grants: [{ id: "g-0011223344556677", class: "command", object: "run `cargo run --example demo` · argv #3f2a1b0c9d8e" }] },
+    ...over,
+  };
+}

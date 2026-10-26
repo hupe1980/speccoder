@@ -1,0 +1,15 @@
+{
+  "head": "spec(001-graph): review.json",
+  "result": {
+    "code": "USAGE",
+    "command": "review",
+    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#usage",
+    "exit_code": 2,
+    "fix": [
+      "speccoder review --help"
+    ],
+    "message": "no revision to undo",
+    "schema_version": 2,
+    "status": "usage_error"
+  }
+}

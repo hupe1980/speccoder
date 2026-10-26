@@ -78,6 +78,7 @@ Click a card to open the **inspector**:
 - **Worktree on disk**: also what git does not show — untracked files (**U**), modified ones (**M**), ignored files and folders (dimmed). When a file there would stop a run (a lockfile never committed, build output not ignored), it is shown with **Commit …**, which copies it into your checkout and commits exactly the setup files.
 - Keys: ↑ ↓ move in the tree, → ← open and close, typing jumps to a name; ⌘P (Ctrl+P) goes to a file; ⌘F (Ctrl+F) finds in the open file. Clicking a line number marks the line.
 - A link in a previewed Markdown file opens the linked file here; a web address opens in your browser.
+- On a task's diff, `+` beside a line adds a comment; **Send N Comments as a Nudge** saves them as one note the task's next attempt reads (`path:line "code" — comment` per line). A line of a frozen test is commented on in Review › Tests instead.
 
 ### Spec & Plan
 
@@ -85,7 +86,10 @@ Click a card to open the **inspector**:
 
 - The documents rendered from Markdown (raw HTML never), Mermaid drawn, requirement IDs marked cited or uncited.
 - The side nav holds the open document's outline: the section you read, a dot per requirement (green: a task cites it; orange: none does), each phase's progress in the task list. `[` and `]` step through sections.
-- **Review** is the spec as a conversation: open questions answered in place; every requirement a card with **Approve**, **Edit**, **Request Changes**, **Clear**; **Approve All**, **Revise the Spec**, and **Commit** for what changed ([review the spec](@/docs/planning.md#review-the-spec)).
+- **Review** is the spec as a conversation: open questions answered in place; every requirement a card with **Approve**, **Edit**, **Request Changes**, **Clear**; **Revise the Spec**, and **Commit** for what changed ([review the spec](@/docs/planning.md#review-the-spec)).
+- **Tests** (below the decision lines): one card per requirement with scenarios. **Write Tests** shows the author calls it makes, then each test with the scenarios it cites, its red result, **Reject…**, **Ask Again…** and **Edit**; `Held out: N` (only the count — the tests are kept from you and the implementer), the strength target and the scenarios no test covers. Two readings that disagree show as an amber strip with **A Is Meant**, **B Is Meant**, **Reword…** ([review the tests](@/docs/planning.md#review-the-tests)).
+- **Approve and Run ▾** opens a sheet: what approving freezes per requirement, and three choices — **Ask on Risky Calls**, **Autopilot** (the grants it may hold, none ticked; the sandbox line), **Keep Refining** (keys 1–3). It is disabled, saying why, while a question is open, a requirement is read two ways or a run is active.
+- **Comments**: select a passage and press `c` (or the floating **Comment**), or `+` beside a test line, or **Add to Comments** on a question. The tray collects them; **Send N Comments** runs one revision limited to their sections, then shows what changed and what changed outside your comments, with **Keep** and **Undo Revision**.
 
 ### Report
 
@@ -144,7 +148,7 @@ In `speccoder ui --window`, a menu item does what the same button does; one that
 | **Edit** | Undo, Redo, Cut, Copy, Paste, Select All |
 | **View** | the six views ⌘1–⌘6, Toggle Sidebar ⌥⌘S, Toggle Status Bar ⌥⌘B, Actions… ⌘K, Appearance (Automatic, Light, Dark), Enter Full Screen |
 | **Run** | Run the Feature ⌘R, Run the Selected Task ⇧⌘R, Re-check Against the Spec, Show the Selected Task's Evidence ⌘I, Nudge / Skip / Accept the Selected Task…, Stop ⌘. |
-| **Review** | Needs You ⇧⌘I, Review the Spec ⌥⌘R, Evidence Report, Open Draft Pull Request… |
+| **Review** | Needs You ⇧⌘I, Review the Spec ⌥⌘R, Evidence Report, Write Tests ⇧⌘T, Send Comments ⇧⌘↵, Undo Revision, Open Draft Pull Request… |
 | **Window** | Minimize, Zoom, Bring All to Front |
 | **Help** | speccoder Documentation, Quickstart, The App, Error Codes, Report an Issue… (in your browser) |
 
@@ -159,6 +163,8 @@ In `speccoder ui --window`, a menu item does what the same button does; one that
 | `,` | Settings |
 | ⌘K / Ctrl+K | The palette: every action, filtered as you type; Enter runs it |
 | `[` `]` | Previous, next section (Spec & Plan) |
+| `c` | Comment on the selected passage (Spec & Plan) |
+| ⇧⌘T / ⇧⌘↵ | Write Tests for the open requirement, Send the comments (Review) |
 | ⌘P / Ctrl+P | Go to a file (Code) |
 | ⌘F / Ctrl+F | Find in the open file (Code) |
 | `Esc` | Close the task |

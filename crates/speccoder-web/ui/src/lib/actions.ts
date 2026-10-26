@@ -34,6 +34,12 @@ export const KINDS: Record<ActionKind, { verb: string; icon?: string; holdsWorkt
   bug_confirm: { verb: "Confirm", icon: "check", holdsWorktree: true },
   bug_run: { verb: "Reproduce", icon: "play", holdsWorktree: true },
   bug_keep: { verb: "Keep", icon: "check", holdsWorktree: true },
+  oracle_tests: { verb: "Write Tests", icon: "shield", holdsWorktree: false },
+  approve_and_run: { verb: "Approve and Run", icon: "play", holdsWorktree: true },
+  comment: { verb: "Comment", icon: "doc", holdsWorktree: false },
+  comments_send: { verb: "Send Comments", icon: "sparkle", holdsWorktree: false },
+  revision_undo: { verb: "Undo Revision", icon: "undo", holdsWorktree: false },
+  code_nudge: { verb: "Send as a Nudge", icon: "sparkle", holdsWorktree: false },
   command: { verb: "Copy", icon: "terminal", holdsWorktree: false },
 };
 

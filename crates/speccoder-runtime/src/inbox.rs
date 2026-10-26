@@ -136,6 +136,8 @@ fn counted(kind: &str, n: usize) -> String {
             "ticks the spec changed under",
         ),
         "question" => ("open question", "open questions"),
+        "ambiguous" => ("scenario read two ways", "scenarios read two ways"),
+        "autopilot_denied" => ("call autopilot refused", "calls autopilot refused"),
         "review" => ("spec to review", "specs to review"),
         "revise" => ("change request", "change requests"),
         "stuck" => ("task that did not pass", "tasks that did not pass"),
@@ -547,6 +549,36 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
         ));
     }
 
+    // What the last autopilot run refused instead of asking (spec 093).
+    let denied = project_state
+        .as_deref()
+        .map(|s| crate::oracle::last_denials(s, feature))
+        .unwrap_or_default();
+    if !denied.is_empty() {
+        let read = action(
+            "work",
+            "see what autopilot refused",
+            "each call was refused for that run; approve one when you run again, or allow it in Settings",
+            flag("speccoder run --json".to_owned()),
+        );
+        out.push(item(
+            "autopilot_denied",
+            None,
+            count(
+                denied.len(),
+                "call autopilot refused instead of asking",
+                "calls autopilot refused instead of asking",
+            ),
+            denied
+                .iter()
+                .take(4)
+                .map(|d| format!("{}: {}", d.task, d.object))
+                .collect::<Vec<_>>()
+                .join("; "),
+            vec![read],
+        ));
+    }
+
     // The spec, reviewed requirement by requirement.
     if let Some(rv) = crate::review::summary(path, Some(feature)).as_ref() {
         let t = rv.totals;
@@ -589,6 +621,63 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
                     .collect::<Vec<_>>()
                     .join("; "),
                 actions,
+            ));
+        }
+        // Two test authors read a requirement two ways (spec 093).
+        let requirements = match crate::inspect(path, Some(feature)).data() {
+            Some(CommandData::Inspect(snap)) => crate::format::of(snap).oracle_requirements(snap),
+            _ => Vec::new(),
+        };
+        let ambiguous = project_state
+            .as_deref()
+            .map(|s| crate::oracle::open_ambiguities(s, feature, &requirements))
+            .unwrap_or_default();
+        if let Some((req, scenario)) = ambiguous.first() {
+            let mut a = action(
+                "review",
+                "reading A is meant",
+                "the first author's tests stay",
+                flag(format!(
+                    "speccoder review tests {req} --reading A {scenario}"
+                )),
+            );
+            a = a.with_run(Runnable::OracleTests {
+                req: req.clone(),
+                op: speccoder_core::oracle::OracleOp::Reading,
+                path: None,
+                scenario: Some(scenario.clone()),
+                reading: Some(speccoder_core::oracle::Reading::A),
+            });
+            let mut b = action(
+                "review",
+                "reading B is meant",
+                "its tests are written again with that reading",
+                flag(format!(
+                    "speccoder review tests {req} --reading B {scenario}"
+                )),
+            );
+            b = b.with_run(Runnable::OracleTests {
+                req: req.clone(),
+                op: speccoder_core::oracle::OracleOp::Reading,
+                path: None,
+                scenario: Some(scenario.clone()),
+                reading: Some(speccoder_core::oracle::Reading::B),
+            });
+            out.push(item(
+                "ambiguous",
+                None,
+                count(
+                    ambiguous.len(),
+                    "scenario read two ways",
+                    "scenarios read two ways",
+                ),
+                ambiguous
+                    .iter()
+                    .map(|(r, s)| format!("{r}/{s}"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+                    + " — Approve and Run waits until you choose a reading or reword",
+                vec![a, b],
             ));
         }
         if t.open + t.lapsed > 0 {

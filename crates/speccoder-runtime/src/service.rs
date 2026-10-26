@@ -35,6 +35,8 @@ pub mod next {
 
 /// The person's review of the spec.
 pub mod review {
+    /// The comment tray and the last revision turn (spec 093).
+    pub use crate::comments::list as comments;
     pub use crate::review::report;
 }
 
@@ -185,6 +187,30 @@ pub fn create_skill(root: &Path) -> Option<String> {
 /// from elsewhere in the repository is never shown); empty otherwise.
 #[must_use]
 pub fn commit_patch(root: &Path, commit: &str) -> String {
+    commit_patch_of(root, commit)
+}
+
+/// Whether `id` is reached from `HEAD`, a branch or a saved attempt.
+fn reachable(git: &crate::git::Git, id: &str) -> bool {
+    if git
+        .succeeds(&["merge-base", "--is-ancestor", id, "HEAD"])
+        .unwrap_or(false)
+    {
+        return true;
+    }
+    git.line(&[
+        "for-each-ref",
+        "--count=1",
+        "--format=%(refname)",
+        "--contains",
+        id,
+        "refs/heads",
+        "refs/speccoder/attempts",
+    ])
+    .is_ok_and(|l| !l.trim().is_empty())
+}
+
+fn commit_patch_of(root: &Path, commit: &str) -> String {
     let git = crate::git::Git::at(root);
     // `^{commit}` peels or fails.
     let Ok(id) = git.line(&[
@@ -195,6 +221,12 @@ pub fn commit_patch(root: &Path, commit: &str) -> String {
     ]) else {
         return String::new();
     };
+    // Only what a branch, `HEAD` or a saved attempt reaches: a commit the
+    // page could only name by its id (a sealed or unreachable object) shows
+    // nothing.
+    if !reachable(&git, &id) {
+        return String::new();
+    }
     git.run(&["show", "--no-color", "--patch", "--format=%h %s%n%n%b", &id])
         .map(|b| String::from_utf8_lossy(&b).into_owned())
         .unwrap_or_default()

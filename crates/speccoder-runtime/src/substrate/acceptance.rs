@@ -310,6 +310,141 @@ pub fn held_out_input(
     ])
 }
 
+/// What the test author is told at review (spec 093): the same author,
+/// for one requirement before any task exists, stating per scenario what it
+/// asserts so two independent answers can be compared.
+#[must_use]
+pub fn review_policy(w: &Wording) -> String {
+    format!(
+        "You are the test author of speccoder, writing the acceptance tests for ONE requirement of a \
+{product} spec at review, BEFORE any code for it exists. Turn {examples} into executable tests in the \
+project's own language and test framework, exactly as the spec states them — do not invent behaviour \
+the spec does not state, and do not weaken an example. Put them in NEW files under the project's test \
+directory — paths that are not in the project's file list; name them after the requirement (for Rust: \
+tests/acceptance_<requirement>.rs, using the crate name from Cargo.toml) — and give the command that runs \
+only these tests (for Rust: cargo test --test <name>), and per file the command that runs only that file. Every file MUST cite the IDs of the scenarios it \
+tests, from the list given; a file citing none is discarded. State, per scenario you cover, the given and \
+the expected outcome you assert, in the spec's terms (`expectations`); list every scenario you cannot \
+test, with why (`untestable`). The tests must fail now and pass once the requirement is implemented. An \
+example whose outcome depends on outside state — the date or time, the network, files, randomness — is \
+NOT a fixed assertion: never pin such a value; list the scenario as untestable instead. The person's \
+notes, when given, are their review of earlier tests: follow them.",
+        product = w.product,
+        examples = w.examples,
+    )
+}
+
+/// The review answer's schema: the run-time answer plus `expectations`
+/// and `untestable`, both required (contracts/author-schema.md).
+#[must_use]
+pub fn review_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "files": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "path": { "type": "string" },
+                        "content": { "type": "string" },
+                        "scenarios": { "type": "array", "items": { "type": "string" } },
+                        "argv": { "type": "array", "items": { "type": "string" } },
+                    },
+                    "required": ["path", "content", "scenarios", "argv"],
+                    "additionalProperties": false,
+                },
+            },
+            "argv": { "type": "array", "items": { "type": "string" } },
+            "notes": { "type": "array", "items": { "type": "string" } },
+            "expectations": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "scenario": { "type": "string" },
+                        "given": { "type": "string" },
+                        "expect": { "type": "string" },
+                    },
+                    "required": ["scenario", "given", "expect"],
+                    "additionalProperties": false,
+                },
+            },
+            "untestable": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "scenario": { "type": "string" },
+                        "why": { "type": "string" },
+                    },
+                    "required": ["scenario", "why"],
+                    "additionalProperties": false,
+                },
+            },
+        },
+        "required": ["files", "argv", "notes", "expectations", "untestable"],
+        "additionalProperties": false,
+    })
+}
+
+/// What a review-time author call is given (spec 093). The requirement,
+/// its scenarios and the person's notes are the person's; the file list is
+/// the checkout's.
+#[derive(Debug, Clone)]
+pub struct ReviewParts<'a> {
+    /// A bundle for the requirement (no task: `task.id` is `req-<key>`).
+    pub bundle: Value,
+    /// `{key, title, text}`.
+    pub requirement: Value,
+    /// Its scenarios.
+    pub scenarios: &'a [speccoder_core::spec::ScenarioRef],
+    /// The checkout's files.
+    pub files: &'a [String],
+    /// The manifest file's text.
+    pub manifest: &'a str,
+    /// The person's notes: rejection reasons, comments, a reading.
+    pub notes: &'a [String],
+    /// Asking again for one test: its path and content.
+    pub again: Option<(&'a str, &'a str)>,
+    /// The repository's instructions.
+    pub instructions: &'a [crate::instructions::Instruction],
+    /// Every part the call is handed, as listed (constitution VIII).
+    pub context: &'a speccoder_core::context::ContextManifest,
+    /// Which independent sample this is (1, 2): two samples are two runs.
+    pub sample: u8,
+}
+
+/// The review-time author's input: `{ mode: "review", … }`.
+#[must_use]
+pub fn review_input(p: &ReviewParts<'_>) -> Tainted<Value> {
+    let mut parts = vec![
+        ("instructions", instructions_part(p.instructions)),
+        ("mode", Tainted::trusted(json!("review"))),
+        ("set", Tainted::trusted(json!("review"))),
+        ("sample", Tainted::trusted(json!(p.sample))),
+        ("bundle", Tainted::trusted(p.bundle.clone())),
+        ("requirement", Tainted::trusted(p.requirement.clone())),
+        ("scenarios", Tainted::trusted(json!(p.scenarios))),
+        ("notes", Tainted::trusted(json!(p.notes))),
+        ("context", Tainted::trusted(json!(p.context))),
+        (
+            "project",
+            Tainted::with_label(
+                json!({ "files": p.files, "manifest": p.manifest }),
+                super::provenance::from(super::provenance::WORKTREE),
+            ),
+        ),
+    ];
+    if let Some((path, content)) = p.again {
+        parts.push((
+            "again",
+            Tainted::trusted(json!({ "path": path, "content": content })),
+        ));
+    }
+    Tainted::object(parts)
+}
+
 /// The answer's schema.
 #[must_use]
 pub fn schema() -> Value {
@@ -400,10 +535,13 @@ impl Skill for Acceptance {
         let strengthen = input.peek()["set"] == "strengthen";
         let reproduce = input.peek()["set"] == "reproduce";
         let reproduce_held_out = input.peek()["set"] == "reproduce_held_out";
+        let review = input.peek()["mode"] == "review";
         let prompt = super::provenance::labelled_prompt(
             {
                 let input = input.peek();
-                let system = if reproduce {
+                let system = if review {
+                    review_policy(self.format.wording())
+                } else if reproduce {
                     reproduce_policy(self.format.wording())
                 } else if reproduce_held_out {
                     reproduce_held_out_policy(self.format.wording())
@@ -499,6 +637,27 @@ impl Skill for Acceptance {
                         ));
                     }
                 }
+                if review {
+                    let notes: Vec<&str> = input["notes"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .filter_map(Value::as_str)
+                        .collect();
+                    if !notes.is_empty() {
+                        text.push_str("\n\n# The person's notes on earlier tests\n");
+                        for n in notes {
+                            text.push_str(&format!("\n- {n}"));
+                        }
+                    }
+                    if let Some(again) = input.get("again") {
+                        text.push_str(&format!(
+                            "\n\n# Write this one test again\n\nReturn exactly one file, at the same path ({}), replacing it; follow the person's notes.\n\n```\n{}\n```\n",
+                            again["path"].as_str().unwrap_or_default(),
+                            again["content"].as_str().unwrap_or_default()
+                        ));
+                    }
+                }
                 if held_out || reproduce_held_out {
                     text.push_str("\n\n# Visible acceptance tests (the implementer sees these)\n");
                     for f in input["visible"].as_array().into_iter().flatten() {
@@ -522,7 +681,9 @@ impl Skill for Acceptance {
         );
         let completion = cx
             .complete_with(&prompt, |call| {
-                call.expecting(if reproduce {
+                call.expecting(if review {
+                    review_schema()
+                } else if reproduce {
                     reproduce_schema()
                 } else if held_out || reproduce_held_out {
                     held_out_schema()

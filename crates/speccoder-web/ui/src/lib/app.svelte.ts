@@ -77,6 +77,8 @@ class AppState {
   /** Where the model's latest reasoning summary landed, its last line: a claim. */
   thinking = $state<string | null>(null);
   usage = $state<{ in: number; out: number; usd: number | null }>({ in: 0, out: 0, usd: null });
+  /** Writing a requirement's tests at review: the stage it is in (spec 093). */
+  oracleStage = $state<{ requirement: string; stage: string; n: number; of: number } | null>(null);
   waiting = $state<Waiting | null>(null);
   toasts = $state<Toast[]>([]);
   selected = $state<string | null>(null);
@@ -233,6 +235,7 @@ class AppState {
         this.said = null;
         this.thinking = null;
         this.usage = { in: 0, out: 0, usd: null };
+        this.oracleStage = null;
         break;
       case "progress":
         this.#progress(e.event);
@@ -249,6 +252,7 @@ class AppState {
         const r = e.result as Reply;
         this.job = { id: e.id, command: this.job?.command ?? "", running: false, result: r };
         this.waiting = null;
+        this.oracleStage = null;
         if (this.#fixing !== undefined) {
           const then = this.#fixing;
           this.#fixing = undefined;
@@ -335,6 +339,10 @@ class AppState {
         break;
       case "notice":
         this.calls = [...this.calls, ev.text];
+        break;
+      case "oracle":
+        // Names and counts only: never a test, never held-out material.
+        if (ev.step?.kind === "stage") this.oracleStage = { requirement: ev.step.requirement, stage: ev.step.stage, n: ev.step.n, of: ev.step.of };
         break;
     }
   }

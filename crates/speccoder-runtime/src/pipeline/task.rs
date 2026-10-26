@@ -424,6 +424,28 @@ pub(crate) fn run_task(
         )
         .with_code("REVIEW-PENDING");
     }
+    // Two test authors read a requirement two ways: the person says which
+    // is meant before a gated run (spec 093).
+    if run_config.review_required {
+        let ambiguous = crate::oracle::open_ambiguities(
+            &s.plane_dir,
+            &feature_name,
+            &format.oracle_requirements(&snap),
+        );
+        if let Some((req, scenario)) = ambiguous.first() {
+            return refuse(
+                CommandStatus::NeedsHuman,
+                format!(
+                    "{req} is read two ways ({scenario}) and [review] required is on: choose a reading or reword it first"
+                ),
+            )
+            .with_code("REVIEW-AMBIGUOUS")
+            .with_fix(vec![
+                format!("speccoder review tests {req} --reading A {scenario}"),
+                format!("speccoder review tests {req} --reading B {scenario}"),
+            ]);
+        }
+    }
     let executor = match external::parse(&config_text) {
         Ok(e) => e,
         Err(e) => {
@@ -443,6 +465,14 @@ pub(crate) fn run_task(
         Ok(r) => r,
         Err(e) => return refuse(CommandStatus::ConfigError, e),
     };
+    // Autopilot asks nobody: it runs only where the OS sandbox confines it.
+    if options.mode == speccoder_core::oracle::RunMode::Autopilot && !runner.is_sandboxed() {
+        return refuse(
+            CommandStatus::ConfigError,
+            "autopilot needs the OS sandbox, and commands here would run unsandboxed".to_owned(),
+        )
+        .with_code("SANDBOX-UNAVAILABLE");
+    }
     let mutation_config = match mutation::parse(&config_text) {
         Ok(c) => c,
         Err(e) => {
@@ -804,6 +834,45 @@ pub(crate) fn run_task(
         Some(f) => super::bug::scenarios(&f.bug),
         None => format.scenarios(&snap, task),
     };
+    // A requirement's oracle frozen at review (spec 093): reused by the
+    // first task citing its scenarios while its wording is unchanged.
+    let mut review_frozen: Option<(speccoder_core::acceptance::PreFrozenAcceptance, String)> = None;
+    let mut review_reuse = None;
+    if bug_fix.is_none() && run_config.acceptance && !options.fresh_acceptance {
+        match crate::oracle::for_task(&s.plane_dir, &project, &wt_root, format, &snap, &scenarios) {
+            Some(r @ crate::oracle::TaskReuse::Ready { .. }) => review_reuse = Some(r),
+            Some(crate::oracle::TaskReuse::Elsewhere { req }) => {
+                notices.push(format!("{req}: frozen oracle not present here — authoring"))
+            }
+            Some(crate::oracle::TaskReuse::Lapsed {
+                req,
+                frozen,
+                current,
+            }) => {
+                if crate::oracle::note_lapse(&s.plane_dir, &feature_name, &req, &frozen) {
+                    live.event(&progress::Event::Oracle {
+                        step: progress::OracleEvent::Lapsed {
+                            unit: feature_name.clone(),
+                            requirement: req.clone(),
+                            frozen_wording_sha256: frozen,
+                            current_wording_sha256: current,
+                        },
+                    });
+                }
+                notices.push(format!(
+                    "{req}'s wording changed since its tests were frozen at review: the frozen oracle lapsed — authoring"
+                ));
+            }
+            Some(crate::oracle::TaskReuse::Tampered(why)) => {
+                return fail(
+                    CommandStatus::NeedsHuman,
+                    format!("{why}: the task stops for a person, nothing is ticked"),
+                )
+                .with_code("ORACLE-TAMPERED");
+            }
+            None => {}
+        }
+    }
     let mut acceptance = if let Some(prepared) = interrupted
         .as_ref()
         .and_then(|m| m.acceptance.clone())
@@ -842,6 +911,56 @@ pub(crate) fn run_task(
                 return fail(CommandStatus::NeedsHuman, e);
             }
         }
+    } else if let Some(reuse) = review_reuse.take() {
+        // A frozen oracle (spec 093): its tests at this checkpoint, red by
+        // the run-time rule, its sealed held-out set red too — no author call.
+        stage(&*live, task, Stage::Red, StageState::Started, None, None);
+        let crate::oracle::TaskReuse::Ready {
+            record,
+            files,
+            tests,
+            manifest,
+        } = reuse
+        else {
+            return fail(CommandStatus::Error, "no frozen oracle".to_owned());
+        };
+        match reuse_pre_frozen(
+            &project,
+            &record,
+            &files,
+            &tests,
+            &runner,
+            RedRule::RunTime,
+            Some(&SealedCheck {
+                state: &s.plane_dir,
+                unit: &feature_name,
+                wt_root: &wt_root,
+                tmp: &tmp,
+                policy: &policy,
+            }),
+        ) {
+            Ok(mut a) => {
+                a.report["pre_frozen"]["manifest"] = serde_json::json!(manifest);
+                notices.push(format!(
+                    "acceptance tests frozen at review by {} ({}) for {}: no author call",
+                    record.decided.by, record.decided.via, record.requirement
+                ));
+                review_frozen = Some((*record, manifest));
+                Some(a)
+            }
+            Err(e) => {
+                let _ = worktree::restore(&wt_root, &tmp, &start);
+                stage(
+                    &*live,
+                    task,
+                    Stage::Red,
+                    StageState::Failed,
+                    Some(e.clone()),
+                    Some(began),
+                );
+                return fail(CommandStatus::NeedsHuman, e).with_code("ORACLE-TAMPERED");
+            }
+        }
     } else if run_config.acceptance && format.acceptance_testable(&bundle) {
         stage(&*live, task, Stage::Red, StageState::Started, None, None);
         Some(prepare_acceptance(&AcceptanceSetup {
@@ -861,11 +980,24 @@ pub(crate) fn run_task(
     } else {
         None
     };
+    if review_frozen.is_none()
+        && acceptance
+            .as_ref()
+            .is_some_and(|a| a.report["source"] == "review")
+        && let Some(crate::oracle::TaskReuse::Ready {
+            record, manifest, ..
+        }) = review_reuse.take()
+    {
+        review_frozen = Some((*record, manifest));
+    }
     // 4c. The held-out set: written after a red visible set, kept in
     //     the state directory, never shown to the implementer.
-    let held_out_store = match &bug_fix {
-        Some(f) => crate::held_out::sealed_dir(&s.plane_dir, &f.bug.unit, &f.bug.requirement),
-        None => crate::held_out::dir(&s.plane_dir, &feature_name, task),
+    let held_out_store = match (&bug_fix, &review_frozen) {
+        (Some(f), _) => crate::held_out::sealed_dir(&s.plane_dir, &f.bug.unit, &f.bug.requirement),
+        (None, Some((r, _))) => {
+            crate::held_out::sealed_dir(&s.plane_dir, &feature_name, &r.requirement)
+        }
+        (None, None) => crate::held_out::dir(&s.plane_dir, &feature_name, task),
     };
     if let Some(a) = acceptance
         .as_mut()
@@ -1117,6 +1249,7 @@ pub(crate) fn run_task(
                     prompts: approver.is_some() && options.lane.is_none(),
                     in_place: options.session.is_some(),
                     hidden: &hidden,
+                    autopilot: options.mode == speccoder_core::oracle::RunMode::Autopilot,
                 },
                 digest.as_ref(),
                 attempt_instructions,
@@ -2150,6 +2283,8 @@ pub(crate) fn run_task(
                         &crate::strength::rulings(&strength_dir),
                     )
                 })
+                // A set frozen at review: the one pre-frozen trailer form.
+                .or_else(|| review_frozen.as_ref().map(|(r, m)| r.trailer(m)))
                 .unwrap_or_default(),
         });
         match &options.session {
