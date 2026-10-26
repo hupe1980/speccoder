@@ -115,6 +115,11 @@ impl Git {
         self.checked(args, &[], None)
     }
 
+    /// Runs `git <args>` with `env` set as well.
+    pub fn run_with_env(&self, args: &[&str], env: &[(&str, &OsStr)]) -> Result<Vec<u8>, GitError> {
+        self.checked(args, env, None)
+    }
+
     /// Runs `git <args>` feeding `input` on stdin.
     pub fn run_with_stdin(&self, args: &[&str], input: &[u8]) -> Result<Vec<u8>, GitError> {
         self.checked(args, &[], Some(input))

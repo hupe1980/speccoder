@@ -381,7 +381,23 @@ fn a_finished_feature_publishes_its_held_out_sets() {
     };
     let wt = Path::new(&fr.attempts[0].worktree);
     let reference = "refs/speccoder/held-out/001-graph";
-    let files = git(wt, &["ls-tree", "-r", "--name-only", reference]);
+    // Never in the project's repository, which every later attempt reads:
+    // no ref, and not one object of the publication.
+    let local = Command::new("git")
+        .args(["rev-parse", "--verify", "-q", reference])
+        .current_dir(wt)
+        .output()
+        .unwrap();
+    assert!(
+        !local.status.success(),
+        "the held-out ref is in the project"
+    );
+    let project_state = speccoder_runtime::worktree::project_state_dir(
+        state.path(),
+        &std::fs::canonicalize(r.path()).unwrap(),
+    );
+    let store = project_state.join("held-out.git");
+    let files = git(&store, &["ls-tree", "-r", "--name-only", reference]);
     assert!(files.lines().any(|l| l == "T005/manifest.json"), "{files}");
     assert!(
         files
@@ -391,9 +407,26 @@ fn a_finished_feature_publishes_its_held_out_sets() {
     );
     // Its parent is the feature branch the tick is on, and the manifest is
     // the one the tick names.
-    let parent = git(wt, &["rev-parse", &format!("{reference}^1")]);
+    let parent = git(&store, &["rev-parse", &format!("{reference}^1")]);
     assert_eq!(parent, git(wt, &["rev-parse", "speccoder/001-graph"]));
-    let manifest = git(wt, &["show", &format!("{reference}:T005/manifest.json")]);
+    let blob = git(
+        &store,
+        &["rev-parse", &format!("{reference}:T005/manifest.json")],
+    );
+    let in_project = Command::new("git")
+        .args(["cat-file", "-e", blob.trim()])
+        .env("GIT_ALTERNATE_OBJECT_DIRECTORIES", "")
+        .current_dir(wt)
+        .output()
+        .unwrap();
+    assert!(
+        !in_project.status.success(),
+        "a held-out object is in the project"
+    );
+    let manifest = git(
+        &store,
+        &["show", &format!("{reference}:T005/manifest.json")],
+    );
     let m: speccoder_runtime::held_out::Manifest = serde_json::from_str(&manifest).unwrap();
     let body = git(wt, &["log", "-1", "--format=%B", "speccoder/001-graph"]);
     assert!(
