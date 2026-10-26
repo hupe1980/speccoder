@@ -7,7 +7,7 @@ weight = 95
 group = "Trust"
 +++
 
-Anyone who can write the branch can write a commit's trailers. So every tick also leaves **signed statements** — what was checked, against which tree, under which judge configuration, with which verdict — signed with your git signing key and kept in git, where any reviewer can re-check them offline.
+Anyone who can write the branch can write a commit's trailers. So every tick also leaves **signed statements**: what was checked, against which tree, under which judge configuration, with which verdict. They are signed with your git signing key and kept in git, where any reviewer re-checks them offline.
 
 ## What a tick leaves
 
@@ -19,31 +19,31 @@ Each ticked task commit gets a git note under `refs/notes/speccoder`. The note i
 | `task-verification` | `https://speccoder.dev/task-verification/v0` | The verdict, the task line's and the spec section's hashes, the tree, the requirements and scenarios it traces to, the diff audit, mutation and monitor results, sandbox, executor and model, the decisions people made during the attempt |
 | The summary | [SLSA VSA v1](https://slsa.dev/spec/v1.1/verification_summary) | `verifiedLevels: ["SPECCODER_VERIFIED"]` or `["SPECCODER_REGRESSION_ONLY"]`, the judge-configuration hash as `policy`, and every other line's sha256 as `inputAttestations` |
 
-A task a person ticked with `speccoder task accept`, or passed by with `speccoder task skip`, gets one `task-verification` with verdict `attested` or `skipped` and who decided — no summary, because a decision is not a verification.
-
-The statements never hold an absolute local path, a remote URL's credentials or anything shaped like a key; a statement that would is not written, and the run says so.
+- A task ticked with `speccoder task accept`, or passed by with `speccoder task skip`, gets one `task-verification` with verdict `attested` or `skipped` and who decided. No summary: a decision is not a verification.
+- The statements never hold an absolute local path, a remote URL's credentials or anything shaped like a key; a statement that would is not written, and the run says so.
+- `[attest] enabled = false` writes no statements.
 
 ## Signing
 
-By default speccoder signs with **the key git signs your commits with**: SSH (`gpg.format = ssh` and `user.signingKey`, signed with `ssh-keygen -Y sign -n in-toto`) or OpenPGP (`gpg --detach-sign`). The `in-toto` namespace keeps a statement signature from passing as a commit signature. If you already sign commits, there is nothing to set up:
+By default speccoder signs with **the key git signs your commits with**: SSH (`gpg.format = ssh` and `user.signingKey`, signed with `ssh-keygen -Y sign -n in-toto`) or OpenPGP (`gpg --detach-sign`). The `in-toto` namespace keeps a statement signature from passing as a commit signature. If you already sign commits, nothing to set up:
 
 ```sh
 git config --global gpg.format ssh
 git config --global user.signingKey ~/.ssh/id_ed25519.pub
 ```
 
-Signing never undoes a tick. Without a key, or when signing fails, the statements are stored **unsigned**, and the run, `report` and `attest verify` say so. `[attest]` in [configuration](@/docs/configuration.md#attest) changes the signer:
+Signing never undoes a tick: without a key, or when signing fails, the statements are stored **unsigned**, and the run, `report` and `attest verify` say so. [`[attest] signer`](@/docs/configuration.md#attest) picks the signer:
 
 | `signer` | Signs with |
 |---|---|
 | `git` (default) | Your git signing key, SSH or OpenPGP |
-| `sigstore` | [Sigstore](https://www.sigstore.dev/) keyless: a short-lived certificate for your identity, logged in the public transparency log. Needs `cosign` and the network. Only the summary is signed — it names every other line by digest — so a tick asks for one login, not five |
+| `sigstore` | [Sigstore](https://www.sigstore.dev/) keyless: a short-lived certificate for your identity, logged in the public transparency log. Needs `cosign` and the network. Only the summary is signed (it names every other line by digest), so a tick asks for one login |
 | `none` | Nothing: the statements stay unsigned |
 
-**Keys that need a touch** (a hardware key, a passphrase prompt) would interrupt every tick. Set `sign_at = "later"`: ticks store their statements unsigned, and you sign them all in one go before handing off:
+**Keys that need a touch** (a hardware key, a passphrase prompt) would interrupt every tick. With `sign_at = "later"` ticks store their statements unsigned, and you sign them in one go before handing off:
 
 ```sh
-speccoder attest sign            # every unsigned statement of the feature
+speccoder attest sign            # every unsigned statement of the feature's task commits (or a REV / range)
 ```
 
 In CI, use a dedicated key without a passphrase or Sigstore with the CI's own identity; never give a CI job your personal key.
@@ -63,7 +63,7 @@ Feature    001-demo
 2 task object(s): 1 mismatch, 1 ok
 ```
 
-Without an argument it checks every task commit on `speccoder/<feature>` and the feature's skips; `attest verify <commit>` or `attest verify main..speccoder/001-demo` picks commits. Per object it checks that:
+Without an argument it checks every task commit on `speccoder/<feature>` and the feature's skips; `attest verify <commit>` or `attest verify main..speccoder/001-demo` picks commits. Per object it checks:
 
 1. a note exists and every line is a statement about **this** commit;
 2. every signature verifies, against **your** trust — never the project's;
@@ -83,7 +83,9 @@ Without an argument it checks every task commit on `speccoder/<feature>` and the
 | `tool_missing` | The signature's tool (`ssh-keygen`, `gpg`, `cosign`) cannot run here: nothing can be said about it, so it never passes |
 | `missing` | The commit has no attestation. If another attested commit has the same tree (a rebase drops notes), it is named |
 
-When several apply, the worst is reported: `missing`, then `malformed`, `bad_signature`, `mismatch`, `tool_missing`, `untrusted_signer`, `unsigned`. Exit code 26 (`attestation_failed`) means at least one object is not `ok` — `unsigned` counts only with `--require-signed`. `--json` gives every object with its reasons.
+- When several apply, the worst is reported: `missing`, then `malformed`, `bad_signature`, `mismatch`, `tool_missing`, `untrusted_signer`, `unsigned`.
+- Exit code 26 (`attestation_failed`): at least one object is not `ok`; `unsigned` counts only with `--require-signed`.
+- `--json` gives every object with its reasons.
 
 **Whom you trust** comes from you, not from the repository:
 
@@ -93,13 +95,9 @@ When several apply, the worst is reported: `missing`, then `malformed`, `bad_sig
 | OpenPGP | Your GnuPG keyring: keys you trust fully or ultimately |
 | Sigstore | `--certificate-identity` and `--certificate-oidc-issuer`. `[attest.sigstore]` in the project only *suggests* them — `speccoder pr` prints them in its verify command for you to confirm |
 
-### On a branch, by its maintainer
+### On a branch
 
-`attest verify` starts from commits. A maintainer asks a different question — *does every `[X]` on this branch carry evidence that verifies?* — and should not need speccoder or a model key for it. [`speccoder-verify`](@/docs/verifier.md) starts from the ticks, checks each with the same rules (one implementation), and adds what only a branch shows: ticks without evidence, task lines reworded after their tick, requirements changed since, evidence a squash merge lost. On GitHub it runs as the [`speccoder / evidence` check](@/docs/github.md#evidence-check). `speccoder attest verify --branch [--base REV]` is the same check from here.
-
-The verifier is `speccoder-runtime` built without its `engine` feature: the model substrate, the HTTP client and the keychain are not in the binary, which the workspace's layering test enforces on every pull request. Code added to the runtime later goes behind `engine` unless the verifier needs it.
-
-What a tick signs is specified openly: [the task-verification predicate](@/docs/task-verification.md).
+`attest verify` starts from commits. To check every `[X]` of a branch (ticks without evidence, task lines reworded after their tick, requirements changed since, evidence a squash merge lost), use [`speccoder-verify`](@/docs/verifier.md), which needs neither speccoder nor a model key, or `speccoder attest verify --branch [--base REV]` from here. Both apply the rules above. What a tick signs is specified in [the task-verification predicate](@/docs/task-verification.md).
 
 ### Without speccoder
 
@@ -118,16 +116,15 @@ For OpenPGP the decoded signature is an armored detached signature (`gpg --verif
 
 ## In the report and the pull request
 
-`speccoder report` shows each tick's attestation as the note says it — `signed ssh SHA256:…`, `unsigned`, `missing` — without checking signatures (that is `attest verify`'s job), and counts ticks without one.
-
-`speccoder pr` adds an Attestation column to the evidence table, each task's [evidence tour](@/docs/verifier.md#the-evidence-tour) and the commands to check it, and pushes `refs/notes/speccoder` after the branch — never with `--force` — then the held-out tests of the tasks closed on the pushed head. When the remote's notes have diverged, it says how to merge them (`git notes --ref=speccoder merge`) and opens the pull request anyway.
-
-Parallel lanes re-issue a task's statements for the commit that lands on the feature branch and sign them again: what is attested is the commit you merge, not the lane's.
+- `speccoder report` shows each tick's attestation as the note says it (`signed ssh SHA256:…`, `unsigned`, `missing`) without checking signatures, and counts ticks without one.
+- `speccoder pr` adds an Attestation column to the evidence table, each task's [evidence tour](@/docs/verifier.md#the-evidence-tour) and the commands to check it, and pushes `refs/notes/speccoder` after the branch, never forced ([what it pushes](@/docs/github.md#its-pull-request)). When the remote's notes have diverged, it prints the `git notes --ref=speccoder merge` commands and opens the pull request anyway.
+- Parallel lanes re-issue a task's statements for the commit that lands on the feature branch and sign them again: what is attested is the commit you merge.
 
 ## What a signature proves
 
-A valid signature by a key you trust shows that **whoever holds that key** recorded these statements about this commit, and that nobody changed them since. Because the key is yours and speccoder signs at the tick, your machine, running speccoder, judged the commit this way.
+A valid signature by a key you trust shows that **whoever holds that key** recorded these statements about this commit, and that nobody changed them since. With your key and signing at the tick: your machine, running speccoder, judged the commit this way.
 
-It does not show that the judging was honest if the machine was not: anyone with your key can sign anything. speccoder keeps the key away from what the model runs — `~/.ssh` and `~/.gnupg` are hidden by the [sandbox](@/docs/security.md#the-os-sandbox) and commands get no `SSH_AUTH_SOCK` — but with `[sandbox] mode = "off"`, a command the model runs could reach a key file or agent you can reach. Use `sign_at = "later"` or a touch-to-sign key if that matters to you.
+It does not show:
 
-Nor does it show more than the evidence does: `verified` is still [what the evidence does not show](@/docs/evidence.md#what-the-evidence-does-not-show) — a signature makes the record tamper-evident, not the change correct.
+- that the judging was honest if the machine was not: anyone with your key can sign anything. `~/.ssh` and `~/.gnupg` are hidden by the [sandbox](@/docs/security.md#the-os-sandbox) and commands get no `SSH_AUTH_SOCK`, but with `[sandbox] mode = "off"` a command the model runs could reach your key file or agent. Use `sign_at = "later"` or a touch-to-sign key if that matters;
+- more than the evidence does ([what the evidence does not show](@/docs/evidence.md#what-the-evidence-does-not-show)): a signature makes the record tamper-evident, not the change correct.
