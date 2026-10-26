@@ -340,6 +340,30 @@ pub fn available_with(
     out
 }
 
+/// `speccoder actions`: what can be done now in the project at `path`
+/// (with `selected` the task an interface has selected) and where the
+/// feature is on its journey — the list every interface renders. Outside
+/// a project: what `report` says there, with an empty list.
+#[must_use]
+pub fn list(path: &Path, feature: Option<&str>, selected: Option<&str>) -> CommandResult {
+    let report = || speccoder_core::ActionsReport {
+        actions: Vec::new(),
+        journey: journey(path, feature),
+    };
+    if crate::format::at(path).detect(path).is_none() {
+        let status = crate::status::report(path, feature);
+        return CommandResult::carried("actions", &status)
+            .with_data(CommandData::Actions(Box::new(report())));
+    }
+    let mut r = report();
+    r.actions = available(path, feature, selected);
+    let message = match speccoder_core::actions::primary(&r.actions) {
+        Some(a) => format!("{} action(s); next: {}", r.actions.len(), a.label),
+        None => format!("{} action(s)", r.actions.len()),
+    };
+    CommandResult::ok("actions", &message).with_data(CommandData::Actions(Box::new(r)))
+}
+
 /// Where the feature is on its journey (spec → plan → tasks → commit → run
 /// → review); the report's, or the start of it.
 #[must_use]

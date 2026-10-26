@@ -88,6 +88,7 @@ Listed by `speccoder help advanced`.
 
 | Command | What it does |
 |---|---|
+| `speccoder actions [--task T]` | What you can do now, by group — the same list the dashboard, the app and an editor offer: each action's command, why it is blocked, what it asks for. With `--json`, scripts read it (payload `actions`): every action has an `id` (`kind` and `subject`) to find it by, and a planning skill its `role` (`create`, `toward_tasks`, `revise`, `check`) |
 | `speccoder fix [--dry-run]` | Commit what in the project's setup stops a run (an uncommitted `.config/nextest.toml`, a lockfile the checks write, build output not ignored) in your checkout as `speccoder: setup` |
 | `speccoder attest verify [REV\|RANGE] [--allowed-signers FILE] [--certificate-identity I --certificate-oidc-issuer O] [--require-signed]` | Re-check every tick's [attestation](@/docs/attestations.md) against its commit, and its signatures against your trust |
 | `speccoder attest sign [REV\|RANGE]` | Sign the statements ticks left unsigned |
@@ -124,6 +125,7 @@ With `--json` every command prints exactly one object on stdout and no progress 
 - `code`, `fix` and `docs` are present on every result that is not plainly `ok`, and on an `ok` with less evidence (`REGRESSION-ONLY`). Branch on `code`, never on `message`.
 - `remedy`, when present, is a fix speccoder can apply itself: `label`, `effect`, the exact `command`, `undo`, and whether it writes git `history`. Nothing applies it unasked: at a terminal `speccoder run` offers it (`[y/N]`) and runs again on a yes; the app shows it as a card; an editor gets a permission request.
 - `payload` names the schema `data` follows.
+- An action (in `speccoder actions`, Needs You and the events) carries `id`: its `kind` (`skill`, `run_task`, `approve`, `pull_request`, …, or `command` for one you run yourself) and `subject` (the task, the skill, the issue). Find an action by `id`, never by its `label`, which may be reworded.
 - `--help` and `--version` always print text.
 
 Every output has a JSON Schema (draft 2020-12), generated from the types that print it and published at `https://hupe1980.github.io/speccoder/schemas/v2/<name>.json`: `result.json`, `event.json`, and one per payload. `speccoder schema <name>` prints the same offline. Within a version fields are only added; ignore fields you do not know. Renaming, removing or changing the meaning of a field raises `schema_version`.

@@ -293,6 +293,30 @@
         }
       ]
     },
+    "ActionsReport": {
+      "description": "Result of `speccoder actions`: what a person can do now in the\nproject — the list every interface renders — and where the feature is\non its journey.",
+      "properties": {
+        "actions": {
+          "description": "Every action, by group, the most urgent first.",
+          "items": {
+            "$ref": "#/$defs/Action"
+          },
+          "type": "array"
+        },
+        "journey": {
+          "description": "The feature's journey (spec → plan → tasks → commit → run → review).",
+          "items": {
+            "$ref": "#/$defs/JourneyStep"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "actions",
+        "journey"
+      ],
+      "type": "object"
+    },
     "ApprovalView": {
       "description": "A pending call as a person sees it: what, why, what it can reach, what\nthe model claimed, and what approving it grants.",
       "properties": {
@@ -928,6 +952,10 @@
         {
           "$ref": "#/$defs/AuthReport",
           "description": "`auth`: who speccoder is on a GitHub host."
+        },
+        {
+          "$ref": "#/$defs/ActionsReport",
+          "description": "`actions`: what can be done now."
         }
       ],
       "description": "Command-specific payload of a result."

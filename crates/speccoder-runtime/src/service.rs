@@ -10,7 +10,7 @@ pub use crate::RunOptions;
 
 /// The action list and the one dispatcher.
 pub mod actions {
-    pub use crate::actions::{Dispatch, Interface, Offer, available, offered, perform};
+    pub use crate::actions::{Dispatch, Interface, Offer, available, list, offered, perform};
 }
 
 /// Calls waiting for a person, and who answers them.

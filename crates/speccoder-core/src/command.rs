@@ -195,6 +195,19 @@ pub enum CommandData {
     Review(Box<ReviewReport>),
     /// `auth`: who speccoder is on a GitHub host.
     Auth(Box<AuthReport>),
+    /// `actions`: what can be done now.
+    Actions(Box<ActionsReport>),
+}
+
+/// Result of `speccoder actions`: what a person can do now in the
+/// project — the list every interface renders — and where the feature is
+/// on its journey.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct ActionsReport {
+    /// Every action, by group, the most urgent first.
+    pub actions: Vec<crate::actions::Action>,
+    /// The feature's journey (spec → plan → tasks → commit → run → review).
+    pub journey: Vec<crate::actions::JourneyStep>,
 }
 
 /// Result of `speccoder auth`: who speccoder acts as on a GitHub
@@ -609,6 +622,7 @@ impl CommandData {
             Self::Inbox(_) => "inbox",
             Self::Review(_) => "review",
             Self::Auth(_) => "auth",
+            Self::Actions(_) => "actions",
         }
     }
 }
@@ -647,6 +661,7 @@ pub const PAYLOADS: &[&str] = &[
     "inbox",
     "review",
     "auth",
+    "actions",
 ];
 
 /// A repository instructions file given to an attempt.

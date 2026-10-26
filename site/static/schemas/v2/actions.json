@@ -1,0 +1,657 @@
+{
+  "$defs": {
+    "Action": {
+      "description": "One thing a person can do now.",
+      "properties": {
+        "blocked": {
+          "description": "Why it cannot run now; `None`: it can.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "command": {
+          "description": "The equivalent command; `\"…\"` marks the input.",
+          "type": "string"
+        },
+        "confirm": {
+          "description": "It leaves the machine (a push, a pull request) or cannot be undone\n(a discard): what an interface says in a confirmation before it runs it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "group": {
+          "description": "`next`, `plan`, `work`, `task`, `feature` or `review`.",
+          "type": "string"
+        },
+        "id": {
+          "$ref": "#/$defs/ActionId",
+          "description": "What it is, independent of its wording ([`identity`])."
+        },
+        "input": {
+          "description": "What to ask for before it runs (`Describe the feature`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "label": {
+          "description": "What it does, in a few words.",
+          "type": "string"
+        },
+        "role": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SkillRole"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "A planning skill's part in its format's planning; `None` for\neverything else."
+        },
+        "run": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Runnable"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "How an interface runs it; `None`: run the command yourself (it leaves\nthe machine, or it is not something an interface hosts)."
+        },
+        "why": {
+          "description": "Why, or what follows (shown beside it).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "group",
+        "label",
+        "why",
+        "command",
+        "run",
+        "blocked",
+        "input",
+        "confirm",
+        "id",
+        "role"
+      ],
+      "type": "object"
+    },
+    "ActionId": {
+      "description": "What an action is, independent of its wording: its kind and what it\nis about (the task, the skill, the issue). An interface finds an action\nby this, never by its label.",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/ActionKind",
+          "description": "Its kind."
+        },
+        "subject": {
+          "description": "What it is about: a task's id, a skill's name, an issue's number,\na review's `verdict` (`verdict:first id`), a command's words.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "subject"
+      ],
+      "type": "object"
+    },
+    "ActionKind": {
+      "description": "What kind of action it is: one per [`Runnable`] kind (a run split by\nwhether it names a task), plus [`ActionKind::Command`] for an action an\ninterface does not run itself. Exhaustive at any one version; a new\nkind arrives with its `Runnable` variant (the *adding a kind* contract\nof `speccoder_runtime::actions::perform`).",
+      "oneOf": [
+        {
+          "const": "skill",
+          "description": "[`Runnable::Skill`].",
+          "type": "string"
+        },
+        {
+          "const": "run_task",
+          "description": "[`Runnable::Run`] with a task.",
+          "type": "string"
+        },
+        {
+          "const": "run_feature",
+          "description": "[`Runnable::Run`] without one: the feature.",
+          "type": "string"
+        },
+        {
+          "const": "converge",
+          "description": "[`Runnable::Converge`].",
+          "type": "string"
+        },
+        {
+          "const": "commit",
+          "description": "[`Runnable::Commit`].",
+          "type": "string"
+        },
+        {
+          "const": "approve",
+          "description": "[`Runnable::Approve`].",
+          "type": "string"
+        },
+        {
+          "const": "reject",
+          "description": "[`Runnable::Reject`].",
+          "type": "string"
+        },
+        {
+          "const": "accept",
+          "description": "[`Runnable::Accept`].",
+          "type": "string"
+        },
+        {
+          "const": "skip",
+          "description": "[`Runnable::Skip`].",
+          "type": "string"
+        },
+        {
+          "const": "nudge",
+          "description": "[`Runnable::Nudge`].",
+          "type": "string"
+        },
+        {
+          "const": "rule",
+          "description": "[`Runnable::Rule`].",
+          "type": "string"
+        },
+        {
+          "const": "review",
+          "description": "[`Runnable::Review`].",
+          "type": "string"
+        },
+        {
+          "const": "issue_comment",
+          "description": "[`Runnable::IssueComment`].",
+          "type": "string"
+        },
+        {
+          "const": "quick_change",
+          "description": "[`Runnable::QuickChange`].",
+          "type": "string"
+        },
+        {
+          "const": "keep_set_aside",
+          "description": "[`Runnable::KeepSetAside`].",
+          "type": "string"
+        },
+        {
+          "const": "drop_set_aside",
+          "description": "[`Runnable::DropSetAside`].",
+          "type": "string"
+        },
+        {
+          "const": "fix_setup",
+          "description": "[`Runnable::FixSetup`].",
+          "type": "string"
+        },
+        {
+          "const": "feature",
+          "description": "[`Runnable::Feature`].",
+          "type": "string"
+        },
+        {
+          "const": "pull_request",
+          "description": "[`Runnable::PullRequest`].",
+          "type": "string"
+        },
+        {
+          "const": "command",
+          "description": "No runnable: the person runs the command.",
+          "type": "string"
+        }
+      ]
+    },
+    "JourneyStep": {
+      "description": "One step of a feature's journey: `spec`, `plan`, `tasks`, `commit`,\n`run`, `review`.",
+      "properties": {
+        "name": {
+          "description": "Its name.",
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/$defs/StepState",
+          "description": "Where it is."
+        }
+      },
+      "required": [
+        "name",
+        "state"
+      ],
+      "type": "object"
+    },
+    "Runnable": {
+      "description": "How an interface runs an action itself.",
+      "oneOf": [
+        {
+          "description": "A planning skill (`speccoder spec <name> <arguments>`).",
+          "properties": {
+            "arguments": {
+              "description": "Its arguments (the input, when one is asked for).",
+              "type": "string"
+            },
+            "kind": {
+              "const": "skill",
+              "type": "string"
+            },
+            "name": {
+              "description": "The skill.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "name",
+            "arguments"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "`speccoder run`, the feature or one task.",
+          "properties": {
+            "kind": {
+              "const": "run",
+              "type": "string"
+            },
+            "task": {
+              "description": "One task, or the feature's ready tasks.",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "task"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "`speccoder run --converge`: the ready tasks, then the assessment of\nthe code against the spec as it is now, appending what remains.",
+          "properties": {
+            "kind": {
+              "const": "converge",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Commit exactly these planning files.",
+          "properties": {
+            "kind": {
+              "const": "commit",
+              "type": "string"
+            },
+            "paths": {
+              "description": "Repository-relative paths.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "kind",
+            "paths"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Approve the task's waiting call.",
+          "properties": {
+            "kind": {
+              "const": "approve",
+              "type": "string"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Reject it (the input is the reason).",
+          "properties": {
+            "kind": {
+              "const": "reject",
+              "type": "string"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Tick the task on the person's word (the input is the reason).",
+          "properties": {
+            "kind": {
+              "const": "accept",
+              "type": "string"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Skip the task (the input is the reason).",
+          "properties": {
+            "kind": {
+              "const": "skip",
+              "type": "string"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Leave a note for the task's next attempts (the input is the note).",
+          "properties": {
+            "kind": {
+              "const": "nudge",
+              "type": "string"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Rule that a held attempt's tests are right (the input is the reason).",
+          "properties": {
+            "kind": {
+              "const": "rule",
+              "type": "string"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Record the person's review of requirements (the input is the\ncomment; required to request changes).",
+          "properties": {
+            "ids": {
+              "description": "The requirement identifiers; empty: every one not yet approved.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "kind": {
+              "const": "review",
+              "type": "string"
+            },
+            "verdict": {
+              "description": "`approve`, `request` (changes), `clear`; `answer` (ids: the\nquestion) and `edit` / `edit-approve` (ids: the requirement) take\nthe input as the words.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "ids",
+            "verdict"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Tell a GitHub issue it is being specified as the current feature.",
+          "properties": {
+            "assign": {
+              "description": "Also assign it to the person.",
+              "type": "boolean"
+            },
+            "issue": {
+              "description": "The issue's number.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "kind": {
+              "const": "issue_comment",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "issue",
+            "assign"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Record a quick change and, when `run`, run it.",
+          "properties": {
+            "checks": {
+              "description": "When it is done: its acceptance scenarios.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "kind": {
+              "const": "quick_change",
+              "type": "string"
+            },
+            "request": {
+              "description": "The change, in the person's words.",
+              "type": "string"
+            },
+            "run": {
+              "description": "Run it once recorded.",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "kind",
+            "request",
+            "checks",
+            "run"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Commit the changes set aside before the task's run onto the\nfeature's branch, as the person's own.",
+          "properties": {
+            "kind": {
+              "const": "keep_set_aside",
+              "type": "string"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Discard them.",
+          "properties": {
+            "kind": {
+              "const": "drop_set_aside",
+              "type": "string"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Commit the setup a run stops on (an uncommitted lockfile, build\noutput not ignored) in the checkout.",
+          "properties": {
+            "kind": {
+              "const": "fix_setup",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Pick the current feature.",
+          "properties": {
+            "kind": {
+              "const": "feature",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Push the feature's branch and open (or update) its draft pull request.",
+          "properties": {
+            "kind": {
+              "const": "pull_request",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "SkillRole": {
+      "description": "The part a planning skill plays in its format's planning, from the\nformat's adapter: what an interface finds \"the create step\" or \"the\nanalysis step\" by, without naming a format's skill.",
+      "oneOf": [
+        {
+          "const": "create",
+          "description": "It creates a unit (Spec Kit's `specify`).",
+          "type": "string"
+        },
+        {
+          "const": "toward_tasks",
+          "description": "It leads toward the task list (`plan`, `tasks`).",
+          "type": "string"
+        },
+        {
+          "const": "revise",
+          "description": "It revises a written spec (`clarify`).",
+          "type": "string"
+        },
+        {
+          "const": "check",
+          "description": "It checks the planning files for consistency (`analyze`).",
+          "type": "string"
+        },
+        {
+          "const": "other",
+          "description": "Anything else.",
+          "type": "string"
+        }
+      ]
+    },
+    "StepState": {
+      "description": "Where a step of the journey is.",
+      "oneOf": [
+        {
+          "const": "done",
+          "description": "Done.",
+          "type": "string"
+        },
+        {
+          "const": "now",
+          "description": "The one to take now.",
+          "type": "string"
+        },
+        {
+          "const": "todo",
+          "description": "Later.",
+          "type": "string"
+        },
+        {
+          "const": "skipped",
+          "description": "Passed without its file: a task list written without a spec or a\nplan. Not a step left to take.",
+          "type": "string"
+        }
+      ]
+    }
+  },
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/actions.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Result of `speccoder actions`: what a person can do now in the\nproject — the list every interface renders — and where the feature is\non its journey.",
+  "properties": {
+    "actions": {
+      "description": "Every action, by group, the most urgent first.",
+      "items": {
+        "$ref": "#/$defs/Action"
+      },
+      "type": "array"
+    },
+    "journey": {
+      "description": "The feature's journey (spec → plan → tasks → commit → run → review).",
+      "items": {
+        "$ref": "#/$defs/JourneyStep"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "actions",
+    "journey"
+  ],
+  "title": "actions: what a person can do now, and the feature's journey",
+  "type": "object"
+}

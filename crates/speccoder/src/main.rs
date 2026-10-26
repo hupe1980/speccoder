@@ -1,6 +1,7 @@
 //! The `speccoder` binary: parse, delegate to the runtime, render.
 
 mod acp;
+mod actions;
 #[cfg(window)]
 mod app;
 mod attention;
@@ -550,6 +551,9 @@ fn main() {
             result
         }
         Command::Inbox => speccoder_runtime::inbox::inbox(path, feature),
+        Command::Actions { task } => {
+            speccoder_runtime::actions::list(path, feature, task.as_deref())
+        }
         Command::Auth { action } => auth(path, action.as_ref()),
         Command::Review { action } => {
             use cli::ReviewAction as R;
@@ -1162,6 +1166,7 @@ fn command_name(command: Option<&Command>) -> &'static str {
             C::Issue { .. } => "issue",
             C::Do { .. } => "do",
             C::Inbox => "inbox",
+            C::Actions { .. } => "actions",
             C::Auth { .. } => "auth",
             C::Review { .. } => "review",
             C::Run { .. } => "run",

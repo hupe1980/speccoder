@@ -74,6 +74,7 @@ const fn describe(payload: &str) -> &'static str {
         b"inbox" => "inbox: every decision waiting for a person, across features",
         b"review" => "review: the spec's requirements and the person's decision on each",
         b"auth" => "auth: who speccoder is on a GitHub host, and where its token comes from",
+        b"actions" => "actions: what a person can do now, and the feature's journey",
         _ => "",
     }
 }
@@ -117,6 +118,7 @@ pub fn get(name: &str) -> Option<Value> {
         "inbox" => generate::<core::InboxReport>(name, title),
         "review" => generate::<core::ReviewReport>(name, title),
         "auth" => generate::<core::AuthReport>(name, title),
+        "actions" => generate::<core::ActionsReport>(name, title),
         _ => return None,
     })
 }
