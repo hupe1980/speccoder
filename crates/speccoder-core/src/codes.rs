@@ -148,7 +148,7 @@ pub const CATALOG: &[Entry] = &[
         E,
         S::ConfigError,
         "a check cannot run on the untouched code",
-        "Before any model call, speccoder runs your fast checks on the worktree as it is. One failed without running a test — a command or profile it names does not exist there, a file it needs was never committed (a worktree holds only commits), or it does not build. It could never judge the task, so nothing was attempted.",
+        "A fast check failed on the untouched worktree without running a test: a command or profile it names is missing, a file it needs was never committed, or it does not build. It could never judge the task, so nothing was attempted.",
         [
             "speccoder doctor",
             "git status",
@@ -180,7 +180,7 @@ pub const CATALOG: &[Entry] = &[
         P,
         S::NeedsHuman,
         "two readings of a requirement disagree",
-        "When tests are written at review, two independent author calls read the same requirement. For a scenario they stated the same given with a different expected outcome (or one found it untestable): the requirement can be read two ways. Until the person says which reading is meant, or rewords it, the feature is not approved and run, its tests are not frozen, and a gated run (`[review] required`) waits.",
+        "Two independent test authors read a scenario two ways (the same given, different expected outcomes). Until you choose a reading or reword the requirement, it is not approved, its tests are not frozen, and a gated run (`[review] required`) waits.",
         [
             "speccoder review tests <REQ> --reading A <scenario>",
             "speccoder review tests <REQ> --reading B <scenario>",
@@ -203,7 +203,7 @@ pub const CATALOG: &[Entry] = &[
         E,
         S::UsageError,
         "this unit's tests are written by its own pipeline",
-        "A quick change and a bug author and confirm their own acceptance: a quick change's run writes its tests, a bug's reproductions are confirmed by the person. A second, review-time oracle would be two oracles for one requirement, so the review writes none here.",
+        "A quick change writes its own tests and a bug's reproductions are confirmed by you; review writes no second set for them.",
         ["speccoder do \"…\"", "speccoder bug confirm <unit>/<task>"]
     ),
     entry!(
@@ -238,7 +238,7 @@ pub const CATALOG: &[Entry] = &[
         E,
         S::UsageError,
         "the requirement's tests are frozen with the approval",
-        "*Approve and Run* froze these tests: they are what the run uses, sealed with their held-out set. Writing, rejecting, editing or choosing a reading now would change a set the approval names, so it is refused. A reworded requirement lapses its freeze; its tests are then written again.",
+        "*Approve and Run* froze these tests and their held-out set, so they cannot be changed. Reword the requirement to lapse the freeze and write them again.",
         [
             "speccoder review",
             "→ reword the requirement to lapse the freeze, then write its tests again"
@@ -249,7 +249,7 @@ pub const CATALOG: &[Entry] = &[
         P,
         S::NeedsHuman,
         "what the approval would freeze changed since it was shown",
-        "*Approve and Run* binds to the sheet the person saw: the decision lines it approves and the tests it freezes, by digest. They changed in between — another tab asked again, a *Write Tests* finished — so approving now would freeze tests nobody saw. Nothing was approved.",
+        "What the approval sheet showed changed before the click (another tab asked again, a *Write Tests* finished). Nothing was approved; look again and approve what you see.",
         [
             "speccoder review",
             "→ open the sheet again and approve what it shows"
@@ -260,7 +260,7 @@ pub const CATALOG: &[Entry] = &[
         P,
         S::NeedsHuman,
         "the review record cannot be read",
-        "`review.json` (the decisions, the frozen tests and the approval) or a record beside it is not valid. Reading it as empty would drop every decision and freeze on the next write, and a run would author tests as if nothing were frozen — so speccoder stops until a person looks.",
+        "`review.json` (decisions, frozen tests, approval) or a record beside it is not valid. Reading it as empty would drop every decision and freeze, so speccoder stops until you look.",
         [
             "git diff -- <unit>/review.json",
             "→ restore it from git (`git checkout -- <unit>/review.json`) or fix the JSON"
@@ -312,7 +312,7 @@ pub const CATALOG: &[Entry] = &[
         E,
         S::ConfigError,
         "the OS sandbox is not available and the project requires it",
-        "`[sandbox] mode = \"required\"` refuses to run commands unsandboxed, and this OS offers no sandbox (Linux without Landlock, a container without user namespaces, another OS). An autopilot run needs the sandbox enforced too: it is refused when the sandbox is off or unavailable.",
+        "No OS sandbox is available (Linux without Landlock, a container without user namespaces, another OS) while `[sandbox] mode = \"required\"` or an autopilot run needs one.",
         [
             "→ run on macOS or Linux 6.2+ (Landlock ABI 3)",
             "→ or set [sandbox] mode = \"auto\" to run unsandboxed and be told",
@@ -324,7 +324,7 @@ pub const CATALOG: &[Entry] = &[
         E,
         S::Error,
         "not signed in to GitHub",
-        "speccoder reads issues and opens pull requests through GitHub's API as you: with GH_TOKEN (or GITHUB_TOKEN) from the environment, else the token `speccoder auth login` keeps in your system keychain. None was found, or GitHub refused it (expired or revoked).",
+        "No GitHub token was found (GH_TOKEN, GITHUB_TOKEN, or the one `speccoder auth login` keeps in your keychain), or GitHub refused it.",
         [
             "speccoder auth login --with-token",
             "speccoder auth status",
@@ -393,7 +393,7 @@ pub const CATALOG: &[Entry] = &[
         E,
         S::GitPrecondition,
         "the project's setup is not committed, so every run would trip over it",
-        "A run works in a worktree checked out from a commit. A file the checks need but the checkout never committed (`.config/nextest.toml`, `speccoder.toml`), a lockfile the checks write, or build output `.gitignore` does not list, is missing there or left behind on every run. `speccoder fix` commits the setup once in the checkout; the message shows the same as git commands.",
+        "A worktree holds only commits: a file the checks need but the checkout never committed (`speccoder.toml`, `.config/nextest.toml`), a lockfile the checks write, or build output `.gitignore` does not list. `speccoder fix` commits that setup once.",
         ["speccoder fix"]
     ),
     entry!(
@@ -688,7 +688,7 @@ pub const CATALOG: &[Entry] = &[
         P,
         S::NeedsHuman,
         "the acceptance tests could not be written, so nothing was attempted",
-        "The call that derives acceptance tests from the spec failed — the provider refused it (no credits, a rejected key) or the run broke. Without those tests the task could only be judged on the regression checks, which would look like a spec without examples.",
+        "The call that writes acceptance tests from the spec failed (no credits, a rejected key, a broken run). Without them the task would be judged on regression checks only, so it stops.",
         [
             "speccoder run --feature {feature}",
             "→ or set [acceptance] generate = false to rely on the checks alone"
@@ -711,7 +711,7 @@ pub const CATALOG: &[Entry] = &[
         P,
         S::NeedsHuman,
         "an acceptance test rejects an implementation the spec appears to allow",
-        "After the task passed, an alternative the spec leaves open (another order, wording, tie-break) was run against the acceptance tests, and they failed it on an assertion: the tests may encode a choice the spec did not make. The attempt is held — its tree kept — until a person rules. A ruling that the tests are right ticks the held attempt on the next run without a model call.",
+        "An alternative the spec allows (another order, wording, tie-break) failed the acceptance tests: they may encode a choice the spec did not make. The attempt is held until you rule; if the tests are right, the next run ticks it without a model call.",
         [
             "speccoder task rule {task} --tests-right --reason \"…\"",
             "speccoder run --task {task} --fresh-acceptance",
@@ -826,7 +826,7 @@ pub const CATALOG: &[Entry] = &[
         P,
         S::NeedsHuman,
         "the bug's home does not carry exactly your words",
-        "What the bug's home reads back — the format's own `assessment.md`, or the standing unit as speccoder would write it — is not exactly your Current, Expected and Unchanged statements (whitespace aside): one is missing, or it carries one you did not give, a longer or reworded one, or one whose words the file's own markup would change. The reproductions are written from your words only, so the bug stops before anything is reproduced (in a standing unit, before anything is written).",
+        "The bug's file (`assessment.md`, or the standing unit) does not read back exactly your Current, Expected and Unchanged statements: one is missing, added, reworded, or changed by the file's markup. Reproductions are written from your words only, so nothing was reproduced.",
         [
             "→ edit the assessment so it carries each statement as a `Current:` / `Expected:` / `Unchanged:` line",
             "speccoder bug --slug <slug>"
@@ -882,7 +882,7 @@ pub const CATALOG: &[Entry] = &[
         P,
         S::NeedsHuman,
         "the bug could not be reproduced: nothing is fixed",
-        "Every try of the reproduction author ended without a test of each Expected statement failing on its own assertion, or you rejected what it wrote (a rejected try counts against `[bug] reproduce_tries` and reproduces nothing). A fix without a failing reproduction would be a guess, so the bug stops for you with the tries made and what each showed.",
+        "No try produced a test for each Expected statement that fails on its own assertion, or you rejected them (rejected tries count against `[bug] reproduce_tries`). A fix without a failing reproduction would be a guess, so the bug comes back to you with what each try showed.",
         [
             "speccoder bug run --task {feature}/{task}",
             "speccoder bug \"…\" --expected \"…\" --test <file>::<test>",

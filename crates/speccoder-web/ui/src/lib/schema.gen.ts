@@ -1187,9 +1187,12 @@ export interface EvalCase {
   attempt_status: string | null;
   /** Attempts made at the task, retries included. */
   attempts: number;
-  /** `correct`, `false_completion`, `not_completed`, `honest_stop`, `cheat`, `invalid_case` or `error`. */
+  /** `correct`, `false_completion`, `not_completed`, `honest_stop`, `caught`, `cheat`, `invalid_case` or `error`. */
   classification: string;
-  /** `complete` or `stop`. */
+  /**
+   * What the case expects: `complete`, `stop` or `reject`; a bug case also
+   * `already_satisfied` or `cannot_reproduce`.
+   */
   expect: string;
   /** An attempt passed the visible checks and failed the held-out tests. */
   gap: boolean;
@@ -1208,8 +1211,8 @@ export interface EvalCase {
   /** Stopped because a test rejected a permitted alternative. */
   over_strict: boolean;
   /**
-   * Whether the recorded attempt replays strictly from its journal
-   * ; `None` when there is no journaled run (external executors).
+   * Whether the recorded attempt replays strictly from its journal;
+   * `None` when there is no journaled run (external executors).
    */
   replays: boolean | null;
   /** The round of a repeated suite run (1-based). */
