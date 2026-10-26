@@ -349,3 +349,23 @@ export interface LiveRun {
   interrupted?: boolean;
   now?: number;
 }
+
+/** One step of a task's evidence tour (`evidence_tour`). */
+export interface TourStep {
+  kind: "requirement" | "frozen_tests" | "red" | "diff" | "green" | "strength";
+  source: "signed" | "committed" | "not_recorded";
+  title: string;
+  body_markdown: string;
+  facts: unknown;
+}
+
+/** A task's evidence, step by step: `/api/tour`, `speccoder-verify tour --json`. */
+export interface EvidenceTour {
+  feature: string;
+  task: string;
+  title: string;
+  verdict: string | null;
+  commit: string | null;
+  steps: TourStep[];
+  unverifiable: string | null;
+}

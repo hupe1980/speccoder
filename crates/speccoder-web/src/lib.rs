@@ -318,6 +318,37 @@ async fn evidence(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Jso
     )
 }
 
+/// The task's evidence tour (payload `evidence_tour`, the same as
+/// `speccoder-verify tour --json`), read as recorded: the app shows what
+/// the signed statements and the commit say; a maintainer's verifier
+/// checks the signatures.
+async fn tour(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Json<Value> {
+    let root = s.root.clone();
+    Json(
+        off(move || {
+            let Some(task) = q.task else {
+                return json!({ "error": "a task is needed" });
+            };
+            let feature = q.feature.or_else(|| match speccoder_runtime::inspect(&root, None).data() {
+                Some(CommandData::Inspect(snap)) => snap.feature.as_ref().map(|f| f.feature.name.clone()),
+                _ => None,
+            });
+            let Some(feature) = feature else {
+                return json!({ "error": "no feature selected" });
+            };
+            let result = speccoder_runtime::tour::command(
+                &root,
+                &feature,
+                &task,
+                &speccoder_runtime::attest::branch::Options::default(),
+                "tour",
+            );
+            serde_json::to_value(&result).unwrap_or_else(|e| json!({ "error": e.to_string() }))
+        })
+        .await,
+    )
+}
+
 async fn diff(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Response {
     let root = s.root.clone();
     let Some(commit) = revision(&q) else {
@@ -790,6 +821,7 @@ pub fn router(s: Shared) -> Router {
         .route("/api/review", get(review))
         .route("/api/approvals", get(approvals))
         .route("/api/evidence", get(evidence))
+        .route("/api/tour", get(tour))
         .route("/api/diff", get(diff))
         .route("/api/documents", get(documents))
         .route("/api/doctor", get(doctor))
