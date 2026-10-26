@@ -864,6 +864,9 @@ pub(crate) fn run_task(
     if bug_fix.is_none() && run_config.acceptance && !options.fresh_acceptance {
         match crate::oracle::for_task(&s.plane_dir, &project, &wt_root, format, &snap, &scenarios) {
             Some(r @ crate::oracle::TaskReuse::Ready { .. }) => review_reuse = Some(r),
+            Some(crate::oracle::TaskReuse::Reused { req }) => notices.push(format!(
+                "{req}'s frozen tests were reused by an earlier task of this run: this task's acceptance tests are authored"
+            )),
             Some(crate::oracle::TaskReuse::Elsewhere { req }) => {
                 notices.push(format!("{req}: frozen oracle not present here — authoring"))
             }

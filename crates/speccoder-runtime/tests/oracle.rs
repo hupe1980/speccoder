@@ -1591,3 +1591,73 @@ fn approve_and_run_freezes_only_what_its_sheet_showed() {
     let ok = approve(Some(&now), Via::Web);
     assert!(ok.message().starts_with("approved"), "{}", ok.message());
 }
+
+#[test]
+fn a_test_the_implementer_committed_under_the_frozen_name_does_not_skip_the_oracle() {
+    // P2: an earlier task's implementer commits a file at the frozen path.
+    let r = repo();
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = written(r.path(), state.path());
+    fs::create_dir_all(r.path().join("tests")).unwrap();
+    fs::write(
+        r.path().join("tests/acceptance_us1_login.txt"),
+        "the implementer's own\n",
+    )
+    .unwrap();
+    git(r.path(), &["add", "-A"]);
+    git(r.path(), &["commit", "-q", "-m", "an earlier task"]);
+    let asked = f.asked().len();
+    write_lib(&f, "c1", "pub fn ok() {}\npub fn login() {}\n");
+    let res = speccoder_runtime::review::approve_and_run(
+        r.path(),
+        None,
+        RunMode::Ask,
+        &[],
+        None,
+        Via::Terminal,
+        Some(state.path()),
+        Some(d),
+        &one_task(),
+    );
+    assert!(
+        res.message()
+            .contains("exists and differs from the confirmed test"),
+        "the frozen oracle was skipped: {}",
+        res.message()
+    );
+    assert_eq!(f.asked().len(), asked, "no author call");
+}
+
+#[test]
+fn a_frozen_record_without_its_approval_or_held_out_binding_is_not_reused() {
+    // P3: editing the state record to drop `held_out_sealed` (or review.json
+    // to drop the approval) silently removed a check.
+    for broken in ["held_out", "approval"] {
+        let r = repo();
+        let state = tempfile::tempdir().unwrap();
+        let (_, d) = written(r.path(), state.path());
+        freeze_only(r.path(), state.path(), d.clone());
+        let plane = speccoder_runtime::worktree::project_state_dir(state.path(), r.path());
+        if broken == "held_out" {
+            let file =
+                speccoder_runtime::pre_frozen::dir(&plane, "001-graph", "US1").join("record.json");
+            let mut rec: Value = serde_json::from_str(&fs::read_to_string(&file).unwrap()).unwrap();
+            rec["held_out_sealed"] = Value::Null;
+            fs::write(&file, serde_json::to_string(&rec).unwrap()).unwrap();
+        } else {
+            let file = r.path().join("specs/001-graph/review.json");
+            let mut rec: Value = serde_json::from_str(&fs::read_to_string(&file).unwrap()).unwrap();
+            rec.as_object_mut().unwrap().remove("approval");
+            fs::write(&file, serde_json::to_string(&rec).unwrap()).unwrap();
+            git(r.path(), &["add", "-A"]);
+            git(r.path(), &["commit", "-q", "-m", "drop the approval"]);
+        }
+        let run = speccoder_runtime::run_with(r.path(), None, "T005", state.path(), d, None);
+        assert_eq!(
+            code(&run),
+            Some("ORACLE-TAMPERED"),
+            "{broken}: {}",
+            run.message()
+        );
+    }
+}

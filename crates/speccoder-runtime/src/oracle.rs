@@ -1945,6 +1945,11 @@ pub(crate) enum TaskReuse {
         /// The manifest digest the tick names.
         manifest: String,
     },
+    /// An earlier task reused it (its tick names the manifest).
+    Reused {
+        /// The requirement.
+        req: String,
+    },
     /// `review.json` names a frozen set this machine does not have.
     Elsewhere {
         /// The requirement.
@@ -1967,8 +1972,8 @@ pub(crate) enum TaskReuse {
 
 /// The frozen oracle `task` (citing `scenarios`) reuses, if any: the
 /// first requirement whose scenarios it cites and whose oracle `review.json`
-/// (in `project`, the worktree's committed copy) froze — unless its tests
-/// are in the worktree's `HEAD` already (an earlier task ticked them).
+/// (in `project`, the worktree's committed copy) froze — unless an earlier
+/// task's tick in the worktree's history names its manifest.
 pub(crate) fn for_task(
     project_state: &Path,
     project: &Path,
@@ -2013,23 +2018,32 @@ pub(crate) fn for_task(
         }
         Err(t) => return Some(TaskReuse::Tampered(t.0)),
     };
-    // Committed by an earlier task's tick: later tasks author as today.
-    let git = crate::git::Git::at(wt_root);
-    let prefix = project
-        .strip_prefix(wt_root)
-        .map(|p| p.to_string_lossy().replace('\\', "/"))
-        .unwrap_or_default();
-    let in_head = record.visible.iter().any(|t| {
-        let rel = if prefix.is_empty() {
-            t.path.clone()
-        } else {
-            format!("{prefix}/{}", t.path)
-        };
-        git.succeeds(&["cat-file", "-e", &format!("HEAD:{rel}")])
-            .unwrap_or(false)
-    });
-    if in_head {
-        return None;
+    // Reused by an earlier task: its tick names the frozen manifest in the
+    // one `Acceptance:` trailer form, which only speccoder's commit writes —
+    // never decided by a file the implementer could commit (P2).
+    let needle = format!("Acceptance: review manifest={} ", entry.manifest_sha256);
+    let reused = crate::git::Git::at(wt_root)
+        .run(&[
+            "log",
+            "--format=%H",
+            "--fixed-strings",
+            &format!("--grep={needle}"),
+            "HEAD",
+        ])
+        .map(|out| !out.is_empty());
+    match reused {
+        Ok(true) => {
+            return Some(TaskReuse::Reused {
+                req: req.key.clone(),
+            });
+        }
+        Ok(false) => {}
+        Err(e) => {
+            return Some(TaskReuse::Unreadable(format!(
+                "the worktree's history cannot be read: {}",
+                e.0
+            )));
+        }
     }
     if !record.is_current(&digest) {
         return Some(TaskReuse::Lapsed {
@@ -2063,12 +2077,26 @@ pub(crate) fn for_task(
             req.key
         )));
     }
-    if approval
-        .as_deref()
-        .is_some_and(|a| a != record.approval_digest)
-    {
+    // Bound both ways (P3): the approval review.json records, and the
+    // held-out set it names — a record that dropped either is not reused.
+    if approval.as_deref() != Some(record.approval_digest.as_str()) {
         return Some(TaskReuse::Tampered(format!(
-            "{}'s frozen set names another approval than review.json",
+            "{}'s frozen set names another approval than review.json{}",
+            req.key,
+            if approval.is_none() {
+                " (which records none)"
+            } else {
+                ""
+            }
+        )));
+    }
+    let sealed = record
+        .held_out_sealed
+        .as_ref()
+        .map(|h| format!("sha256:{}", h.manifest_sha256));
+    if sealed != entry.held_out_sha256 {
+        return Some(TaskReuse::Tampered(format!(
+            "{}'s frozen held-out set is not the one review.json names",
             req.key
         )));
     }
