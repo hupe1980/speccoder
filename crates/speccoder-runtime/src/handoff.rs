@@ -668,7 +668,7 @@ mod tests {
         std::fs::write(w.join("ci.yml"), "jobs: {}\n").unwrap();
         std::fs::write(
             w.join("evidence.yaml"),
-            "steps:\n  - uses: hupe1980/speccoder-verify@v0.2.0\n",
+            "steps:\n  - uses: hupe1980/speccoder/packaging/speccoder-verify-action@v0.2.0\n",
         )
         .unwrap();
         assert_eq!(

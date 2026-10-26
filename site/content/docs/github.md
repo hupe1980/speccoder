@@ -109,7 +109,7 @@ The description is the author's account; the **`speccoder / evidence`** check is
      evidence:
        runs-on: ubuntu-latest
        steps:
-         - uses: hupe1980/speccoder-verify@v0.2.0
+         - uses: hupe1980/speccoder/packaging/speccoder-verify-action@v0.2.0
    ```
 
    No checkout: the action fetches the head and its notes as git objects into a scratch repository. A `pull_request` run from a **fork** gets a read-only token: the action then writes the summary and annotations to the job, says the named check was not published, and the **job**'s status carries the outcome. Require the job, or use the fork workflow below.
