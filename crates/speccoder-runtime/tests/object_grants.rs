@@ -790,3 +790,142 @@ fn a_budget_of_zero_never_prompts() {
     assert!(person.requests().is_empty());
     assert_eq!(report(&res).pending.as_ref().unwrap()["batched"], true);
 }
+
+/// The batch of the only waiting call of `r`'s run: its run, calls and digest.
+fn batch_of(r: &Path, state: &Path) -> (String, Vec<String>, String) {
+    let listed = speccoder_runtime::approvals::list_with(r, None, state);
+    let Some(CommandData::Approvals(a)) = listed.data() else {
+        panic!("{}", listed.message())
+    };
+    let b = a
+        .batch
+        .first()
+        .unwrap_or_else(|| panic!("no batch: {a:#?}"));
+    (
+        b.run.clone(),
+        b.groups.iter().flat_map(|g| g.calls.clone()).collect(),
+        b.digest.clone(),
+    )
+}
+
+/// With *resume asking* the run prompts again after a batch decision;
+/// without it, the next call needing a person waits in a new batch.
+#[test]
+fn resume_asking_starts_the_budget_again_and_without_it_the_run_waits() {
+    for resume in [true, false] {
+        let r = repo("[approvals]\nbudget = 1\n");
+        let state = tempfile::tempdir().unwrap();
+        let (f, d) = fake();
+        write(&f, "c1", "package.json");
+        write(&f, "c2", "web/package.json");
+        let person = Scripted::new(vec![once()]);
+        let first = run_asking(r.path(), state.path(), "T005", d, person);
+        assert_eq!(
+            first.status(),
+            CommandStatus::NeedsHuman,
+            "{}",
+            first.message()
+        );
+        let (run, calls, digest) = batch_of(r.path(), state.path());
+        let decide = Runnable::DecideBatch {
+            run,
+            verdict: BatchVerdict::Approve,
+            calls,
+            digest,
+            resume_asking: resume,
+        };
+        let ok = speccoder_runtime::actions::perform_in(
+            r.path(),
+            None,
+            Dispatch::new(&decide, Via::Web),
+            Some(state.path()),
+        );
+        assert_eq!(ok.status(), CommandStatus::Ok, "{}", ok.message());
+        let (f2, d2) = fake();
+        write(&f2, "c3", "api/package.json");
+        f2.will_structure(done());
+        let person2 = Scripted::new(vec![once()]);
+        let second = run_asking(r.path(), state.path(), "T005", d2, person2.clone());
+        if resume {
+            assert_eq!(person2.requests().len(), 1, "{}", second.message());
+            assert_eq!(second.status(), CommandStatus::Ok, "{}", second.message());
+        } else {
+            assert!(person2.requests().is_empty(), "prompted past the budget");
+            assert_eq!(
+                second.status(),
+                CommandStatus::NeedsHuman,
+                "{}",
+                second.message()
+            );
+            assert_eq!(report(&second).pending.as_ref().unwrap()["batched"], true);
+        }
+    }
+}
+
+/// A batch rejection records the one reason for every listed call, and
+/// the model is told it.
+#[test]
+fn a_batch_rejection_tells_the_model_the_reason() {
+    let r = repo("[approvals]\nbudget = 0\n");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    write(&f, "c1", "package.json");
+    let _ = run_asking(r.path(), state.path(), "T005", d, Scripted::new(Vec::new()));
+    let (run, calls, digest) = batch_of(r.path(), state.path());
+    let decide = Runnable::DecideBatch {
+        run,
+        verdict: BatchVerdict::Reject,
+        calls,
+        digest,
+        resume_asking: false,
+    };
+    let mut dispatch = Dispatch::new(&decide, Via::Web);
+    let needs = speccoder_runtime::actions::perform_in(
+        r.path(),
+        None,
+        Dispatch::new(&decide, Via::Web),
+        Some(state.path()),
+    );
+    assert_eq!(needs.message(), "a reason is needed");
+    dispatch.input = Some("no new dependencies");
+    let ok = speccoder_runtime::actions::perform_in(r.path(), None, dispatch, Some(state.path()));
+    assert_eq!(ok.status(), CommandStatus::Ok, "{}", ok.message());
+    let (f2, d2) = fake();
+    f2.will_structure(done());
+    let res = speccoder_runtime::run_with(r.path(), None, "T005", state.path(), d2, None);
+    let call = &report(&res).tool_calls[0];
+    assert_eq!(call["decision"], "deny", "{call}");
+    assert_eq!(
+        call["reason"],
+        "a person rejected this: no new dependencies"
+    );
+    assert_eq!(call["approver"]["via"], "web");
+}
+
+/// A batched call expires on its own deadline: nobody's decision, and the
+/// batch is gone once nothing waits in it.
+#[test]
+fn a_batched_call_expires_as_any_waiting_call() {
+    let r = repo("[approvals]\nbudget = 0\nwait = \"1m\"\n");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    write(&f, "c1", "package.json");
+    let _ = run_asking(r.path(), state.path(), "T005", d, Scripted::new(Vec::new()));
+    let _ = batch_of(r.path(), state.path());
+    let plane = speccoder_runtime::worktree::project_state_dir(
+        state.path(),
+        &fs::canonicalize(r.path()).unwrap(),
+    );
+    let later = agentplane::core::Timestamp::now_utc() + std::time::Duration::from_secs(3600);
+    speccoder_runtime::approvals::expire_due(&plane, later).unwrap();
+    let listed = speccoder_runtime::approvals::list_with(r.path(), None, state.path());
+    let Some(CommandData::Approvals(a)) = listed.data() else {
+        panic!("{}", listed.message())
+    };
+    assert!(a.batch.is_empty() && a.pending.is_empty(), "{a:#?}");
+    let (f2, d2) = fake();
+    f2.will_structure(done());
+    let res = speccoder_runtime::run_with(r.path(), None, "T005", state.path(), d2, None);
+    let call = &report(&res).tool_calls[0];
+    assert_eq!(call["by"], "expiry", "{call}");
+}
