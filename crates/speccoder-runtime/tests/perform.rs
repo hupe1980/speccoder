@@ -280,6 +280,14 @@ fn cases() -> Vec<Case> {
             review(&[], "approve"),
             Some("looks right"),
         ),
+        // A path that starts with the unit's name and leaves it.
+        case(
+            "commit-outside",
+            Runnable::Commit {
+                paths: vec!["specs/001-graph/../../src/lib.rs".to_owned()],
+            },
+            None,
+        ),
         case(
             "commit",
             Runnable::Commit {
