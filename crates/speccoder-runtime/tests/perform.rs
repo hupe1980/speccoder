@@ -579,7 +579,10 @@ fn hex(s: &str) -> String {
     let flush = |run: &mut String, out: &mut String| {
         let letters = run.chars().any(|c| c.is_ascii_alphabetic());
         let digits = run.chars().any(|c| c.is_ascii_digit());
-        if run.len() >= 7 && letters && digits {
+        // After `as ` a run is the commit's id even when it happens to be
+        // all digits or all letters; elsewhere a plain number stays.
+        let named = out.ends_with(" as ");
+        if run.len() >= 7 && (named || (letters && digits)) {
             out.push_str("<hex>");
         } else {
             out.push_str(run);
@@ -690,6 +693,15 @@ fn the_normaliser_replaces_ids_and_keeps_words() {
     assert_eq!(
         hex("committed 1a2b3c4d5e as deadbeef1; feed facade 1234567"),
         "committed <hex> as <hex>; feed facade 1234567"
+    );
+    // A commit id of digits only, or letters only, is still an id.
+    assert_eq!(
+        hex("committed 1 file(s) as 1234567"),
+        "committed 1 file(s) as <hex>"
+    );
+    assert_eq!(
+        hex("committed 1 file(s) as deadbee"),
+        "committed 1 file(s) as <hex>"
     );
 }
 

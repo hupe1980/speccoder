@@ -19,7 +19,10 @@ use speccoder_core::{CommandData, CommandResult, CommandStatus, RunReport};
 const CONFIG: &str = "[model]\nprovider = \"openai\"\nmodel = \"gpt-5.4-mini\"\n\n[checks.has-ok]\nargv = [\"grep\", \"-q\", \"fn ok\", \"src/lib.rs\"]\n\n[commands]\nallow_prefix = [[\"grep\", \"-q\"], [\"./accept.sh\", \"--\"]]\n";
 
 /// One test: "the pattern is in src/lib.rs", with libtest's summary line.
-const ACCEPT_SH: &str = "#!/bin/sh\n[ \"$1\" = -- ] && shift\nif grep -q \"$1\" src/lib.rs; then\n  echo 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out'\nelse\n  echo 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out'\n  exit 101\nfi\n";
+// A runner: the file a command names (its second argument) must exist, or
+// it collects nothing, as a real one would — so a held-out file is red only
+// by what it adds.
+const ACCEPT_SH: &str = "#!/bin/sh\n[ \"$1\" = -- ] && shift\nif [ -n \"$2\" ] && [ ! -f \"$2\" ]; then\n  echo 'test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out'\n  exit 0\nfi\nif grep -q \"$1\" src/lib.rs; then\n  echo 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out'\nelse\n  echo 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out'\n  exit 101\nfi\n";
 
 const SPEC: &str = "# Spec\n\n### User Story 1 - Login\n\nUsers log in.\n\n**Acceptance**: a `login` function exists.\n";
 
@@ -88,7 +91,7 @@ fn held_out(pattern: &str, scenarios: &[&str]) -> Value {
         "path": HELD_OUT_PATH,
         "content": format!("login takes a password; token \"{SECRET}\"\n"),
         "scenarios": scenarios,
-        "argv": ["./accept.sh", "--", pattern],
+        "argv": ["./accept.sh", "--", pattern, HELD_OUT_PATH],
         "composition": false,
     }], "notes": [] })
 }
@@ -224,15 +227,27 @@ fn the_same_scenarios_failing_twice_stop_retrying() {
 
 #[test]
 fn held_out_tests_that_are_not_red_or_cite_unknown_scenarios_are_discarded() {
-    for (pattern, scenarios, reason) in [
-        ("fn ok", vec!["US1-1"], "not_red"),
-        ("fn login_with_password", vec!["US9-9"], "unknown_scenario"),
+    for (pattern, scenarios, own_file, reason) in [
+        ("fn ok", vec!["US1-1"], true, "not_red"),
+        (
+            "fn login_with_password",
+            vec!["US9-9"],
+            true,
+            "unknown_scenario",
+        ),
+        // Its command fails with or without the file: another test's red,
+        // never this file's.
+        ("fn login_with_password", vec!["US1-1"], false, "not_red"),
     ] {
         let r = repo("");
         let state = tempfile::tempdir().unwrap();
         let (f, d) = fake();
         f.will_structure(visible());
-        f.will_structure(held_out(pattern, &scenarios));
+        let mut set = held_out(pattern, &scenarios);
+        if !own_file {
+            set["files"][0]["argv"] = json!(["./accept.sh", "--", pattern]);
+        }
+        f.will_structure(set);
         write_lib(&f, "c1", TAILORED);
         let res = run(r.path(), state.path(), d);
         assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());

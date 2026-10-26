@@ -287,7 +287,10 @@ fn hex(s: &str) -> String {
     let flush = |run: &mut String, out: &mut String| {
         let letters = run.chars().any(|c| c.is_ascii_alphabetic());
         let digits = run.chars().any(|c| c.is_ascii_digit());
-        if run.len() >= 7 && letters && digits {
+        // After `as ` a run is the commit's id even when it happens to be
+        // all digits or all letters; elsewhere a plain number stays.
+        let named = out.ends_with(" as ");
+        if run.len() >= 7 && (named || (letters && digits)) {
             out.push_str("<hex>");
         } else {
             out.push_str(run);
