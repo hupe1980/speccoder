@@ -3,23 +3,25 @@
   // selection in the accent, the command it runs shown below. Enter runs
   // it (or copies a command that would leave the machine).
   import { app } from "../lib/app.svelte";
+  import { key as keyOf, offer, type Offer } from "../lib/actions";
   import type { Action } from "../lib/types";
   import Icon from "./Icon.svelte";
   let filter = $state("");
   let at = $state(0);
   const groups: Record<string, string> = { page: "View", next: "Up Next", plan: "Plan", work: "Work", task: "Tasks", feature: "Features", review: "Review" };
   const icons: Record<string, string> = { next: "sparkle", plan: "doc", work: "play", task: "list", feature: "grid", review: "chart" };
-  // The page's own commands, as the menu bar has them (`menu:` + its id).
-  const page: Action[] = ([
+  // The page's own commands, as the menu bar has them (by their menu id).
+  type Entry = (Action | Offer) & { menu?: string };
+  const page: Entry[] = ([
     ["theme.light", "appearance: light"],
     ["theme.dark", "appearance: dark"],
     ["theme.auto", "appearance: automatic", "follow the system"],
     ["view.sidebar", "toggle the sidebar"],
     ["view.statusbar", "toggle the status bar"],
-  ] as [string, string, string?][]).map(([id, label, why]) => ({ group: "page", label, why: why ?? "", command: `menu:${id}`, run: null, blocked: null, input: null }));
-  const isMenu = (a?: Action) => !!a?.command.startsWith("menu:");
+  ] as [string, string, string?][]).map(([id, label, why]) => ({ ...offer(null, { group: "page", label, why: why ?? "", command: "" }), menu: id }));
+  const isMenu = (a?: Entry) => !!a?.menu;
   const matched = $derived(
-    [...app.actions, ...page].filter((a) => {
+    ([...app.actions, ...page] as Entry[]).filter((a) => {
       const f = filter.toLowerCase().trim();
       // The page's commands only when asked for: they would crowd the work.
       if (isMenu(a)) return f.length >= 2 && a.label.includes(f);
@@ -29,17 +31,17 @@
   const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
   // Typed words are also a change to make: offered last, as Spotlight
   // offers a search of the web.
-  const quick = $derived.by((): Action | null => {
+  const quick = $derived.by((): Entry | null => {
     const f = filter.trim();
     if (f.length < 6) return null;
-    return { group: "work", label: `quick change: "${f}"`, why: "recorded as a story, a requirement and a task; judged on evidence", command: `speccoder do "${f.replaceAll('"', '\\"')}"`, run: null, blocked: null, input: null };
+    return offer(null, { group: "work", label: `quick change: "${f}"`, why: "recorded as a story, a requirement and a task; judged on evidence", command: `speccoder do "${f.replaceAll('"', '\\"')}"` });
   });
   const items = $derived(quick ? [...matched, quick] : matched);
-  const pick = (a?: Action) => {
+  const pick = (a?: Entry) => {
     if (!a || a.blocked) return;
     if (isMenu(a)) {
       app.palette = false;
-      window.dispatchEvent(new CustomEvent("speccoder:menu", { detail: a.command.slice(5) }));
+      window.dispatchEvent(new CustomEvent("speccoder:menu", { detail: a.menu }));
       return;
     }
     if (a === quick) {
@@ -69,7 +71,7 @@
       <input autofocus placeholder="What would you like to do?" bind:value={filter} onkeydown={key} aria-controls="pal-list" aria-activedescendant="pal-{at}" />
     </label>
     <ul id="pal-list" role="listbox" bind:this={list}>
-      {#each items as a, i (a.group + a.label)}
+      {#each items as a, i (keyOf(a) + (a.menu ?? ""))}
         {#if i === 0 || items[i - 1]?.group !== a.group}<li class="group" role="presentation">{groups[a.group] ?? cap(a.group)}</li>{/if}
         <li role="option" id="pal-{i}" aria-selected={i === at} aria-disabled={!!a.blocked} data-i={i}>
           <button class:on={i === at} disabled={!!a.blocked} tabindex="-1" onmouseenter={() => (at = i)} onclick={() => pick(a)}>

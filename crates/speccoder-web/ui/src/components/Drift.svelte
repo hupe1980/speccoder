@@ -3,12 +3,13 @@
   // what the evidence was for and what the spec asks now — and the step
   // that checks the code against it again.
   import { app } from "../lib/app.svelte";
+  import { byKind } from "../lib/actions";
   import type { Drift } from "../lib/types";
   import { diffWords, wording } from "../lib/words";
   import Icon from "./Icon.svelte";
 
   let { drift }: { drift: Drift } = $props();
-  const recheck = $derived(app.actions.find((a) => a.run?.kind === "converge"));
+  const recheck = $derived(byKind(app.actions, "converge")[0]);
   const how = (then: string | null, now: string | null) => (!then ? "Added" : !now ? "Removed" : "Reworded");
 </script>
 

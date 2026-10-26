@@ -6,7 +6,7 @@
   // because speccoder reads committed configuration only.
   import { app } from "../lib/app.svelte";
   import { get, post } from "../lib/api";
-  import type { ConfigChange, ConfigKey, ConfigReport, ConfigSection, Envelope } from "../lib/types";
+  import type { ConfigChange, ConfigKey, ConfigReport, ConfigSection, Reply } from "../lib/types";
   import Icon from "./Icon.svelte";
   import Diff from "./Diff.svelte";
 
@@ -18,7 +18,7 @@
   let newTable = $state("");
 
   async function load() {
-    const r = await get<Envelope<ConfigReport>>("/api/config");
+    const r = await get<Reply<ConfigReport>>("/api/config");
     report = r.data ?? null;
   }
   $effect(() => {
@@ -82,7 +82,7 @@
     saving = true;
     error = null;
     try {
-      const r = await post<Envelope<ConfigReport>>("/api/config", { changes: Object.values(draft) });
+      const r = await post<Reply<ConfigReport>>("/api/config", { changes: Object.values(draft) });
       if (r.status !== "ok") error = r.message;
       else {
         report = r.data ?? report;
@@ -98,7 +98,7 @@
   async function commit() {
     saving = true;
     try {
-      const r = await post<Envelope<ConfigReport>>("/api/config/commit", {});
+      const r = await post<Reply<ConfigReport>>("/api/config/commit", {});
       if (r.status !== "ok") error = r.message;
       else {
         app.toast({ tone: "ok", text: r.message });

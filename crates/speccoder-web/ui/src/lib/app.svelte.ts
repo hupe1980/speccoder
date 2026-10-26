@@ -2,7 +2,8 @@
 // feature changes, and what the running job is doing, from its events.
 
 import { get, post, q, listen } from "./api";
-import type { Action, Envelope, Inbox, LiveRun, Project, Report, PendingCall, Presentation, Runnable, Document, Remedy } from "./types";
+import { KINDS, kindOf, type Offer } from "./actions";
+import type { Action, Reply, Inbox, LiveRun, Project, Report, PendingCall, Presentation, Runnable, Document, Remedy } from "./types";
 
 export interface StageView {
   stage: string;
@@ -28,7 +29,7 @@ export interface Toast {
 class AppState {
   project = $state<Project | null>(null);
   feature = $state<string | null>(null);
-  report = $state<Envelope<Report> | null>(null);
+  report = $state<Reply<Report> | null>(null);
   actions = $state<Action[]>([]);
   approvals = $state<PendingCall[]>([]);
   /** Which document the Spec & Plan view shows (`review`: the review cards). */
@@ -36,7 +37,7 @@ class AppState {
   /** The section of the shown document, by its outline id. */
   section = $state<string | null>(null);
   /** Every decision waiting for the person, across features. */
-  inbox = $state<Envelope<Inbox> | null>(null);
+  inbox = $state<Reply<Inbox> | null>(null);
   documents = $state<Document[]>([]);
   /** The doctor's warnings and failures: what would stop or spoil a run. */
   preflight = $state<{ check: string; level: string; detail: string; fix: string[]; code?: string | null; remedy?: Remedy }[]>([]);
@@ -54,7 +55,7 @@ class AppState {
   connected = $state(false);
   loading = $state(true);
 
-  job = $state<{ id: number; command: string; running: boolean; result: Envelope | null } | null>(null);
+  job = $state<{ id: number; command: string; running: boolean; result: Reply | null } | null>(null);
   task = $state<{ id: string; title: string } | null>(null);
   stages = $state<StageView[]>([]);
   calls = $state<string[]>([]);
@@ -80,7 +81,7 @@ class AppState {
   codeMode = $state<"changes" | "files">("changes");
   codeFile = $state<string | null>(null);
   codeLine = $state<number | null>(null);
-  input = $state<{ action: Action } | null>(null);
+  input = $state<{ action: Action | Offer } | null>(null);
   palette = $state(false);
   view = $state<"inbox" | "overview" | "board" | "code" | "documents" | "report" | "settings" | "setup">("inbox");
 
@@ -106,15 +107,15 @@ class AppState {
       const f = this.feature ?? undefined;
       const [project, report, actions, approvals, documents] = await Promise.all([
         get<Project>("/api/project"),
-        get<Envelope<Report>>(`/api/report${q({ feature: f })}`),
+        get<Reply<Report>>(`/api/report${q({ feature: f })}`),
         get<Action[]>(`/api/actions${q({ feature: f, task: this.selected })}`),
-        get<Envelope<{ pending: PendingCall[] }>>(`/api/approvals${q({ feature: f })}`),
+        get<Reply<{ pending: PendingCall[] }>>(`/api/approvals${q({ feature: f })}`),
         get<Document[]>(`/api/documents${q({ feature: f })}`),
       ]);
-      void get<Envelope<Inbox>>("/api/inbox")
+      void get<Reply<Inbox>>("/api/inbox")
         .then((i) => (this.inbox = i))
         .catch(() => {});
-      void get<Envelope<{ checks: { check: string; level: string; detail: string; fix: string[]; code?: string | null }[] }>>(`/api/doctor${q({ feature: f })}`)
+      void get<Reply<{ checks: { check: string; level: string; detail: string; fix: string[]; code?: string | null }[] }>>(`/api/doctor${q({ feature: f })}`)
         .then((d) => {
           this.doctor = d.data?.checks ?? [];
           this.preflight = this.doctor.filter((c) => c.level === "warn" || c.level === "fail") as typeof this.preflight;
@@ -147,12 +148,12 @@ class AppState {
 
   /** Runs `a`; asks for its input first when it takes one. */
   /** An action that leaves the machine, waiting for the person's yes. */
-  confirming = $state<{ action: Action } | null>(null);
+  confirming = $state<{ action: Action | Offer } | null>(null);
   /** A stop speccoder knows the fix for: offered until done or dismissed,
    *  then what stopped runs again. */
-  remedy = $state<{ remedy: Remedy; message: string; code?: string; then: Action | null } | null>(null);
-  #last: Action | null = null;
-  #fixing: Action | null | undefined = undefined;
+  remedy = $state<{ remedy: Remedy; message: string; code?: string; then: Action | Offer | null } | null>(null);
+  #last: Action | Offer | null = null;
+  #fixing: Action | Offer | null | undefined = undefined;
 
   /** Applies the remedy offered; once it holds, runs again what it stopped. */
   async applyRemedy() {
@@ -168,7 +169,7 @@ class AppState {
     }
   }
 
-  async perform(a: Action, input?: string, confirmed = false) {
+  async perform(a: Action | Offer, input?: string, confirmed = false) {
     if (!a.run) {
       await navigator.clipboard?.writeText(a.command).catch(() => {});
       this.toast({ tone: "ok", text: "Copied — run it in your shell", detail: a.command });
@@ -179,8 +180,7 @@ class AppState {
       return;
     }
     // One run per project: another process holds the worktree and journal.
-    const runs = ["run", "converge", "quick_change", "skill", "keep_set_aside", "fix_setup"];
-    if (this.elsewhere && a.run && runs.includes(a.run.kind)) {
+    if (this.elsewhere && KINDS[kindOf(a.run)].holdsWorktree) {
       const l = this.live!.live!;
       this.toast({ tone: "warn", text: `${l.task} is running in another speccoder (pid ${l.pid})`, detail: "It holds this project; wait for it, or stop it there." });
       return;
@@ -243,7 +243,7 @@ class AppState {
         if (this.waiting?.id === e.id) this.waiting = null;
         break;
       case "done": {
-        const r = e.result as Envelope;
+        const r = e.result as Reply;
         this.job = { id: e.id, command: this.job?.command ?? "", running: false, result: r };
         this.waiting = null;
         if (this.#fixing !== undefined) {
@@ -256,7 +256,7 @@ class AppState {
           break;
         }
         if (r?.remedy) {
-          this.remedy = { remedy: r.remedy, message: r.message, code: r.code, then: this.#last };
+          this.remedy = { remedy: r.remedy, message: r.message, code: r.code ?? undefined, then: this.#last };
           void this.refresh();
           break;
         }

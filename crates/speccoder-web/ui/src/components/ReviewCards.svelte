@@ -7,18 +7,19 @@
   // answered in place; a requirement is reworded here; what changed since
   // the last commit and how the spec evolved are beside it.
   import { app } from "../lib/app.svelte";
+  import { byKind, offer, type Offer } from "../lib/actions";
   import { get, latest, q } from "../lib/api";
-  import type { Action, Envelope, Review, ReviewItem } from "../lib/types";
+  import type { Action, Reply, Review, ReviewItem } from "../lib/types";
   import { diffWords, questions as asks, tokenised } from "../lib/words";
   import Icon from "./Icon.svelte";
   import Code from "./Code.svelte";
 
-  let review = $state<Envelope<Review> | null>(null);
+  let review = $state<Reply<Review> | null>(null);
   const fetchOf = latest();
   $effect(() => {
     void app.report;
     void app.job?.running;
-    fetchOf(get<Envelope<Review>>(`/api/review${q({ feature: app.feature ?? undefined })}`), (r) => (review = r), () => (review = null));
+    fetchOf(get<Reply<Review>>(`/api/review${q({ feature: app.feature ?? undefined })}`), (r) => (review = r), () => (review = null));
   });
   const r = $derived(review?.data ?? null);
   const total = $derived(r?.requirements.length ?? 0);
@@ -27,40 +28,40 @@
   const words: Record<ReviewItem["state"], string> = { open: "To Review", approved: "Approved", changes_requested: "Changes Requested", lapsed: "Changed Since Decided" };
   const tone: Record<ReviewItem["state"], string> = { open: "ready", approved: "verified", changes_requested: "needs_approval", lapsed: "needs_approval" };
 
-  const act = (ids: string[], verdict: "approve" | "request" | "clear", label: string): Action => ({
-    group: "plan",
-    label,
-    why: verdict === "request" ? "the comment says what the requirement should say" : "recorded with your name, bound to this wording",
-    command: `speccoder review ${verdict}${ids.length ? " " + ids.join(" ") : ""}${verdict === "request" ? ' --comment "…"' : ""}`,
-    run: { kind: "review", ids, verdict },
-    blocked: null,
-    input: verdict === "request" ? `What should ${ids[0]} say?` : null,
-  });
+  const act = (ids: string[], verdict: "approve" | "request" | "clear", label: string): Offer =>
+    offer(
+      { kind: "review", ids, verdict },
+      {
+        group: "plan",
+        label,
+        why: verdict === "request" ? "the comment says what the requirement should say" : "recorded with your name, bound to this wording",
+        command: `speccoder review ${verdict}${ids.length ? " " + ids.join(" ") : ""}${verdict === "request" ? ' --comment "…"' : ""}`,
+        input: verdict === "request" ? `What should ${ids[0]} say?` : null,
+      },
+    );
   const reviseNow = () => {
     if (!r?.revise_with || !r.revision) return;
-    void app.perform({
-      group: "plan",
-      label: `revise the spec (${r.revise_with})`,
-      why: "the format's skill rewrites what you asked; you review the result",
-      command: `speccoder spec ${r.revise_with} "…"`,
-      run: { kind: "skill", name: r.revise_with, arguments: r.revision },
-      blocked: null,
-      input: null,
-    });
+    void app.perform(
+      offer(
+        { kind: "skill", name: r.revise_with, arguments: r.revision },
+        {
+          group: "plan",
+          label: `revise the spec (${r.revise_with})`,
+          why: "the format's skill rewrites what you asked; you review the result",
+          command: `speccoder spec ${r.revise_with} "…"`,
+        },
+      ),
+    );
   };
   // Answers and edits, kept per card while typed.
   let answers = $state<Record<string, string>>({});
   let editing = $state<string | null>(null);
   let draft = $state("");
-  const words_ = (id: string, verdict: "answer" | "edit" | "edit-approve", label: string, command: string): Action => ({
-    group: "plan",
-    label,
-    why: verdict === "answer" ? "your words replace the question where it stands" : "the line keeps its identifier",
-    command,
-    run: { kind: "review", ids: [id], verdict },
-    blocked: null,
-    input: null,
-  });
+  const words_ = (id: string, verdict: "answer" | "edit" | "edit-approve", label: string, command: string): Offer =>
+    offer(
+      { kind: "review", ids: [id], verdict },
+      { group: "plan", label, why: verdict === "answer" ? "your words replace the question where it stands" : "the line keeps its identifier", command },
+    );
   async function answer(id: string) {
     const text = (answers[id] ?? "").trim();
     if (!text) return;
@@ -75,9 +76,9 @@
   }
   const clarify = () => {
     if (!r?.revise_with) return;
-    void app.perform({ group: "plan", label: `clarify with ${r.revise_with}`, why: "the format's skill asks you the questions and writes the answers in", command: `speccoder spec ${r.revise_with}`, run: { kind: "skill", name: r.revise_with, arguments: "" }, blocked: null, input: null });
+    void app.perform(offer({ kind: "skill", name: r.revise_with, arguments: "" }, { group: "plan", label: `clarify with ${r.revise_with}`, why: "the format's skill asks you the questions and writes the answers in", command: `speccoder spec ${r.revise_with}` }));
   };
-  const commit = $derived(app.actions.find((a) => a.run?.kind === "commit"));
+  const commit = $derived(byKind(app.actions, "commit")[0]);
   const how = (then: string | null, now: string | null) => (!then ? "Added" : !now ? "Removed" : "Reworded");
   const plain = (l: string | null) => (l ?? "").replace(/^\s*-\s*\*\*[A-Z]+-\d+\*\*:?\s*/, "");
   const when = (s: number | null) => (s ? new Date(s * 1000).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "");

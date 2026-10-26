@@ -3,6 +3,7 @@
   // it is done — recorded as a story, a requirement and a task, then run and
   // judged like any other. No planning ceremony; no skipped evidence.
   import { app } from "../lib/app.svelte";
+  import { offer } from "../lib/actions";
   import Icon from "./Icon.svelte";
 
   let request = $state(app.quickDraft);
@@ -15,15 +16,17 @@
     const done = checks.map((c) => c.trim()).filter(Boolean);
     const quoted = request.trim().replaceAll('"', '\\"');
     app.quick = false;
-    await app.perform({
-      group: "work",
-      label: run ? "make the change" : "record the change",
-      why: "a story, a requirement and a task — judged on evidence",
-      command: `speccoder do "${quoted}"${done.map((c) => ` --check "${c.replaceAll('"', '\\"')}"`).join("")}${run ? "" : " --no-run"}`,
-      run: { kind: "quick_change", request: request.trim(), checks: done, run },
-      blocked: null,
-      input: null,
-    });
+    await app.perform(
+      offer(
+        { kind: "quick_change", request: request.trim(), checks: done, run },
+        {
+          group: "work",
+          label: run ? "make the change" : "record the change",
+          why: "a story, a requirement and a task — judged on evidence",
+          command: `speccoder do "${quoted}"${done.map((c) => ` --check "${c.replaceAll('"', '\\"')}"`).join("")}${run ? "" : " --no-run"}`,
+        },
+      ),
+    );
   }
   function key(e: KeyboardEvent) {
     if (e.key === "Escape") app.quick = false;

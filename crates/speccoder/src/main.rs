@@ -22,6 +22,8 @@ mod prompt;
 mod schema;
 mod style;
 mod tui;
+#[cfg(test)]
+mod typescript;
 
 use speccoder_core::ExitCode;
 

@@ -717,3 +717,179 @@ fn the_caller_scan_finds_a_planted_one() {
     assert_eq!(errors.len(), 1, "{errors:?}");
     assert!(errors[0].contains("tools/mod.rs:3"), "{errors:?}");
 }
+
+/// Label, reason and command text the page may test because it decides
+/// no action: what it displays, and what the person typed into a filter.
+/// Each entry is a file and a piece of its line.
+const UI_TEXT_ALLOWED: &[(&str, &str)] = &[
+    // The input sheet shows the command with the person's words in it.
+    (
+        "components/InputSheet.svelte",
+        "a.command.replace(\"\\\"…\\\"\"",
+    ),
+    // The palette filters by what the person typed.
+    ("components/Palette.svelte", "a.label.includes(f)"),
+    (
+        "components/Palette.svelte",
+        "a.label.toLowerCase().includes(f) || a.command.toLowerCase().includes(f) || a.why.toLowerCase().includes(f)",
+    ),
+    // A fix's button says the fix's first word.
+    (
+        "components/RemedyCard.svelte",
+        "r.remedy.label.split(\" \")[0]",
+    ),
+    // Evidence rows and the inspector's sources are not actions.
+    ("components/Drawer.svelte", "r.label === \"Model says\""),
+    (
+        "components/Drawer.svelte",
+        "source?.label === \"Set Aside\"",
+    ),
+    (
+        "components/Drawer.svelte",
+        "source?.label === \"Last Attempt\"",
+    ),
+];
+
+/// Where `text` (the UI source `file`) decides by an action's wording, or
+/// writes an action itself outside `lib/actions.ts`.
+fn ui_text_tests(file: &str, text: &str) -> Vec<(usize, String)> {
+    const OPS: &[&str] = &[
+        "===",
+        "==",
+        "!==",
+        "!=",
+        ".test(",
+        ".includes(",
+        ".startsWith(",
+        ".endsWith(",
+        ".match(",
+        ".replace(",
+        ".replaceAll(",
+        ".split(",
+    ];
+    const CHAIN: &[&str] = &[".toLowerCase()", ".toUpperCase()", ".trim()", "?"];
+    let mut found = Vec::new();
+    for (i, line) in text.lines().enumerate() {
+        let code = line.trim_start();
+        if code.starts_with("//") || code.starts_with('*') || code.starts_with("/*") {
+            continue;
+        }
+        let allowed = |l: &str| {
+            UI_TEXT_ALLOWED
+                .iter()
+                .any(|(f, piece)| *f == file && l.contains(piece))
+        };
+        for field in [".label", ".why", ".command"] {
+            for (k, _) in line.match_indices(field) {
+                let after = &line[k + field.len()..];
+                if after.starts_with(|c: char| c.is_alphanumeric() || c == '_') {
+                    continue;
+                }
+                let mut rest = after.trim_start();
+                while let Some(c) = CHAIN.iter().find(|c| rest.starts_with(**c)) {
+                    rest = &rest[c.len()..];
+                }
+                // What is tested comes after the object (`a`, `r.remedy`).
+                let before = line[..k]
+                    .trim_end_matches(|c: char| c.is_alphanumeric() || "_.?$".contains(c))
+                    .trim_end();
+                let tested = OPS.iter().any(|op| rest.starts_with(op))
+                    || ["===", "==", "!==", "!="]
+                        .iter()
+                        .any(|op| before.ends_with(op) && !before.ends_with("=>"))
+                    || before.ends_with(".test(");
+                if tested && !allowed(line) {
+                    found.push((i + 1, format!("tests `{field}`")));
+                }
+            }
+        }
+        if file != "lib/actions.ts" {
+            for piece in ["perform({", ": Action = {", "Action => ({", " as Action"] {
+                let written = line
+                    .match_indices(piece)
+                    .any(|(k, _)| !line[k + piece.len()..].starts_with('['));
+                if written {
+                    found.push((
+                        i + 1,
+                        format!("writes an action (`{piece}`): use offer() in lib/actions.ts"),
+                    ));
+                }
+            }
+        }
+    }
+    found
+}
+
+fn ui_files(dir: &Path, out: &mut Vec<std::path::PathBuf>) {
+    for e in std::fs::read_dir(dir).unwrap().flatten() {
+        let p = e.path();
+        if p.is_dir() {
+            ui_files(&p, out);
+        } else if p.extension().is_some_and(|x| x == "ts" || x == "svelte")
+            && !p.ends_with("schema.gen.ts")
+        {
+            out.push(p);
+        }
+    }
+}
+
+#[test]
+fn ui_label_text_never_decides_which_action_runs() {
+    let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("../speccoder-web/ui/src");
+    let mut files = Vec::new();
+    ui_files(&src, &mut files);
+    files.sort();
+    let mut errors = Vec::new();
+    for f in &files {
+        let rel = f.strip_prefix(&src).unwrap().display().to_string();
+        let text = std::fs::read_to_string(f).unwrap();
+        for (line, what) in ui_text_tests(&rel, &text) {
+            errors.push(format!(
+                "layering: ui/src/{rel}:{line} {what}: find an action by its id, kind or role (lib/actions.ts)"
+            ));
+        }
+    }
+    assert!(errors.is_empty(), "\n{}", errors.join("\n"));
+}
+
+#[test]
+fn ui_label_scan_finds_a_planted_match() {
+    let text = "const s = $derived(app.actions.find((a) => a.run?.kind === \"skill\" && /specify/.test(a.label)));\nconst x = actions.filter((a) => a.label.includes(t.id));\nconst y = a.why.toLowerCase().startsWith(\"x\");\nif (\"commit\" === a.command) go();\nvoid app.perform({ group: \"work\", run: { kind: \"fix_setup\" } });\n// a.label === \"x\" in a comment\nconst label = a.label;\n";
+    let found: Vec<usize> = ui_text_tests("components/X.svelte", text)
+        .into_iter()
+        .map(|(l, _)| l)
+        .collect();
+    assert_eq!(found, [1, 2, 3, 4, 5]);
+    // What the allow-list names passes.
+    assert!(
+        ui_text_tests(
+            "components/Palette.svelte",
+            "if (isMenu(a)) return f.length >= 2 && a.label.includes(f);"
+        )
+        .is_empty()
+    );
+}
+
+#[test]
+fn needs_you_has_a_place_for_every_kind_the_inbox_lists() {
+    let page = std::fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../speccoder-web/ui/src/components/Inbox.svelte"),
+    )
+    .unwrap();
+    let sections = page
+        .split("const sections")
+        .nth(1)
+        .and_then(|s| s.split("\n  };").next())
+        .unwrap();
+    let missing: Vec<&str> = speccoder_runtime::inbox::KINDS
+        .iter()
+        .filter(|k| !sections.contains(&format!("\n    {k}: {{")))
+        .copied()
+        .collect();
+    assert!(
+        missing.is_empty(),
+        "Inbox.svelte has no section for {missing:?} (they show under Other until it does)"
+    );
+    assert!(page.contains("\"other\""), "no fallback section");
+}

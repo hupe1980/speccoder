@@ -3,6 +3,7 @@
   // `speccoder run` — as the status bar opens it: what it works on, where it
   // is, what the model last thought and said (a claim), and the way to it.
   import { app } from "../lib/app.svelte";
+  import { offer } from "../lib/actions";
   import Icon from "./Icon.svelte";
   let { onclose }: { onclose: () => void } = $props();
   const r = $derived(app.live?.live ?? null);
@@ -30,7 +31,7 @@
   function resume() {
     if (!r) return;
     void app.selectFeature(r.feature).then(() =>
-      app.perform({ group: "work", label: `run ${r.task}`, why: "resumes the interrupted attempt from its journal", command: `speccoder run --task ${r.task}`, run: { kind: "run", task: r.task }, blocked: null, input: null }),
+      app.perform(offer({ kind: "run", task: r.task }, { group: "work", label: `run ${r.task}`, why: "resumes the interrupted attempt from its journal", command: `speccoder run --task ${r.task}` })),
     );
     onclose();
   }

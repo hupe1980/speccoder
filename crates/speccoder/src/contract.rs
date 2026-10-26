@@ -126,6 +126,69 @@ fn every_payload_has_its_own_name() {
     assert_eq!(duplicates(["verify", "run", "verify"]), ["verify"]);
 }
 
+fn ui_lib() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../speccoder-web/ui/src/lib")
+}
+
+/// The UI's types, generated from the published schemas (not the code:
+/// the page is held to what is published).
+fn ui_types() -> String {
+    let schemas: Vec<(&str, &str, Value)> = crate::schema::ROOTS
+        .iter()
+        .map(|(name, root)| (*name, *root, published(name)))
+        .collect();
+    crate::typescript::render(&schemas).unwrap_or_else(|e| panic!("{e}"))
+}
+
+#[test]
+fn the_ui_types_are_what_the_schemas_generate() {
+    let file = ui_lib().join("schema.gen.ts");
+    let text = ui_types();
+    if bless() {
+        std::fs::write(&file, text).unwrap();
+    } else {
+        assert!(
+            std::fs::read_to_string(&file).ok().as_deref() == Some(text.as_str()),
+            "UI types differ from the schemas: crates/speccoder-web/ui/src/lib/schema.gen.ts; run SPECCODER_BLESS=1 cargo test -p speccoder ui_types"
+        );
+    }
+}
+
+/// Names `text` declares (`interface X`, `type X =`).
+fn declared(text: &str) -> Vec<String> {
+    text.lines()
+        .filter_map(|l| {
+            let l = l.trim_start().trim_start_matches("export ");
+            l.strip_prefix("interface ")
+                .or_else(|| l.strip_prefix("type "))
+                .map(|r| {
+                    r.chars()
+                        .take_while(|c| c.is_alphanumeric() || *c == '_')
+                        .collect::<String>()
+                })
+        })
+        .filter(|n| !n.is_empty())
+        .collect()
+}
+
+#[test]
+fn the_hand_written_ui_types_declare_nothing_the_schemas_generate() {
+    let generated = declared(&ui_types());
+    let hand = std::fs::read_to_string(ui_lib().join("types.ts")).unwrap();
+    let twice: Vec<String> = declared(&hand)
+        .into_iter()
+        .filter(|n| generated.contains(n))
+        .collect();
+    assert!(
+        twice.is_empty(),
+        "types.ts declares what schema.gen.ts generates: {twice:?}; import it from ./schema.gen instead"
+    );
+    assert_eq!(
+        declared("export interface A {\n}\ntype B = string;\n// type C\n"),
+        ["A", "B"]
+    );
+}
+
 #[test]
 fn the_codes_page_is_the_catalog_and_the_cli_reference_lists_every_status() {
     let file = site().join("content/docs/codes.md");

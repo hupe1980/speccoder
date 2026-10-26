@@ -79,48 +79,64 @@ const fn describe(payload: &str) -> &'static str {
     }
 }
 
-/// The schema `name`, if speccoder publishes one by that name.
-#[must_use]
-pub fn get(name: &str) -> Option<Value> {
-    let title = names().into_iter().find(|(n, _)| *n == name)?.1;
-    Some(match name {
-        "result" => generate::<core::CommandResult>(name, title),
-        "event" => generate::<crate::events::Line>(name, title),
-        "inspect" => generate::<core::snapshot::ProjectSnapshot>(name, title),
-        "verify" => generate::<core::verify::VerifyReport>(name, title),
-        "worktree" => generate::<core::WorktreeReport>(name, title),
-        "propose" => generate::<core::ProposeReport>(name, title),
-        "replay" => generate::<core::ReplayReport>(name, title),
-        "run" => generate::<core::RunReport>(name, title),
-        "eval" => generate::<core::EvalReport>(name, title),
-        "feature" => generate::<core::FeatureReport>(name, title),
-        "converge" => generate::<core::ConvergeReport>(name, title),
-        "report" => generate::<core::StatusReport>(name, title),
-        "approvals" => generate::<core::ApprovalsReport>(name, title),
-        "control" => generate::<core::ControlReport>(name, title),
-        "cost" => generate::<core::CostReport>(name, title),
-        "pr" => generate::<core::PrReport>(name, title),
-        "bench" => generate::<core::BenchReport>(name, title),
-        "init" => generate::<core::InitReport>(name, title),
-        "skills" => generate::<core::SkillsReport>(name, title),
-        "skill" => generate::<core::SkillRunReport>(name, title),
-        "checklists" => generate::<Vec<core::ChecklistStatus>>(name, title),
-        "archive" => generate::<core::ArchiveReport>(name, title),
-        "in-place" => generate::<core::InPlaceReport>(name, title),
-        "attest" => generate::<core::AttestReport>(name, title),
-        "explain" => generate::<core::ExplainReport>(name, title),
-        "schema" => generate::<core::SchemaReport>(name, title),
-        "doctor" => generate::<core::DoctorReport>(name, title),
-        "features" => generate::<core::FeaturesReport>(name, title),
-        "ui" => generate::<core::UiReport>(name, title),
-        "config" => generate::<core::ConfigReport>(name, title),
-        "issues" => generate::<core::IssuesReport>(name, title),
-        "inbox" => generate::<core::InboxReport>(name, title),
-        "review" => generate::<core::ReviewReport>(name, title),
-        "auth" => generate::<core::AuthReport>(name, title),
-        "actions" => generate::<core::ActionsReport>(name, title),
-        _ => return None,
-    })
+/// Every published schema: its name, the name its root type has in the
+/// web app's generated types, and the type that prints it. One table, so
+/// the schemas and the names generated from them cannot diverge.
+macro_rules! published {
+    ($($name:literal, $ts:literal => $ty:ty,)*) => {
+        /// The schema `name`, if speccoder publishes one by that name.
+        #[must_use]
+        pub fn get(name: &str) -> Option<Value> {
+            let title = names().into_iter().find(|(n, _)| *n == name)?.1;
+            Some(match name {
+                $($name => generate::<$ty>(name, title),)*
+                _ => return None,
+            })
+        }
+
+        /// Each schema's name and its root type's name in the web app's
+        /// generated types (`result` → `Envelope`).
+        #[cfg(test)]
+        pub const ROOTS: &[(&str, &str)] = &[$(($name, $ts),)*];
+    };
+}
+
+published! {
+    "result", "Envelope" => core::CommandResult,
+    "event", "EventLine" => crate::events::Line,
+    "inspect", "ProjectSnapshot" => core::snapshot::ProjectSnapshot,
+    "verify", "VerifyReport" => core::verify::VerifyReport,
+    "worktree", "WorktreeReport" => core::WorktreeReport,
+    "propose", "ProposeReport" => core::ProposeReport,
+    "replay", "ReplayReport" => core::ReplayReport,
+    "run", "RunReport" => core::RunReport,
+    "eval", "EvalReport" => core::EvalReport,
+    "feature", "FeatureReport" => core::FeatureReport,
+    "converge", "ConvergeReport" => core::ConvergeReport,
+    "report", "StatusReport" => core::StatusReport,
+    "approvals", "ApprovalsReport" => core::ApprovalsReport,
+    "control", "ControlReport" => core::ControlReport,
+    "cost", "CostReport" => core::CostReport,
+    "pr", "PrReport" => core::PrReport,
+    "bench", "BenchReport" => core::BenchReport,
+    "init", "InitReport" => core::InitReport,
+    "skills", "SkillsReport" => core::SkillsReport,
+    "skill", "SkillRunReport" => core::SkillRunReport,
+    "checklists", "Checklists" => Vec<core::ChecklistStatus>,
+    "archive", "ArchiveReport" => core::ArchiveReport,
+    "in-place", "InPlaceReport" => core::InPlaceReport,
+    "attest", "AttestReport" => core::AttestReport,
+    "explain", "ExplainReport" => core::ExplainReport,
+    "schema", "SchemaReport" => core::SchemaReport,
+    "doctor", "DoctorReport" => core::DoctorReport,
+    "features", "FeaturesReport" => core::FeaturesReport,
+    "ui", "UiReport" => core::UiReport,
+    "config", "ConfigReport" => core::ConfigReport,
+    "issues", "IssuesReport" => core::IssuesReport,
+    "inbox", "InboxReport" => core::InboxReport,
+    "review", "ReviewReport" => core::ReviewReport,
+    "auth", "AuthReport" => core::AuthReport,
+    "actions", "ActionsReport" => core::ActionsReport,
 }
 
 /// `speccoder schema [NAME]`.
