@@ -360,6 +360,12 @@ pub trait Detect: Send + Sync {
     fn adapter(&self) -> Option<&'static dyn Adapter>;
 }
 
+/// Every adapter this build runs, in detection order.
+#[must_use]
+pub fn adapters() -> Vec<&'static dyn Adapter> {
+    all().into_iter().filter_map(|d| d.adapter()).collect()
+}
+
 /// The adapter of `kind`, if this build runs it.
 #[must_use]
 pub fn adapter(kind: FormatKind) -> Option<&'static dyn Adapter> {

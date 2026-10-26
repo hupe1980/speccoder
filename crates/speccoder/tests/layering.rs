@@ -21,7 +21,14 @@ const VERIFY: &str = "speccoder-verify";
 /// Crates the verifier must never reach, as it is built (`-p
 /// speccoder-verify`, the runtime without `engine`): no model, no network,
 /// no keychain (rule 7, FR-005).
-const VERIFY_DENY: &[&str] = &["agentplane", "tokio", "reqwest", "hyper", "keyring", "rustls"];
+const VERIFY_DENY: &[&str] = &[
+    "agentplane",
+    "tokio",
+    "reqwest",
+    "hyper",
+    "keyring",
+    "rustls",
+];
 
 /// Crates the pure core must never reach, directly or transitively (rule 5).
 const CORE_DENY: &[&str] = &[
@@ -199,16 +206,7 @@ fn verify_closure() -> BTreeSet<String> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let out = Command::new(env!("CARGO"))
         .args([
-            "tree",
-            "--locked",
-            "-p",
-            VERIFY,
-            "-e",
-            "normal",
-            "--prefix",
-            "none",
-            "--format",
-            "{p}",
+            "tree", "--locked", "-p", VERIFY, "-e", "normal", "--prefix", "none", "--format", "{p}",
         ])
         .current_dir(root)
         .output()

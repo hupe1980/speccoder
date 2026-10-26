@@ -1,0 +1,267 @@
+{
+  "$defs": {
+    "Decider": {
+      "description": "Who decided an `attested` or `skipped` task, and why.",
+      "properties": {
+        "by": {
+          "description": "The person.",
+          "type": "string"
+        },
+        "reason": {
+          "description": "Their reason.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "by",
+        "reason"
+      ],
+      "type": "object"
+    },
+    "Red": {
+      "description": "The red run's output, bounded and checked clean (revision 2).",
+      "properties": {
+        "excerpt": {
+          "description": "The last bytes of the output (at most 2048); `null` when withheld.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "excerpt_sha256": {
+          "description": "sha256 of `excerpt`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "$ref": "#/$defs/RedKind",
+          "description": "How the tests failed."
+        },
+        "output_sha256": {
+          "description": "sha256 of the captured output the excerpt was cut from.",
+          "type": "string"
+        },
+        "withheld": {
+          "description": "The excerpt was not clean (a local path, a credential): dropped.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "kind",
+        "output_sha256",
+        "withheld"
+      ],
+      "type": "object"
+    },
+    "RedKind": {
+      "description": "How the acceptance tests first failed (revision 2).",
+      "oneOf": [
+        {
+          "const": "assertion",
+          "description": "On an assertion.",
+          "type": "string"
+        },
+        {
+          "const": "missing_symbol",
+          "description": "Because what the task introduces did not exist yet.",
+          "type": "string"
+        }
+      ]
+    },
+    "SpecRef": {
+      "description": "The requirement the task belongs to.",
+      "properties": {
+        "section": {
+          "description": "The requirement or story, e.g. `US1`; `null`: none.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "section_hash": {
+          "description": "sha256 of that requirement's text as the attempt was given it.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "section_hash"
+      ],
+      "type": "object"
+    },
+    "TaskRef": {
+      "description": "The task.",
+      "properties": {
+        "id": {
+          "description": "Task ID (`T012`, `1.3`).",
+          "type": "string"
+        },
+        "line_hash": {
+          "description": "sha256 of the task line with its box read as open (before the tick).",
+          "type": "string"
+        },
+        "title": {
+          "description": "The task's title.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "line_hash",
+        "title"
+      ],
+      "type": "object"
+    },
+    "Unit": {
+      "description": "The spec unit (feature, change) the task belongs to.",
+      "properties": {
+        "dir": {
+          "description": "The unit's directory, project-relative.",
+          "type": "string"
+        },
+        "feature": {
+          "description": "The unit's name, e.g. `007-config`.",
+          "type": "string"
+        },
+        "format": {
+          "description": "The spec format, e.g. `speckit`, `openspec`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "format",
+        "feature",
+        "dir"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://hupe1980.github.io/speccoder/schemas/task-verification-v0.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "The `task-verification` predicate, v0.\n\nFields `null` in a tick may be absent in a decision (`attested`,\n`skipped`), which carries `decider` instead of the test evidence.",
+  "properties": {
+    "acceptance": {
+      "description": "Reserved (specs 093, 090): where the acceptance tests were decided —\n`{ source: authored|review|bug_confirmation|person_test, pre_frozen }`.\nOpaque here."
+    },
+    "bug": {
+      "description": "Reserved (spec 090, bugs): home, triad digest, outcome, the\nreproductions' discrimination, special-case rejections,\npass-to-pass. Opaque here; its owner types it with a revision bump."
+    },
+    "context": {
+      "description": "Reserved (spec 098): the context manifest (with spec 095's provider\ndigests). Opaque here."
+    },
+    "decider": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Decider"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "The decision's maker (`attested`, `skipped`)."
+    },
+    "decisions": {
+      "description": "People's decisions on the attempt's calls."
+    },
+    "dependencies": {
+      "description": "Reserved (D-122): dependencies the change added, with their\nregistry checksums. Opaque here."
+    },
+    "executor": {
+      "description": "Who implemented: `{ kind, agent? }`."
+    },
+    "instructions": {
+      "description": "Repository instruction files given to the attempt."
+    },
+    "integrity": {
+      "description": "The diff audit's findings (`{ findings: [] }`)."
+    },
+    "model": {
+      "description": "The judging model: `{ provider, model }`, or `null`."
+    },
+    "monitor": {
+      "description": "The gaming monitor: `{ state: clean|suspected|unreviewed|off, findings }`."
+    },
+    "mutation": {
+      "description": "Mutation testing: `{ caught, missed, … }`, or `null`."
+    },
+    "policy_sha256": {
+      "description": "sha256 of the judge's configuration at the parent commit.",
+      "type": "string"
+    },
+    "red": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Red"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "The red run's output excerpt (revision 2)."
+    },
+    "revision": {
+      "description": "Additive revision within v0; absent: 1.",
+      "format": "uint32",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "run": {
+      "description": "The agentplane run, or `null`."
+    },
+    "sandbox": {
+      "description": "Where the attempt ran: `{ mode, backend, network }`."
+    },
+    "spec": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SpecRef"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "The requirement and its text's hash (ticks)."
+    },
+    "strength": {
+      "description": "The acceptance set's strength (shares, near misses, permitted\nalternatives), or `null`."
+    },
+    "task": {
+      "$ref": "#/$defs/TaskRef",
+      "description": "The task."
+    },
+    "time": {
+      "description": "When it was recorded (RFC 3339, UTC).",
+      "type": "string"
+    },
+    "trace": {
+      "description": "Requirement → scenario → test rows, each with its phase and result."
+    },
+    "tree": {
+      "description": "The task commit's tree.",
+      "type": "string"
+    },
+    "unit": {
+      "$ref": "#/$defs/Unit",
+      "description": "The unit."
+    },
+    "verdict": {
+      "description": "`verified`, `regression_only`, `attested` or `skipped`.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "verdict",
+    "unit",
+    "task",
+    "tree",
+    "policy_sha256",
+    "time"
+  ],
+  "title": "https://speccoder.dev/task-verification/v0 (revision 2)",
+  "type": "object"
+}

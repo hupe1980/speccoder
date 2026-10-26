@@ -1,0 +1,758 @@
+{
+  "$defs": {
+    "Anchor": {
+      "description": "Where an annotation lands: a file and a 1-based line, at the head.",
+      "properties": {
+        "line": {
+          "description": "1-based line.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "path": {
+          "description": "Repository-relative path.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "line"
+      ],
+      "type": "object"
+    },
+    "BranchTotals": {
+      "description": "Counts by outcome, in the verdict bar's order.",
+      "properties": {
+        "attested": {
+          "description": "Evidenced `attested`.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "regressed": {
+          "description": "Regressed (reserved).",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "regression_only": {
+          "description": "Evidenced `regression_only`.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "skipped": {
+          "description": "Skipped by a person (not ticks).",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "stale": {
+          "description": "Stale.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "unverifiable": {
+          "description": "Unverifiable.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "verified": {
+          "description": "Evidenced `verified`.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "verified",
+        "regression_only",
+        "attested",
+        "stale",
+        "unverifiable",
+        "regressed",
+        "skipped"
+      ],
+      "type": "object"
+    },
+    "Conclusion": {
+      "description": "The branch's conclusion.",
+      "oneOf": [
+        {
+          "const": "success",
+          "description": "Every tick carries verifying evidence.",
+          "type": "string"
+        },
+        {
+          "const": "failure",
+          "description": "A tick is unverifiable, stale or regressed (or not verified while\nrequired), or a claim in range cannot be checked.",
+          "type": "string"
+        },
+        {
+          "const": "neutral",
+          "description": "Nothing to check: never success.",
+          "type": "string"
+        }
+      ]
+    },
+    "Mode": {
+      "description": "Which units a check covers.",
+      "oneOf": [
+        {
+          "const": "touched",
+          "description": "Every unit whose task list or intent differs between base and head.",
+          "type": "string"
+        },
+        {
+          "const": "all",
+          "description": "Every unit (the badge, the default branch).",
+          "type": "string"
+        }
+      ]
+    },
+    "ObjectVerification": {
+      "description": "One task object's verification.",
+      "properties": {
+        "kind": {
+          "description": "`task` or `skip`.",
+          "type": "string"
+        },
+        "object": {
+          "description": "The commit (or skip record) id.",
+          "type": "string"
+        },
+        "outcome": {
+          "$ref": "#/$defs/VerifyOutcome",
+          "description": "The outcome."
+        },
+        "reasons": {
+          "description": "Every reason found.",
+          "items": {
+            "$ref": "#/$defs/VerifyReason"
+          },
+          "type": "array"
+        },
+        "same_tree_as": {
+          "description": "For a missing attestation: an attested commit with the same tree.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "signer": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SignerView"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Who signed, when signed."
+        },
+        "statements": {
+          "description": "How many statements the bundle holds.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "task": {
+          "description": "Task ID.",
+          "type": "string"
+        },
+        "verdict": {
+          "description": "The verdict the statements claim.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "object",
+        "kind",
+        "task",
+        "verdict",
+        "outcome",
+        "reasons",
+        "signer",
+        "statements",
+        "same_tree_as"
+      ],
+      "type": "object"
+    },
+    "RequirementDrift": {
+      "description": "One cited requirement, as the tick saw it and as the spec has it now.",
+      "properties": {
+        "id": {
+          "description": "`FR-003`.",
+          "type": "string"
+        },
+        "now": {
+          "description": "Its line now; `None`: it was removed.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "then": {
+          "description": "Its line when the task was ticked; `None`: it did not exist yet.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "then",
+        "now"
+      ],
+      "type": "object"
+    },
+    "SignerView": {
+      "description": "Who signed.",
+      "properties": {
+        "keyid": {
+          "description": "The key's fingerprint (`SHA256:…`, an OpenPGP fingerprint).",
+          "type": "string"
+        },
+        "kind": {
+          "description": "`ssh`, `openpgp` or `sigstore`.",
+          "type": "string"
+        },
+        "principal": {
+          "description": "The principal the verifier's trust input names for it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "keyid"
+      ],
+      "type": "object"
+    },
+    "SkippedTask": {
+      "description": "A task skipped by a person's decision: no tick, not counted.",
+      "properties": {
+        "feature": {
+          "description": "The unit.",
+          "type": "string"
+        },
+        "task": {
+          "description": "Task ID.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "feature",
+        "task"
+      ],
+      "type": "object"
+    },
+    "Tick": {
+      "description": "A ticked task at the checked head.",
+      "properties": {
+        "anchor": {
+          "$ref": "#/$defs/Anchor",
+          "description": "The task line (a tick) or the home's assessment (trailer-only)."
+        },
+        "claim_sha256": {
+          "description": "For trailer-only: the claim's digest at the head (the bug's triad).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "feature": {
+          "description": "The unit, as the format adapter names it.",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/TickKind",
+          "description": "A tick or a trailer-only task."
+        },
+        "line_sha256": {
+          "description": "sha256 of the task line with its box read as open: what the\npredicate's `task.line_hash` must equal. `None` for trailer-only.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "task": {
+          "description": "Task ID (`T012`, `1.3`, `bug:<slug>`).",
+          "type": "string"
+        },
+        "title": {
+          "description": "The task's title.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "feature",
+        "task",
+        "title",
+        "kind",
+        "anchor",
+        "line_sha256",
+        "claim_sha256"
+      ],
+      "type": "object"
+    },
+    "TickKind": {
+      "description": "What a checked task is.",
+      "oneOf": [
+        {
+          "const": "tick",
+          "description": "A `[X]` line in a task list.",
+          "type": "string"
+        },
+        {
+          "const": "trailer_only",
+          "description": "A closed task of a format home without a task list: its verdict\ncommit is the claim (spec 090's `bug:<slug>`).",
+          "type": "string"
+        }
+      ]
+    },
+    "TickOutcome": {
+      "description": "A tick's outcome.",
+      "oneOf": [
+        {
+          "const": "evidenced",
+          "description": "The evidence verifies; `verdict` says what it shows.",
+          "type": "string"
+        },
+        {
+          "const": "stale",
+          "description": "The evidence verifies, but a requirement the task cites changed\nsince the tick (D-091): it is for the earlier wording.",
+          "type": "string"
+        },
+        {
+          "const": "unverifiable",
+          "description": "The evidence does not verify; `reason` says why.",
+          "type": "string"
+        },
+        {
+          "const": "regressed",
+          "description": "Reserved (D-121): a later signed checkpoint marks this earlier task\nregressed. No producer yet; it fails like `unverifiable`.",
+          "type": "string"
+        }
+      ]
+    },
+    "TickReport": {
+      "description": "One tick's report.",
+      "properties": {
+        "commit": {
+          "description": "The task commit checked (the latest reachable with the task's\nverdict trailers), when one exists.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "decider": {
+          "description": "Who accepted an `attested` tick.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "detail": {
+          "description": "More on the reason, in one line.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "newer_fields": {
+          "description": "Predicate fields or revisions this verifier does not know (kept,\nnever deciding).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "outcome": {
+          "$ref": "#/$defs/TickOutcome",
+          "description": "The outcome."
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Unverifiable"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "For `unverifiable`."
+        },
+        "signer": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SignerView"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Who signed."
+        },
+        "stale": {
+          "description": "For `stale`: the cited requirements that changed since the tick.",
+          "items": {
+            "$ref": "#/$defs/RequirementDrift"
+          },
+          "type": "array"
+        },
+        "stale_anchor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Anchor"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "For `stale`: the first changed requirement's line at the head."
+        },
+        "tick": {
+          "$ref": "#/$defs/Tick",
+          "description": "The tick."
+        },
+        "verdict": {
+          "description": "`verified`, `regression_only` or `attested`, as the evidence claims.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "verification": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ObjectVerification"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "`attest verify`'s object for the commit, unchanged."
+        }
+      },
+      "required": [
+        "tick",
+        "commit",
+        "outcome",
+        "verdict",
+        "reason",
+        "detail",
+        "signer",
+        "decider",
+        "stale",
+        "stale_anchor",
+        "newer_fields",
+        "verification"
+      ],
+      "type": "object"
+    },
+    "TraceRow": {
+      "description": "One row of the requirement → scenario → test → verdict matrix.",
+      "properties": {
+        "changed": {
+          "default": false,
+          "description": "The requirement changed since that task's tick: the verdict is for\nits earlier wording.",
+          "type": "boolean"
+        },
+        "requirement": {
+          "description": "`FR-001`, `SC-002`.",
+          "type": "string"
+        },
+        "scenario": {
+          "description": "`US1.2`: story 1, acceptance scenario 2.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "task": {
+          "description": "The task that cites it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "test": {
+          "description": "The acceptance test.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "verdict": {
+          "description": "That task's verdict.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "requirement",
+        "scenario",
+        "test",
+        "task",
+        "verdict",
+        "changed"
+      ],
+      "type": "object"
+    },
+    "Unverifiable": {
+      "description": "Why a tick's evidence does not verify.",
+      "oneOf": [
+        {
+          "const": "ticked_without_evidence",
+          "description": "No commit carries the task's verdict (ticked by hand).",
+          "type": "string"
+        },
+        {
+          "const": "missing",
+          "description": "The task commit has no attestation note.",
+          "type": "string"
+        },
+        {
+          "const": "malformed",
+          "description": "A line of the note does not parse, or the predicate is not v0.",
+          "type": "string"
+        },
+        {
+          "const": "bad_signature",
+          "description": "A signature does not verify.",
+          "type": "string"
+        },
+        {
+          "const": "mismatch",
+          "description": "A statement disagrees with the commit, its trailers, the task line\nor the bundle.",
+          "type": "string"
+        },
+        {
+          "const": "untrusted_signer",
+          "description": "Signed by a key the verifier does not trust.",
+          "type": "string"
+        },
+        {
+          "const": "unsigned",
+          "description": "Not signed (unverifiable unless the caller accepts unsigned ticks).",
+          "type": "string"
+        },
+        {
+          "const": "commit_unreachable",
+          "description": "The commit the evidence names is not reachable from the head (a\nsquash or rebase merge).",
+          "type": "string"
+        },
+        {
+          "const": "tool_missing",
+          "description": "The signature's tool (`ssh-keygen`, `gpg`, `cosign`) cannot run.",
+          "type": "string"
+        }
+      ]
+    },
+    "VerifyOutcome": {
+      "description": "What `attest verify` found for one task object.",
+      "oneOf": [
+        {
+          "const": "ok",
+          "description": "Every line parses, every signature verifies against the trust input,\nand every statement agrees with the commit.",
+          "type": "string"
+        },
+        {
+          "const": "unsigned",
+          "description": "The statements hold but are not signed.",
+          "type": "string"
+        },
+        {
+          "const": "missing",
+          "description": "No speccoder attestation on the object.",
+          "type": "string"
+        },
+        {
+          "const": "bad_signature",
+          "description": "A signature does not verify.",
+          "type": "string"
+        },
+        {
+          "const": "untrusted_signer",
+          "description": "A signature verifies, but its key is not trusted by the verifier.",
+          "type": "string"
+        },
+        {
+          "const": "mismatch",
+          "description": "A statement disagrees with the commit, its trailers, the spec or the bundle.",
+          "type": "string"
+        },
+        {
+          "const": "malformed",
+          "description": "A line does not parse.",
+          "type": "string"
+        },
+        {
+          "const": "tool_missing",
+          "description": "The signature's tool (`ssh-keygen`, `gpg`, `cosign`) cannot run:\nnothing can be said about it.",
+          "type": "string"
+        }
+      ]
+    },
+    "VerifyReason": {
+      "description": "Why an object got its outcome.",
+      "properties": {
+        "code": {
+          "description": "A stable code, e.g. `subject`, `trailer`, `line_hash`, `signature`.",
+          "type": "string"
+        },
+        "expected": {
+          "description": "What it should be.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "field": {
+          "description": "The field that disagrees.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "found": {
+          "description": "What it is.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "code"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/branch_verify.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Result of `speccoder-verify check` / `speccoder attest verify --branch`.",
+  "properties": {
+    "accepted_unsigned": {
+      "description": "Unsigned evidence was accepted (`--require-signed=false`).",
+      "type": "boolean"
+    },
+    "base": {
+      "description": "The merge base with the given base, when one was given.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "conclusion": {
+      "$ref": "#/$defs/Conclusion",
+      "description": "The conclusion."
+    },
+    "features": {
+      "description": "The units checked, in order.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "head": {
+      "description": "The commit checked.",
+      "type": "string"
+    },
+    "mode": {
+      "$ref": "#/$defs/Mode",
+      "description": "Which units were covered."
+    },
+    "newer_fields": {
+      "description": "Predicate fields or revisions seen but unknown here (tolerated).",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "not_evaluated": {
+      "description": "Rules this verifier version does not evaluate yet.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "open_no_claim": {
+      "description": "Bug homes touched without a verdict commit (informational).",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "require_verified": {
+      "description": "`regression_only` and `attested` fail too.",
+      "type": "boolean"
+    },
+    "share": {
+      "description": "Evidenced (not stale) over all ticks; `None` without ticks.",
+      "format": "double",
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "skipped": {
+      "description": "Tasks skipped by a person's decision (informational).",
+      "items": {
+        "$ref": "#/$defs/SkippedTask"
+      },
+      "type": "array"
+    },
+    "ticks": {
+      "description": "Every tick (and trailer-only task), in document order per unit.",
+      "items": {
+        "$ref": "#/$defs/TickReport"
+      },
+      "type": "array"
+    },
+    "totals": {
+      "$ref": "#/$defs/BranchTotals",
+      "description": "Counts by outcome."
+    },
+    "trace": {
+      "description": "Requirement → task → test → verdict, from the signed `trace[]`,\nwith a row (no task) for each requirement no tick cites.",
+      "items": {
+        "$ref": "#/$defs/TraceRow"
+      },
+      "type": "array"
+    },
+    "trust": {
+      "description": "The trust used: the allowed-signers file and the revision it was\nread at, the Sigstore identity and issuer."
+    }
+  },
+  "required": [
+    "head",
+    "base",
+    "mode",
+    "features",
+    "ticks",
+    "skipped",
+    "totals",
+    "conclusion",
+    "trust",
+    "accepted_unsigned",
+    "require_verified",
+    "trace",
+    "share",
+    "open_no_claim",
+    "not_evaluated",
+    "newer_fields"
+  ],
+  "title": "attest verify --branch, speccoder-verify: every tick of a branch and what its evidence comes to",
+  "type": "object"
+}

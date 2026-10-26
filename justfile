@@ -19,6 +19,8 @@ fmt-check:
 lint:
     @echo "==> gate: lint"
     cargo clippy --workspace --all-targets -- -D warnings
+    # The verifier alone resolves the runtime without `engine`: its read half lints clean too.
+    cargo clippy -p speccoder-verify --all-targets -- -D warnings
 
 test:
     @echo "==> gate: test"

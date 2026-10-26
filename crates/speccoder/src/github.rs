@@ -8,25 +8,7 @@ use std::io::Write;
 
 use speccoder_core::{CommandData, CommandResult, StatusReport};
 
-/// Bytes a step summary may take (GitHub's cap is 1 MiB per step).
-pub const SUMMARY_BUDGET: usize = 1_000_000;
-
-/// Annotations of one kind GitHub shows per step.
-pub const ANNOTATIONS_PER_KIND: usize = 10;
-
-/// Escapes workflow-command data.
-#[must_use]
-pub fn data(s: &str) -> String {
-    s.replace('%', "%25")
-        .replace('\r', "%0D")
-        .replace('\n', "%0A")
-}
-
-/// Escapes a workflow-command property.
-#[must_use]
-pub fn property(s: &str) -> String {
-    data(s).replace(':', "%3A").replace(',', "%2C")
-}
+pub use speccoder_core::workflow::{ANNOTATIONS_PER_KIND, SUMMARY_BUDGET, data, property};
 
 /// The annotation lines for a report: warnings for `regression_only` and
 /// suspected gaming, errors for failed and blocked tasks; at most

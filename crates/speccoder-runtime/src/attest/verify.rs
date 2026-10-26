@@ -65,6 +65,8 @@ enum Checked {
     Good(SignerView),
     Untrusted(SignerView),
     Bad(String),
+    /// The signer's tool cannot be spawned: nothing can be said.
+    ToolMissing(&'static str),
 }
 
 fn run(mut cmd: Command, input: Option<&[u8]>) -> Option<(bool, String, String)> {
@@ -120,7 +122,7 @@ fn check_ssh(armored: &[u8], data: &[u8], keyid: &str, allowed: Option<&Path>) -
             return match run(verify, Some(data)) {
                 Some((true, ..)) => Checked::Good(view(Some(principal))),
                 Some((false, _, err)) => Checked::Bad(err.trim().to_owned()),
-                None => Checked::Bad("ssh-keygen did not run".to_owned()),
+                None => Checked::ToolMissing("ssh-keygen"),
             };
         }
     }
@@ -132,7 +134,7 @@ fn check_ssh(armored: &[u8], data: &[u8], keyid: &str, allowed: Option<&Path>) -
     match run(check, Some(data)) {
         Some((true, ..)) => Checked::Untrusted(view(None)),
         Some((false, _, err)) => Checked::Bad(err.trim().to_owned()),
-        None => Checked::Bad("ssh-keygen did not run".to_owned()),
+        None => Checked::ToolMissing("ssh-keygen"),
     }
 }
 
@@ -150,7 +152,7 @@ fn check_openpgp(armored: &[u8], data: &[u8], keyid: &str) -> Checked {
         .arg(&sig)
         .arg(&body);
     let Some((_, status, _)) = run(cmd, None) else {
-        return Checked::Bad("gpg did not run".to_owned());
+        return Checked::ToolMissing("gpg");
     };
     let view = SignerView {
         kind: "openpgp".to_owned(),
@@ -208,7 +210,7 @@ fn check_sigstore(line: &Envelope, data: &[u8], trust: &Trust) -> Checked {
     match run(cmd, None) {
         Some((true, ..)) => Checked::Good(view),
         Some((false, _, err)) => Checked::Bad(err.trim().to_owned()),
-        None => Checked::Untrusted(view),
+        None => Checked::ToolMissing("cosign"),
     }
 }
 
@@ -252,12 +254,12 @@ fn trailers(repo: &Path, object: &str) -> BTreeMap<String, String> {
 
 /// The task line's hash in the tasks file at the commit, with its box read
 /// as open (the hash a statement names was taken before the tick).
-fn line_hash_at(repo: &Path, object: &str, tasks_path: &str, task: &str) -> Option<String> {
-    let text = Git::at(repo)
+fn line_hash_at(cx: &Context<'_>, object: &str, tasks_path: &str, task: &str) -> Option<String> {
+    let text = Git::at(cx.repo)
         .run(&["show", &format!("{object}:{tasks_path}")])
         .ok()
         .map(|b| String::from_utf8_lossy(&b).into_owned())?;
-    let format = crate::format::at(repo);
+    let format = cx.format.unwrap_or_else(|| crate::format::at(cx.repo));
     let (parsed, _) = format.parse_tasks(tasks_path, &text);
     let t = parsed.tasks.iter().find(|t| t.id == task)?;
     let line = text
@@ -280,6 +282,9 @@ pub struct Context<'a> {
     pub config_path: &'a str,
     /// The verifier's trust.
     pub trust: &'a Trust,
+    /// The format reading the task lists, when the caller knows it (read
+    /// from git objects); `None`: the one of the checkout at `repo`.
+    pub format: Option<&'static dyn crate::format::Adapter>,
 }
 
 /// Verifies one object.
@@ -394,6 +399,14 @@ pub fn object(cx: &Context<'_>, target: &Target) -> ObjectVerification {
                 r.found = Some(why);
                 out.reasons.push(r);
             }
+            Some(Checked::ToolMissing(tool)) => {
+                raise(&mut worst, VerifyOutcome::ToolMissing);
+                let mut r = reason("tool_missing");
+                r.found = Some(format!(
+                    "{tool} cannot be run: install it to check this signature"
+                ));
+                out.reasons.push(r);
+            }
         }
     }
     // 3–4. The task-verification agrees with the commit.
@@ -476,7 +489,7 @@ pub fn object(cx: &Context<'_>, target: &Target) -> ObjectVerification {
         ));
     }
     if let Some(path) = cx.tasks_path
-        && let Some(at) = line_hash_at(cx.repo, &target.object, path, task_id)
+        && let Some(at) = line_hash_at(cx, &target.object, path, task_id)
     {
         let claimed = tv["task"]["line_hash"].as_str().unwrap_or_default();
         if claimed != at {
@@ -586,44 +599,20 @@ fn policy_at(cx: &Context<'_>, object: &str) -> Option<String> {
 /// The requirement's text hash at the commit, through the format adapter
 /// over the commit's tree: what the spec said when the task was ticked.
 fn section_hash_at(cx: &Context<'_>, object: &str, _section: &str, task: &str) -> Option<String> {
-    let dir = tempfile::tempdir().ok()?;
     // Only what a spec format reads: the top level's files and dot
-    // directories, `openspec/`, and the tree holding the unit — never the
-    // source tree, whose size would make every check slow.
-    let git = Git::at(cx.repo);
-    let unit_top = cx
-        .tasks_path
-        .and_then(|p| p.split('/').next())
-        .unwrap_or_default();
-    let top = git
-        .run(&["ls-tree", "--format=%(objecttype) %(path)", object])
-        .map(|b| String::from_utf8_lossy(&b).into_owned())
-        .ok()?;
-    let mut paths: Vec<&str> = top
-        .lines()
-        .filter_map(|l| l.split_once(' '))
-        .filter(|(kind, path)| {
-            *kind == "blob" || path.starts_with('.') || *path == "openspec" || *path == unit_top
-        })
-        .map(|(_, path)| path)
-        .collect();
-    if cx.tasks_path.is_none() {
-        paths.clear();
-    }
-    let mut args = vec!["archive", object];
-    if !paths.is_empty() {
-        args.push("--");
-        args.extend(paths);
-    }
-    let archive = git.run(&args).ok()?;
-    let mut tar = Command::new("tar")
-        .args(["-x", "-C"])
-        .arg(dir.path())
-        .stdin(Stdio::piped())
-        .spawn()
-        .ok()?;
-    tar.stdin.take()?.write_all(&archive).ok()?;
-    tar.wait().ok()?;
+    // directories, the directories holding a format's intent, and the tree
+    // holding the unit — never the source tree, whose size would make
+    // every check slow. Written from git objects: nothing but git runs.
+    let tops = cx.tasks_path.map(|p| {
+        let mut tops = super::tree::intent_tops(cx.repo, object).unwrap_or_default();
+        if let Some(unit_top) = p.split('/').next()
+            && !tops.iter().any(|t| t == unit_top)
+        {
+            tops.push(unit_top.to_owned());
+        }
+        tops
+    });
+    let dir = super::tree::materialize(cx.repo, object, tops.as_deref())?;
     let format = crate::format::at(dir.path());
     let snap = format.inspect(dir.path(), Some(cx.feature))?;
     let bundle = format.bundle(&snap, task).ok()?;
@@ -748,12 +737,13 @@ pub fn report(cx: &Context<'_>, targets: &[Target], require_signed: bool) -> Com
         })
         .collect();
     // In the order the summary reads: ok first, then the worst first.
-    const KINDS: [&str; 7] = [
+    const KINDS: [&str; 8] = [
         "ok",
         "missing",
         "malformed",
         "bad_signature",
         "mismatch",
+        "tool_missing",
         "untrusted_signer",
         "unsigned",
     ];
@@ -880,6 +870,7 @@ pub fn verify_at(
         tasks_path: tasks_path.as_deref(),
         config_path: &config_path,
         trust: &trust,
+        format: None,
     };
     report(&cx, &targets, require_signed)
 }

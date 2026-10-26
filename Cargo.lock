@@ -4752,6 +4752,7 @@ name = "speccoder"
 version = "0.2.0"
 dependencies = [
  "assert_cmd",
+ "base64 0.22.1",
  "clap",
  "clap_complete",
  "jsonschema 0.60.1",
@@ -4842,7 +4843,7 @@ dependencies = [
 name = "speccoder-verify"
 version = "0.2.0"
 dependencies = [
- "assert_cmd",
+ "base64 0.22.1",
  "clap",
  "serde_json",
  "speccoder-core",

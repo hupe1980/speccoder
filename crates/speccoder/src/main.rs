@@ -38,6 +38,58 @@ fn no_state(command: &str) -> speccoder_core::CommandResult {
     .with_code("NO-STATE-DIR")
 }
 
+/// `speccoder attest verify --branch`: the branch verifier's check (the
+/// same function as `speccoder-verify check`), with this machine's trust —
+/// the flags, else git's `gpg.ssh.allowedSignersFile`.
+#[allow(clippy::too_many_arguments)] // the command's flags, one each
+fn attest_branch(
+    path: &std::path::Path,
+    head: Option<&str>,
+    base: Option<&str>,
+    allowed_signers: Option<&std::path::Path>,
+    allowed_signers_rev: Option<&str>,
+    identity: Option<&str>,
+    issuer: Option<&str>,
+    require_signed: bool,
+) -> speccoder_core::CommandResult {
+    use speccoder_runtime::attest::branch::{AllowedSigners, Options, verify};
+    const COMMAND: &str = "attest verify --branch";
+    let configured = || {
+        speccoder_runtime::git::Git::at(path)
+            .line(&["config", "gpg.ssh.allowedSignersFile"])
+            .ok()
+            .filter(|p| !p.is_empty())
+            .map(|p| match (p.strip_prefix("~/"), std::env::var_os("HOME")) {
+                (Some(rest), Some(home)) => std::path::PathBuf::from(home).join(rest),
+                _ => std::path::PathBuf::from(p),
+            })
+    };
+    let allowed = match (allowed_signers, allowed_signers_rev) {
+        (Some(f), _) => Some(AllowedSigners::File(f.to_path_buf())),
+        (None, Some(spec)) => match AllowedSigners::parse_rev(spec) {
+            Ok(a) => Some(a),
+            Err(e) => {
+                return speccoder_core::CommandResult::new(
+                    COMMAND,
+                    speccoder_core::CommandStatus::UsageError,
+                    &e,
+                );
+            }
+        },
+        (None, None) => configured().map(AllowedSigners::File),
+    };
+    let opts = Options {
+        head: head.unwrap_or("HEAD").to_owned(),
+        base: base.map(str::to_owned),
+        allowed_signers: allowed,
+        identity: identity.map(str::to_owned),
+        issuer: issuer.map(str::to_owned),
+        require_signed,
+        ..Options::default()
+    };
+    verify(path, &opts, COMMAND)
+}
+
 /// `speccoder spec archive [<change>] [--yes] [--allow-unverified TASK]…`:
 /// flags given after the change are read from the trailing arguments too.
 fn archive(
@@ -672,6 +724,29 @@ fn main() {
                     certificate_identity,
                     certificate_oidc_issuer,
                     require_signed,
+                    branch: true,
+                    base,
+                    allowed_signers_rev,
+                },
+        } => attest_branch(
+            path,
+            rev.as_deref(),
+            base.as_deref(),
+            allowed_signers.as_deref(),
+            allowed_signers_rev.as_deref(),
+            certificate_identity.as_deref(),
+            certificate_oidc_issuer.as_deref(),
+            *require_signed,
+        ),
+        Command::Attest {
+            action:
+                cli::AttestAction::Verify {
+                    rev,
+                    allowed_signers,
+                    certificate_identity,
+                    certificate_oidc_issuer,
+                    require_signed,
+                    ..
                 },
         } => speccoder_runtime::attest::verify::verify_at(
             path,

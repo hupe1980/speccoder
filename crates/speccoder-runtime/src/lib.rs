@@ -88,6 +88,7 @@ pub mod substrate {
 }
 #[cfg(feature = "engine")]
 pub mod tools;
+pub mod tour;
 /// Without the engine: only the path classes and the write policy.
 #[cfg(not(feature = "engine"))]
 pub mod tools {

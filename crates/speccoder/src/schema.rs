@@ -74,6 +74,10 @@ const fn describe(payload: &str) -> &'static str {
         b"inbox" => "inbox: every decision waiting for a person, across features",
         b"review" => "review: the spec's requirements and the person's decision on each",
         b"auth" => "auth: who speccoder is on a GitHub host, and where its token comes from",
+        b"branch_verify" => {
+            "attest verify --branch, speccoder-verify: every tick of a branch and what its evidence comes to"
+        }
+        b"evidence_tour" => "speccoder-verify tour, /api/tour: one task's evidence, step by step",
         _ => "",
     }
 }
@@ -81,6 +85,9 @@ const fn describe(payload: &str) -> &'static str {
 /// The schema `name`, if speccoder publishes one by that name.
 #[must_use]
 pub fn get(name: &str) -> Option<Value> {
+    if name == PREDICATE_NAME {
+        return Some(predicate());
+    }
     let title = names().into_iter().find(|(n, _)| *n == name)?.1;
     Some(match name {
         "result" => generate::<core::CommandResult>(name, title),
@@ -117,8 +124,41 @@ pub fn get(name: &str) -> Option<Value> {
         "inbox" => generate::<core::InboxReport>(name, title),
         "review" => generate::<core::ReviewReport>(name, title),
         "auth" => generate::<core::AuthReport>(name, title),
+        "branch_verify" => generate::<core::verify_branch::BranchReport>(name, title),
+        "evidence_tour" => generate::<core::tour::EvidenceTour>(name, title),
         _ => return None,
     })
+}
+
+/// The predicate schema's name (`speccoder schema task-verification-v0`).
+pub const PREDICATE_NAME: &str = "task-verification-v0";
+
+/// Where the task-verification predicate's schema is published (beside
+/// the payloads, not under `v2/`: it is the predicate's own version).
+pub const PREDICATE: &str =
+    "https://hupe1980.github.io/speccoder/schemas/task-verification-v0.json";
+
+/// The schema of the `task-verification` predicate body (v0), published as
+/// part of its open specification.
+#[must_use]
+pub fn predicate() -> Value {
+    let generator = SchemaSettings::draft2020_12().into_generator();
+    let mut schema = serde_json::to_value(
+        generator.into_root_schema_for::<core::predicate::TaskVerificationV0>(),
+    )
+    .unwrap_or_default();
+    if let Some(o) = schema.as_object_mut() {
+        o.insert("$id".to_owned(), Value::String(PREDICATE.to_owned()));
+        o.insert(
+            "title".to_owned(),
+            Value::String(format!(
+                "{} (revision {})",
+                core::predicate::TYPE,
+                core::predicate::REVISION
+            )),
+        );
+    }
+    schema
 }
 
 /// `speccoder schema [NAME]`.
