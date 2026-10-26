@@ -142,7 +142,9 @@ pub static PLANNING: Planning = Planning {
     prefix: "openspec-",
     core: &[],
     refused,
-    creates: &[],
+    // `propose` creates a change (and writes its proposal, deltas and
+    // tasks in one pass): the first step of a project without one.
+    creates: &["propose"],
     current_env: None,
     toward_tasks,
     revises: None,
