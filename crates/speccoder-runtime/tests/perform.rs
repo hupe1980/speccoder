@@ -561,6 +561,8 @@ impl Norm {
                             Value::Number(n) if n.as_u64().is_some_and(|n| n > 1_000_000_000) => {
                                 json!(0)
                             }
+                            // A commit's day: the day the test runs.
+                            Value::String(d) if k == "date" && d.len() == 10 => json!("<date>"),
                             x => self.value(x),
                         };
                         (k.clone(), x)
