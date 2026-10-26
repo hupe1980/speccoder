@@ -67,19 +67,9 @@ kind = "claude"      # or "codex", "command"
 - What stays: the isolated worktree, the acceptance tests written before the attempt (by the model in `[model]`), the diff audit, the checks and the verdict, retries, the monitor, ticking and committing.
 - What changes: **guarantees are diff-level, not call-level.** The agent runs outside speccoder's sandbox under its own permission system, so there are no approvals during an attempt; a frozen test it edits is caught by the audit and fails the verdict. See [security](@/docs/security.md#external-agents).
 
-## Pull requests
-
-`speccoder pr` hands a feature off as a draft pull request whose description is the evidence; see [GitHub](@/docs/github.md#its-pull-request).
-
 ## CI and scripting
 
-Three contracts, all described by published [JSON Schemas](@/docs/cli.md#json-output):
-
-- `--json` prints one result object: status, exit code, a [code](@/docs/codes.md) with `fix` and `docs` when something is wrong, `next`, and the typed `data`.
-- `--events` streams JSON Lines — tasks, stages, tool calls, approvals, usage — ending in the same object ([events](@/docs/cli.md#events)).
-- Exit codes are stable ([CLI reference](@/docs/cli.md#exit-codes)); 23 always means "a person is needed".
-
-For unattended runs use `--no-prompt`: a call that needs approval waits for [`task approve`](@/docs/approvals.md#later) instead of prompting.
+`--json` (one result object), `--events` (JSON Lines ending in that object) and the exit codes are stable contracts with published schemas; see the [CLI reference](@/docs/cli.md#json-output). Exit 23 always means "a person is needed". For unattended runs use `--no-prompt`: a call that needs approval waits for [`task approve`](@/docs/approvals.md#later) instead of prompting.
 
 ### GitHub Actions
 
@@ -91,14 +81,4 @@ Under `GITHUB_ACTIONS=true`, `run` and `report` append the feature's report as M
     ANTHROPIC_API_KEY: …   # from the repository's secrets
 ```
 
-`speccoder report --markdown` prints the same Markdown anywhere. For checking evidence on pull requests, see [the evidence check](@/docs/github.md#evidence-check).
-
-## Spec Kit workflows
-
-`speccoder workflow install` adds speccoder to Spec Kit's workflow engine: the step type `speccoder` (`.specify/workflows/steps/speccoder/`) and a workflow that uses it (`.specify/workflows/speccoder/workflow.yml`; `--force` replaces existing files). Exit code 23 becomes the step status `paused`, so `specify workflow resume` continues after your decision.
-
-```sh
-specify workflow run .specify/workflows/speccoder/workflow.yml --input spec="…"
-```
-
-**The `bugfix` workflow.** With Spec Kit's `bug` extension and its `bugfix` workflow installed, `speccoder workflow install --overlay bugfix` writes `.specify/workflows/overlays/bugfix/speccoder.yml`, which replaces the workflow's `test` step with a `speccoder` step running `speccoder bug run --slug <the bug's slug>`. `specify workflow run bugfix` then pauses for the reproductions' confirmation and reports the verdict. `speccoder workflow uninstall --overlay bugfix` removes the overlay. See [bug fixes](@/docs/bugs.md).
+`speccoder report --markdown` prints the same Markdown anywhere. Pull requests: [GitHub](@/docs/github.md#its-pull-request); checking evidence on them: [the evidence check](@/docs/github.md#evidence-check). Spec Kit workflow steps: [planning](@/docs/planning.md#spec-kit-workflows).

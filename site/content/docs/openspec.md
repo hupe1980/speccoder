@@ -8,7 +8,7 @@ group = "Use"
 nav = "OpenSpec projects"
 +++
 
-speccoder runs [OpenSpec](https://github.com/Fission-AI/OpenSpec) changes under the same judge as Spec Kit features ([how it works](@/docs/how-it-works.md)). What differs:
+speccoder runs [OpenSpec](https://github.com/Fission-AI/OpenSpec) changes under the same [judge](@/docs/how-it-works.md) as Spec Kit features. What differs:
 
 | | Spec Kit | OpenSpec |
 |---|---|---|
@@ -31,13 +31,11 @@ speccoder run --task 1.2          # one task
 
 The format is detected: the nearest `openspec/` (with `config.yaml`, `specs/` or `changes/`) or `.specify/` decides. When a directory has both, choose with `--format openspec`, `SPECCODER_FORMAT` or `[spec] format`. `--change` is an alias of `--feature`.
 
-Commit the change's files before a run: the worktree on `speccoder/<change-id>` is built from commits. A task ticked before speccoder ran it is reported as ticked without evidence.
-
-Each attempt sees `config.yaml`'s `context` (as the project's rules), `proposal.md` and `design.md` (as the plan), and every delta of the change in full. OpenSpec does not link a task to a requirement, so acceptance tests come from the change's scenarios that the task concerns. The archive is never shown.
+Commit the change's files before a run; the work happens on `speccoder/<change-id>`. A task ticked before speccoder ran it is reported as ticked without evidence. Each attempt sees `config.yaml`'s `context` (as the project's rules), `proposal.md` and `design.md` (as the plan), and every delta of the change in full. OpenSpec does not link a task to a requirement, so acceptance tests come from the change's scenarios that the task concerns. The archive is never shown.
 
 ## Caught before any model call
 
-`openspec validate --strict` accepts some deltas that `openspec archive` refuses after the work is done. speccoder checks the change first and refuses to run while any of these hold:
+`openspec validate --strict` accepts some deltas that `openspec archive` later refuses, so speccoder refuses to run while any of these hold:
 
 | Code | Meaning |
 |---|---|

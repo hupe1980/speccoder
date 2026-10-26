@@ -31,7 +31,7 @@ network_allow = [["cargo", "fetch"]]
 
 ## Changing it
 
-Edit the file, or use `speccoder config`. Its edits are checked by every parser before they are written, and keep the file's comments, order and layout:
+Edit the file, or use `speccoder config` (or **Settings** in the [web interface](@/docs/web.md#settings)). Its edits are checked by every parser before they are written, and keep the file's comments, order and layout. A change takes effect once committed.
 
 ```sh
 speccoder config                                   # every key: its value, or its default
@@ -40,17 +40,13 @@ speccoder config set budget.max_turns 40
 speccoder config set format.argv cargo fmt         # words, read by the key's kind
 speccoder config set commands.allow '[["cargo", "check"]]'   # or JSON
 speccoder config set checks.lint.argv -- cargo clippy -- -D warnings   # words starting with - after --
-speccoder config coverage commands.allow_prefix npm run    # what a prefix would newly allow
-speccoder config set commands.allow_prefix '[["npm", "run"]]'  # shows that, asks to confirm (--yes)
 speccoder config unset budget.max_turns            # back to the default
 speccoder config commit                            # commits speccoder.toml, and nothing else
 ```
 
-**Settings** in the [web interface](@/docs/web.md#settings) does the same. Either way, a change takes effect once committed.
-
 ## `[checks.<name>]`
 
-The commands that decide whether nothing regressed. A check's command up to its first option is also a prefix the model may run (`cargo nextest run …` allows `cargo nextest run` with any arguments). When that leaves only the program (`python3 -m pytest …`), the check allows exactly itself.
+The commands that decide whether nothing regressed. A check's command up to its first option is also a prefix the model may run (`cargo nextest run …` allows `cargo nextest run` with any arguments); when that leaves only the program (`python3 -m pytest …`), the check allows exactly itself.
 
 | Key | Default | Meaning |
 |---|---|---|
@@ -78,7 +74,7 @@ The commands that decide whether nothing regressed. A check's command up to its 
 | `price_cache_read_per_mtok` | the input price | USD per million tokens read from the cache |
 | `price_cache_write_per_mtok`, `price_cache_write_1h_per_mtok` | Anthropic: 1.25× and 2× input; others: input | USD per million tokens written to the five-minute and the one-hour cache |
 
-The API key comes from `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`, never from this file. A local model must support tool calls and structured output; the [evaluation suite](@/docs/evaluation.md) tells whether it is good enough.
+The API key comes from the environment, never from this file. A local model must support tool calls and structured output; the [evaluation suite](@/docs/evaluation.md) tells whether it is good enough.
 
 ## `[budget]`
 
@@ -102,11 +98,16 @@ The API key comes from `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`, never from this 
 
 ### Prefix lists
 
-`[commands] allow` and `[sandbox] network_allow` match exact argvs. A prefix in `allow_prefix` / `network_allow_prefix` lets every command that starts with it run without asking; no approval ever writes one, and a bare program is refused.
+`[commands] allow` and `[sandbox] network_allow` match exact argvs. A prefix in `allow_prefix` / `network_allow_prefix` lets every command that starts with it run without asking, including commands nobody has seen, so no approval ever writes one and a bare program is refused.
 
-- `speccoder config coverage KEY PREFIX…` lists every distinct command the project's journal recorded that the prefix would newly allow: how often, when last, how it was decided, and which a fixed rule (shells, privilege, network tools, remote git) still asks for or denies.
-- `config set` (and Settings) saves the prefix only as the confirmation of that list, and not at all while the journal cannot be read in full (another speccoder holds it).
-- A prefix added by hand shows the same list in Settings. Removing an entry is always possible.
+```sh
+speccoder config coverage commands.allow_prefix npm run     # the preview only
+speccoder config set commands.allow_prefix npm run          # shows it, then: type yes
+```
+
+- `config coverage KEY PREFIX…` lists every distinct command the project's journal recorded that the prefix would newly allow: how often, when last, how it was decided, and which a fixed rule (shells, privilege, network tools, remote git) still asks for or denies.
+- `config set` (and **Save Prefix** in Settings) saves the prefix only as the confirmation of that list: `yes` at a terminal, `--yes` without asking; otherwise it exits needing a person. It is refused when the preview changed since it was shown, and while the journal cannot be read in full (another speccoder holds it).
+- A prefix added by hand shows the same list in Settings (**Coverage**). Removing an entry needs no preview.
 
 ## `[context]`
 
@@ -216,7 +217,7 @@ command = []           # with method = "command": program and arguments; the mes
 stall_after = "15m"    # Ns | Nm | Nh, at least 30s
 ```
 
-- **Themes:** `auto` uses the terminal's 16 colours and so follows its palette; `dark` and `light` are fixed 24-bit palettes; `daltonized` uses blue and orange instead of green and red; `mono` uses only bold, dim, underline and reverse. Every state also has a word or mark.
+- **Themes:** `auto` uses the terminal's 16 colours, following its palette; `dark` and `light` are fixed 24-bit palettes; `daltonized` uses blue and orange instead of green and red; `mono` uses only bold, dim, underline and reverse.
 - **Notifications:** `auto` sends a desktop notification where the terminal shows one, a bell elsewhere. `command` runs without a shell, for at most five seconds (e.g. `["terminal-notifier", "-title", "speccoder", "-message"]`).
 - A value speccoder does not understand is a warning; the default applies.
 
