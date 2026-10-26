@@ -109,20 +109,22 @@ A run another speccoder does for the project, say a `speccoder run` in a termina
 
 The gear (or `,`) opens `speccoder.toml` as a settings page: each section with what it decides, each key as a control with its default and meaning, checks and MCP servers as tables. Edits gather until **Save**, which writes the file only when every parser accepts it, keeping its comments. speccoder reads committed configuration only, so the page then offers to **Commit** `speccoder.toml` alone; the `speccoder config` commands that do the same are shown.
 
+The prefix lists (`[commands] allow_prefix`, `[sandbox] network_allow_prefix`) are not saved with the rest. **Preview…** beside a new prefix lists every command from the project's journal it would newly allow — how often, how it was decided then, and what a rule still asks for — and **Save Prefix** is enabled only when that list is complete; each existing prefix shows the same list under **Coverage** ([prefix lists](@/docs/configuration.md#prefix-lists)).
+
 ## When a run needs you
 
-A call that needs a person opens as a sheet: the call (a diff or the exact command), its task, why it stopped, what the sandbox allows, and the model's claim, labelled as a claim.
+A call that needs a person opens as a sheet: the call (a diff or the exact command), the object a decision covers (the file, the argv with its hash and the program it runs, the tool with its digest), its task, why it stopped, what the sandbox allows, and the model's claim, labelled as a claim. Arguments copied from content the model read are named with their source, and then only **Allow Once**, **Don't Allow** and **Stop Task** are offered.
 
 | Choice | Key | Covers |
 |---|---|---|
 | **Allow Once** | `y` | this call |
-| **Allow for Task** | `t` | this class of call, for the rest of the task |
-| **Allow for Run** | `r` | this class of call, in every task of the run (never for high-risk calls) |
+| **Allow for Task** | `t` | this exact object, for the rest of the task in this run |
+| **Allow for Run** | `r` | this exact object, in every task of the run (never for high-risk calls) |
+| **Always Allow…** | `a` | a command, when offered: allows it once and adds exactly its argv to `[commands] allow` (a network call: `[sandbox] network_allow`) — nothing after it runs because of this; commit it in Settings |
 | **Don't Allow…** | `n` | rejects, with a reason the model is told |
 | **Stop Task** | `s` | stops the task; the call waits for `speccoder task approve` |
-| **Always Allow…** | `a` | an exact command: allows it and adds it to `[commands] allow` (a network call: `[sandbox] network_allow`), as a change you commit |
 
-A decision reaches at most the run; anything longer is policy. It is the same decision as the [inline prompt](@/docs/approvals.md#inline), recorded with your name and `via web`. Questions from planning skills are answered in the same sheet.
+A decision reaches at most the run; anything longer is policy. Once a run has used its [asking budget](@/docs/approvals.md#the-asking-budget), its further calls do not open the sheet: they wait together as one **Needs You** item, approved or rejected there in one decision, each call once. It is the same decision as the [inline prompt](@/docs/approvals.md#inline), recorded with your name and `via web`. Questions from planning skills are answered in the same sheet.
 
 In another window, the tab's title turns to *● Needs you*; with **Notify me** (the bell) allowed once, a desktop notification calls you back.
 
