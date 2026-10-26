@@ -151,28 +151,92 @@ fn check_openpgp(armored: &[u8], data: &[u8], keyid: &str) -> Checked {
     cmd.args(["--batch", "--status-fd", "1", "--verify"])
         .arg(&sig)
         .arg(&body);
-    let Some((_, status, _)) = run(cmd, None) else {
+    let Some((ok, status, _)) = run(cmd, None) else {
         return Checked::ToolMissing("gpg");
     };
-    let view = SignerView {
+    let view = |fingerprint: Option<String>, uid: Option<String>| SignerView {
         kind: "openpgp".to_owned(),
-        keyid: keyid.to_owned(),
-        principal: status
-            .lines()
-            .find_map(|l| l.strip_prefix("[GNUPG:] GOODSIG "))
-            .and_then(|l| l.split_once(' ').map(|(_, uid)| uid.to_owned())),
+        keyid: fingerprint.unwrap_or_else(|| keyid.to_owned()),
+        principal: uid,
     };
-    if status.contains("[GNUPG:] BADSIG") {
-        Checked::Bad("gpg: BAD signature".to_owned())
-    } else if status.contains("[GNUPG:] VALIDSIG") {
-        if status.contains("TRUST_ULTIMATE") || status.contains("TRUST_FULLY") {
-            Checked::Good(view)
-        } else {
-            Checked::Untrusted(view)
+    match gpg_status(&status, ok) {
+        Gpg::Bad => Checked::Bad("gpg: BAD signature".to_owned()),
+        Gpg::Good { fingerprint, uid } => Checked::Good(view(Some(fingerprint), uid)),
+        Gpg::Untrusted { fingerprint, uid } => Checked::Untrusted(view(fingerprint, uid)),
+    }
+}
+
+/// What gpg's `--status-fd` lines say about a detached signature.
+#[derive(Debug, PartialEq, Eq)]
+enum Gpg {
+    /// A signature that does not verify.
+    Bad,
+    /// One good signature by a key the keyring trusts fully or ultimately.
+    Good {
+        /// The signing key's fingerprint (`VALIDSIG`).
+        fingerprint: String,
+        /// The user ID `GOODSIG` names (the signer's own text).
+        uid: Option<String>,
+    },
+    /// Anything else: no key here, an expired or revoked key, a key not
+    /// trusted, or status lines that do not add up to one good signature.
+    Untrusted {
+        /// The signing key's fingerprint, when gpg gave one.
+        fingerprint: Option<String>,
+        /// The user ID, when gpg gave one.
+        uid: Option<String>,
+    },
+}
+
+/// Reads gpg's status lines exactly: a line counts only when it starts with
+/// `[GNUPG:] ` and its keyword (the first token after) is the one asked for
+/// — never a substring, since the user ID on `GOODSIG` is the signer's text.
+/// Good takes gpg's success, exactly one `GOODSIG`, one `VALIDSIG` whose
+/// fingerprint ends in that `GOODSIG`'s key ID, and one trust line that is
+/// `TRUST_FULLY` or `TRUST_ULTIMATE`, with no bad, erroneous, expired or
+/// revoked signature beside them.
+fn gpg_status(status: &str, exited_ok: bool) -> Gpg {
+    let mut good: Vec<(&str, Option<&str>)> = Vec::new();
+    let mut valid: Vec<&str> = Vec::new();
+    let mut trust: Vec<&str> = Vec::new();
+    let mut spoiled = false;
+    for line in status.lines() {
+        let Some(rest) = line.strip_prefix("[GNUPG:] ") else {
+            continue;
+        };
+        let (keyword, args) = rest.split_once(' ').unwrap_or((rest, ""));
+        match keyword {
+            "BADSIG" => return Gpg::Bad,
+            "GOODSIG" => {
+                let (id, uid) = args
+                    .split_once(' ')
+                    .map_or((args, None), |(id, uid)| (id, Some(uid)));
+                good.push((id, uid));
+            }
+            "VALIDSIG" => valid.push(args.split(' ').next().unwrap_or_default()),
+            "TRUST_UNDEFINED" | "TRUST_NEVER" | "TRUST_MARGINAL" | "TRUST_FULLY"
+            | "TRUST_ULTIMATE" => trust.push(keyword),
+            "ERRSIG" | "EXPSIG" | "EXPKEYSIG" | "REVKEYSIG" | "NO_PUBKEY" => spoiled = true,
+            _ => {}
         }
-    } else {
-        // ERRSIG / NO_PUBKEY: the verifier does not hold the key.
-        Checked::Untrusted(view)
+    }
+    let uid = good.first().and_then(|(_, u)| u.map(str::to_owned));
+    let fingerprint = valid
+        .first()
+        .filter(|f| !f.is_empty())
+        .map(|f| (*f).to_owned());
+    let one_good = match (&good[..], &valid[..], &trust[..]) {
+        ([(id, _)], [fpr], [level]) => {
+            !id.is_empty()
+                && fpr.len() >= id.len()
+                && fpr.to_ascii_uppercase().ends_with(&id.to_ascii_uppercase())
+                && matches!(*level, "TRUST_FULLY" | "TRUST_ULTIMATE")
+        }
+        _ => false,
+    };
+    match fingerprint {
+        Some(fingerprint) if exited_ok && one_good && !spoiled => Gpg::Good { fingerprint, uid },
+        fingerprint => Gpg::Untrusted { fingerprint, uid },
     }
 }
 
@@ -895,4 +959,87 @@ pub fn verify_at(
         format: None,
     };
     report(&cx, &targets, require_signed)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const FPR: &str = "0123456789ABCDEF0123456789ABCDEF01234567";
+
+    fn status(uid: &str, trust: &str) -> String {
+        format!(
+            "[GNUPG:] NEWSIG\n[GNUPG:] KEY_CONSIDERED {FPR} 0\n[GNUPG:] SIG_ID abc 2026-10-26 1793000000\n\
+             [GNUPG:] GOODSIG 89ABCDEF01234567 {uid}\n\
+             [GNUPG:] VALIDSIG {FPR} 2026-10-26 1793000000 0 4 0 22 10 00 {FPR}\n\
+             [GNUPG:] {trust} 0 pgp\n"
+        )
+    }
+
+    #[test]
+    fn a_fully_trusted_good_signature_is_good() {
+        assert_eq!(
+            gpg_status(&status("Ada <ada@example.com>", "TRUST_ULTIMATE"), true),
+            Gpg::Good {
+                fingerprint: FPR.to_owned(),
+                uid: Some("Ada <ada@example.com>".to_owned()),
+            }
+        );
+        assert!(matches!(
+            gpg_status(&status("Ada <ada@example.com>", "TRUST_FULLY"), true),
+            Gpg::Good { .. }
+        ));
+    }
+
+    #[test]
+    fn trust_words_in_the_signers_user_id_are_not_trust() {
+        // The user ID is the signer's own text: a key nobody trusts that
+        // calls itself TRUST_ULTIMATE is still a key nobody trusts.
+        for uid in [
+            "Eve TRUST_ULTIMATE <eve@example.com>",
+            "Eve [GNUPG:] TRUST_FULLY 0 pgp",
+            "TRUST_ULTIMATE",
+        ] {
+            assert!(
+                matches!(
+                    gpg_status(&status(uid, "TRUST_UNDEFINED"), true),
+                    Gpg::Untrusted { .. }
+                ),
+                "{uid}"
+            );
+        }
+        // A line the uid forges is a second trust line: not one good signature.
+        let forged = status("Eve\n[GNUPG:] TRUST_ULTIMATE 0 pgp", "TRUST_UNDEFINED");
+        assert!(matches!(gpg_status(&forged, true), Gpg::Untrusted { .. }));
+    }
+
+    #[test]
+    fn only_one_good_signature_by_the_key_gpg_validated_is_good() {
+        let s = status("Ada", "TRUST_ULTIMATE");
+        // gpg failed, a bad signature, an expired key, no VALIDSIG, a
+        // GOODSIG of another key than VALIDSIG's.
+        assert!(matches!(gpg_status(&s, false), Gpg::Untrusted { .. }));
+        assert_eq!(
+            gpg_status(&format!("{s}[GNUPG:] BADSIG 89ABCDEF01234567 Ada\n"), true),
+            Gpg::Bad
+        );
+        assert!(matches!(
+            gpg_status(
+                &format!("{s}[GNUPG:] EXPKEYSIG 89ABCDEF01234567 Ada\n"),
+                true
+            ),
+            Gpg::Untrusted { .. }
+        ));
+        let no_valid: String = s
+            .lines()
+            .filter(|l| !l.contains("VALIDSIG"))
+            .map(|l| format!("{l}\n"))
+            .collect();
+        assert!(matches!(gpg_status(&no_valid, true), Gpg::Untrusted { .. }));
+        let other = s.replace("GOODSIG 89ABCDEF01234567", "GOODSIG FFFFFFFFFFFFFFFF");
+        assert!(matches!(gpg_status(&other, true), Gpg::Untrusted { .. }));
+        // Not at a line's start: not a status line.
+        let indented = s.replace("[GNUPG:] TRUST_ULTIMATE", "x [GNUPG:] TRUST_ULTIMATE");
+        assert!(matches!(gpg_status(&indented, true), Gpg::Untrusted { .. }));
+    }
 }
