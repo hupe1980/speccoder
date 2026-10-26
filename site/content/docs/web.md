@@ -41,6 +41,7 @@ A project without `speccoder.toml` opens in the **setup assistant** instead: wha
 - Each row decides in place, in its own feature, or **Open** shows it with its evidence. An action that cannot run now says why.
 - The tab and the page title carry the count. With nothing waiting, the page offers the next step.
 - **Quick Change** (or `q`) opens a sheet for a small change and when it is done ([quick changes](@/docs/running.md#quick-changes)).
+- A bug's stops have their own sections: a reproduction to confirm, one that could not be reproduced, an *Unchanged* statement that does not hold, a reproduction too weak, a bug already fixed. Opening one opens its Bug sheet.
 - The same list is `speccoder inbox` in the terminal and `/inbox` in an editor.
 
 ### Overview
@@ -105,6 +106,10 @@ A run that stops on something speccoder can fix itself, such as setup your check
 
 A run another speccoder does for the project, say a `speccoder run` in a terminal, shows too: a violet pill in the status bar (amber when that process died mid-run), its task on the Board's Running lane, and in **Up next** in place of Run. The pill opens its task, stage, last call, reasoning and spend; an interrupted run offers **Resume**. Runs started here while it holds the project are refused with its pid.
 
+### Bug sheet
+
+**File ▸ Report a Bug…** (⇧⌘B), the palette's *report a bug*, a Needs You item of a bug, or **Fix as Bug** on a GitHub issue labelled `bug` opens it. Fill in what happens, what should happen instead (one line per behaviour — **Record** stays disabled without one, saying why), what must keep working, and optionally the issue, your own failing test or a fix to judge. The stage strip (Record → Reproduce → Confirm → Unchanged → Fix → Ship) follows the host's state, so a reload resumes where the bug is. When the reproductions fail on the untouched code it lists each — statement, file, test, its classes — with **Confirm and Fix** and **Reject with Reason**, bound to the digest shown. An issue's title may prefill the symptom; the words you submit are the triad. See [bug fixes](@/docs/bugs.md).
+
 ## Settings
 
 The gear (or `,`) opens `speccoder.toml` as a settings page: each section with what it decides, each key as a control with its default and meaning, checks and MCP servers as tables. Edits gather until **Save**, which writes the file only when every parser accepts it, keeping its comments. speccoder reads committed configuration only, so the page then offers to **Commit** `speccoder.toml` alone; the `speccoder config` commands that do the same are shown.
@@ -135,7 +140,7 @@ In `speccoder ui --window`, a menu item does what the same button does; one that
 | Menu | Items |
 |---|---|
 | **speccoder** | About, Settings… ⌘,, Services, Hide, Hide Others, Show All, Quit |
-| **File** | New Feature… ⌘N, Quick Change… ⇧⌘N, Start from a GitHub Issue…, Commit the Planning Files, Close Window |
+| **File** | New Feature… ⌘N, Quick Change… ⇧⌘N, Report a Bug… ⇧⌘B, Start from a GitHub Issue…, Commit the Planning Files, Close Window |
 | **Edit** | Undo, Redo, Cut, Copy, Paste, Select All |
 | **View** | the six views ⌘1–⌘6, Toggle Sidebar ⌥⌘S, Toggle Status Bar ⌥⌘B, Actions… ⌘K, Appearance (Automatic, Light, Dark), Enter Full Screen |
 | **Run** | Run the Feature ⌘R, Run the Selected Task ⇧⌘R, Re-check Against the Spec, Show the Selected Task's Evidence ⌘I, Nudge / Skip / Accept the Selected Task…, Stop ⌘. |
@@ -150,6 +155,7 @@ In `speccoder ui --window`, a menu item does what the same button does; one that
 | `1` … `6` (⌘1 … ⌘6 in the window) | Needs You, Overview, Board, Code, Spec & Plan, Report |
 | `n` | The next step |
 | `q` | A quick change |
+| `⇧B` | Report a bug |
 | `,` | Settings |
 | ⌘K / Ctrl+K | The palette: every action, filtered as you type; Enter runs it |
 | `[` `]` | Previous, next section (Spec & Plan) |

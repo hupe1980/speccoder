@@ -52,6 +52,8 @@ export ANTHROPIC_API_KEY=…           # or OPENAI_API_KEY — read from the env
 speccoder init                       # detects your checks, runs them, offers to commit speccoder.toml
 speccoder run                        # works through the feature's tasks
 speccoder do "make the login button blue"   # a small change, judged like any other
+speccoder bug "saving an empty title crashes" --expected "an empty title is refused"
+                                     # a bug: reproduced first, confirmed by you once, fixed on evidence
 speccoder review                     # sign off the spec, requirement by requirement
 speccoder inbox                      # what waits for your decision, in every feature
 speccoder actions                    # what you can do now, each with its command (--json for scripts)
@@ -108,6 +110,8 @@ Then, as you need them:
 4. 🛠️ **Attempt** — the model works in the worktree; every call is classified before it runs.
 5. ⚖️ **Judgement** — `verified` when the acceptance tests went red → green and nothing regressed; `regression_only` when nothing task-specific was shown; `failed` otherwise. A verified task's tests then meet wrong variants of the change: how many they reject is its acceptance strength.
 6. 🏁 **Outcome** — a verified task is ticked and committed by speccoder. A failed one is retried once with the verifier's facts. Anything else is saved under `refs/speccoder/attempts/…`, undone, and handed to a person.
+
+🐞 **A bug** (`speccoder bug`) adds one rule each way: a test-blind author writes one reproduction per expected behaviour that must fail on the untouched code by an assertion, you confirm it once, and the fix is `verified` only if undoing it makes a reproduction fail again. A bug that cannot be reproduced comes back to you; one that already passes is never ticked. With Spec Kit's `bug` extension the bug lives in its own `.specify/bugs/<slug>/`. ([Bug fixes](https://hupe1980.github.io/speccoder/docs/bugs/))
 
 🔄 Change the spec later and the ticks that cite a changed requirement say they were proven against the earlier wording; `speccoder run --converge` checks the code against the spec as it is now.
 
