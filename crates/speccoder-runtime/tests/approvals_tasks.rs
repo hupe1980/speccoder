@@ -790,3 +790,134 @@ fn a_waiting_call_shows_the_model_s_commentary() {
         "{waiting:?}"
     );
 }
+
+// ── a journal whose writer was killed ───────────────────────────────
+
+const KILLED: &str = "SPECCODER_TEST_KILLED_WRITER";
+
+/// The writer half of `a_killed_writer_blocks_neither_a_run_s_gate_nor_a_decision`,
+/// run in a child process: opens the journal to write as a decision does,
+/// commits a sweep, and waits to be killed without closing it.
+#[test]
+#[ignore = "the writer half of a_killed_writer_blocks_neither_a_run_s_gate_nor_a_decision, run in a child process"]
+fn the_killed_writer() {
+    let Ok(dir) = std::env::var(KILLED).map(PathBuf::from) else {
+        return;
+    };
+    let plane_dir = PathBuf::from(fs::read_to_string(dir.join("plane")).unwrap());
+    let plane = speccoder_runtime::substrate::Plane::open_for_decisions(&plane_dir)
+        .unwrap_or_else(|e| panic!("{}", e.0));
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(plane.expire_due(agentplane::core::Timestamp::now_utc()))
+        .unwrap_or_else(|e| panic!("{}", e.0));
+    fs::write(dir.join("ready"), "").unwrap();
+    loop {
+        std::thread::sleep(std::time::Duration::from_secs(1));
+    }
+}
+
+/// Opens the journal in a child process and kills it (SIGKILL) while it
+/// writes: the journal is left needing the repair only a writer makes.
+fn kill_a_writer(journal: &Path) {
+    let markers = tempfile::tempdir().unwrap();
+    fs::write(
+        markers.path().join("plane"),
+        journal.to_string_lossy().as_bytes(),
+    )
+    .unwrap();
+    let mut child = Command::new(std::env::current_exe().unwrap())
+        .args(["the_killed_writer", "--exact", "--ignored", "--nocapture"])
+        .env(KILLED, markers.path())
+        .spawn()
+        .unwrap();
+    until(&markers.path().join("ready"));
+    child.kill().unwrap();
+    assert!(!child.wait().unwrap().success());
+    // A reader cannot open it now: the repair is a writer's.
+    assert!(
+        speccoder_runtime::substrate::open_reader(journal)
+            .err()
+            .is_some_and(|e| e.0.contains("ended without closing")),
+        "the killed writer left the journal readable"
+    );
+}
+
+/// **A run killed while it writes the journal** leaves it needing a
+/// repair a reader cannot make. The listings say exactly that — never
+/// that nothing waits; the next run's gate reads through its own writer,
+/// which repairs, so the call that waits still holds the worktree; and a
+/// person's decision goes through, never blocked by the killed run.
+#[test]
+fn a_killed_writer_blocks_neither_a_run_s_gate_nor_a_decision() {
+    let r = repo("");
+    fs::write(
+        r.path().join("specs/001-graph/tasks.md"),
+        "# Tasks\n\n## Phase 1: Setup\n\n- [ ] T005 [P] Add the manifest\n- [ ] T006 [P] Add another manifest\n",
+    )
+    .unwrap();
+    git(r.path(), &["commit", "-qam", "two tasks"]);
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    write_manifest(&f, "c1");
+    let first = speccoder_runtime::run_with(r.path(), None, "T005", state.path(), d, None);
+    assert_eq!(
+        first.status(),
+        CommandStatus::NeedsHuman,
+        "{}",
+        first.message()
+    );
+    let journal = plane_dir(r.path(), state.path());
+
+    // Listings read only: they say why they cannot, precisely.
+    kill_a_writer(&journal);
+    let listed = speccoder_runtime::approvals::list_with(r.path(), None, state.path());
+    let Some(CommandData::Approvals(a)) = listed.data() else {
+        panic!("{listed:?}");
+    };
+    assert!(
+        a.unreadable.as_deref().is_some_and(|u| u
+            .contains("the last run ended without closing its journal")
+            && u.contains("the next run or decision repairs it")),
+        "{:?}",
+        a.unreadable
+    );
+    let status = speccoder_runtime::progress::status_with(r.path(), state.path());
+    assert!(
+        status
+            .message()
+            .contains("waiting for a person: unknown — the last run ended without closing"),
+        "{}",
+        status.message()
+    );
+
+    // The gate of another task's run fails closed: T005 still holds the
+    // worktree, and T006 does not start beside it.
+    let (_f, d) = fake();
+    let other = speccoder_runtime::run_with(r.path(), None, "T006", state.path(), d, None);
+    assert_eq!(
+        other.status(),
+        CommandStatus::NeedsHuman,
+        "{}",
+        other.message()
+    );
+    assert!(
+        other.message().contains("T005 waits for a person"),
+        "{}",
+        other.message()
+    );
+
+    // A decision repairs it too, and is recorded.
+    kill_a_writer(&journal);
+    let approve = decide_with(
+        r.path(),
+        None,
+        Verb::Approve("T005"),
+        state.path(),
+        speccoder_core::actions::Via::Terminal,
+    );
+    assert_eq!(approve.status(), CommandStatus::Ok, "{}", approve.message());
+    assert!(pending(r.path(), state.path()).is_empty());
+}

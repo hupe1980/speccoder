@@ -1120,9 +1120,15 @@ fn decided(feature: &str, decisions: &Decisions) -> Vec<DecidedCall> {
 
 /// Whether a call with deadline `due` still waits at `now`: one whose
 /// deadline has passed is denied as expired by the next writer.
-fn still_waits(due: Option<agentplane::core::Timestamp>, now: agentplane::core::Timestamp) -> bool {
+pub(crate) fn still_waits(
+    due: Option<agentplane::core::Timestamp>,
+    now: agentplane::core::Timestamp,
+) -> bool {
     due.is_none_or(|due| due > now)
 }
+
+/// A waiting call as listed, with the task row it waits on.
+type Waiting = (PendingCall, agentplane::core::Task);
 
 /// Calls of `feature` waiting for a person on a human task, oldest
 /// first: the attempt is suspended and resumes once they are decided.
@@ -1133,15 +1139,21 @@ fn still_waits(due: Option<agentplane::core::Timestamp>, now: agentplane::core::
 /// without a journal has none, and a read never creates one. A call past
 /// its deadline is not listed: the next writer denies it as expired (a
 /// decision sweeps first, so it cannot be approved).
-fn waiting_tasks(
-    root: &Path,
-    dir: &Path,
-    feature: &str,
-) -> Result<Vec<(PendingCall, agentplane::core::Task)>, String> {
+fn waiting_tasks(root: &Path, dir: &Path, feature: &str) -> Result<Vec<Waiting>, String> {
     let rt = crate::tokio_runtime()?;
     let Some(plane) = crate::substrate::Plane::open_for_reading(dir).map_err(|e| e.0)? else {
         return Ok(Vec::new());
     };
+    waiting_on(&rt, &plane, root, feature)
+}
+
+/// The calls of `feature` waiting on `plane`, as [`waiting_tasks`] lists them.
+fn waiting_on(
+    rt: &tokio::runtime::Runtime,
+    plane: &crate::substrate::Plane,
+    root: &Path,
+    feature: &str,
+) -> Result<Vec<Waiting>, String> {
     let open = rt
         .block_on(plane.open_tasks())
         .map_err(|e| format!("listing the waiting calls: {}", e.0))?;
@@ -1185,80 +1197,167 @@ fn waiting_tasks(
         .collect())
 }
 
-/// Denies, as expired, every call in the journal at `dir` whose deadline
-/// passed at `now` (nobody's decision); their attempts read the refusal
-/// when they next resume.
-pub fn expire_due(dir: &Path, now: agentplane::core::Timestamp) -> Result<(), String> {
-    let rt = crate::tokio_runtime()?;
-    let plane = crate::substrate::Plane::open_for_decisions(dir).map_err(|e| e.0)?;
-    rt.block_on(plane.expire_due(now)).map_err(|e| e.0)
+/// The journal at `dir` opened to decide on, through its writer: the
+/// waiting calls are listed and decided through the one handle, so nothing
+/// changes between the list and the decision (another writer is refused
+/// while it is open). Opening it repairs a journal a killed run left
+/// unclosed, which a reader cannot; every call past its deadline is denied
+/// as expired first, so none is approved late. `None` without a journal:
+/// nothing waits, and none is created.
+struct Deciding {
+    rt: tokio::runtime::Runtime,
+    plane: crate::substrate::Plane,
 }
 
-/// Another task of `feature` whose attempt waits for a person, with what
-/// it waits on: its attempt holds the feature's worktree until it is
-/// decided and resumed.
-#[must_use]
+impl Deciding {
+    /// # Errors
+    ///
+    /// The journal cannot be opened to write (another process writes it,
+    /// or it cannot be read and not be replaced), or the sweep failed.
+    fn open(dir: &Path) -> Result<Option<Self>, String> {
+        if !dir.join(crate::substrate::JOURNAL).exists() {
+            return Ok(None);
+        }
+        let rt = crate::tokio_runtime()?;
+        let plane = crate::substrate::Plane::open_for_decisions(dir).map_err(|e| e.0)?;
+        rt.block_on(plane.expire_due(agentplane::core::Timestamp::now_utc()))
+            .map_err(|e| format!("denying the calls past their deadline: {}", e.0))?;
+        Ok(Some(Self { rt, plane }))
+    }
+
+    /// The calls of `feature` waiting now, as [`waiting_tasks`] lists them.
+    fn waiting(&self, root: &Path, feature: &str) -> Result<Vec<Waiting>, String> {
+        waiting_on(&self.rt, &self.plane, root, feature)
+    }
+
+    /// Records `answer` on the waiting call `task`: refused when its row
+    /// changed since it was listed, or its deadline passed since. The run
+    /// continues when it next resumes.
+    fn decide(
+        &self,
+        task: &agentplane::core::Task,
+        answer: &Answer,
+        by: &Who,
+    ) -> Result<(), String> {
+        if !still_waits(task.due_at, agentplane::core::Timestamp::now_utc()) {
+            return Err(
+                "its deadline passed before it was decided: it is denied as expired".to_owned(),
+            );
+        }
+        let decision = tasks::decision_for(answer, by, None)
+            .ok_or_else(|| format!("`{}` is not a name a decision can carry", by.name))?;
+        self.rt
+            .block_on(
+                self.plane
+                    .decide_at(task.id, &decision, Some(task.justification.digest())),
+            )
+            .map(|_| ())
+            .map_err(|e| e.0)
+    }
+}
+
+/// Denies, as expired, every call in the journal at `dir` whose deadline
+/// passed at `now` (nobody's decision); their attempts read the refusal
+/// when they next resume. The path a journal this build could not read
+/// was moved aside to, if it was.
+///
+/// # Errors
+///
+/// The journal cannot be opened to write, or the sweep failed.
+pub fn expire_due(
+    dir: &Path,
+    now: agentplane::core::Timestamp,
+) -> Result<Option<std::path::PathBuf>, String> {
+    let rt = crate::tokio_runtime()?;
+    let plane = crate::substrate::Plane::open_for_decisions(dir).map_err(|e| e.0)?;
+    rt.block_on(plane.expire_due(now)).map_err(|e| e.0)?;
+    Ok(plane.replaced_journal.clone())
+}
+
+/// What a run of `task` finds before it starts: another task of the
+/// feature whose attempt waits for a person, with what it waits on (its
+/// attempt holds the feature's worktree until it is decided and resumed).
+#[derive(Debug, Default)]
+pub struct Elsewhere {
+    /// The other task and what its call covers, when one waits.
+    pub waiting: Option<(String, String)>,
+    /// Where a journal this build could not read was moved aside to.
+    pub replaced_journal: Option<std::path::PathBuf>,
+}
+
+/// [`Elsewhere`] for a run of `task`, read through the journal's writer:
+/// one a killed run left unclosed is repaired, not taken for one where
+/// nothing waits.
+///
+/// # Errors
+///
+/// The waiting calls cannot be read — the run cannot tell whether another
+/// attempt holds the worktree, so it does not start.
 pub fn waiting_elsewhere(
     root: &Path,
     dir: &Path,
     feature: &str,
     task: &str,
-) -> Option<(String, String)> {
-    // Unreadable: the run that would wait opens the journal itself and
-    // stops there with the reason, so nothing is hidden by `None` here.
-    waiting_tasks(root, dir, feature)
-        .ok()?
+) -> Result<Elsewhere, String> {
+    let Some(deciding) = Deciding::open(dir)? else {
+        return Ok(Elsewhere::default());
+    };
+    let waiting = deciding
+        .waiting(root, feature)?
         .into_iter()
         .map(|(c, _)| c)
         .find(|c| c.task != task && c.source == "task")
-        .map(|c| (c.task, c.covers))
+        .map(|c| (c.task, c.covers));
+    Ok(Elsewhere {
+        waiting,
+        replaced_journal: deciding.plane.replaced_journal.clone(),
+    })
 }
 
 /// Withdraws every call of `feature` waiting on a person: their attempts
 /// were set aside (`--return`, changed intent), so nothing resumes them.
+/// Listed and withdrawn through the journal's writer.
+///
+/// # Errors
+///
+/// The journal cannot be opened to write, or a withdrawal failed: the
+/// calls may still wait.
 pub fn withdraw_waiting(
     root: &Path,
     dir: &Path,
     feature: &str,
     reason: &str,
 ) -> Result<usize, String> {
-    let rows = waiting_tasks(root, dir, feature)?;
+    let Some(deciding) = Deciding::open(dir)? else {
+        return Ok(0);
+    };
+    let rows = deciding.waiting(root, feature)?;
     if rows.is_empty() {
         return Ok(0);
     }
-    let rt = crate::tokio_runtime()?;
-    let plane = crate::substrate::Plane::open_for_decisions(dir).map_err(|e| e.0)?;
-    rt.block_on(plane.expire_due(agentplane::core::Timestamp::now_utc()))
-        .map_err(|e| e.0)?;
     let by = agentplane::core::Operator::from_parts(who_in(root), "asserted")
         .ok()
         .ok_or_else(|| "no name to record the withdrawal under".to_owned())?;
     for (_, task) in &rows {
-        rt.block_on(plane.withdraw(task, &by, reason))
+        deciding
+            .rt
+            .block_on(deciding.plane.withdraw(task, &by, reason))
             .map_err(|e| e.0)?;
     }
     Ok(rows.len())
 }
 
-/// Records `answer` on the waiting call `task` through a plane without the
-/// attempt's skill: the run continues when it next resumes.
-fn decide_waiting(
-    dir: &Path,
-    task: &agentplane::core::Task,
-    answer: &Answer,
-    by: &Who,
-) -> Result<(), String> {
-    let rt = crate::tokio_runtime()?;
-    let plane = crate::substrate::Plane::open_for_decisions(dir).map_err(|e| e.0)?;
-    // A call past its deadline is denied as expired before anything is
-    // decided: it cannot be approved late.
-    rt.block_on(plane.expire_due(agentplane::core::Timestamp::now_utc()))
-        .map_err(|e| e.0)?;
-    let decision = tasks::decision_for(answer, by, None)
-        .ok_or_else(|| format!("`{}` is not a name a decision can carry", by.name))?;
-    rt.block_on(plane.decide(task.id, &decision))
-        .map(|_| ())
-        .map_err(|e| e.0)
+/// A decision of several calls that failed on one: the decisions already
+/// recorded stay recorded, so they are said first — never only an error.
+fn partly_decided(recorded: &[String], failed: &str, of: usize) -> String {
+    if recorded.is_empty() {
+        return failed.to_owned();
+    }
+    format!(
+        "{}\n{failed}\n{} of {of} call(s) were decided before it and stay decided; `speccoder report --approvals` lists what still waits",
+        recorded.join("\n"),
+        recorded.len()
+    )
 }
 
 /// What to do with a pending call.
@@ -1402,16 +1501,6 @@ pub fn decide_with(
             .collect(),
         _ => Vec::new(),
     };
-    let (tasks_waiting, unreadable) = match waiting_tasks(&root, &dir, &feature) {
-        Ok(rows) => (rows, None),
-        Err(e) => (Vec::new(), Some(e)),
-    };
-    let unreadable = match (unreadable, &decisions_unreadable) {
-        (Some(a), Some(b)) => Some(format!("{a}; {b}")),
-        (a, b) => a.or_else(|| b.clone()),
-    };
-    let waiting = lane_pending(&decisions, &open);
-
     // A call waiting on a task is decided there: who, how known, bound to
     // what was shown. Its attempt continues on the next run.
     let choice = match verb {
@@ -1421,6 +1510,31 @@ pub fn decide_with(
         Verb::Reject(t, r) => Some(Choice::reject(t, r)),
         Verb::Decide(c) => Some(c),
     };
+    // A decision lists the calls through the writer it decides with (which
+    // repairs a journal a killed run left unclosed); a listing reads beside
+    // whoever writes.
+    let mut deciding = None;
+    let listed = if choice.is_some() {
+        Deciding::open(&dir).and_then(|d| {
+            let rows = d
+                .as_ref()
+                .map_or_else(|| Ok(Vec::new()), |d| d.waiting(&root, &feature));
+            deciding = d;
+            rows
+        })
+    } else {
+        waiting_tasks(&root, &dir, &feature)
+    };
+    let (tasks_waiting, unreadable) = match listed {
+        Ok(rows) => (rows, None),
+        Err(e) => (Vec::new(), Some(e)),
+    };
+    let unreadable = match (unreadable, &decisions_unreadable) {
+        (Some(a), Some(b)) => Some(format!("{a}; {b}")),
+        (a, b) => a.or_else(|| b.clone()),
+    };
+    let waiting = lane_pending(&decisions, &open);
+
     if let (Some(_), Some(why)) = (choice, &unreadable) {
         return CommandResult::new(
             command,
@@ -1469,7 +1583,7 @@ pub fn decide_with(
                 ),
             );
         }
-        if !matching.is_empty() {
+        if let (false, Some(deciding)) = (matching.is_empty(), &deciding) {
             let by = Who::local_in(&root, via);
             let mut lines = Vec::new();
             for (call, row) in &matching {
@@ -1478,8 +1592,13 @@ pub fn decide_with(
                 } else {
                     Answer::reject(c.reason.unwrap_or("no reason given"), Some(by.clone()))
                 };
-                if let Err(e) = decide_waiting(&dir, row, &answer, &by) {
-                    return CommandResult::new(command, CommandStatus::Error, &e);
+                if let Err(e) = deciding.decide(row, &answer, &by) {
+                    let failed = format!("not decided: {} for {}: {e}", call.covers, call.task);
+                    return CommandResult::new(
+                        command,
+                        CommandStatus::Error,
+                        &partly_decided(&lines, &failed, matching.len()),
+                    );
                 }
                 lines.push(if c.approve {
                     format!(
@@ -1502,7 +1621,7 @@ pub fn decide_with(
                 });
             }
             // The calls waiting after the decision, or why they are unknown.
-            let (after, unreadable) = match waiting_tasks(&root, &dir, &feature) {
+            let (after, unreadable) = match deciding.waiting(&root, &feature) {
                 Ok(rows) => (rows, None),
                 Err(e) => (Vec::new(), Some(e)),
             };
@@ -1790,9 +1909,15 @@ pub fn decide_batch(
         Ok(d) => d,
         Err(e) => return CommandResult::new(command, CommandStatus::ConfigError, &e),
     };
-    let rows = match waiting_tasks(&root, &dir, &feature) {
-        Ok(r) => r,
+    // Decided through the writer the calls are listed with.
+    let deciding = match Deciding::open(&dir) {
+        Ok(d) => d,
         Err(e) => return CommandResult::new(command, CommandStatus::Error, &e),
+    };
+    let rows = match deciding.as_ref().map(|d| d.waiting(&root, &feature)) {
+        Some(Ok(r)) => r,
+        None => Vec::new(),
+        Some(Err(e)) => return CommandResult::new(command, CommandStatus::Error, &e),
     };
     let reason = choice.reason.unwrap_or("no reason given");
     let mut lines = Vec::new();
@@ -1834,11 +1959,22 @@ pub fn decide_batch(
             lines.push(format!("{}: {}", p.task, p.covers));
             continue;
         }
-        let Some((p, row)) = rows.iter().find(|(p, _)| p.call == *id) else {
+        let (Some((p, row)), Some(deciding)) =
+            (rows.iter().find(|(p, _)| p.call == *id), &deciding)
+        else {
             continue;
         };
-        if let Err(e) = decide_waiting(&dir, row, &answer, &by) {
-            return CommandResult::new(command, CommandStatus::Error, &e);
+        if let Err(e) = deciding.decide(row, &answer, &by) {
+            let failed = format!("not decided: {}: {} — {e}", p.task, p.covers);
+            let message = partly_decided(&lines, &failed, choice.calls.len());
+            if let Err(e) = decisions.save(&dir) {
+                return CommandResult::new(
+                    command,
+                    CommandStatus::Error,
+                    &format!("{message}\n{e}"),
+                );
+            }
+            return CommandResult::new(command, CommandStatus::Error, &message);
         }
         lines.push(format!("{}: {}", p.task, p.covers));
     }
@@ -1925,17 +2061,20 @@ pub fn allow_always(
     let Ok(id) = agentplane::core::TaskId::parse(call) else {
         return refuse("not a call id");
     };
-    let row = match crate::tokio_runtime().and_then(|rt| {
-        let Some(plane) = crate::substrate::Plane::open_for_reading(&dir).map_err(|e| e.0)? else {
-            return Ok(None);
-        };
-        rt.block_on(plane.task(id)).map_err(|e| e.0)
-    }) {
-        Ok(Some(row)) => row,
+    // Read and decided through the journal's writer.
+    let deciding = match Deciding::open(&dir) {
+        Ok(Some(d)) => d,
         Ok(None) => {
             return CommandResult::new(command, CommandStatus::NotFound, "no such waiting call");
         }
         Err(e) => return CommandResult::new(command, CommandStatus::Error, &e),
+    };
+    let row = match deciding.rt.block_on(deciding.plane.task(id)) {
+        Ok(Some(row)) => row,
+        Ok(None) => {
+            return CommandResult::new(command, CommandStatus::NotFound, "no such waiting call");
+        }
+        Err(e) => return CommandResult::new(command, CommandStatus::Error, &e.0),
     };
     let Some(request) = tasks::request_of(&row.justification.proposed_action)
         .filter(|r| r.task == format!("{feature}/{task}"))
@@ -1955,7 +2094,7 @@ pub fn allow_always(
     let by = Who::local_in(&root, via);
     match row.state {
         agentplane::core::TaskState::Open | agentplane::core::TaskState::Claimed => {
-            if let Err(e) = decide_waiting(&dir, &row, &Answer::always(Some(by.clone())), &by) {
+            if let Err(e) = deciding.decide(&row, &Answer::always(Some(by.clone())), &by) {
                 return CommandResult::new(command, CommandStatus::Error, &e);
             }
         }
@@ -2038,6 +2177,19 @@ mod tests {
             canonical: path.to_owned(),
             asked: path.to_owned(),
         }
+    }
+
+    #[test]
+    fn a_failure_part_way_through_says_what_was_decided_before_it() {
+        let recorded = vec!["approved: write `a` for T005".to_owned()];
+        let m = partly_decided(&recorded, "not decided: write `b` for T006: gone", 2);
+        assert!(m.starts_with("approved: write `a` for T005\n"), "{m}");
+        assert!(m.contains("not decided: write `b` for T006: gone"), "{m}");
+        assert!(
+            m.contains("1 of 2 call(s) were decided before it and stay decided"),
+            "{m}"
+        );
+        assert_eq!(partly_decided(&[], "not decided: x", 1), "not decided: x");
     }
 
     #[test]

@@ -326,11 +326,28 @@ pub fn open_reader(dir: &Path) -> Result<Option<Arc<RedbStore>>, PlaneError> {
             "another process holds the journal in {} alone (a speccoder build that does not share it): {e}",
             dir.display()
         ))),
+        // A writer that died without closing it (killed, Ctrl-C, a closed
+        // terminal) leaves it to be repaired, which only a writer does.
+        // agentplane reports that as unreadable; redb's wording tells it
+        // from damage (AP-34 asks for a variant of its own).
+        Err(agentplane::core::StoreError::Unreadable(e)) if needs_repair(&e) => {
+            Err(PlaneError(format!(
+                "the last run ended without closing its journal in {}; the next run or decision repairs it ({e})",
+                dir.display()
+            )))
+        }
         Err(e) => Err(PlaneError(format!(
             "cannot read the journal in {}: {e}",
             dir.display()
         ))),
     }
+}
+
+/// Whether an unreadable journal only needs the repair a writer makes on
+/// open: redb's "repair aborted", which a read-only open reports for a file
+/// its last writer did not close.
+fn needs_repair(detail: &str) -> bool {
+    detail.to_lowercase().contains("repair aborted")
 }
 
 /// What a model provider refused, from a run's failure: the text after
@@ -680,8 +697,19 @@ impl Plane {
         task: agentplane::core::TaskId,
         decision: &agentplane::core::Decision,
     ) -> Result<agentplane::core::Delivery, PlaneError> {
+        self.decide_at(task, decision, None).await
+    }
+
+    /// [`Plane::decide`], refused (nothing recorded) unless the task row
+    /// is still the one whose justification digest is `expected`.
+    pub async fn decide_at(
+        &self,
+        task: agentplane::core::TaskId,
+        decision: &agentplane::core::Decision,
+        expected: Option<agentplane::core::Digest>,
+    ) -> Result<agentplane::core::Delivery, PlaneError> {
         self.runtime
-            .decide_task(task, decision, &[])
+            .decide_task_at(task, decision, &[], expected)
             .await
             .map_err(|e| PlaneError(e.to_string()))
     }

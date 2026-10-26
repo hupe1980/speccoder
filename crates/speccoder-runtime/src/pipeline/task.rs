@@ -189,10 +189,25 @@ pub(crate) fn run_task(
 
     // 2a. A task waiting for a person holds the worktree with its attempt:
     //     another task starts once it is decided and has resumed.
-    if options.lane.is_none()
-        && let Some((other, covers)) =
-            crate::approvals::waiting_elsewhere(&project, &plane_dir, &feature_name, task)
-    {
+    //     Read through the journal's writer, which repairs one a killed run
+    //     left unclosed; calls that cannot be read refuse the run, never
+    //     pass for none waiting.
+    let elsewhere = if options.lane.is_none() {
+        match crate::approvals::waiting_elsewhere(&project, &plane_dir, &feature_name, task) {
+            Ok(e) => e,
+            Err(e) => {
+                return refuse(
+                    CommandStatus::Error,
+                    format!(
+                        "the calls waiting for a person could not be read, so whether another task's attempt holds the worktree is unknown: {e}"
+                    ),
+                );
+            }
+        }
+    } else {
+        crate::approvals::Elsewhere::default()
+    };
+    if let Some((other, covers)) = elsewhere.waiting {
         return refuse(
             CommandStatus::NeedsHuman,
             format!(
@@ -728,8 +743,18 @@ pub(crate) fn run_task(
         Ok(t) => std::sync::Arc::new(t.with_runner(runner.clone())),
         Err(e) => return fail(CommandStatus::Error, e.to_string()),
     };
-    // Calls past their deadline are denied as expired before anything resumes.
-    let _ = crate::approvals::expire_due(&plane_dir, agentplane::core::Timestamp::now_utc());
+    // Calls past their deadline are denied as expired before anything
+    // resumes; a run that cannot tell does not start.
+    let swept =
+        match crate::approvals::expire_due(&plane_dir, agentplane::core::Timestamp::now_utc()) {
+            Ok(p) => p,
+            Err(e) => {
+                return fail(
+                    CommandStatus::RunFailed,
+                    format!("the calls past their deadline could not be denied: {e}"),
+                );
+            }
+        };
     // What a person is shown about the sandbox, for every call they decide.
     let present = crate::approvals::PresentContext {
         root: None,
@@ -766,9 +791,11 @@ pub(crate) fn run_task(
         Ok(p) => p,
         Err(e) => return fail(CommandStatus::RunFailed, e.0),
     };
-    let mut notices: Vec<String> = plane
+    let mut notices: Vec<String> = elsewhere
         .replaced_journal
         .iter()
+        .chain(swept.iter())
+        .chain(plane.replaced_journal.iter())
         .map(|p| {
             format!(
                 "the journal could not be read by this build and was moved to {}; past runs stay in git",

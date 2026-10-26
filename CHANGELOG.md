@@ -15,7 +15,16 @@ adheres to [Semantic Versioning](https://semver.org/).
   another speccoder is working. Only a second writer — another run, or a
   decision on a waiting call — is refused while the run holds the journal,
   and at once. A read never creates, moves or writes the journal; a call past
-  its deadline is not listed as waiting.
+  its deadline is not listed as waiting, `status` included. A run killed
+  before it closed the journal (Ctrl-C, a closed terminal) leaves it for the
+  next writer to repair: the listings say so (`unknown — the last run ended
+  without closing its journal`), while the next run and every decision open
+  it through their writer, which repairs it. A run's check for another
+  task's waiting call, and the withdrawal of a set-aside attempt's calls,
+  refuse rather than proceed when the calls cannot be read. A decision
+  lists and decides through one writer, after denying the calls past their
+  deadline; when `--all` or a batch fails part way, the calls decided before
+  the failure are named as decided.
 - **OpenAI's words beside its calls are shown.** With the Responses API, the
   model's commentary appears as what it said — live, in waiting calls and in
   `task show --account` — as Anthropic's words already did.

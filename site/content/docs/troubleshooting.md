@@ -27,7 +27,9 @@ Every failure names a [code](@/docs/codes.md) and the command that fixes it; `sp
 | `stopped[BUDGET-EXHAUSTED]` (23) | Raise the `[budget]` limit it hit, or split the task in `tasks.md`. |
 | `error[PROVIDER-REFUSED]` (21) or `stopped[ACCEPTANCE-UNWRITTEN]` (23), e.g. `credit_balance_exhausted` | The provider refuses the account, not the request; nothing is retried. Top it up or fix the key, and run again. |
 | `another speccoder is working on this project` | Another process is writing the journal (a run, or a decision). Reads still work beside it; wait for it to finish before you decide or run, or watch it with `speccoder report --live`. |
-| `waiting for a person: unknown — …` | The journal could not be read: damaged, or held alone by a speccoder 0.2.0 or earlier. Nothing is reported as not waiting; let that process finish. |
+| `waiting for a person: unknown — the last run ended without closing its journal…` | A run was killed (Ctrl-C at a terminal, a closed terminal, out of memory) before it closed the journal. A read cannot repair it; the next `speccoder run`, `task approve` or `task reject` does, and decides as usual. Nothing is reported as not waiting meanwhile. |
+| `waiting for a person: unknown — …` (other) | The journal could not be read: damaged, or held alone by a speccoder 0.2.0 or earlier (let that process finish). Nothing is reported as not waiting. |
+| `the calls waiting for a person could not be read, so whether another task's attempt holds the worktree is unknown` | A run refuses to start rather than guess. The reason follows: another process writing the journal (wait for it), or one this build cannot open. |
 | `MCP tool … changed since it was allowed` | The server changed a tool you allowed. Read it again; approving one call records it as it is now. |
 | No colour | Output is not a terminal, `NO_COLOR` or `TERM=dumb` is set, or screen-reader mode is on. `--color always` forces it (not in screen-reader mode). |
 | Odd symbols or boxes | The font lacks them: `--ascii`, or `[ui] ascii = true` in [your settings](@/docs/configuration.md#your-settings). |
