@@ -22,6 +22,7 @@
   import CodeView from "./components/CodeView.svelte";
   import Setup from "./components/Setup.svelte";
   import ConfirmSheet from "./components/ConfirmSheet.svelte";
+  import RemedyCard from "./components/RemedyCard.svelte";
 
   let theme = $state<string>(localStorage.getItem("speccoder-theme") ?? "auto");
   $effect(() => {
@@ -244,6 +245,7 @@
 {#if app.waiting}<AskSheet />{/if}
 {#if app.input}<InputSheet />{/if}
 {#if app.confirming}<ConfirmSheet />{/if}
+{#if app.remedy}<RemedyCard />{/if}
 {#if app.palette}<Palette />{/if}
 {#if app.context}<ContextMenu />{/if}
 {#if app.quick}<QuickSheet />{/if}

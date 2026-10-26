@@ -532,6 +532,51 @@ fn prompt(
         shown = result.message().to_owned();
     }
     say(&format!("```text\n{}\n```", shown.trim_end()));
+    // A fix speccoder knows: the editor asks the person, and on a yes it
+    // is applied and the command runs again.
+    if let Some(remedy) = result.remedy()
+        && !cancel.load(Ordering::SeqCst)
+        && fix_allowed(c, session, remedy)
+    {
+        let fixed = match remedy.run {
+            speccoder_core::actions::Runnable::FixSetup => {
+                speccoder_runtime::code::fix_setup(cwd, None)
+            }
+            _ => return,
+        };
+        say(&format!("```text\n{}\n```", fixed.message()));
+        if fixed.status() == speccoder_core::CommandStatus::Ok {
+            prompt(conn, session, cwd, line, cancel);
+        }
+    }
+}
+
+/// Asks the editor whether to apply `remedy`: its effect, the exact
+/// command and the undo, as an `execute` permission request.
+fn fix_allowed(c: &Conn, session: &str, remedy: &speccoder_core::Remedy) -> bool {
+    let mut text = format!("{}.\n$ {}", remedy.effect, remedy.command);
+    if let Some(u) = &remedy.undo {
+        text.push_str(&format!("\nUndo: {u}"));
+    }
+    let reply = c.request(
+        "session/request_permission",
+        json!({
+            "sessionId": session,
+            "toolCall": {
+                "toolCallId": c.id("fix"),
+                "title": format!("{} and run again", remedy.label),
+                "kind": "execute",
+                "status": "pending",
+                "rawInput": { "command": remedy.command },
+                "content": [{ "type": "content", "content": { "type": "text", "text": text } }],
+            },
+            "options": [
+                { "optionId": "fix", "name": remedy.label, "kind": "allow_once" },
+                { "optionId": "later", "name": "Not now", "kind": "reject_once" },
+            ],
+        }),
+    );
+    reply.is_some_and(|r| r["result"]["outcome"]["optionId"] == "fix")
 }
 
 /// Serves ACP on `input`/`output` until the editor closes the connection.

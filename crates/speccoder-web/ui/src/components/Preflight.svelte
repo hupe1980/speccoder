@@ -37,6 +37,13 @@
             <span class="d"><Code text={i.detail} /></span>
           </span>
           <span class="fixes">
+            {#if i.remedy}
+              {@const r = i.remedy}
+              <!-- What speccoder can fix itself is one click, its command a tooltip away. -->
+              <button class="btn small tinted" title="{r.effect} — $ {r.command}" disabled={!!app.job?.running} onclick={() => app.perform({ group: "work", label: r.label, why: r.effect, command: r.command, run: r.run, blocked: null, input: null })}>
+                <Icon name="check" size={11} weight={2.4} /> {r.label}
+              </button>
+            {:else}
             {#each i.fix.slice(0, 2) as f}
               {#if runnable(f)}
                 <button class="fix" title="Copy: {command(f)}" onclick={() => copy(command(f))}>
@@ -47,6 +54,7 @@
                 <span class="hint">{f.replace(/^→\s*/, "")}</span>
               {/if}
             {/each}
+            {/if}
           </span>
         </li>
       {/each}

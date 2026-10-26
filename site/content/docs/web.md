@@ -101,6 +101,8 @@ A running job floats at the bottom of the page: the task, its stage and the time
 
 The **status bar** shows, left to right: the feature, its branch and unmerged commits, its verdicts, requirements approved, stale ticks; then the running task and stage, spend, the model, the sandbox, decisions waiting and the connection to the host. Every item opens where it leads.
 
+A run that stops on something speccoder can fix itself, such as setup your checkout never committed, leaves a card instead of a passing notice: what stopped, what the fix changes, the exact command, how to undo it, and **Commit and Run Again**. Nothing is applied until you click.
+
 A run another speccoder does for the project, say a `speccoder run` in a terminal, shows too: a violet pill in the status bar (amber when that process died mid-run), its task on the Board's Running lane, and in **Up next** in place of Run. The pill opens its task, stage, last call, reasoning and spend; an interrupted run offers **Resume**. Runs started here while it holds the project are refused with its pid.
 
 ## Settings

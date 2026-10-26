@@ -236,14 +236,21 @@ pub(crate) fn run_task(
             if !left.ignore.is_empty() {
                 what.push(format!("{} is not git-ignored", left.ignore.join(", ")));
             }
+            let checkout = std::path::Path::new(&s.snapshot.root);
+            let remedy = crate::code::setup_remedy(checkout, Some(&feature_name));
+            let command = remedy
+                .as_ref()
+                .map_or_else(|| left.fix(checkout, &wt_root, &[]), |r| r.command.clone());
             return refuse(
                 CommandStatus::GitPrecondition,
                 format!(
-                    "{}: the checks write it on every run, so each run would find it in the worktree and set it aside — fix the setup once in your checkout: `{}`",
+                    "{} — the checks write it on every run, so each run would find it in the worktree and set it aside",
                     what.join(" and "),
-                    left.fix(std::path::Path::new(&s.snapshot.root), &wt_root)
                 ),
-            );
+            )
+            .with_code("SETUP-INCOMPLETE")
+            .with_fix(vec!["speccoder fix".to_owned(), command])
+            .with_remedy(remedy);
         }
         match set_aside_leftovers(&wt_root, &tmp, &feature_name, task) {
             Ok(reference) => set_aside = Some(reference),
@@ -482,6 +489,21 @@ pub(crate) fn run_task(
             Some(format!("`{}` cannot run", c.name)),
             Some(began),
         );
+        // Configuration the checkout never committed is the likely cause,
+        // and one speccoder can fix.
+        let checkout = std::path::Path::new(&s.snapshot.root);
+        if let Some(remedy) = crate::code::setup_remedy(checkout, Some(&feature_name)) {
+            return fail(
+                CommandStatus::GitPrecondition,
+                format!(
+                    "check `{}` cannot run in the worktree: your checkout has not committed its setup — {why}",
+                    c.name
+                ),
+            )
+            .with_code("SETUP-INCOMPLETE")
+            .with_fix(vec!["speccoder fix".to_owned(), remedy.command.clone()])
+            .with_remedy(Some(remedy));
+        }
         return fail(
             CommandStatus::ConfigError,
             // A cause speccoder recognised comes with its fix; else the
@@ -1992,6 +2014,9 @@ fn with_cause(note: &str, c: &speccoder_core::verify::CheckResult) -> String {
     let fix = match said.as_deref() {
         Some(l) if l.contains("profile `speccoder` not found") => Some(
             "`.config/nextest.toml` is not committed — `git add .config/nextest.toml && git commit -m \"speccoder: nextest profile\"`",
+        ),
+        Some(l) if l.contains("no tests to run") => Some(
+            "the project has no tests yet; if the first task writes them, run with --allow-failing-baseline, or add `--no-tests=pass` to the check's argv",
         ),
         Some(l) if l.contains("must be present") || l.contains("no targets") => Some(
             "the project has nothing to build yet; if the first task creates it, run with --allow-failing-baseline",

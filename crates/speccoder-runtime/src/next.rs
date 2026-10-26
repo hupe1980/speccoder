@@ -56,6 +56,13 @@ fn by_code(code: &str) -> Option<Vec<speccoder_core::next::NextStep>> {
             "speccoder doctor",
             "check the rest of the setup once the key is set",
         )],
+        "SETUP-INCOMPLETE" => vec![
+            step(
+                "speccoder fix --dry-run",
+                "what the fix commits, changing nothing",
+            ),
+            step("speccoder run", "run again once it is committed"),
+        ],
         "CONFIG-INVALID" => vec![step(
             "speccoder config",
             "every key, its value, and what is wrong",

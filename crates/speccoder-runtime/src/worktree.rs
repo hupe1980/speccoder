@@ -486,10 +486,11 @@ impl Leftovers {
         self.ignore.is_empty() && self.commit.is_empty()
     }
 
-    /// The fix, as one command line run in `checkout`; a lockfile only
-    /// the worktree's checks wrote is copied from `worktree`.
+    /// The fix, as one command line run in `checkout`, committing `also`
+    /// with it; a lockfile only the worktree's checks wrote is copied from
+    /// `worktree`.
     #[must_use]
-    pub fn fix(&self, checkout: &Path, worktree: &Path) -> String {
+    pub fn fix(&self, checkout: &Path, worktree: &Path, also: &[String]) -> String {
         let mut steps = Vec::new();
         for f in &self.commit {
             if !checkout.join(f).exists() {
@@ -502,7 +503,11 @@ impl Leftovers {
                 self.ignore.join("\\n")
             ));
         }
-        let mut add: Vec<&str> = self.commit.iter().map(String::as_str).collect();
+        let mut add: Vec<&str> = also
+            .iter()
+            .chain(&self.commit)
+            .map(String::as_str)
+            .collect();
         if !self.ignore.is_empty() {
             add.push(".gitignore");
         }

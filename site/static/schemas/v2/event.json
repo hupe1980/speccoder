@@ -848,6 +848,17 @@
             "null"
           ]
         },
+        "remedy": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Remedy"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The fix speccoder can apply itself, on the person's yes."
+        },
         "schema_version": {
           "description": "The envelope's version.",
           "format": "uint32",
@@ -1729,6 +1740,17 @@
         "level": {
           "$ref": "#/$defs/DoctorLevel",
           "description": "Pass, warn or fail."
+        },
+        "remedy": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Remedy"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The fix speccoder can apply itself, on the person's yes."
         }
       },
       "required": [
@@ -3815,6 +3837,47 @@
       "required": [
         "id",
         "now"
+      ],
+      "type": "object"
+    },
+    "Remedy": {
+      "description": "The fix speccoder knows and can apply itself: what it does, the exact\ncommand it amounts to, how to take it back. An interface offers it as\none action (never applies it unasked); a script reads the command.",
+      "properties": {
+        "command": {
+          "description": "The same, as a command run in the checkout.",
+          "type": "string"
+        },
+        "effect": {
+          "description": "What it changes, in one line.",
+          "type": "string"
+        },
+        "history": {
+          "description": "It writes git history (a commit): an interface asks first.",
+          "type": "boolean"
+        },
+        "label": {
+          "description": "The action, a verb first (`Commit Cargo.lock`).",
+          "type": "string"
+        },
+        "run": {
+          "$ref": "#/$defs/Runnable",
+          "description": "How an interface applies it."
+        },
+        "undo": {
+          "description": "How to take it back once applied.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "label",
+        "effect",
+        "command",
+        "undo",
+        "history",
+        "run"
       ],
       "type": "object"
     },

@@ -552,6 +552,9 @@ pub struct DoctorCheck {
     pub code: Option<String>,
     /// How to resolve it.
     pub fix: Vec<String>,
+    /// The fix speccoder can apply itself, on the person's yes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub remedy: Option<Remedy>,
 }
 
 /// Result of `speccoder doctor`.
@@ -1750,6 +1753,26 @@ pub struct CommandResult {
     next: Vec<crate::next::NextStep>,
     code: Option<&'static crate::codes::Entry>,
     fix: Vec<String>,
+    remedy: Option<Box<Remedy>>,
+}
+
+/// The fix speccoder knows and can apply itself: what it does, the exact
+/// command it amounts to, how to take it back. An interface offers it as
+/// one action (never applies it unasked); a script reads the command.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct Remedy {
+    /// The action, a verb first (`Commit Cargo.lock`).
+    pub label: String,
+    /// What it changes, in one line.
+    pub effect: String,
+    /// The same, as a command run in the checkout.
+    pub command: String,
+    /// How to take it back once applied.
+    pub undo: Option<String>,
+    /// It writes git history (a commit): an interface asks first.
+    pub history: bool,
+    /// How an interface applies it.
+    pub run: crate::actions::Runnable,
 }
 
 /// Envelope v2: `next`, `code`, `fix` and `docs` beside the typed `data`.
@@ -1766,6 +1789,9 @@ impl Serialize for CommandResult {
             map.serialize_entry("code", code.name)?;
             map.serialize_entry("fix", &self.fix())?;
             map.serialize_entry("docs", &code.docs())?;
+        }
+        if let Some(remedy) = &self.remedy {
+            map.serialize_entry("remedy", remedy)?;
         }
         if !self.next.is_empty() {
             map.serialize_entry("next", &self.next)?;
@@ -1803,6 +1829,9 @@ struct Envelope {
     /// The code's section on the codes page.
     #[serde(skip_serializing_if = "Option::is_none")]
     docs: Option<String>,
+    /// The fix speccoder can apply itself, on the person's yes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    remedy: Option<Remedy>,
     /// The steps that continue.
     #[serde(skip_serializing_if = "Option::is_none")]
     next: Option<Vec<crate::next::NextStep>>,
@@ -1838,6 +1867,7 @@ impl CommandResult {
             next: Vec::new(),
             code: None,
             fix: Vec::new(),
+            remedy: None,
         }
     }
 
@@ -1848,7 +1878,20 @@ impl CommandResult {
         let mut out = Self::new(command, from.status, &from.message);
         out.code = from.code;
         out.fix.clone_from(&from.fix);
+        out.remedy.clone_from(&from.remedy);
         out
+    }
+
+    /// The code, fixes and remedy of `from`, whose outcome this result
+    /// reports with the same status (a feature's run stopped by a task's).
+    #[must_use]
+    pub fn caused_by(mut self, from: &Self) -> Self {
+        if self.status == from.status {
+            self.code = from.code;
+            self.fix.clone_from(&from.fix);
+            self.remedy.clone_from(&from.remedy);
+        }
+        self
     }
 
     /// The same result with another status and message: payload and next
@@ -1858,6 +1901,7 @@ impl CommandResult {
         if status != self.status {
             self.code = None;
             self.fix.clear();
+            self.remedy = None;
         }
         self.status = status;
         self.exit_code = status.exit_code();
@@ -1881,6 +1925,19 @@ impl CommandResult {
     pub fn with_fix(mut self, fix: Vec<String>) -> Self {
         self.fix = fix;
         self
+    }
+
+    /// Attaches the fix speccoder can apply itself.
+    #[must_use]
+    pub fn with_remedy(mut self, remedy: Option<Remedy>) -> Self {
+        self.remedy = remedy.map(Box::new);
+        self
+    }
+
+    /// The fix speccoder can apply itself, if it knows one.
+    #[must_use]
+    pub fn remedy(&self) -> Option<&Remedy> {
+        self.remedy.as_deref()
     }
 
     /// The code: the one attached, else the status's default (none for a

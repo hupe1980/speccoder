@@ -9,7 +9,7 @@ use std::io::{BufRead, Write};
 use std::path::Path;
 
 use speccoder_core::actions::{Action, JourneyStep, Runnable, primary};
-use speccoder_core::{CommandResult, CommandStatus, ExitCode};
+use speccoder_core::{CommandResult, CommandStatus, ExitCode, Remedy};
 
 /// At most this many steps in a row without a pause.
 const STEPS: usize = 6;
@@ -59,6 +59,67 @@ pub fn offer(
         }
     }
     code
+}
+
+/// Offers `remedy` as a card — what it does, the command it amounts to,
+/// how to undo it — and applies it on a yes. A remedy that writes history
+/// waits for an explicit yes (`[y/N]`). Whether it was applied.
+pub fn remedy(path: &Path, feature: Option<&str>, remedy: &Remedy) -> bool {
+    let mut err = std::io::stderr().lock();
+    let _ = write!(err, "{}", remedy_question(remedy));
+    let _ = err.flush();
+    drop(err);
+    let mut line = String::new();
+    if std::io::stdin().lock().read_line(&mut line).unwrap_or(0) == 0 {
+        return false;
+    }
+    let answer = line.trim().to_lowercase();
+    let yes = matches!(answer.as_str(), "y" | "yes") || (!remedy.history && answer.is_empty());
+    if !yes {
+        return false;
+    }
+    let result = match remedy.run {
+        Runnable::FixSetup => speccoder_runtime::code::fix_setup(path, feature),
+        _ => return false,
+    };
+    let _ = crate::output::render(&result, false);
+    result.status() == CommandStatus::Ok
+}
+
+/// The card [`remedy`] shows, ending in its question.
+#[must_use]
+pub fn remedy_question(r: &Remedy) -> String {
+    use crate::style::Token;
+    let look = crate::style::err();
+    let prompt = if r.history { "[y/N]" } else { "[Y/n]" };
+    let undo = r.undo.as_deref().map(|u| format!("undo: {u}"));
+    if look.screen_reader {
+        return format!(
+            "\nfix: {} — {}.{}\nFix it and run again? yes or no: ",
+            r.label,
+            r.effect,
+            undo.map(|u| format!(" {u}.")).unwrap_or_default()
+        );
+    }
+    // The command it amounts to is the `fix:` line above.
+    let mut lines = vec![
+        look.paint(Token::Accent, &r.label),
+        look.paint(Token::Muted, &r.effect),
+    ];
+    if let Some(u) = undo {
+        lines.push(look.paint(Token::Muted, &u));
+    }
+    let text = format!(
+        "\n{}  {} {} ",
+        crate::human::card_in(&look, "Fix", &lines),
+        look.paint(Token::Attention, "Fix it and run again?"),
+        look.paint(Token::Muted, prompt)
+    );
+    if look.ascii {
+        crate::style::asciify(&text)
+    } else {
+        text
+    }
 }
 
 /// What the person is asked: where the feature is, then the step as a

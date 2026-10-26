@@ -6,12 +6,6 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### Added
-
-- **Runs in a terminal, seen in the app.** A `speccoder run` from another
-  process shows in the status bar, on the Board and in Up next, with its
-  stage, last call and reasoning; an interrupted one offers Resume.
-
 ## [0.2.0] - 2026-10-26
 
 ### Added
@@ -34,6 +28,17 @@ adheres to [Semantic Versioning](https://semver.org/).
 - File-type icons in the app's file tree and diffs.
 - `cargo binstall speccoder` takes the release archive.
 
+- **Runs in a terminal, seen in the app.** A `speccoder run` from another
+  process shows in the status bar, on the Board and in Up next, with its
+  stage, last call and reasoning; an interrupted one offers Resume.
+- **Fixes speccoder knows, offered as one action.** A run that stops on
+  setup the checkout never committed (`.config/nextest.toml`, a lockfile,
+  build output not ignored) says `error[SETUP-INCOMPLETE]` and carries a
+  `remedy`: its effect, the exact command and the undo. `speccoder run`
+  offers it at a terminal (`[y/N]`) and runs again on a yes; the app shows
+  **Commit and Run Again**; editors get a permission request; `speccoder fix
+  [--dry-run]` applies it.
+
 ### Changed
 
 - agentplane 0.53.0. In an editor (ACP) the model's words arrive as its
@@ -52,6 +57,8 @@ adheres to [Semantic Versioning](https://semver.org/).
 - The app read the journal for several requests at once and refused
   itself ("another speccoder is working on this project"); reads now share
   one handle and wait briefly for another process.
+- A feature run reports the code of the task that stopped it
+  (`CHECK-BROKEN`, not `CONFIG`).
 
 ## [0.1.0] - 2026-10-25
 

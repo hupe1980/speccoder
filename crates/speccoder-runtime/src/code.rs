@@ -255,51 +255,136 @@ pub fn worktree_view(root: &Path, feature: Option<&str>) -> WorktreeView {
         })
         .take(2000)
         .collect();
-    let left = crate::worktree::leftovers(&wt);
+    let s = setup(root, feature);
     WorktreeView {
         path: Some(wt.display().to_string()),
         entries,
-        blocking: left.commit.iter().chain(&left.ignore).cloned().collect(),
-        fix: (!left.is_empty()).then(|| left.fix(root, &wt)),
+        blocking: s
+            .config
+            .iter()
+            .chain(&s.left.commit)
+            .chain(&s.left.ignore)
+            .cloned()
+            .collect(),
+        fix: (!s.is_empty()).then(|| s.command(root)),
     }
 }
 
-/// Fixes the setup [`worktree_view`] says stops a run, in the checkout at
-/// `root`, on the person's command: a lockfile only the worktree's checks
-/// wrote is copied over, build output is added to `.gitignore`, and exactly
-/// those files are committed (`speccoder: setup`).
+/// What of the project's setup stops a run: what the feature's worktree is
+/// left with ([`crate::worktree::Leftovers`]), and the configuration a
+/// check reads that the checkout has but never committed — a worktree,
+/// checked out from a commit, lacks it.
+struct Setup {
+    worktree: Option<PathBuf>,
+    left: crate::worktree::Leftovers,
+    config: Vec<String>,
+}
+
+/// The files `init` writes that a run reads from its worktree.
+const CONFIG: [&str; 2] = [crate::verify::config::FILE, ".config/nextest.toml"];
+
+fn setup(root: &Path, feature: Option<&str>) -> Setup {
+    let worktree = branch_of(root, feature).and_then(|b| {
+        crate::worktree::worktree_for(&Git::at(root), &b)
+            .ok()
+            .flatten()
+    });
+    let left = worktree
+        .as_deref()
+        .map(crate::worktree::leftovers)
+        .unwrap_or_default();
+    let g = Git::at(root);
+    let config = CONFIG
+        .iter()
+        .filter(|p| root.join(p).is_file())
+        .filter(|p| {
+            g.run(&["status", "--porcelain", "--", p])
+                .is_ok_and(|o| !o.trim_ascii().is_empty())
+        })
+        .map(|p| (*p).to_owned())
+        .collect();
+    Setup {
+        worktree,
+        left,
+        config,
+    }
+}
+
+impl Setup {
+    fn is_empty(&self) -> bool {
+        self.left.is_empty() && self.config.is_empty()
+    }
+
+    /// Every file the fix commits.
+    fn paths(&self) -> Vec<String> {
+        let mut paths: Vec<String> = self
+            .config
+            .iter()
+            .chain(&self.left.commit)
+            .cloned()
+            .collect();
+        if !self.left.ignore.is_empty() {
+            paths.push(".gitignore".to_owned());
+        }
+        paths
+    }
+
+    fn command(&self, root: &Path) -> String {
+        let wt = self.worktree.as_deref().unwrap_or(root);
+        self.left.fix(root, wt, &self.config)
+    }
+}
+
+/// The fix of what in the setup stops a run, as an interface offers it:
+/// `None` when nothing does.
+#[must_use]
+pub fn setup_remedy(root: &Path, feature: Option<&str>) -> Option<speccoder_core::Remedy> {
+    let s = setup(root, feature);
+    if s.is_empty() {
+        return None;
+    }
+    let paths = s.paths();
+    let ignore = if s.left.ignore.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "{} added to .gitignore, ",
+            speccoder_core::words::listed(&s.left.ignore)
+        )
+    };
+    Some(speccoder_core::Remedy {
+        label: format!("Commit {}", speccoder_core::words::listed(&paths)),
+        effect: format!("{ignore}in your checkout as `speccoder: setup`; the next run picks it up"),
+        command: s.command(root),
+        undo: Some("git reset --soft HEAD~1".to_owned()),
+        history: true,
+        run: speccoder_core::actions::Runnable::FixSetup,
+    })
+}
+
+/// Fixes the setup that stops a run, in the checkout at `root`, on the
+/// person's command: a lockfile only the worktree's checks wrote is copied
+/// over, build output is added to `.gitignore`, and exactly those files and
+/// the uncommitted configuration are committed (`speccoder: setup`).
 #[must_use]
 pub fn fix_setup(root: &Path, feature: Option<&str>) -> speccoder_core::CommandResult {
     use speccoder_core::{CommandResult, CommandStatus};
-    let refuse = |status, m: String| CommandResult::new("setup", status, &m);
-    let Some(branch) = branch_of(root, feature) else {
-        return refuse(CommandStatus::NotFound, "no feature branch".to_owned());
-    };
-    let Ok(Some(wt)) = crate::worktree::worktree_for(&Git::at(root), &branch) else {
-        return refuse(
-            CommandStatus::NotFound,
-            "the feature has no worktree yet".to_owned(),
-        );
-    };
-    let left = crate::worktree::leftovers(&wt);
-    if left.is_empty() {
-        return CommandResult::new(
-            "setup",
-            CommandStatus::Ok,
-            "nothing in the worktree stops a run",
-        );
+    let refuse = |status, m: String| CommandResult::new("fix", status, &m);
+    let s = setup(root, feature);
+    if s.is_empty() {
+        return CommandResult::new("fix", CommandStatus::Ok, "nothing in the setup stops a run");
     }
-    let mut paths = Vec::new();
-    for f in &left.commit {
-        let to = root.join(f);
-        if !to.exists()
-            && let Err(e) = std::fs::copy(wt.join(f), &to)
-        {
-            return refuse(CommandStatus::Error, format!("{f}: {e}"));
+    if let Some(wt) = &s.worktree {
+        for f in &s.left.commit {
+            let to = root.join(f);
+            if !to.exists()
+                && let Err(e) = std::fs::copy(wt.join(f), &to)
+            {
+                return refuse(CommandStatus::Error, format!("{f}: {e}"));
+            }
         }
-        paths.push(f.clone());
     }
-    if !left.ignore.is_empty() {
+    if !s.left.ignore.is_empty() {
         let ignore = root.join(".gitignore");
         let existing = std::fs::read_to_string(&ignore).unwrap_or_default();
         let sep = if existing.is_empty() || existing.ends_with('\n') {
@@ -307,19 +392,19 @@ pub fn fix_setup(root: &Path, feature: Option<&str>) -> speccoder_core::CommandR
         } else {
             "\n"
         };
-        let text = format!("{existing}{sep}{}\n", left.ignore.join("\n"));
+        let text = format!("{existing}{sep}{}\n", s.left.ignore.join("\n"));
         if let Err(e) = std::fs::write(&ignore, text) {
             return refuse(CommandStatus::Error, format!(".gitignore: {e}"));
         }
-        paths.push(".gitignore".to_owned());
     }
+    let paths = s.paths();
     match crate::init::commit_written_as(root, &paths, "speccoder: setup") {
         Ok(id) => CommandResult::new(
-            "setup",
+            "fix",
             CommandStatus::Ok,
             &format!(
-                "committed {} as {id}; the next run takes it into the feature's branch",
-                paths.join(", ")
+                "committed {} as {id}; the next run takes it into the feature's branch (undo: git reset --soft HEAD~1)",
+                speccoder_core::words::listed(&paths)
             ),
         ),
         Err(e) => refuse(CommandStatus::GitPrecondition, e),

@@ -1557,11 +1557,17 @@ fn an_uncommitted_lockfile_stops_the_run_with_its_fix_until_committed() {
         "{}",
         res.message()
     );
+    // The fix, as one action and as the command it amounts to.
+    assert_eq!(res.code().map(|c| c.name), Some("SETUP-INCOMPLETE"));
+    let remedy = res.remedy().expect("a remedy");
+    assert_eq!(remedy.label, "Commit Cargo.lock");
+    assert!(remedy.history);
     assert!(
-        res.message().contains("git add Cargo.lock"),
+        remedy.command.contains("git add Cargo.lock"),
         "{}",
-        res.message()
+        remedy.command
     );
+    assert!(res.fix().iter().any(|f| f == "speccoder fix"));
     assert!(
         git_out(r.path(), &["for-each-ref", "refs/speccoder/attempts/"])
             .lines()
@@ -3603,4 +3609,26 @@ fn reasoning_summaries_can_be_switched_off() {
     let res = run(r.path(), state.path(), "T005", d);
     assert!(!f.asked().is_empty(), "{}", res.message());
     assert!(f.asked().iter().all(|a| !a.reasoning_summary));
+}
+
+#[test]
+fn uncommitted_setup_config_is_part_of_the_fix() {
+    let r = repo("");
+    fs::create_dir_all(r.path().join(".config")).unwrap();
+    fs::write(
+        r.path().join(".config/nextest.toml"),
+        "[profile.speccoder]\n",
+    )
+    .unwrap();
+    let remedy = speccoder_runtime::code::setup_remedy(r.path(), None).expect("a remedy");
+    assert_eq!(remedy.label, "Commit .config/nextest.toml");
+    assert!(
+        remedy.command.contains("git add .config/nextest.toml"),
+        "{}",
+        remedy.command
+    );
+    let fixed = speccoder_runtime::code::fix_setup(r.path(), None);
+    assert_eq!(fixed.status(), CommandStatus::Ok, "{}", fixed.message());
+    assert!(git_out(r.path(), &["ls-files", ".config/nextest.toml"]).contains("nextest.toml"));
+    assert!(speccoder_runtime::code::setup_remedy(r.path(), None).is_none());
 }

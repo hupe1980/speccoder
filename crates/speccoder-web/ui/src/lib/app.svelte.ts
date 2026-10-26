@@ -2,7 +2,7 @@
 // feature changes, and what the running job is doing, from its events.
 
 import { get, post, q, listen } from "./api";
-import type { Action, Envelope, Inbox, LiveRun, Project, Report, PendingCall, Presentation, Runnable, Document } from "./types";
+import type { Action, Envelope, Inbox, LiveRun, Project, Report, PendingCall, Presentation, Runnable, Document, Remedy } from "./types";
 
 export interface StageView {
   stage: string;
@@ -39,7 +39,7 @@ class AppState {
   inbox = $state<Envelope<Inbox> | null>(null);
   documents = $state<Document[]>([]);
   /** The doctor's warnings and failures: what would stop or spoil a run. */
-  preflight = $state<{ check: string; level: string; detail: string; fix: string[]; code?: string | null }[]>([]);
+  preflight = $state<{ check: string; level: string; detail: string; fix: string[]; code?: string | null; remedy?: Remedy }[]>([]);
   /** Every doctor check (the status bar reads the model and the sandbox). */
   doctor = $state<{ check: string; level: string; detail: string }[]>([]);
   /** The quick-change sheet is open. */
@@ -148,6 +148,25 @@ class AppState {
   /** Runs `a`; asks for its input first when it takes one. */
   /** An action that leaves the machine, waiting for the person's yes. */
   confirming = $state<{ action: Action } | null>(null);
+  /** A stop speccoder knows the fix for: offered until done or dismissed,
+   *  then what stopped runs again. */
+  remedy = $state<{ remedy: Remedy; message: string; code?: string; then: Action | null } | null>(null);
+  #last: Action | null = null;
+  #fixing: Action | null | undefined = undefined;
+
+  /** Applies the remedy offered; once it holds, runs again what it stopped. */
+  async applyRemedy() {
+    const r = this.remedy;
+    if (!r) return;
+    this.remedy = null;
+    this.#fixing = r.then;
+    try {
+      await post("/api/run", { run: r.remedy.run, input: null, feature: this.feature, command: r.remedy.command });
+    } catch (e) {
+      this.#fixing = undefined;
+      this.toast({ tone: "error", text: String((e as Error).message ?? e) });
+    }
+  }
 
   async perform(a: Action, input?: string, confirmed = false) {
     if (!a.run) {
@@ -178,6 +197,8 @@ class AppState {
     }
     this.input = null;
     this.palette = false;
+    this.#last = a;
+    this.remedy = null;
     try {
       await post("/api/run", { run: a.run as Runnable, input: input ?? null, feature: this.feature, command: a.command });
     } catch (e) {
@@ -225,6 +246,20 @@ class AppState {
         const r = e.result as Envelope;
         this.job = { id: e.id, command: this.job?.command ?? "", running: false, result: r };
         this.waiting = null;
+        if (this.#fixing !== undefined) {
+          const then = this.#fixing;
+          this.#fixing = undefined;
+          this.toast({ tone: r?.status === "ok" ? "ok" : "error", text: r?.message ?? "done" });
+          void this.refresh().then(() => {
+            if (r?.status === "ok" && then) void this.perform(then);
+          });
+          break;
+        }
+        if (r?.remedy) {
+          this.remedy = { remedy: r.remedy, message: r.message, code: r.code, then: this.#last };
+          void this.refresh();
+          break;
+        }
         this.toast({
           tone: r?.status === "ok" ? "ok" : r?.status === "needs_human" ? "warn" : "error",
           text: r?.message ?? "done",
