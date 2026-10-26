@@ -639,9 +639,18 @@
             "string",
             "null"
           ]
+        },
+        "sha256": {
+          "default": null,
+          "description": "The approval digest *Approve and Run* would record now (decision\nlines and frozen manifests): the click sends it back and is refused\nwhen it no longer matches. `None`: it cannot be computed here.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
+        "sha256",
         "approves",
         "blocked",
         "autopilot_blocked",
@@ -6949,6 +6958,13 @@
           },
           "type": "array"
         },
+        "error": {
+          "description": "Why the review record (`review.json`) cannot be read: shown, never\nread as \"nothing decided\" by a write.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "feature": {
           "description": "The feature.",
           "type": "string"
@@ -7105,6 +7121,14 @@
           },
           "type": "array"
         },
+        "beside": {
+          "default": [],
+          "description": "Documents changed while it ran by something other than the skill\n(the person's own edit): *Undo Revision* never overwrites them.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "changed": {
           "description": "Sections it changed.",
           "items": {
@@ -7162,7 +7186,8 @@
         "outside",
         "outcome",
         "files",
-        "asked_again"
+        "asked_again",
+        "beside"
       ],
       "type": "object"
     },
@@ -8109,6 +8134,13 @@
             "mode": {
               "$ref": "#/$defs/RunMode",
               "description": "How the run asks."
+            },
+            "sheet": {
+              "description": "The sheet's `sha256`: what the person saw approved and frozen.\nRequired from every interface but a terminal command.",
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           "required": [

@@ -52,7 +52,7 @@ describe("ApproveSheet", () => {
     go().click();
     for (let i = 0; i < 5; i++) await Promise.resolve();
     const [o] = host.app.perform.mock.calls[0]!;
-    expect((o as { run: unknown }).run).toEqual({ kind: "approve_and_run", mode: "ask", grants: [] });
+    expect((o as { run: unknown }).run).toEqual({ kind: "approve_and_run", mode: "ask", grants: [], sheet: "sha256:5e1f" });
     expect(host.app.view).toBe("board");
   });
 
@@ -68,7 +68,7 @@ describe("ApproveSheet", () => {
     go().click();
     for (let i = 0; i < 5; i++) await Promise.resolve();
     const [o] = host.app.perform.mock.calls[0]!;
-    expect((o as { run: unknown }).run).toEqual({ kind: "approve_and_run", mode: "autopilot", grants: ["g-0011223344556677"] });
+    expect((o as { run: unknown }).run).toEqual({ kind: "approve_and_run", mode: "autopilot", grants: ["g-0011223344556677"], sheet: "sha256:5e1f" });
   });
 
   it("is disabled naming what blocks it; Keep Refining records nothing", () => {

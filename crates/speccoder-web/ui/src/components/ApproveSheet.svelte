@@ -58,7 +58,7 @@
     onclose();
     await app.perform(
       offer(
-        { kind: "approve_and_run", mode: m, grants },
+        { kind: "approve_and_run", mode: m, grants, sheet: sheet?.sha256 ?? null },
         { group: "review", label: m === "autopilot" ? "approve and run on autopilot" : "approve and run", why: `approves ${approves} decision lines and freezes the written tests`, command },
       ),
     );

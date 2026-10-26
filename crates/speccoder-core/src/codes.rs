@@ -245,6 +245,17 @@ pub const CATALOG: &[Entry] = &[
         ]
     ),
     entry!(
+        "REVIEW-CHANGED",
+        P,
+        S::NeedsHuman,
+        "what the approval would freeze changed since it was shown",
+        "*Approve and Run* binds to the sheet the person saw: the decision lines it approves and the tests it freezes, by digest. They changed in between — another tab asked again, a *Write Tests* finished — so approving now would freeze tests nobody saw. Nothing was approved.",
+        [
+            "speccoder review",
+            "→ open the sheet again and approve what it shows"
+        ]
+    ),
+    entry!(
         "REVIEW-UNREADABLE",
         P,
         S::NeedsHuman,

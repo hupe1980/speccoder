@@ -345,6 +345,11 @@ pub struct OfferedGrant {
 /// and run now, and what autopilot would hold.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct ApproveSheet {
+    /// The approval digest *Approve and Run* would record now (decision
+    /// lines and frozen manifests): the click sends it back and is refused
+    /// when it no longer matches. `None`: it cannot be computed here.
+    #[serde(default)]
+    pub sha256: Option<String>,
     /// Decision lines the approval records.
     pub approves: Vec<String>,
     /// Why *Approve and Run* is disabled now (each a line naming its

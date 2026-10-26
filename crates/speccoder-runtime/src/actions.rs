@@ -813,9 +813,21 @@ pub fn perform_in(
             state,
             options,
         ),
-        Runnable::ApproveAndRun { mode, grants } => {
-            crate::review::approve_and_run(root, feature, *mode, grants, via, state, None, options)
-        }
+        Runnable::ApproveAndRun {
+            mode,
+            grants,
+            sheet,
+        } => crate::review::approve_and_run(
+            root,
+            feature,
+            *mode,
+            grants,
+            sheet.as_deref(),
+            via,
+            state,
+            None,
+            options,
+        ),
         Runnable::Comment { op, anchor, id } => crate::comments::comment(
             root,
             feature,

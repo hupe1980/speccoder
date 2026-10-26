@@ -388,6 +388,7 @@ fn us2_disagreeing_authors_block_approve_and_run_until_a_reading_is_chosen() {
         None,
         RunMode::Ask,
         &[],
+        None,
         Via::Terminal,
         Some(state.path()),
         Some(d.clone()),
@@ -629,6 +630,14 @@ fn written(r: &Path, state: &Path) -> (Arc<FakeProvider>, Arc<dyn ModelProvider>
     (f, d)
 }
 
+/// The approve sheet's digest, as the web app sends it back.
+fn sheet_of(r: &Path, state: &Path) -> Option<String> {
+    review(&speccoder_runtime::review::report_in(r, None, Some(state)))
+        .sheet
+        .as_ref()
+        .and_then(|s| s.sha256.clone())
+}
+
 fn one_task() -> RunOptions {
     RunOptions {
         max_tasks: Some(1),
@@ -657,6 +666,7 @@ fn us3_us4_approve_freezes_and_the_run_reuses_the_oracle_without_an_author_call(
         None,
         RunMode::Ask,
         &[],
+        sheet_of(r.path(), state.path()).as_deref(),
         Via::Web,
         Some(state.path()),
         Some(d),
@@ -749,6 +759,7 @@ fn us4_a_tampered_frozen_test_stops_the_task_and_a_lapse_or_missing_set_authors(
         None,
         RunMode::Ask,
         &[],
+        None,
         Via::Terminal,
         Some(state.path()),
         Some(d.clone()),
@@ -821,6 +832,7 @@ fn us3_autopilot_refuses_what_would_ask_and_lists_it() {
         None,
         RunMode::Autopilot,
         &["g-nope".to_owned()],
+        sheet_of(r.path(), state.path()).as_deref(),
         Via::Web,
         Some(state.path()),
         Some(d.clone()),
@@ -832,6 +844,7 @@ fn us3_autopilot_refuses_what_would_ask_and_lists_it() {
         None,
         RunMode::Autopilot,
         &[],
+        sheet_of(r.path(), state.path()).as_deref(),
         Via::Web,
         Some(state.path()),
         Some(d),
@@ -875,6 +888,7 @@ fn autopilot_without_a_sandbox_is_refused() {
         None,
         RunMode::Autopilot,
         &[],
+        sheet_of(r.path(), state.path()).as_deref(),
         Via::Web,
         Some(state.path()),
         Some(d),
@@ -1082,6 +1096,7 @@ fn autopilot_never_adopts_the_grants_of_an_interrupted_earlier_run() {
         None,
         RunMode::Ask,
         &[],
+        None,
         Via::Terminal,
         Some(state.path()),
         Some(d.clone()),
@@ -1172,6 +1187,7 @@ fn freeze_only(r: &Path, state: &Path, d: Arc<dyn ModelProvider>) {
         None,
         RunMode::Ask,
         &[],
+        None,
         Via::Terminal,
         Some(state),
         Some(d),
@@ -1452,6 +1468,7 @@ fn the_code_view_never_shows_a_held_out_file_or_follows_a_link_out_of_the_worktr
         None,
         RunMode::Ask,
         &[],
+        sheet_of(r.path(), state.path()).as_deref(),
         Via::Web,
         Some(state.path()),
         Some(d),
@@ -1516,4 +1533,61 @@ fn the_code_view_never_shows_a_held_out_file_or_follows_a_link_out_of_the_worktr
     }
     overlay.join().unwrap().unwrap();
     assert!(seen_on_disk, "the overlay was polled while it ran");
+}
+
+#[test]
+fn approve_and_run_freezes_only_what_its_sheet_showed() {
+    // P1: the draft changes after the sheet was shown (another tab).
+    let r = repo();
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_structure(answer(standard(), "refused"));
+    f.will_structure(answer(standard(), "refused"));
+    f.will_structure(held_out("fn login"));
+    assert_eq!(
+        write(r.path(), state.path(), d.clone()).status(),
+        CommandStatus::Ok
+    );
+    let shown = sheet_of(r.path(), state.path()).unwrap();
+    let approve = |sheet: Option<&str>, via: Via| {
+        speccoder_runtime::review::approve_and_run(
+            r.path(),
+            None,
+            RunMode::Ask,
+            &[],
+            sheet,
+            via,
+            Some(state.path()),
+            Some(d.clone()),
+            &RunOptions {
+                max_tasks: Some(0),
+                ..RunOptions::default()
+            },
+        )
+    };
+    // A click without the sheet's digest is refused.
+    let blind = approve(None, Via::Web);
+    assert_eq!(code(&blind), Some("USAGE"), "{}", blind.message());
+    // Another tab rejects a test: the red set the sheet showed is gone.
+    let mut reject = request("US1", OracleOp::Reject);
+    reject.path = Some("tests/acceptance_us1_login.txt");
+    reject.text = Some("wrong");
+    let res = tests_with(
+        r.path(),
+        None,
+        &reject,
+        Via::Web,
+        state.path(),
+        None,
+        &RunOptions::default(),
+    );
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let stale = approve(Some(&shown), Via::Web);
+    assert_eq!(code(&stale), Some("REVIEW-CHANGED"), "{}", stale.message());
+    assert!(!r.path().join("specs/001-graph/review.json").exists());
+    // The sheet as it is now approves.
+    let now = sheet_of(r.path(), state.path()).unwrap();
+    assert_ne!(now, shown);
+    let ok = approve(Some(&now), Via::Web);
+    assert!(ok.message().starts_with("approved"), "{}", ok.message());
 }

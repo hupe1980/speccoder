@@ -94,7 +94,7 @@ export function review(over: Partial<ReviewReport> = {}): ReviewReport {
     oracle: [oracleView()],
     tests_notice: null,
     approval: null,
-    sheet: { approves: ["FR-001"], blocked: [], autopilot_blocked: null, sandbox: "Sandbox: Seatbelt, network off", grants: [{ id: "g-0011223344556677", class: "command", object: "run `cargo run --example demo` · argv #3f2a1b0c9d8e" }] },
+    sheet: { sha256: "sha256:5e1f", approves: ["FR-001"], blocked: [], autopilot_blocked: null, sandbox: "Sandbox: Seatbelt, network off", grants: [{ id: "g-0011223344556677", class: "command", object: "run `cargo run --example demo` · argv #3f2a1b0c9d8e" }] },
     ...over,
   };
 }

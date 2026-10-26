@@ -72,9 +72,18 @@
             "string",
             "null"
           ]
+        },
+        "sha256": {
+          "default": null,
+          "description": "The approval digest *Approve and Run* would record now (decision\nlines and frozen manifests): the click sends it back and is refused\nwhen it no longer matches. `None`: it cannot be computed here.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
+        "sha256",
         "approves",
         "blocked",
         "autopilot_blocked",
@@ -884,6 +893,13 @@
         "$ref": "#/$defs/RequirementDrift"
       },
       "type": "array"
+    },
+    "error": {
+      "description": "Why the review record (`review.json`) cannot be read: shown, never\nread as \"nothing decided\" by a write.",
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "feature": {
       "description": "The feature.",

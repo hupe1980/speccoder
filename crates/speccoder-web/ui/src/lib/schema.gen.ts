@@ -200,6 +200,12 @@ export interface ApproveSheet {
   grants: OfferedGrant[];
   /** The sandbox line (`Seatbelt, network off`). */
   sandbox: string | null;
+  /**
+   * The approval digest *Approve and Run* would record now (decision
+   * lines and frozen manifests): the click sends it back and is refused
+   * when it no longer matches. `None`: it cannot be computed here.
+   */
+  sha256: string | null;
 }
 
 /** Result of `speccoder spec archive` (an OpenSpec change). */
@@ -2784,6 +2790,11 @@ export interface ReviewReport {
    * spec: what a commit would record.
    */
   changes: RequirementDrift[];
+  /**
+   * Why the review record (`review.json`) cannot be read: shown, never
+   * read as "nothing decided" by a write.
+   */
+  error?: string | null;
   /** The feature. */
   feature: string;
   /** Where the review is recorded (project-relative); commit it to share. */
@@ -2849,6 +2860,11 @@ export interface ReviewTotals {
 export interface RevisionView {
   /** Requirements whose tests were asked again from test comments. */
   asked_again: string[];
+  /**
+   * Documents changed while it ran by something other than the skill
+   * (the person's own edit): *Undo Revision* never overwrites them.
+   */
+  beside: string[];
   /** Sections it changed. */
   changed: string[];
   /** The comments it was sent with. */
@@ -3227,6 +3243,11 @@ export type Runnable =
     kind: "approve_and_run";
     /** How the run asks. */
     mode: RunMode;
+    /**
+     * The sheet's `sha256`: what the person saw approved and frozen.
+     * Required from every interface but a terminal command.
+     */
+    sheet?: string | null;
   }
   /** Add, delete or keep a review comment (the input: its words). */
   | {

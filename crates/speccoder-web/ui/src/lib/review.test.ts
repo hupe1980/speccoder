@@ -38,6 +38,8 @@ describe("the approve sheet", () => {
     expect(sheetBlocked(sheet, "ask", true)).toEqual(["a run is active"]);
     expect(sheetBlocked({ ...sheet!, autopilot_blocked: "autopilot needs the OS sandbox" }, "autopilot", false)).toEqual(["autopilot needs the OS sandbox"]);
     expect(sheetBlocked({ ...sheet!, blocked: ["US1: two readings of US1-2 disagree"] }, "refine", true)).toEqual([]);
+    // Without the digest the click could not bind to what is shown.
+    expect(sheetBlocked({ ...sheet!, sha256: null }, "ask", false)).toEqual(["the sheet cannot say what it would freeze: open it again"]);
     expect(approveCommand("autopilot", ["g-1", "g-2"])).toBe("speccoder review approve --run autopilot --grant g-1 --grant g-2");
     expect(approveCommand("ask", [])).toBe("speccoder review approve --run ask");
   });

@@ -638,6 +638,43 @@ fn project_in(root: &Path, worktree_root: &Path) -> PathBuf {
     }
 }
 
+/// One writer of a unit's oracle at a time: *Write Tests* and its kin, and
+/// the freeze of *Approve and Run*. A holder elsewhere is refused, never
+/// waited for (a write runs model calls).
+pub(crate) struct UnitLock(PathBuf);
+
+impl UnitLock {
+    pub(crate) fn take(project_state: &Path, unit: &str) -> Result<Self, String> {
+        let path = project_state.join(DIR).join(format!("{unit}.lock"));
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
+        }
+        // A lock older than an hour is a crashed writer's.
+        if std::fs::metadata(&path)
+            .ok()
+            .and_then(|m| m.modified().ok())
+            .and_then(|m| m.elapsed().ok())
+            .is_some_and(|age| age.as_secs() > 3600)
+        {
+            let _ = std::fs::remove_file(&path);
+        }
+        std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+            .map(|_| Self(path))
+            .map_err(|_| {
+                format!("{unit}'s tests are being written or frozen elsewhere right now: look again when that ends")
+            })
+    }
+}
+
+impl Drop for UnitLock {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
+    }
+}
+
 /// What a progress sink is told: a stage, by name and count.
 fn stage(options: &crate::RunOptions, req: &str, stage: &str, n: u32, of: u32) {
     if let Some(p) = &options.progress {
@@ -713,6 +750,10 @@ pub fn tests_with(
     let req = match check(&ctx, request) {
         Ok(r) => r,
         Err(r) => return *r,
+    };
+    let _lock = match UnitLock::take(&ctx.plane_dir, &ctx.feature) {
+        Ok(l) => l,
+        Err(e) => return refuse(CommandStatus::GitPrecondition, "RUN-ACTIVE", &e),
     };
     let who = crate::approvals::Who::local_in(&ctx.root, via);
     let done = match request.op {

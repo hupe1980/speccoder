@@ -530,7 +530,26 @@ fn sheet(
     if run_active(u) {
         blocked.push("a run is active".to_owned());
     }
+    // What the approval would record: the click sends it back, and a
+    // change in between refuses it (REVIEW-CHANGED).
+    let sha256 = match (&u.state, u.record()) {
+        (Some(plane), Ok(record)) => {
+            match crate::oracle::freezable(plane, &u.feature, &u.oracle_requirements()) {
+                Ok(f) => Some(would_approve(&u.requirements(), &record, &f)),
+                Err(t) => {
+                    blocked.push(format!("a test draft cannot be read: {}", t.0));
+                    None
+                }
+            }
+        }
+        (_, Err(e)) => {
+            blocked.push(e);
+            None
+        }
+        (None, Ok(_)) => None,
+    };
     speccoder_core::oracle::ApproveSheet {
+        sha256,
         approves: items
             .iter()
             .filter(|i| matches!(i.state.as_str(), "open" | "lapsed"))
@@ -854,6 +873,38 @@ pub fn decide_in(
         .with_data(CommandData::Review(Box::new(r)))
 }
 
+/// The approval digest *Approve and Run* records when it runs now: every
+/// decision line approved after it (each open or lapsed one approved on
+/// its wording), and the requirements it freezes — what the sheet shows,
+/// so the click binds to it.
+fn would_approve(
+    requirements: &[(String, String)],
+    record: &Record,
+    freezable: &[crate::oracle::Freezable],
+) -> String {
+    let before = items(requirements, record);
+    let approved: Vec<(String, String)> = requirements
+        .iter()
+        .filter_map(|(id, line)| {
+            let state = before.iter().find(|i| i.id == *id)?.state.as_str();
+            match state {
+                "open" | "lapsed" => Some((id.clone(), digest(line))),
+                _ => record
+                    .requirements
+                    .get(id)
+                    .filter(|d| d.verdict == "approved")
+                    .map(|d| (id.clone(), d.sha256.clone())),
+            }
+        })
+        .collect();
+    approval_digest(
+        approved.iter().map(|(a, b)| (a.as_str(), b.as_str())),
+        freezable
+            .iter()
+            .map(|f| (f.req.key.as_str(), f.manifest.as_str())),
+    )
+}
+
 /// The approval digest (research R6): SHA-256 over the approved decision
 /// lines (`ID=line digest`, sorted) and the frozen oracle entries
 /// (`REQ=manifest digest`, sorted).
@@ -893,6 +944,7 @@ pub fn approve_and_run(
     feature: Option<&str>,
     mode: speccoder_core::oracle::RunMode,
     grants: &[String],
+    sheet: Option<&str>,
     via: speccoder_core::actions::Via,
     state: Option<&Path>,
     provider: Option<std::sync::Arc<dyn agentplane::model::ModelProvider>>,
@@ -923,6 +975,11 @@ pub fn approve_and_run(
             ),
         );
     }
+    // Nothing writes the unit's tests while they are frozen.
+    let lock = match crate::oracle::UnitLock::take(&plane, &u.feature) {
+        Ok(l) => l,
+        Err(e) => return refuse(CommandStatus::GitPrecondition, "RUN-ACTIVE", e),
+    };
     let open = questions(&u);
     if !open.is_empty() {
         return refuse(
@@ -1055,6 +1112,24 @@ pub fn approve_and_run(
             .iter()
             .map(|f| (f.req.key.as_str(), f.manifest.as_str())),
     );
+    // A click binds to what its sheet showed; a terminal command acts on
+    // what it reads now.
+    if sheet.is_none() && via != speccoder_core::actions::Via::Terminal {
+        return refuse(
+            CommandStatus::UsageError,
+            "USAGE",
+            "Approve and Run names what its sheet showed (the sheet's sha256): open the sheet again".to_owned(),
+        );
+    }
+    if let Some(shown) = sheet
+        && shown != sha
+    {
+        return refuse(
+            CommandStatus::NeedsHuman,
+            "REVIEW-CHANGED",
+            "what Approve and Run would approve and freeze changed since the sheet showed it (another tab, a finished Write Tests): nothing was approved — look at the sheet again".to_owned(),
+        );
+    }
     record.oracle.clear();
     let mut frozen = Vec::new();
     for f in &freezable {
@@ -1140,6 +1215,7 @@ pub fn approve_and_run(
         },
         u.rel()
     );
+    drop(lock);
     let mut run_options = options.clone();
     run_options.mode = mode;
     if mode == RunMode::Autopilot {

@@ -187,6 +187,7 @@ fn cases() -> Vec<Case> {
             Runnable::ApproveAndRun {
                 mode: speccoder_core::oracle::RunMode::Ask,
                 grants: Vec::new(),
+                sheet: None,
             },
             None,
         ),

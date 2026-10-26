@@ -229,6 +229,14 @@
           },
           "type": "array"
         },
+        "beside": {
+          "default": [],
+          "description": "Documents changed while it ran by something other than the skill\n(the person's own edit): *Undo Revision* never overwrites them.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "changed": {
           "description": "Sections it changed.",
           "items": {
@@ -286,7 +294,8 @@
         "outside",
         "outcome",
         "files",
-        "asked_again"
+        "asked_again",
+        "beside"
       ],
       "type": "object"
     }

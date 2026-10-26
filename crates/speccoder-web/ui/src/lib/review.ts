@@ -57,6 +57,8 @@ export function testsCommand(req: string, op: "write" | "reject" | "again" | "ed
 export function sheetBlocked(sheet: ApproveSheet | null, mode: RunMode | "refine", running: boolean): string[] {
   if (mode === "refine") return [];
   const out = [...(sheet?.blocked ?? [])];
+  // The click binds to what the sheet shows: without its digest, nothing.
+  if (!sheet?.sha256 && !out.length) out.push("the sheet cannot say what it would freeze: open it again");
   if (running && !out.some((b) => b.includes("run is active"))) out.push("a run is active");
   if (mode === "autopilot" && sheet?.autopilot_blocked) out.push(sheet.autopilot_blocked);
   return out;
