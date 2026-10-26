@@ -1596,7 +1596,9 @@ pub(crate) fn trailers(
         }
     }
     if let Some(i) = fix.bug.issue.as_ref().filter(|_| outcome == "fixed") {
-        out.push_str(&format!("Fixes #{}\n", i.number));
+        // A trailer git parses (`Fixes #N` without the colon would make
+        // git read none of the block); GitHub closes on it either way.
+        out.push_str(&format!("Fixes: #{}\n", i.number));
     }
     out
 }

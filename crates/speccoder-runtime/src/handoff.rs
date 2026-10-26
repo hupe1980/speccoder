@@ -54,6 +54,59 @@ fn trailers(repo: &Git, base: &str, branch: &str) -> Vec<(String, String, String
         .collect()
 }
 
+/// The bug fixes on the branch: (task, `Bug:` value, `Fixes:` value) of
+/// every commit carrying a `Fixes` trailer.
+fn bug_trailers(repo: &Git, base: &str, branch: &str) -> Vec<(String, String, String)> {
+    const FS: char = '\u{1f}';
+    const RS: char = '\u{1e}';
+    let format = format!(
+        "--format=%(trailers:key=Spec-Task,valueonly){FS}%(trailers:key=Bug,valueonly){FS}%(trailers:key=Fixes,valueonly){RS}"
+    );
+    let log = repo
+        .run(&["log", &format, &format!("{base}..{branch}")])
+        .map(|b| String::from_utf8_lossy(&b).into_owned())
+        .unwrap_or_default();
+    log.split(RS)
+        .filter_map(|r| {
+            let f: Vec<&str> = r.trim_start_matches('\n').split(FS).collect();
+            let [task, bug, fixes] = f[..] else {
+                return None;
+            };
+            let task = task.trim().rsplit('/').next()?.to_owned();
+            (!task.is_empty() && !fixes.trim().is_empty())
+                .then(|| (task, bug.trim().to_owned(), fixes.trim().to_owned()))
+        })
+        .collect()
+}
+
+/// The issues the branch's bug fixes close: a `Fixes: #N` trailer on a
+/// commit whose `Bug:` outcome is `fixed`, for a task that is still
+/// verified or attested (a task the status does not list — a trailer-only
+/// bug task — stands on its trailers). Each issue once, in order.
+#[must_use]
+pub fn bug_fixes(status: &StatusReport, trailers: &[(String, String, String)]) -> Vec<u64> {
+    let mut out = Vec::new();
+    for (task, bug, fixes) in trailers {
+        let holds = status
+            .tasks
+            .iter()
+            .find(|t| t.id == *task)
+            .is_none_or(|t| matches!(t.state.as_str(), "verified" | "attested"));
+        if !bug.starts_with("fixed ") || !holds {
+            continue;
+        }
+        for n in fixes
+            .lines()
+            .filter_map(|l| l.trim().trim_start_matches('#').parse::<u64>().ok())
+        {
+            if !out.contains(&n) {
+                out.push(n);
+            }
+        }
+    }
+    out
+}
+
 /// A note's state for the table: `ssh SHA256:…` (signer and key; who the
 /// key belongs to is `attest verify`'s answer), `unsigned` or `missing`.
 fn attestation(state: &str) -> String {
@@ -346,6 +399,14 @@ pub fn pr(path: &Path, feature: Option<&str>, options: &PrOptions<'_>) -> Comman
         body.push('\n');
         for url in &report.issues {
             body.push_str(&format!("Closes {url}\n"));
+        }
+    }
+    // The issues the bug fixes on the branch close (`speccoder bug --issue N`).
+    let fixes = bug_fixes(report, &bug_trailers(&repo, &base, &branch));
+    if !fixes.is_empty() {
+        body.push('\n');
+        for n in fixes {
+            body.push_str(&format!("Fixes #{n}\n"));
         }
     }
     if let Some(section) = verify_section(report, options.remote, sigstore) {

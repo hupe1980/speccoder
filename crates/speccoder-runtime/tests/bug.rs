@@ -344,7 +344,7 @@ fn a_bug_is_recorded_reproduced_confirmed_once_and_fixed_with_its_revert_rejecte
         message.contains("Acceptance: bug_confirmation manifest=sha256:"),
         "{message}"
     );
-    assert!(!message.contains("Fixes #"), "{message}");
+    assert!(!message.contains("Fixes: #"), "{message}");
     let shown = git(
         r.path(),
         &["show", &format!("{commit}:specs/001-bugfixes/tasks.md")],
@@ -1051,7 +1051,27 @@ fn the_issue_is_context_and_its_number_closes_it_only_on_a_verified_fix() {
         r.path(),
         &["log", "-1", "--format=%B", b.commit.as_deref().unwrap()],
     );
-    assert!(message.contains("Fixes #42"), "{message}");
+    assert!(message.contains("\nFixes: #42\n"), "{message}");
+    // The pull request's body names it too, so merging closes the issue.
+    let o = speccoder_runtime::handoff::PrOptions {
+        remote: "origin",
+        base: Some("main"),
+        open: false,
+        force: false,
+        github: req.github.as_ref().unwrap(),
+    };
+    let worktrees = git(r.path(), &["worktree", "list", "--porcelain"]);
+    let wt = worktrees
+        .split("\n\n")
+        .find(|w| w.contains("branch refs/heads/speccoder/001-bugfixes"))
+        .and_then(|w| w.lines().next()?.strip_prefix("worktree "))
+        .unwrap_or_else(|| panic!("{worktrees}"));
+    let dry = speccoder_runtime::handoff::pr(Path::new(wt), Some("001-bugfixes"), &o);
+    let Some(CommandData::Pr(p)) = dry.data() else {
+        panic!("{}", dry.message())
+    };
+    assert!(p.body.contains("\nFixes #42\n"), "{}", p.body);
+    assert_eq!(p.body.matches("Fixes #42").count(), 1, "{}", p.body);
     let plane = speccoder_runtime::worktree::project_state_dir(state.path(), r.path());
     let origins = speccoder_runtime::ladder::of(&plane, "001-bugfixes/FR-001");
     assert!(

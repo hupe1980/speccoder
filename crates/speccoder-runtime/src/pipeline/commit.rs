@@ -332,7 +332,7 @@ mod tests {
 
     #[test]
     fn trailers_are_read_by_their_exact_key() {
-        let m = "speccoder: T001 fix\n\nSpec-Task: 007-bugfixes/T001\nVerdict: verified\nAcceptance-Strength: 1.00 near-miss=1/1\nAcceptance: bug_confirmation manifest=sha256:m approval=sha256:a wording=sha256:w by=Ada\nBug: fixed (standing_speckit) triad=sha256:t\nFixes #42\n";
+        let m = "speccoder: T001 fix\n\nSpec-Task: 007-bugfixes/T001\nVerdict: verified\nAcceptance-Strength: 1.00 near-miss=1/1\nAcceptance: bug_confirmation manifest=sha256:m approval=sha256:a wording=sha256:w by=Ada\nBug: fixed (standing_speckit) triad=sha256:t\nFixes: #42\n";
         assert_eq!(
             trailer(m, "Acceptance"),
             Some("bug_confirmation manifest=sha256:m approval=sha256:a wording=sha256:w by=Ada")
@@ -346,6 +346,7 @@ mod tests {
             Some("fixed (standing_speckit) triad=sha256:t")
         );
         assert_eq!(trailer(m, "Spec-Task"), Some("007-bugfixes/T001"));
+        assert_eq!(trailer(m, "Fixes"), Some("#42"));
         assert_eq!(trailer(m, "Acceptance-Str"), None);
     }
 }

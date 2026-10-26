@@ -33,7 +33,9 @@ adheres to [Semantic Versioning](https://semver.org/).
   and `already_satisfied`. `--test PATH::NAME` brings the person's own
   failing test; `--candidate PATCH|pr:N` judges someone else's fix without
   an implementer or retries; `--issue N` adds the issue as untrusted context
-  and `Fixes #N` on a verified fix. A bug in the extension's layout is a
+  and, on a verified or attested fix only, a `Fixes: #N` trailer and a
+  `Fixes #N` line in the body of the pull request `speccoder pr` opens, so
+  merging it closes the issue. A bug in the extension's layout is a
   trailer-only task (`Spec-Task: bugs/<slug>/bug:<slug>`) that `attest verify
   --branch` and `speccoder-verify` check, stale when its triad changes;
   `speccoder workflow install --overlay bugfix` lets Spec Kit's `bugfix`

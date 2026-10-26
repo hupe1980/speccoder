@@ -76,6 +76,7 @@ The description is the evidence:
 - the totals, and a table of every task: its verdict, mutation results, attestation and commit;
 - tokens, and convergence rounds, if any;
 - `Closes` for every issue the spec names, so merging closes them;
+- `Fixes #N` for every issue a [bug fix](@/docs/bugs.md) on the branch came from (`speccoder bug --issue N`), when its task is still `verified` or `attested`;
 - how a reviewer verifies the attestations, when there are any;
 - each ticked task's [evidence tour](@/docs/verifier.md#the-evidence-tour), collapsed (dropped last-first, counted, within GitHub's 65 536 characters);
 - what `verified` does not mean.
