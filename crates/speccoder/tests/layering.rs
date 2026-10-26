@@ -346,3 +346,374 @@ fn scan_finds_a_planted_literal() {
         ]
     );
 }
+
+/// `text` up to its first `#[cfg(test)]`, without line comments.
+fn code_of(text: &str) -> String {
+    let mut out = String::new();
+    for line in text.lines() {
+        if line.trim_start().starts_with("#[cfg(test)]") {
+            break;
+        }
+        let code = match line.find("//") {
+            // `//` inside a string (a URL) is not a comment.
+            Some(i) if line[..i].matches('"').count() % 2 == 0 => &line[..i],
+            _ => line,
+        };
+        out.push_str(code);
+        out.push('\n');
+    }
+    out
+}
+
+fn workspace_sources() -> Vec<std::path::PathBuf> {
+    let crates = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    let mut files = Vec::new();
+    for e in std::fs::read_dir(&crates).unwrap().flatten() {
+        let src = e.path().join("src");
+        if src.is_dir() {
+            rust_files(&src, &mut files);
+        }
+    }
+    files.sort();
+    files
+}
+
+fn relative(f: &Path) -> String {
+    let crates = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .canonicalize()
+        .unwrap();
+    let f = f.canonicalize().unwrap();
+    f.strip_prefix(&crates).unwrap().display().to_string()
+}
+
+/// The `Runnable` variants each `match` block of `code` names, by the
+/// block's line: a block naming most of them maps every kind to something.
+fn matches_over_runnables(code: &str) -> Vec<(usize, std::collections::BTreeSet<String>)> {
+    let mut out = Vec::new();
+    let mut from = 0;
+    while let Some(i) = code[from..].find("match ") {
+        let start = from + i;
+        from = start + 6;
+        // A word, not the end of another one (`rematch `).
+        if code[..start]
+            .chars()
+            .last()
+            .is_some_and(|c| c.is_alphanumeric() || c == '_')
+        {
+            continue;
+        }
+        let Some(open) = code[start..].find('{').map(|o| start + o) else {
+            break;
+        };
+        let mut depth = 0;
+        let mut end = code.len();
+        for (j, c) in code[open..].char_indices() {
+            match c {
+                '{' => depth += 1,
+                '}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        end = open + j;
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+        let block = &code[open..end];
+        let names: std::collections::BTreeSet<String> = block
+            .match_indices("Runnable::")
+            .map(|(k, m)| {
+                block[k + m.len()..]
+                    .chars()
+                    .take_while(|c| c.is_alphanumeric())
+                    .collect()
+            })
+            .collect();
+        let line = code[..start].matches('\n').count() + 1;
+        out.push((line, names));
+    }
+    out
+}
+
+/// The kinds of `Runnable` (a run with or without a task is one variant).
+fn runnable_variants() -> usize {
+    speccoder_core::actions::Runnable::examples()
+        .iter()
+        .map(|r| serde_json::to_value(r).unwrap()["kind"].to_string())
+        .collect::<BTreeSet<_>>()
+        .len()
+}
+
+/// Where a `match` over most `Runnable` kinds is, outside the dispatcher
+/// and the core's own definition.
+fn second_dispatchers(files: &[(String, String)]) -> Vec<String> {
+    let half = runnable_variants() / 2;
+    let mut errors = Vec::new();
+    for (rel, text) in files {
+        if rel == "speccoder-core/src/actions.rs" {
+            continue;
+        }
+        for (line, names) in matches_over_runnables(&code_of(text)) {
+            if names.len() >= half && rel != "speccoder-runtime/src/actions.rs" {
+                errors.push(format!(
+                    "layering: {rel}:{line} matches {} runnable kinds: only `actions::perform` maps kinds to runtime calls",
+                    names.len()
+                ));
+            }
+        }
+    }
+    errors
+}
+
+fn sources() -> Vec<(String, String)> {
+    workspace_sources()
+        .iter()
+        .map(|f| (relative(f), std::fs::read_to_string(f).unwrap()))
+        .collect()
+}
+
+#[test]
+fn one_dispatcher_maps_runnable_kinds_to_runtime_calls() {
+    let files = sources();
+    let errors = second_dispatchers(&files);
+    assert!(errors.is_empty(), "\n{}", errors.join("\n"));
+    // And it is there: one match over every kind.
+    let (_, actions) = files
+        .iter()
+        .find(|(r, _)| r == "speccoder-runtime/src/actions.rs")
+        .unwrap();
+    let most = matches_over_runnables(&code_of(actions))
+        .into_iter()
+        .map(|(_, n)| n.len())
+        .max()
+        .unwrap_or(0);
+    assert_eq!(most, runnable_variants(), "perform names every kind");
+    // The offer table decides every pair itself.
+    let table = actions
+        .split("pub const fn offered(")
+        .nth(1)
+        .and_then(|t| t.split("\n}\n").next())
+        .unwrap();
+    assert!(
+        !table.contains("_ =>"),
+        "the offer table has a wildcard arm"
+    );
+}
+
+#[test]
+fn the_dispatcher_scan_finds_a_planted_second_one() {
+    let planted = "fn take(r: &Runnable) {\n    match r {\n        Runnable::Skill { .. } => a(),\n        Runnable::Run { .. } => b(),\n        Runnable::Converge | Runnable::Commit { .. } | Runnable::Approve { .. } => c(),\n        Runnable::Reject { .. } | Runnable::Accept { .. } | Runnable::Skip { .. } => d(),\n        Runnable::Nudge { .. } | Runnable::Rule { .. } => e(),\n        _ => f(),\n    }\n}\n// match r { Runnable::Review {} }\n";
+    let card = "fn verb(a: &Action) -> &str {\n    match &a.run {\n        Some(Runnable::Commit { .. }) => \"Commit them?\",\n        Some(Runnable::Run { .. } | Runnable::Converge) => \"Start it now?\",\n        _ => \"Run it now?\",\n    }\n}\n";
+    let errors = second_dispatchers(&[
+        ("speccoder-web/src/jobs.rs".to_owned(), planted.to_owned()),
+        ("speccoder/src/follow.rs".to_owned(), card.to_owned()),
+    ]);
+    assert_eq!(errors.len(), 1, "{errors:?}");
+    assert!(
+        errors[0].starts_with("layering: speccoder-web/src/jobs.rs:2 matches 10"),
+        "{errors:?}"
+    );
+}
+
+/// Paths into the runtime from `text` that do not go through its facade.
+fn around_the_facade(text: &str) -> Vec<(usize, String)> {
+    let mut found = Vec::new();
+    for (i, line) in text.lines().enumerate() {
+        let code = line.split("//").next().unwrap_or("");
+        for (k, _) in code.match_indices("speccoder_runtime::") {
+            let rest = &code[k + "speccoder_runtime::".len()..];
+            if !rest.starts_with("service") {
+                let path: String = rest
+                    .chars()
+                    .take_while(|c| c.is_alphanumeric() || *c == '_' || *c == ':')
+                    .collect();
+                let path = if rest.starts_with('{') {
+                    "{…}".to_owned()
+                } else {
+                    path
+                };
+                found.push((i + 1, path));
+            }
+        }
+    }
+    found
+}
+
+#[test]
+fn the_web_host_reaches_the_runtime_only_through_its_facade() {
+    let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("../speccoder-web/src");
+    let mut files = Vec::new();
+    rust_files(&src, &mut files);
+    let mut errors = Vec::new();
+    for f in &files {
+        let text = std::fs::read_to_string(f).unwrap();
+        for (line, path) in around_the_facade(&text) {
+            errors.push(format!(
+                "layering: speccoder-web/src/{}:{line} uses speccoder_runtime::{path}: the web host goes through speccoder_runtime::service",
+                f.strip_prefix(&src).unwrap().display()
+            ));
+        }
+    }
+    assert!(errors.is_empty(), "\n{}", errors.join("\n"));
+}
+
+#[test]
+fn the_facade_scan_finds_a_planted_path() {
+    let text = "use speccoder_runtime::service::actions;\nuse speccoder_runtime::approvals::decide;\n// speccoder_runtime::git is not code\nlet r = speccoder_runtime::controls::skip(a, b, c, d);\nuse speccoder_runtime::{status, service};\n";
+    assert_eq!(
+        around_the_facade(text),
+        [
+            (2, "approvals::decide".to_owned()),
+            (4, "controls::skip".to_owned()),
+            (5, "{…}".to_owned()),
+        ]
+    );
+}
+
+/// Web routes that change something without a `Runnable`: the session
+/// (the token is the page's), sign-in, a running job's answers and its
+/// stop, and the setup forms that predate one dispatcher. Every other
+/// route that writes goes through `perform`.
+const WRITES_WITHOUT_A_KIND: &[(&str, &str)] = &[
+    ("start", "starts a job: the job runs `actions::perform`"),
+    ("answer", "answers what a running job asks"),
+    ("stop", "stops the running job"),
+    ("config_save", "the settings form (speccoder.toml)"),
+    ("config_commit", "commits speccoder.toml"),
+    ("setup_init", "the setup form (speccoder init)"),
+    ("setup_commit", "commits what setup wrote"),
+    ("github_login", "signs in with a token"),
+    ("github_device", "starts a device sign-in"),
+    ("github_device_wait", "finishes a device sign-in"),
+];
+
+/// Handlers registered for a writing method, and whether each reaches the
+/// runtime only through `perform`.
+fn writes(lib: &str) -> Vec<(String, bool)> {
+    let mut handlers = BTreeSet::new();
+    for line in lib.lines().filter(|l| l.contains(".route(")) {
+        for method in ["post(", "put(", "delete(", "patch("] {
+            for (k, _) in line.match_indices(method) {
+                let name: String = line[k + method.len()..]
+                    .chars()
+                    .take_while(|c| c.is_alphanumeric() || *c == '_')
+                    .collect();
+                handlers.insert(name);
+            }
+        }
+    }
+    handlers
+        .into_iter()
+        .map(|h| {
+            let body = lib
+                .split(&format!("fn {h}("))
+                .nth(1)
+                .and_then(|b| b.split("\n}\n").next())
+                .unwrap_or("");
+            let perform = body.contains("perform(");
+            (h, perform)
+        })
+        .collect()
+}
+
+#[test]
+fn every_web_route_that_writes_goes_through_the_dispatcher() {
+    let web = Path::new(env!("CARGO_MANIFEST_DIR")).join("../speccoder-web/src");
+    let jobs = std::fs::read_to_string(web.join("jobs.rs")).unwrap();
+    assert!(
+        !code_of(&jobs).contains("Runnable::"),
+        "jobs.rs maps a kind itself: it only calls service::actions::perform"
+    );
+    assert!(code_of(&jobs).contains("perform("), "jobs.rs: no perform");
+    let lib = std::fs::read_to_string(web.join("lib.rs")).unwrap();
+    let errors: Vec<String> = writes(&lib)
+        .into_iter()
+        .filter(|(h, perform)| !perform && !WRITES_WITHOUT_A_KIND.iter().any(|(x, _)| x == h))
+        .map(|(h, _)| {
+            format!(
+                "layering: the web route handler `{h}` writes without `service::actions::perform`: add a kind (the adding-a-kind contract of actions::perform)"
+            )
+        })
+        .collect();
+    assert!(errors.is_empty(), "\n{}", errors.join("\n"));
+}
+
+#[test]
+fn the_route_scan_finds_a_planted_write() {
+    let lib = "        .route(\"/api/x\", get(x).post(save_x))\n        .route(\"/api/y\", post(run_y))\nasync fn save_x() {\n    settings::apply();\n}\nasync fn run_y() {\n    service::actions::perform(a, b, d);\n}\n";
+    assert_eq!(
+        writes(lib),
+        [("run_y".to_owned(), true), ("save_x".to_owned(), false)]
+    );
+}
+
+/// Files that may name the dispatcher: itself, the facade, and the
+/// interfaces a person acts through.
+const DISPATCHERS: &[&str] = &[
+    "speccoder-runtime/src/actions.rs",
+    "speccoder-runtime/src/service.rs",
+    "speccoder-web/src/jobs.rs",
+    "speccoder/src/follow.rs",
+    "speccoder/src/acp.rs",
+    "speccoder/src/tui/mod.rs",
+];
+
+/// Where code names the dispatcher outside [`DISPATCHERS`].
+fn callers(files: &[(String, String)]) -> Vec<String> {
+    let mut errors = Vec::new();
+    for (rel, text) in files {
+        if DISPATCHERS.contains(&rel.as_str()) {
+            continue;
+        }
+        for (i, line) in code_of(text).lines().enumerate() {
+            let named = [
+                "actions::perform",
+                "perform_for(",
+                "perform_in(",
+                "Dispatch {",
+                "Dispatch::new(",
+            ]
+            .iter()
+            .find(|n| line.contains(*n));
+            if let Some(n) = named {
+                errors.push(format!(
+                    "layering: {rel}:{} names `{n}`: only an interface a person acts through takes an action",
+                    i + 1
+                ));
+            }
+        }
+    }
+    errors
+}
+
+#[test]
+fn only_the_interfaces_a_person_acts_through_take_actions() {
+    let files = sources();
+    let errors = callers(&files);
+    assert!(errors.is_empty(), "\n{}", errors.join("\n"));
+    // The dashboard's `n` hands off to the line CLI's offer; it maps no
+    // kind itself.
+    let (_, tui) = files
+        .iter()
+        .find(|(r, _)| r == "speccoder/src/tui/mod.rs")
+        .unwrap();
+    assert!(code_of(tui).contains("perform_for(Interface::Dashboard"));
+    let (_, main) = files
+        .iter()
+        .find(|(r, _)| r == "speccoder/src/main.rs")
+        .unwrap();
+    assert!(main.contains("tui::handed_off()") && main.contains("follow::offer("));
+}
+
+#[test]
+fn the_caller_scan_finds_a_planted_one() {
+    let tool = "fn approve_for_the_model(r: &Path) {\n    // actions::perform is not for tools\n    let _ = speccoder_runtime::actions::perform(r, None, d);\n}\n";
+    let errors = callers(&[(
+        "speccoder-runtime/src/tools/mod.rs".to_owned(),
+        tool.to_owned(),
+    )]);
+    assert_eq!(errors.len(), 1, "{errors:?}");
+    assert!(errors[0].contains("tools/mod.rs:3"), "{errors:?}");
+}

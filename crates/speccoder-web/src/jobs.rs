@@ -9,10 +9,10 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
 
 use serde_json::{Value, json};
-use speccoder_core::actions::Runnable;
+use speccoder_core::actions::{Runnable, Via};
 use speccoder_core::{CommandResult, CommandStatus};
-use speccoder_runtime::approvals::{Answer, Approver, Presentation, Who};
-use speccoder_runtime::progress::{Event, Progress};
+use speccoder_runtime::service::approvals::{Answer, Approver, Presentation, Who};
+use speccoder_runtime::service::progress::{Event, Progress};
 use tokio::sync::broadcast;
 
 /// What a waiting job is answered with.
@@ -125,7 +125,7 @@ impl Hub {
         if let Some(c) = self.cancel.lock().ok().and_then(|c| c.clone()) {
             c.store(true, Ordering::SeqCst);
         }
-        let who = Who::local_in(&self.root, "web");
+        let who = Who::local_in(&self.root, Via::Web);
         if let Some(w) = self.waiting.lock().ok().and_then(|mut w| w.take()) {
             let _ = w.reply.send(match w.event["type"].as_str() {
                 Some("question") => Reply::Text(None),
@@ -203,7 +203,7 @@ impl Hub {
         std::thread::spawn(move || {
             let peer: Arc<Peer> = Arc::new(Peer {
                 hub: Arc::clone(&hub),
-                who: Who::local_in(&hub.root, "web"),
+                who: Who::local_in(&hub.root, Via::Web),
             });
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 execute(
@@ -218,7 +218,7 @@ impl Hub {
             .unwrap_or_else(|_| {
                 CommandResult::new("job", CommandStatus::Error, "the job stopped unexpectedly")
             });
-            let result = speccoder_runtime::next::attach(result, feature.as_deref());
+            let result = speccoder_runtime::service::next::attach(result, feature.as_deref());
             let value = serde_json::to_value(&result).unwrap_or(Value::Null);
             if let Ok(mut job) = hub.job.lock()
                 && let Some(j) = job.as_mut()
@@ -273,8 +273,8 @@ impl Approver for Peer {
         }
     }
 
-    fn via(&self) -> String {
-        "web".to_owned()
+    fn via(&self) -> Via {
+        Via::Web
     }
 }
 
@@ -286,120 +286,24 @@ fn execute(
     peer: &Arc<Peer>,
     cancel: Arc<AtomicBool>,
 ) -> CommandResult {
-    use speccoder_runtime::approvals::{Choice, Verb, decide};
-    let needs = |what: &str| {
-        CommandResult::new(
-            "job",
-            CommandStatus::UsageError,
-            &format!("{what} is needed"),
-        )
-    };
-    let state = speccoder_runtime::worktree::state_dir();
-    let options = speccoder_runtime::RunOptions {
+    use speccoder_runtime::service::actions::{Dispatch, Interface, Offer, offered, perform};
+    if offered(Interface::WebJobs, run.kind()) == Offer::Refuse {
+        return Interface::WebJobs.refusal();
+    }
+    let options = speccoder_runtime::service::RunOptions {
         approver: Some(Arc::clone(peer) as Arc<dyn Approver>),
         progress: Some(Arc::clone(peer) as Arc<dyn Progress>),
         cancel: Some(cancel),
-        ..speccoder_runtime::RunOptions::default()
+        ..speccoder_runtime::service::RunOptions::default()
     };
-    let text = input.map(str::trim).filter(|t| !t.is_empty());
-    match run {
-        Runnable::Skill { name, arguments } => {
-            let args = text.map_or_else(|| arguments.clone(), str::to_owned);
-            speccoder_runtime::hosting::run(root, feature, name, &args, &options)
-        }
-        Runnable::Run { task: Some(t) } => speccoder_runtime::run(root, feature, t, &options),
-        Runnable::Run { task: None } => {
-            speccoder_runtime::run_feature(root, feature, &options, false)
-        }
-        Runnable::Converge => speccoder_runtime::run_feature(root, feature, &options, true),
-        Runnable::Commit { paths } => {
-            speccoder_runtime::hosting::commit_planning(root, feature, paths)
-        }
-        Runnable::Approve { task } => {
-            decide(root, feature, Verb::Decide(Choice::approve(task, text)))
-        }
-        Runnable::Reject { task } => match text {
-            Some(why) => decide(root, feature, Verb::Decide(Choice::reject(task, why))),
-            None => needs("a reason"),
-        },
-        Runnable::Accept { task } => match (text, &state) {
-            (Some(why), Some(s)) => {
-                speccoder_runtime::controls::accept_in(root, feature, task, why, s, false)
-            }
-            (None, _) => needs("a reason"),
-            (_, None) => {
-                CommandResult::new("job", CommandStatus::ConfigError, "no state directory")
-            }
-        },
-        Runnable::Skip { task } => match text {
-            Some(why) => speccoder_runtime::controls::skip(root, feature, task, Some(why)),
-            None => needs("a reason"),
-        },
-        Runnable::Nudge { task } => match (text, &state) {
-            (Some(note), Some(s)) => {
-                speccoder_runtime::controls::nudge_with(root, feature, task, Some(note), s)
-            }
-            (None, _) => needs("a note"),
-            (_, None) => {
-                CommandResult::new("job", CommandStatus::ConfigError, "no state directory")
-            }
-        },
-        Runnable::FixSetup => speccoder_runtime::code::fix_setup(root, feature),
-        Runnable::KeepSetAside { task } => {
-            speccoder_runtime::controls::restore(root, feature, task)
-        }
-        Runnable::DropSetAside { task } => {
-            speccoder_runtime::controls::drop_set_aside(root, feature, task)
-        }
-        Runnable::QuickChange {
-            request,
-            checks,
+    perform(
+        root,
+        feature,
+        Dispatch {
             run,
-        } => speccoder_runtime::quick::change(root, request, checks, *run, "web", &options),
-        Runnable::IssueComment { issue, assign } => speccoder_runtime::github::comment(
-            &speccoder_runtime::github::Ctx::from_env(),
-            root,
-            feature,
-            &issue.to_string(),
-            *assign,
-        ),
-        Runnable::Review { ids, verdict } => match (verdict.as_str(), ids.first(), text) {
-            ("answer", Some(q), Some(t)) => speccoder_runtime::review::answer(root, feature, q, t),
-            ("edit" | "edit-approve", Some(id), Some(t)) => speccoder_runtime::review::edit(
-                root,
-                feature,
-                id,
-                t,
-                verdict == "edit-approve",
-                "web",
-            ),
-            ("answer" | "edit" | "edit-approve", _, _) => needs("the words"),
-            _ => speccoder_runtime::review::decide(root, feature, ids, verdict, text, "web"),
+            input,
+            via: Via::Web,
+            options,
         },
-        Runnable::Rule { task } => match (text, &state) {
-            (Some(why), Some(s)) => {
-                speccoder_runtime::controls::rule(root, feature, task, why, None, s)
-            }
-            (None, _) => needs("a reason"),
-            (_, None) => {
-                CommandResult::new("job", CommandStatus::ConfigError, "no state directory")
-            }
-        },
-        Runnable::Feature => match text {
-            Some(name) => speccoder_runtime::current::switch(root, name),
-            None => needs("a feature"),
-        },
-        // The page has confirmed it (the action's `confirm`): push and open.
-        Runnable::PullRequest => speccoder_runtime::handoff::pr(
-            root,
-            feature,
-            &speccoder_runtime::handoff::PrOptions {
-                remote: "origin",
-                base: None,
-                open: true,
-                force: false,
-                github: &speccoder_runtime::github::Ctx::from_env(),
-            },
-        ),
-    }
+    )
 }

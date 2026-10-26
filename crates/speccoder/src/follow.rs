@@ -8,7 +8,7 @@
 use std::io::{BufRead, Write};
 use std::path::Path;
 
-use speccoder_core::actions::{Action, JourneyStep, Runnable, primary};
+use speccoder_core::actions::{Action, JourneyStep, Runnable, Via, primary};
 use speccoder_core::{CommandResult, CommandStatus, ExitCode, Remedy};
 
 /// At most this many steps in a row without a pause.
@@ -78,12 +78,22 @@ pub fn remedy(path: &Path, feature: Option<&str>, remedy: &Remedy) -> bool {
     if !yes {
         return false;
     }
-    let result = match remedy.run {
-        Runnable::FixSetup => speccoder_runtime::code::fix_setup(path, feature),
-        _ => return false,
+    let Some(result) = apply(path, feature, &remedy.run) else {
+        return false;
     };
     let _ = crate::output::render(&result, false);
     result.status() == CommandStatus::Ok
+}
+
+/// Applies a fix the terminal applies; `None` for one it does not.
+fn apply(path: &Path, feature: Option<&str>, run: &Runnable) -> Option<CommandResult> {
+    use speccoder_runtime::actions::{Dispatch, Interface, perform_for};
+    perform_for(
+        Interface::CliRemedy,
+        path,
+        feature,
+        Dispatch::new(run, Via::Terminal),
+    )
 }
 
 /// The card [`remedy`] shows, ending in its question.
@@ -188,42 +198,27 @@ pub fn question(a: &Action, steps: &[JourneyStep]) -> String {
     }
 }
 
-/// Runs `a` here, at the terminal: inline approvals, live progress.
+/// Runs `a` here, at the terminal: inline approvals, live progress, the
+/// arguments it carries — if it is a step the terminal takes.
 fn take(
     path: &Path,
     feature: Option<&str>,
     a: &Action,
     verbosity: crate::progress::Verbosity,
 ) -> CommandResult {
+    use speccoder_runtime::actions::{Dispatch, Interface, perform_for};
+    let refused = || Interface::CliFollow.refusal();
+    let Some(run) = &a.run else {
+        return refused();
+    };
     let approver: std::sync::Arc<dyn speccoder_runtime::approvals::Approver> =
         std::sync::Arc::new(crate::prompt::Terminal);
     let progress: std::sync::Arc<dyn speccoder_runtime::progress::Progress> =
         std::sync::Arc::new(crate::progress::Printer::new(verbosity));
-    let options = speccoder_runtime::RunOptions {
-        approver: Some(approver),
-        progress: Some(progress),
-        ..speccoder_runtime::RunOptions::default()
-    };
-    match &a.run {
-        Some(Runnable::Commit { paths }) => {
-            speccoder_runtime::hosting::commit_planning(path, feature, paths)
-        }
-        Some(Runnable::Skill { name, arguments }) => {
-            speccoder_runtime::hosting::run(path, feature, name, arguments, &options)
-        }
-        Some(Runnable::Run { task: Some(task) }) => {
-            speccoder_runtime::run(path, feature, task, &options)
-        }
-        Some(Runnable::Run { task: None }) => {
-            speccoder_runtime::run_feature(path, feature, &options, false)
-        }
-        Some(Runnable::Converge) => speccoder_runtime::run_feature(path, feature, &options, true),
-        _ => CommandResult::new(
-            "next",
-            CommandStatus::UsageError,
-            "not a step speccoder takes here",
-        ),
-    }
+    let mut step = Dispatch::new(run, Via::Terminal);
+    step.options.approver = Some(approver);
+    step.options.progress = Some(progress);
+    perform_for(Interface::CliFollow, path, feature, step).unwrap_or_else(refused)
 }
 
 #[cfg(test)]
@@ -270,6 +265,13 @@ mod tests {
                 "not a step speccoder takes here"
             )
         );
+    }
+
+    #[test]
+    fn a_fix_the_terminal_does_not_apply_is_not_applied() {
+        let dir = tempfile::tempdir().unwrap_or_else(|e| panic!("{e}"));
+        assert!(apply(dir.path(), None, &Runnable::PullRequest).is_none());
+        assert!(apply(dir.path(), None, &Runnable::FixSetup).is_some());
     }
 
     #[test]

@@ -1298,8 +1298,12 @@ pub struct DecidedCall {
     pub call: Option<String>,
     /// Who decided; `None` for an expiry.
     pub operator: Option<OperatorView>,
-    /// Through what: `terminal`, `cli` or `editor <name>`.
+    /// Through what: an origin of `actions::Via` (`terminal`, `web`,
+    /// `acp`, …).
     pub via: Option<String>,
+    /// The editor decided in, over the Agent Client Protocol.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub client: Option<String>,
     /// Nobody decided: the deadline passed and the call was denied.
     pub expired: bool,
 }

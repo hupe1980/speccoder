@@ -1,12 +1,43 @@
-//! What a person can do now, from the project as it stands: the
-//! report, what waits for a decision, the planning files not yet committed
-//! and the installed planning skills. Interfaces render the list; the
-//! dashboard runs what it can and shows the command for the rest.
+//! What a person can do now, and taking it. The list comes from the
+//! project as it stands: the report, what waits for a decision, the
+//! planning files not yet committed and the installed planning skills.
+//! Interfaces render the list; [`perform`] is the one place an action's
+//! [`Runnable`] becomes runtime calls, for every interface.
+//!
+//! # Adding a kind
+//!
+//! Every new person-initiated action — a model run or a plain write —
+//! lands in one change with all of:
+//!
+//! 1. a `Runnable` variant with typed fields (`speccoder_core::actions`);
+//! 2. its `ActionKind`, its `identity` arm and its subject rule (same file);
+//! 3. exactly one arm in [`perform_in`] (input rules, `needs(..)`
+//!    messages, the dispatch's `via` passed through);
+//! 4. its result payload: an existing `CommandData` variant, or a new one
+//!    with a unique name in `PAYLOADS`;
+//! 5. that payload's published schema (`SPECCODER_BLESS=1`);
+//! 6. its generated UI type (`crates/speccoder-web/ui/src/lib/schema.gen.ts`);
+//! 7. a decision for every interface in [`offered`] (no wildcard: the
+//!    build fails until each interface has one);
+//! 8. a golden for its arm (`tests/fixtures/perform/`);
+//! 9. if the web app shows it, its verb and icon in the UI's kind table
+//!    (`ui/src/lib/actions.ts`).
+//!
+//! No feature adds a web job kind, a web route that writes, a terminal
+//! prompt, an editor command or a dashboard key that maps a kind to runtime
+//! calls itself, nor a marker on an existing variant meaning another
+//! action: it adds a kind. Only the interfaces of [`Interface`] call
+//! [`perform`] — never a model tool, a hook, a gate or the engine — so
+//! nothing but a person's command approves, rejects, accepts, rules or
+//! ticks through it. `specs/089-action-contract/quickstart.md` walks
+//! through one such change.
 
 use std::path::Path;
 
-use speccoder_core::actions::{Action, Runnable};
-use speccoder_core::{ApprovalsReport, CommandData, StatusReport};
+use speccoder_core::actions::{Action, ActionKind, Runnable, Via};
+use speccoder_core::{ApprovalsReport, CommandData, CommandResult, CommandStatus, StatusReport};
+
+use crate::RunOptions;
 
 pub(crate) fn action(
     group: &str,
@@ -40,9 +71,7 @@ pub fn available_with(
     };
     let approvals = listed.cloned().or_else(|| {
         crate::worktree::state_dir().and_then(|state| {
-            match crate::approvals::decide_with(path, feature, crate::approvals::Verb::List, &state)
-                .data()
-            {
+            match crate::approvals::list_with(path, feature, &state).data() {
                 Some(CommandData::Approvals(a)) => Some((**a).clone()),
                 _ => None,
             }
@@ -321,11 +350,402 @@ pub fn journey(path: &Path, feature: Option<&str>) -> Vec<speccoder_core::action
     }
 }
 
+/// An interface that takes actions, and so decides which kinds it offers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Interface {
+    /// The web host's jobs (`POST /api/run`).
+    WebJobs,
+    /// The line CLI's offer of the next step.
+    CliFollow,
+    /// The line CLI's offer of a fix speccoder knows.
+    CliRemedy,
+    /// An editor's fix, over the Agent Client Protocol.
+    AcpRemedy,
+    /// The dashboard's own keys (its `n` hands off to [`Interface::CliFollow`]).
+    Dashboard,
+}
+
+impl Interface {
+    /// Every interface.
+    pub const ALL: &'static [Self] = &[
+        Self::WebJobs,
+        Self::CliFollow,
+        Self::CliRemedy,
+        Self::AcpRemedy,
+        Self::Dashboard,
+    ];
+
+    /// What it answers for a kind it does not offer.
+    #[must_use]
+    pub fn refusal(self) -> CommandResult {
+        match self {
+            Self::CliFollow => CommandResult::new(
+                "next",
+                CommandStatus::UsageError,
+                "not a step speccoder takes here",
+            ),
+            Self::Dashboard => CommandResult::new(
+                "tui",
+                CommandStatus::UsageError,
+                "not something the dashboard does",
+            ),
+            Self::WebJobs => CommandResult::new(
+                "job",
+                CommandStatus::UsageError,
+                "not something the web app runs",
+            ),
+            Self::CliRemedy | Self::AcpRemedy => CommandResult::new(
+                "fix",
+                CommandStatus::UsageError,
+                "not a fix speccoder applies here",
+            ),
+        }
+    }
+}
+
+/// Whether an interface takes a kind.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Offer {
+    /// It does.
+    Take,
+    /// It does not: it answers with [`Interface::refusal`], before anything runs.
+    Refuse,
+}
+
+/// Which kinds each interface takes: every pair decided, no default, so a
+/// new kind does not build until each interface has a decision.
+#[must_use]
+pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
+    use ActionKind as K;
+    match interface {
+        Interface::WebJobs => match kind {
+            K::Skill
+            | K::RunTask
+            | K::RunFeature
+            | K::Converge
+            | K::Commit
+            | K::Approve
+            | K::Reject
+            | K::Accept
+            | K::Skip
+            | K::Nudge
+            | K::Rule
+            | K::Review
+            | K::IssueComment
+            | K::QuickChange
+            | K::KeepSetAside
+            | K::DropSetAside
+            | K::FixSetup
+            | K::Feature
+            | K::PullRequest => Offer::Take,
+            K::Command => Offer::Refuse,
+        },
+        // Decisions belong to their own prompt; what leaves the machine
+        // or asks for words is the person's own command there.
+        Interface::CliFollow => match kind {
+            K::Skill | K::RunTask | K::RunFeature | K::Converge | K::Commit => Offer::Take,
+            K::Approve
+            | K::Reject
+            | K::Accept
+            | K::Skip
+            | K::Nudge
+            | K::Rule
+            | K::Review
+            | K::IssueComment
+            | K::QuickChange
+            | K::KeepSetAside
+            | K::DropSetAside
+            | K::FixSetup
+            | K::Feature
+            | K::PullRequest
+            | K::Command => Offer::Refuse,
+        },
+        // Its keys decide the queue's calls and switch the feature; `n`
+        // hands the next step to the line CLI's offer.
+        Interface::Dashboard => match kind {
+            K::Approve | K::Reject | K::Feature => Offer::Take,
+            K::Skill
+            | K::RunTask
+            | K::RunFeature
+            | K::Converge
+            | K::Commit
+            | K::Accept
+            | K::Skip
+            | K::Nudge
+            | K::Rule
+            | K::Review
+            | K::IssueComment
+            | K::QuickChange
+            | K::KeepSetAside
+            | K::DropSetAside
+            | K::FixSetup
+            | K::PullRequest
+            | K::Command => Offer::Refuse,
+        },
+        Interface::CliRemedy | Interface::AcpRemedy => match kind {
+            K::FixSetup => Offer::Take,
+            K::Skill
+            | K::RunTask
+            | K::RunFeature
+            | K::Converge
+            | K::Commit
+            | K::Approve
+            | K::Reject
+            | K::Accept
+            | K::Skip
+            | K::Nudge
+            | K::Rule
+            | K::Review
+            | K::IssueComment
+            | K::QuickChange
+            | K::KeepSetAside
+            | K::DropSetAside
+            | K::Feature
+            | K::PullRequest
+            | K::Command => Offer::Refuse,
+        },
+    }
+}
+
+/// An action to take: what runs, the person's input, the interface it
+/// came through and how that interface runs it (who it asks, where
+/// progress goes, its cancel flag).
+#[derive(Debug)]
+pub struct Dispatch<'a> {
+    /// What runs.
+    pub run: &'a Runnable,
+    /// The person's input (a reason, a note, a skill's arguments); blank
+    /// is none.
+    pub input: Option<&'a str>,
+    /// The interface, as what the person decides is recorded.
+    pub via: Via,
+    /// The interface's approver, progress and cancellation.
+    pub options: RunOptions,
+}
+
+impl<'a> Dispatch<'a> {
+    /// `run` through `via`, without input, asking nobody.
+    #[must_use]
+    pub fn new(run: &'a Runnable, via: Via) -> Self {
+        Self {
+            run,
+            input: None,
+            via,
+            options: RunOptions::default(),
+        }
+    }
+}
+
+/// [`perform`], if `interface` offers the action's kind; `None`, with
+/// nothing run, if it does not.
+#[must_use]
+pub fn perform_for(
+    interface: Interface,
+    root: &Path,
+    feature: Option<&str>,
+    d: Dispatch<'_>,
+) -> Option<CommandResult> {
+    (offered(interface, d.run.kind()) == Offer::Take).then(|| perform(root, feature, d))
+}
+
+/// Takes the action: the only place a [`Runnable`] becomes runtime calls.
+/// It never prompts and never confirms (an interface has, before); what
+/// an interface does not offer it refuses before calling this
+/// ([`offered`]).
+#[must_use]
+pub fn perform(root: &Path, feature: Option<&str>, d: Dispatch<'_>) -> CommandResult {
+    perform_in(root, feature, d, crate::worktree::state_dir().as_deref())
+}
+
+/// [`perform`] with the state directory given (`None`: there is none).
+#[must_use]
+pub fn perform_in(
+    root: &Path,
+    feature: Option<&str>,
+    d: Dispatch<'_>,
+    state: Option<&Path>,
+) -> CommandResult {
+    use crate::approvals::{Choice, Verb};
+    let needs = |what: &str| {
+        CommandResult::new(
+            "job",
+            CommandStatus::UsageError,
+            &format!("{what} is needed"),
+        )
+    };
+    let no_state = || CommandResult::new("job", CommandStatus::ConfigError, "no state directory");
+    let decide = |verb| crate::approvals::decide_in(root, feature, verb, state, d.via);
+    let options = &d.options;
+    let via = d.via;
+    let text = d.input.map(str::trim).filter(|t| !t.is_empty());
+    match d.run {
+        Runnable::Skill { name, arguments } => skill(root, feature, name, text, arguments, options),
+        Runnable::Run { task: Some(t) } => run_task(root, feature, t, options),
+        Runnable::Run { task: None } => run_feature(root, feature, options, false),
+        Runnable::Converge => run_feature(root, feature, options, true),
+        Runnable::Commit { paths } => crate::hosting::commit_planning(root, feature, paths),
+        Runnable::Approve { task } => decide(Verb::Decide(Choice::approve(task, text))),
+        Runnable::Reject { task } => match text {
+            Some(why) => decide(Verb::Decide(Choice::reject(task, why))),
+            None => needs("a reason"),
+        },
+        Runnable::Accept { task } => match (text, state) {
+            (Some(why), Some(s)) => crate::controls::accept_in(root, feature, task, why, s, false),
+            (None, _) => needs("a reason"),
+            (_, None) => no_state(),
+        },
+        Runnable::Skip { task } => match text {
+            Some(why) => crate::controls::skip(root, feature, task, Some(why)),
+            None => needs("a reason"),
+        },
+        Runnable::Nudge { task } => match (text, state) {
+            (Some(note), Some(s)) => {
+                crate::controls::nudge_with(root, feature, task, Some(note), s)
+            }
+            (None, _) => needs("a note"),
+            (_, None) => no_state(),
+        },
+        Runnable::Rule { task } => match (text, state) {
+            (Some(why), Some(s)) => crate::controls::rule(root, feature, task, why, None, s),
+            (None, _) => needs("a reason"),
+            (_, None) => no_state(),
+        },
+        Runnable::Review { ids, verdict } => match (verdict.as_str(), ids.first(), text) {
+            ("answer", Some(q), Some(t)) => crate::review::answer(root, feature, q, t),
+            ("edit" | "edit-approve", Some(id), Some(t)) => {
+                crate::review::edit(root, feature, id, t, verdict == "edit-approve", via)
+            }
+            ("answer" | "edit" | "edit-approve", _, _) => needs("the words"),
+            _ => crate::review::decide(root, feature, ids, verdict, text, via),
+        },
+        Runnable::IssueComment { issue, assign } => crate::github::comment(
+            &crate::github::Ctx::from_env(),
+            root,
+            feature,
+            &issue.to_string(),
+            *assign,
+        ),
+        Runnable::QuickChange {
+            request,
+            checks,
+            run,
+        } => quick_change(root, request, checks, *run, via, options),
+        Runnable::KeepSetAside { task } => crate::controls::restore(root, feature, task),
+        Runnable::DropSetAside { task } => crate::controls::drop_set_aside(root, feature, task),
+        Runnable::FixSetup => crate::code::fix_setup(root, feature),
+        Runnable::Feature => match text {
+            Some(name) => crate::current::switch(root, name),
+            None => needs("a feature"),
+        },
+        // The interface has confirmed it (the action's `confirm`): push
+        // and open.
+        Runnable::PullRequest => crate::handoff::pr(
+            root,
+            feature,
+            &crate::handoff::PrOptions {
+                remote: "origin",
+                base: None,
+                open: true,
+                force: false,
+                github: &crate::github::Ctx::from_env(),
+            },
+        ),
+    }
+}
+
+// The arms that run the model, one function each, so a build without the
+// engine can leave them out without a second dispatcher.
+
+/// A planning skill: the person's input, else the arguments it carries.
+fn skill(
+    root: &Path,
+    feature: Option<&str>,
+    name: &str,
+    input: Option<&str>,
+    carried: &str,
+    options: &RunOptions,
+) -> CommandResult {
+    crate::hosting::run(root, feature, name, input.unwrap_or(carried), options)
+}
+
+fn run_task(root: &Path, feature: Option<&str>, task: &str, options: &RunOptions) -> CommandResult {
+    crate::run(root, feature, task, options)
+}
+
+fn run_feature(
+    root: &Path,
+    feature: Option<&str>,
+    options: &RunOptions,
+    converge: bool,
+) -> CommandResult {
+    crate::run_feature(root, feature, options, converge)
+}
+
+fn quick_change(
+    root: &Path,
+    request: &str,
+    checks: &[String],
+    run: bool,
+    via: Via,
+    options: &RunOptions,
+) -> CommandResult {
+    crate::quick::change(root, request, checks, run, via, options)
+}
+
 #[cfg(test)]
 mod tests {
     use speccoder_core::actions::primary;
 
     use super::*;
+
+    #[test]
+    fn every_interface_decides_every_kind() {
+        let mut taken = 0;
+        for i in Interface::ALL {
+            for k in ActionKind::ALL {
+                if offered(*i, *k) == Offer::Take {
+                    taken += 1;
+                } else {
+                    assert_ne!(i.refusal().status(), CommandStatus::Ok, "{i:?}");
+                }
+            }
+        }
+        // The web host runs every runnable kind; the terminal the steps
+        // it offers; the remedies only the setup's fix.
+        let runnable = Runnable::examples().len();
+        assert_eq!(taken, runnable + 5 + 3 + 2);
+        assert_eq!(
+            offered(Interface::CliFollow, ActionKind::PullRequest),
+            Offer::Refuse
+        );
+        assert_eq!(
+            offered(Interface::AcpRemedy, ActionKind::FixSetup),
+            Offer::Take
+        );
+    }
+
+    #[test]
+    fn blank_input_is_no_input() {
+        let dir = tempfile::tempdir().unwrap_or_else(|e| panic!("{e}"));
+        let run = Runnable::Reject {
+            task: "T001".to_owned(),
+        };
+        let r = perform_in(
+            dir.path(),
+            None,
+            Dispatch {
+                run: &run,
+                input: Some("  "),
+                via: Via::Web,
+                options: RunOptions::default(),
+            },
+            None,
+        );
+        assert_eq!(
+            (r.command(), r.status(), r.message()),
+            ("job", CommandStatus::UsageError, "a reason is needed")
+        );
+    }
 
     #[test]
     fn a_project_outside_git_still_gets_a_list() {

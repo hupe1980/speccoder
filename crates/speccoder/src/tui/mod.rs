@@ -21,9 +21,10 @@ use std::sync::mpsc::{Sender, TryRecvError};
 use std::time::{Duration, Instant};
 
 use ratatui::crossterm::event::{self, Event as TermEvent, KeyCode, KeyEventKind, KeyModifiers};
+use speccoder_core::actions::Runnable;
 use speccoder_core::stage::{Stage, StageState};
 use speccoder_core::{ApprovalsReport, CommandData, CommandResult, CommandStatus, StatusReport};
-use speccoder_runtime::approvals::{Answer, Presentation, Verb, Who, decide_with};
+use speccoder_runtime::approvals::{Answer, Presentation, Who};
 use speccoder_runtime::progress::{Event, LiveState, RECENT, read_live};
 
 use crate::prompt::Parsed;
@@ -795,7 +796,7 @@ pub fn load(path: &Path, feature: Option<&str>, state: &Path) -> Snapshot {
         Some(CommandData::Report(r)) => Some((**r).clone()),
         _ => None,
     };
-    let approvals_result = decide_with(path, feature, Verb::List, state);
+    let approvals_result = speccoder_runtime::approvals::list_with(path, feature, state);
     let approvals = match approvals_result.data() {
         Some(CommandData::Approvals(a)) => Some((**a).clone()),
         _ => None,
@@ -883,6 +884,15 @@ fn no_state(command: &str) -> CommandResult {
     .with_code("NO-STATE-DIR")
 }
 
+/// A decision or a switch, taken as every interface takes one.
+fn take(path: &Path, feature: Option<&str>, run: &Runnable, input: Option<&str>) -> CommandResult {
+    use speccoder_runtime::actions::{Dispatch, Interface, perform_for};
+    let mut d = Dispatch::new(run, speccoder_core::actions::Via::Terminal);
+    d.input = input;
+    perform_for(Interface::Dashboard, path, feature, d)
+        .unwrap_or_else(|| Interface::Dashboard.refusal())
+}
+
 /// What the loop does with an action that is not the model's.
 fn perform(app: &mut App, action: Action, path: &Path, chosen: &mut Option<String>, state: &Path) {
     let feature = chosen.clone();
@@ -896,7 +906,7 @@ fn perform(app: &mut App, action: Action, path: &Path, chosen: &mut Option<Strin
             }
         }
         Action::Switch(name) => {
-            let r = speccoder_runtime::current::switch(path, &name);
+            let r = take(path, feature, &Runnable::Feature, Some(&name));
             app.flash = Some(r.message().to_owned());
             if r.status() == CommandStatus::Ok {
                 *chosen = Some(name);
@@ -904,12 +914,12 @@ fn perform(app: &mut App, action: Action, path: &Path, chosen: &mut Option<Strin
             }
         }
         Action::Approve(task) => {
-            let r = decide_with(path, feature, Verb::Approve(&task), state);
+            let r = take(path, feature, &Runnable::Approve { task }, None);
             app.flash = Some(r.message().to_owned());
             app.snap = load(path, feature, state);
         }
         Action::Reject(task, why) => {
-            let r = decide_with(path, feature, Verb::Reject(&task, &why), state);
+            let r = take(path, feature, &Runnable::Reject { task }, Some(&why));
             app.flash = Some(r.message().to_owned());
             app.snap = load(path, feature, state);
         }

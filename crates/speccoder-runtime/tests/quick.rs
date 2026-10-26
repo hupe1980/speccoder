@@ -78,7 +78,7 @@ fn record(r: &Path, request: &str, checks: &[&str]) -> speccoder_core::CommandRe
         request,
         &checks,
         false,
-        "cli",
+        speccoder_core::actions::Via::Terminal,
         &speccoder_runtime::RunOptions::default(),
     )
 }

@@ -16,7 +16,7 @@ pub fn change(
     request: &str,
     checks: &[String],
     run: bool,
-    via: &str,
+    via: speccoder_core::actions::Via,
     options: &crate::RunOptions,
 ) -> CommandResult {
     let format = crate::format::at(path);

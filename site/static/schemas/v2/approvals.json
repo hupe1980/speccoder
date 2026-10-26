@@ -71,6 +71,13 @@
             "null"
           ]
         },
+        "client": {
+          "description": "The editor decided in, over the Agent Client Protocol.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "covers": {
           "description": "What it covers.",
           "type": "string"
@@ -120,7 +127,7 @@
           "type": "string"
         },
         "via": {
-          "description": "Through what: `terminal`, `cli` or `editor <name>`.",
+          "description": "Through what: an origin of `actions::Via` (`terminal`, `web`,\n`acp`, …).",
           "type": [
             "string",
             "null"

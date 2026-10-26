@@ -335,7 +335,11 @@ fn approval_content(p: &Presentation) -> Value {
 }
 
 impl Approver for Permissions {
-    fn via(&self) -> String {
+    fn via(&self) -> speccoder_core::actions::Via {
+        speccoder_core::actions::Via::Acp
+    }
+
+    fn client(&self) -> Option<String> {
         let editor = self
             .conn
             .0
@@ -343,21 +347,17 @@ impl Approver for Permissions {
             .lock()
             .map(|c| c.clone())
             .unwrap_or_default();
-        format!(
-            "editor {}",
-            if editor.is_empty() {
-                "unknown"
-            } else {
-                &editor
-            }
-        )
+        Some(if editor.is_empty() {
+            "unknown".to_owned()
+        } else {
+            editor
+        })
     }
 
     fn ask(&self, p: &Presentation) -> Answer {
         // Who answers in the editor: the local person, through it.
-        let via = self.via();
-        let editor = via.trim_start_matches("editor ").to_owned();
-        let by = || Some(Who::local(&via));
+        let editor = self.client().unwrap_or_default();
+        let by = || Some(Who::connected(&editor));
         if self.cancel.load(Ordering::SeqCst) {
             return Answer::stop(by());
         }
@@ -538,11 +538,10 @@ fn prompt(
         && !cancel.load(Ordering::SeqCst)
         && fix_allowed(c, session, remedy)
     {
-        let fixed = match remedy.run {
-            speccoder_core::actions::Runnable::FixSetup => {
-                speccoder_runtime::code::fix_setup(cwd, None)
-            }
-            _ => return,
+        use speccoder_runtime::actions::{Dispatch, Interface, perform_for};
+        let fix = Dispatch::new(&remedy.run, speccoder_core::actions::Via::Acp);
+        let Some(fixed) = perform_for(Interface::AcpRemedy, cwd, None, fix) else {
+            return;
         };
         say(&format!("```text\n{}\n```", fixed.message()));
         if fixed.status() == speccoder_core::CommandStatus::Ok {
@@ -841,8 +840,8 @@ mod tests {
         // connection reports, recorded as such on the decision.
         let by = a.by.clone().unwrap_or_else(|| panic!("no one answered"));
         assert_eq!(
-            (by.via.as_str(), by.basis.as_str()),
-            ("editor Zed", "connected")
+            (by.via.as_str(), by.client.as_deref(), by.basis.as_str()),
+            ("acp", Some("Zed"), "connected")
         );
         let d = speccoder_runtime::approvals::tasks::decision_for(&a, &by, None)
             .unwrap_or_else(|| panic!("no decision"));
@@ -851,7 +850,23 @@ mod tests {
             .operator()
             .unwrap_or_else(|| panic!("no operator"));
         assert_eq!(op.basis().to_string(), "connected");
-        assert_eq!(d.amendment["via"], "editor Zed");
+        assert_eq!(
+            (&d.amendment["via"], &d.amendment["client"]),
+            (&json!("acp"), &json!("Zed"))
+        );
+        // Read back as recorded; one recorded before origins were one
+        // vocabulary reads the same.
+        let back = speccoder_runtime::approvals::tasks::read(&d);
+        assert_eq!(back.by.as_ref(), Some(&by));
+        let mut old = d.clone();
+        old.amendment = json!({ "scope": "run", "via": "editor Zed" });
+        let old = speccoder_runtime::approvals::tasks::read(&old)
+            .by
+            .unwrap_or_else(|| panic!("no one"));
+        assert_eq!(
+            (old.via.as_str(), old.client.as_deref()),
+            ("acp", Some("Zed"))
+        );
     }
 
     #[test]

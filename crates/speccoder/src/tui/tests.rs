@@ -143,7 +143,8 @@ fn call() -> Presentation {
 fn who() -> Who {
     Who {
         name: "Dana".to_owned(),
-        via: "dashboard".to_owned(),
+        via: "terminal".to_owned(),
+        client: None,
         basis: "asserted".to_owned(),
     }
 }
@@ -319,7 +320,7 @@ fn the_approval_overlay_answers_with_the_prompts_keys() {
             assert_eq!(a.decision, Decision::Approve);
             assert_eq!(a.scope, Scope::Task);
             assert_eq!(a.note.as_deref(), Some("keep it small"));
-            assert_eq!(a.by.as_ref().map(|w| w.via.as_str()), Some("dashboard"));
+            assert_eq!(a.by.as_ref().map(|w| w.via.as_str()), Some("terminal"));
         }
         other => panic!("{other:?}"),
     }

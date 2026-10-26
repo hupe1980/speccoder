@@ -77,6 +77,55 @@ fn the_published_schemas_are_what_the_code_generates() {
     );
 }
 
+/// Names given more than once.
+fn duplicates<'a>(names: impl IntoIterator<Item = &'a str>) -> Vec<&'a str> {
+    let mut seen = std::collections::BTreeSet::new();
+    let mut twice: Vec<&str> = names.into_iter().filter(|n| !seen.insert(*n)).collect();
+    twice.dedup();
+    twice
+}
+
+/// The names `CommandData::kind` gives, read from its source: one per
+/// variant, as the compiler keeps the match exhaustive.
+fn payload_kinds() -> Vec<String> {
+    let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../speccoder-core/src/command.rs");
+    let text = std::fs::read_to_string(file).unwrap();
+    let body = text
+        .split("pub const fn kind(&self) -> &'static str {")
+        .nth(1)
+        .and_then(|b| b.split("\n    }\n").next())
+        .unwrap();
+    body.lines()
+        .filter_map(|l| l.split("=> \"").nth(1))
+        .filter_map(|r| r.split('"').next())
+        .map(str::to_owned)
+        .collect()
+}
+
+#[test]
+fn every_payload_has_its_own_name() {
+    let kinds = payload_kinds();
+    assert!(!kinds.is_empty());
+    assert_eq!(
+        duplicates(speccoder_core::PAYLOADS.iter().copied()),
+        Vec::<&str>::new()
+    );
+    assert_eq!(
+        duplicates(kinds.iter().map(String::as_str)),
+        Vec::<&str>::new()
+    );
+    let mut a: Vec<&str> = kinds.iter().map(String::as_str).collect();
+    let mut b = speccoder_core::PAYLOADS.to_vec();
+    a.sort_unstable();
+    b.sort_unstable();
+    assert_eq!(
+        a, b,
+        "CommandData::kind and PAYLOADS name different payloads"
+    );
+    // A second `verify` is caught as a name.
+    assert_eq!(duplicates(["verify", "run", "verify"]), ["verify"]);
+}
+
 #[test]
 fn the_codes_page_is_the_catalog_and_the_cli_reference_lists_every_status() {
     let file = site().join("content/docs/codes.md");

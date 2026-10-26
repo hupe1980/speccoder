@@ -51,6 +51,7 @@ pub(crate) fn record_inline_approvals(
                 .unwrap_or_else(|_| approvals::Who {
                     name: "unknown".to_owned(),
                     via: "inline".to_owned(),
+                    client: None,
                     basis: "asserted".to_owned(),
                 });
             let approved = c["approved_by"] == "person";

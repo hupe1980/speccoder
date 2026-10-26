@@ -144,19 +144,12 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
         return Vec::new();
     };
     let approvals: Option<ApprovalsReport> =
-        state.and_then(|s| {
-            match crate::approvals::decide_with(
-                path,
-                Some(feature),
-                crate::approvals::Verb::List,
-                s,
-            )
-            .data()
-            {
+        state.and_then(
+            |s| match crate::approvals::list_with(path, Some(feature), s).data() {
                 Some(CommandData::Approvals(a)) => Some((**a).clone()),
                 _ => None,
-            }
-        });
+            },
+        );
     let flag = |command: String| {
         if several {
             format!("{command} --feature {feature}")

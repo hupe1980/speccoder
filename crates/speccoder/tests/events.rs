@@ -273,8 +273,10 @@ fn a_run_at_a_terminal_is_answered_in_the_dashboard() {
         "{text}"
     );
     assert_eq!(v["exit"], 0, "{text}");
-    // The decision names who made it and through what.
-    assert!(text.contains("(dashboard)"), "{text}");
+    // The decision names who made it and through what: the dashboard is
+    // the terminal (one origin vocabulary).
+    assert!(text.contains("(terminal)"), "{text}");
+    assert!(!text.contains("dashboard)"), "{text}");
     // On leaving, the run's result, as plain `run` prints it.
     assert!(text.contains("verdict: regression_only"), "{text}");
     assert!(text.contains("Next:"), "{text}");

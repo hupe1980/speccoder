@@ -12,6 +12,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
+use speccoder_core::actions::Via;
 use speccoder_core::{
     ApprovalsReport, CommandData, CommandResult, CommandStatus, DecidedCall, PendingCall,
 };
@@ -40,16 +41,46 @@ pub struct TaskDecisions {
 
 /// Who decided, through what, and how speccoder knows the name.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(from = "WhoRecord")]
 pub struct Who {
     /// The person (see [`who`]).
     pub name: String,
-    /// `terminal`, `editor <name>` or `cli`.
+    /// The interface ([`Via::as_str`]): `terminal`, `web`, `acp`, …
     pub via: String,
+    /// The editor's name, over the Agent Client Protocol.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub client: Option<String>,
     /// `asserted` (typed at a local terminal or the CLI) or `connected`
     /// (reported by a client over its connection). speccoder authenticates
     /// nobody, so never `authenticated`.
-    #[serde(default = "asserted")]
     pub basis: String,
+}
+
+/// [`Who`] as recorded, by this version or an earlier one (`cli`,
+/// `dashboard`, `editor <name>`).
+#[derive(Deserialize)]
+struct WhoRecord {
+    name: String,
+    via: String,
+    #[serde(default)]
+    client: Option<String>,
+    #[serde(default = "asserted")]
+    basis: String,
+}
+
+impl From<WhoRecord> for Who {
+    fn from(r: WhoRecord) -> Self {
+        let (via, client) = match Via::read(&r.via) {
+            Some((v, named)) => (v.as_str().to_owned(), named.or(r.client)),
+            None => (r.via, r.client),
+        };
+        Self {
+            name: r.name,
+            via,
+            client,
+            basis: r.basis,
+        }
+    }
 }
 
 fn asserted() -> String {
@@ -57,26 +88,33 @@ fn asserted() -> String {
 }
 
 impl Who {
-    /// The local person, deciding through `via`: over an editor's
-    /// connection the name is the connection's (`connected`), otherwise
-    /// the person's own (`asserted`).
+    /// The local person, deciding through `via`: the name is the person's
+    /// own (`asserted`).
     #[must_use]
-    pub fn local(via: &str) -> Self {
+    pub fn local(via: Via) -> Self {
         Self::local_in(Path::new("."), via)
     }
 
     /// [`Who::local`], named as git names the person in `dir` (the project).
     #[must_use]
-    pub fn local_in(dir: &Path, via: &str) -> Self {
+    pub fn local_in(dir: &Path, via: Via) -> Self {
         Self {
             name: who_in(dir),
-            via: via.to_owned(),
-            basis: if via.starts_with("editor") {
-                "connected"
-            } else {
-                "asserted"
-            }
-            .to_owned(),
+            via: via.as_str().to_owned(),
+            client: None,
+            basis: "asserted".to_owned(),
+        }
+    }
+
+    /// The local person, deciding in the editor `client` over its
+    /// connection (`acp`): the name is the connection's (`connected`).
+    #[must_use]
+    pub fn connected(client: &str) -> Self {
+        Self {
+            name: who(),
+            via: Via::Acp.as_str().to_owned(),
+            client: Some(client.to_owned()),
+            basis: "connected".to_owned(),
         }
     }
 
@@ -400,9 +438,14 @@ pub trait Approver: Send + Sync + std::fmt::Debug {
         None
     }
 
-    /// Through what the person answers: `terminal`, or `editor <name>`.
-    fn via(&self) -> String {
-        "terminal".to_owned()
+    /// Through what the person answers.
+    fn via(&self) -> Via {
+        Via::Terminal
+    }
+
+    /// The client the person answers in (an editor's name), if it says.
+    fn client(&self) -> Option<String> {
+        None
     }
 }
 
@@ -649,6 +692,7 @@ fn decided(feature: &str, decisions: &Decisions) -> Vec<DecidedCall> {
             note: last(g).and_then(|x| x.note.clone()),
             operator: last(g).map(|x| x.by.view()),
             via: last(g).map(|x| x.by.via.clone()),
+            client: last(g).and_then(|x| x.by.client.clone()),
             ..DecidedCall::default()
         }));
         out.extend(d.rejected.iter().map(|r| DecidedCall {
@@ -661,6 +705,7 @@ fn decided(feature: &str, decisions: &Decisions) -> Vec<DecidedCall> {
             note: None,
             operator: last(&r.grant).map(|x| x.by.view()),
             via: last(&r.grant).map(|x| x.by.via.clone()),
+            client: last(&r.grant).and_then(|x| x.by.client.clone()),
             ..DecidedCall::default()
         }));
         // "For this run" decisions live in the history only.
@@ -678,6 +723,7 @@ fn decided(feature: &str, decisions: &Decisions) -> Vec<DecidedCall> {
                     note: x.note.clone(),
                     operator: Some(x.by.view()),
                     via: Some(x.by.via.clone()),
+                    client: x.by.client.clone(),
                     ..DecidedCall::default()
                 }),
         );
@@ -779,8 +825,8 @@ pub fn withdraw_waiting(
     }
     let rt = crate::tokio_runtime()?;
     let plane = crate::substrate::Plane::open_for_decisions(dir).map_err(|e| e.0)?;
-    let by = Who::local_in(root, "cli")
-        .operator()
+    let by = agentplane::core::Operator::from_parts(who_in(root), "asserted")
+        .ok()
         .ok_or_else(|| "no name to record the withdrawal under".to_owned())?;
     for (_, task) in &rows {
         rt.block_on(plane.withdraw(task, &by, reason))
@@ -870,12 +916,26 @@ impl<'a> Choice<'a> {
     }
 }
 
-/// `approvals`, `approve --task` and `reject --task --reason` against `state`.
+/// `approvals` against `state`: the calls waiting and the decisions made.
+pub fn list_with(path: &Path, feature: Option<&str>, state: &Path) -> CommandResult {
+    // Listing records nothing, so through no interface in particular.
+    decide_with(path, feature, Verb::List, state, Via::Terminal)
+}
+
+/// [`list_with`] in the default state directory.
+#[must_use]
+pub fn list(path: &Path, feature: Option<&str>) -> CommandResult {
+    decide(path, feature, Verb::List, Via::Terminal)
+}
+
+/// `approvals`, `approve --task` and `reject --task --reason` against
+/// `state`, decided through `via`.
 pub fn decide_with(
     path: &Path,
     feature: Option<&str>,
     verb: Verb<'_>,
     state: &Path,
+    via: Via,
 ) -> CommandResult {
     let command = match verb {
         Verb::List => "approvals",
@@ -957,7 +1017,7 @@ pub fn decide_with(
             );
         }
         if !matching.is_empty() {
-            let by = Who::local_in(&root, "cli");
+            let by = Who::local_in(&root, via);
             let mut lines = Vec::new();
             for (call, row) in &matching {
                 let answer = if c.approve {
@@ -1063,7 +1123,7 @@ pub fn decide_with(
                         task,
                         grant.clone(),
                         reason,
-                        &Who::local_in(&root, "cli"),
+                        &Who::local_in(&root, via),
                     );
                     format!(
                         "rejected: {} for {task} — the model will be told: {reason}",
@@ -1071,7 +1131,7 @@ pub fn decide_with(
                     )
                 }
                 _ => {
-                    decisions.approve(&feature, task, grant.clone(), &Who::local_in(&root, "cli"));
+                    decisions.approve(&feature, task, grant.clone(), &Who::local_in(&root, via));
                     if let Verb::ApproveNoted(_, note) = verb
                         && !note.trim().is_empty()
                     {
@@ -1118,9 +1178,27 @@ pub fn decide_with(
 
 /// [`decide_with`] in the default state directory.
 #[must_use]
-pub fn decide(path: &Path, feature: Option<&str>, verb: Verb<'_>) -> CommandResult {
-    match crate::worktree::state_dir() {
-        Some(state) => decide_with(path, feature, verb, &state),
+pub fn decide(path: &Path, feature: Option<&str>, verb: Verb<'_>, via: Via) -> CommandResult {
+    decide_in(
+        path,
+        feature,
+        verb,
+        crate::worktree::state_dir().as_deref(),
+        via,
+    )
+}
+
+/// [`decide_with`] in `state`, if there is one.
+#[must_use]
+pub fn decide_in(
+    path: &Path,
+    feature: Option<&str>,
+    verb: Verb<'_>,
+    state: Option<&Path>,
+    via: Via,
+) -> CommandResult {
+    match state {
+        Some(state) => decide_with(path, feature, verb, state, via),
         None => CommandResult::new(
             "approvals",
             CommandStatus::ConfigError,
@@ -1141,7 +1219,7 @@ mod tests {
             path: "Cargo.toml".to_owned(),
         };
         let mut d = Decisions::load(dir.path()).unwrap_or_else(|e| panic!("{e}"));
-        let by = Who::local("cli");
+        let by = Who::local(Via::Terminal);
         d.reject("f", "T1", g.clone(), "no new dependencies", &by);
         d.approve("f", "T1", g.clone(), &by);
         assert_eq!(d.tasks["f/T1"].decided.len(), 2);

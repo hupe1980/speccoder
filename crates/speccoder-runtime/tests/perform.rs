@@ -1,9 +1,9 @@
 //! One dispatcher: every runnable kind, taken with the same input on the
 //! same project, gives the result it gave before the dispatcher moved out
 //! of the web host. The goldens under `tests/fixtures/perform/` were
-//! recorded through a verbatim copy of that host's mapping
-//! (`SPECCODER_BLESS=1` writes them); a golden diff means behaviour
-//! changed — fix the code, not the golden.
+//! recorded through a verbatim copy of that host's mapping (at `90439f4`,
+//! before `actions::perform` existed; `SPECCODER_BLESS=1` writes them); a
+//! golden diff means behaviour changed — fix the code, not the golden.
 
 // Test code: panicking on unexpected input is the failure report.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
@@ -16,8 +16,9 @@ use std::sync::Arc;
 use agentplane::model::ModelProvider;
 use agentplane::model::fake::FakeProvider;
 use serde_json::{Value, json};
-use speccoder_core::actions::Runnable;
+use speccoder_core::actions::{Runnable, Via};
 use speccoder_core::{CommandResult, CommandStatus};
+use speccoder_runtime::actions::Dispatch;
 
 const CONFIG: &str = "[model]\nprovider = \"openai\"\nmodel = \"gpt-5.4-mini\"\n\n[checks.has-ok]\nargv = [\"grep\", \"-q\", \"fn ok\", \"src/lib.rs\"]\n\n[acceptance]\ngenerate = false\n";
 
@@ -93,138 +94,6 @@ fn wait_on_t005(r: &Path, state: &Path) {
         "{}",
         first.message()
     );
-}
-
-/// Today's web job mapping (`speccoder-web/src/jobs.rs`, `execute`, at
-/// `90439f4`), copied verbatim but for the state directory, which is
-/// passed in (a test cannot set the environment) — and, through it, the
-/// approvals' `decide` as `decide_with`.
-#[allow(dead_code)]
-fn oracle(
-    root: &Path,
-    feature: Option<&str>,
-    run: &Runnable,
-    input: Option<&str>,
-    state: Option<&Path>,
-) -> CommandResult {
-    use speccoder_runtime::approvals::{Choice, Verb, decide_with};
-    let decide = |root: &Path, feature: Option<&str>, verb: Verb<'_>| match state {
-        Some(s) => decide_with(root, feature, verb, s),
-        None => CommandResult::new(
-            "approvals",
-            CommandStatus::ConfigError,
-            "no state directory (set SPECCODER_STATE_DIR or HOME)",
-        )
-        .with_code("NO-STATE-DIR"),
-    };
-    let needs = |what: &str| {
-        CommandResult::new(
-            "job",
-            CommandStatus::UsageError,
-            &format!("{what} is needed"),
-        )
-    };
-    let options = speccoder_runtime::RunOptions::default();
-    let text = input.map(str::trim).filter(|t| !t.is_empty());
-    match run {
-        Runnable::Skill { name, arguments } => {
-            let args = text.map_or_else(|| arguments.clone(), str::to_owned);
-            speccoder_runtime::hosting::run(root, feature, name, &args, &options)
-        }
-        Runnable::Run { task: Some(t) } => speccoder_runtime::run(root, feature, t, &options),
-        Runnable::Run { task: None } => {
-            speccoder_runtime::run_feature(root, feature, &options, false)
-        }
-        Runnable::Converge => speccoder_runtime::run_feature(root, feature, &options, true),
-        Runnable::Commit { paths } => {
-            speccoder_runtime::hosting::commit_planning(root, feature, paths)
-        }
-        Runnable::Approve { task } => {
-            decide(root, feature, Verb::Decide(Choice::approve(task, text)))
-        }
-        Runnable::Reject { task } => match text {
-            Some(why) => decide(root, feature, Verb::Decide(Choice::reject(task, why))),
-            None => needs("a reason"),
-        },
-        Runnable::Accept { task } => match (text, &state) {
-            (Some(why), Some(s)) => {
-                speccoder_runtime::controls::accept_in(root, feature, task, why, s, false)
-            }
-            (None, _) => needs("a reason"),
-            (_, None) => {
-                CommandResult::new("job", CommandStatus::ConfigError, "no state directory")
-            }
-        },
-        Runnable::Skip { task } => match text {
-            Some(why) => speccoder_runtime::controls::skip(root, feature, task, Some(why)),
-            None => needs("a reason"),
-        },
-        Runnable::Nudge { task } => match (text, &state) {
-            (Some(note), Some(s)) => {
-                speccoder_runtime::controls::nudge_with(root, feature, task, Some(note), s)
-            }
-            (None, _) => needs("a note"),
-            (_, None) => {
-                CommandResult::new("job", CommandStatus::ConfigError, "no state directory")
-            }
-        },
-        Runnable::FixSetup => speccoder_runtime::code::fix_setup(root, feature),
-        Runnable::KeepSetAside { task } => {
-            speccoder_runtime::controls::restore(root, feature, task)
-        }
-        Runnable::DropSetAside { task } => {
-            speccoder_runtime::controls::drop_set_aside(root, feature, task)
-        }
-        Runnable::QuickChange {
-            request,
-            checks,
-            run,
-        } => speccoder_runtime::quick::change(root, request, checks, *run, "web", &options),
-        Runnable::IssueComment { issue, assign } => speccoder_runtime::github::comment(
-            &speccoder_runtime::github::Ctx::from_env(),
-            root,
-            feature,
-            &issue.to_string(),
-            *assign,
-        ),
-        Runnable::Review { ids, verdict } => match (verdict.as_str(), ids.first(), text) {
-            ("answer", Some(q), Some(t)) => speccoder_runtime::review::answer(root, feature, q, t),
-            ("edit" | "edit-approve", Some(id), Some(t)) => speccoder_runtime::review::edit(
-                root,
-                feature,
-                id,
-                t,
-                verdict == "edit-approve",
-                "web",
-            ),
-            ("answer" | "edit" | "edit-approve", _, _) => needs("the words"),
-            _ => speccoder_runtime::review::decide(root, feature, ids, verdict, text, "web"),
-        },
-        Runnable::Rule { task } => match (text, &state) {
-            (Some(why), Some(s)) => {
-                speccoder_runtime::controls::rule(root, feature, task, why, None, s)
-            }
-            (None, _) => needs("a reason"),
-            (_, None) => {
-                CommandResult::new("job", CommandStatus::ConfigError, "no state directory")
-            }
-        },
-        Runnable::Feature => match text {
-            Some(name) => speccoder_runtime::current::switch(root, name),
-            None => needs("a feature"),
-        },
-        Runnable::PullRequest => speccoder_runtime::handoff::pr(
-            root,
-            feature,
-            &speccoder_runtime::handoff::PrOptions {
-                remote: "origin",
-                base: None,
-                open: true,
-                force: false,
-                github: &speccoder_runtime::github::Ctx::from_env(),
-            },
-        ),
-    }
 }
 
 /// One case: its golden's name, what runs, the person's input, and
@@ -573,7 +442,19 @@ fn against_goldens(
 
 #[test]
 fn every_kind_gives_the_result_it_gave_before() {
-    against_goldens(oracle);
+    against_goldens(|root, feature, run, input, state| {
+        speccoder_runtime::actions::perform_in(
+            root,
+            feature,
+            Dispatch {
+                run,
+                input,
+                via: Via::Web,
+                options: speccoder_runtime::RunOptions::default(),
+            },
+            state,
+        )
+    });
 }
 
 #[test]
@@ -592,14 +473,7 @@ fn lists() -> Vec<(String, Vec<speccoder_core::actions::Action>)> {
     let state = tempfile::tempdir().unwrap();
     let mut out = Vec::new();
     let mut list = |name: &str, r: &Path, selected: Option<&str>| {
-        let listed = match speccoder_runtime::approvals::decide_with(
-            r,
-            None,
-            speccoder_runtime::approvals::Verb::List,
-            state.path(),
-        )
-        .data()
-        {
+        let listed = match speccoder_runtime::approvals::list_with(r, None, state.path()).data() {
             Some(CommandData::Approvals(a)) => Some((**a).clone()),
             _ => None,
         };
@@ -700,4 +574,53 @@ fn spec_kit_offers_its_create_step_by_role() {
         .find(|a| a.group == "next" && a.role == Some(SkillRole::Create))
         .unwrap_or_else(|| panic!("{first:#?}"));
     assert!(create.input.is_some(), "the create step asks for words");
+}
+
+/// The origin is the interface the person used, recorded as given — a
+/// reject from the web app records `web` (it once recorded `cli` whatever
+/// sent it) — and what earlier versions recorded reads back.
+#[test]
+fn a_decision_records_the_interface_it_came_through() {
+    use speccoder_core::CommandData;
+    let r = repo();
+    let state = tempfile::tempdir().unwrap();
+    wait_on_t005(r.path(), state.path());
+    let run = Runnable::Reject { task: task("T005") };
+    let mut d = Dispatch::new(&run, Via::Web);
+    d.input = Some("no new files");
+    let res = speccoder_runtime::actions::perform_in(r.path(), None, d, Some(state.path()));
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    // The attempt resumes and reads the decision back, with its origin.
+    let f = FakeProvider::new();
+    f.will_structure(json!({ "summary": "left it", "status": "done", "files_changed": [], "checks_run": [], "notes": [] }));
+    let provider: Arc<dyn ModelProvider> = f;
+    let resumed = speccoder_runtime::run_with(r.path(), None, "T005", state.path(), provider, None);
+    let Some(CommandData::Run(rep)) = resumed.data() else {
+        panic!("{}", resumed.message())
+    };
+    let call = &rep.tool_calls[0];
+    assert_eq!(call["decision"], "deny", "{call}");
+    assert_eq!(call["approver"]["via"], "web", "{call}");
+
+    for (old, via, client) in [
+        ("cli", "terminal", None),
+        ("tui", "terminal", None),
+        ("dashboard", "terminal", None),
+        ("editor Zed", "acp", Some("Zed")),
+        ("web", "web", None),
+    ] {
+        let who: speccoder_runtime::approvals::Who =
+            serde_json::from_value(json!({ "name": "Dana", "via": old, "basis": "asserted" }))
+                .unwrap();
+        assert_eq!(
+            (who.via.as_str(), who.client.as_deref()),
+            (via, client),
+            "{old}"
+        );
+    }
+    let new = speccoder_runtime::approvals::Who::local_in(r.path(), Via::Terminal);
+    assert_eq!(
+        serde_json::to_value(&new).unwrap()["via"],
+        Via::Terminal.as_str()
+    );
 }
