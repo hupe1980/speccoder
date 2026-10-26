@@ -628,10 +628,29 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
             Some(CommandData::Inspect(snap)) => crate::format::of(snap).oracle_requirements(snap),
             _ => Vec::new(),
         };
-        let ambiguous = project_state
+        let ambiguous = match project_state
             .as_deref()
             .map(|s| crate::oracle::open_ambiguities(s, feature, &requirements))
-            .unwrap_or_default();
+        {
+            Some(Ok(a)) => a,
+            None => Vec::new(),
+            // Unknown is never "nothing read two ways": a person looks.
+            Some(Err(t)) => {
+                out.push(item(
+                    "ambiguous",
+                    None,
+                    "a test draft cannot be read".to_owned(),
+                    format!("{} — Approve and Run waits until it is written again", t.0),
+                    vec![action(
+                        "review",
+                        "see the tests",
+                        "write the requirement's tests again",
+                        flag("speccoder review".to_owned()),
+                    )],
+                ));
+                Vec::new()
+            }
+        };
         if let Some((req, scenario)) = ambiguous.first() {
             let mut a = action(
                 "review",

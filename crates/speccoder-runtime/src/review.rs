@@ -93,11 +93,10 @@ impl Unit {
             std::fs::read_to_string(self.root.join(&self.dir).join(file)).unwrap_or_default();
         self.format.requirements_in(&text)
     }
-    fn record(&self) -> Record {
-        std::fs::read_to_string(self.file())
-            .ok()
-            .and_then(|t| serde_json::from_str(&t).ok())
-            .unwrap_or_default()
+    /// The recorded review; none written yet is the empty record, one
+    /// that cannot be read is an `Err` (never read as empty).
+    fn record(&self) -> Result<Record, String> {
+        read_record(&self.file())
     }
     /// The requirements with scenarios a review writes tests for.
     fn oracle_requirements(&self) -> Vec<crate::format::OracleRequirement> {
@@ -368,14 +367,25 @@ pub fn totals_of(
         state: None,
     };
     let requirements = u.requirements();
-    (!requirements.is_empty())
-        .then(|| totals(&items(&requirements, &u.record()), questions(&u).len()))
+    // A record that cannot be read approves nothing: every line counts open.
+    (!requirements.is_empty()).then(|| {
+        totals(
+            &items(&requirements, &u.record().unwrap_or_default()),
+            questions(&u).len(),
+        )
+    })
 }
 
 /// The review; `full` adds what changed since the last commit and the
 /// history (git reads, for the review view — not for the inbox).
 fn report_of(u: &Unit, full: bool) -> ReviewReport {
-    let items = items(&u.requirements(), &u.record());
+    // Shown as it is: a record that cannot be read approves and freezes
+    // nothing, and the report says why.
+    let (record, error) = match u.record() {
+        Ok(r) => (r, None),
+        Err(e) => (Record::default(), Some(e)),
+    };
+    let items = items(&u.requirements(), &record);
     let skills = crate::skills::discover_with(&u.root, u.format.planning());
     let installed = |name: &str| {
         let full = format!("{}{name}", u.format.planning().prefix);
@@ -391,7 +401,6 @@ fn report_of(u: &Unit, full: bool) -> ReviewReport {
     } else {
         Vec::new()
     };
-    let record = u.record();
     let rung = u.rung();
     let (oracle, tests_notice) = if rung == speccoder_core::ladder::Rung::Feature {
         let cfg = crate::oracle::ViewConfig::at(&u.root);
@@ -444,6 +453,7 @@ fn report_of(u: &Unit, full: bool) -> ReviewReport {
         tests_notice,
         approval: record.approval,
         sheet,
+        error,
     }
 }
 
@@ -539,16 +549,31 @@ fn sheet(
 
 /// The frozen oracle entries and the approval digest `review.json` in
 /// `dir` (project-relative, under `root`) holds.
-#[must_use]
+///
+/// # Errors
+/// The record exists but cannot be read: never read as "nothing frozen".
 pub fn oracle_entries(
     root: &Path,
     dir: &str,
-) -> (BTreeMap<String, crate::oracle::OracleEntry>, Option<String>) {
-    let record: Record = std::fs::read_to_string(root.join(dir).join(REVIEW_FILE))
-        .ok()
-        .and_then(|t| serde_json::from_str(&t).ok())
-        .unwrap_or_default();
-    (record.oracle, record.approval.map(|a| a.sha256))
+) -> Result<(BTreeMap<String, crate::oracle::OracleEntry>, Option<String>), String> {
+    let record = read_record(&root.join(dir).join(REVIEW_FILE))?;
+    Ok((record.oracle, record.approval.map(|a| a.sha256)))
+}
+
+/// `review.json` at `file`: absent is the empty record; present and not
+/// valid is an error naming it.
+fn read_record(file: &Path) -> Result<Record, String> {
+    match std::fs::read_to_string(file) {
+        Ok(text) => serde_json::from_str(&text)
+            .map_err(|e| format!("{} is not a valid review record: {e}", file.display())),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Record::default()),
+        Err(e) => Err(format!("{}: {e}", file.display())),
+    }
+}
+
+/// The refusal for a review record that cannot be read.
+fn unreadable(e: &str) -> CommandResult {
+    CommandResult::new("review", CommandStatus::NeedsHuman, e).with_code("REVIEW-UNREADABLE")
 }
 
 fn message(r: &ReviewReport) -> String {
@@ -656,7 +681,10 @@ pub fn decide_in(
         .with_code("USAGE");
     }
     let requirements = u.requirements();
-    let mut record = u.record();
+    let mut record = match u.record() {
+        Ok(r) => r,
+        Err(e) => return unreadable(&e),
+    };
     let before = items(&requirements, &record);
     // A wording that still asks a question is not one to sign: approving
     // it is refused; approving "the rest" passes it by and says so.
@@ -911,7 +939,10 @@ pub fn approve_and_run(
         );
     }
     let named = u.oracle_requirements();
-    let ambiguous = crate::oracle::open_ambiguities(&plane, &u.feature, &named);
+    let ambiguous = match crate::oracle::open_ambiguities(&plane, &u.feature, &named) {
+        Ok(a) => a,
+        Err(t) => return refuse(CommandStatus::NeedsHuman, "ORACLE-TAMPERED", t.0),
+    };
     if !ambiguous.is_empty() {
         return refuse(
             CommandStatus::NeedsHuman,
@@ -979,7 +1010,10 @@ pub fn approve_and_run(
     };
     // The decision lines: every one open or lapsed is approved now.
     let requirements = u.requirements();
-    let mut record = u.record();
+    let mut record = match u.record() {
+        Ok(r) => r,
+        Err(e) => return unreadable(&e),
+    };
     let before = items(&requirements, &record);
     let who = crate::approvals::Who::local_in(&u.root, via);
     let at = std::time::SystemTime::now()

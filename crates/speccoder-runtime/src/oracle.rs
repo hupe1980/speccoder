@@ -492,24 +492,29 @@ pub fn view(
 
 /// Requirements of the selected unit whose tests two authors read
 /// differently, with the scenario: `(REQ, scenario)`.
-#[must_use]
+///
+/// # Errors
+/// A stored draft was tampered with or cannot be read: whether it holds an
+/// open reading is unknown, never "none" (FR-009).
 pub fn open_ambiguities(
     project_state: &Path,
     unit: &str,
     requirements: &[OracleRequirement],
-) -> Vec<(String, String)> {
-    requirements
-        .iter()
-        .filter_map(|r| {
-            let (d, _) = load(project_state, unit, &r.key).ok().flatten()?;
-            (d.requirement.sha256 == r.digest()).then_some(d)
-        })
-        .flat_map(|d| {
+) -> Result<Vec<(String, String)>, Tampered> {
+    let mut out = Vec::new();
+    for r in requirements {
+        let Some((d, _)) = load(project_state, unit, &r.key)? else {
+            continue;
+        };
+        if d.requirement.sha256 != r.digest() {
+            continue;
+        }
+        out.extend(
             d.open_ambiguities()
-                .map(|a| (d.requirement.key.clone(), a.scenario.clone()))
-                .collect::<Vec<_>>()
-        })
-        .collect()
+                .map(|a| (d.requirement.key.clone(), a.scenario.clone())),
+        );
+    }
+    Ok(out)
 }
 
 /// The rung of the selected unit, by the format's standing units.
@@ -794,6 +799,23 @@ fn check(ctx: &Ctx, request: &Request<'_>) -> Result<OracleRequirement, Box<Comm
             ),
         )));
     }
+    // A frozen set is what the run uses, sealed with its held-out set: it
+    // is not rewritten under the approval that names it (C4).
+    let (entries, _) = crate::review::oracle_entries(&ctx.root, &ctx.dir)
+        .map_err(|e| Box::new(refuse(CommandStatus::NeedsHuman, "REVIEW-UNREADABLE", &e)))?;
+    if let Some(e) = entries
+        .get(&req.key)
+        .filter(|e| e.requirement_sha256 == req.digest())
+    {
+        return Err(Box::new(refuse(
+            CommandStatus::UsageError,
+            "ORACLE-FROZEN",
+            &format!(
+                "{}'s tests were frozen with the approval by {}: the run uses them as frozen — reword {} to lapse the freeze, then write its tests again",
+                req.key, e.by, req.key
+            ),
+        )));
+    }
     Ok(req)
 }
 
@@ -998,21 +1020,51 @@ impl<'a> Author<'a> {
     }
 }
 
-fn expectations(answer: &Value, req: &OracleRequirement) -> (Vec<Expectation>, Vec<Untestable>) {
-    let known = |id: &str| req.scenarios.iter().any(|s| s.id == id);
-    let e: Vec<Expectation> =
-        serde_json::from_value::<Vec<Expectation>>(answer["expectations"].clone())
-            .unwrap_or_default()
-            .into_iter()
-            .filter(|e| known(&e.scenario))
-            .collect();
-    let u: Vec<Untestable> =
-        serde_json::from_value::<Vec<Untestable>>(answer["untestable"].clone())
-            .unwrap_or_default()
-            .into_iter()
-            .filter(|u| known(&u.scenario))
-            .collect();
-    (e, u)
+/// What one author states it expects of each scenario, and what it found
+/// untestable, by the requirement's own scenario ids (case aside). `Err`:
+/// an answer the comparison cannot read — not parseable, naming a scenario
+/// the requirement does not have, or saying nothing of any scenario — is
+/// an author failure, never "no ambiguity" (FR-008).
+fn expectations(
+    answer: &Value,
+    req: &OracleRequirement,
+) -> Result<(Vec<Expectation>, Vec<Untestable>), String> {
+    let canonical = |id: &str| {
+        req.scenarios
+            .iter()
+            .find(|s| s.id.eq_ignore_ascii_case(id.trim()))
+            .map(|s| s.id.clone())
+            .ok_or_else(|| {
+                format!(
+                    "the test author's expectations name `{id}`, which {} does not have",
+                    req.key
+                )
+            })
+    };
+    let list = |field: &str| -> Result<Value, String> {
+        match &answer[field] {
+            Value::Null => Ok(Value::Array(Vec::new())),
+            v @ Value::Array(_) => Ok(v.clone()),
+            _ => Err(format!("the test author's `{field}` is not a list")),
+        }
+    };
+    let mut e: Vec<Expectation> = serde_json::from_value(list("expectations")?)
+        .map_err(|x| format!("the test author's expectations cannot be read: {x}"))?;
+    let mut u: Vec<Untestable> = serde_json::from_value(list("untestable")?)
+        .map_err(|x| format!("the test author's untestable list cannot be read: {x}"))?;
+    for x in &mut e {
+        x.scenario = canonical(&x.scenario)?;
+    }
+    for x in &mut u {
+        x.scenario = canonical(&x.scenario)?;
+    }
+    if e.is_empty() && u.is_empty() {
+        return Err(
+            "the test author stated no expectation for any scenario: the readings cannot be compared"
+                .to_owned(),
+        );
+    }
+    Ok((e, u))
 }
 
 /// A scratch worktree of the checkout's `HEAD`, its project directory and
@@ -1204,8 +1256,25 @@ fn write(
     let author = Author::open(ctx, req, provider, options)?;
     let bench = Bench::open(ctx)?;
     let (files, manifest) = bench.files();
-    // What the person said about earlier tests is told again.
-    let earlier = load(&ctx.plane_dir, &ctx.feature, &req.key).ok().flatten();
+    // What the person said about earlier tests is told again; a draft
+    // that cannot be read is not overwritten with its rejections lost.
+    let earlier = load(&ctx.plane_dir, &ctx.feature, &req.key).map_err(|t| {
+        Box::new(
+            refuse(
+                CommandStatus::NeedsHuman,
+                "ORACLE-TAMPERED",
+                &format!(
+                    "{}: writing anew would lose the rejections and notes it holds",
+                    t.0
+                ),
+            )
+            .with_fix(vec![format!(
+                "→ restore it, or remove {} to start {}'s tests over",
+                dir(&ctx.plane_dir, &ctx.feature, &req.key).display(),
+                req.key
+            )]),
+        )
+    })?;
     let (rejected, mut notes) = earlier
         .as_ref()
         .filter(|(d, _)| d.requirement.sha256 == req.digest())
@@ -1222,7 +1291,17 @@ fn write(
     let (first, run1, mut context) = author
         .call(req, &files, &manifest, &told, None, 1)
         .map_err(failed)?;
-    let (e1, u1) = expectations(&first, req);
+    // The comparison needs both readings; with one sample they are kept
+    // as stated, for the card.
+    let read = |answer: &Value| {
+        let got = expectations(answer, req);
+        if samples >= 2 {
+            got.map_err(failed)
+        } else {
+            Ok(got.unwrap_or_default())
+        }
+    };
+    let (e1, u1) = read(&first)?;
     let mut runs = vec![run1];
     let (mut e2, mut u2) = (Vec::new(), Vec::new());
     if samples >= 2 {
@@ -1230,7 +1309,7 @@ fn write(
         let (second, run2, more) = author
             .call(req, &files, &manifest, &told, None, 2)
             .map_err(failed)?;
-        (e2, u2) = expectations(&second, req);
+        (e2, u2) = read(&second)?;
         runs.push(run2);
         for c in more {
             if !context.contains(&c) {
@@ -1841,6 +1920,8 @@ pub(crate) enum TaskReuse {
     },
     /// The stored set no longer matches what was frozen.
     Tampered(String),
+    /// `review.json` cannot be read: whether anything is frozen is unknown.
+    Unreadable(String),
 }
 
 /// The frozen oracle `task` (citing `scenarios`) reuses, if any: the
@@ -1857,7 +1938,11 @@ pub(crate) fn for_task(
 ) -> Option<TaskReuse> {
     let f = snapshot.feature.as_ref()?;
     let unit = f.feature.name.as_str();
-    let (entries, approval) = crate::review::oracle_entries(project, &f.feature.dir);
+    let (entries, approval) = match crate::review::oracle_entries(project, &f.feature.dir) {
+        Ok(x) => x,
+        // Unreadable is never "nothing frozen": the task stops for a person.
+        Err(e) => return Some(TaskReuse::Unreadable(e)),
+    };
     if entries.is_empty() {
         return None;
     }

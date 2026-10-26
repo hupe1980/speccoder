@@ -1165,3 +1165,276 @@ fn autopilot_never_adopts_the_grants_of_an_interrupted_earlier_run() {
         fr.autopilot_denied
     );
 }
+
+fn freeze_only(r: &Path, state: &Path, d: Arc<dyn ModelProvider>) {
+    let res = speccoder_runtime::review::approve_and_run(
+        r,
+        None,
+        RunMode::Ask,
+        &[],
+        Via::Terminal,
+        Some(state),
+        Some(d),
+        &RunOptions {
+            max_tasks: Some(0),
+            ..RunOptions::default()
+        },
+    );
+    assert!(
+        res.message().contains("froze tests for 1"),
+        "{}",
+        res.message()
+    );
+}
+
+/// Every file under `dir`, with its bytes.
+fn tree(dir: &Path) -> Vec<(PathBuf, Vec<u8>)> {
+    let mut out = Vec::new();
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(d) = stack.pop() {
+        for e in fs::read_dir(&d).into_iter().flatten().flatten() {
+            if e.path().is_dir() {
+                stack.push(e.path());
+            } else {
+                out.push((e.path(), fs::read(e.path()).unwrap()));
+            }
+        }
+    }
+    out.sort();
+    out
+}
+
+#[test]
+fn a_frozen_requirement_s_tests_are_not_rewritten_under_its_approval() {
+    // C4: Write Tests again after the freeze would replace the sealed
+    // held-out set the frozen record names.
+    let r = repo();
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = written(r.path(), state.path());
+    freeze_only(r.path(), state.path(), d.clone());
+    let plane = speccoder_runtime::worktree::project_state_dir(state.path(), r.path());
+    let sealed = speccoder_runtime::held_out::sealed_dir(&plane, "001-graph", "US1");
+    let before = tree(&sealed);
+    assert!(!before.is_empty());
+    f.will_structure(answer(standard(), "refused"));
+    f.will_structure(answer(standard(), "refused"));
+    f.will_structure(held_out("fn login("));
+    let asked = f.asked().len();
+    let again = write(r.path(), state.path(), d);
+    assert_eq!(code(&again), Some("ORACLE-FROZEN"), "{}", again.message());
+    assert_eq!(f.asked().len(), asked, "no author call");
+    let mut reject = request("US1", OracleOp::Reject);
+    reject.path = Some("tests/acceptance_us1_login.txt");
+    reject.text = Some("wrong");
+    let res = tests_with(
+        r.path(),
+        None,
+        &reject,
+        Via::Web,
+        state.path(),
+        None,
+        &RunOptions::default(),
+    );
+    assert_eq!(code(&res), Some("ORACLE-FROZEN"), "{}", res.message());
+    assert_eq!(tree(&sealed), before, "the sealed set is untouched");
+    let v = us1(&speccoder_runtime::review::report_in(
+        r.path(),
+        None,
+        Some(state.path()),
+    ));
+    assert_eq!(v.state, OracleState::Frozen);
+}
+
+#[test]
+fn a_tampered_draft_is_unknown_to_the_ambiguity_gate_never_clear() {
+    // C5: an unreadable draft hid its open reading from a gated run.
+    let r = repo_with(SPEC, "\n[review]\nrequired = true\n");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_structure(answer(standard(), "refused"));
+    f.will_structure(answer(standard(), "an error message"));
+    f.will_structure(held_out("fn login"));
+    assert_eq!(
+        write(r.path(), state.path(), d.clone()).status(),
+        CommandStatus::Ok
+    );
+    let plain = speccoder_runtime::review::decide_in(
+        r.path(),
+        None,
+        &[],
+        "approve",
+        None,
+        Via::Terminal,
+        Some(state.path()),
+    );
+    assert_eq!(plain.status(), CommandStatus::Ok, "{}", plain.message());
+    git(r.path(), &["add", "-A"]);
+    git(r.path(), &["commit", "-q", "-m", "approve"]);
+    let plane = speccoder_runtime::worktree::project_state_dir(state.path(), r.path());
+    let draft = speccoder_runtime::oracle::dir(&plane, "001-graph", "US1");
+    fs::write(
+        draft.join("files/tests/acceptance_us1_login.txt"),
+        "changed by a sync tool\n",
+    )
+    .unwrap();
+    let gated = speccoder_runtime::run_with(r.path(), None, "T005", state.path(), d, None);
+    assert_eq!(code(&gated), Some("ORACLE-TAMPERED"), "{}", gated.message());
+    let inbox = speccoder_runtime::inbox::inbox_with(r.path(), None, Some(state.path()));
+    let Some(CommandData::Inbox(i)) = inbox.data() else {
+        panic!("{}", inbox.message())
+    };
+    assert!(
+        i.items
+            .iter()
+            .any(|i| i.kind == "ambiguous" && i.detail.contains("changed")),
+        "{:?}",
+        i.items
+    );
+}
+
+#[test]
+fn an_unreadable_earlier_draft_is_not_overwritten_with_its_rejections() {
+    // C6: Write Tests again over a tampered draft dropped its rejections.
+    let r = repo();
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = written(r.path(), state.path());
+    let plane = speccoder_runtime::worktree::project_state_dir(state.path(), r.path());
+    let draft = speccoder_runtime::oracle::dir(&plane, "001-graph", "US1").join("draft.json");
+    let text = fs::read_to_string(&draft)
+        .unwrap()
+        .replace("\"samples\"", "\"samples_\"");
+    fs::write(&draft, &text).unwrap();
+    f.will_structure(answer(standard(), "refused"));
+    f.will_structure(answer(standard(), "refused"));
+    let res = write(r.path(), state.path(), d);
+    assert_eq!(code(&res), Some("ORACLE-TAMPERED"), "{}", res.message());
+    assert_eq!(fs::read_to_string(&draft).unwrap(), text);
+}
+
+#[test]
+fn expectations_the_comparison_cannot_read_fail_the_author_never_pass() {
+    // C6: sample 2's expectations by unknown ids read as "no expectations",
+    // so no ambiguity; ids differing in case are the same scenario.
+    let r = repo();
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    let mut unknown = answer(standard(), "an error message");
+    unknown["expectations"][1]["scenario"] = json!("US9-2");
+    f.will_structure(answer(standard(), "refused"));
+    f.will_structure(unknown);
+    let res = write(r.path(), state.path(), d);
+    assert_eq!(
+        code(&res),
+        Some("ORACLE-AUTHOR-FAILED"),
+        "{}",
+        res.message()
+    );
+    assert!(res.message().contains("US9-2"), "{}", res.message());
+    let v = us1(&speccoder_runtime::review::report_in(
+        r.path(),
+        None,
+        Some(state.path()),
+    ));
+    assert_eq!(v.state, OracleState::None, "nothing stored");
+    // Unparseable: not a list.
+    let (f, d) = fake();
+    let mut broken = answer(standard(), "refused");
+    broken["expectations"] = json!("none");
+    f.will_structure(answer(standard(), "refused"));
+    f.will_structure(broken);
+    let res = write(r.path(), state.path(), d);
+    assert_eq!(
+        code(&res),
+        Some("ORACLE-AUTHOR-FAILED"),
+        "{}",
+        res.message()
+    );
+    // Lower case: the same scenario, and the readings differ.
+    let (f, d) = fake();
+    let mut lower = answer(standard(), "an error message");
+    lower["expectations"][1]["scenario"] = json!("us1-2");
+    f.will_structure(answer(standard(), "refused"));
+    f.will_structure(lower);
+    f.will_structure(held_out("fn login"));
+    let res = write(r.path(), state.path(), d);
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    assert_eq!(us1(&res).state, OracleState::Ambiguous);
+}
+
+#[test]
+fn an_unreadable_review_record_stops_the_task_and_refuses_decisions() {
+    // C6: an unparseable review.json read as "nothing frozen" authored anew.
+    let r = repo();
+    let state = tempfile::tempdir().unwrap();
+    let (_, d) = written(r.path(), state.path());
+    freeze_only(r.path(), state.path(), d.clone());
+    let file = r.path().join("specs/001-graph/review.json");
+    fs::write(&file, "{ \"oracle\": ").unwrap();
+    git(r.path(), &["add", "-A"]);
+    git(r.path(), &["commit", "-q", "-m", "broken"]);
+    let run = speccoder_runtime::run_with(r.path(), None, "T005", state.path(), d, None);
+    assert_eq!(code(&run), Some("REVIEW-UNREADABLE"), "{}", run.message());
+    let decided = speccoder_runtime::review::decide_in(
+        r.path(),
+        None,
+        &[],
+        "approve",
+        None,
+        Via::Terminal,
+        Some(state.path()),
+    );
+    assert_eq!(
+        code(&decided),
+        Some("REVIEW-UNREADABLE"),
+        "{}",
+        decided.message()
+    );
+    assert_eq!(fs::read_to_string(&file).unwrap(), "{ \"oracle\": ");
+    let rv = speccoder_runtime::review::report_in(r.path(), None, Some(state.path()));
+    assert!(review(&rv).error.is_some());
+}
+
+#[test]
+fn a_test_comment_whose_ask_again_failed_goes_back_to_the_tray() {
+    // P6: no model — the Ask Again fails, the comment is not consumed.
+    let r = repo();
+    let state = tempfile::tempdir().unwrap();
+    let _ = written(r.path(), state.path());
+    let add = speccoder_runtime::comments::comment(
+        r.path(),
+        None,
+        speccoder_core::actions::CommentOp::Add,
+        Some(&speccoder_core::oracle::CommentAnchor::TestLine {
+            req: "US1".to_owned(),
+            path: "tests/acceptance_us1_login.txt".to_owned(),
+            line: 1,
+            quote: "checks fn login".to_owned(),
+        }),
+        None,
+        Some("check the signature"),
+        Via::Web,
+        Some(state.path()),
+    );
+    assert_eq!(add.status(), CommandStatus::Ok, "{}", add.message());
+    let sent = speccoder_runtime::comments::send_with(
+        r.path(),
+        None,
+        &[],
+        Via::Web,
+        state.path(),
+        None,
+        None,
+        &RunOptions::default(),
+    );
+    assert_eq!(sent.status(), CommandStatus::Ok, "{}", sent.message());
+    let Some(CommandData::Comments(c)) = sent.data() else {
+        panic!("{}", sent.message())
+    };
+    assert!(c.turn.as_ref().unwrap().asked_again.is_empty());
+    assert_eq!(c.drafts.len(), 1, "{}", sent.message());
+    assert!(
+        sent.message().contains("back in the tray"),
+        "{}",
+        sent.message()
+    );
+}

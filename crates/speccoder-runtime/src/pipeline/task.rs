@@ -433,11 +433,23 @@ pub(crate) fn run_task(
     // Two test authors read a requirement two ways: the person says which
     // is meant before a gated run (spec 093).
     if run_config.review_required {
-        let ambiguous = crate::oracle::open_ambiguities(
+        let ambiguous = match crate::oracle::open_ambiguities(
             &s.plane_dir,
             &feature_name,
             &format.oracle_requirements(&snap),
-        );
+        ) {
+            Ok(a) => a,
+            Err(t) => {
+                return refuse(
+                    CommandStatus::NeedsHuman,
+                    format!(
+                        "{}: whether it is read two ways is unknown and [review] required is on",
+                        t.0
+                    ),
+                )
+                .with_code("ORACLE-TAMPERED");
+            }
+        };
         if let Some((req, scenario)) = ambiguous.first() {
             return refuse(
                 CommandStatus::NeedsHuman,
@@ -880,6 +892,13 @@ pub(crate) fn run_task(
                     format!("{why}: the task stops for a person, nothing is ticked"),
                 )
                 .with_code("ORACLE-TAMPERED");
+            }
+            Some(crate::oracle::TaskReuse::Unreadable(why)) => {
+                return fail(
+                    CommandStatus::NeedsHuman,
+                    format!("{why}: whether its tests are frozen is unknown, so the task stops for a person, nothing is ticked"),
+                )
+                .with_code("REVIEW-UNREADABLE");
             }
             None => {}
         }

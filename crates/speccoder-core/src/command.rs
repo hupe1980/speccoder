@@ -327,6 +327,10 @@ pub struct ReviewReport {
     /// only).
     #[serde(default)]
     pub sheet: Option<crate::oracle::ApproveSheet>,
+    /// Why the review record (`review.json`) cannot be read: shown, never
+    /// read as "nothing decided" by a write.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
 }
 
 /// A question a document leaves open, to answer in place.
