@@ -498,14 +498,24 @@ pub fn object(cx: &Context<'_>, target: &Target) -> ObjectVerification {
                 .push(differs("line_hash", "task.line_hash", &at, claimed));
         }
     }
-    if let Some(section) = tv["spec"]["section"].as_str()
-        && let Some(now) = section_hash_at(cx, &target.object, section, task_id)
-    {
+    if let Some(section) = tv["spec"]["section"].as_str() {
         let claimed = tv["spec"]["section_hash"].as_str().unwrap_or_default();
-        if claimed != now {
-            raise(&mut worst, VerifyOutcome::Mismatch);
-            out.reasons
-                .push(differs("section_hash", "spec.section_hash", &now, claimed));
+        match section_hash_at(cx, &target.object, section, task_id) {
+            Ok(now) if claimed == now => {}
+            Ok(now) => {
+                raise(&mut worst, VerifyOutcome::Mismatch);
+                out.reasons
+                    .push(differs("section_hash", "spec.section_hash", &now, claimed));
+            }
+            // A requirement that cannot be read at the commit is not one
+            // the claim agrees with: never a check skipped.
+            Err(why) => {
+                raise(&mut worst, VerifyOutcome::Mismatch);
+                let mut r = reason("section_hash");
+                r.field = Some("spec.section_hash".to_owned());
+                r.found = Some(why);
+                out.reasons.push(r);
+            }
         }
     }
     // 5–6. The summary names exactly the other lines; decisions have none.
@@ -598,25 +608,37 @@ fn policy_at(cx: &Context<'_>, object: &str) -> Option<String> {
 
 /// The requirement's text hash at the commit, through the format adapter
 /// over the commit's tree: what the spec said when the task was ticked.
-fn section_hash_at(cx: &Context<'_>, object: &str, _section: &str, task: &str) -> Option<String> {
+fn section_hash_at(
+    cx: &Context<'_>,
+    object: &str,
+    _section: &str,
+    task: &str,
+) -> Result<String, String> {
     // Only what a spec format reads: the top level's files and dot
     // directories, the directories holding a format's intent, and the tree
     // holding the unit — never the source tree, whose size would make
     // every check slow. Written from git objects: nothing but git runs.
-    let tops = cx.tasks_path.map(|p| {
-        let mut tops = super::tree::intent_tops(cx.repo, object).unwrap_or_default();
-        if let Some(unit_top) = p.split('/').next()
-            && !tops.iter().any(|t| t == unit_top)
-        {
-            tops.push(unit_top.to_owned());
+    let tops = match cx.tasks_path {
+        Some(p) => {
+            let mut tops = super::tree::intent_tops(cx.repo, object)?;
+            if let Some(unit_top) = p.split('/').next()
+                && !tops.iter().any(|t| t == unit_top)
+            {
+                tops.push(unit_top.to_owned());
+            }
+            Some(tops)
         }
-        tops
-    });
+        None => None,
+    };
     let dir = super::tree::materialize(cx.repo, object, tops.as_deref())?;
     let format = crate::format::at(dir.path());
-    let snap = format.inspect(dir.path(), Some(cx.feature))?;
-    let bundle = format.bundle(&snap, task).ok()?;
-    Some(crate::integrity::sha256_hex(bundle.story.as_bytes()))
+    let snap = format
+        .inspect(dir.path(), Some(cx.feature))
+        .ok_or_else(|| format!("the commit holds no unit {}", cx.feature))?;
+    let bundle = format
+        .bundle(&snap, task)
+        .map_err(|e| format!("the commit's unit holds no task {task}: {e:?}"))?;
+    Ok(crate::integrity::sha256_hex(bundle.story.as_bytes()))
 }
 
 /// Another noted commit with the same tree (a rebase lost the note).

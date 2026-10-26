@@ -27,7 +27,7 @@ For the branch's head and the base it is compared with, the verifier takes every
 
 Reasons for `unverifiable`: `ticked_without_evidence` (ticked by hand), `missing` (no note: push `refs/notes/speccoder`), `malformed`, `bad_signature`, `mismatch` (also a task line reworded after the tick), `untrusted_signer`, `unsigned`, `commit_unreachable` (a squash or rebase merge lost the commit), `tool_missing` (`ssh-keygen`, `gpg` or `cosign` cannot run here).
 
-The branch's **conclusion** is `failure` when any tick fails, `success` when every tick carries verifying evidence, and `neutral` when there is nothing to check (no ticks in the touched units, or no spec format) — never success. Skipped tasks are listed, not counted. Earlier-task regressions (a later task breaking an earlier one's tests) are not evaluated by this version, and the check says so.
+The branch's **conclusion** is `failure` when any tick fails, `success` when every tick carries verifying evidence, and `neutral` when there is nothing to check (no ticks in the touched units, or no spec project in a tree that was read whole) — never success. A check that cannot read what it checks is an **error** (exit `1`, no check payload), never neutral, so `--allow-neutral` cannot pass it: a git command that fails, a tree that cannot be written out whole (a blob git cannot read, or two paths equal but for letter case), a unit that cannot be read, or a head that drops the spec project its base (or the trust's revision) holds. Skipped tasks are listed, not counted. Earlier-task regressions (a later task breaking an earlier one's tests) are not evaluated by this version, and the check says so.
 
 ## Run it
 
@@ -62,7 +62,7 @@ failure: 7 verified, 1 regression only, 1 attested, 1 stale, 2 unverifiable
 | `--allow-neutral` | publish a neutral outcome as `neutral` (else `failure`) |
 | `--github-annotations` | workflow-command annotations, and the check appended to `$GITHUB_STEP_SUMMARY` |
 
-Exit status: `0` success, `1` failure or a refusal, `78` neutral. `speccoder attest verify --branch [--base REV]` runs the same check from speccoder itself, with your own trust (also git's `gpg.ssh.allowedSignersFile`).
+Exit status: `0` success, `1` failure, a refusal or an error, `78` neutral. `speccoder attest verify --branch [--base REV]` runs the same check from speccoder itself, with your own trust (also git's `gpg.ssh.allowedSignersFile`).
 
 ## The check on the pull request
 

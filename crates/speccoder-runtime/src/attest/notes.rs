@@ -111,9 +111,18 @@ pub fn read(repo: &Path, object: &str) -> Option<String> {
         .map(|b| String::from_utf8_lossy(&b).into_owned())
 }
 
-/// Every object with a note.
+/// Every object with a note; empty when git cannot list them.
 #[must_use]
 pub fn noted(repo: &Path) -> std::collections::BTreeSet<String> {
+    try_noted(repo).unwrap_or_default()
+}
+
+/// Every object with a note (none without the notes ref).
+///
+/// # Errors
+///
+/// git cannot list the notes.
+pub fn try_noted(repo: &Path) -> Result<std::collections::BTreeSet<String>, crate::git::GitError> {
     Git::at(repo)
         .run(&["notes", "--ref=speccoder", "list"])
         .map(|b| {
@@ -122,5 +131,4 @@ pub fn noted(repo: &Path) -> std::collections::BTreeSet<String> {
                 .filter_map(|l| l.split_whitespace().nth(1).map(str::to_owned))
                 .collect()
         })
-        .unwrap_or_default()
 }

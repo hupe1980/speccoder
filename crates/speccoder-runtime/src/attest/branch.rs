@@ -112,6 +112,15 @@ pub struct Refusal {
 }
 
 impl Refusal {
+    /// A check that could not read what it checks: an error (exit 1), never
+    /// `neutral`.
+    fn internal(what: impl std::fmt::Display) -> Self {
+        Self::new(
+            CommandStatus::Error,
+            format!("the check could not read the branch: {what}; nothing was verified"),
+        )
+    }
+
     fn new(status: CommandStatus, message: impl Into<String>) -> Self {
         Self {
             status,
@@ -265,7 +274,7 @@ struct History {
     bug_claims: BTreeSet<String>,
 }
 
-fn history(git: &Git, head: &str, base: Option<&str>) -> History {
+fn history(git: &Git, head: &str, base: Option<&str>) -> Result<History, Refusal> {
     let log = git
         .run(&[
             "log",
@@ -274,17 +283,19 @@ fn history(git: &Git, head: &str, base: Option<&str>) -> History {
             head,
         ])
         .map(|b| String::from_utf8_lossy(&b).into_owned())
-        .unwrap_or_default();
-    let in_range: Option<BTreeSet<String>> = base.map(|b| {
-        git.run(&["rev-list", &format!("{b}..{head}")])
-            .map(|o| {
-                String::from_utf8_lossy(&o)
-                    .lines()
-                    .map(str::to_owned)
-                    .collect()
-            })
-            .unwrap_or_default()
-    });
+        .map_err(|e| Refusal::internal(format!("git log {head}: {}", e.0)))?;
+    let in_range: Option<BTreeSet<String>> = base
+        .map(|b| {
+            git.run(&["rev-list", &format!("{b}..{head}")])
+                .map(|o| {
+                    String::from_utf8_lossy(&o)
+                        .lines()
+                        .map(str::to_owned)
+                        .collect()
+                })
+                .map_err(|e| Refusal::internal(format!("git rev-list {b}..{head}: {}", e.0)))
+        })
+        .transpose()?;
     let mut latest = BTreeMap::new();
     let mut bug_claims = BTreeSet::new();
     for record in log.split(RS) {
@@ -303,13 +314,17 @@ fn history(git: &Git, head: &str, base: Option<&str>) -> History {
             .entry(task.to_owned())
             .or_insert_with(|| commit.to_owned());
     }
-    History { latest, bug_claims }
+    Ok(History { latest, bug_claims })
 }
 
 /// Noted commits not reachable from `head`, by the task their
 /// task-verification names (`<unit>/<task>`): evidence a squash or rebase
 /// merge left behind.
-fn unreachable_evidence(git: &Git, repo: &Path, head: &str) -> BTreeMap<String, String> {
+fn unreachable_evidence(
+    git: &Git,
+    repo: &Path,
+    head: &str,
+) -> Result<BTreeMap<String, String>, Refusal> {
     let reachable: BTreeSet<String> = git
         .run(&["rev-list", head])
         .map(|o| {
@@ -318,9 +333,11 @@ fn unreachable_evidence(git: &Git, repo: &Path, head: &str) -> BTreeMap<String, 
                 .map(str::to_owned)
                 .collect()
         })
-        .unwrap_or_default();
+        .map_err(|e| Refusal::internal(format!("git rev-list {head}: {}", e.0)))?;
+    let noted = notes::try_noted(repo)
+        .map_err(|e| Refusal::internal(format!("git notes list: {}", e.0)))?;
     let mut out = BTreeMap::new();
-    for commit in notes::noted(repo) {
+    for commit in noted {
         if reachable.contains(&commit) {
             continue;
         }
@@ -332,14 +349,24 @@ fn unreachable_evidence(git: &Git, repo: &Path, head: &str) -> BTreeMap<String, 
             }
         }
     }
-    out
+    Ok(out)
 }
 
-/// The changed paths between `base` and `head`.
-fn changed(git: &Git, base: &str, head: &str) -> Vec<String> {
+/// The changed paths between `base` and `head`. A diff git cannot make is
+/// an error: an empty list would touch no unit, and check nothing.
+fn changed(git: &Git, base: &str, head: &str) -> Result<Vec<String>, Refusal> {
     git.run(&["diff", "--name-only", "-z", base, head])
         .map(|o| crate::git::nul_fields(&o))
-        .unwrap_or_default()
+        .map_err(|e| Refusal::internal(format!("git diff {base} {head}: {}", e.0)))
+}
+
+/// Whether `rev` holds a spec project at `start_rel` (read as the head is).
+fn project_at(top: &Path, rev: &str, start_rel: &str) -> Result<bool, Refusal> {
+    let dir = super::tree::intent_tops(top, rev)
+        .and_then(|tops| super::tree::materialize(top, rev, Some(&tops)))
+        .map_err(Refusal::internal)?;
+    let at = dir.path().join(start_rel);
+    Ok(crate::format::at(&at).inspect(&at, None).is_some())
 }
 
 /// One unit's ticks at the head.
@@ -350,19 +377,24 @@ struct Unit {
     skipped: Vec<SkippedTask>,
 }
 
+/// One unit's ticks; a unit the project lists but this cannot read is an
+/// error, never a unit left out.
 fn unit(
     format: &dyn Adapter,
     project: &Path,
     name: &str,
     prefix: &str,
     skips: &BTreeSet<String>,
-) -> Option<Unit> {
-    let snap = format.inspect(project, Some(name))?;
-    let f = snap.feature?;
+) -> Result<Unit, Refusal> {
+    let f = format
+        .inspect(project, Some(name))
+        .and_then(|snap| snap.feature)
+        .ok_or_else(|| Refusal::internal(format!("the unit {name} cannot be read at the head")))?;
     let mut ticks = Vec::new();
     let mut skipped = Vec::new();
     if let Some(tasks) = &f.tasks {
-        let text = std::fs::read_to_string(project.join(&tasks.path)).unwrap_or_default();
+        let text = std::fs::read_to_string(project.join(&tasks.path))
+            .map_err(|e| Refusal::internal(format!("{prefix}{}: {e}", tasks.path)))?;
         let lines: Vec<&str> = text.lines().collect();
         for t in &tasks.tasks {
             if !t.done {
@@ -396,7 +428,7 @@ fn unit(
             });
         }
     }
-    Some(Unit {
+    Ok(Unit {
         name: name.to_owned(),
         dir: f.feature.dir,
         ticks,
@@ -405,7 +437,7 @@ fn unit(
 }
 
 /// The skipped tasks' refs, as `<unit>/<task>`.
-fn skips(git: &Git) -> BTreeSet<String> {
+fn skips(git: &Git) -> Result<BTreeSet<String>, Refusal> {
     git.run(&[
         "for-each-ref",
         "--format=%(refname)",
@@ -418,7 +450,7 @@ fn skips(git: &Git) -> BTreeSet<String> {
             .map(str::to_owned)
             .collect()
     })
-    .unwrap_or_default()
+    .map_err(|e| Refusal::internal(format!("git for-each-ref {}: {}", notes::SKIPPED, e.0)))
 }
 
 /// A reason's line: `trailer Spec-Task: expected …, found …`.
@@ -830,7 +862,7 @@ fn run(
         &git,
         &head,
         base.as_deref().filter(|_| mode == Mode::Touched),
-    );
+    )?;
     if !history.bug_claims.is_empty() {
         // Spec 090's bug homes are not read by this version (FR-026): a
         // claim it cannot check is not proof.
@@ -839,16 +871,32 @@ fn run(
             .push(verify_branch::TRAILER_ONLY_TASKS.to_owned());
     }
     let start_rel = relative(start, &top).unwrap_or_default();
-    let intent = super::tree::intent_tops(&top, &head)
-        .and_then(|tops| super::tree::materialize(&top, &head, Some(&tops)));
-    let opened = intent.and_then(|dir| {
+    let dir = super::tree::intent_tops(&top, &head)
+        .and_then(|tops| super::tree::materialize(&top, &head, Some(&tops)))
+        .map_err(Refusal::internal)?;
+    let opened = {
         let at = dir.path().join(&start_rel);
         let format = crate::format::at(&at);
-        let snap = format.inspect(&at, None)?;
-        let project = PathBuf::from(&snap.root);
-        Some((dir, project, format, snap))
-    });
-    let Some((dir, project, format, snap)) = opened else {
+        format.inspect(&at, None).map(|snap| (format, snap))
+    };
+    let Some((format, snap)) = opened else {
+        // Nothing to verify only when there is no project to verify: a head
+        // that drops the project its base (or the trust's revision) holds
+        // has not shown there is nothing to check.
+        let reference = base.clone().or_else(|| match &opts.allowed_signers {
+            Some(AllowedSigners::Rev { rev, .. }) => resolve(rev).ok(),
+            _ => None,
+        });
+        if let Some(r) = reference
+            && project_at(&top, &r, &start_rel)?
+        {
+            return Err(Refusal::new(
+                CommandStatus::AttestationFailed,
+                format!(
+                    "{head} holds no spec project where {r} holds one: the head removes or breaks it, and its ticks cannot be checked"
+                ),
+            ));
+        }
         report.conclusion = Conclusion::of(&[], opts.require_verified, &report.not_evaluated);
         return Ok(Checked {
             report,
@@ -856,6 +904,7 @@ fn run(
             prefix: as_prefix(&start_rel),
         });
     };
+    let project = PathBuf::from(&snap.root);
     let prefix = as_prefix(&relative(&project, dir.path()).unwrap_or_default());
     let mut units: Vec<&speccoder_core::snapshot::FeatureRef> = snap
         .features
@@ -865,7 +914,7 @@ fn run(
     if mode == Mode::Touched
         && let Some(b) = &base
     {
-        let paths = changed(&git, b, &head);
+        let paths = changed(&git, b, &head)?;
         let dirs: Vec<String> = units
             .iter()
             .map(|f| format!("{prefix}{}/", f.dir.trim_end_matches('/')))
@@ -887,7 +936,7 @@ fn run(
                 .collect();
         }
     }
-    let skipped = skips(&git);
+    let skipped = skips(&git)?;
     let config_path = crate::verify::find_config(&project)
         .and_then(|d| relative(&d, dir.path()))
         .map_or_else(
@@ -896,9 +945,7 @@ fn run(
         );
     let mut lost: Option<BTreeMap<String, String>> = None;
     for f in units {
-        let Some(mut u) = unit(format, &project, &f.name, &prefix, &skipped) else {
-            continue;
-        };
+        let mut u = unit(format, &project, &f.name, &prefix, &skipped)?;
         if let Some((_, Some(task))) = only {
             u.ticks.retain(|t| t.task == task);
         }
@@ -915,6 +962,17 @@ fn run(
             format: Some(format),
         };
         let checking = trust.is_some();
+        // Where the evidence of a tick no reachable commit carries went:
+        // read once, before the checks, so a git failure is an error.
+        if lost.is_none()
+            && u.ticks.iter().any(|t| {
+                !history
+                    .latest
+                    .contains_key(&format!("{}/{}", t.feature, t.task))
+            })
+        {
+            lost = Some(unreachable_evidence(&git, &top, &head)?);
+        }
         // Each commit's check is its own processes; a few side by side.
         let width = std::thread::available_parallelism().map_or(4, std::num::NonZero::get);
         let mut reports: Vec<TickReport> = Vec::new();
@@ -963,17 +1021,15 @@ fn run(
                     .zip(chunk)
                     .map(|(h, tick)| match h.join() {
                         Ok(Some(done)) => done,
-                        Ok(None) => {
-                            let lost =
-                                lost.get_or_insert_with(|| unreachable_evidence(&git, &top, &head));
-                            (
-                                without_commit(
-                                    tick,
-                                    lost.get(&format!("{}/{}", tick.feature, tick.task)),
-                                ),
-                                Vec::new(),
-                            )
-                        }
+                        Ok(None) => (
+                            without_commit(
+                                tick,
+                                lost.as_ref().and_then(|l| {
+                                    l.get(&format!("{}/{}", tick.feature, tick.task))
+                                }),
+                            ),
+                            Vec::new(),
+                        ),
                         Err(_) => {
                             let mut r = without_commit(tick, None);
                             r.reason = Some(Unverifiable::Malformed);
@@ -1040,6 +1096,36 @@ mod tests {
             Some(3)
         );
         assert_eq!(line_of(text, "nope"), None);
+    }
+
+    #[test]
+    fn a_git_failure_is_an_error_never_an_empty_answer() {
+        let dir = tempfile::tempdir().unwrap();
+        let run = |args: &[&str]| {
+            assert!(
+                std::process::Command::new("git")
+                    .args(["-c", "user.name=t", "-c", "user.email=t@example.com"])
+                    .args(["-c", "commit.gpgsign=false"])
+                    .args(args)
+                    .current_dir(dir.path())
+                    .output()
+                    .unwrap()
+                    .status
+                    .success()
+            );
+        };
+        run(&["init", "-q"]);
+        run(&["commit", "-q", "--allow-empty", "-m", "x"]);
+        let git = Git::at(dir.path());
+        // An empty diff would touch no unit and check nothing.
+        let Err(r) = changed(&git, "no-such-base", "HEAD") else {
+            panic!("a failed diff was an empty one");
+        };
+        assert_eq!(r.status, CommandStatus::Error);
+        assert!(history(&git, "no-such-head", None).is_err());
+        assert!(history(&git, "HEAD", Some("no-such-base")).is_err());
+        assert!(unreachable_evidence(&git, dir.path(), "no-such-head").is_err());
+        assert!(changed(&git, "HEAD", "HEAD").unwrap().is_empty());
     }
 
     #[test]
