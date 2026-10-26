@@ -2232,3 +2232,99 @@ fn a_trailer_only_tasks_staleness_is_read_from_the_verified_statement_only() {
     let t = tick(&head);
     assert_ne!(t.outcome, TickOutcome::Evidenced, "{t:?}");
 }
+
+#[test]
+fn an_extension_bug_is_dropped_by_its_hand_off_s_skip_step() {
+    // The Drop step (`task skip bug:<slug>`) found no extension bug: no
+    // feature lists it as a task, and `:` is no ref name.
+    let r = extension_repo();
+    fs::copy(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/bug/already/src/lib.rs"),
+        r.path().join("src/lib.rs"),
+    )
+    .unwrap();
+    git(r.path(), &["commit", "-qam", "fixed already"]);
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_call_tool("w", "write_file", json!({ "path": ".specify/bugs/saving-an-empty-title/assessment.md", "content": ASSESSMENT }));
+    f.will_structure(
+        json!({ "summary": "assessed", "status": "done", "files_written": [], "questions": [] }),
+    );
+    for _ in 0..3 {
+        f.will_structure(json!({ "files": [
+            test_file("tests/repro_e1.txt", "E1", "refuses_empty"),
+            test_file("tests/repro_u1.txt", "U1", "saves_title"),
+        ], "notes": [] }));
+    }
+    let res = bug::bug_with(
+        r.path(),
+        &request(
+            &["an empty title is refused with a message"],
+            &["a title is saved"],
+            true,
+        ),
+        Via::Terminal,
+        state.path(),
+        Some(d),
+        None,
+        &RunOptions::default(),
+    );
+    let b = the_bug(&res).clone();
+    assert_eq!(b.outcome, Outcome::AlreadySatisfied, "{}", res.message());
+    let drop_step = b
+        .handoff
+        .as_ref()
+        .and_then(|h| h.next.iter().find(|s| s.why == "drop it"))
+        .map(|s| s.command.clone())
+        .or_else(|| {
+            speccoder_runtime::bug::handoff::next(&b, Outcome::AlreadySatisfied)
+                .into_iter()
+                .find(|s| s.why == "drop it")
+                .map(|s| s.command)
+        })
+        .unwrap();
+    assert!(
+        drop_step.starts_with(
+            "speccoder task skip bug:saving-an-empty-title --feature bugs/saving-an-empty-title"
+        ),
+        "{drop_step}"
+    );
+    let inbox = |want: bool| {
+        let i = speccoder_runtime::inbox::inbox_with(r.path(), None, Some(state.path()));
+        let Some(CommandData::Inbox(i)) = i.data() else {
+            panic!("{}", i.message())
+        };
+        assert_eq!(
+            i.items.iter().any(|x| x.kind == "bug_already_satisfied"),
+            want,
+            "{:?}",
+            i.items
+        );
+    };
+    inbox(true);
+    let dropped = speccoder_runtime::controls::skip(
+        r.path(),
+        Some("bugs/saving-an-empty-title"),
+        "bug:saving-an-empty-title",
+        Some("already fixed"),
+    );
+    assert_eq!(dropped.status(), CommandStatus::Ok, "{}", dropped.message());
+    assert_eq!(
+        speccoder_runtime::controls::skipped(r.path(), "bugs/saving-an-empty-title")
+            .get("bug:saving-an-empty-title")
+            .map(String::as_str),
+        Some("already fixed")
+    );
+    inbox(false);
+    // The inbox's own step names no feature: the slug finds the unit.
+    let undo = speccoder_runtime::controls::skip(r.path(), None, "bug:saving-an-empty-title", None);
+    assert_eq!(undo.status(), CommandStatus::Ok, "{}", undo.message());
+    inbox(true);
+    let unknown = speccoder_runtime::controls::skip(r.path(), None, "bug:no-such-bug", Some("x"));
+    assert_eq!(
+        unknown.status(),
+        CommandStatus::NotFound,
+        "{}",
+        unknown.message()
+    );
+}

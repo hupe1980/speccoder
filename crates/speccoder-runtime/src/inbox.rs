@@ -88,6 +88,8 @@ pub fn inbox_with(path: &Path, feature: Option<&str>, state: Option<&Path>) -> C
             crate::bug::state::all(&plane)
                 .iter()
                 .filter(|b| b.home.kind.native())
+                // A bug the person dropped waits for nobody.
+                .filter(|b| !crate::controls::skipped(&project, &b.unit).contains_key(&b.task))
                 .filter_map(|b| bug_item(b, &|c| c)),
         );
     }

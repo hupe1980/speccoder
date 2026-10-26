@@ -1456,7 +1456,10 @@ mod tests {
     fn the_turn_s_record_waits_for_a_short_writer_and_never_goes_without_the_lock() {
         let state = tempfile::tempdir().unwrap_or_else(|e| panic!("{e}"));
         let held = Lock::take(state.path(), "u").unwrap_or_else(|e| panic!("{e}"));
-        assert!(Lock::take(state.path(), "u").is_err(), "one writer at a time");
+        assert!(
+            Lock::take(state.path(), "u").is_err(),
+            "one writer at a time"
+        );
         let releaser = std::thread::spawn(move || {
             std::thread::sleep(std::time::Duration::from_millis(200));
             drop(held);

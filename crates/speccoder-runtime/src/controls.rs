@@ -309,6 +309,53 @@ pub fn drop_set_aside(path: &Path, feature: Option<&str>, task: &str) -> Command
     )
 }
 
+/// The unit of the bug `slug` in the format's own bug structure, and the
+/// project root: the bug must be there (its directory), and a `feature`
+/// given must name that unit.
+fn bug_unit_of(
+    path: &Path,
+    feature: Option<&str>,
+    slug: &str,
+) -> Result<(String, PathBuf), Box<CommandResult>> {
+    let not_found = |m: String| Box::new(CommandResult::new("skip", CommandStatus::NotFound, &m));
+    if !speccoder_core::bug::valid_slug(slug) {
+        return Err(Box::new(
+            CommandResult::new(
+                "skip",
+                CommandStatus::UsageError,
+                &format!("`{slug}` is not a bug slug"),
+            )
+            .with_code("USAGE"),
+        ));
+    }
+    let opened = crate::format::open(path, None)
+        .map_err(|r| Box::new(CommandResult::new("skip", r.status, &r.message)))?;
+    let root = PathBuf::from(&opened.snapshot.root);
+    let format = crate::format::at(&root);
+    let home = format
+        .bug_unit(&root)
+        .ok()
+        .filter(|h| h.kind.native())
+        .ok_or_else(|| {
+            not_found(format!(
+                "bug:{slug} names a bug of the format's own bug structure, which this project does not have"
+            ))
+        })?;
+    let (dir, unit) = format
+        .bug_dir(&home, slug)
+        .filter(|(dir, _)| root.join(dir).is_dir())
+        .ok_or_else(|| not_found(format!("no bug {slug} in {}", home.location)))?;
+    if let Some(f) = feature
+        && f != unit
+        && f != dir
+    {
+        return Err(not_found(format!(
+            "bug:{slug} is a task of {unit}, not of {f}"
+        )));
+    }
+    Ok((unit, root))
+}
+
 /// The selected feature and the project root of the user's checkout.
 fn locate(
     command: &str,
@@ -512,6 +559,17 @@ fn plane_dir_of(state: &Path, project: &Path) -> PathBuf {
 
 // ── skip ───────────────────────────────────────────────────────────────────
 
+/// A task id as a ref name component: `bug:<slug>` (a trailer-only task
+/// of the format's own bug structure) has a `:`, which git refuses in a ref.
+fn ref_task(task: &str) -> String {
+    task.replace('%', "%25").replace(':', "%3A")
+}
+
+/// [`ref_task`] read back.
+fn task_of_ref(name: &str) -> String {
+    name.replace("%3A", ":").replace("%25", "%")
+}
+
 /// Skipped tasks of `feature` with their reasons.
 #[must_use]
 pub fn skipped(root: &Path, feature: &str) -> BTreeMap<String, String> {
@@ -525,7 +583,7 @@ pub fn skipped(root: &Path, feature: &str) -> BTreeMap<String, String> {
         .filter_map(|r| {
             let (name, reason) = r.trim_start_matches('\n').split_once(FS)?;
             Some((
-                name.strip_prefix(&prefix)?.to_owned(),
+                task_of_ref(name.strip_prefix(&prefix)?),
                 reason.trim().to_owned(),
             ))
         })
@@ -536,12 +594,18 @@ pub fn skipped(root: &Path, feature: &str) -> BTreeMap<String, String> {
 /// done nor attempted; the feature loop passes it by, and what depends on it
 /// stays blocked.
 pub fn skip(path: &Path, feature: Option<&str>, task: &str, reason: Option<&str>) -> CommandResult {
-    let (feature, root) = match locate("skip", path, feature) {
+    // A bug of the format's own bug structure (`bug:<slug>`): no feature
+    // lists it as a task — its unit is found from its slug.
+    let located = match task.strip_prefix("bug:") {
+        Some(slug) => bug_unit_of(path, feature, slug),
+        None => locate("skip", path, feature),
+    };
+    let (feature, root) = match located {
         Ok(x) => x,
         Err(r) => return *r,
     };
     let git = Git::at(&root);
-    let reference = format!("{SKIPPED}/{feature}/{task}");
+    let reference = format!("{SKIPPED}/{feature}/{}", ref_task(task));
     let report = |action: &str, text: Option<String>| ControlReport {
         feature: feature.clone(),
         task: task.to_owned(),
@@ -557,12 +621,28 @@ pub fn skip(path: &Path, feature: Option<&str>, task: &str, reason: Option<&str>
             &format!("{task} is no longer skipped"),
         );
     };
-    if !open_tasks(&root, &feature).iter().any(|t| t == task) {
+    if !task.starts_with("bug:") && !open_tasks(&root, &feature).iter().any(|t| t == task) {
         return CommandResult::new(
             "skip",
             CommandStatus::NotFound,
             &format!("{task} is not an open task of {feature}"),
         );
+    }
+    if task.starts_with("bug:")
+        && let Some(state) = crate::worktree::state_dir()
+        && let Some(b) = crate::bug::state::load(
+            &crate::worktree::project_state_dir(&state, &root),
+            &feature,
+            task,
+        )
+        && b.commit.is_some()
+    {
+        return CommandResult::new(
+            "skip",
+            CommandStatus::TaskNotReady,
+            &format!("{task} is done already: its commit is recorded"),
+        )
+        .with_code("TASK-DONE");
     }
     let reason = one_line(reason);
     let by = person(&root);
