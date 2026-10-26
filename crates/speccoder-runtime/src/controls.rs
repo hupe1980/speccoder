@@ -108,11 +108,21 @@ pub fn changed_files(root: &Path, commit: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// Whether a saved attempt holds changes a run set aside (0.1.0 saved
+/// them as `interrupted`, with this reason).
+#[must_use]
+pub fn is_set_aside(a: &crate::attempts::Saved) -> bool {
+    a.outcome == SET_ASIDE
+        || (a.outcome == "interrupted"
+            && a.reason
+                .starts_with("the worktree had uncommitted changes when a run started"))
+}
+
 /// The newest changes set aside before `task`'s run.
 fn set_aside_of(root: &Path, feature: &str, task: &str) -> Option<crate::attempts::Saved> {
     crate::attempts::list(root, feature)
         .into_iter()
-        .find(|a| a.task == task && a.outcome == SET_ASIDE)
+        .find(|a| a.task == task && is_set_aside(a))
 }
 
 /// `speccoder task restore TASK`: the changes set aside before the task's
@@ -191,18 +201,44 @@ pub fn restore(path: &Path, feature: Option<&str>, task: &str) -> CommandResult 
     // changes, nothing moves.
     let moved = match crate::worktree::worktree_for(&git, &format!("speccoder/{feature}")) {
         Ok(Some(wt)) => {
-            if let Err(r) = crate::worktree::require_clean(&wt) {
+            // Untracked build output does not stand in the way; edits to
+            // tracked files do, and are named.
+            let dirty: Vec<String> = Git::at(&wt)
+                .run(&["status", "--porcelain=v1", "--untracked-files=no"])
+                .map(|o| {
+                    String::from_utf8_lossy(&o)
+                        .lines()
+                        .map(|l| l.get(3..).unwrap_or(l).to_owned())
+                        .collect()
+                })
+                .unwrap_or_default();
+            if !dirty.is_empty() {
                 return refuse(
                     CommandStatus::NeedsHuman,
                     format!(
-                        "the worktree has uncommitted changes again ({}); nothing was changed",
-                        r.message
+                        "the worktree {} has uncommitted changes to {}; nothing was changed",
+                        wt.display(),
+                        dirty.iter().take(5).cloned().collect::<Vec<_>>().join(", ")
+                            + if dirty.len() > 5 { ", …" } else { "" }
                     ),
                 );
             }
-            Git::at(&wt)
-                .run(&["merge", "--ff-only", "-q", &kept])
-                .map(|_| ())
+            // An untracked copy identical to what is kept (a lockfile the
+            // checks wrote again) gives way; a different one stops the merge.
+            let wt_git = Git::at(&wt);
+            for f in &files {
+                let p = wt.join(f);
+                let same = p.is_file()
+                    && wt_git
+                        .line(&["ls-files", "--error-unmatch", "--", f])
+                        .is_err()
+                    && wt_git.line(&["hash-object", "--", f]).ok()
+                        == git.line(&["rev-parse", &format!("{kept}:{f}")]).ok();
+                if same {
+                    let _ = std::fs::remove_file(&p);
+                }
+            }
+            wt_git.run(&["merge", "--ff-only", "-q", &kept]).map(|_| ())
         }
         _ => git.run(&["update-ref", &branch, &kept, &tip]).map(|_| ()),
     };
@@ -230,34 +266,46 @@ pub fn restore(path: &Path, feature: Option<&str>, task: &str) -> CommandResult 
     )
 }
 
-/// `speccoder task drop TASK`: the changes set aside before the task's run,
-/// discarded.
+/// `speccoder task drop TASK`: every change set aside before the task's
+/// runs, discarded.
 #[must_use]
 pub fn drop_set_aside(path: &Path, feature: Option<&str>, task: &str) -> CommandResult {
     let (feature, root) = match locate("drop", path, feature) {
         Ok(x) => x,
         Err(r) => return *r,
     };
-    let Some(saved) = set_aside_of(&root, &feature, task) else {
+    let saved: Vec<crate::attempts::Saved> = crate::attempts::list(&root, &feature)
+        .into_iter()
+        .filter(|a| a.task == task && is_set_aside(a))
+        .collect();
+    if saved.is_empty() {
         return CommandResult::new(
             "drop",
             CommandStatus::NotFound,
             &format!("nothing was set aside before {task}'s run"),
         );
-    };
-    if let Err(e) = Git::at(&root).run(&["update-ref", "-d", &saved.reference]) {
-        return CommandResult::new("drop", CommandStatus::Error, &e.to_string());
     }
+    let git = Git::at(&root);
+    for a in &saved {
+        if let Err(e) = git.run(&["update-ref", "-d", &a.reference]) {
+            return CommandResult::new("drop", CommandStatus::Error, &e.to_string());
+        }
+    }
+    let n = saved.len();
     done(
         "drop",
         ControlReport {
             feature,
             task: task.to_owned(),
             action: "dropped".to_owned(),
-            text: None,
-            record: Some(saved.reference),
+            text: Some(n.to_string()),
+            record: saved.first().map(|a| a.reference.clone()),
         },
-        &format!("discarded the changes set aside before {task}"),
+        &if n == 1 {
+            format!("discarded the changes set aside before {task}")
+        } else {
+            format!("discarded the {n} sets of changes set aside before {task}")
+        },
     )
 }
 

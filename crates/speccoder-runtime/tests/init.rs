@@ -46,7 +46,8 @@ fn detects_a_node_project_and_writes_a_file_speccoder_accepts() {
     let Some(CommandData::Init(i)) = res.data() else {
         panic!()
     };
-    assert_eq!(i.wrote, ["speccoder.toml"]);
+    // `node_modules/` too: npm's output, ignored from the start.
+    assert_eq!(i.wrote, ["speccoder.toml", ".gitignore"]);
 
     // An existing file is not replaced without --force.
     let again = init_with(r, None, None, false, None, &no_keys);
@@ -95,7 +96,11 @@ fn a_nextest_check_comes_with_its_profile_and_keeps_an_existing_config() {
     let Some(CommandData::Init(i)) = res.data() else {
         panic!()
     };
-    assert_eq!(i.wrote, ["speccoder.toml", ".config/nextest.toml"]);
+    // `target/` too: cargo's output, ignored from the start.
+    assert_eq!(
+        i.wrote,
+        ["speccoder.toml", ".config/nextest.toml", ".gitignore"]
+    );
     // Run again with --force: the profile is not added twice.
     init_with(
         r,

@@ -191,7 +191,11 @@ fn bring_spec_changes(
 ) -> Result<(), Refusal> {
     let head = repo.line(&["rev-parse", "HEAD"])?;
     let base = repo.line(&["merge-base", branch, &head])?;
-    let paths = artifacts.paths();
+    // What decides a run moves the branch too: the spec, and the setup the
+    // checks run with (the configuration, the nextest profile, what is
+    // ignored, the lockfiles).
+    let mut paths = artifacts.paths();
+    paths.extend(SETUP.iter().map(|p| (*p).to_owned()));
     let mut diff = vec!["diff", "--quiet", &base, &head, "--"];
     diff.extend(paths.iter().map(String::as_str));
     let moved = !repo.succeeds(&diff)?;
@@ -199,6 +203,18 @@ fn bring_spec_changes(
         return Ok(());
     }
     let wt = Git::at(worktree);
+    // A lockfile the checks wrote here, untracked, is their output: the one
+    // the checkout committed takes its place.
+    for lock in LOCKFILES {
+        if worktree.join(lock).is_file()
+            && wt
+                .line(&["ls-files", "--error-unmatch", "--", lock])
+                .is_err()
+            && repo.succeeds(&["cat-file", "-e", &format!("{head}:{lock}")])?
+        {
+            let _ = fs::remove_file(worktree.join(lock));
+        }
+    }
     let merged = wt.run(&[
         "-c",
         "user.name=speccoder",
@@ -210,7 +226,7 @@ fn bring_spec_changes(
         "-q",
         "--no-edit",
         "-m",
-        "speccoder: bring in the spec changes from the checkout",
+        "speccoder: bring in the spec and setup changes from the checkout",
         &head,
     ]);
     if let Err(e) = merged {
@@ -297,7 +313,7 @@ pub fn remove_lane(repo_root: &Path, feature: &str, lane: &str) -> Result<(), Gi
 }
 
 /// The worktree checked out on `branch`, if any.
-pub(crate) fn worktree_for(repo: &Git, branch: &str) -> Result<Option<PathBuf>, GitError> {
+pub fn worktree_for(repo: &Git, branch: &str) -> Result<Option<PathBuf>, GitError> {
     let fields = nul_fields(&repo.run(&["worktree", "list", "--porcelain", "-z"])?);
     let wanted = format!("branch refs/heads/{branch}");
     let mut current: Option<PathBuf> = None;
@@ -409,6 +425,119 @@ fn status_entries(out: &[u8]) -> Vec<(String, String)> {
         entries.push((path.to_owned(), reason.to_owned()));
     }
     entries
+}
+
+/// The build output a check's toolchain writes into the tree it runs in.
+#[must_use]
+pub fn build_output(argv: &[String]) -> &'static [&'static str] {
+    let program = argv
+        .first()
+        .map(|a| a.rsplit('/').next().unwrap_or(a))
+        .unwrap_or_default();
+    match program {
+        "cargo" => &["target/"],
+        "npm" | "npx" | "pnpm" | "yarn" | "bun" => &["node_modules/"],
+        "pytest" | "python" | "python3" | "uv" => &[".pytest_cache/", "__pycache__/"],
+        _ => &[],
+    }
+}
+
+/// What the checks run with besides the spec: a change in the checkout
+/// reaches the feature's branch before a run.
+pub const SETUP: &[&str] = &[
+    "speccoder.toml",
+    ".config/nextest.toml",
+    ".gitignore",
+    "Cargo.lock",
+    "package-lock.json",
+    "pnpm-lock.yaml",
+    "yarn.lock",
+    "uv.lock",
+    "poetry.lock",
+    "go.sum",
+];
+
+/// Lockfiles a toolchain writes when the repository has none committed.
+pub const LOCKFILES: &[&str] = &[
+    "Cargo.lock",
+    "package-lock.json",
+    "pnpm-lock.yaml",
+    "yarn.lock",
+    "uv.lock",
+    "poetry.lock",
+    "go.sum",
+];
+
+/// What checks leave behind in `dir` that git does not know: build output
+/// `.gitignore` does not list (`target/`, `node_modules/`, caches), and
+/// lockfiles never committed. No one's edits — the setup's gaps.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct Leftovers {
+    /// Directories to ignore.
+    pub ignore: Vec<String>,
+    /// Lockfiles to commit.
+    pub commit: Vec<String>,
+}
+
+impl Leftovers {
+    /// Nothing left behind.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.ignore.is_empty() && self.commit.is_empty()
+    }
+
+    /// The fix, as one command line run in `checkout`; a lockfile only
+    /// the worktree's checks wrote is copied from `worktree`.
+    #[must_use]
+    pub fn fix(&self, checkout: &Path, worktree: &Path) -> String {
+        let mut steps = Vec::new();
+        for f in &self.commit {
+            if !checkout.join(f).exists() {
+                steps.push(format!("cp '{}' .", worktree.join(f).display()));
+            }
+        }
+        if !self.ignore.is_empty() {
+            steps.push(format!(
+                "printf '{}\\n' >> .gitignore",
+                self.ignore.join("\\n")
+            ));
+        }
+        let mut add: Vec<&str> = self.commit.iter().map(String::as_str).collect();
+        if !self.ignore.is_empty() {
+            add.push(".gitignore");
+        }
+        steps.push(format!(
+            "git add {} && git commit -m \"speccoder: setup\"",
+            add.join(" ")
+        ));
+        steps.join(" && ")
+    }
+}
+
+/// [`Leftovers`] in `dir`.
+#[must_use]
+pub fn leftovers(dir: &Path) -> Leftovers {
+    const BUILD: [&str; 4] = ["target", "node_modules", ".pytest_cache", "__pycache__"];
+    let Ok(out) = Git::at(dir).run(&["status", "--porcelain=v1", "--untracked-files=normal"])
+    else {
+        return Leftovers::default();
+    };
+    let mut found = Leftovers::default();
+    for p in String::from_utf8_lossy(&out)
+        .lines()
+        .filter_map(|l| l.strip_prefix("?? "))
+    {
+        let p = p.trim_end_matches('/');
+        let first = p.split('/').next().unwrap_or(p);
+        if BUILD.contains(&first) {
+            found.ignore.push(format!("{first}/"));
+        } else if LOCKFILES.contains(&p) {
+            found.commit.push(p.to_owned());
+        }
+    }
+    found.ignore.sort();
+    found.ignore.dedup();
+    found
 }
 
 /// Refuses when the working tree has any uncommitted change (for in-place mode).

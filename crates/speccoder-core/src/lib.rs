@@ -18,6 +18,7 @@ pub mod spec;
 pub mod stage;
 pub mod strength;
 pub mod verify;
+pub mod words;
 
 pub use command::{
     ApprovalView, ApprovalsReport, ArchiveReport, AttestReport, AuthReport, BenchReport,

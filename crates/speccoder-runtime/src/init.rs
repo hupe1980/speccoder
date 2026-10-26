@@ -559,26 +559,41 @@ pub fn init_with(
             }
         }
     }
-    // Reports a check writes under .speccoder/ are output, not source: kept
-    // out of git — added to .gitignore only when that file is new or has no
-    // other uncommitted change (so committing it commits nothing else).
+    // What checks write — speccoder's reports under .speccoder/, the
+    // toolchains' build output — is output, not source: kept out of git, or
+    // every run would find it in the worktree and set it aside. Added to
+    // .gitignore only when that file is new or has no other uncommitted
+    // change (so committing it commits nothing else).
+    let mut output: Vec<&str> = Vec::new();
     if checks
         .iter()
         .any(|c| c.argv.iter().any(|a| a.contains(".speccoder/")))
     {
+        output.push(".speccoder/");
+    }
+    for c in &checks {
+        for dir in crate::worktree::build_output(&c.argv) {
+            if !output.contains(dir) {
+                output.push(dir);
+            }
+        }
+    }
+    let git = Git::at(&root);
+    let missing: Vec<&str> = output
+        .into_iter()
+        .filter(|d| {
+            !git.succeeds(&["check-ignore", "-q", "--no-index", d])
+                .unwrap_or(false)
+        })
+        .collect();
+    if !missing.is_empty() {
         let ignore = root.join(".gitignore");
         let existing = std::fs::read_to_string(&ignore).unwrap_or_default();
-        let listed = existing.lines().any(|l| {
-            matches!(
-                l.trim(),
-                ".speccoder" | ".speccoder/" | "/.speccoder/" | "/.speccoder"
-            )
-        });
         let clean = !ignore.exists()
-            || Git::at(&root)
+            || git
                 .line(&["status", "--porcelain", "--", ".gitignore"])
                 .is_ok_and(|l| l.trim().is_empty());
-        if !listed && clean {
+        if clean {
             let sep = if existing.is_empty() || existing.ends_with('\n') {
                 ""
             } else {
@@ -586,7 +601,10 @@ pub fn init_with(
             };
             if std::fs::write(
                 &ignore,
-                format!("{existing}{sep}# speccoder's check reports\n.speccoder/\n"),
+                format!(
+                    "{existing}{sep}# what checks write (speccoder init)\n{}\n",
+                    missing.join("\n")
+                ),
             )
             .is_ok()
             {
@@ -599,7 +617,7 @@ pub fn init_with(
     } else {
         format!(
             "wrote {} with {} check(s) and {provider}/{model}; review it, then commit it",
-            wrote.join(" and "),
+            speccoder_core::words::listed(&wrote),
             checks.len()
         )
     };
@@ -705,7 +723,18 @@ pub struct Prepared {
 }
 
 /// The files `init` may commit: nothing else, whatever a caller asks.
-pub const COMMITTABLE: &[&str] = &[FILE, ".config/nextest.toml", ".gitignore"];
+pub const COMMITTABLE: &[&str] = &[
+    FILE,
+    ".config/nextest.toml",
+    ".gitignore",
+    "Cargo.lock",
+    "package-lock.json",
+    "pnpm-lock.yaml",
+    "yarn.lock",
+    "uv.lock",
+    "poetry.lock",
+    "go.sum",
+];
 
 /// Writes the configuration and (unless `no_verify`) runs its checks on the
 /// untouched code. A refusal comes back as `Err`.
@@ -752,6 +781,18 @@ pub fn prepare(
     {
         to_commit.push(profile.to_owned());
     }
+    // A lockfile the checks just wrote, never committed: every run would
+    // find it in the worktree, so it goes with the configuration.
+    for lock in crate::worktree::LOCKFILES {
+        if root.join(lock).exists()
+            && !to_commit.iter().any(|p| p == lock)
+            && Git::at(&root)
+                .line(&["status", "--porcelain", "--", lock])
+                .is_ok_and(|l| l.starts_with("??"))
+        {
+            to_commit.push((*lock).to_owned());
+        }
+    }
     Ok(Prepared {
         written,
         report,
@@ -768,6 +809,15 @@ pub fn prepare(
 ///
 /// A path `init` does not commit, or git's complaint.
 pub fn commit_written(root: &Path, paths: &[String]) -> Result<String, String> {
+    commit_written_as(root, paths, "speccoder: config")
+}
+
+/// [`commit_written`] with its own subject.
+///
+/// # Errors
+///
+/// A path `init` does not commit, or git's complaint.
+pub fn commit_written_as(root: &Path, paths: &[String], subject: &str) -> Result<String, String> {
     if paths.is_empty() {
         return Err("nothing to commit".to_owned());
     }
@@ -778,7 +828,7 @@ pub fn commit_written(root: &Path, paths: &[String]) -> Result<String, String> {
     let names: Vec<&str> = paths.iter().map(String::as_str).collect();
     let mut add = vec!["add", "--"];
     add.extend(&names);
-    let mut commit = vec!["commit", "-q", "-m", "speccoder: config", "--"];
+    let mut commit = vec!["commit", "-q", "-m", subject, "--"];
     commit.extend(&names);
     g.run(&add).map_err(|e| e.0)?;
     // Nothing differs from the last commit: say that, not an empty failure.
@@ -787,7 +837,7 @@ pub fn commit_written(root: &Path, paths: &[String]) -> Result<String, String> {
     if g.succeeds(&unchanged).unwrap_or(false) {
         return Err(format!(
             "nothing to commit: {} is committed as it is",
-            names.join(" and ")
+            speccoder_core::words::listed(&names)
         ));
     }
     g.run(&commit)

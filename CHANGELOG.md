@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-26
+
 ### Added
 
 - **The model's reasoning.** Each attempt turn asks the provider for a
@@ -18,6 +20,11 @@ adheres to [Semantic Versioning](https://semver.org/).
   started waits in Needs You and on the task's card: `speccoder task
   restore T` commits it onto the feature's branch as yours, `task drop T`
   discards it; the inspector shows the files and the diff.
+- **The worktree on disk.** The app's Files view shows what git does not:
+  untracked, modified and ignored paths. A lockfile never committed or build
+  output not ignored — which every check run leaves behind — stops a run
+  with its fix, offered there as one click (**Commit Cargo.lock**); `init`
+  commits the lockfile and ignores the build output from the start.
 - File-type icons in the app's file tree and diffs.
 - `cargo binstall speccoder` takes the release archive.
 
@@ -26,6 +33,13 @@ adheres to [Semantic Versioning](https://semver.org/).
 - agentplane 0.53.0. In an editor (ACP) the model's words arrive as its
   message and its reasoning as its thoughts.
 - Needs You counts in words (`2 tasks that did not pass`).
+- A feature's branch takes setup changes from the checkout too (the
+  configuration, the nextest profile, `.gitignore`, lockfiles), not only the
+  spec's.
+- `error[CHECK-BROKEN]` quotes the check's own error and, for a nextest
+  profile never committed, the fix.
+- `task drop` discards every set-aside change of the task, also those 0.1.0
+  saved.
 
 ### Fixed
 
@@ -130,6 +144,7 @@ cannot produce or edit.
 
 - Name reservation placeholder for `speccoder` on crates.io.
 
-[Unreleased]: https://github.com/hupe1980/speccoder/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/hupe1980/speccoder/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/hupe1980/speccoder/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/hupe1980/speccoder/compare/v0.0.1...v0.1.0
 [0.0.1]: https://github.com/hupe1980/speccoder/releases/tag/v0.0.1

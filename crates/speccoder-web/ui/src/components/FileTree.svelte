@@ -53,9 +53,13 @@
     changed = new Set<string>(),
     counts = {},
     label = "Files",
+    marks = {},
     onpick,
   }: {
     paths: string[];
+    /** What git does not show: `untracked`, `ignored` (an ignored folder
+     *  comes as its path with `ignored-dir`), `modified`. */
+    marks?: Record<string, "untracked" | "ignored" | "ignored-dir" | "modified">;
     selected?: string | null;
     changed?: Set<string>;
     counts?: Record<string, { add: number | null; del: number | null }>;
@@ -168,8 +172,15 @@
         {#if r.holds}<span class="dot" title="Holds changes"></span>{/if}
       {:else}
         <span class="chev" aria-hidden="true"></span>
-        <FileIcon path={r.name} size={16} />
-        <span class="name mono">{r.name}</span>
+        {#if marks[r.path] === "ignored-dir"}
+          <svg class="folder ghost" width="16" height="14" viewBox="0 0 16 14" aria-hidden="true"><path d="M1 3.2C1 2 1.9 1 3 1h3.1c.5 0 .9.2 1.2.6L8.2 3H13c1.1 0 2 .9 2 2v6c0 1.1-.9 2-2 2H3c-1.1 0-2-.9-2-2z" fill="none" stroke="currentColor" stroke-dasharray="2 1.6" /></svg>
+        {:else}
+          <FileIcon path={r.name} size={16} />
+        {/if}
+        <span class="name mono" class:ghosted={marks[r.path]?.startsWith("ignored")}>{r.name}</span>
+        {#if marks[r.path] === "untracked"}<span class="mark u" title="Untracked: in the worktree, not in git">U</span>
+        {:else if marks[r.path] === "modified"}<span class="mark m" title="Modified in the worktree, not committed">M</span>
+        {:else if marks[r.path]?.startsWith("ignored")}<span class="pill" title="Git-ignored: never committed, never judged">ignored</span>{/if}
         {#if c}
           <span class="n a">{c.add == null ? "bin" : `+${c.add}`}</span>{#if c.del}<span class="n d">−{c.del}</span>{/if}
         {:else if changed.has(r.path)}<span class="dot" title="Changed by this feature"></span>{/if}
@@ -179,6 +190,13 @@
 </ul>
 
 <style>
+  .ghosted { opacity: 0.5; font-style: italic; }
+  .ghost { color: var(--faint); }
+  .mark { margin-left: auto; font: 700 0.68rem/1 var(--mono); padding: 0.12rem 0.3rem; border-radius: 4px; }
+  .mark.u { color: var(--verified, #30d158); background: color-mix(in srgb, var(--verified, #30d158) 14%, transparent); }
+  .mark.m { color: var(--attention, #ff9f0a); background: color-mix(in srgb, var(--attention, #ff9f0a) 14%, transparent); }
+  .pill { margin-left: auto; font-size: 0.66rem; color: var(--faint); border: 1px solid var(--border); border-radius: 999px; padding: 0.02rem 0.4rem; }
+  .row.on .mark, .row.on .pill { color: #fff; background: rgba(255, 255, 255, 0.18); border-color: transparent; }
   ul { list-style: none; margin: 0; padding: 0; }
   .row {
     display: flex; align-items: center; gap: 0.35rem; cursor: pointer; user-select: none;

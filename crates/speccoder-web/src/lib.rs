@@ -414,9 +414,14 @@ async fn changes(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Json
 /// The files at the feature's revision.
 async fn tree(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Json<Value> {
     let root = s.root.clone();
-    let (rev, files) =
-        off(move || speccoder_runtime::code::tree(&root, q.feature.as_deref())).await;
-    Json(json!({ "rev": rev, "files": files }))
+    let ((rev, files), worktree) = off(move || {
+        (
+            speccoder_runtime::code::tree(&root, q.feature.as_deref()),
+            speccoder_runtime::code::worktree_view(&root, q.feature.as_deref()),
+        )
+    })
+    .await;
+    Json(json!({ "rev": rev, "files": files, "worktree": worktree }))
 }
 
 #[derive(Debug, Deserialize)]
@@ -429,7 +434,14 @@ struct FileQuery {
 async fn file(State(s): State<Shared>, Query(q): Query<FileQuery>) -> Json<Value> {
     let root = s.root.clone();
     let markdown = q.path.to_ascii_lowercase().ends_with(".md");
-    let r = off(move || speccoder_runtime::code::file(&root, q.feature.as_deref(), &q.path)).await;
+    // Committed at the revision, else untracked in the worktree.
+    let r = off(move || {
+        speccoder_runtime::code::file(&root, q.feature.as_deref(), &q.path).or_else(|e| {
+            speccoder_runtime::code::worktree_file(&root, q.feature.as_deref(), &q.path)
+                .map_err(|_| e)
+        })
+    })
+    .await;
     Json(match r {
         // Markdown also rendered (raw HTML shown as text), for the preview.
         Ok(text) if markdown => {

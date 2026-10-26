@@ -96,6 +96,9 @@ pub enum Runnable {
         /// The task.
         task: String,
     },
+    /// Commit the setup a run stops on (an uncommitted lockfile, build
+    /// output not ignored) in the checkout.
+    FixSetup,
     /// Pick the current feature.
     Feature,
     /// Push the feature's branch and open (or update) its draft pull request.

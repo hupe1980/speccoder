@@ -11,7 +11,8 @@ Every failure names a [code](@/docs/codes.md) and the command that fixes it — 
 
 | Symptom | Cause and fix |
 |---|---|
-| `error[CHECK-BROKEN]` before any model call | A check fails on the untouched worktree without running a test. Most often a file it needs was never committed — a worktree holds only commits (`speccoder doctor` lists untracked configuration such as `.config/`). Commit it, fix the check, or run with `--allow-failing-baseline`. |
+| `error[CHECK-BROKEN]` before any model call | A check fails on the untouched worktree without running a test; the message quotes the check's own error. Most often a file it needs was never committed — a worktree holds only commits — such as `.config/nextest.toml` (`profile speccoder not found`). Commit it, fix the check, or, when the first task creates the project, run with `--allow-failing-baseline`. |
+| `Cargo.lock is not committed` / `target/ is not git-ignored` | The checks write it on every run, so each run would find it in the worktree. The message gives the command; in the app, **Code › Files › Commit Cargo.lock** does it. Committed setup reaches the feature's branch on the next run. |
 | No colour | Output is not a terminal, `NO_COLOR` or `TERM=dumb` is set, or screen-reader mode is on. `--color always` forces it. |
 | Odd symbols or boxes | The font lacks them: `--ascii`, or `[ui] ascii = true` in [your settings](@/docs/configuration.md#your-settings). |
 | `error[CONFIG-MISSING]` — the worktree has no speccoder.toml (13) | speccoder reads committed files. Commit `speccoder.toml`. |

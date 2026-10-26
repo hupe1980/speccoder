@@ -1048,7 +1048,7 @@ fn init(
         }
         eprint!(
             "Commit {}? speccoder reads committed files only. [{}] ",
-            prepared.to_commit.join(" and "),
+            speccoder_core::words::listed(&prepared.to_commit),
             if default_yes { "Y/n" } else { "y/N" }
         );
         let mut line = String::new();

@@ -30,7 +30,30 @@
   let commit = $state<string | null>(null);
   let commitPatch = $state("");
   let focus = $state<string | null>(null);
-  let tree = $state<{ rev: string; files: string[] } | null>(null);
+  interface WorktreeView { path: string | null; entries: { path: string; state: "untracked" | "ignored" | "modified" }[]; blocking: string[]; fix: string | null }
+  let tree = $state<{ rev: string; files: string[]; worktree?: WorktreeView } | null>(null);
+  // The worktree as it is on disk: untracked, ignored and modified paths
+  // beside the committed tree (a per-viewer choice).
+  const readDisk = () => { try { return localStorage.getItem("speccoder-worktree") === "on"; } catch { return false; } };
+  let disk = $state(readDisk());
+  function toggleDisk() {
+    disk = !disk;
+    try { localStorage.setItem("speccoder-worktree", disk ? "on" : "off"); } catch { /* storage off */ }
+  }
+  const wt = $derived(tree?.worktree ?? null);
+  // While something on disk stops a run, the disk is shown: the culprit in view.
+  const shown_disk = $derived(disk || !!wt?.blocking.length);
+  const extra = $derived(shown_disk && wt ? wt.entries.filter((e) => e.state !== "modified") : []);
+  const marks = $derived.by(() => {
+    const m: Record<string, "untracked" | "ignored" | "ignored-dir" | "modified"> = {};
+    if (!shown_disk || !wt) return m;
+    for (const e of wt.entries) {
+      const dir = e.path.endsWith("/");
+      m[dir ? e.path.slice(0, -1) : e.path] = e.state === "ignored" && dir ? "ignored-dir" : e.state;
+    }
+    return m;
+  });
+  const counted = $derived({ untracked: wt?.entries.filter((e) => e.state === "untracked").length ?? 0, ignored: wt?.entries.filter((e) => e.state === "ignored").length ?? 0 });
   let filter = $state("");
   const open = $derived(app.codeFile);
   let text = $state<{ text?: string; html?: string; error?: string } | null>(null);
@@ -67,7 +90,7 @@
     void app.report;
     const feature = app.feature ?? undefined;
     if (mode !== "files") return;
-    treeOf(get<{ rev: string; files: string[] }>(`/api/tree${q({ feature })}`), (t) => (tree = t));
+    treeOf(get<{ rev: string; files: string[]; worktree?: WorktreeView }>(`/api/tree${q({ feature })}`), (t) => (tree = t));
   });
   $effect(() => {
     const c = commit;
@@ -85,7 +108,8 @@
   const total = $derived((changes?.files ?? []).reduce((a, f) => ({ add: a.add + (f.add ?? 0), del: a.del + (f.del ?? 0) }), { add: 0, del: 0 }));
   // The whole tree (folders keep it navigable); a filter narrows it to the
   // matching paths, at most 400.
-  const matching = $derived((tree?.files ?? []).filter((f) => !filter || f.toLowerCase().includes(filter.toLowerCase())));
+  const all = $derived([...(tree?.files ?? []), ...extra.map((e) => (e.path.endsWith("/") ? e.path.slice(0, -1) : e.path))]);
+  const matching = $derived(all.filter((f) => !filter || f.toLowerCase().includes(filter.toLowerCase())));
   const matches = $derived(matching.length);
   const shown = $derived(filter ? matching.slice(0, 400) : matching);
   const changed = $derived(new Set((changes?.files ?? []).map((f) => f.path)));
@@ -236,8 +260,28 @@
           <input class="search" placeholder="Filter files" bind:value={filter} aria-label="Filter files" />
           <button class="btn small" title="Go to file (⌘P)" onclick={() => (quick = true)}><Icon name="search" size={12} /> Go to <kbd>⌘P</kbd></button>
         </div>
+        {#if wt?.path}
+          <button class="disk" class:on={shown_disk} onclick={toggleDisk} aria-pressed={shown_disk} title="Show the worktree as it is on disk: what git does not track or ignores">
+            <span class="sw" aria-hidden="true"><i></i></span>
+            <span>Worktree on disk</span>
+            <span class="muted small">{counted.untracked} untracked · {counted.ignored} ignored</span>
+          </button>
+        {/if}
+        {#if wt?.blocking.length}
+          <div class="blocker" role="note">
+            <Icon name="exclaim" size={14} weight={2.2} />
+            <div>
+              <strong>{wt.blocking.join(", ")} {wt.blocking.length === 1 ? "is" : "are"} in the worktree, not in git</strong>
+              <p>The checks write {wt.blocking.length === 1 ? "it" : "them"} on every run, so a run stops until {wt.blocking.length === 1 ? "it is" : "they are"} part of your checkout's setup.</p>
+              <div class="row">
+                <button class="btn small tinted" disabled={!!app.job?.running} onclick={() => app.perform({ group: "work", label: `commit the setup: ${wt.blocking.join(", ")}`, why: "copied into your checkout and committed; the next run takes it", command: wt.fix ?? "", run: { kind: "fix_setup" }, blocked: null, input: null })}><Icon name="check" size={11} weight={2.4} /> {wt.blocking.some((b) => b.endsWith("/")) ? "Fix the Setup" : `Commit ${wt.blocking.join(", ")}`}</button>
+                {#if wt.fix}<button class="btn small ghost" onclick={() => { void navigator.clipboard?.writeText(wt.fix ?? ""); app.toast({ tone: "ok", text: "Copied the command", detail: "Run it in your checkout." }); }}><Icon name="copy" size={11} /> Copy the Command</button>{/if}
+              </div>
+            </div>
+          </div>
+        {/if}
         {#key filter}
-          <FileTree paths={shown} selected={open} {changed} onpick={(p) => (app.codeFile = p)} />
+          <FileTree paths={shown} selected={open} {changed} {marks} onpick={(p) => (app.codeFile = p)} />
         {/key}
         {#if tree && filter && matches > shown.length}<p class="muted small">{matches - shown.length} more match — type more to narrow.</p>{/if}
       </aside>
@@ -301,6 +345,19 @@
 </section>
 
 <style>
+  .disk { display: flex; align-items: center; gap: 0.5rem; width: 100%; border: 0; background: none; padding: 0.35rem 0.25rem; margin: 0.15rem 0 0.25rem; cursor: pointer; font: inherit; font-size: 0.8rem; color: var(--text-2); border-radius: 8px; }
+  .disk:hover { background: var(--fill); }
+  .disk .muted { margin-left: auto; }
+  .sw { width: 1.75rem; height: 1rem; border-radius: 999px; background: var(--fill-2); position: relative; transition: background var(--speed) var(--ease); flex: none; }
+  .sw i { position: absolute; top: 2px; left: 2px; width: 0.75rem; height: 0.75rem; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25); transition: transform 220ms var(--spring); }
+  .disk.on .sw { background: var(--verified-fill, #30d158); }
+  .disk.on .sw i { transform: translateX(0.75rem); }
+  .blocker { display: grid; grid-template-columns: auto 1fr; gap: 0.5rem; padding: 0.65rem 0.7rem; margin: 0.2rem 0 0.5rem; border-radius: 10px; color: var(--text-2); font-size: 0.8rem;
+    background: color-mix(in srgb, var(--attention, #ff9f0a) 10%, var(--surface)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--attention, #ff9f0a) 30%, transparent); }
+  .blocker :global(svg) { color: var(--attention, #ff9f0a); margin-top: 0.1rem; }
+  .blocker strong { color: var(--text); font-size: 0.82rem; }
+  .blocker p { margin: 0.2rem 0 0.35rem; }
+  .blocker .row { display: flex; flex-wrap: wrap; gap: 0.35rem; }
   .code { max-width: 1400px; margin: 0 auto; display: grid; gap: 1rem; }
   header { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
   .seg { display: inline-flex; padding: 2px; border-radius: 9px; background: var(--fill); }
