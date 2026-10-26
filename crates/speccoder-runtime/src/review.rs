@@ -459,6 +459,14 @@ fn report_of(u: &Unit, full: bool) -> ReviewReport {
             Some("Tests for this unit are written and confirmed by its own pipeline".to_owned()),
         )
     };
+    let bug_tests = if rung == speccoder_core::ladder::Rung::Bug {
+        u.state
+            .as_deref()
+            .map(|plane| confirmed_reproductions(plane, &u.feature))
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
     let mut totals = totals;
     totals.ambiguous = oracle
         .iter()
@@ -483,10 +491,55 @@ fn report_of(u: &Unit, full: bool) -> ReviewReport {
             .map(str::to_owned),
         oracle,
         tests_notice,
+        bug_tests,
         approval: record.approval,
         sheet,
         error,
     }
+}
+
+/// The confirmed reproductions of the bugs recorded in bug unit `unit`,
+/// each with the content kept when it was confirmed (digest checked).
+fn confirmed_reproductions(plane: &Path, unit: &str) -> Vec<speccoder_core::oracle::BugTests> {
+    let mut bugs: Vec<speccoder_core::bug::BugReport> = crate::bug::state::all(plane)
+        .into_iter()
+        .filter(|b| b.unit == unit && b.confirmation.is_some())
+        .collect();
+    bugs.sort_by(|a, b| a.task.cmp(&b.task));
+    bugs.into_iter()
+        .filter_map(|b| {
+            let paths: Vec<String> = b.reproductions.iter().map(|r| r.file.clone()).collect();
+            let kept = crate::bug::state::repro(plane, &b.unit, &b.task, &paths);
+            let reproductions = b
+                .reproductions
+                .iter()
+                .map(|r| speccoder_core::oracle::BugTest {
+                    statement: r.statement.clone(),
+                    file: r.file.clone(),
+                    test: r.test.clone(),
+                    red_class: r
+                        .baseline
+                        .last()
+                        .map(|c| crate::pipeline::class_word(*c))
+                        .unwrap_or_default(),
+                    content: kept
+                        .iter()
+                        .find(|(p, _)| *p == r.file)
+                        .filter(|(_, c)| {
+                            format!("sha256:{}", crate::integrity::sha256_hex(c.as_bytes()))
+                                == r.digest
+                        })
+                        .map(|(_, c)| c.clone()),
+                })
+                .collect();
+            Some(speccoder_core::oracle::BugTests {
+                task: b.task.clone(),
+                title: b.title.clone(),
+                confirmation: b.confirmation.clone()?,
+                reproductions,
+            })
+        })
+        .collect()
 }
 
 /// Whether a feature run holds this project now.

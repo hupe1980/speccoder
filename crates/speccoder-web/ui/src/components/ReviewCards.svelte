@@ -14,6 +14,7 @@
   import Icon from "./Icon.svelte";
   import Code from "./Code.svelte";
   import OracleTests from "./OracleTests.svelte";
+  import BugTests from "./BugTests.svelte";
   import ApproveSheet from "./ApproveSheet.svelte";
   import { comments } from "../lib/comments.svelte";
   import { driftAnchor, testsCommand } from "../lib/review";
@@ -232,6 +233,7 @@
       <section class="tests" aria-label="Tests">
         <h3><Icon name="shield" size={13} weight={2} /> Tests</h3>
         <p class="muted">{r.tests_notice}</p>
+        {#if r.bug_tests?.length}<BugTests bugs={r.bug_tests} />{/if}
       </section>
     {:else if r.oracle.length}
       <section class="tests" aria-label="Tests">

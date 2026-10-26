@@ -488,6 +488,38 @@ export interface BugReport {
 /** Where the bug is. */
 export type BugStage = "record" | "reproduce" | "confirm" | "unchanged" | "fix" | "ship" | "done";
 
+/** One confirmed reproduction. */
+export interface BugTest {
+  /**
+   * Its content as confirmed; `None` when the kept copy is missing or no
+   * longer matches its digest.
+   */
+  content: string | null;
+  /** Project-relative test file. */
+  file: string;
+  /** Its class on the untouched code (`assertion`). */
+  red_class: string;
+  /** The statement it reproduces (`E1`) or guards (`U1`). */
+  statement: string;
+  /** The test's name. */
+  test: string;
+}
+
+/**
+ * A bug's confirmed reproductions as a bug unit's Tests tab shows them,
+ * read only: a bug's tests are written and confirmed by its own pipeline.
+ */
+export interface BugTests {
+  /** The person's confirmation of the reproductions. */
+  confirmation: Confirmation;
+  /** The reproductions, in the order confirmed. */
+  reproductions: BugTest[];
+  /** The bug's task (`T001`). */
+  task: string;
+  /** Its title. */
+  title: string;
+}
+
 /** Someone else's fix, judged as the attempt. */
 export interface Candidate {
   /** It was applied as the attempt. */
@@ -2804,6 +2836,8 @@ export interface ReviewItem {
 export interface ReviewReport {
   /** The approval that froze the oracle, when one is recorded. */
   approval: ReviewApproval | null;
+  /** A bug unit's confirmed reproductions, read only. */
+  bug_tests?: BugTests[];
   /**
    * Requirements changed in the checkout since the last commit of the
    * spec: what a commit would record.

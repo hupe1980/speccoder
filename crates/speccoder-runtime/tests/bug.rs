@@ -2328,3 +2328,61 @@ fn an_extension_bug_is_dropped_by_its_hand_off_s_skip_step() {
         unknown.message()
     );
 }
+
+#[test]
+fn a_bug_unit_s_tests_tab_lists_its_confirmed_reproductions_read_only() {
+    // T061: the review of a bug unit writes no tests; it shows the bug's own.
+    let r = repo("seeded");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_structure(reproductions());
+    f.will_structure(held_out("refuses_blank"));
+    let b = the_bug(&record_and_reproduce(r.path(), state.path(), &d)).clone();
+    let review = |r: &Path| {
+        let res = speccoder_runtime::review::report_in(r, Some("001-bugfixes"), Some(state.path()));
+        match res.data() {
+            Some(CommandData::Review(rv)) => (**rv).clone(),
+            other => panic!("{} → {other:?}", res.message()),
+        }
+    };
+    assert!(
+        review(r.path()).bug_tests.is_empty(),
+        "nothing confirmed yet"
+    );
+    let confirmed = bug::confirm_with(
+        r.path(),
+        &b.key(),
+        &b.confirm_digest.clone().unwrap(),
+        None,
+        Via::Terminal,
+        state.path(),
+        None,
+        None,
+        &RunOptions::default(),
+    );
+    assert_eq!(
+        confirmed.status(),
+        CommandStatus::Ok,
+        "{}",
+        confirmed.message()
+    );
+    let rv = review(r.path());
+    assert!(rv.oracle.is_empty());
+    assert!(
+        rv.tests_notice
+            .as_deref()
+            .is_some_and(|n| n.contains("own pipeline"))
+    );
+    let bt = &rv.bug_tests[0];
+    assert_eq!(bt.task, b.task);
+    assert_eq!(bt.confirmation.digest, b.confirm_digest.clone().unwrap());
+    let e1 = bt
+        .reproductions
+        .iter()
+        .find(|x| x.statement == "E1")
+        .unwrap();
+    assert_eq!(e1.red_class, "assertion");
+    assert_eq!(e1.content.as_deref(), Some("expect: refuses_empty\n"));
+    let text = serde_json::to_string(&rv).unwrap();
+    assert!(!text.contains("held_e1"), "no held-out path: {text}");
+}

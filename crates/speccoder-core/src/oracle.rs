@@ -535,6 +535,36 @@ pub struct RevisionView {
     pub diffs: Vec<SectionDiff>,
 }
 
+/// A bug's confirmed reproductions as a bug unit's Tests tab shows them,
+/// read only: a bug's tests are written and confirmed by its own pipeline.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct BugTests {
+    /// The bug's task (`T001`).
+    pub task: String,
+    /// Its title.
+    pub title: String,
+    /// The person's confirmation of the reproductions.
+    pub confirmation: crate::bug::Confirmation,
+    /// The reproductions, in the order confirmed.
+    pub reproductions: Vec<BugTest>,
+}
+
+/// One confirmed reproduction.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct BugTest {
+    /// The statement it reproduces (`E1`) or guards (`U1`).
+    pub statement: String,
+    /// Project-relative test file.
+    pub file: String,
+    /// The test's name.
+    pub test: String,
+    /// Its class on the untouched code (`assertion`).
+    pub red_class: String,
+    /// Its content as confirmed; `None` when the kept copy is missing or no
+    /// longer matches its digest.
+    pub content: Option<String>,
+}
+
 /// One section a revision changed, before and after (each cut to 4000
 /// characters).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]

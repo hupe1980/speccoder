@@ -1555,6 +1555,73 @@
         }
       ]
     },
+    "BugTest": {
+      "description": "One confirmed reproduction.",
+      "properties": {
+        "content": {
+          "description": "Its content as confirmed; `None` when the kept copy is missing or no\nlonger matches its digest.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "file": {
+          "description": "Project-relative test file.",
+          "type": "string"
+        },
+        "red_class": {
+          "description": "Its class on the untouched code (`assertion`).",
+          "type": "string"
+        },
+        "statement": {
+          "description": "The statement it reproduces (`E1`) or guards (`U1`).",
+          "type": "string"
+        },
+        "test": {
+          "description": "The test's name.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "statement",
+        "file",
+        "test",
+        "red_class",
+        "content"
+      ],
+      "type": "object"
+    },
+    "BugTests": {
+      "description": "A bug's confirmed reproductions as a bug unit's Tests tab shows them,\nread only: a bug's tests are written and confirmed by its own pipeline.",
+      "properties": {
+        "confirmation": {
+          "$ref": "#/$defs/Confirmation",
+          "description": "The person's confirmation of the reproductions."
+        },
+        "reproductions": {
+          "description": "The reproductions, in the order confirmed.",
+          "items": {
+            "$ref": "#/$defs/BugTest"
+          },
+          "type": "array"
+        },
+        "task": {
+          "description": "The bug's task (`T001`).",
+          "type": "string"
+        },
+        "title": {
+          "description": "Its title.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task",
+        "title",
+        "confirmation",
+        "reproductions"
+      ],
+      "type": "object"
+    },
     "Candidate": {
       "description": "Someone else's fix, judged as the attempt.",
       "properties": {
@@ -6883,6 +6950,13 @@
           ],
           "default": null,
           "description": "The approval that froze the oracle, when one is recorded."
+        },
+        "bug_tests": {
+          "description": "A bug unit's confirmed reproductions, read only.",
+          "items": {
+            "$ref": "#/$defs/BugTests"
+          },
+          "type": "array"
         },
         "changes": {
           "description": "Requirements changed in the checkout since the last commit of the\nspec: what a commit would record.",

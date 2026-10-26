@@ -107,6 +107,128 @@
         }
       ]
     },
+    "Basis": {
+      "description": "How the person decided the reproductions.",
+      "oneOf": [
+        {
+          "const": "shown",
+          "description": "They saw the reproductions and confirmed them.",
+          "type": "string"
+        },
+        {
+          "const": "named_test",
+          "description": "They named the tests themselves (`--test`).",
+          "type": "string"
+        }
+      ]
+    },
+    "BugTest": {
+      "description": "One confirmed reproduction.",
+      "properties": {
+        "content": {
+          "description": "Its content as confirmed; `None` when the kept copy is missing or no\nlonger matches its digest.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "file": {
+          "description": "Project-relative test file.",
+          "type": "string"
+        },
+        "red_class": {
+          "description": "Its class on the untouched code (`assertion`).",
+          "type": "string"
+        },
+        "statement": {
+          "description": "The statement it reproduces (`E1`) or guards (`U1`).",
+          "type": "string"
+        },
+        "test": {
+          "description": "The test's name.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "statement",
+        "file",
+        "test",
+        "red_class",
+        "content"
+      ],
+      "type": "object"
+    },
+    "BugTests": {
+      "description": "A bug's confirmed reproductions as a bug unit's Tests tab shows them,\nread only: a bug's tests are written and confirmed by its own pipeline.",
+      "properties": {
+        "confirmation": {
+          "$ref": "#/$defs/Confirmation",
+          "description": "The person's confirmation of the reproductions."
+        },
+        "reproductions": {
+          "description": "The reproductions, in the order confirmed.",
+          "items": {
+            "$ref": "#/$defs/BugTest"
+          },
+          "type": "array"
+        },
+        "task": {
+          "description": "The bug's task (`T001`).",
+          "type": "string"
+        },
+        "title": {
+          "description": "Its title.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task",
+        "title",
+        "confirmation",
+        "reproductions"
+      ],
+      "type": "object"
+    },
+    "Confirmation": {
+      "description": "The person's one confirmation, bound to what they saw.",
+      "properties": {
+        "at": {
+          "description": "Unix seconds.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "basis": {
+          "$ref": "#/$defs/Basis",
+          "description": "Seen or named."
+        },
+        "by": {
+          "description": "Who.",
+          "type": "string"
+        },
+        "digest": {
+          "description": "`sha256:<hex>` over the reproductions shown (their files and\nstatement ids).",
+          "type": "string"
+        },
+        "triad_digest": {
+          "description": "The triad's digest when confirmed: a different one lapses this.",
+          "type": "string"
+        },
+        "via": {
+          "$ref": "#/$defs/Via",
+          "description": "Through what."
+        }
+      },
+      "required": [
+        "digest",
+        "triad_digest",
+        "by",
+        "via",
+        "basis",
+        "at"
+      ],
+      "type": "object"
+    },
     "HeldOutSummary": {
       "description": "The held-out set of a requirement as anyone may see it: a count, a\nstate and a digest — never a path or a line of it.",
       "properties": {
@@ -911,6 +1033,13 @@
       ],
       "default": null,
       "description": "The approval that froze the oracle, when one is recorded."
+    },
+    "bug_tests": {
+      "description": "A bug unit's confirmed reproductions, read only.",
+      "items": {
+        "$ref": "#/$defs/BugTests"
+      },
+      "type": "array"
     },
     "changes": {
       "description": "Requirements changed in the checkout since the last commit of the\nspec: what a commit would record.",

@@ -320,6 +320,9 @@ pub struct ReviewReport {
     /// authors and confirms them (a quick change, a bug).
     #[serde(default)]
     pub tests_notice: Option<String>,
+    /// A bug unit's confirmed reproductions, read only.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub bug_tests: Vec<crate::oracle::BugTests>,
     /// The approval that froze the oracle, when one is recorded.
     #[serde(default)]
     pub approval: Option<crate::oracle::ReviewApproval>,
