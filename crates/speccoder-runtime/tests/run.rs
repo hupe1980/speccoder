@@ -2106,6 +2106,7 @@ fn a_run_reports_its_steps_live_and_status_reads_them() {
             Event::Said { .. } => "said".to_owned(),
             Event::Reasoning { .. } => "reasoning".to_owned(),
             Event::Notice { text } => text.clone(),
+            Event::Bug { step, .. } => step.name().to_owned(),
         })
         .filter(|k| k != "usage")
         .collect();

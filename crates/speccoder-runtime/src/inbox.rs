@@ -16,11 +16,29 @@ use speccoder_core::{
 use crate::actions::action;
 
 /// The kinds, most urgent first: what blocks a run, what questions the
-/// evidence, what stops a task, what blocks a hand-off.
-pub const KINDS: [&str; 12] = [
-    "unknown", "approval", "ruling", "gaming", "stale", "question", "review", "revise", "stuck",
-    "aside", "commit", "handoff",
+/// evidence, what stops a task, what blocks a hand-off — derived from the
+/// one registry, `speccoder_core::inbox::Kind`.
+pub const KINDS: [&str; 17] = [
+    Kind::ALL[0].as_str(),
+    Kind::ALL[1].as_str(),
+    Kind::ALL[2].as_str(),
+    Kind::ALL[3].as_str(),
+    Kind::ALL[4].as_str(),
+    Kind::ALL[5].as_str(),
+    Kind::ALL[6].as_str(),
+    Kind::ALL[7].as_str(),
+    Kind::ALL[8].as_str(),
+    Kind::ALL[9].as_str(),
+    Kind::ALL[10].as_str(),
+    Kind::ALL[11].as_str(),
+    Kind::ALL[12].as_str(),
+    Kind::ALL[13].as_str(),
+    Kind::ALL[14].as_str(),
+    Kind::ALL[15].as_str(),
+    Kind::ALL[16].as_str(),
 ];
+
+use speccoder_core::inbox::Kind;
 
 /// `speccoder inbox [--feature]`: the decisions waiting in every feature of
 /// the project at `path`, or in `feature` only.
@@ -58,6 +76,19 @@ pub fn inbox_with(path: &Path, feature: Option<&str>, state: Option<&Path>) -> C
     let mut items = Vec::new();
     for name in &names {
         items.extend(of_feature(path, name, state, several));
+    }
+    // Bugs of the format's own bug structure: no feature lists them.
+    if only.is_none()
+        && let Some(s) = state
+        && let Some(project) = crate::format::at(path).detect(path)
+    {
+        let plane = crate::worktree::project_state_dir(s, &project);
+        items.extend(
+            crate::bug::state::all(&plane)
+                .iter()
+                .filter(|b| b.home.kind.native())
+                .filter_map(|b| bug_item(b, &|c| c)),
+        );
     }
     let rank = |k: &str| KINDS.iter().position(|x| *x == k).unwrap_or(KINDS.len());
     items.sort_by(|a, b| {
@@ -106,6 +137,20 @@ fn counted(kind: &str, n: usize) -> String {
         "aside" => ("set-aside change", "set-aside changes"),
         "commit" => ("plan to commit", "plans to commit"),
         "handoff" => ("branch to hand off", "branches to hand off"),
+        "bug_confirm" => (
+            "bug reproduction to confirm",
+            "bug reproductions to confirm",
+        ),
+        "bug_cannot_reproduce" => (
+            "bug that could not be reproduced",
+            "bugs that could not be reproduced",
+        ),
+        "bug_unchanged_not_holding" => (
+            "bug whose Unchanged statement does not hold",
+            "bugs whose Unchanged statements do not hold",
+        ),
+        "bug_repro_weak" => ("bug reproduction too weak", "bug reproductions too weak"),
+        "bug_already_satisfied" => ("bug already fixed", "bugs already fixed"),
         k => (k, k),
     };
     count(n, one, many)
@@ -159,6 +204,9 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
     };
     let item = |kind: &str, task: Option<&str>, title: String, detail: String, actions| InboxItem {
         kind: kind.to_owned(),
+        group: Kind::named(kind)
+            .map_or("blocked_on_you", |k| k.group().as_str())
+            .to_owned(),
         feature: feature.to_owned(),
         task: task.map(str::to_owned),
         title,
@@ -248,6 +296,14 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
             "verified" | "regression_only" | "attested" | "ticked_without_evidence" | "skipped"
         );
         if done || waiting.contains(&t.id.as_str()) {
+            continue;
+        }
+        if let Some(i) = project_state
+            .as_deref()
+            .and_then(|s| crate::bug::state::load(s, feature, &t.id))
+            .and_then(|b| bug_item(&b, &flag))
+        {
+            out.push(i);
             continue;
         }
         let held = project_state
@@ -598,6 +654,193 @@ fn with_input(
     a = a.with_run(run);
     a.input = Some(prompt.to_owned());
     a
+}
+
+/// The Needs You item of a bug that stopped for the person, if it did.
+fn bug_item(
+    b: &speccoder_core::bug::BugReport,
+    flag: &dyn Fn(String) -> String,
+) -> Option<InboxItem> {
+    use speccoder_core::bug::Outcome;
+    let key = b.key();
+    let kind = match b.outcome {
+        Outcome::AwaitingConfirmation => Kind::BugConfirm,
+        Outcome::CannotReproduce => Kind::BugCannotReproduce,
+        Outcome::UnchangedNotHolding => Kind::BugUnchangedNotHolding,
+        Outcome::AlreadySatisfied => Kind::BugAlreadySatisfied,
+        _ if b.code.as_deref() == Some("BUG-REPRO-WEAK") => Kind::BugReproWeak,
+        _ => return None,
+    };
+    let task = || b.task.clone();
+    let mut actions = Vec::new();
+    match kind {
+        Kind::BugConfirm => {
+            let digest = b.confirm_digest.clone().unwrap_or_default();
+            let mut yes = action(
+                "next",
+                format!("confirm {}'s reproductions", b.task),
+                "they show the bug: they are frozen and the fix runs",
+                format!("speccoder bug confirm {key} --digest {digest}"),
+            );
+            yes = yes.with_run(Runnable::BugConfirm {
+                task: key.clone(),
+                digest: digest.clone(),
+                reject: false,
+            });
+            let mut no = action(
+                "next",
+                format!("reject {}'s reproductions", b.task),
+                "the author tries again, told why",
+                format!("speccoder bug confirm {key} --reject --reason \"…\""),
+            );
+            no = no.with_run(Runnable::BugConfirm {
+                task: key.clone(),
+                digest,
+                reject: true,
+            });
+            no.input = Some("Why they do not show the bug".to_owned());
+            actions.extend([yes, no]);
+        }
+        Kind::BugAlreadySatisfied => {
+            let mut keep = action(
+                "next",
+                format!("keep {}'s reproduction as a regression test", b.task),
+                "accepted on your word: attested, not verified",
+                flag(format!(
+                    "speccoder task accept {} --reason \"kept as a regression test\"",
+                    b.task
+                )),
+            );
+            keep = keep.with_run(Runnable::Accept { task: task() });
+            keep.input = Some("Why it is kept".to_owned());
+            let mut drop = action(
+                "task",
+                format!("drop {}", b.task),
+                "it is fixed already",
+                flag(format!("speccoder task skip {} --reason \"…\"", b.task)),
+            );
+            drop = drop.with_run(Runnable::Skip { task: task() });
+            drop.input = Some("Why it is dropped".to_owned());
+            actions.extend([keep, drop]);
+        }
+        Kind::BugReproWeak => {
+            let mut rule = action(
+                "task",
+                format!("rule on {}", b.task),
+                "the tests are right: the special case is not a fix",
+                flag(format!(
+                    "speccoder task rule {} --tests-right --reason \"…\"",
+                    b.task
+                )),
+            );
+            rule = rule.with_run(Runnable::Rule { task: task() });
+            rule.input = Some("Why the tests are right".to_owned());
+            actions.push(rule);
+            actions.push(action(
+                "task",
+                "bring your own test",
+                "one per Expected statement",
+                format!(
+                    "speccoder bug \"{}\" --expected \"…\" --test <file>::<test>",
+                    b.triad.current.text
+                ),
+            ));
+        }
+        _ => {
+            let mut again = action(
+                "next",
+                format!("reproduce {} again", b.task),
+                "a fresh set of tries",
+                format!("speccoder bug run --task {key}"),
+            );
+            again = again.with_run(Runnable::BugRun {
+                slug: None,
+                task: Some(key.clone()),
+            });
+            actions.push(again);
+            actions.push(action(
+                "task",
+                "bring your own test",
+                "one per Expected statement",
+                format!(
+                    "speccoder bug \"{}\" --expected \"…\" --test <file>::<test>",
+                    b.triad.current.text
+                ),
+            ));
+            if !b.home.kind.native() {
+                actions.push(action(
+                    "task",
+                    format!("reword {}", b.requirement),
+                    "the triad in other words (what was confirmed lapses)",
+                    format!(
+                        "speccoder review edit {} \"…\" --feature {}",
+                        b.requirement, b.unit
+                    ),
+                ));
+                let mut drop = action(
+                    "task",
+                    format!("drop {}", b.task),
+                    "nothing is fixed",
+                    flag(format!("speccoder task skip {} --reason \"…\"", b.task)),
+                );
+                drop = drop.with_run(Runnable::Skip { task: task() });
+                drop.input = Some("Why it is dropped".to_owned());
+                actions.push(drop);
+            }
+        }
+    }
+    let detail = b
+        .handoff
+        .as_ref()
+        .map(|h| {
+            format!(
+                "{} tries; reproduced: {}; not reproduced: {}; already passing: {}",
+                h.tries.len(),
+                if h.statements.reproduced.is_empty() {
+                    "none".to_owned()
+                } else {
+                    h.statements.reproduced.join(", ")
+                },
+                if h.statements.not_reproduced.is_empty() {
+                    "none".to_owned()
+                } else {
+                    h.statements.not_reproduced.join(", ")
+                },
+                if h.statements.satisfied.is_empty() {
+                    "none".to_owned()
+                } else {
+                    h.statements.satisfied.join(", ")
+                },
+            )
+        })
+        .unwrap_or_else(|| format!("{} — {}", b.title, b.outcome.as_str().replace('_', " ")));
+    Some(InboxItem {
+        kind: kind.as_str().to_owned(),
+        group: kind.group().as_str().to_owned(),
+        feature: b.unit.clone(),
+        task: Some(b.task.clone()),
+        title: match kind {
+            Kind::BugConfirm => format!(
+                "{}: {} reproduction(s) wait for your confirmation",
+                b.task,
+                b.reproductions.iter().filter(|r| r.reproduces()).count()
+            ),
+            Kind::BugAlreadySatisfied => format!(
+                "{}: already fixed — keep the reproduction or drop it",
+                b.task
+            ),
+            Kind::BugReproWeak => {
+                format!("{}: a special-case fix passes the reproductions", b.task)
+            }
+            Kind::BugUnchangedNotHolding => {
+                format!("{}: an Unchanged statement does not hold today", b.task)
+            }
+            _ => format!("{}: could not be reproduced", b.task),
+        },
+        detail,
+        since: b.confirmation.as_ref().map(|c| c.at),
+        actions,
+    })
 }
 
 fn nudge(t: &speccoder_core::TaskStatus, flag: &dyn Fn(String) -> String) -> Action {

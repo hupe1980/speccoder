@@ -43,6 +43,11 @@ pub mod inbox {
     pub use crate::inbox::inbox;
 }
 
+/// A bug as speccoder keeps it (read-only; a bug's actions are kinds).
+pub mod bug {
+    pub use crate::bug::show;
+}
+
 /// A task's evidence.
 pub mod evidence {
     pub use crate::evidence::{account_of, banner, rows, statements};

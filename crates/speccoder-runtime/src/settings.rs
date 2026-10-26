@@ -398,6 +398,26 @@ pub const CATALOGUE: &[Section] = &[
         ],
     },
     Section {
+        name: "bug",
+        title: "Bug fixes",
+        about: "`speccoder bug`: how hard reproduce tries before the bug goes to you as cannot reproduce. A project setting only: a value in your user config is ignored.",
+        named: false,
+        keys: &[
+            k(
+                "reproduce_tries",
+                Kind::Int(1, 5),
+                Some("3"),
+                "Tries of the reproduction author before cannot reproduce (a rejection counts as one)",
+            ),
+            k(
+                "test",
+                Kind::Argv,
+                None,
+                "How one named test (`--test PATH::NAME`) runs, `{file}` and `{name}` filled in; default: the toolchain's own runner",
+            ),
+        ],
+    },
+    Section {
         name: "converge",
         title: "Convergence",
         about: "How often a feature may be brought back to its spec.",

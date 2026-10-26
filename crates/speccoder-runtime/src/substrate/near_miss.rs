@@ -44,9 +44,48 @@ structure.",
     )
 }
 
+/// What the author is told for a bug task's special cases: fixes that
+/// recognise a reproduction's literal inputs and keep the old behaviour
+/// everywhere else — what a held-out variant with other inputs must catch.
+pub fn special_case_policy(w: &Wording) -> String {
+    format!(
+        "You help test the reproduction tests of a {product} bug fix. The fix is final. For EACH reproduction shown, write one `special_case` variant: a replacement of the changed source files that makes exactly that reproduction pass by recognising its literal inputs (the values, strings or shapes the test uses) and otherwise keeps the code's behaviour from BEFORE the fix. It must build. Name the statement it targets (`E1`, …) as its scenario and say in one line which input it special-cases. Change only the files you are shown. Answer only in the requested structure.",
+        product = w.product,
+    )
+}
+
+/// The special-case author's input: the spec context, the changed files,
+/// the change, and the visible reproductions (never a held-out variant).
+#[must_use]
+pub fn special_case_input(
+    bundle: &Value,
+    changed: &[(String, String)],
+    patch: &str,
+    reproductions: &[(String, String, String)],
+    context: &speccoder_core::context::ContextManifest,
+) -> Tainted<Value> {
+    let base = input(bundle, changed, patch, 0, 0);
+    let mut v = base.peek().clone();
+    v["set"] = json!("special_case");
+    v["counts"] = json!({ "special_case": reproductions.len() });
+    v["reproductions"] = json!(
+        reproductions
+            .iter()
+            .map(|(statement, path, content)| json!({ "statement": statement, "path": path, "content": content }))
+            .collect::<Vec<_>>()
+    );
+    v["context"] = json!(context);
+    Tainted::with_label(v, super::provenance::from(super::provenance::WORKTREE))
+}
+
 /// The answer's schema.
 #[must_use]
 pub fn schema() -> Value {
+    schema_of(&["wrong", "permitted"])
+}
+
+/// The schema with the kinds `kinds`.
+fn schema_of(kinds: &[&str]) -> Value {
     json!({
         "type": "object",
         "properties": {
@@ -55,7 +94,7 @@ pub fn schema() -> Value {
                 "items": {
                     "type": "object",
                     "properties": {
-                        "kind": { "type": "string", "enum": ["wrong", "permitted"] },
+                        "kind": { "type": "string", "enum": kinds },
                         "scenario": { "type": "string" },
                         "rationale": { "type": "string" },
                         "files": {
@@ -133,7 +172,12 @@ pub fn input(
 }
 
 fn prompt_raw(input: &Value, ttl: CacheTtl, style: PromptStyle, w: &Wording) -> Value {
-    let system_policy = policy(w);
+    let special = input["set"] == "special_case";
+    let system_policy = if special {
+        special_case_policy(w)
+    } else {
+        policy(w)
+    };
     let s = |v: &Value| v.as_str().unwrap_or_default().to_owned();
     let files: Vec<String> = input["files"]
         .as_array()
@@ -154,10 +198,30 @@ fn prompt_raw(input: &Value, ttl: CacheTtl, style: PromptStyle, w: &Wording) -> 
             s(&input["patch"]),
             files.join("\n\n")
         ),
-        format!(
-            "Write {} `wrong` variant(s) and at most {} `permitted` variant(s).",
-            input["counts"]["wrong"], input["counts"]["permitted"]
-        ),
+        if special {
+            let shown: Vec<String> = input["reproductions"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|r| {
+                    format!(
+                        "## {} ({})\n\n```\n{}\n```",
+                        s(&r["statement"]),
+                        s(&r["path"]),
+                        s(&r["content"])
+                    )
+                })
+                .collect();
+            format!(
+                "# The reproductions\n\n{}\n\nWrite one `special_case` variant per reproduction.",
+                shown.join("\n\n")
+            )
+        } else {
+            format!(
+                "Write {} `wrong` variant(s) and at most {} `permitted` variant(s).",
+                input["counts"]["wrong"], input["counts"]["permitted"]
+            )
+        },
     ];
     match style {
         PromptStyle::OpenAi => json!({
@@ -215,8 +279,13 @@ impl Skill for NearMiss {
             prompt(input.peek(), ttl, style, self.format.wording()),
             &super::provenance::from(super::provenance::WORKTREE),
         );
+        let expecting = if input.peek()["set"] == "special_case" {
+            schema_of(&["special_case"])
+        } else {
+            schema()
+        };
         let completion = cx
-            .complete_with(&prompt, |call| call.expecting(schema()))
+            .complete_with(&prompt, |call| call.expecting(expecting))
             .await?;
         Ok(Outcome::done(completion.map(|c| {
             json!({

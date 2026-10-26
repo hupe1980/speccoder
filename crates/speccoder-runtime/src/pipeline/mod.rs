@@ -11,6 +11,7 @@ use crate::commands::*;
 use crate::{approvals, progress, substrate, verify, worktree};
 
 pub mod acceptance;
+pub mod bug;
 pub mod commit;
 pub mod feature;
 pub mod full;
@@ -21,6 +22,7 @@ pub mod samples;
 pub mod task;
 
 pub(crate) use acceptance::*;
+pub(crate) use bug::{reject as bug_reject, triad_now as bug_triad_now};
 pub(crate) use commit::*;
 pub use feature::*;
 pub(crate) use judge::*;
@@ -169,6 +171,8 @@ pub struct RunOptions {
     pub in_place: bool,
     /// The in-place session the runtime opened for this run.
     pub session: Option<Arc<std::sync::Mutex<crate::in_place::Session>>>,
+    /// Run a bug of the format's own bug structure (no task list names it).
+    pub bug_home: Option<Arc<bug::NativeBug>>,
 }
 
 /// Where a task runs, as `worktree` reports it: speccoder's worktree, or in

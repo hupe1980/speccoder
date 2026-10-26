@@ -133,6 +133,7 @@ const COMMANDS: &[&str] = &[
     "app.settings",
     "file.new",
     "file.quick",
+    "file.bug",
     "file.issues",
     "file.commit",
     "view.inbox",
@@ -236,6 +237,7 @@ fn menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> 
         &[
             &item("file.new", "New Feature…", Some("CmdOrCtrl+N"))?,
             &item("file.quick", "Quick Change…", Some("Shift+CmdOrCtrl+N"))?,
+            &item("file.bug", "Report a Bug…", Some("Shift+CmdOrCtrl+B"))?,
             &item("file.issues", "Start from a GitHub Issue…", None)?,
             &sep()?,
             &item("file.commit", "Commit the Planning Files", None)?,

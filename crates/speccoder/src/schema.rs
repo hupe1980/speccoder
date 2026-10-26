@@ -36,8 +36,32 @@ pub fn names() -> Vec<(&'static str, &'static str)> {
         ),
         ("event", "one line of --events"),
     ];
+    // The public projections of domain events, one per name the event
+    // registry marks as a domain event.
+    v.extend(
+        core::event::REGISTRY
+            .iter()
+            .filter(|n| n.class == core::event::Class::Domain)
+            .map(|n| {
+                (
+                    projection(n.name),
+                    "a domain event's public projection: ids, digests and counts",
+                )
+            }),
+    );
     v.extend(core::PAYLOADS.iter().map(|p| (*p, describe(p))));
     v
+}
+
+/// The schema name of a domain event's public projection.
+fn projection(name: &str) -> &'static str {
+    match name {
+        "bug.recorded" => "events/bug.recorded",
+        "bug.confirmed" => "events/bug.confirmed",
+        "bug.confirm_rejected" => "events/bug.confirm_rejected",
+        "bug.outcome" => "events/bug.outcome",
+        _ => "",
+    }
 }
 
 const fn describe(payload: &str) -> &'static str {
@@ -75,6 +99,7 @@ const fn describe(payload: &str) -> &'static str {
         b"review" => "review: the spec's requirements and the person's decision on each",
         b"auth" => "auth: who speccoder is on a GitHub host, and where its token comes from",
         b"actions" => "actions: what a person can do now, and the feature's journey",
+        b"bug" => "bug: a bug, its triad, reproductions, confirmation and how far it got",
         b"branch_verify" => {
             "attest verify --branch, speccoder-verify: every tick of a branch and what its evidence comes to"
         }
@@ -146,6 +171,11 @@ published! {
     "actions", "ActionsReport" => core::ActionsReport,
     "branch_verify", "BranchReport" => core::verify_branch::BranchReport,
     "evidence_tour", "EvidenceTour" => core::tour::EvidenceTour,
+    "bug", "BugReport" => core::bug::BugReport,
+    "events/bug.recorded", "PublicBugRecorded" => crate::events::PublicBugRecorded,
+    "events/bug.confirmed", "PublicBugConfirmed" => crate::events::PublicBugConfirmed,
+    "events/bug.confirm_rejected", "PublicBugConfirmRejected" => crate::events::PublicBugConfirmRejected,
+    "events/bug.outcome", "PublicBugOutcome" => crate::events::PublicBugOutcome,
 }
 
 /// The predicate schema's name (`speccoder schema task-verification-v0`).

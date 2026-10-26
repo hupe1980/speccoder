@@ -128,8 +128,11 @@ pub(crate) fn judge_checks(
     let mut task_checks: Vec<&str> = Vec::new();
     if let Some(a) = acceptance.filter(|a| a.argv.is_some()) {
         let argv = a.argv.as_deref().unwrap_or_default();
-        let green = verify::rerun_once(run_acceptance(project, argv, runner), || {
-            run_acceptance(project, argv, runner)
+        let all: Vec<&[String]> = std::iter::once(argv)
+            .chain(a.more_argv.iter().map(Vec::as_slice))
+            .collect();
+        let green = verify::rerun_once(run_all_acceptance(project, &all, runner), || {
+            run_all_acceptance(project, &all, runner)
         });
         if let Some(r) = report.acceptance.as_mut() {
             r["green"] = serde_json::json!(green.status == CheckStatus::Passed);
@@ -158,6 +161,24 @@ pub(crate) fn judge_checks(
     current.comparison = Some(cmp);
     report.verification = Some(current);
     Ok(())
+}
+
+/// Every command of an acceptance set, as one result: passed only when
+/// each passed (the first failure's output is kept).
+fn run_all_acceptance(
+    project: &Path,
+    all: &[&[String]],
+    runner: &sandbox::Runner,
+) -> speccoder_core::verify::CheckResult {
+    let mut first = None;
+    for argv in all {
+        let r = run_acceptance(project, argv, runner);
+        if r.status != CheckStatus::Passed {
+            return r;
+        }
+        first.get_or_insert(r);
+    }
+    first.unwrap_or_else(|| run_acceptance(project, &[], runner))
 }
 
 /// Why a failed, completed attempt is not retried, if it is not.

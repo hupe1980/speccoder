@@ -168,6 +168,39 @@ pub enum Command {
         #[arg(long)]
         no_prompt: bool,
     },
+    /// A bug, fixed on evidence: `bug "<what happens>" --expected "<what should>"` reproduces it, asks you once, fixes it.
+    #[command(args_conflicts_with_subcommands = true, subcommand_negates_reqs = true)]
+    Bug {
+        #[command(subcommand)]
+        action: Option<BugAction>,
+        /// What happens (the symptom), in your words; a symptom that reads
+        /// `confirm` or `run` follows `--`.
+        symptom: Option<String>,
+        /// What should happen instead (repeatable: one per behaviour).
+        #[arg(long, value_name = "WORDS")]
+        expected: Vec<String>,
+        /// What must keep working as it does (repeatable).
+        #[arg(long, value_name = "WORDS")]
+        unchanged: Vec<String>,
+        /// The GitHub issue it comes from (its text is context, never the triad).
+        #[arg(long, value_name = "N")]
+        issue: Option<u64>,
+        /// Your own failing test, one per --expected, in order (naming it confirms it).
+        #[arg(long = "test", value_name = "PATH::NAME")]
+        tests: Vec<String>,
+        /// Someone else's fix to judge: a patch file or `pr:N` (no retries).
+        #[arg(long, value_name = "PATCH|pr:N")]
+        candidate: Option<String>,
+        /// Continue a bug Spec Kit's `bug` extension created (`.specify/bugs/<slug>/`).
+        #[arg(long, value_name = "SLUG")]
+        slug: Option<String>,
+        /// Record it (and commit exactly that) without reproducing it.
+        #[arg(long)]
+        no_run: bool,
+        /// Never ask inline: the reproductions wait for `bug confirm`.
+        #[arg(long)]
+        no_prompt: bool,
+    },
     /// What waits for your decision in every feature, the most urgent first, with the command for each.
     Inbox,
     /// What you can do now in the project: every action the interfaces offer, with its command.
@@ -704,14 +737,58 @@ pub enum ConfigAction {
     Commit,
 }
 
+/// `speccoder bug` actions.
+#[derive(Debug, Subcommand)]
+pub enum BugAction {
+    /// Confirm a bug's reproductions (bound to the digest shown), or reject them with a reason.
+    Confirm {
+        /// The bug, as `<unit>/<task>` (e.g. `007-bugfixes/T003`, `bugs/login-timeout/bug:login-timeout`).
+        task: String,
+        /// The digest you were shown (asked for at a terminal when left out).
+        #[arg(long)]
+        digest: Option<String>,
+        /// Reject them: the author tries again, told your reason.
+        #[arg(long, requires = "reason")]
+        reject: bool,
+        /// Why (with --reject).
+        #[arg(long)]
+        reason: Option<String>,
+        /// Record the decision without running what follows.
+        #[arg(long)]
+        no_run: bool,
+    },
+    /// Continue a bug: reproduce it again, or run its confirmed fix.
+    Run {
+        /// A bug of Spec Kit's `bug` extension, by slug.
+        #[arg(long, conflicts_with = "task")]
+        slug: Option<String>,
+        /// Or `<unit>/<task>`.
+        #[arg(long)]
+        task: Option<String>,
+        /// Never ask inline.
+        #[arg(long)]
+        no_prompt: bool,
+    },
+}
+
 /// `speccoder workflow` actions.
 #[derive(Debug, Subcommand)]
 pub enum WorkflowAction {
-    /// Write `.specify/workflows/steps/speccoder/` and `.specify/workflows/speccoder/workflow.yml`.
+    /// Write `.specify/workflows/steps/speccoder/` and `.specify/workflows/speccoder/workflow.yml`
+    /// — or, with `--overlay NAME`, an overlay of one of Spec Kit's workflows (`bugfix`).
     Install {
         /// Replace existing files.
         #[arg(long)]
         force: bool,
+        /// An overlay instead: `bugfix` replaces the bug workflow's `test` step with speccoder's.
+        #[arg(long, value_name = "NAME")]
+        overlay: Option<String>,
+    },
+    /// Remove an overlay `install --overlay` wrote.
+    Uninstall {
+        /// The overlay (`bugfix`).
+        #[arg(long, value_name = "NAME")]
+        overlay: String,
     },
 }
 

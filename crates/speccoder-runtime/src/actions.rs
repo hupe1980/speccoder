@@ -461,7 +461,10 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::DropSetAside
             | K::FixSetup
             | K::Feature
-            | K::PullRequest => Offer::Take,
+            | K::PullRequest
+            | K::BugFix
+            | K::BugConfirm
+            | K::BugRun => Offer::Take,
             K::Command => Offer::Refuse,
         },
         // Decisions belong to their own prompt; what leaves the machine
@@ -482,6 +485,9 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::FixSetup
             | K::Feature
             | K::PullRequest
+            | K::BugFix
+            | K::BugConfirm
+            | K::BugRun
             | K::Command => Offer::Refuse,
         },
         // Its keys decide the queue's calls and switch the feature; `n`
@@ -504,6 +510,9 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::DropSetAside
             | K::FixSetup
             | K::PullRequest
+            | K::BugFix
+            | K::BugConfirm
+            | K::BugRun
             | K::Command => Offer::Refuse,
         },
         Interface::CliRemedy | Interface::AcpRemedy => match kind {
@@ -526,6 +535,9 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::DropSetAside
             | K::Feature
             | K::PullRequest
+            | K::BugFix
+            | K::BugConfirm
+            | K::BugRun
             | K::Command => Offer::Refuse,
         },
     }
@@ -661,6 +673,43 @@ pub fn perform_in(
             Some(name) => crate::current::switch(root, name),
             None => needs("a feature"),
         },
+        Runnable::BugFix {
+            symptom,
+            expected,
+            unchanged,
+            issue,
+            tests,
+            candidate,
+            slug,
+            run,
+        } => bug_fix(
+            root,
+            &crate::bug::Request::of(
+                symptom,
+                expected,
+                unchanged,
+                *issue,
+                tests,
+                candidate.as_deref(),
+                slug.as_deref(),
+                *run,
+            ),
+            via,
+            state,
+            options,
+        ),
+        Runnable::BugConfirm {
+            task,
+            digest,
+            reject,
+        } => match (*reject, text) {
+            (true, None) => needs("a reason"),
+            (true, Some(why)) => bug_confirm(root, task, digest, Some(why), via, state, options),
+            (false, _) => bug_confirm(root, task, digest, None, via, state, options),
+        },
+        Runnable::BugRun { slug, task } => {
+            bug_run(root, slug.as_deref(), task.as_deref(), state, options)
+        }
         // The interface has confirmed it (the action's `confirm`): push
         // and open.
         Runnable::PullRequest => crate::handoff::pr(
@@ -703,6 +752,38 @@ fn run_feature(
     converge: bool,
 ) -> CommandResult {
     crate::run_feature(root, feature, options, converge)
+}
+
+fn bug_fix(
+    root: &Path,
+    req: &crate::bug::Request,
+    via: Via,
+    state: Option<&Path>,
+    options: &RunOptions,
+) -> CommandResult {
+    crate::bug::bug(root, req, via, state, options)
+}
+
+fn bug_confirm(
+    root: &Path,
+    task: &str,
+    digest: &str,
+    reject: Option<&str>,
+    via: Via,
+    state: Option<&Path>,
+    options: &RunOptions,
+) -> CommandResult {
+    crate::bug::confirm(root, task, digest, reject, true, via, state, options)
+}
+
+fn bug_run(
+    root: &Path,
+    slug: Option<&str>,
+    task: Option<&str>,
+    state: Option<&Path>,
+    options: &RunOptions,
+) -> CommandResult {
+    crate::bug::run(root, slug, task, state, options)
 }
 
 fn quick_change(

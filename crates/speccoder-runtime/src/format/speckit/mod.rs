@@ -5,6 +5,8 @@
 
 #[cfg(feature = "engine")]
 pub mod bench;
+pub mod bug;
+pub mod extensions;
 pub mod hooks;
 mod quick;
 mod texts;
@@ -241,6 +243,47 @@ impl Adapter for SpecKit {
         checks: &[String],
     ) -> Result<super::Recorded, String> {
         quick::record(root, request, checks)
+    }
+
+    fn extensions(&self, root: &Path) -> Option<crate::format::Inventory> {
+        extensions::inventory(root)
+    }
+
+    fn bug_unit(
+        &self,
+        root: &Path,
+    ) -> Result<speccoder_core::bug::BugHome, crate::format::BugRefusal> {
+        bug::unit(root)
+    }
+
+    fn record_bug(
+        &self,
+        root: &Path,
+        home: &speccoder_core::bug::BugHome,
+        triad: &speccoder_core::bug::Triad,
+    ) -> Result<crate::format::RecordedBug, crate::format::BugRefusal> {
+        bug::record(root, home, triad)
+    }
+
+    fn bug_step(&self) -> Option<crate::format::BugStep> {
+        Some(bug::STEP)
+    }
+
+    fn bug_dir(&self, home: &speccoder_core::bug::BugHome, slug: &str) -> Option<(String, String)> {
+        bug::dir(home, slug)
+    }
+
+    fn bug_slug(&self, root: &Path, _home: &speccoder_core::bug::BugHome, title: &str) -> String {
+        bug::slug(root, title)
+    }
+
+    fn read_bug(
+        &self,
+        root: &Path,
+        home: &speccoder_core::bug::BugHome,
+        key: &str,
+    ) -> Result<crate::format::ReadBug, crate::format::BugRefusal> {
+        bug::read(root, home, key)
     }
 
     fn requirements_in(&self, text: &str) -> Vec<(String, String)> {

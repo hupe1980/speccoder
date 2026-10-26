@@ -99,6 +99,47 @@ pub fn store(
     Ok(manifest.sha256())
 }
 
+/// Where a sealed set lives: `<project state>/held-out/<unit>/req-<key>/`
+/// (run-time task sets stay at `<unit>/<task>/`).
+#[must_use]
+pub fn sealed_dir(project_state: &Path, unit: &str, key: &str) -> PathBuf {
+    project_state
+        .join("held-out")
+        .join(unit)
+        .join(format!("req-{}", key.replace([':', '/'], "-")))
+}
+
+/// Seals a held-out set keyed by `(unit, requirement)` — the entry point
+/// for sets decided before a run (a bug's reproduction variants, a
+/// review's oracle): the one store protocol, each manifest entry citing
+/// its statements or scenarios.
+pub fn seal(
+    project_state: &Path,
+    unit: &str,
+    key: &str,
+    manifest: &Manifest,
+    contents: &[(String, String)],
+) -> Result<speccoder_core::acceptance::SealedRef, String> {
+    let sha = store(&sealed_dir(project_state, unit, key), manifest, contents)?;
+    Ok(speccoder_core::acceptance::SealedRef {
+        key: key.to_owned(),
+        manifest_sha256: sha,
+        count: manifest.files.len(),
+    })
+}
+
+/// A sealed set, checked against its reference.
+pub fn open_sealed(
+    project_state: &Path,
+    unit: &str,
+    sealed: &speccoder_core::acceptance::SealedRef,
+) -> Result<(Manifest, Vec<(String, String)>), Tampered> {
+    load_verified(
+        &sealed_dir(project_state, unit, &sealed.key),
+        &sealed.manifest_sha256,
+    )
+}
+
 /// A stored set that no longer matches what was recorded.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Tampered(pub String);

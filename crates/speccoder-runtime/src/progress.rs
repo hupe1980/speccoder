@@ -186,6 +186,197 @@ pub enum Event {
         /// The line.
         text: String,
     },
+    /// A bug's step (`bug.*` on the event stream).
+    Bug {
+        /// The task (`T003`, `bug:<slug>`).
+        task: String,
+        /// What happened.
+        step: BugEvent,
+    },
+}
+
+/// One statement's class in a reproduce try.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct StatementClass {
+    /// `E1`, `U1`.
+    pub statement: String,
+    /// The red class (`assertion`, `passed`, …).
+    pub class: String,
+}
+
+/// A reproduction as the stream shows it: never its content.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ShownReproduction {
+    /// Its statement.
+    pub statement: String,
+    /// Its file.
+    pub file: String,
+    /// Its test.
+    pub test: String,
+    /// Its content's digest.
+    pub digest: String,
+}
+
+/// A special case as the stream shows it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ShownSpecialCase {
+    /// The statement it targets.
+    pub statement: String,
+    /// Rejected by the combined set.
+    pub rejected: bool,
+}
+
+/// A bug's step.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum BugEvent {
+    /// The triad is recorded (domain).
+    Recorded {
+        /// The home's kind.
+        home: String,
+        /// The unit.
+        unit: String,
+        /// The requirement.
+        requirement: String,
+        /// The triad's digest.
+        triad_digest: String,
+        /// Through what.
+        via: String,
+    },
+    /// One reproduce try ended.
+    ReproduceTry {
+        /// The try.
+        n: u32,
+        /// Of at most.
+        of: u32,
+        /// Per statement.
+        per_statement: Vec<StatementClass>,
+    },
+    /// Every statement is reproduced.
+    Reproduced {
+        /// The reproductions.
+        reproductions: Vec<ShownReproduction>,
+    },
+    /// The reproductions wait for the person.
+    ConfirmWaiting {
+        /// The digest to confirm.
+        digest: String,
+        /// The command.
+        next: String,
+    },
+    /// The person confirmed them (domain).
+    Confirmed {
+        /// The digest.
+        digest: String,
+        /// Who.
+        by: String,
+        /// Through what.
+        via: String,
+        /// `shown` or `named_test`.
+        basis: String,
+    },
+    /// The person rejected them (domain).
+    ConfirmRejected {
+        /// The digest.
+        digest: String,
+        /// Why.
+        reason: String,
+    },
+    /// The pass-to-pass set was chosen.
+    UnchangedSelected {
+        /// `selected` or `none_selected`.
+        state: String,
+        /// Members.
+        count: usize,
+    },
+    /// The revert and special cases were judged.
+    Discrimination {
+        /// `rejected`, `survived`, `unviable`.
+        revert: String,
+        /// The special cases.
+        special_case: Vec<ShownSpecialCase>,
+    },
+    /// The bug's outcome (domain).
+    Outcome {
+        /// `awaiting_confirmation`, `cannot_reproduce`, …
+        outcome: String,
+        /// The fix's verdict.
+        verdict: Option<String>,
+        /// The stop's code.
+        code: Option<String>,
+        /// What to do next.
+        next: Vec<String>,
+    },
+}
+
+impl BugEvent {
+    /// Its name on the event stream (registered in
+    /// `speccoder_core::event::REGISTRY`).
+    #[must_use]
+    pub const fn name(&self) -> &'static str {
+        match self {
+            Self::Recorded { .. } => "bug.recorded",
+            Self::ReproduceTry { .. } => "bug.reproduce_try",
+            Self::Reproduced { .. } => "bug.reproduced",
+            Self::ConfirmWaiting { .. } => "bug.confirm_waiting",
+            Self::Confirmed { .. } => "bug.confirmed",
+            Self::ConfirmRejected { .. } => "bug.confirm_rejected",
+            Self::UnchangedSelected { .. } => "bug.unchanged_selected",
+            Self::Discrimination { .. } => "bug.discrimination",
+            Self::Outcome { .. } => "bug.outcome",
+        }
+    }
+
+    /// The line a plain progress printer shows.
+    #[must_use]
+    pub fn line(&self) -> String {
+        match self {
+            Self::Recorded {
+                unit, requirement, ..
+            } => format!("bug recorded as {requirement} in {unit}"),
+            Self::ReproduceTry {
+                n,
+                of,
+                per_statement,
+            } => format!(
+                "reproduce try {n}/{of}: {}",
+                per_statement
+                    .iter()
+                    .map(|s| format!("{} {}", s.statement, s.class))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            Self::Reproduced { reproductions } => format!(
+                "reproduced: {} test(s) fail on an assertion",
+                reproductions
+                    .iter()
+                    .filter(|r| r.statement.starts_with('E'))
+                    .count()
+            ),
+            Self::ConfirmWaiting { next, .. } => format!("the reproductions wait for you: {next}"),
+            Self::Confirmed { by, basis, .. } => {
+                format!("reproductions confirmed by {by} ({basis})")
+            }
+            Self::ConfirmRejected { reason, .. } => format!("reproductions rejected: {reason}"),
+            Self::UnchangedSelected { state, count } => {
+                format!("pass-to-pass: {count} test(s) ({state})")
+            }
+            Self::Discrimination {
+                revert,
+                special_case,
+            } => format!(
+                "revert {revert}; {} special case(s), {} rejected",
+                special_case.len(),
+                special_case.iter().filter(|s| s.rejected).count()
+            ),
+            Self::Outcome {
+                outcome, verdict, ..
+            } => match verdict {
+                Some(v) => format!("bug {outcome}: {v}"),
+                None => format!("bug {outcome}"),
+            },
+        }
+    }
 }
 
 /// Receives events as they happen.
@@ -398,7 +589,7 @@ impl Progress for Live {
                 Event::TaskFinished {
                     outcome, message, ..
                 } => s.finished = Some(format!("{outcome}: {message}")),
-                Event::Notice { .. } | Event::RunStarted { .. } => {}
+                Event::Notice { .. } | Event::RunStarted { .. } | Event::Bug { .. } => {}
             }
             s.updated_at = now();
             self.write(&s);

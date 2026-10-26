@@ -373,7 +373,11 @@ fn pipeline(f: &mut Frame<'_>, app: &App, area: Rect) {
             };
             lines.push(Line::styled(a(&head), bold()));
             let mut spans = Vec::new();
-            for stage in Stage::ALL {
+            // A bug task's own stages show once it reaches them.
+            for stage in Stage::ALL
+                .into_iter()
+                .filter(|s| Stage::TASK.contains(s) || h.stages.iter().any(|r| r.stage == *s))
+            {
                 let row = h.stages.iter().find(|s| s.stage == stage);
                 let g = stage_glyph(row.map(|r| r.state));
                 spans.push(Span::styled(
@@ -415,10 +419,12 @@ fn pipeline(f: &mut Frame<'_>, app: &App, area: Rect) {
             };
             lines.push(Line::styled(a(&head), bold()));
             let mut spans = Vec::new();
-            let at = l
-                .stage
-                .and_then(|s| Stage::ALL.iter().position(|x| *x == s));
-            for (i, stage) in Stage::ALL.iter().enumerate() {
+            let strip: Vec<Stage> = Stage::ALL
+                .into_iter()
+                .filter(|s| Stage::TASK.contains(s) || l.stage == Some(*s))
+                .collect();
+            let at = l.stage.and_then(|s| strip.iter().position(|x| *x == s));
+            for (i, stage) in strip.iter().enumerate() {
                 // Watching from outside, only the current stage is known.
                 let g = match at {
                     Some(n) if i == n && l.finished.is_none() && *running => Glyph::Running,

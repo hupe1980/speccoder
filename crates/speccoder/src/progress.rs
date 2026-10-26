@@ -231,6 +231,7 @@ pub fn lines(event: &Event, seconds: Option<u64>, verbosity: Verbosity) -> Vec<S
                 .collect()
         }
         Event::Notice { text } if !quiet => vec![format!("» {text}")],
+        Event::Bug { step, .. } => vec![format!("» {}", step.line())],
         // Running totals go to `speccoder report --live`; a line per turn is noise.
         _ => Vec::new(),
     }
@@ -400,6 +401,7 @@ pub fn reader_lines(event: &Event, verbosity: Verbosity) -> Vec<String> {
             )]
         }
         Event::Notice { text } if !quiet => vec![format!("notice: {text}")],
+        Event::Bug { step, .. } => vec![format!("bug: {}", step.line())],
         _ => Vec::new(),
     }
 }

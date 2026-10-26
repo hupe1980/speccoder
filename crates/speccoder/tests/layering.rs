@@ -302,6 +302,10 @@ const SPECKIT_LITERALS: &[&str] = &[
     "tasks.md",
     "spec.md",
     "plan.md",
+    ".specify/bugs",
+    "assessment.md",
+    "bugfixes",
+    "bugfix",
 ];
 
 /// Spec Kit's parser crate, which only the adapter calls.

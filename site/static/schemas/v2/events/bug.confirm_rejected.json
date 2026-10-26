@@ -1,0 +1,21 @@
+{
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/events/bug.confirm_rejected.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "`bug.confirm_rejected`, as published.",
+  "properties": {
+    "digest": {
+      "description": "The digest rejected.",
+      "type": "string"
+    },
+    "reason": {
+      "description": "The person's reason.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "digest",
+    "reason"
+  ],
+  "title": "a domain event's public projection: ids, digests and counts",
+  "type": "object"
+}

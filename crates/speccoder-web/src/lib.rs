@@ -272,6 +272,16 @@ async fn inbox(State(s): State<Shared>) -> Json<Value> {
     envelope(&r)
 }
 
+/// A bug by `<unit>/<task>` (`task`): its triad, reproductions and stage.
+async fn bug(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Json<Value> {
+    let root = s.root.clone();
+    let Some(task) = q.task else {
+        return Json(json!({ "error": "a bug is needed: task=<unit>/<task>" }));
+    };
+    let r = off(move || speccoder_runtime::service::bug::show(&root, &task)).await;
+    envelope(&r)
+}
+
 async fn actions(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Json<Value> {
     let root = s.root.clone();
     Json(
@@ -803,6 +813,7 @@ pub fn router(s: Shared) -> Router {
         .route("/api/report", get(report))
         .route("/api/actions", get(actions))
         .route("/api/inbox", get(inbox))
+        .route("/api/bug", get(bug))
         .route("/api/account", get(account))
         .route("/api/review", get(review))
         .route("/api/approvals", get(approvals))

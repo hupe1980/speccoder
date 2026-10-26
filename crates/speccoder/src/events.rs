@@ -227,12 +227,299 @@ pub enum Body {
         /// The line.
         text: String,
     },
+    /// A bug's triad was recorded.
+    #[serde(rename = "bug.recorded")]
+    BugRecorded {
+        /// Its task.
+        task: String,
+        /// The public projection.
+        #[serde(flatten)]
+        public: PublicBugRecorded,
+    },
+    /// One reproduce try ended.
+    #[serde(rename = "bug.reproduce_try")]
+    BugReproduceTry {
+        /// Its task.
+        task: String,
+        /// The try.
+        n: u32,
+        /// Of at most.
+        of: u32,
+        /// Each statement's class.
+        per_statement: Vec<StatementClass>,
+    },
+    /// Every statement is reproduced.
+    #[serde(rename = "bug.reproduced")]
+    BugReproduced {
+        /// Its task.
+        task: String,
+        /// The reproductions (never their content).
+        reproductions: Vec<ShownReproduction>,
+    },
+    /// The reproductions wait for the person.
+    #[serde(rename = "bug.confirm_waiting")]
+    BugConfirmWaiting {
+        /// Its task.
+        task: String,
+        /// The digest to confirm.
+        digest: String,
+        /// The command.
+        next: String,
+    },
+    /// The person confirmed them.
+    #[serde(rename = "bug.confirmed")]
+    BugConfirmed {
+        /// Its task.
+        task: String,
+        /// The public projection.
+        #[serde(flatten)]
+        public: PublicBugConfirmed,
+    },
+    /// The person rejected them.
+    #[serde(rename = "bug.confirm_rejected")]
+    BugConfirmRejected {
+        /// Its task.
+        task: String,
+        /// The public projection.
+        #[serde(flatten)]
+        public: PublicBugConfirmRejected,
+    },
+    /// The pass-to-pass set was chosen.
+    #[serde(rename = "bug.unchanged_selected")]
+    BugUnchangedSelected {
+        /// Its task.
+        task: String,
+        /// `selected` or `none_selected`.
+        state: String,
+        /// Members.
+        count: usize,
+    },
+    /// The revert and the special cases were judged.
+    #[serde(rename = "bug.discrimination")]
+    BugDiscrimination {
+        /// Its task.
+        task: String,
+        /// `rejected`, `survived`, `unviable`.
+        revert: String,
+        /// The special cases.
+        special_case: Vec<ShownSpecialCase>,
+    },
+    /// The bug's outcome.
+    #[serde(rename = "bug.outcome")]
+    BugOutcome {
+        /// Its task.
+        task: String,
+        /// The public projection.
+        #[serde(flatten)]
+        public: PublicBugOutcome,
+    },
     /// The last line: the command's result, as `--json` prints it.
     #[serde(rename = "result")]
     Result {
         /// The result envelope.
         result: CommandResult,
     },
+}
+
+/// One statement's class in a reproduce try.
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct StatementClass {
+    /// `E1`, `U1`.
+    pub statement: String,
+    /// `assertion`, `passed`, `build_error`, …
+    pub class: String,
+}
+
+/// A reproduction as the stream shows it.
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct ShownReproduction {
+    /// Its statement.
+    pub statement: String,
+    /// Its file.
+    pub file: String,
+    /// Its test.
+    pub test: String,
+    /// Its content's digest.
+    pub digest: String,
+}
+
+/// A special case as the stream shows it.
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct ShownSpecialCase {
+    /// The statement it targets.
+    pub statement: String,
+    /// Rejected (or ruled).
+    pub rejected: bool,
+}
+
+/// `bug.recorded`, as published: ids and digests only.
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct PublicBugRecorded {
+    /// The home's kind.
+    pub home: String,
+    /// The unit.
+    pub unit: String,
+    /// The requirement.
+    pub requirement: String,
+    /// The triad's digest.
+    pub triad_digest: String,
+    /// Through what.
+    pub via: String,
+}
+
+/// `bug.confirmed`, as published.
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct PublicBugConfirmed {
+    /// The digest confirmed.
+    pub digest: String,
+    /// Who.
+    pub by: String,
+    /// Through what.
+    pub via: String,
+    /// `shown` or `named_test`.
+    pub basis: String,
+}
+
+/// `bug.confirm_rejected`, as published.
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct PublicBugConfirmRejected {
+    /// The digest rejected.
+    pub digest: String,
+    /// The person's reason.
+    pub reason: String,
+}
+
+/// `bug.outcome`, as published.
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct PublicBugOutcome {
+    /// `awaiting_confirmation`, `cannot_reproduce`, `fixed`, …
+    pub outcome: String,
+    /// The fix's verdict.
+    pub verdict: Option<String>,
+    /// The stop's code.
+    pub code: Option<String>,
+    /// What to do next.
+    pub next: Vec<String>,
+}
+
+/// The stream's body for a bug's step.
+fn bug_body(task: &str, step: &progress::BugEvent) -> Body {
+    use progress::BugEvent as B;
+    let task = clean(task);
+    match step {
+        B::Recorded {
+            home,
+            unit,
+            requirement,
+            triad_digest,
+            via,
+        } => Body::BugRecorded {
+            task,
+            public: PublicBugRecorded {
+                home: home.clone(),
+                unit: clean(unit),
+                requirement: clean(requirement),
+                triad_digest: triad_digest.clone(),
+                via: via.clone(),
+            },
+        },
+        B::ReproduceTry {
+            n,
+            of,
+            per_statement,
+        } => Body::BugReproduceTry {
+            task,
+            n: *n,
+            of: *of,
+            per_statement: per_statement
+                .iter()
+                .map(|s| StatementClass {
+                    statement: s.statement.clone(),
+                    class: s.class.clone(),
+                })
+                .collect(),
+        },
+        B::Reproduced { reproductions } => Body::BugReproduced {
+            task,
+            reproductions: reproductions
+                .iter()
+                .map(|r| ShownReproduction {
+                    statement: r.statement.clone(),
+                    file: clean(&r.file),
+                    test: clean(&r.test),
+                    digest: r.digest.clone(),
+                })
+                .collect(),
+        },
+        B::ConfirmWaiting { digest, next } => Body::BugConfirmWaiting {
+            task,
+            digest: digest.clone(),
+            next: clean(next),
+        },
+        B::Confirmed {
+            digest,
+            by,
+            via,
+            basis,
+        } => Body::BugConfirmed {
+            task,
+            public: PublicBugConfirmed {
+                digest: digest.clone(),
+                by: clean(by),
+                via: via.clone(),
+                basis: basis.clone(),
+            },
+        },
+        B::ConfirmRejected { digest, reason } => Body::BugConfirmRejected {
+            task,
+            public: PublicBugConfirmRejected {
+                digest: digest.clone(),
+                reason: clean(reason),
+            },
+        },
+        B::UnchangedSelected { state, count } => Body::BugUnchangedSelected {
+            task,
+            state: state.clone(),
+            count: *count,
+        },
+        B::Discrimination {
+            revert,
+            special_case,
+        } => Body::BugDiscrimination {
+            task,
+            revert: revert.clone(),
+            special_case: special_case
+                .iter()
+                .map(|s| ShownSpecialCase {
+                    statement: s.statement.clone(),
+                    rejected: s.rejected,
+                })
+                .collect(),
+        },
+        B::Outcome {
+            outcome,
+            verdict,
+            code,
+            next,
+        } => Body::BugOutcome {
+            task,
+            public: PublicBugOutcome {
+                outcome: outcome.clone(),
+                verdict: verdict.clone(),
+                code: code.clone(),
+                next: cleaned(next),
+            },
+        },
+    }
+}
+
+/// The `type` of a body, as registered (`speccoder_core::event`).
+#[must_use]
+pub fn type_of(body: &Body) -> String {
+    serde_json::to_value(body)
+        .ok()
+        .and_then(|v| v["type"].as_str().map(str::to_owned))
+        .unwrap_or_default()
 }
 
 /// No control characters, at most [`MAX_STRING`] characters.
@@ -422,6 +709,7 @@ pub fn body(event: &Event) -> Body {
             text: text.clone(),
         },
         Event::Notice { text } => Body::Notice { text: clean(text) },
+        Event::Bug { task, step } => bug_body(task, step),
     }
 }
 
@@ -499,7 +787,8 @@ impl Events {
         let Ok(mut state) = self.state.lock() else {
             return;
         };
-        if !state.open {
+        // A name the registry does not list is never emitted.
+        if !state.open || speccoder_core::event::lookup(&type_of(&body)).is_none() {
             return;
         }
         state.seq += 1;
@@ -589,6 +878,65 @@ impl Progress for Events {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn every_type_is_registered_and_every_registered_name_is_a_type() {
+        let schema = serde_json::to_value(schemars::schema_for!(Line)).unwrap();
+        let mut types = Vec::new();
+        fn walk(v: &serde_json::Value, out: &mut Vec<String>) {
+            match v {
+                serde_json::Value::Object(o) => {
+                    if let Some(t) = o
+                        .get("properties")
+                        .and_then(|p| p.get("type"))
+                        .and_then(|t| t.get("const"))
+                        .and_then(|c| c.as_str())
+                    {
+                        out.push(t.to_owned());
+                    }
+                    for x in o.values() {
+                        walk(x, out);
+                    }
+                }
+                serde_json::Value::Array(a) => a.iter().for_each(|x| walk(x, out)),
+                _ => {}
+            }
+        }
+        walk(&schema, &mut types);
+        types.sort();
+        types.dedup();
+        for t in &types {
+            assert!(
+                speccoder_core::event::lookup(t).is_some(),
+                "{t} is not registered"
+            );
+        }
+        for n in speccoder_core::event::REGISTRY {
+            assert!(
+                types.iter().any(|t| t == n.name),
+                "{} is registered but no line has it",
+                n.name
+            );
+        }
+        // An unregistered type is dropped, not written.
+        let buf = Buf::default();
+        let e = Events::start(Box::new(buf.clone()), "bug");
+        e.event(&Event::Bug {
+            task: "T001".to_owned(),
+            step: progress::BugEvent::UnchangedSelected {
+                state: "selected".to_owned(),
+                count: 2,
+            },
+        });
+        let lines = lines(&buf);
+        assert!(
+            lines
+                .iter()
+                .any(|l| l["type"] == "bug.unchanged_selected" && l["count"] == 2),
+            "{lines:?}"
+        );
+    }
+
     use super::*;
     use std::sync::Arc;
 

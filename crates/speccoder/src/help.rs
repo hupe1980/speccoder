@@ -11,7 +11,7 @@ use crate::cli::Cli;
 pub const GROUPS: &[(&str, &[&str])] = &[
     ("Start", &["init", "doctor", "config", "auth"]),
     ("Plan", &["feature", "spec", "review", "issue"]),
-    ("Work", &["run", "do", "task"]),
+    ("Work", &["run", "do", "bug", "task"]),
     ("Review", &["inbox", "report", "ui", "pr"]),
 ];
 

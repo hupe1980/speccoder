@@ -178,6 +178,8 @@ pub(crate) struct TickFacts<'a> {
     /// The kind of red the acceptance tests showed, when they did.
     pub(crate) red: Option<speccoder_core::verify::RedClass>,
     pub(crate) checklists_overridden: bool,
+    /// More trailers (a bug task's `Bug:`, `Acceptance:`, `Fixes`).
+    pub(crate) extra: String,
 }
 
 /// The commit message of a ticked task: subject, title, and the trailers
@@ -217,6 +219,7 @@ pub(crate) fn tick_message(f: &TickFacts<'_>) -> String {
     if f.checklists_overridden {
         evidence.push_str("Checklists: overridden\n");
     }
+    evidence.push_str(&f.extra);
     format!(
         "{}\n\n{}\n\nSpec-Task: {}/{}\nVerdict: {verdict_word}\n{evidence}Run: {}\n{}{}",
         commit_subject(f.task, f.title),

@@ -1,5 +1,5 @@
 {
-  "head": "spec(002-quick-changes): quick change: Log every sign-in",
+  "head": "bug: signing in twice logs out",
   "result": {
     "command": "feature",
     "data": {
@@ -31,6 +31,19 @@
           "number": 2,
           "tasks": 1,
           "title": "Quick Changes"
+        },
+        {
+          "artifacts": [
+            "spec",
+            "tasks"
+          ],
+          "current": false,
+          "dir": "specs/003-bugfixes",
+          "done": 0,
+          "name": "003-bugfixes",
+          "number": 3,
+          "tasks": 1,
+          "title": "Bug Fixes"
         }
       ],
       "reason": "recorded",

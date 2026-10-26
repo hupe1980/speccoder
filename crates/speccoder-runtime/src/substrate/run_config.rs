@@ -13,6 +13,13 @@ struct RawBudget {
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
+struct RawBug {
+    reproduce_tries: Option<u32>,
+    test: Option<Vec<String>>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct RawAcceptance {
     generate: Option<bool>,
     held_out: Option<bool>,
@@ -221,6 +228,11 @@ pub struct RunConfig {
     /// `[context] instructions`: the file names read per directory as the
     /// repository's instructions for agents; empty: none.
     pub instructions: Vec<String>,
+    /// `[bug] reproduce_tries`: the reproduction author's tries (1–5).
+    pub reproduce_tries: u32,
+    /// `[bug] test`: how one named test runs (`{file}`, `{name}` filled),
+    /// when the toolchain's own rule does not fit.
+    pub bug_test: Option<Vec<String>>,
 }
 
 impl Default for RunConfig {
@@ -243,6 +255,8 @@ impl Default for RunConfig {
             approval_wait: std::time::Duration::from_secs(7 * 24 * 3600),
             attest: AttestConfig::default(),
             instructions: vec!["AGENTS.md".to_owned()],
+            reproduce_tries: speccoder_core::bug::DEFAULT_TRIES,
+            bug_test: None,
         }
     }
 }
@@ -413,6 +427,20 @@ pub fn parse(text: &str) -> Result<RunConfig, String> {
                 .map_or(ds.timeout, |s| std::time::Duration::from_secs(s.max(1))),
         }
     };
+    let bug: RawBug = match table.get("bug") {
+        Some(v) => v.clone().try_into().map_err(|e| format!("[bug]: {e}"))?,
+        None => RawBug::default(),
+    };
+    let reproduce_tries = bug.reproduce_tries.unwrap_or(d.reproduce_tries);
+    if !(1..=speccoder_core::bug::MAX_TRIES).contains(&reproduce_tries) {
+        return Err(format!(
+            "[bug]: reproduce_tries = {reproduce_tries} (1 to {})",
+            speccoder_core::bug::MAX_TRIES
+        ));
+    }
+    if bug.test.as_ref().is_some_and(Vec::is_empty) {
+        return Err("[bug]: test = [] (a program and its arguments)".to_owned());
+    }
     let approval_wait = match approvals.wait.as_deref() {
         Some(w) => wait(w)?,
         None => d.approval_wait,
@@ -439,12 +467,30 @@ pub fn parse(text: &str) -> Result<RunConfig, String> {
         approval_wait,
         attest,
         instructions: context.instructions.unwrap_or(d.instructions),
+        reproduce_tries,
+        bug_test: bug.test,
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bug_tries_default_to_three_and_stay_within_five() {
+        assert_eq!(parse("").unwrap().reproduce_tries, 3);
+        assert_eq!(
+            parse("[bug]\nreproduce_tries = 5\n")
+                .unwrap()
+                .reproduce_tries,
+            5
+        );
+        assert!(parse("[bug]\nreproduce_tries = 6\n").is_err());
+        assert!(parse("[bug]\nreproduce_tries = 0\n").is_err());
+        assert!(parse("[bug]\ntries = 2\n").is_err());
+        let c = parse("[bug]\ntest = [\"sh\", \"t.sh\", \"{file}\", \"{name}\"]\n").unwrap();
+        assert_eq!(c.bug_test.unwrap_or_default().len(), 4);
+    }
 
     #[test]
     fn agents_md_is_read_unless_configured_otherwise() {

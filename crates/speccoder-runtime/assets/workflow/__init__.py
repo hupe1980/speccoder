@@ -19,6 +19,8 @@ Config:
   max_tasks: at most this many tasks
   timeout:   seconds (default: no limit; a feature run takes as long as it takes)
   executable: path to speccoder (default: `speccoder` on PATH)
+  bug:       a bug's slug (Spec Kit's `bug` extension): `speccoder bug run --slug`
+             — reproduce, the person's confirmation (paused), the fix
 """
 
 from __future__ import annotations
@@ -49,6 +51,9 @@ class SpeccoderStep(StepBase):
     def argv(self, config: dict[str, Any], context: StepContext) -> list[str]:
         exe = config.get("executable") or shutil.which("speccoder") or "speccoder"
         root = context.project_root or "."
+        bug = _value(config.get("bug"), context)
+        if bug:
+            return [exe, "-C", root, "--json", "bug", "run", "--no-prompt", "--slug", str(bug)]
         skill = config.get("skill")
         if skill:
             args = _value(config.get("args", ""), context)
@@ -137,6 +142,8 @@ class SpeccoderStep(StepBase):
             t = config["timeout"]
             if isinstance(t, bool) or not isinstance(t, (int, float)) or not math.isfinite(t) or t <= 0:
                 errors.append(f"speccoder step {sid!r}: 'timeout' must be a positive number of seconds")
+        if "bug" in config and not isinstance(config["bug"], str):
+            errors.append(f"speccoder step {sid!r}: 'bug' must be a slug (or an expression)")
         if "skill" in config and not isinstance(config["skill"], str):
             errors.append(f"speccoder step {sid!r}: 'skill' must be a string")
         return errors
