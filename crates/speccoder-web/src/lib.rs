@@ -329,10 +329,14 @@ async fn tour(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Json<Va
             let Some(task) = q.task else {
                 return json!({ "error": "a task is needed" });
             };
-            let feature = q.feature.or_else(|| match speccoder_runtime::inspect(&root, None).data() {
-                Some(CommandData::Inspect(snap)) => snap.feature.as_ref().map(|f| f.feature.name.clone()),
-                _ => None,
-            });
+            let feature =
+                q.feature
+                    .or_else(|| match speccoder_runtime::inspect(&root, None).data() {
+                        Some(CommandData::Inspect(snap)) => {
+                            snap.feature.as_ref().map(|f| f.feature.name.clone())
+                        }
+                        _ => None,
+                    });
             let Some(feature) = feature else {
                 return json!({ "error": "no feature selected" });
             };

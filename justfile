@@ -87,6 +87,7 @@ release-test:
     @echo "==> gate: release-test"
     scripts/test-installer.sh
     scripts/release/test.sh
+    packaging/speccoder-verify-action/test.sh
 
 # Set the version; for a release also cut the CHANGELOG. Never commits.
 bump version:

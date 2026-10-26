@@ -1,0 +1,5 @@
+# Who may sign speccoder evidence in this repository (ssh-keygen's
+# allowed-signers format: `<principal> namespaces="in-toto" <key>`, one per
+# line). The speccoder-verify action reads this file from the base branch of
+# a pull request, never from the pull request itself. This repository commits
+# no specs, so nothing is signed yet: the dogfood check is neutral.

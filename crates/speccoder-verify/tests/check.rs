@@ -635,3 +635,41 @@ fn a_task_line_hash_is_checked_against_the_head() {
             .contains("task line changed")
     );
 }
+
+/// SC-003, for `scripts/verify-performance.sh`: the given binary checks 50
+/// signed ticks within the budget left after its download.
+#[test]
+#[ignore = "run by scripts/verify-performance.sh with a release-verify binary"]
+fn fifty_signed_ticks_are_checked_within_the_budget() {
+    let (Some(bin), Some(budget)) = (
+        std::env::var_os("SPECCODER_VERIFY_PERF_BIN"),
+        std::env::var("SPECCODER_VERIFY_PERF_BUDGET_MS")
+            .ok()
+            .and_then(|b| b.parse::<u64>().ok()),
+    ) else {
+        panic!("SPECCODER_VERIFY_PERF_BIN and SPECCODER_VERIFY_PERF_BUDGET_MS are needed");
+    };
+    let r = Repo::new(50);
+    for (id, _) in support::tasks(50) {
+        r.tick(&id, "verified", Sign::Trusted);
+    }
+    let allowed = r.allowed.display().to_string();
+    let start = std::time::Instant::now();
+    let out = std::process::Command::new(bin)
+        .args([
+            "check",
+            "--json",
+            "--base",
+            "main",
+            "--allowed-signers",
+            &allowed,
+        ])
+        .current_dir(r.path())
+        .output()
+        .unwrap();
+    let took = start.elapsed();
+    let v: Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(v["data"]["totals"]["verified"], 50, "{v}");
+    eprintln!("50 signed ticks checked in {took:?} (budget {budget} ms)");
+    assert!(took < std::time::Duration::from_millis(budget), "{took:?}");
+}

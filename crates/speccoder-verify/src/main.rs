@@ -248,7 +248,13 @@ fn run_check(args: &CheckArgs) -> ExitCode {
         Ok(c) => c,
         Err(r) => return refuse(COMMAND, r.status, &r.message, args.json),
     };
-    let tours = speccoder_runtime::tour::markdown_all(&checked);
+    // Tours only where they are shown: each reads its commit's tree.
+    let tours = if args.markdown.is_some() || args.github_check.is_some() || args.github_annotations
+    {
+        speccoder_runtime::tour::markdown_all(&checked)
+    } else {
+        Vec::new()
+    };
     let report = &checked.report;
     let mut failed_writes = Vec::new();
     if let Some(path) = &args.markdown

@@ -1,0 +1,4 @@
+# speccoder-verify release digests: <version> <target> <sha256 of speccoder-verify-<version>-<target>.tar.gz>
+# Filled from the release's SHA256SUMS after each release (the owner's follow-up commit);
+# mandatory in the published hupe1980/speccoder-verify action. Empty here: the
+# action then checks the attested release's SHA256SUMS.
