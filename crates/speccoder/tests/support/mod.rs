@@ -6,6 +6,14 @@
 
 use serde_json::Value;
 
+/// A state directory of this test process's own — nextest runs each test
+/// in a process of its own — for every binary a test spawns without naming
+/// one: the developer's real state directory is never written.
+pub fn isolated_state() -> &'static std::path::Path {
+    static DIR: std::sync::OnceLock<tempfile::TempDir> = std::sync::OnceLock::new();
+    DIR.get_or_init(|| tempfile::tempdir().unwrap()).path()
+}
+
 fn schema(name: &str) -> Value {
     let file = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join(format!("../../site/static/schemas/v2/{name}.json"));

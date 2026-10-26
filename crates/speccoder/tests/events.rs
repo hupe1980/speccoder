@@ -167,6 +167,7 @@ fn a_run_streams_its_lifecycle_and_ends_in_the_result() {
 #[test]
 fn events_and_json_together_are_one_usage_error() {
     let out = Command::new(env!("CARGO_BIN_EXE_speccoder"))
+        .env("SPECCODER_STATE_DIR", support::isolated_state())
         .args(["--events", "--json", "report"])
         .output()
         .unwrap();
@@ -177,6 +178,7 @@ fn events_and_json_together_are_one_usage_error() {
     assert_eq!(lines[1]["result"]["code"], "USAGE-CONFLICT");
     // And a bad flag under --json is an envelope too, not clap's text.
     let out = Command::new(env!("CARGO_BIN_EXE_speccoder"))
+        .env("SPECCODER_STATE_DIR", support::isolated_state())
         .args(["--json", "run", "--bogus"])
         .output()
         .unwrap();

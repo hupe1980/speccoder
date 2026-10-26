@@ -11,6 +11,8 @@ use assert_cmd::Command;
 
 fn speccoder() -> Command {
     let mut cmd = Command::cargo_bin("speccoder").unwrap();
+    // A test that needs its own state names it after this.
+    cmd.env("SPECCODER_STATE_DIR", support::isolated_state());
     cmd.env_remove("SPECIFY_FEATURE_DIRECTORY");
     cmd.env_remove("SPECCODER_FORMAT");
     cmd
@@ -743,6 +745,7 @@ fn init_at_a_terminal_commits_only_the_config_on_yes() {
     let bin = assert_cmd::cargo::cargo_bin("speccoder");
     let line = format!("{} init", bin.display());
     let mut cmd = std::process::Command::new("script");
+    cmd.env("SPECCODER_STATE_DIR", support::isolated_state());
     if cfg!(target_os = "macos") {
         cmd.args(["-q", "/dev/null"]).arg(&bin).arg("init");
     } else {
@@ -872,6 +875,7 @@ fn init_at_a_terminal_commits_the_nextest_profile_with_the_config() {
     let bin = assert_cmd::cargo::cargo_bin("speccoder");
     let line = format!("{} init --no-verify", bin.display());
     let mut cmd = std::process::Command::new("script");
+    cmd.env("SPECCODER_STATE_DIR", support::isolated_state());
     if cfg!(target_os = "macos") {
         cmd.args(["-q", "/dev/null"])
             .arg(&bin)
