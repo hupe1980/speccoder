@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { approveCommand, calls, coverage, freezes, grouped, locate, nudgeLine, passage, place, sheetBlocked, stageLabel, testsCommand, touched } from "./review";
+import { approveCommand, calls, coverage, discardWord, freezes, grouped, locate, nudgeLine, passage, place, sheetBlocked, stageLabel, testsCommand, touched } from "./review";
 import type { CommentDraft } from "./schema.gen";
 import { oracleView, review } from "../test/fixtures";
 
@@ -8,7 +8,7 @@ describe("freezes", () => {
     expect(freezes(oracleView())).toBe("1 test · 2 held out · target 80%");
     expect(freezes(oracleView({ strength_target: null, held_out: { state: "off", count: 0, manifest_sha256: null, reason: null } }))).toBe("1 test");
     expect(freezes(oracleView({ tests: [] }))).toBe("tests written at run time");
-    expect(freezes(oracleView({ state: "frozen" }))).toBe("1 tests frozen");
+    expect(freezes(oracleView({ state: "frozen" }))).toBe("1 test frozen");
   });
 
   it("is blocked by a reading still open", () => {
@@ -70,5 +70,12 @@ describe("locate", () => {
     expect(locate(md, "not in it")).toBeNull();
     expect(locate(md, "   ")).toBeNull();
     expect(passage("specs/001/spec.md", md, "FR-001: Users")).toMatchObject({ kind: "passage", start_line: 5, end_line: 5 });
+  });
+});
+
+describe("discardWord", () => {
+  it("says why a test was not kept, in words", () => {
+    expect(discardWord("cites_no_scenario", "US1")).toBe("cites no scenario of US1");
+    expect(discardWord("something_else", "US1")).toBe("something else");
   });
 });

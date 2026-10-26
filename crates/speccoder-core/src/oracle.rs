@@ -295,7 +295,9 @@ impl OracleView {
             return format!("blocked: two readings of {}", a.scenario);
         }
         match self.state {
-            OracleState::Frozen => format!("{red} tests frozen"),
+            OracleState::Frozen => {
+                format!("{red} {} frozen", if red == 1 { "test" } else { "tests" })
+            }
             _ if red == 0 => "tests written at run time".to_owned(),
             _ => {
                 let mut parts = vec![format!("{red} {}", if red == 1 { "test" } else { "tests" })];

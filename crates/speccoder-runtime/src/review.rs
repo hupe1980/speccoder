@@ -628,7 +628,21 @@ pub fn decide(
     comment: Option<&str>,
     via: speccoder_core::actions::Via,
 ) -> CommandResult {
-    let u = match unit("review", path, feature) {
+    decide_in(path, feature, ids, verdict, comment, via, None)
+}
+
+/// [`decide`] with the state directory given (`None`: the environment's).
+#[must_use]
+pub fn decide_in(
+    path: &Path,
+    feature: Option<&str>,
+    ids: &[String],
+    verdict: &str,
+    comment: Option<&str>,
+    via: speccoder_core::actions::Via,
+    state: Option<&Path>,
+) -> CommandResult {
+    let u = match unit_in("review", path, feature, state) {
         Ok(u) => u,
         Err(r) => return *r,
     };

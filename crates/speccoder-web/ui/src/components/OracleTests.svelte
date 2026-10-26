@@ -8,7 +8,7 @@
   import { offer } from "../lib/actions";
   import { comments } from "../lib/comments.svelte";
   import { language } from "../lib/highlight";
-  import { calls, coverage, stageLabel, testsCommand } from "../lib/review";
+  import { calls, coverage, discardWord, stageLabel, testsCommand } from "../lib/review";
   import type { OracleView, Runnable } from "../lib/types";
   import Icon from "./Icon.svelte";
   import Source from "./Source.svelte";
@@ -19,13 +19,7 @@
   const stage = $derived(app.oracleStage?.requirement === v.req ? app.oracleStage : null);
   const scenario = (id: string) => v.scenarios.find((s) => s.id === id)?.text ?? id;
   const when = (s: number | null) => (s ? new Date(s * 1000).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "");
-  const why = $derived<Record<string, string>>({
-    cites_no_scenario: `cites no scenario of ${v.req}`,
-    not_a_new_test_file: "not a new test file",
-    exists: "the file exists already",
-    command_not_allowed: "its command is not allowed",
-    limit: "more than four tests",
-  });
+
   const pill = (red: boolean, cls: string) => (red ? `red: ${cls.replaceAll("_", " ")}` : cls === "passed" ? "already passes" : cls.replaceAll("_", " "));
 
   function act(op: "write" | "reject" | "again" | "edit" | "reading", extra: Partial<Extract<Runnable, { kind: "oracle_tests" }>>, label: string, command: string, input: string | null = null) {
@@ -169,7 +163,7 @@
     {/each}
     {#if v.discarded.length}
       <details class="discarded"><summary>{v.discarded.length} discarded</summary>
-        <ul>{#each v.discarded as d (d.path)}<li><span class="mono">{d.path}</span> — {why[d.why] ?? d.why.replaceAll("_", " ")}</li>{/each}</ul>
+        <ul>{#each v.discarded as d (d.path)}<li><span class="mono">{d.path}</span> — {discardWord(d.why, v.req)}</li>{/each}</ul>
       </details>
     {/if}
     {#if v.rejected.length}

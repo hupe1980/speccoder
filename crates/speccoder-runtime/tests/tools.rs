@@ -643,7 +643,10 @@ fn the_model_writes_no_review_record_and_nothing_of_the_state_directory() {
     let state = tempfile::tempdir().unwrap();
     for outside in [
         format!("{}/oracle/001-x/US1/draft.json", state.path().display()),
-        format!("{}/pre-frozen/001-x/US1/record.json", state.path().display()),
+        format!(
+            "{}/pre-frozen/001-x/US1/record.json",
+            state.path().display()
+        ),
         format!("{}/comments/001-x.json", state.path().display()),
         "../state/held-out/001-x/req-US1/manifest.json".to_owned(),
     ] {

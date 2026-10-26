@@ -404,22 +404,47 @@ fn us2_disagreeing_authors_block_approve_and_run_until_a_reading_is_chosen() {
         format!("{CONFIG}\n[review]\nrequired = true\n"),
     )
     .unwrap();
-    // Both readings: A for US1-2; US1-3's untestable reading too.
-    for scenario in ["US1-2"] {
-        let mut req = request("US1", OracleOp::Reading);
-        req.scenario = Some(scenario);
-        req.reading = Some(Reading::A);
-        let res = tests_with(
-            r.path(),
-            None,
-            &req,
-            Via::Web,
-            state.path(),
-            None,
-            &RunOptions::default(),
-        );
-        assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
-    }
+    // Per-line decisions still record, and say Approve and Run waits.
+    let plain = speccoder_runtime::review::decide_in(
+        r.path(),
+        None,
+        &[],
+        "approve",
+        None,
+        Via::Terminal,
+        Some(state.path()),
+    );
+    assert_eq!(plain.status(), CommandStatus::Ok, "{}", plain.message());
+    assert!(
+        plain
+            .message()
+            .contains("US1 is ambiguous — Approve and Run stays blocked"),
+        "{}",
+        plain.message()
+    );
+    git(r.path(), &["add", "-A"]);
+    git(r.path(), &["commit", "-q", "-m", "gate the run"]);
+    let gated = speccoder_runtime::run_with(r.path(), None, "T005", state.path(), d.clone(), None);
+    assert_eq!(
+        code(&gated),
+        Some("REVIEW-AMBIGUOUS"),
+        "{}",
+        gated.message()
+    );
+    // Reading A is meant: the item closes, the tests stay.
+    let mut req = request("US1", OracleOp::Reading);
+    req.scenario = Some("US1-2");
+    req.reading = Some(Reading::A);
+    let res = tests_with(
+        r.path(),
+        None,
+        &req,
+        Via::Web,
+        state.path(),
+        None,
+        &RunOptions::default(),
+    );
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
     let v = us1(&speccoder_runtime::review::report_in(
         r.path(),
         None,

@@ -358,6 +358,9 @@ mod tests {
             trailer(review, "Acceptance"),
             Some("review manifest=sha256:m approval=sha256:a wording=sha256:w by=Ada Lovelace")
         );
-        assert_eq!(trailer(review, "Acceptance-Strength"), Some("0.80 near-miss=0/1"));
+        assert_eq!(
+            trailer(review, "Acceptance-Strength"),
+            Some("0.80 near-miss=0/1")
+        );
     }
 }

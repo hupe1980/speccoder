@@ -5,7 +5,7 @@
 //! `HEAD` in a scratch worktree, a held-out set sealed beside them — shaped
 //! by the person (reject, ask again, edit, choose a reading), and frozen
 //! with the approval ([`freeze`]). A task whose requirement has a frozen,
-//! current oracle reuses it instead of calling the author ([`for_task`]).
+//! current oracle reuses it instead of calling the author.
 //!
 //! Drafts live in the state directory (`<state>/oracle/<unit>/<REQ>/`),
 //! never in the worktree; the model writes none of them. A held-out test's
@@ -168,6 +168,12 @@ pub struct FrozenTest {
     pub scenarios: Vec<String>,
 }
 
+/// A draft with its tests' contents (path, text).
+pub type Loaded = (Draft, Vec<(String, String)>);
+
+/// A test to keep: path, content, the scenarios it cites, its command.
+type Kept = (String, String, Vec<String>, Vec<String>);
+
 /// A stored draft that no longer matches its record.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Tampered(pub String);
@@ -240,11 +246,7 @@ pub fn store(
 
 /// A requirement's draft and its tests' contents, every hash checked;
 /// `Ok(None)`: none was written.
-pub fn load(
-    project_state: &Path,
-    unit: &str,
-    key: &str,
-) -> Result<Option<(Draft, Vec<(String, String)>)>, Tampered> {
+pub fn load(project_state: &Path, unit: &str, key: &str) -> Result<Option<Loaded>, Tampered> {
     let d = dir(project_state, unit, key);
     let Ok(text) = std::fs::read_to_string(d.join("draft.json")) else {
         return Ok(None);
@@ -809,10 +811,7 @@ fn usage(message: &str) -> Box<CommandResult> {
     Box::new(refuse(CommandStatus::UsageError, "USAGE", message))
 }
 
-fn existing(
-    ctx: &Ctx,
-    req: &OracleRequirement,
-) -> Result<(Draft, Vec<(String, String)>), Box<CommandResult>> {
+fn existing(ctx: &Ctx, req: &OracleRequirement) -> Result<Loaded, Box<CommandResult>> {
     match load(&ctx.plane_dir, &ctx.feature, &req.key) {
         Ok(Some((d, c))) if d.requirement.sha256 == req.digest() => Ok((d, c)),
         Ok(Some(_)) => Err(usage(&format!(
@@ -1097,10 +1096,7 @@ fn keep(
     answer: &Value,
     req: &OracleRequirement,
     taken: &[String],
-) -> (
-    Vec<(String, String, Vec<String>, Vec<String>)>,
-    Vec<OracleDiscarded>,
-) {
+) -> (Vec<Kept>, Vec<OracleDiscarded>) {
     let (valid, refused) =
         crate::pipeline::validate_answer(answer, &bench.project, &ctx.policy, &req.scenarios);
     let mut discarded: Vec<OracleDiscarded> = refused

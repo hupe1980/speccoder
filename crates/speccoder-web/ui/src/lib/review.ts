@@ -12,7 +12,7 @@ export function freezes(v: OracleView): string {
   const red = v.tests.filter((t) => t.red).length;
   const open = v.ambiguities.find((a) => !a.resolution);
   if (open) return `blocked: two readings of ${open.scenario}`;
-  if (v.state === "frozen") return `${red} tests frozen`;
+  if (v.state === "frozen") return `${red} ${red === 1 ? "test" : "tests"} frozen`;
   if (red === 0) return "tests written at run time";
   const parts = [`${red} ${red === 1 ? "test" : "tests"}`];
   if (v.held_out.state === "kept") parts.push(`${v.held_out.count} held out`);
@@ -162,4 +162,16 @@ export function passage(path: string, markdown: string, selected: string): Comme
 /** Whether a path is one of the frozen tests a review shows. */
 export function frozenTests(oracle: OracleView[]): Set<string> {
   return new Set(oracle.filter((v) => v.state === "frozen").flatMap((v) => v.tests.map((t) => t.path)));
+}
+
+/** Why a written test was not kept, in words. */
+export function discardWord(reason: string, req: string): string {
+  const words: Record<string, string> = {
+    cites_no_scenario: `cites no scenario of ${req}`,
+    not_a_new_test_file: "not a new test file",
+    exists: "the file exists already",
+    command_not_allowed: "its command is not allowed",
+    limit: "more than four tests",
+  };
+  return words[reason] ?? reason.replaceAll("_", " ");
 }
