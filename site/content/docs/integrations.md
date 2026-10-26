@@ -93,3 +93,7 @@ Under `GITHUB_ACTIONS=true`, `run` and `report` append the feature's report as M
 ```
 
 `speccoder report --markdown` prints the same Markdown anywhere, for a pull request comment or a chat.
+
+## Spec Kit's `bugfix` workflow
+
+With Spec Kit's first-party `bug` extension and its `bugfix` workflow installed, `speccoder workflow install --overlay bugfix` writes a project overlay (`.specify/workflows/overlays/bugfix/speccoder.yml`) that replaces the workflow's `test` step with speccoder's (`speccoder bug run --slug {{ inputs.slug }}`): `specify workflow run bugfix` assesses with the extension, pauses for the reproductions' confirmation, and reports the verdict. `speccoder workflow uninstall --overlay bugfix` removes it. See [bug fixes](@/docs/bugs.md).

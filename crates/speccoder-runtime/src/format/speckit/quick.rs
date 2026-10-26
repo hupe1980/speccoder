@@ -26,7 +26,7 @@ fn title(request: &str) -> String {
 }
 
 /// The highest number after `prefix` in `text` (`FR-`, `T`, `User Story `).
-fn highest(text: &str, prefix: &str) -> u32 {
+pub(super) fn highest(text: &str, prefix: &str) -> u32 {
     text.match_indices(prefix)
         .filter_map(|(i, _)| {
             let digits: String = text[i + prefix.len()..]

@@ -155,6 +155,7 @@ fn statuses(
                         reference: a.reference.clone(),
                     }),
                 set_aside: None,
+                bug: None,
                 note: if t.done {
                     found.map(|e| e.reason.clone()).filter(|r| !r.is_empty())
                 } else {
@@ -518,6 +519,15 @@ pub fn report(path: &Path, feature: Option<&str>) -> CommandResult {
     } else {
         message.push_str("; speccoder has not worked on this feature yet");
     }
+    // A bug task's outcome, from what speccoder keeps of the bug.
+    #[cfg(feature = "engine")]
+    if let Some(state) = crate::worktree::state_dir() {
+        let plane = crate::worktree::project_state_dir(&state, root);
+        for t in &mut tasks {
+            t.bug = crate::bug::state::load(&plane, &name, &t.id)
+                .map(|b| b.outcome.as_str().to_owned());
+        }
+    }
     CommandResult::new("report", CommandStatus::Ok, &message).with_data(CommandData::Report(
         Box::new(StatusReport {
             review: crate::review::totals_of(root, format, &name, &f.feature.dir),
@@ -664,6 +674,7 @@ mod tests {
             run_id: None,
             last_attempt: None,
             set_aside: None,
+            bug: None,
             note: None,
             attestation: None,
             strength: None,

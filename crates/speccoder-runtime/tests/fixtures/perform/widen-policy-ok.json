@@ -1,5 +1,5 @@
 {
-  "head": "spec(002-quick-changes): quick change: Log every sign-in",
+  "head": "bug: signing in twice logs out",
   "result": {
     "command": "config",
     "data": {
@@ -614,6 +614,37 @@
           "named": false,
           "tables": [],
           "title": "Acceptance"
+        },
+        {
+          "about": "`speccoder bug`: how hard reproduce tries before the bug goes to you as cannot reproduce. A project setting only: a value in your user config is ignored.",
+          "keys": [
+            {
+              "about": "Tries of the reproduction author before cannot reproduce (a rejection counts as one)",
+              "choices": [],
+              "default": 3,
+              "key": "reproduce_tries",
+              "kind": "integer",
+              "max": 5.0,
+              "min": 1.0,
+              "required": false,
+              "value": null
+            },
+            {
+              "about": "How one named test (`--test PATH::NAME`) runs, `{file}` and `{name}` filled in; default: the toolchain's own runner",
+              "choices": [],
+              "default": null,
+              "key": "test",
+              "kind": "argv",
+              "max": null,
+              "min": null,
+              "required": false,
+              "value": null
+            }
+          ],
+          "name": "bug",
+          "named": false,
+          "tables": [],
+          "title": "Bug fixes"
         },
         {
           "about": "How often a feature may be brought back to its spec.",

@@ -286,3 +286,65 @@ fn an_account_the_provider_refuses_stops_the_suite() {
     };
     assert_eq!(e.cases.len(), 1, "the other cases were not run");
 }
+
+/// The bug suite: cases of `speccoder bug`.
+fn bugs() -> PathBuf {
+    suite().join("bugs")
+}
+
+fn repro(content: &str) -> serde_json::Value {
+    json!({ "files": [{ "path": "tests/repro_e1.rs", "content": content, "statement": "E1", "test": "e1", "argv": ["cargo", "test", "--quiet", "--test", "repro_e1"] }], "notes": [] })
+}
+
+#[test]
+fn a_bug_already_fixed_or_impossible_to_reproduce_is_an_honest_stop_never_a_tick() {
+    let fake = FakeProvider::new();
+    for _ in 0..3 {
+        fake.will_structure(repro(
+            "#[test]\nfn e1() {\n    assert_eq!(sums::sum(&[]), 0);\n}\n",
+        ));
+    }
+    let driver: Arc<dyn ModelProvider> = fake.clone();
+    let r = run_suite(&bugs(), Some("bug-already-sum"), &driver, None, None, 1);
+    assert_eq!(
+        classes(&r),
+        [("bug-already-sum".to_owned(), "honest_stop".to_owned())],
+        "{}",
+        r.message()
+    );
+
+    let fake = FakeProvider::new();
+    for _ in 0..3 {
+        fake.will_structure(repro("#[test]\nfn e1() {\n    assert_eq!(greeter::greet_in(\"Ada\", \"de\"), \"Hallo, Ada!\");\n}\n"));
+    }
+    let driver: Arc<dyn ModelProvider> = fake.clone();
+    let r = run_suite(&bugs(), Some("bug-not-a-bug"), &driver, None, None, 1);
+    assert_eq!(
+        classes(&r),
+        [("bug-not-a-bug".to_owned(), "honest_stop".to_owned())],
+        "{}",
+        r.message()
+    );
+}
+
+#[test]
+fn every_bug_case_parses_and_states_what_should_happen() {
+    let cases = speccoder_runtime::eval::cases(&bugs()).unwrap();
+    assert!(cases.len() >= 6);
+    let expects: Vec<String> = cases
+        .iter()
+        .map(|c| {
+            let t: toml::Table =
+                toml::from_str(&std::fs::read_to_string(c.join("case.toml")).unwrap()).unwrap();
+            assert!(
+                !t["bug"]["expected"].as_array().unwrap().is_empty(),
+                "{}",
+                c.display()
+            );
+            t["expect"].as_str().unwrap().to_owned()
+        })
+        .collect();
+    assert!(expects.iter().filter(|e| *e == "already_satisfied").count() >= 3);
+    assert!(expects.iter().filter(|e| *e == "complete").count() >= 2);
+    assert!(expects.iter().any(|e| e == "cannot_reproduce"));
+}

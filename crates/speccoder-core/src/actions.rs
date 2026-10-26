@@ -112,6 +112,44 @@ pub enum Runnable {
     Feature,
     /// Push the feature's branch and open (or update) its draft pull request.
     PullRequest,
+    /// Record a bug in the person's words (`speccoder bug`) and, when
+    /// `run`, reproduce it.
+    BugFix {
+        /// What happens (the symptom).
+        symptom: String,
+        /// What should happen instead (one or more).
+        expected: Vec<String>,
+        /// What must keep working (zero or more).
+        unchanged: Vec<String>,
+        /// The GitHub issue it comes from.
+        issue: Option<u64>,
+        /// The person's own reproduction tests, one per expected statement
+        /// (`PATH::NAME`).
+        tests: Vec<String>,
+        /// Someone else's fix to judge: a patch file or `pr:N`.
+        candidate: Option<String>,
+        /// Continue a bug the format's own bug step created.
+        slug: Option<String>,
+        /// Reproduce it once recorded.
+        run: bool,
+    },
+    /// Confirm (or, with `reject`, reject: the input is the reason) a
+    /// bug's reproductions, bound to the digest shown.
+    BugConfirm {
+        /// `<unit>/<task>`.
+        task: String,
+        /// The digest the person saw.
+        digest: String,
+        /// Reject instead.
+        reject: bool,
+    },
+    /// Continue a bug: reproduce again, or run its confirmed fix.
+    BugRun {
+        /// A bug of the format's own bug structure, by slug.
+        slug: Option<String>,
+        /// Or `<unit>/<task>`.
+        task: Option<String>,
+    },
     /// Always Allow: approve the waiting command once and add exactly its
     /// argv to `[commands] allow` (or `[sandbox] network_allow`).
     AllowAlways {
@@ -253,6 +291,12 @@ pub enum ActionKind {
     Feature,
     /// [`Runnable::PullRequest`].
     PullRequest,
+    /// [`Runnable::BugFix`].
+    BugFix,
+    /// [`Runnable::BugConfirm`].
+    BugConfirm,
+    /// [`Runnable::BugRun`].
+    BugRun,
     /// [`Runnable::AllowAlways`].
     AllowAlways,
     /// [`Runnable::WidenPolicy`].
@@ -285,6 +329,9 @@ impl ActionKind {
         Self::FixSetup,
         Self::Feature,
         Self::PullRequest,
+        Self::BugFix,
+        Self::BugConfirm,
+        Self::BugRun,
         Self::AllowAlways,
         Self::WidenPolicy,
         Self::DecideBatch,
@@ -314,6 +361,9 @@ impl ActionKind {
             Self::FixSetup => "fix_setup",
             Self::Feature => "feature",
             Self::PullRequest => "pull_request",
+            Self::BugFix => "bug_fix",
+            Self::BugConfirm => "bug_confirm",
+            Self::BugRun => "bug_run",
             Self::AllowAlways => "allow_always",
             Self::WidenPolicy => "widen_policy",
             Self::DecideBatch => "decide_batch",
@@ -369,6 +419,25 @@ impl ActionKind {
             Self::FixSetup => Runnable::FixSetup,
             Self::Feature => Runnable::Feature,
             Self::PullRequest => Runnable::PullRequest,
+            Self::BugFix => Runnable::BugFix {
+                symptom: "saving an empty title crashes".to_owned(),
+                expected: vec!["an empty title is refused".to_owned()],
+                unchanged: Vec::new(),
+                issue: None,
+                tests: Vec::new(),
+                candidate: None,
+                slug: None,
+                run: false,
+            },
+            Self::BugConfirm => Runnable::BugConfirm {
+                task: "007-bugfixes/T001".to_owned(),
+                digest: "sha256:0".to_owned(),
+                reject: false,
+            },
+            Self::BugRun => Runnable::BugRun {
+                slug: None,
+                task: Some("007-bugfixes/T001".to_owned()),
+            },
             Self::AllowAlways => Runnable::AllowAlways {
                 task: task(),
                 call: "0f3c".to_owned(),
@@ -420,6 +489,9 @@ impl Runnable {
             Self::FixSetup => ActionKind::FixSetup,
             Self::Feature => ActionKind::Feature,
             Self::PullRequest => ActionKind::PullRequest,
+            Self::BugFix { .. } => ActionKind::BugFix,
+            Self::BugConfirm { .. } => ActionKind::BugConfirm,
+            Self::BugRun { .. } => ActionKind::BugRun,
             Self::AllowAlways { .. } => ActionKind::AllowAlways,
             Self::WidenPolicy { .. } => ActionKind::WidenPolicy,
             Self::DecideBatch { .. } => ActionKind::DecideBatch,
@@ -474,6 +546,11 @@ pub fn identity(run: Option<&Runnable>, command: &str) -> ActionId {
         Runnable::WidenPolicy { key, .. } => Some(key.as_str().to_owned()),
         Runnable::DecideBatch { run, .. } => Some(run.clone()),
         Runnable::IssueComment { issue, .. } => Some(issue.to_string()),
+        Runnable::BugConfirm { task, .. } => Some(task.clone()),
+        Runnable::BugRun { slug, task } => task.clone().or_else(|| slug.clone()),
+        Runnable::BugFix { slug, issue, .. } => {
+            slug.clone().or_else(|| issue.map(|n| format!("#{n}")))
+        }
         Runnable::Review { ids, verdict } => Some(match ids.first() {
             Some(id) => format!("{verdict}:{id}"),
             None => verdict.clone(),

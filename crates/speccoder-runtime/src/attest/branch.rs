@@ -436,6 +436,41 @@ fn unit(
     })
 }
 
+/// The trailer-only task `claim` (`<unit>/bug:<slug>`) as the head holds
+/// it: anchored on its home's file (the first Expected line), its claim the
+/// triad's digest; `None` when the home cannot be read.
+fn trailer_only(format: &dyn Adapter, project: &Path, prefix: &str, claim: &str) -> Option<Tick> {
+    let (unit, task) = claim.rsplit_once('/')?;
+    let slug = task.strip_prefix("bug:")?;
+    let home = format.bug_unit(project).ok().filter(|h| h.kind.native())?;
+    let read = format.read_bug(project, &home, slug).ok()?;
+    let triad = speccoder_core::bug::Triad::new(
+        read.current.first().map_or("", String::as_str),
+        &read.expected,
+        &read.unchanged,
+        crate::integrity::sha256_hex,
+    )
+    .ok()?;
+    let text = std::fs::read_to_string(project.join(&read.file)).unwrap_or_default();
+    let line = text
+        .lines()
+        .position(|l| l.contains("Expected:"))
+        .and_then(|i| u32::try_from(i + 1).ok())
+        .unwrap_or(1);
+    Some(Tick {
+        feature: unit.to_owned(),
+        task: task.to_owned(),
+        title: read.title.clone().unwrap_or_else(|| triad.title()),
+        kind: TickKind::TrailerOnly,
+        anchor: Anchor {
+            path: format!("{prefix}{}", read.file),
+            line,
+        },
+        line_sha256: None,
+        claim_sha256: Some(triad.digest),
+    })
+}
+
 /// The skipped tasks' refs, as `<unit>/<task>`.
 fn skips(git: &Git) -> Result<BTreeSet<String>, Refusal> {
     git.run(&[
@@ -520,7 +555,16 @@ fn outcome_of(
     if r.outcome == TickOutcome::Evidenced {
         match tv {
             Some(Ok(tv)) => {
-                if Some(&tv.task.line_hash) != tick.line_sha256.as_ref() {
+                // A trailer-only task has no line: its claim is anchored on
+                // the bug's triad (checked for staleness by the caller).
+                let anchored = match tick.kind {
+                    TickKind::Tick => Some(&tv.task.line_hash) == tick.line_sha256.as_ref(),
+                    TickKind::TrailerOnly => tv
+                        .bug
+                        .as_ref()
+                        .is_some_and(|b| b["triad_sha256"].as_str().is_some()),
+                };
+                if !anchored {
                     unverifiable(
                         &mut r,
                         Unverifiable::Mismatch,
@@ -863,13 +907,6 @@ fn run(
         &head,
         base.as_deref().filter(|_| mode == Mode::Touched),
     )?;
-    if !history.bug_claims.is_empty() {
-        // Spec 090's bug homes are not read by this version (FR-026): a
-        // claim it cannot check is not proof.
-        report
-            .not_evaluated
-            .push(verify_branch::TRAILER_ONLY_TASKS.to_owned());
-    }
     let start_rel = relative(start, &top).unwrap_or_default();
     let dir = super::tree::intent_tops(&top, &head)
         .and_then(|tops| super::tree::materialize(&top, &head, Some(&tops)))
@@ -1058,6 +1095,83 @@ fn run(
         let requirements = format.requirement_ids(&project, &u.dir);
         report.trace.extend(trace(&requirements, &reports, &signed));
         report.ticks.extend(reports);
+    }
+    // Trailer-only tasks: a bug of the format's own bug structure, closed by
+    // its verdict commit and anchored on its triad (spec 090 FR-002a).
+    for claim in &history.bug_claims {
+        let Some(tick) = trailer_only(format, &project, &prefix, claim) else {
+            // A claim whose home this build cannot read is not proof.
+            if !report
+                .not_evaluated
+                .iter()
+                .any(|n| n == verify_branch::TRAILER_ONLY_TASKS)
+            {
+                report
+                    .not_evaluated
+                    .push(verify_branch::TRAILER_ONLY_TASKS.to_owned());
+            }
+            continue;
+        };
+        if only.is_some_and(|(name, task)| {
+            tick.feature != name || task.is_some_and(|t| t != tick.task)
+        }) {
+            continue;
+        }
+        let Some(commit) = history.latest.get(claim).cloned() else {
+            continue;
+        };
+        let statements = crate::evidence::statements(&top, &commit);
+        let unchecked = Trust::default();
+        let cx = Context {
+            repo: &top,
+            feature: &tick.feature,
+            tasks_path: None,
+            config_path: &config_path,
+            trust: trust.as_ref().unwrap_or(&unchecked),
+            format: Some(format),
+        };
+        let mut r = if trust.is_some() {
+            let v = super::verify::object(
+                &cx,
+                &Target {
+                    object: commit.clone(),
+                    kind: "task",
+                    task: tick.task.clone(),
+                },
+            );
+            outcome_of(&tick, &commit, v, &statements, opts.require_signed)
+        } else {
+            let v = as_recorded(&commit, &tick.task, &statements);
+            let mut r = outcome_of(&tick, &commit, v, &statements, false);
+            if r.outcome == TickOutcome::Evidenced {
+                r.detail = Some("as recorded: signatures not checked (no trust given)".to_owned());
+            }
+            r
+        };
+        // The triad read at the head against the one the fix was judged on.
+        let signed = statements
+            .iter()
+            .find(|s| s["predicateType"] == statement::TASK_VERIFICATION)
+            .and_then(|s| {
+                s["predicate"]["bug"]["triad_sha256"]
+                    .as_str()
+                    .map(str::to_owned)
+            });
+        if r.outcome == TickOutcome::Evidenced
+            && let (Some(now), Some(then)) = (tick.claim_sha256.as_deref(), signed.as_deref())
+            && now != then
+        {
+            r.outcome = TickOutcome::Stale;
+            r.stale_anchor = Some(tick.anchor.clone());
+            r.detail = Some(
+                "the bug's triad changed since its fix: the verdict is for the earlier words"
+                    .to_owned(),
+            );
+        }
+        if !report.features.contains(&tick.feature) {
+            report.features.push(tick.feature.clone());
+        }
+        report.ticks.push(r);
     }
     let mut newer: BTreeSet<String> = BTreeSet::new();
     for t in &report.ticks {

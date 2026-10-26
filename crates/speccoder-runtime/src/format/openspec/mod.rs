@@ -5,6 +5,7 @@
 
 #[cfg(feature = "engine")]
 pub mod archive;
+mod bug;
 pub mod cli;
 mod texts;
 
@@ -236,6 +237,31 @@ impl Adapter for OpenSpec {
 
     fn checklists(&self, _root: &Path, _unit_dir: &str) -> Vec<ChecklistStatus> {
         Vec::new()
+    }
+
+    fn bug_unit(
+        &self,
+        _root: &Path,
+    ) -> Result<speccoder_core::bug::BugHome, crate::format::BugRefusal> {
+        Ok(bug::unit())
+    }
+
+    fn record_bug(
+        &self,
+        root: &Path,
+        _home: &speccoder_core::bug::BugHome,
+        triad: &speccoder_core::bug::Triad,
+    ) -> Result<crate::format::RecordedBug, crate::format::BugRefusal> {
+        bug::record(root, triad)
+    }
+
+    fn read_bug(
+        &self,
+        root: &Path,
+        _home: &speccoder_core::bug::BugHome,
+        key: &str,
+    ) -> Result<crate::format::ReadBug, crate::format::BugRefusal> {
+        bug::read(root, key)
     }
 
     fn tick(&self, tasks_file: &Path, task: &str, line_hash: &str) -> Result<(), String> {

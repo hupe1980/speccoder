@@ -188,3 +188,7 @@ With `[monitor] enabled = true`, a separate model call reviews every passing att
 ## What the evidence does not show
 
 The checks and tests you configured, and the examples in your spec, bound what `verified` can mean. A strength of 1.0 means the tests rejected every wrong variant that was tried, not every possible one, and a surviving near miss may be one its author got wrong. A spec without acceptance examples yields `regression_only`; a wrong example yields a wrong test. When speccoder cannot demonstrate something, it says so — `not_demonstrated`, `blocked` — rather than guessing.
+
+## A bug's evidence
+
+A bug task's run report and attestation add a `bug` section — the home, the triad's digest, per reproduction its class on the untouched code (twice), on the fixed tree and against the revert, each special case and whether it was rejected, the pass-to-pass set — and an `acceptance` section naming where the visible tests came from (`bug_confirmation` or `person_test`) with the confirmation's digests. Its verdict commit carries `Bug: <outcome> (<home>) triad=sha256:…` and `Acceptance: bug_confirmation manifest=… approval=… wording=… by=…`. See [bug fixes](@/docs/bugs.md).

@@ -202,6 +202,7 @@ pub(crate) fn bare_report(
         attestation: None,
         instructions: Vec::new(),
         strength: None,
+        bug: None,
     }
 }
 

@@ -43,6 +43,14 @@ speccoder do "Make the login button blue" --no-run      # record it, run later
 
 `do` records the change in a standing feature, `NNN-quick-changes`: a user story (your words, each `--check` as an acceptance scenario), a requirement (approved — you wrote it) and a task citing it. It commits exactly those files (`spec(NNN-quick-changes): quick change: …`), then runs the task like any other — acceptance tests that must fail first, the checks, a verdict, a commit with its evidence. Each quick change is its own user story, so they do not wait for each other. `--no-run` prints the `run --task` command for later. In the [app](@/docs/web.md): **Quick Change** in Needs You, or `q`.
 
+## Bug fixes
+
+```sh
+speccoder bug "saving an empty title crashes" --expected "an empty title is refused with a message"
+```
+
+A bug is reproduced before it is fixed: one test per expected behaviour that fails on the untouched code by an assertion, shown to you once, then frozen as the fix's acceptance tests; the fix is `verified` only if undoing it makes a reproduction fail again. A bug that cannot be reproduced stops in Needs You; one that already passes is `already_satisfied` and never ticked. See [bug fixes](@/docs/bugs.md).
+
 ## Outcomes
 
 | Outcome | Exit | Meaning | What to do |

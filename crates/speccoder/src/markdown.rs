@@ -280,6 +280,7 @@ mod tests {
             note: None,
             attestation: Some("signed ssh SHA256:x".to_owned()),
             strength: None,
+            bug: None,
         }
     }
 

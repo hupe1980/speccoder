@@ -288,10 +288,93 @@ impl Approver for Terminal {
         let mut err = std::io::stderr().lock();
         ask_with(&mut input, &mut err, p)
     }
+
+    fn confirm(
+        &self,
+        request: &speccoder_runtime::approvals::ConfirmRequest,
+    ) -> Option<speccoder_runtime::approvals::ConfirmAnswer> {
+        let stdin = std::io::stdin();
+        let mut input = stdin.lock();
+        let mut err = std::io::stderr().lock();
+        confirm_with(&mut input, &mut err, request)
+    }
+}
+
+/// Asks the person once about a bug's reproductions: `y` confirms them
+/// (they are frozen, the fix runs), `n` rejects them with a reason (the
+/// author tries again), anything else leaves them waiting.
+pub fn confirm_with(
+    input: &mut dyn BufRead,
+    err: &mut dyn Write,
+    request: &speccoder_runtime::approvals::ConfirmRequest,
+) -> Option<speccoder_runtime::approvals::ConfirmAnswer> {
+    use speccoder_runtime::approvals::ConfirmAnswer;
+    let _ = write!(
+        err,
+        "\n{}\nDo these show the bug? [y] confirm and fix · [n] reject with a reason · [enter] later > ",
+        speccoder_runtime::approvals::present::confirm_text(request)
+    );
+    let _ = err.flush();
+    let mut line = String::new();
+    if input.read_line(&mut line).ok()? == 0 {
+        return None;
+    }
+    match line.trim().to_ascii_lowercase().as_str() {
+        "y" | "yes" => Some(ConfirmAnswer::Confirm),
+        "n" | "no" => {
+            let _ = write!(err, "  why (the author is told) > ");
+            let _ = err.flush();
+            let mut why = String::new();
+            let _ = input.read_line(&mut why);
+            let why = why.trim();
+            (!why.is_empty()).then(|| ConfirmAnswer::Reject(why.to_owned()))
+        }
+        _ => None,
+    }
 }
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn a_bug_confirmation_is_yes_no_with_a_reason_or_later() {
+        use speccoder_runtime::approvals::{ConfirmAnswer, ConfirmRequest, ShownReproduction};
+        let r = ConfirmRequest {
+            bug: "007-bugfixes/T001".to_owned(),
+            title: "empty title".to_owned(),
+            digest: "sha256:abc".to_owned(),
+            reproductions: vec![ShownReproduction {
+                statement: "E1".to_owned(),
+                words: "an empty title is refused".to_owned(),
+                file: "tests/repro_e1.rs".to_owned(),
+                test: "refused".to_owned(),
+                excerpt: "assertion failed".to_owned(),
+                content: String::new(),
+            }],
+        };
+        let mut err = Vec::new();
+        assert_eq!(
+            confirm_with(&mut "y\n".as_bytes(), &mut err, &r),
+            Some(ConfirmAnswer::Confirm)
+        );
+        let shown = String::from_utf8_lossy(&err);
+        assert!(
+            shown.contains("sha256:abc") && shown.contains("E1 — an empty title is refused"),
+            "{shown}"
+        );
+        assert_eq!(
+            confirm_with(
+                &mut "n\nit tests the wrong field\n".as_bytes(),
+                &mut Vec::new(),
+                &r
+            ),
+            Some(ConfirmAnswer::Reject("it tests the wrong field".to_owned()))
+        );
+        assert_eq!(
+            confirm_with(&mut "\n".as_bytes(), &mut Vec::new(), &r),
+            None
+        );
+    }
     use super::*;
     use serde_json::json;
     use speccoder_runtime::approvals::{Decision, PresentContext, Request, options, present};

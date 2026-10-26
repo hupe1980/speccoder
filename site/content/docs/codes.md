@@ -79,6 +79,22 @@ Every result that is not plainly `ok` names a code — `error[CODE]`, `stopped[C
 | [`PROVIDER-REFUSED`](#provider-refused) | error | 21 | the model provider refused the request |
 | [`REPLAY-DIVERGED`](#replay-diverged) | error | 22 | the replay did not reproduce the recorded run |
 | [`NOT-REPLAYABLE`](#not-replayable) | error | 25 | this build cannot re-derive the recorded run |
+| [`BUG-NO-UNIT`](#bug-no-unit) | error | 2 | this spec format has no place for a bug |
+| [`BUG-EMPTY`](#bug-empty) | error | 2 | the symptom and every statement need words |
+| [`BUG-NO-EXPECTED`](#bug-no-expected) | error | 2 | a bug needs at least one --expected statement |
+| [`BUG-ASSESSMENT-DRIFT`](#bug-assessment-drift) | stop | 23 | the bug's assessment does not carry your words |
+| [`BUG-ASSESSMENT-UNREADABLE`](#bug-assessment-unreadable) | stop | 23 | the bug's assessment is not in a shape speccoder reads |
+| [`BUG-TEST-NOT-FOUND`](#bug-test-not-found) | error | 2 | the test named with --test is not found |
+| [`BUG-TEST-NOT-RED`](#bug-test-not-red) | error | 2 | the named test does not fail on an assertion |
+| [`BUG-TEST-PASSES`](#bug-test-passes) | error | 2 | the named test passes on the untouched code |
+| [`BUG-TEST-COVERAGE`](#bug-test-coverage) | error | 2 | each --expected statement needs its own --test |
+| [`BUG-CANNOT-REPRODUCE`](#bug-cannot-reproduce) | stop | 23 | the bug could not be reproduced: nothing is fixed |
+| [`BUG-ALREADY-SATISFIED`](#bug-already-satisfied) | warning | 0 | the reproductions already pass: nothing to fix |
+| [`BUG-UNCHANGED-NOT-HOLDING`](#bug-unchanged-not-holding) | stop | 23 | an Unchanged statement does not hold today |
+| [`BUG-NOT-DISCRIMINATING`](#bug-not-discriminating) | error | 20 | the reproduction does not tell the fix from no fix |
+| [`BUG-REPRO-WEAK`](#bug-repro-weak) | stop | 23 | a fix that special-cases the reproduction's input passes |
+| [`BUG-CANDIDATE-APPLY`](#bug-candidate-apply) | error | 14 | the candidate patch does not apply |
+| [`BUG-CANDIDATE-JUDGE`](#bug-candidate-judge) | error | 2 | the candidate patch touches what judges it |
 | [`EVAL-FAILED`](#eval-failed) | error | 24 | the evaluation found a false completion or a cheat |
 
 ### USAGE
@@ -647,6 +663,138 @@ This build cannot re-derive the recorded run.
 The run was recorded by a build whose skills or effects this one does not have.
 
 - Replay with the speccoder version that recorded the run
+
+### BUG-NO-UNIT
+
+This spec format has no place for a bug.
+
+A bug lives in the format's own bug structure (Spec Kit's `bug` extension) or in its standing bug-fix unit (Spec Kit's `NNN-bugfixes`, an OpenSpec standing change). Kiro's `bugfix.md` runs once speccoder has a Kiro adapter (F-052); until then nothing is written.
+
+- Write a spec for the change and run it
+- A change without a reproduction: speccoder do "…"
+
+### BUG-EMPTY
+
+The symptom and every statement need words.
+
+`speccoder bug` records the person's own words: an empty symptom, `--expected` or `--unchanged` is refused before anything is written.
+
+- `speccoder bug "<what happens>" --expected "<what should>"`
+
+### BUG-NO-EXPECTED
+
+A bug needs at least one --expected statement.
+
+A reproduction asserts what should happen; speccoder never infers it from the symptom or an issue. Give one `--expected` per behaviour.
+
+- `speccoder bug "<what happens>" --expected "<what should>"`
+
+### BUG-ASSESSMENT-DRIFT
+
+The bug's assessment does not carry your words.
+
+The format's own bug step wrote `assessment.md`, and at least one of your Current, Expected or Unchanged statements is not in it verbatim (whitespace aside). The reproductions are written from your words only, so the bug stops before reproduce.
+
+- Edit the assessment so it carries each statement as a `Current:` / `Expected:` / `Unchanged:` line
+- `speccoder bug --slug <slug>`
+
+### BUG-ASSESSMENT-UNREADABLE
+
+The bug's assessment is not in a shape speccoder reads.
+
+speccoder reads `assessment.md` in the layout of the `bug` extension version it was built against, and refuses rather than guesses on any other shape.
+
+- `specify extension list --json`
+- Add `Current:` and `Expected:` lines to the assessment's Report section
+
+### BUG-TEST-NOT-FOUND
+
+The test named with --test is not found.
+
+`--test PATH::NAME` must name an existing test file and a test in it that the runner collects.
+
+- Give the test as PATH::NAME, as the runner lists it
+
+### BUG-TEST-NOT-RED
+
+The named test does not fail on an assertion.
+
+A reproduction must fail on the untouched code by an assertion, twice. A build or collection error, a timeout, an absent symbol or a flaky failure shows nothing about the bug.
+
+- Fix the test so it fails on an assertion, then run `speccoder bug` again
+
+### BUG-TEST-PASSES
+
+The named test passes on the untouched code.
+
+A test that passes before any fix cannot show the bug. Perhaps it is fixed already.
+
+- Check the behaviour by hand; if it is fixed, there is nothing to record
+
+### BUG-TEST-COVERAGE
+
+Each --expected statement needs its own --test.
+
+Each stated behaviour gets its own reproduction: repeat `--test` once per `--expected`, in the same order.
+
+- `speccoder bug "…" --expected "<e1>" --test <file>::<test1> --expected "<e2>" --test <file>::<test2>`
+
+### BUG-CANNOT-REPRODUCE
+
+The bug could not be reproduced: nothing is fixed.
+
+Every try of the reproduction author ended without a test of each Expected statement failing on an assertion. A fix without a failing reproduction would be a guess, so the bug stops for you with the tries made and what each showed.
+
+- `speccoder bug "…" --expected "…" --test <file>::<test>`
+
+### BUG-ALREADY-SATISFIED
+
+The reproductions already pass: nothing to fix.
+
+Every reproduction passed on the untouched code on every try. Nothing is ticked; keep a reproduction as a regression test or drop the task.
+
+- `speccoder task accept <task> --reason "kept as a regression test"`
+- `speccoder task drop <task>`
+
+### BUG-UNCHANGED-NOT-HOLDING
+
+An Unchanged statement does not hold today.
+
+The test of an Unchanged statement fails on the untouched code, so the statement is not true now and cannot guard the fix. The bug stops before any fix.
+
+- Reword or remove the statement, then `speccoder bug run`
+
+### BUG-NOT-DISCRIMINATING
+
+The reproduction does not tell the fix from no fix.
+
+With the attempt's source changes undone (its tests kept), no reproduction failed on an assertion: passing them proves nothing about the fix. The retry is told which statement.
+
+- `speccoder run --task <task>`
+
+### BUG-REPRO-WEAK
+
+A fix that special-cases the reproduction's input passes.
+
+A candidate fix that only recognises the reproduction's literal inputs passed the reproductions and the held-out variants, even after one variant was written again. The tests are too weak for a verified fix.
+
+- `speccoder bug "…" --expected "…" --test <file>::<test>`
+
+### BUG-CANDIDATE-APPLY
+
+The candidate patch does not apply.
+
+`--candidate` applies the patch on the untouched code with `git apply --check` first; some hunks did not apply.
+
+- Rebase the patch on HEAD
+
+### BUG-CANDIDATE-JUDGE
+
+The candidate patch touches what judges it.
+
+A candidate must not change a frozen reproduction, a held-out path or another judge input (checks, configuration, the intent). It is refused before it is applied.
+
+- Remove those hunks from the patch
 
 ### EVAL-FAILED
 

@@ -108,6 +108,9 @@
               <button class="btn small" onclick={() => { void app.selectFeature(i.feature!); app.view = "board"; }}><Icon name="chevron" size={10} weight={2.6} /> {i.feature.replace(/^\d+-/, "")}</button>
             </span>
           {:else}
+            {#if i.labels.includes("bug")}
+              <button class="btn small" disabled={!!app.job?.running} title="Reproduce and fix it as a bug ($ speccoder bug … --issue {i.number}); the issue is context, your words are the triad" onclick={() => (app.bugSheet = { symptom: i.title, issue: i.number })}><Icon name="exclaim" size={10} weight={2.2} /> Fix as Bug</button>
+            {/if}
             <button class="btn small tinted" disabled={!!app.job?.running || starting !== null} title="Spec Kit's specify, with the issue as the description ($ speccoder issue start {i.number})" onclick={() => start(i.number)}>
               {#if starting === i.number}<span class="spin"></span>{:else}<Icon name="sparkle" size={11} weight={2.2} />{/if} Start Feature
             </button>

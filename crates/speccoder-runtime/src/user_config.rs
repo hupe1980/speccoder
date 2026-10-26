@@ -134,7 +134,30 @@ pub fn load() -> (Settings, Vec<String>) {
     let (notify, mut warnings) = parse(&text, &file);
     let (ui, more) = parse_ui(&text, &file);
     warnings.extend(more);
+    warnings.extend(project_only(&text, &file));
     (Settings { notify, ui }, warnings)
+}
+
+/// Keys that are the project's policy, never the person's: a value in the
+/// user config is refused with a warning naming it (until settings learn
+/// which keys a person may tighten).
+pub const PROJECT_ONLY: &[(&str, &str)] = &[("bug", "reproduce_tries"), ("bug", "test")];
+
+/// One warning per [`PROJECT_ONLY`] key `text` sets.
+#[must_use]
+pub fn project_only(text: &str, file: &str) -> Vec<String> {
+    let Ok(table) = toml::from_str::<toml::Table>(text) else {
+        return Vec::new();
+    };
+    PROJECT_ONLY
+        .iter()
+        .filter(|(section, key)| table.get(*section).and_then(|s| s.get(*key)).is_some())
+        .map(|(section, key)| {
+            format!(
+                "warning: {file}: {section}.{key}: a project setting (speccoder.toml), not read from the user config; ignored"
+            )
+        })
+        .collect()
 }
 
 const THEMES: [&str; 6] = [
@@ -296,6 +319,17 @@ fn duration(text: &str) -> Option<Duration> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_project_setting_in_the_user_config_is_refused() {
+        let w = super::project_only("[bug]\nreproduce_tries = 5\n", "config.toml");
+        assert_eq!(w.len(), 1);
+        assert!(
+            w[0].contains("bug.reproduce_tries") && w[0].contains("ignored"),
+            "{w:?}"
+        );
+        assert!(super::project_only("[ui]\ntheme = \"dark\"\n", "c").is_empty());
+    }
+
     use super::*;
 
     #[test]

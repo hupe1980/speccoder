@@ -9,6 +9,7 @@ import type { Envelope, FeatureEntry, IssueEntry as GitHubIssue } from "./schema
 
 export type {
   Action,
+  BugReport,
   ActionId,
   ActionKind,
   ConfigKey,

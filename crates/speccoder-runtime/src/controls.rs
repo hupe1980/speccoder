@@ -72,6 +72,7 @@ fn attest_decision(
         sandbox: serde_json::Value::Null,
         executor: serde_json::Value::Null,
         model: serde_json::Value::Null,
+        bug: None,
     };
     let a = crate::attest::record_decision(&tick, decider.0, decider.1);
     match (a["state"].as_str(), a["reason"].as_str()) {

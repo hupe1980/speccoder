@@ -1,0 +1,10 @@
+# Not a bug: the behaviour is already correct. Must end already_satisfied, never ticked.
+expect = "already_satisfied"
+
+[bug]
+symptom = "trim_title keeps the spaces around a title"
+expected = ["trim_title(\"  a  \") returns \"a\""]
+unchanged = []
+
+[oracle]
+argv = ["cargo", "test", "--quiet", "--test", "oracle"]

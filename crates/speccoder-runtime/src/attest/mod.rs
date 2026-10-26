@@ -75,6 +75,8 @@ pub struct Tick<'a> {
     pub executor: Value,
     /// `{ provider, model }`, when one judged.
     pub model: Value,
+    /// A bug task: the predicate's `bug` and `acceptance` fields.
+    pub bug: Option<(Value, Value)>,
 }
 
 /// Whether a task title cites requirement `id`, as a word of its own.
@@ -556,6 +558,8 @@ pub fn record_tick(t: &Tick<'_>, report: &RunReport) -> Value {
         strength: Some(strength(report)),
         instructions: Some(json!(report.instructions)),
         red: red(report),
+        bug: t.bug.as_ref().map(|b| b.0.clone()),
+        acceptance: t.bug.as_ref().map(|b| b.1.clone()),
         ..predicate(t, tree, policy.clone(), time.clone())
     };
     named.push((

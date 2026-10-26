@@ -1,0 +1,31 @@
+{
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/events/bug.confirmed.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "`bug.confirmed`, as published.",
+  "properties": {
+    "basis": {
+      "description": "`shown` or `named_test`.",
+      "type": "string"
+    },
+    "by": {
+      "description": "Who.",
+      "type": "string"
+    },
+    "digest": {
+      "description": "The digest confirmed.",
+      "type": "string"
+    },
+    "via": {
+      "description": "Through what.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "digest",
+    "by",
+    "via",
+    "basis"
+  ],
+  "title": "a domain event's public projection: ids, digests and counts",
+  "type": "object"
+}

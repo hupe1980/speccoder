@@ -10,6 +10,36 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Bug fixes: `speccoder bug`.** `speccoder bug "<what happens>" --expected
+  "<what should>" [--unchanged "…"]…` records the person's triad where the
+  format keeps bugs — Spec Kit's first-party `bug` extension
+  (`.specify/bugs/<slug>/`, written by its own assess skill and read back
+  verbatim, else `BUG-ASSESSMENT-DRIFT`), else the standing unit
+  `NNN-bugfixes` (Spec Kit) or `openspec/changes/bugfixes/` (OpenSpec) —
+  commits exactly that as `bug: <title>`, and reproduces it: a test-blind
+  author writes one test per expected behaviour, each red on the untouched
+  code by an assertion twice (an absent symbol or a flaky failure is not a
+  bug's red), plus sealed held-out variants. The person confirms the
+  reproductions once, bound to the digest shown (terminal prompt, `speccoder
+  bug confirm`, the app's Bug sheet, Needs You); they are frozen as the fix's
+  acceptance tests (`PreFrozenAcceptance`, `Acceptance: bug_confirmation`).
+  The fix is `verified` only when every reproduction went red → green, the
+  pass-to-pass set (baseline-green tests that reference the changed code,
+  and each Unchanged statement's test) passed by name, the held-out variants
+  passed, the revert — the fix undone — was rejected by a reproduction
+  (`BUG-NOT-DISCRIMINATING`), and a special case that only recognises the
+  reproduction's input was rejected (`BUG-REPRO-WEAK`). Honest outcomes
+  never tick: `cannot_reproduce` (an engine-written hand-off in Needs You)
+  and `already_satisfied`. `--test PATH::NAME` brings the person's own
+  failing test; `--candidate PATCH|pr:N` judges someone else's fix without
+  an implementer or retries; `--issue N` adds the issue as untrusted context
+  and `Fixes #N` on a verified fix. A bug in the extension's layout is a
+  trailer-only task (`Spec-Task: bugs/<slug>/bug:<slug>`) that `attest verify
+  --branch` and `speccoder-verify` check, stale when its triad changes;
+  `speccoder workflow install --overlay bugfix` lets Spec Kit's `bugfix`
+  workflow run speccoder for its test step. JSON payload `bug`, `bug.*`
+  events (with public projections of the domain events), `BUG-*` codes, the
+  `[bug]` settings, and six bug cases in `evals/bugs`.
 - **The model's reasoning.** Each attempt turn asks the provider for a
   summary of the model's reasoning (Anthropic, OpenAI Responses;
   `[model] reasoning_summary = false` turns it off). It is shown as the

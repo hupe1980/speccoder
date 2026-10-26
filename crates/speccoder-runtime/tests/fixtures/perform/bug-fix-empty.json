@@ -1,0 +1,37 @@
+{
+  "head": "spec(002-quick-changes): quick change: Log every sign-in",
+  "result": {
+    "code": "BUG-NO-EXPECTED",
+    "command": "bug",
+    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#bug-no-expected",
+    "exit_code": 2,
+    "fix": [
+      "speccoder bug \"<what happens>\" --expected \"<what should>\""
+    ],
+    "message": "say what should happen instead: `--expected \"…\"` (one per behaviour)",
+    "schema_version": 2,
+    "status": "usage_error"
+  },
+  "review": {
+    "requirements": {
+      "FR-001": {
+        "at": 0,
+        "by": "Dana Example",
+        "comment": "looks right",
+        "line": "- **FR-001**: Users MUST log in with a passkey.",
+        "sha256": "sha256:<hex>",
+        "verdict": "approved",
+        "via": "web"
+      },
+      "FR-002": {
+        "at": 0,
+        "by": "Dana Example",
+        "line": "- **FR-002**: Sessions MUST expire after thirty minutes.",
+        "sha256": "sha256:<hex>",
+        "verdict": "approved",
+        "via": "web"
+      }
+    }
+  },
+  "status": " M specs/001-graph/spec.md\n"
+}

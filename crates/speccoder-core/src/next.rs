@@ -3,10 +3,10 @@
 //! model text. The human `Next:` block, the TUI footer and `data.next` are
 //! all this list.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// One step a person can take.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct NextStep {
     /// A copy-pasteable command (`"…"` marks text the person writes).
     pub command: String,

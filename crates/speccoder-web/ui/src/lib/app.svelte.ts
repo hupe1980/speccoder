@@ -47,6 +47,9 @@ class AppState {
   quick = $state(false);
   /** What the quick-change sheet opens with (typed in the palette). */
   quickDraft = $state("");
+  /** The Bug sheet is open: a new bug (prefilled from an issue), or the
+   *  bug `<unit>/<task>` it shows. */
+  bugSheet = $state<{ key?: string; symptom?: string; issue?: number } | null>(null);
   /** An open context menu: where, and its items. */
   context = $state<{ x: number; y: number; title: string; items: { label: string; icon?: string; disabled?: string | null; hint?: string; act: () => void }[] } | null>(null);
   /** Whether the sidebar and the status bar are shown (View menu). */

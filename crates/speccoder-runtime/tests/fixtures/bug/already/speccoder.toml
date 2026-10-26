@@ -1,0 +1,15 @@
+[model]
+provider = "openai"
+model = "gpt-5.4-mini"
+
+[checks.unit]
+argv = ["./check.sh", "tests/existing.txt"]
+
+[commands]
+allow_prefix = [["./check.sh", "--"]]
+
+[acceptance]
+strength = false
+
+[bug]
+test = ["./check.sh", "--", "{file}"]

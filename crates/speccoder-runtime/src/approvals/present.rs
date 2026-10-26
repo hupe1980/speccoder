@@ -426,6 +426,33 @@ pub fn present(request: &Request, context: &PresentContext) -> Presentation {
     }
 }
 
+/// The text a terminal shows for a bug's reproductions: each with its
+/// statement, file, test and how it failed, then the digest the answer is
+/// bound to.
+#[must_use]
+pub fn confirm_text(r: &super::ConfirmRequest) -> String {
+    let mut out = format!(
+        "Bug {} — {}: {} reproduction(s) fail on the untouched code by an assertion.\n",
+        r.bug,
+        r.title,
+        r.reproductions
+            .iter()
+            .filter(|x| x.statement.starts_with('E'))
+            .count()
+    );
+    for x in &r.reproductions {
+        out.push_str(&format!(
+            "\n{} — {}\n  {} :: {}\n",
+            x.statement, x.words, x.file, x.test
+        ));
+        for l in x.excerpt.lines().take(8) {
+            out.push_str(&format!("    | {l}\n"));
+        }
+    }
+    out.push_str(&format!("\ndigest {}\n", r.digest));
+    out
+}
+
 /// The choice `o` as every interface offers it: its key, its fixed number
 /// and its label.
 #[must_use]

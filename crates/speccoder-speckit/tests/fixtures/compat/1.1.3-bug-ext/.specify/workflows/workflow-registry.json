@@ -1,0 +1,23 @@
+{
+  "schema_version": "1.0",
+  "workflows": {
+    "speckit": {
+      "name": "Full SDD Cycle",
+      "version": "1.0.1",
+      "description": "Runs specify \u2192 plan \u2192 tasks \u2192 implement with review gates",
+      "source": "bundled",
+      "installed_at": "2026-10-26T11:14:22.959303+00:00",
+      "updated_at": "2026-10-26T11:14:22.959307+00:00"
+    },
+    "bugfix": {
+      "name": "Guided Bug Fix",
+      "version": "1.0.0",
+      "description": "Runs bug assess \u2192 human review gate \u2192 bug fix \u2192 bug test on a bug report",
+      "source": "catalog",
+      "catalog_name": "default",
+      "url": "https://raw.githubusercontent.com/github/spec-kit/main/workflows/bugfix/workflow.yml",
+      "installed_at": "2026-10-26T11:14:56.497292+00:00",
+      "updated_at": "2026-10-26T11:14:56.497520+00:00"
+    }
+  }
+}

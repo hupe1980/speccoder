@@ -29,6 +29,10 @@ pub(crate) struct PreparedAcceptance {
     pub(crate) report: serde_json::Value,
     /// The command, when the tests were written.
     pub(crate) argv: Option<Vec<String>>,
+    /// Further commands of the set (a bug's reproductions run one test
+    /// each); every one must pass.
+    #[serde(default)]
+    pub(crate) more_argv: Vec<Vec<String>>,
     /// They failed before the attempt, on an assertion or for an absent
     /// symbol.
     pub(crate) red: bool,
@@ -61,6 +65,7 @@ pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance 
         PreparedAcceptance {
             report,
             argv: None,
+            more_argv: Vec::new(),
             red: false,
             red_class: None,
             held_out: None,
@@ -213,6 +218,7 @@ pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance 
     PreparedAcceptance {
         report,
         argv: Some(argv),
+        more_argv: Vec::new(),
         red,
         red_class: Some(class),
         held_out: None,
@@ -796,4 +802,154 @@ mod tests {
         assert!(!story_checkpoint(Some(&tasks), "T006", &two[..1]));
         assert!(!story_checkpoint(None, "T006", &two));
     }
+}
+
+/// How a reused set must be red at the checkpoint.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RedRule {
+    /// A review's oracle: the run-time rule (an assertion, or an absent
+    /// symbol). The review producer (spec 093) reuses its sets with it.
+    #[allow(dead_code)]
+    RunTime,
+    /// A bug's reproductions: an assertion only, both runs.
+    BugAssertionOnly,
+}
+
+/// One test of a reused set: its file, what it cites and how it runs.
+pub(crate) struct ReusedTest {
+    /// Project-relative path.
+    pub(crate) path: String,
+    /// The statement or scenario ids.
+    pub(crate) cites: Vec<String>,
+    /// The command that runs only it.
+    pub(crate) argv: Vec<String>,
+    /// It must pass at the checkpoint instead (an *Unchanged* test).
+    pub(crate) green: bool,
+}
+
+/// Acceptance tests decided before the run, reused at the checkpoint:
+/// written into the worktree (the one function every pre-frozen producer
+/// uses), each red twice by `rule` — or green, for a test that guards what
+/// must not change — with no acceptance author call. `Err`: why the set
+/// cannot stand (the person looks).
+pub(crate) fn reuse_pre_frozen(
+    project: &Path,
+    record: &speccoder_core::acceptance::PreFrozenAcceptance,
+    files: &[(String, String)],
+    tests: &[ReusedTest],
+    runner: &sandbox::Runner,
+    rule: RedRule,
+) -> Result<PreparedAcceptance, String> {
+    use serde_json::json;
+    for (rel, content) in files {
+        let full = project.join(rel);
+        if let Ok(now) = std::fs::read_to_string(&full) {
+            if now != *content {
+                return Err(format!(
+                    "`{rel}` exists and differs from the confirmed test; it is not overwritten"
+                ));
+            }
+            continue;
+        }
+        if let Some(parent) = full.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        std::fs::write(&full, content).map_err(|e| format!("`{rel}`: {e}"))?;
+    }
+    let mut classes = Vec::new();
+    for t in tests {
+        let (first, summary) = execute(project, &t.argv, runner);
+        let one = classify_red(&first, summary.as_ref());
+        let class = if t.green {
+            one
+        } else {
+            match rule {
+                RedRule::BugAssertionOnly if one == RedClass::Assertion => {
+                    let (second, summary) = execute(project, &t.argv, runner);
+                    speccoder_core::bug::bug_class(
+                        one,
+                        Some(classify_red(&second, summary.as_ref())),
+                    )
+                }
+                RedRule::BugAssertionOnly => one,
+                RedRule::RunTime if one.is_red() => {
+                    let (second, summary) = execute(project, &t.argv, runner);
+                    if classify_red(&second, summary.as_ref()).is_red() {
+                        one
+                    } else {
+                        RedClass::Flaky
+                    }
+                }
+                RedRule::RunTime => one,
+            }
+        };
+        let holds = if t.green {
+            class == RedClass::Passed
+        } else {
+            match rule {
+                RedRule::BugAssertionOnly => class == RedClass::Assertion,
+                RedRule::RunTime => class.is_red(),
+            }
+        };
+        if !holds {
+            return Err(if t.green {
+                format!(
+                    "the confirmed test `{}` ({}) no longer passes on the branch ({})",
+                    t.path,
+                    t.cites.join(", "),
+                    class_word(class)
+                )
+            } else {
+                format!(
+                    "the confirmed test `{}` ({}) no longer fails on an assertion ({}): the behaviour may have changed on the branch",
+                    t.path,
+                    t.cites.join(", "),
+                    class_word(class)
+                )
+            });
+        }
+        classes.push(class);
+    }
+    let red: Vec<&ReusedTest> = tests.iter().filter(|t| !t.green).collect();
+    let Some(first) = red.first() else {
+        return Err("the confirmed set has no test that must fail first".to_owned());
+    };
+    let more: Vec<Vec<String>> = tests
+        .iter()
+        .filter(|t| !std::ptr::eq(*t, *first))
+        .map(|t| t.argv.clone())
+        .collect();
+    let held_out = match &record.held_out_sealed {
+        Some(h) => {
+            json!({ "state": "on", "manifest": format!("sha256:{}", h.manifest_sha256), "kept": h.count })
+        }
+        None => json!({ "state": "absent", "reason": "none_kept" }),
+    };
+    Ok(PreparedAcceptance {
+        report: json!({
+            "files": files.iter().map(|(p, _)| p).collect::<Vec<_>>(),
+            "tests": tests.iter().map(|t| json!({ "path": t.path, "scenarios": t.cites })).collect::<Vec<_>>(),
+            "argv": first.argv,
+            "red": true,
+            "red_class": RedClass::Assertion,
+            "source": record.producer.source(),
+            "pre_frozen": {
+                "manifest": crate::pre_frozen::manifest_digest(record),
+                "approval": record.approval_digest,
+                "wording": record.wording_digest,
+                "by": record.decided.by,
+                "via": record.decided.via,
+            },
+            "held_out": held_out,
+        }),
+        argv: Some(first.argv.clone()),
+        more_argv: more,
+        red: true,
+        red_class: Some(RedClass::Assertion),
+        held_out: record
+            .held_out_sealed
+            .as_ref()
+            .map(|h| h.manifest_sha256.clone()),
+        generation_failed: None,
+    })
 }

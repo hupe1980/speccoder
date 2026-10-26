@@ -81,6 +81,7 @@ pub const SECTIONS: &[&str] = &[
     "approvals",
     "attest",
     "context",
+    "bug",
 ];
 
 /// Parses the configuration text; checks keep their file order.
