@@ -20,6 +20,7 @@ const CONFIG: &str = "[model]\nprovider = \"openai\"\nmodel = \"gpt-5.4-mini\"\n
 
 fn git(dir: &Path, args: &[&str]) {
     let ok = Command::new("git")
+        .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
         .args([
             "-c",
             "user.name=Dana Example",
@@ -255,8 +256,21 @@ fn a_waiting_call_past_its_deadline_is_denied_as_nobodys_decision() {
         "{since} → {deadline}"
     );
 
-    // Two minutes later: the deadline has passed.
+    // Two minutes later: the deadline has passed. Every listing — status
+    // too — leaves the call out before anything denies it.
     let later = agentplane::core::Timestamp::now_utc() + std::time::Duration::from_secs(120);
+    let now = speccoder_runtime::progress::status_with(r.path(), state.path());
+    assert!(
+        now.message().contains("denied as expired in"),
+        "{}",
+        now.message()
+    );
+    let then = speccoder_runtime::progress::status_at(r.path(), state.path(), later);
+    assert!(
+        !then.message().contains("denied as expired in"),
+        "{}",
+        then.message()
+    );
     speccoder_runtime::approvals::expire_due(&plane_dir(r.path(), state.path()), later).unwrap();
 
     // The attempt continues with the call refused, and nobody is named.
@@ -449,6 +463,7 @@ fn a_resumed_attempt_that_fails_is_undone_to_where_the_task_started() {
         "the failed attempt's write is still there"
     );
     let status = Command::new("git")
+        .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
         .args(["status", "--porcelain"])
         .current_dir(wt)
         .output()
@@ -475,7 +490,8 @@ fn calls_waiting_in_a_journal_another_process_holds_are_unknown_never_none() {
     );
     assert_eq!(pending(r.path(), state.path()).len(), 1);
 
-    // Another holder of the journal (as another speccoder process would be).
+    // A writer that holds the journal alone (as speccoder 0.2.0 did): it
+    // cannot be read beside.
     let held =
         agentplane::store::RedbStore::open(plane_dir(r.path(), state.path()).join("journal.redb"))
             .unwrap();
@@ -563,4 +579,455 @@ fn decisions_that_cannot_be_read_are_unknown_never_none() {
         "{}",
         approve.message()
     );
+}
+
+// ── a journal another process writes ────────────────────────────────
+
+const WRITER: &str = "SPECCODER_TEST_JOURNAL_WRITER";
+
+/// Wait for a marker file the other process writes.
+fn until(path: &Path) {
+    for _ in 0..600 {
+        if path.exists() {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    panic!("{} never appeared", path.display());
+}
+
+/// The writer half of `a_run_in_another_process_leaves_the_journal_readable`,
+/// run in a child process: opens the project's journal to write, as a run
+/// or a decision does, and holds it until told.
+#[test]
+#[ignore = "the writer half of a_run_in_another_process_leaves_the_journal_readable, run in a child process"]
+fn the_other_process_writer() {
+    let Ok(dir) = std::env::var(WRITER).map(PathBuf::from) else {
+        return;
+    };
+    let plane_dir = PathBuf::from(fs::read_to_string(dir.join("plane")).unwrap());
+    let plane = speccoder_runtime::substrate::Plane::open_for_decisions(&plane_dir)
+        .unwrap_or_else(|e| panic!("{}", e.0));
+    fs::write(dir.join("ready"), "").unwrap();
+    until(&dir.join("done"));
+    drop(plane);
+}
+
+/// **Another process writes the journal; this one reads it.** The waiting
+/// call is listed (not `unknown`) in the approvals, the inbox and status,
+/// the run's account reads, all without waiting for the writer — and a
+/// second writer (a decision, a run) is refused at once, the file untouched.
+#[test]
+fn a_run_in_another_process_leaves_the_journal_readable() {
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_answer(agentplane::model::Completion {
+        tool_calls: vec![agentplane::model::ToolCall {
+            id: "c1".to_owned(),
+            name: "write_file".to_owned(),
+            arguments: json!({ "path": "package.json", "content": "{}\n" }),
+        }],
+        text: "I'll add the manifest.".to_owned(),
+        model: None,
+        usage: agentplane::model::Usage::default(),
+        stop_reason: Some("tool_use".to_owned()),
+        truncated: false,
+        commentary: None,
+        compacted: None,
+        structured: None,
+        continuation: None,
+        reasoning: None,
+    });
+    let first = speccoder_runtime::run_with(r.path(), None, "T005", state.path(), d, None);
+    assert_eq!(
+        first.status(),
+        CommandStatus::NeedsHuman,
+        "{}",
+        first.message()
+    );
+    let run_id = report(&first).run_id.clone();
+    let journal = plane_dir(r.path(), state.path());
+
+    let markers = tempfile::tempdir().unwrap();
+    fs::write(
+        markers.path().join("plane"),
+        journal.to_string_lossy().as_bytes(),
+    )
+    .unwrap();
+    let mut child = Command::new(std::env::current_exe().unwrap())
+        .args([
+            "the_other_process_writer",
+            "--exact",
+            "--ignored",
+            "--nocapture",
+        ])
+        .env(WRITER, markers.path())
+        .spawn()
+        .unwrap();
+    until(&markers.path().join("ready"));
+    let before = fs::read(journal.join(speccoder_runtime::substrate::JOURNAL)).unwrap();
+
+    let timed = |what: &str, started: std::time::Instant| {
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(1),
+            "{what} waited {:?} for the other process",
+            started.elapsed()
+        );
+    };
+    // The approvals list the waiting call itself.
+    let started = std::time::Instant::now();
+    let listed = speccoder_runtime::approvals::list_with(r.path(), None, state.path());
+    timed("the listing", started);
+    let Some(CommandData::Approvals(a)) = listed.data() else {
+        panic!("{listed:?}");
+    };
+    assert_eq!(a.pending.len(), 1, "{}", listed.message());
+    assert!(a.unreadable.is_none(), "{:?}", a.unreadable);
+    // So does the inbox.
+    let started = std::time::Instant::now();
+    let inbox = speccoder_runtime::inbox::inbox_with(r.path(), None, Some(state.path()));
+    timed("the inbox", started);
+    let Some(CommandData::Inbox(i)) = inbox.data() else {
+        panic!("{inbox:?}");
+    };
+    assert!(
+        i.items.iter().all(|i| i.kind != "unknown") && !i.items.is_empty(),
+        "{:?}",
+        i.items
+    );
+    // So does status.
+    let started = std::time::Instant::now();
+    let status = speccoder_runtime::progress::status_with(r.path(), state.path());
+    timed("status", started);
+    assert!(
+        status
+            .message()
+            .contains("waiting for a person: 001-graph/T005"),
+        "{}",
+        status.message()
+    );
+    assert!(
+        !status.message().contains("unknown"),
+        "{}",
+        status.message()
+    );
+    // The model's account of the run.
+    let started = std::time::Instant::now();
+    let account = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(speccoder_runtime::substrate::account(&journal, &run_id))
+        .unwrap_or_else(|e| panic!("{}", e.0));
+    timed("the account", started);
+    assert_eq!(
+        account.first().and_then(|t| t.said.as_deref()),
+        Some("I'll add the manifest."),
+        "{account:?}"
+    );
+
+    // A second writer is refused at once: a decision…
+    let started = std::time::Instant::now();
+    let approve = decide_with(
+        r.path(),
+        None,
+        Verb::Approve("T005"),
+        state.path(),
+        speccoder_core::actions::Via::Terminal,
+    );
+    assert!(started.elapsed() < std::time::Duration::from_millis(500));
+    assert_ne!(approve.status(), CommandStatus::Ok, "{}", approve.message());
+    assert!(
+        approve.message().contains("another speccoder"),
+        "{}",
+        approve.message()
+    );
+    // …and a run.
+    let (_, d2) = fake();
+    let second = speccoder_runtime::run_with(r.path(), None, "T005", state.path(), d2, None);
+    assert_ne!(second.status(), CommandStatus::Ok, "{}", second.message());
+    assert!(
+        second.message().contains("another speccoder"),
+        "{}",
+        second.message()
+    );
+    assert_eq!(
+        fs::read(journal.join(speccoder_runtime::substrate::JOURNAL)).unwrap(),
+        before,
+        "a refused writer or a reader touched the journal"
+    );
+
+    fs::write(markers.path().join("done"), "").unwrap();
+    assert!(child.wait().unwrap().success(), "the writer process failed");
+    // Once it is gone, the call is decided as ever.
+    assert_eq!(pending(r.path(), state.path()).len(), 1);
+}
+
+/// A waiting call shows what the model said when it asked: its
+/// commentary, where the provider marks it apart from the answer.
+#[test]
+fn a_waiting_call_shows_the_model_s_commentary() {
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_answer(agentplane::model::Completion {
+        tool_calls: vec![agentplane::model::ToolCall {
+            id: "c1".to_owned(),
+            name: "write_file".to_owned(),
+            arguments: json!({ "path": "package.json", "content": "{}\n" }),
+        }],
+        text: String::new(),
+        model: None,
+        usage: agentplane::model::Usage::default(),
+        stop_reason: None,
+        truncated: false,
+        commentary: Some("The manifest comes first.".to_owned()),
+        compacted: None,
+        structured: None,
+        continuation: None,
+        reasoning: None,
+    });
+    let first = speccoder_runtime::run_with(r.path(), None, "T005", state.path(), d, None);
+    assert_eq!(
+        first.status(),
+        CommandStatus::NeedsHuman,
+        "{}",
+        first.message()
+    );
+    let waiting = pending(r.path(), state.path());
+    assert_eq!(
+        waiting[0]
+            .presentation
+            .as_ref()
+            .and_then(|p| p.claim.as_deref()),
+        Some("The manifest comes first."),
+        "{waiting:?}"
+    );
+}
+
+// ── a journal whose writer was killed ───────────────────────────────
+
+const KILLED: &str = "SPECCODER_TEST_KILLED_WRITER";
+
+/// The writer half of `a_killed_writer_blocks_neither_a_run_s_gate_nor_a_decision`,
+/// run in a child process: opens the journal to write as a decision does,
+/// commits a sweep, and waits to be killed without closing it.
+#[test]
+#[ignore = "the writer half of a_killed_writer_blocks_neither_a_run_s_gate_nor_a_decision, run in a child process"]
+fn the_killed_writer() {
+    let Ok(dir) = std::env::var(KILLED).map(PathBuf::from) else {
+        return;
+    };
+    let plane_dir = PathBuf::from(fs::read_to_string(dir.join("plane")).unwrap());
+    let plane = speccoder_runtime::substrate::Plane::open_for_decisions(&plane_dir)
+        .unwrap_or_else(|e| panic!("{}", e.0));
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(plane.expire_due(agentplane::core::Timestamp::now_utc()))
+        .unwrap_or_else(|e| panic!("{}", e.0));
+    fs::write(dir.join("ready"), "").unwrap();
+    loop {
+        std::thread::sleep(std::time::Duration::from_secs(1));
+    }
+}
+
+/// Opens the journal in a child process and kills it (SIGKILL) while it
+/// writes: the journal is left needing the repair only a writer makes.
+fn kill_a_writer(journal: &Path) {
+    let markers = tempfile::tempdir().unwrap();
+    fs::write(
+        markers.path().join("plane"),
+        journal.to_string_lossy().as_bytes(),
+    )
+    .unwrap();
+    let mut child = Command::new(std::env::current_exe().unwrap())
+        .args(["the_killed_writer", "--exact", "--ignored", "--nocapture"])
+        .env(KILLED, markers.path())
+        .spawn()
+        .unwrap();
+    until(&markers.path().join("ready"));
+    child.kill().unwrap();
+    assert!(!child.wait().unwrap().success());
+    // A reader cannot open it now: the repair is a writer's.
+    assert!(
+        speccoder_runtime::substrate::open_reader(journal)
+            .err()
+            .is_some_and(|e| e.0.contains("ended without closing")),
+        "the killed writer left the journal readable"
+    );
+}
+
+/// **A run killed while it writes the journal** leaves it needing a
+/// repair a reader cannot make. The listings say exactly that — never
+/// that nothing waits; the next run's gate reads through its own writer,
+/// which repairs, so the call that waits still holds the worktree; and a
+/// person's decision goes through, never blocked by the killed run.
+#[test]
+fn a_killed_writer_blocks_neither_a_run_s_gate_nor_a_decision() {
+    let r = repo("");
+    fs::write(
+        r.path().join("specs/001-graph/tasks.md"),
+        "# Tasks\n\n## Phase 1: Setup\n\n- [ ] T005 [P] Add the manifest\n- [ ] T006 [P] Add another manifest\n",
+    )
+    .unwrap();
+    git(r.path(), &["commit", "-qam", "two tasks"]);
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    write_manifest(&f, "c1");
+    let first = speccoder_runtime::run_with(r.path(), None, "T005", state.path(), d, None);
+    assert_eq!(
+        first.status(),
+        CommandStatus::NeedsHuman,
+        "{}",
+        first.message()
+    );
+    let journal = plane_dir(r.path(), state.path());
+
+    // Listings read only: they say why they cannot, precisely.
+    kill_a_writer(&journal);
+    let listed = speccoder_runtime::approvals::list_with(r.path(), None, state.path());
+    let Some(CommandData::Approvals(a)) = listed.data() else {
+        panic!("{listed:?}");
+    };
+    assert!(
+        a.unreadable.as_deref().is_some_and(|u| u
+            .contains("the last run ended without closing its journal")
+            && u.contains("the next run or decision repairs it")),
+        "{:?}",
+        a.unreadable
+    );
+    let status = speccoder_runtime::progress::status_with(r.path(), state.path());
+    assert!(
+        status
+            .message()
+            .contains("waiting for a person: unknown — the last run ended without closing"),
+        "{}",
+        status.message()
+    );
+
+    // The gate of another task's run fails closed: T005 still holds the
+    // worktree, and T006 does not start beside it.
+    let (_f, d) = fake();
+    let other = speccoder_runtime::run_with(r.path(), None, "T006", state.path(), d, None);
+    assert_eq!(
+        other.status(),
+        CommandStatus::NeedsHuman,
+        "{}",
+        other.message()
+    );
+    assert!(
+        other.message().contains("T005 waits for a person"),
+        "{}",
+        other.message()
+    );
+
+    // A decision repairs it too, and is recorded.
+    kill_a_writer(&journal);
+    let approve = decide_with(
+        r.path(),
+        None,
+        Verb::Approve("T005"),
+        state.path(),
+        speccoder_core::actions::Via::Terminal,
+    );
+    assert_eq!(approve.status(), CommandStatus::Ok, "{}", approve.message());
+    assert!(pending(r.path(), state.path()).is_empty());
+}
+
+// ── a decision speccoder 0.2.0 recorded ─────────────────────────────
+
+/// Records an approval of the waiting call `call` in the journal at
+/// `journal` as speccoder 0.2.0 (agentplane 0.53) did: the decision as a
+/// worklist event with `approved: true`, the shape 0.54 replaced by a
+/// verdict, and the task completed.
+fn approve_as_0_2_0(journal: &Path, call: &str) {
+    use agentplane::case::{EventStore as _, TaskStore as _};
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let store = agentplane::store::RedbStore::open_shared(journal.join("journal.redb")).unwrap();
+    let id = agentplane::core::TaskId::parse(call).unwrap();
+    let row = rt.block_on(store.task(id)).unwrap().unwrap();
+    let by = agentplane::core::Operator::from_parts("Dana Example", "asserted").unwrap();
+    let mut decision = agentplane::core::Decision::approve(by.clone(), "");
+    decision.reviewed = Some(row.justification.digest());
+    let mut old = serde_json::to_value(&decision).unwrap();
+    let fields = old.as_object_mut().unwrap();
+    fields.remove("verdict");
+    fields.insert("approved".to_owned(), json!(true));
+    let event = agentplane::core::InboundEvent::new(
+        "agentplane://worklist",
+        format!("task-decision:{call}"),
+        "agentplane.task.decided",
+        old,
+    )
+    .correlate(agentplane::core::CorrelationKey::new("task", call))
+    .minted_by(by);
+    assert!(
+        rt.block_on(store.buffer(&event, agentplane::core::Timestamp::now_utc()))
+            .unwrap()
+    );
+    rt.block_on(store.set_state(id, agentplane::core::TaskState::Completed))
+        .unwrap();
+}
+
+/// **A decision speccoder 0.2.0 recorded** does not read in this build
+/// (agentplane 0.54 made a decision a verdict). The attempt that waited on
+/// it is named as such, with the fix — and the fix works: the next run
+/// starts the task afresh instead of failing on the same record again.
+#[test]
+fn a_decision_recorded_by_0_2_0_is_named_and_the_task_runs_again() {
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    write_manifest(&f, "c1");
+    let first = speccoder_runtime::run_with(r.path(), None, "T005", state.path(), d, None);
+    assert_eq!(
+        first.status(),
+        CommandStatus::NeedsHuman,
+        "{}",
+        first.message()
+    );
+    let waiting = pending(r.path(), state.path());
+    approve_as_0_2_0(&plane_dir(r.path(), state.path()), &waiting[0].call);
+
+    let (f2, d2) = fake();
+    f2.will_structure(done());
+    let second = speccoder_runtime::run_with(r.path(), None, "T005", state.path(), d2, None);
+    assert_eq!(
+        second.status(),
+        CommandStatus::RunFailed,
+        "{}",
+        second.message()
+    );
+    assert!(
+        second
+            .message()
+            .contains("a decision recorded by speccoder 0.2.0")
+            && second.message().contains("run the task again"),
+        "{}",
+        second.message()
+    );
+    // Its replay names it too, never as a divergence.
+    let replayed = speccoder_runtime::replay_with(r.path(), &report(&second).run_id, state.path());
+    assert!(
+        replayed.message().contains("recorded by speccoder 0.2.0"),
+        "{}",
+        replayed.message()
+    );
+    // The fix works: the next run starts the attempt afresh, and asks again.
+    let (f3, d3) = fake();
+    write_manifest(&f3, "c1");
+    let third = speccoder_runtime::run_with(r.path(), None, "T005", state.path(), d3, None);
+    assert_eq!(
+        third.status(),
+        CommandStatus::NeedsHuman,
+        "{}",
+        third.message()
+    );
+    assert_eq!(pending(r.path(), state.path()).len(), 1);
 }

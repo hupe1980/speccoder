@@ -11,6 +11,8 @@ use assert_cmd::Command;
 
 fn speccoder() -> Command {
     let mut cmd = Command::cargo_bin("speccoder").unwrap();
+    // A test that needs its own state names it after this.
+    cmd.env("SPECCODER_STATE_DIR", support::isolated_state());
     cmd.env_remove("SPECIFY_FEATURE_DIRECTORY");
     cmd.env_remove("SPECCODER_FORMAT");
     cmd
@@ -248,6 +250,7 @@ fn verify_without_config_exits_13() {
 
 fn git(dir: &std::path::Path, args: &[&str]) {
     let ok = std::process::Command::new("git")
+        .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
         .args([
             "-c",
             "user.name=t",
@@ -627,6 +630,7 @@ fn make_project() -> tempfile::TempDir {
     let git = |args: &[&str]| {
         assert!(
             std::process::Command::new("git")
+                .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
                 .args([
                     "-c",
                     "user.name=t",
@@ -683,6 +687,7 @@ fn init_runs_the_checks_and_names_the_commit_without_making_it() {
         "{next:?}"
     );
     let log = std::process::Command::new("git")
+        .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
         .args(["log", "--format=%s"])
         .current_dir(dir.path())
         .output()
@@ -743,6 +748,7 @@ fn init_at_a_terminal_commits_only_the_config_on_yes() {
     let bin = assert_cmd::cargo::cargo_bin("speccoder");
     let line = format!("{} init", bin.display());
     let mut cmd = std::process::Command::new("script");
+    cmd.env("SPECCODER_STATE_DIR", support::isolated_state());
     if cfg!(target_os = "macos") {
         cmd.args(["-q", "/dev/null"]).arg(&bin).arg("init");
     } else {
@@ -771,6 +777,7 @@ fn init_at_a_terminal_commits_only_the_config_on_yes() {
     let text = String::from_utf8_lossy(&out.stdout);
     assert!(text.contains("Commit speccoder.toml?"), "{text}");
     let log = std::process::Command::new("git")
+        .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
         .args(["log", "--format=%s"])
         .current_dir(dir.path())
         .output()
@@ -781,6 +788,7 @@ fn init_at_a_terminal_commits_only_the_config_on_yes() {
         "{text}"
     );
     let files = std::process::Command::new("git")
+        .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
         .args(["show", "--name-only", "--format=", "HEAD"])
         .current_dir(dir.path())
         .output()
@@ -854,6 +862,7 @@ fn init_at_a_terminal_commits_the_nextest_profile_with_the_config() {
     std::fs::remove_file(dir.path().join("Makefile")).unwrap();
     let git = |args: &[&str]| {
         std::process::Command::new("git")
+            .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
             .args([
                 "-c",
                 "user.name=t",
@@ -872,6 +881,7 @@ fn init_at_a_terminal_commits_the_nextest_profile_with_the_config() {
     let bin = assert_cmd::cargo::cargo_bin("speccoder");
     let line = format!("{} init --no-verify", bin.display());
     let mut cmd = std::process::Command::new("script");
+    cmd.env("SPECCODER_STATE_DIR", support::isolated_state());
     if cfg!(target_os = "macos") {
         cmd.args(["-q", "/dev/null"])
             .arg(&bin)
@@ -979,6 +989,7 @@ fn config_sets_checks_and_commits_the_configuration_alone() {
     let (code, v) = run(&["commit"]);
     assert_eq!(code, Some(0), "{v}");
     let shown = std::process::Command::new("git")
+        .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
         .args(["show", "--name-only", "--format=%s", "HEAD"])
         .current_dir(d)
         .output()
@@ -1105,4 +1116,102 @@ fn bug_refuses_missing_words_before_writing_and_a_symptom_named_run_follows_two_
         .unwrap();
     let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
     assert_eq!(v["status"], "usage_error", "{v}");
+}
+
+/// Reading a project records nothing: on a project speccoder never ran,
+/// the read commands neither create the state directory nor a journal —
+/// a missing journal is "nothing recorded", never a new file.
+#[test]
+fn reading_a_fresh_project_creates_no_state() {
+    let dir = make_project();
+    let state = tempfile::tempdir().unwrap();
+    let missing = state.path().join("state");
+    for args in [
+        &["status"][..],
+        &["inbox"],
+        &["report"],
+        &["report", "--approvals"],
+        &["report", "--live"],
+        &["actions"],
+        &["doctor"],
+        &["task", "show", "T005", "--account"],
+    ] {
+        let _ = speccoder()
+            .args(args)
+            .current_dir(dir.path())
+            .env("SPECCODER_STATE_DIR", &missing)
+            .output()
+            .unwrap();
+        assert!(
+            !missing.exists(),
+            "`speccoder {}` created {}",
+            args.join(" "),
+            missing.display()
+        );
+    }
+}
+
+/// `doctor` fails a state directory that cannot be made: its path, or a
+/// folder it would be made in, is a file.
+#[test]
+fn doctor_fails_a_state_path_that_is_a_file() {
+    let dir = make_project();
+    let state = tempfile::tempdir().unwrap();
+    let file = state.path().join("file");
+    std::fs::write(&file, "").unwrap();
+    for path in [file.clone(), file.join("speccoder")] {
+        let out = speccoder()
+            .args(["--json", "doctor", "-C"])
+            .arg(dir.path())
+            .env("SPECCODER_STATE_DIR", &path)
+            .output()
+            .unwrap();
+        let v = support::result(&out.stdout);
+        let check = v["data"]["checks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["check"] == "state")
+            .cloned()
+            .unwrap();
+        assert_eq!(check["level"], "fail", "{}: {check}", path.display());
+    }
+}
+
+/// Under nextest every test process gets a state directory of its own,
+/// fresh and empty: what one test leaves there, no other test sees.
+fn a_state_directory_of_its_own(mine: &str, theirs: &str) {
+    if std::env::var_os("NEXTEST").is_none() {
+        eprintln!("skipped: not under nextest");
+        return;
+    }
+    let dir = std::path::PathBuf::from(std::env::var_os("SPECCODER_STATE_DIR").unwrap());
+    let home = std::path::PathBuf::from(std::env::var_os("HOME").unwrap());
+    assert!(
+        !dir.starts_with(home.join(".local/state")),
+        "{}",
+        dir.display()
+    );
+    assert!(!dir.join(theirs).exists(), "another test's state is here");
+    // And git runs without background maintenance racing the test.
+    let auto = std::process::Command::new("git")
+        .args(["config", "--get", "maintenance.auto"])
+        .output()
+        .unwrap();
+    assert_eq!(String::from_utf8_lossy(&auto.stdout).trim(), "false");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join(mine), "").unwrap();
+    // Long enough that the other test, run beside or after, would see it.
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    assert!(!dir.join(theirs).exists(), "another test's state is here");
+}
+
+#[test]
+fn each_test_has_a_state_directory_of_its_own_a() {
+    a_state_directory_of_its_own("a", "b");
+}
+
+#[test]
+fn each_test_has_a_state_directory_of_its_own_b() {
+    a_state_directory_of_its_own("b", "a");
 }

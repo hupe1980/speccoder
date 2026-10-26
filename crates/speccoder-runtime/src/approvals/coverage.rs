@@ -133,7 +133,9 @@ pub fn preview(root: &Path, state: &Path, list: PolicyList, prefix: &[String]) -
 
 fn read_calls(dir: &Path) -> Result<crate::substrate::RecordedCalls, String> {
     let rt = crate::tokio_runtime()?;
-    let plane = crate::substrate::Plane::open_for_decisions(dir).map_err(|e| e.0)?;
+    let Some(plane) = crate::substrate::Plane::open_for_reading(dir).map_err(|e| e.0)? else {
+        return Ok(crate::substrate::RecordedCalls::default());
+    };
     rt.block_on(plane.tool_calls("proc", "run_command"))
         .map_err(|e| e.0)
 }

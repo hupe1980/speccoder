@@ -40,9 +40,11 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
+      # nextest pinned: the test isolation uses its experimental wrapper
+      # scripts (.config/nextest.toml), which a later release may change.
       - uses: taiki-e/install-action@v2
         with:
-          tool: just,cargo-nextest,cargo-deny
+          tool: just,cargo-nextest@0.9.146,cargo-deny
       - run: just ci
 
   # The web interface is embedded from its committed build: rebuilding it

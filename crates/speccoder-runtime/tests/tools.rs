@@ -13,6 +13,7 @@ use speccoder_runtime::tools::policy::Policy;
 
 fn git(dir: &Path, args: &[&str]) {
     let ok = Command::new("git")
+        .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
         .args([
             "-c",
             "user.name=t",

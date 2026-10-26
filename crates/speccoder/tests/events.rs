@@ -28,6 +28,7 @@ impl Drop for Killed {
 
 fn git(dir: &Path, args: &[&str]) {
     let ok = Command::new("git")
+        .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
         .args([
             "-c",
             "user.name=t",
@@ -167,6 +168,7 @@ fn a_run_streams_its_lifecycle_and_ends_in_the_result() {
 #[test]
 fn events_and_json_together_are_one_usage_error() {
     let out = Command::new(env!("CARGO_BIN_EXE_speccoder"))
+        .env("SPECCODER_STATE_DIR", support::isolated_state())
         .args(["--events", "--json", "report"])
         .output()
         .unwrap();
@@ -177,6 +179,7 @@ fn events_and_json_together_are_one_usage_error() {
     assert_eq!(lines[1]["result"]["code"], "USAGE-CONFLICT");
     // And a bad flag under --json is an envelope too, not clap's text.
     let out = Command::new(env!("CARGO_BIN_EXE_speccoder"))
+        .env("SPECCODER_STATE_DIR", support::isolated_state())
         .args(["--json", "run", "--bogus"])
         .output()
         .unwrap();
@@ -214,6 +217,7 @@ fn a_reader_that_goes_away_does_not_break_the_run() {
     assert!(!err.contains("panicked"), "{err}");
     // The run still finished its work: the task is ticked on the branch.
     let log = Command::new("git")
+        .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
         .args(["log", "--format=%s", "speccoder/001-graph"])
         .current_dir(repo.path())
         .output()
@@ -378,6 +382,7 @@ fn after_planning_the_cli_offers_the_commit_and_then_the_run() {
     assert!(text.contains("+ specs/001-graph/tasks.md"), "{text}");
     // Committed: exactly the planning file, under its own message.
     let log = Command::new("git")
+        .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
         .args(["log", "-1", "--format=%s", "--name-only"])
         .current_dir(r)
         .output()
@@ -605,6 +610,7 @@ fn the_web_host_guards_itself_and_a_run_is_answered_over_its_api() {
 
     // Ticked on the feature's branch; the decision names the web.
     let log = Command::new("git")
+        .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
         .args(["log", "--format=%s%n%b%n%N", "speccoder/001-graph"])
         .current_dir(repo.path())
         .output()

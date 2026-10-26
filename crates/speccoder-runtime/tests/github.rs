@@ -20,6 +20,7 @@ fn repo() -> tempfile::TempDir {
     ] {
         assert!(
             Command::new("git")
+                .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
                 .args(args)
                 .current_dir(dir.path())
                 .status()
@@ -144,6 +145,7 @@ fn a_missing_remote_is_said_before_any_login() {
     let bare = tempfile::tempdir().unwrap();
     assert!(
         Command::new("git")
+            .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
             .args(["init", "-q"])
             .current_dir(bare.path())
             .status()
@@ -246,6 +248,7 @@ fn a_pull_request_is_looked_up_where_the_remote_points() {
     let dir = repo();
     assert!(
         Command::new("git")
+            .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
             .args([
                 "remote",
                 "add",

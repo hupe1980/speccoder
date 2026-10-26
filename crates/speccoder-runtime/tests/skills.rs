@@ -20,6 +20,7 @@ const SKILL: &str = "---\nname: \"demo-specify\"\ndescription: \"Write a feature
 
 fn git(dir: &Path, args: &[&str]) {
     let ok = Command::new("git")
+        .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
         .args([
             "-c",
             "user.name=t",
@@ -182,6 +183,9 @@ fn a_planning_skill_writes_the_spec_in_the_checkout_and_asks_when_it_can() {
         "{prompt}"
     );
     assert!(asked[0].tools.iter().any(|t| t.name == "ask_person"));
+    // Recorded as an answer, by the person who gave it.
+    assert_eq!(k.tool_calls[0]["answered"], true, "{:?}", k.tool_calls);
+    assert!(!k.tool_calls[0]["operator"].is_null(), "{:?}", k.tool_calls);
     // The person's answer reached the model.
     assert!(
         serde_json::to_string(&asked[1].prompt)
@@ -282,6 +286,7 @@ fn a_mandatory_before_implement_hook_runs_as_a_hosted_skill_and_optional_ones_ar
     );
     let st = String::from_utf8(
         Command::new("git")
+            .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
             .args(["status", "--porcelain", "--ignored"])
             .current_dir(r.path())
             .output()

@@ -38,6 +38,7 @@ fn an_editor_starts_a_session_and_runs_a_command() {
     ] {
         assert!(
             Command::new("git")
+                .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
                 .args(args)
                 .current_dir(dir.path())
                 .status()

@@ -34,6 +34,7 @@ const HELD_OUT_PATH: &str = "tests/held_out_us1_login.txt";
 
 fn git(dir: &Path, args: &[&str]) -> String {
     let out = Command::new("git")
+        .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
         .args(["-c", "user.name=Ada", "-c", "user.email=ada@example.com"])
         .args([
             "-c",
@@ -532,6 +533,7 @@ fn edge_cases_refuse_with_their_codes() {
     f.will_fail(agentplane::model::ModelError::Refused {
         model: agentplane::model::ModelId::new("openai", "gpt-5.4-mini"),
         detail: "down".to_owned(),
+        code: None,
     });
     let res = write(r.path(), state.path(), d);
     assert_eq!(

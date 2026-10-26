@@ -37,6 +37,7 @@ fn write_accept_sh(root: &Path) {
 
 fn git(dir: &Path, args: &[&str]) {
     let ok = Command::new("git")
+        .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
         .args([
             "-c",
             "user.name=t",
@@ -664,6 +665,7 @@ fn out_of_scope_changes_are_reported_not_gated() {
         (true, vec!["src/util.rs".to_owned()])
     );
     let message = Command::new("git")
+        .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
         .args(["log", "-1", "--format=%B"])
         .current_dir(&rep.worktree)
         .output()
@@ -728,6 +730,7 @@ fn an_overridden_checklist_gate_is_recorded_on_the_commit() {
     let attempt = &fr.attempts[0];
     assert!(attempt.ticked, "{}", res.message());
     let message = Command::new("git")
+        .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
         .args(["log", "-1", "--format=%B"])
         .current_dir(&attempt.worktree)
         .output()
@@ -752,6 +755,7 @@ fn feature(res: &CommandResult) -> &speccoder_core::FeatureReport {
 fn git_out(dir: &Path, args: &[&str]) -> String {
     String::from_utf8(
         Command::new("git")
+            .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
             .args(args)
             .current_dir(dir)
             .output()
@@ -1001,6 +1005,7 @@ fn a_missing_symbol_is_absent_red_and_can_verify() {
     assert_eq!(rep.verdict, Some(Verdict::Verified));
     // The kind of red travels with the tick.
     let message = Command::new("git")
+        .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
         .args(["log", "-1", "--format=%B"])
         .current_dir(&rep.worktree)
         .output()
@@ -2719,6 +2724,7 @@ fn files_the_checks_generate_do_not_empty_a_lane_merge() {
     // Every ticked task's work is on the branch.
     for f in ["src/alpha.rs", "src/beta.rs"] {
         let shown = Command::new("git")
+            .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
             .args(["show", &format!("HEAD:{f}")])
             .current_dir(&feature_wt)
             .output()
@@ -3560,6 +3566,8 @@ fn the_model_s_account_is_live_and_kept() {
         usage: agentplane::model::Usage::default(),
         stop_reason: Some("tool_use".to_owned()),
         truncated: false,
+        commentary: None,
+        compacted: None,
         structured: None,
         continuation: None,
         reasoning: Some("The test only needs login() to exist.\nSo the smallest change is a new empty function.".to_owned()),
@@ -3690,4 +3698,98 @@ fn uncommitted_setup_config_is_part_of_the_fix() {
     assert_eq!(fixed.status(), CommandStatus::Ok, "{}", fixed.message());
     assert!(git_out(r.path(), &["ls-files", ".config/nextest.toml"]).contains("nextest.toml"));
     assert!(speccoder_runtime::code::setup_remedy(r.path(), None).is_none());
+}
+
+/// An OpenAI Responses model's commentary — its words beside its calls,
+/// which that wire marks apart from the answer — is shown live and kept,
+/// before any text the turn has; a final turn's commentary too.
+#[test]
+fn the_model_s_commentary_is_what_it_said() {
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    let turn = |text: &str,
+                commentary: &str,
+                calls: Vec<agentplane::model::ToolCall>,
+                structured: Option<Value>| agentplane::model::Completion {
+        tool_calls: calls,
+        text: text.to_owned(),
+        model: None,
+        usage: agentplane::model::Usage::default(),
+        stop_reason: None,
+        truncated: false,
+        commentary: Some(commentary.to_owned()),
+        compacted: None,
+        structured,
+        continuation: None,
+        reasoning: None,
+    };
+    f.will_answer(turn(
+        "",
+        "Reading the library first.",
+        vec![agentplane::model::ToolCall {
+            id: "c1".to_owned(),
+            name: "read_file".to_owned(),
+            arguments: json!({ "path": "src/lib.rs" }),
+        }],
+        None,
+    ));
+    f.will_answer(turn(
+        "then the edit.",
+        "Adding login().",
+        vec![agentplane::model::ToolCall {
+            id: "c2".to_owned(),
+            name: "edit_file".to_owned(),
+            arguments: json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\npub fn login() {}" }),
+        }],
+        None,
+    ));
+    let answer = done("added login");
+    f.will_answer(turn(&answer.to_string(), "Done.", Vec::new(), Some(answer)));
+    let rec = Arc::new(Recorder::default());
+    let options = speccoder_runtime::RunOptions {
+        progress: Some(rec.clone()),
+        ..speccoder_runtime::RunOptions::default()
+    };
+    let res = speccoder_runtime::run_with_options(
+        r.path(),
+        None,
+        "T005",
+        state.path(),
+        d,
+        None,
+        &options,
+    );
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let said: Vec<(u32, String)> = rec
+        .0
+        .lock()
+        .unwrap()
+        .iter()
+        .filter_map(|e| match e {
+            Event::Said { turn, text, .. } => Some((*turn, text.clone())),
+            _ => None,
+        })
+        .collect();
+    let expected = vec![
+        (1, "Reading the library first.".to_owned()),
+        (2, "Adding login().\n\nthen the edit.".to_owned()),
+        (3, "Done.".to_owned()),
+    ];
+    assert_eq!(said, expected);
+    let plane = speccoder_runtime::worktree::project_state_dir(state.path(), r.path());
+    let kept = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(speccoder_runtime::substrate::account(
+            &plane,
+            &report(&res).run_id,
+        ))
+        .unwrap();
+    let kept: Vec<(u32, String)> = kept
+        .into_iter()
+        .map(|t| (t.turn, t.said.unwrap_or_default()))
+        .collect();
+    assert_eq!(kept, expected);
 }

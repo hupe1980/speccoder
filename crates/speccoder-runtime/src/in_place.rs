@@ -504,9 +504,17 @@ impl Session {
     /// restores the branch tip, and forgets the attempts that cannot resume
     /// any more. `None` when there was nothing to save.
     fn set_aside(&self, plane_dir: &Path, reason: &str) -> Result<Option<String>, InPlaceError> {
+        // A call that waited for a person waits on nothing now. One that
+        // cannot be withdrawn stops this: its attempt would resume into a
+        // checkout that no longer holds its writes.
+        crate::approvals::withdraw_waiting(&self.project, plane_dir, &self.feature, reason)
+            .map_err(|e| {
+                InPlaceError::new(
+                    "RETURN-BLOCKED",
+                    format!("the calls waiting for a person could not be withdrawn: {e}"),
+                )
+            })?;
         let _ = std::fs::remove_dir_all(plane_dir.join("resume").join(&self.feature));
-        // A call that waited for a person waits on nothing now.
-        let _ = crate::approvals::withdraw_waiting(&self.project, plane_dir, &self.feature, reason);
         if worktree::require_clean(&self.checkout).is_ok() {
             return Ok(None);
         }

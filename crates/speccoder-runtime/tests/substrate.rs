@@ -287,7 +287,7 @@ fn a_journal_in_use_is_refused_untouched_and_an_unreadable_one_is_moved_aside() 
     let Err(e) = Plane::open(dir.path(), &model, Arc::clone(&d)) else {
         panic!("a second plane opened a journal in use")
     };
-    assert!(started.elapsed() < std::time::Duration::from_secs(2));
+    assert!(started.elapsed() < std::time::Duration::from_millis(500));
     assert!(e.0.contains("another speccoder"), "{}", e.0);
     assert_eq!(
         fs::read(dir.path().join(JOURNAL)).unwrap(),

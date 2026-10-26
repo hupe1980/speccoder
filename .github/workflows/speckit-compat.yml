@@ -37,3 +37,5 @@ jobs:
       - run: cargo test -p speccoder-runtime --test compat
         env:
           SPECCODER_COMPAT_VERSIONS: ${{ steps.v.outputs.version }}
+      # Plain `cargo test` writes no state outside its throwaway directories.
+      - run: test ! -e "$HOME/.local/state/speccoder" && test ! -e "${XDG_STATE_HOME:-$HOME/.local/state}/speccoder"

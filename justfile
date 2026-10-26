@@ -24,8 +24,17 @@ lint:
 
 # On Linux the sandbox re-runs the speccoder binary as its helper; the
 # runtime crate's tests find it here (built by the same nextest run).
+# Every test writes state to a throwaway directory, removed afterwards —
+# never to the developer's real one (nextest's wrapper script gives each
+# test process a fresh directory of its own inside it; see
+# .config/nextest.toml).
 test:
-    @echo "==> gate: test"
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "==> gate: test"
+    root="$(mktemp -d "${TMPDIR:-/tmp}/speccoder-test.XXXXXX")"
+    trap 'rm -rf "$root"' EXIT
+    export SPECCODER_TEST_STATE_ROOT="$root" SPECCODER_STATE_DIR="$root/state" XDG_STATE_HOME="$root/xdg"
     SPECCODER_SANDBOX_HELPER="${CARGO_TARGET_DIR:-$PWD/target}/debug/speccoder" cargo nextest run --workspace -E 'not binary(layering)'
     cargo test --workspace --doc
 

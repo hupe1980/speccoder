@@ -15,7 +15,7 @@
       },
       "rows": [],
       "unreadable": [
-        "the journal: another speccoder is working on this project (its journal in <state>/<hex> is in use): Database already open. Cannot acquire lock."
+        "the journal: another process holds the journal in <state>/<hex> alone (a speccoder build that does not share it): Database already open. Cannot acquire lock."
       ]
     },
     "docs": "https://hupe1980.github.io/speccoder/docs/codes/#usage",
@@ -23,7 +23,7 @@
     "fix": [
       "speccoder config --help"
     ],
-    "message": "the preview is incomplete: the journal: another speccoder is working on this project (its journal in <state>/<hex> is in use): Database already open. Cannot acquire lock.; try again when the journal can be read",
+    "message": "the preview is incomplete: the journal: another process holds the journal in <state>/<hex> alone (a speccoder build that does not share it): Database already open. Cannot acquire lock.; try again when the journal can be read",
     "payload": "policy_coverage",
     "schema_version": 2,
     "status": "usage_error"

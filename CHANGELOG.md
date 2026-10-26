@@ -6,6 +6,72 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Built on agentplane 0.54.0.**
+- **Watch a project while a run works on it.** `speccoder status`,
+  `report --approvals`, `inbox`, `task show --account` and the app read the
+  journal of a run in another process at once, instead of waiting and saying
+  another speccoder is working. Only a second writer — another run, or a
+  decision on a waiting call — is refused while the run holds the journal,
+  and at once. A read never creates, moves or writes the journal; a call past
+  its deadline is not listed as waiting, `status` included. A run killed
+  before it closed the journal (Ctrl-C, a closed terminal) leaves it for the
+  next writer to repair: the listings say so (`unknown — the last run ended
+  without closing its journal`), while the next run and every decision open
+  it through their writer, which repairs it. A run's check for another
+  task's waiting call, and the withdrawal of a set-aside attempt's calls,
+  refuse rather than proceed when the calls cannot be read. A decision
+  lists and decides through one writer, after denying the calls past their
+  deadline; when `--all` or a batch fails part way, the calls decided before
+  the failure are named as decided.
+- **OpenAI's words beside its calls are shown.** With the Responses API, the
+  model's commentary appears as what it said — live, in waiting calls and in
+  `task show --account` — as Anthropic's words already did.
+- **`speccoder eval` stops on a refused account by the provider's code**,
+  as recorded in the journal, not by words in the message: the codes
+  agentplane 0.54 classifies as the account's — OpenAI's
+  `insufficient_quota`, `billing_*` and `invalid_api_key`; Anthropic's
+  `authentication_error`, `billing_error` and `permission_error`; Gemini's
+  and Bedrock's refused or expired credentials. A refused request no longer
+  stops the suite because its message mentions "credit" or "quota". Not
+  yet recognised: Anthropic's "credit balance is too low", which it sends as
+  `invalid_request_error` — the suite goes on and each remaining case fails
+  as refused.
+
+### Fixed
+
+- **Reading a project no longer creates a journal.** `task show --account`
+  and a strict replay on a project speccoder never ran created an empty
+  journal in the state directory, and `doctor` created the state directory
+  itself; now only a run or a decision creates them. `doctor` still fails a
+  state directory that cannot be made, because its path or a parent is a
+  file.
+- The test suite no longer writes to your real state directory
+  (`~/.local/state/speccoder`). Under nextest (`just test`, CI) every test
+  process runs with a fresh state directory of its own, removed when it
+  ends, and git's background maintenance off; under plain `cargo test` the
+  tests name throwaway directories themselves (the binaries they spawn get
+  one per test process under `target/tmp`).
+
+### Upgrading
+
+- A project journal written by 0.2.0 still opens, and its runs still list
+  and show (`report --approvals`, `inbox`, `task show --account`,
+  `config coverage`). A person's decision recorded under 0.2.0 does not read
+  in this build (agentplane 0.54 records a decision as a verdict): the
+  attempt that waited on it fails once, saying so ("a decision recorded by
+  speccoder 0.2.0 … run the task again"), and is set aside; the next
+  `speccoder run` starts it afresh and asks again. `speccoder replay` of a
+  run that read such a decision says the same instead of a divergence.
+  Ticks and attempt refs in git are untouched; nothing needs deleting.
+- While a 0.2.0 process holds a journal, a newer one reads its waiting calls
+  as `unknown`.
+  The other way round, a 0.2.0 run or decision waits up to 2 s for a newer
+  speccoder's read, which holds the journal only while it reads; it stops
+  with "another speccoder is working" only if reads keep it held longer than
+  that. Upgrade every speccoder that works on a project together.
+
 ## [0.2.0] - 2026-10-26
 
 ### Added

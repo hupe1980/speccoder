@@ -35,6 +35,7 @@ const HELD_OUT_PATH: &str = "tests/held_out_us1_secret.txt";
 
 fn git(dir: &Path, args: &[&str]) -> String {
     let out = Command::new("git")
+        .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
         .args(["-c", "user.name=Ada", "-c", "user.email=ada@example.com"])
         .args([
             "-c",
@@ -237,6 +238,7 @@ fn oracle_leak_no_endpoint_or_event_carries_held_out_material() {
     // A dangling commit carrying the secret: no branch reaches it.
     let blob = {
         let mut c = Command::new("git")
+            .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
             .args(["hash-object", "-w", "--stdin"])
             .current_dir(repo.path())
             .stdin(Stdio::piped())
@@ -253,6 +255,7 @@ fn oracle_leak_no_endpoint_or_event_carries_held_out_material() {
     };
     let tree = {
         let mut c = Command::new("git")
+            .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
             .args(["mktree"])
             .current_dir(repo.path())
             .stdin(Stdio::piped())

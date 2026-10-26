@@ -36,7 +36,7 @@ jobs:
       - run: rustup toolchain install # from rust-toolchain.toml
       - uses: Swatinem/rust-cache@v2
       - uses: sigstore/cosign-installer@v3.8.1
-      - run: cargo install --locked cargo-nextest
+      - run: cargo install --locked cargo-nextest@0.9.146
       - env:
           SPECCODER_SIGSTORE_TEST: "1"
           SPECCODER_SIGSTORE_IDENTITY: https://github.com/${{ github.workflow_ref }}

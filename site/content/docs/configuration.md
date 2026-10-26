@@ -106,7 +106,7 @@ speccoder config set commands.allow_prefix npm run          # shows it, then: ty
 ```
 
 - `config coverage KEY PREFIX…` lists every distinct command the project's journal recorded that the prefix would newly allow: how often, when last, how it was decided, and which a fixed rule (shells, privilege, network tools, remote git) still asks for or denies.
-- `config set` (and **Save Prefix** in Settings) saves the prefix only as the confirmation of that list: `yes` at a terminal, `--yes` without asking; otherwise it exits needing a person. It is refused when the preview changed since it was shown, and while the journal cannot be read in full (another speccoder holds it).
+- `config set` (and **Save Prefix** in Settings) saves the prefix only as the confirmation of that list: `yes` at a terminal, `--yes` without asking; otherwise it exits needing a person. It is refused when the preview changed since it was shown, and while the journal cannot be read in full.
 - A prefix added by hand shows the same list in Settings (**Coverage**). Removing an entry needs no preview.
 
 ## `[context]`

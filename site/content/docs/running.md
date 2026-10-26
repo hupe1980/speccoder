@@ -53,7 +53,7 @@ speccoder task drop T005      # discard them
 
 ## The model's account
 
-Each turn, the model's summary of its reasoning and its words beside its calls are shown muted: in the terminal as `∴ …` and quoted text (in full with `-v`; `model thinks:` / `model says:` in screen-reader mode), the latest of each in the dashboard and `report --live`, per turn in the [app](@/docs/web.md)'s inspector, as the agent's thoughts and message in an editor, and afterwards with `speccoder task show T005 --account`. A verdict never rests on it. The summary comes from the provider (Anthropic, OpenAI Responses; an OpenAI-compatible server gives none) and is asked for on the attempt's turns only; `[model] reasoning_summary = false` turns it off. The OpenAI Responses API does not pass on the model's words beside its calls.
+Each turn, the model's summary of its reasoning and its words beside its calls are shown muted: in the terminal as `∴ …` and quoted text (in full with `-v`; `model thinks:` / `model says:` in screen-reader mode), the latest of each in the dashboard and `report --live`, per turn in the [app](@/docs/web.md)'s inspector, as the agent's thoughts and message in an editor, and afterwards with `speccoder task show T005 --account`. A verdict never rests on it. The summary comes from the provider (Anthropic, OpenAI Responses; an OpenAI-compatible server gives none) and is asked for on the attempt's turns only; `[model] reasoning_summary = false` turns it off. With the OpenAI Responses API, the words are the model's commentary, which that API marks apart from its answer; a final turn's commentary is shown too.
 
 ## Quick changes
 

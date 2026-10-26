@@ -50,6 +50,7 @@ fn tasks_md(n: usize) -> String {
 /// git in `dir`, as Ada, never signing commits, no hooks.
 pub fn git(dir: &Path, args: &[&str]) -> String {
     let out = Command::new("git")
+        .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
         .args(["-c", "user.name=Ada", "-c", "user.email=ada@example.com"])
         .args([
             "-c",
@@ -414,7 +415,7 @@ impl Repo {
                 statement::VSA,
                 statement::vsa(&statement::Summary {
                     speccoder: "0.2.0".to_owned(),
-                    agentplane: "0.53.0".to_owned(),
+                    agentplane: "0.54.0".to_owned(),
                     time: "2026-10-26T00:00:00Z".to_owned(),
                     resource_uri: format!("git:{commit}"),
                     policy_sha256: String::new(),
