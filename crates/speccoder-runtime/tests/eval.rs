@@ -288,6 +288,31 @@ fn an_account_the_provider_refuses_stops_the_suite() {
     assert_eq!(e.cases.len(), 1, "the other cases were not run");
 }
 
+/// A refusal of one request — or one without a code — does not stop the
+/// suite, whatever words its message has: the provider's code decides.
+#[test]
+fn a_refused_request_does_not_stop_the_suite_whatever_its_words() {
+    for code in [Some("invalid_request_error"), None] {
+        let fake = FakeProvider::new();
+        fake.will_fail(agentplane::model::ModelError::Refused {
+            model: agentplane::model::ModelId::new("openai", "gpt-5.4-mini"),
+            detail: "the credit card field is not a quota: request too large".to_owned(),
+            code: code.map(str::to_owned),
+        });
+        let driver: Arc<dyn ModelProvider> = fake.clone();
+        let r = run_suite(&suite(), Some("calc-add"), &driver, None, None, 2);
+        assert!(
+            !r.message().starts_with("stopped after"),
+            "{code:?}: {}",
+            r.message()
+        );
+        let Some(CommandData::Eval(e)) = r.data() else {
+            panic!("{}", r.message())
+        };
+        assert_eq!(e.cases.len(), 2, "{code:?}: every round ran");
+    }
+}
+
 /// The bug suite: cases of `speccoder bug`.
 fn bugs() -> PathBuf {
     suite().join("bugs")

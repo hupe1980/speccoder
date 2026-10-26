@@ -19,6 +19,10 @@ adheres to [Semantic Versioning](https://semver.org/).
 - **OpenAI's words beside its calls are shown.** With the Responses API, the
   model's commentary appears as what it said — live, in waiting calls and in
   `task show --account` — as Anthropic's words already did.
+- **`speccoder eval` stops on a refused account by the provider's code**
+  (exhausted quota or credit, billing, a bad or expired key), as recorded in
+  the journal, not by words in the message. A refused request no longer
+  stops the suite because its message mentions "credit" or "quota".
 
 ### Upgrading
 

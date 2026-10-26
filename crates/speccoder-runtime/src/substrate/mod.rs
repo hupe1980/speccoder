@@ -346,24 +346,45 @@ pub fn provider_refusal(failure: &str) -> Option<String> {
     Some(rest[..end].trim_end_matches(['"', ')']).trim().to_owned())
 }
 
-/// Whether a provider refusal concerns the account (no credits, quota,
-/// a key it does not accept) rather than one request: every later call
-/// would be refused too.
-#[must_use]
-pub fn account_refusal(refusal: &str) -> bool {
-    let r = refusal.to_lowercase();
-    [
-        "credit",
-        "billing",
-        "quota",
-        "insufficient",
-        "api key",
-        "api_key",
-        "authentication",
-        "unauthorized",
-    ]
-    .iter()
-    .any(|w| r.contains(w))
+/// The first run in the journal at `dir` that ended on a provider refusing
+/// the **account** — an exhausted quota or credit, billing, a missing or
+/// invalid key, a permission the key lacks — rather than one request:
+/// every later call would be refused too. Read from the records (the
+/// effect the run failed on and the provider's code), read-only; a
+/// refusal without a code is not taken for one. `None` with no journal.
+///
+/// # Errors
+///
+/// The journal cannot be read.
+pub async fn refused_account(
+    dir: &Path,
+) -> Result<Option<agentplane::journal::FailedEffect>, PlaneError> {
+    use agentplane::journal::JournalStore as _;
+    let Some(store) = open_reader(dir)? else {
+        return Ok(None);
+    };
+    let mut after: Option<(u64, agentplane::core::RunId)> = None;
+    loop {
+        let page = store
+            .recent_runs(after, 500)
+            .await
+            .map_err(|e| PlaneError(format!("listing the journal's runs: {e}")))?;
+        let Some(last) = page.last().cloned() else {
+            return Ok(None);
+        };
+        for (run, _) in &page {
+            let records = store
+                .read(*run, 0)
+                .await
+                .map_err(|e| PlaneError(format!("run {run}: {e}")))?;
+            if let Some(failed) = agentplane::journal::failed_effect(&records)
+                .filter(agentplane::journal::FailedEffect::refuses_the_account)
+            {
+                return Ok(Some(failed));
+            }
+        }
+        after = Some((last.1, last.0));
+    }
 }
 
 /// The runtime every plane shares: the journal, the agent with speccoder's
@@ -1168,10 +1189,6 @@ mod tests {
             r,
             "credit_balance_exhausted: You have no credits remaining. Add credits at https://platform.openai.com/settings/organization/billing/."
         );
-        assert!(account_refusal(&r));
-        assert!(!account_refusal(
-            "the continuation was not an Anthropic assistant-content array"
-        ));
         assert_eq!(provider_refusal("Failed(\"timeout\")"), None);
     }
 

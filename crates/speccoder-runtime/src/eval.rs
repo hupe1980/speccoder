@@ -208,10 +208,16 @@ pub fn run_suite_as(
             }
         });
         for p in &paths {
-            let mut case = run_case(p, &suite, provider, secret, round_keep.as_deref());
+            let mut refusal = None;
+            let mut case = run_case(
+                p,
+                &suite,
+                provider,
+                secret,
+                round_keep.as_deref(),
+                &mut refusal,
+            );
             case.round = round;
-            let refusal = crate::substrate::provider_refusal(&case.outcome)
-                .filter(|r| crate::substrate::account_refusal(r));
             results.push(case);
             if let Some(r) = refusal {
                 stopped = Some(r);
@@ -259,12 +265,34 @@ pub fn run_suite_as(
     )))
 }
 
+/// Why the provider refuses the account, when a run of the case (the
+/// attempt, or any run beside it) ended on such a refusal as its journal
+/// records it — the provider's code, never the message's words. Worded
+/// with the refusal the outcome quotes, else the code.
+fn account_refused(state: &Path, repo: &Path, outcome: &str) -> Option<String> {
+    let dir = crate::worktree::project_state_dir(state, repo);
+    let rt = crate::tokio_runtime().ok()?;
+    let failed = rt
+        .block_on(crate::substrate::refused_account(&dir))
+        .ok()
+        .flatten()?;
+    Some(
+        crate::substrate::provider_refusal(outcome).unwrap_or_else(|| {
+            format!(
+                "the account ({})",
+                failed.code.as_deref().unwrap_or("no code")
+            )
+        }),
+    )
+}
+
 fn run_case(
     path: &Path,
     suite: &str,
     provider: &Arc<dyn ModelProvider>,
     secret: Option<&str>,
     keep: Option<&Path>,
+    refused: &mut Option<String>,
 ) -> EvalCase {
     let name = path
         .file_name()
@@ -362,7 +390,9 @@ fn run_case(
     }
 
     if let Some(b) = &spec.bug {
-        return bug_case(path, &spec, b, &repo, &state, provider, secret, case);
+        let case = bug_case(path, &spec, b, &repo, &state, provider, secret, case);
+        *refused = account_refused(&state, &repo, &case.outcome);
+        return case;
     }
     let result = crate::run_with(
         &repo,
@@ -373,6 +403,7 @@ fn run_case(
         secret,
     );
     case.outcome = format!("{:?}: {}", result.status(), result.message());
+    *refused = account_refused(&state, &repo, &case.outcome);
     let Some(CommandData::Run(report)) = result.data() else {
         case.classification = if result.status() == CommandStatus::ConfigError {
             "invalid_case"
