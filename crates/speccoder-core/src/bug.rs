@@ -457,9 +457,15 @@ fn class_in<'t>(t: &'t ReproduceTry, statement: &str) -> Option<&'t RedClass> {
 
 /// What the tries so far decide, for the *Expected* statements `expected`
 /// and at most `max` tries. Pure; never reads the author's words.
+///
+/// Only the latest try can reproduce: an earlier one either was shown and
+/// rejected (then it is discarded) or was superseded by a later try. Every
+/// try counts against `max`, a discarded or rejected one too, so the author
+/// is called at most `max` times; a discarded try is never evidence of a
+/// statement either way.
 #[must_use]
 pub fn decide_reproduce(tries: &[ReproduceTry], expected: &[String], max: u32) -> Reproduce {
-    if let Some(t) = tries.iter().find(|t| {
+    if let Some(t) = tries.last().filter(|t| {
         t.discarded.is_none()
             && !expected.is_empty()
             && expected
@@ -486,7 +492,11 @@ pub fn decide_reproduce(tries: &[ReproduceTry], expected: &[String], max: u32) -
     let mut satisfied = Vec::new();
     let mut not_demonstrated = Vec::new();
     for e in expected {
-        let classes: Vec<&RedClass> = tries.iter().filter_map(|t| class_in(t, e)).collect();
+        let classes: Vec<&RedClass> = tries
+            .iter()
+            .filter(|t| t.discarded.is_none())
+            .filter_map(|t| class_in(t, e))
+            .collect();
         if classes.contains(&&RedClass::Assertion) {
             reproduced.push(e.clone());
         } else if !classes.is_empty() && classes.iter().all(|c| **c == RedClass::Passed) {
@@ -500,6 +510,32 @@ pub fn decide_reproduce(tries: &[ReproduceTry], expected: &[String], max: u32) -
         satisfied,
         not_demonstrated,
     }
+}
+
+/// Why a try was discarded when the person rejected what it reproduced.
+#[must_use]
+pub fn rejected_try(reason: &str) -> String {
+    format!("rejected by the person: {reason}")
+}
+
+/// The most a bug slug may be long.
+pub const MAX_SLUG: usize = 64;
+
+/// Whether `slug` names a bug directory: lowercase ASCII letters, digits
+/// and `-`, starting with a letter or digit, at most [`MAX_SLUG`] long —
+/// never a path (`..`, a separator) whatever its source (a flag, an
+/// interface, a commit trailer of an untrusted pull request).
+#[must_use]
+pub fn valid_slug(slug: &str) -> bool {
+    !slug.is_empty()
+        && slug.len() <= MAX_SLUG
+        && slug
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+        && slug
+            .bytes()
+            .next()
+            .is_some_and(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
 }
 
 /// The class a reproduction counts as from its two baseline runs: red only
@@ -660,13 +696,17 @@ pub struct Discrimination<'a> {
     pub revert: &'a RevertResult,
     /// The special-case candidates.
     pub special_case: &'a [SpecialCase],
+    /// Why the special-case author gave none (its call failed, it did
+    /// not answer, its candidates were not real changes).
+    pub special_case_error: Option<&'a str>,
 }
 
 /// The verdict on a bug task: `base` (the ordinary rules, held-out
 /// included) stands only if every reproduction passed on the final tree,
-/// the revert was rejected by an assertion, every special case was rejected
-/// (or ruled), the pass-to-pass set passed by name and the held-out
-/// variants passed. Reasons name statements, never a held-out test.
+/// the revert was rejected by an assertion, every reproducing statement has
+/// a special case and each was rejected (or ruled), the pass-to-pass set
+/// passed by name and the held-out variants passed. Reasons name
+/// statements, never a held-out test.
 #[must_use]
 pub fn bug_verdict(
     base: Verdict,
@@ -688,6 +728,24 @@ pub fn bug_verdict(
             Revert::Unviable => "the reproduction does not discriminate the fix: the revert does not build, and no reproduction rejects it by an assertion".to_owned(),
             _ => "the reproduction does not discriminate the fix: with the change undone the reproductions still pass".to_owned(),
         });
+    }
+    // At least one special case per reproducing statement (FR-017): a
+    // statement without one has no evidence the reproduction is strong.
+    let mut reproducing: Vec<&str> = d
+        .reproductions
+        .iter()
+        .filter(|r| r.reproduces())
+        .map(|r| r.statement.as_str())
+        .collect();
+    reproducing.dedup();
+    for st in reproducing {
+        if !d.special_case.iter().any(|s| s.statement == st) {
+            reasons.push(format!(
+                "no special-case candidate for {st} ({}): the reproduction's strength is not shown",
+                d.special_case_error
+                    .unwrap_or("the special-case author wrote none")
+            ));
+        }
     }
     for s in d.special_case {
         if !s.rejected && !s.ruled {
@@ -889,6 +947,10 @@ pub struct BugReport {
     /// The sealed set holding them.
     #[serde(default)]
     pub held_out_sealed: Option<crate::acceptance::SealedRef>,
+    /// Why no held-out variant is sealed (the author's call failed, none
+    /// was red): the verdict names it, and the confirmation says it first.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub held_out_reason: Option<String>,
     /// The digest waiting for the person's confirmation.
     #[serde(default)]
     pub confirm_digest: Option<String>,
@@ -1042,10 +1104,12 @@ mod tests {
                 .enumerate()
                 .map(|(i, c)| try_of(u32::try_from(i).unwrap_or(0) + 1, &[("E1", c[0]), ("E2", c[1])]))
                 .collect();
-            let all_red = tries.iter().any(|t| t.per_statement.iter().all(|s| s.class == RedClass::Assertion));
+            // Only the latest try reproduces: an earlier one was superseded.
+            let all_red = tries.last().is_some_and(|t| t.per_statement.iter().all(|s| s.class == RedClass::Assertion));
             match decide_reproduce(&tries, &expected, max) {
                 Reproduce::Reproduced { n } => {
                     prop_assert!(all_red);
+                    prop_assert_eq!(n as usize, tries.len());
                     let t = &tries[(n - 1) as usize];
                     // Absent or flaky is never a bug's red.
                     prop_assert!(t.per_statement.iter().all(|s| s.class == RedClass::Assertion));
@@ -1100,17 +1164,18 @@ mod tests {
                 revert: Revert::NotRun,
             }).collect();
             let revert = RevertResult { outcome: if rejected_by.is_empty() { Revert::Survived } else { Revert::Rejected }, rejected_by: rejected_by.clone() };
-            let special_case: Vec<SpecialCase> = special.iter().map(|(rejected, ruled)| SpecialCase {
-                statement: "E1".to_owned(), digest: "sha256:s".to_owned(), rejected: *rejected, regenerated: false, ruled: *ruled,
+            let special_case: Vec<SpecialCase> = special.iter().enumerate().map(|(i, (rejected, ruled))| SpecialCase {
+                statement: format!("E{}", i + 1), digest: "sha256:s".to_owned(), rejected: *rejected, regenerated: false, ruled: *ruled,
             }).collect();
             let p2p = PassToPass {
                 state: if members.is_empty() { PassToPassState::NoneSelected } else { PassToPassState::Selected },
                 members: members.iter().map(|m| Member { test: "held_out_secret_name".to_owned(), file: "tests/a.rs".to_owned(), rule: "same_file".to_owned(), final_: *m }).collect(),
             };
-            let d = Discrimination { reproductions: &reproductions, revert: &revert, special_case: &special_case };
+            let d = Discrimination { reproductions: &reproductions, revert: &revert, special_case: &special_case, special_case_error: None };
             let v = bug_verdict(Verdict::Verified, &d, &p2p, &held);
             let ok = finals.iter().all(|f| *f == Final::Passed)
                 && !rejected_by.is_empty()
+                && (1..=finals.len()).all(|i| special_case.iter().any(|s| s.statement == format!("E{i}")))
                 && special.iter().all(|(r, ruled)| *r || *ruled)
                 && members.iter().all(|m| *m == MemberFinal::Passed)
                 && matches!(held, HeldOut::Passed { .. } | HeldOut::Off);
@@ -1141,6 +1206,106 @@ mod tests {
             decide_reproduce(&tries, &strings(&["E1"]), 1),
             Reproduce::CannotReproduce { .. }
         ));
+    }
+
+    #[test]
+    fn a_rejected_try_is_discarded_and_the_tries_stay_bounded() {
+        let e1 = strings(&["E1"]);
+        let mut rejected = try_of(1, &[("E1", RedClass::Assertion)]);
+        rejected.discarded = Some(rejected_try("it tests the wrong field"));
+        // The rejected try never reproduces again: the author tries anew.
+        assert_eq!(
+            decide_reproduce(std::slice::from_ref(&rejected), &e1, 3),
+            Reproduce::Retry
+        );
+        let again = try_of(2, &[("E1", RedClass::Assertion)]);
+        assert_eq!(
+            decide_reproduce(&[rejected.clone(), again], &e1, 3),
+            Reproduce::Reproduced { n: 2 }
+        );
+        // Every try rejected: the tries run out, nothing counts as reproduced.
+        let all: Vec<ReproduceTry> = (1..=3)
+            .map(|n| ReproduceTry {
+                n,
+                ..rejected.clone()
+            })
+            .collect();
+        assert_eq!(
+            decide_reproduce(&all, &e1, 3),
+            Reproduce::CannotReproduce {
+                reproduced: Vec::new(),
+                satisfied: Vec::new(),
+                not_demonstrated: e1.clone(),
+            }
+        );
+        // An earlier reproducing try is superseded by a later one that is not.
+        let tries = [
+            try_of(1, &[("E1", RedClass::Assertion)]),
+            try_of(2, &[("E1", RedClass::BuildError)]),
+        ];
+        assert_eq!(decide_reproduce(&tries, &e1, 3), Reproduce::Retry);
+    }
+
+    #[test]
+    fn a_missing_special_case_withholds_verified() {
+        let reproductions = vec![Reproduction {
+            statement: "E1".to_owned(),
+            file: "tests/repro.rs".to_owned(),
+            test: "t".to_owned(),
+            source: Source::Author,
+            baseline: vec![RedClass::Assertion, RedClass::Assertion],
+            digest: "sha256:x".to_owned(),
+            argv: Vec::new(),
+            final_: Final::Passed,
+            revert: Revert::Rejected,
+        }];
+        let revert = RevertResult {
+            outcome: Revert::Rejected,
+            rejected_by: strings(&["E1"]),
+        };
+        let p2p = PassToPass {
+            state: PassToPassState::NoneSelected,
+            members: Vec::new(),
+        };
+        let d = Discrimination {
+            reproductions: &reproductions,
+            revert: &revert,
+            special_case: &[],
+            special_case_error: Some("the author call failed: timeout"),
+        };
+        let Verdict::Failed { reasons } =
+            bug_verdict(Verdict::Verified, &d, &p2p, &HeldOut::Passed { files: 1 })
+        else {
+            panic!("verified without a special case");
+        };
+        assert!(
+            reasons
+                .iter()
+                .any(|r| r.contains("E1") && r.contains("the author call failed: timeout")),
+            "{reasons:?}"
+        );
+    }
+
+    #[test]
+    fn a_slug_is_never_a_path() {
+        for ok in ["empty-title-crash", "a", "0-x", "saving-an-empty-title-2"] {
+            assert!(valid_slug(ok), "{ok}");
+        }
+        for bad in [
+            "",
+            "..",
+            "../x",
+            "a/b",
+            "a\\b",
+            "-x",
+            "A",
+            "a b",
+            "a.b",
+            "é",
+            &"a".repeat(MAX_SLUG + 1),
+        ] {
+            assert!(!valid_slug(bad), "{bad}");
+        }
     }
 
     #[test]

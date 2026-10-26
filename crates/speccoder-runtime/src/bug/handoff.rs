@@ -107,9 +107,11 @@ pub fn compose(
 ) -> Handoff {
     let mut statements = Statements::default();
     for e in bug.expected_ids() {
+        // A discarded (or rejected) try is evidence of nothing.
         let classes: Vec<RedClass> = bug
             .tries
             .iter()
+            .filter(|t| t.discarded.is_none())
             .filter_map(|t| {
                 t.per_statement
                     .iter()

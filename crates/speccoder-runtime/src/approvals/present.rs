@@ -442,12 +442,19 @@ pub fn confirm_text(r: &super::ConfirmRequest) -> String {
     );
     for x in &r.reproductions {
         out.push_str(&format!(
-            "\n{} — {}\n  {} :: {}\n",
-            x.statement, x.words, x.file, x.test
+            "\n{} — {}\n  {} :: {}\n  $ {}\n",
+            x.statement,
+            x.words,
+            x.file,
+            x.test,
+            x.argv.join(" ")
         ));
         for l in x.excerpt.lines().take(8) {
             out.push_str(&format!("    | {l}\n"));
         }
+    }
+    if let Some(w) = &r.warning {
+        out.push_str(&format!("\n! {w}\n"));
     }
     out.push_str(&format!("\ndigest {}\n", r.digest));
     out

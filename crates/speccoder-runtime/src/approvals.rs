@@ -687,6 +687,9 @@ pub struct ShownReproduction {
     pub file: String,
     /// The test's name.
     pub test: String,
+    /// The exact command that runs it (and only it): what the person
+    /// confirms, bound into the digest.
+    pub argv: Vec<String>,
     /// How it failed on the untouched code (up to 20 lines).
     pub excerpt: String,
     /// The test's content.
@@ -704,6 +707,9 @@ pub struct ConfirmRequest {
     pub digest: String,
     /// The reproductions.
     pub reproductions: Vec<ShownReproduction>,
+    /// What the person should know before confirming (no held-out
+    /// variant could be kept: the fix cannot be verified).
+    pub warning: Option<String>,
 }
 
 /// The person's answer.

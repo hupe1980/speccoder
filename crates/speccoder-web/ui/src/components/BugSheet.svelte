@@ -119,11 +119,14 @@
           {#each bug.reproductions as r (r.file)}
             <li>
               <span class="st mono">{r.statement}</span>
-              <span class="w"><strong>{bug.triad.expected.find((s) => s.id === r.statement)?.text ?? bug.triad.unchanged.find((s) => s.id === r.statement)?.text}</strong><span class="d mono">{r.file} :: {r.test}</span></span>
+              <span class="w"><strong>{bug.triad.expected.find((s) => s.id === r.statement)?.text ?? bug.triad.unchanged.find((s) => s.id === r.statement)?.text}</strong><span class="d mono">{r.file} :: {r.test}</span><span class="d mono" title="the exact command you confirm">$ {r.argv.join(" ")}</span></span>
               <span class="cls mono">{r.baseline.join(" · ")}{r.final !== "not_run" ? ` → ${r.final}` : ""}{r.revert !== "not_run" ? ` · revert ${r.revert}` : ""}</span>
             </li>
           {/each}
         </ul>
+      {/if}
+      {#if bug.held_out_reason}
+        <p class="warn">No held-out variant could be kept ({bug.held_out_reason}): the fix cannot be verified until one is.</p>
       {/if}
       {#if bug.handoff}
         <p class="muted">{bug.handoff.tries.length} tries · reproduced: {bug.handoff.statements.reproduced.join(", ") || "none"} · not: {bug.handoff.statements.not_reproduced.join(", ") || "none"} · already passing: {bug.handoff.statements.satisfied.join(", ") || "none"}</p>

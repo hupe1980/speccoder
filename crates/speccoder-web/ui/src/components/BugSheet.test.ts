@@ -104,6 +104,8 @@ describe("BugSheet", () => {
     expect(document.querySelector("h2")?.textContent).toBe(bug.title);
     expect(document.body.textContent).toContain("an empty title is refused with a message");
     expect(document.body.textContent).toContain("tests/repro_e1.rs :: e1");
+    // The exact command the person confirms.
+    expect(document.body.textContent).toContain("$ cargo test --test repro_e1");
     expect(document.querySelector(".strip .now")?.textContent).toBe("Confirm");
     // No form to fill again.
     expect(document.querySelector('input[aria-label="Expected, 1"]')).toBeNull();

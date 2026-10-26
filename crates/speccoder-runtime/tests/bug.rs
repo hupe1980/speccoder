@@ -763,9 +763,13 @@ fn judge_candidate(
     d: &Arc<dyn ModelProvider>,
     candidate: &str,
     github: Option<speccoder_runtime::github::Ctx>,
+    special: bool,
 ) -> CommandResult {
     f.will_structure(reproductions());
     f.will_structure(held_out("refuses_blank"));
+    if special {
+        special_case(f);
+    }
     let mut req = request(
         &["an empty title is refused with a message"],
         &["a title is saved"],
@@ -836,8 +840,7 @@ fn a_pull_request_is_judged_from_its_diff_and_its_head_is_recorded() {
     let (f, d) = fake();
     let github = speccoder_runtime::github::Ctx::fixed(&api.url, Some("t0ken"));
     // The special-case author is the only model call after confirmation.
-    special_case(&f);
-    let res = judge_candidate(r.path(), state.path(), &f, &d, "pr:7", Some(github));
+    let res = judge_candidate(r.path(), state.path(), &f, &d, "pr:7", Some(github), true);
     assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
     let b = the_bug(&res);
     assert_eq!(b.verdict, Some(Verdict::Verified));
@@ -876,7 +879,7 @@ fn a_patch_that_does_not_apply_is_refused_and_a_failing_one_is_not_retried() {
     fs::write(r.path().join("stale.patch"), stale).unwrap();
     let state = tempfile::tempdir().unwrap();
     let (f, d) = fake();
-    let res = judge_candidate(r.path(), state.path(), &f, &d, "stale.patch", None);
+    let res = judge_candidate(r.path(), state.path(), &f, &d, "stale.patch", None, false);
     assert_eq!(
         res.code().map(|c| c.name),
         Some("BUG-CANDIDATE-APPLY"),
@@ -896,7 +899,7 @@ fn a_patch_that_does_not_apply_is_refused_and_a_failing_one_is_not_retried() {
     fs::write(r.path().join("wrong.patch"), wrong).unwrap();
     let state = tempfile::tempdir().unwrap();
     let (f, d) = fake();
-    let res = judge_candidate(r.path(), state.path(), &f, &d, "wrong.patch", None);
+    let res = judge_candidate(r.path(), state.path(), &f, &d, "wrong.patch", None, false);
     let b = the_bug(&res);
     assert_eq!(b.outcome, Outcome::Failed, "{}", res.message());
     assert_ne!(b.verdict, Some(Verdict::Verified));
@@ -1389,4 +1392,342 @@ fn a_kiro_project_has_no_place_for_a_bug_yet() {
         res.message()
     );
     assert!(res.message().contains("F-052"), "{}", res.message());
+}
+
+
+/// An approver who rejects every set of reproductions, counting.
+#[derive(Debug, Default)]
+struct Rejects(std::sync::atomic::AtomicUsize);
+impl Approver for Rejects {
+    fn ask(&self, _: &Presentation) -> Answer {
+        panic!("no call should need approval")
+    }
+    fn confirm(&self, _: &ConfirmRequest) -> Option<ConfirmAnswer> {
+        self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        Some(ConfirmAnswer::Reject("it tests the wrong field".to_owned()))
+    }
+}
+
+/// `f` on its own thread, failed when it takes longer than two minutes
+/// (a loop that never ends is a failure, not a hung suite).
+fn within<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> T {
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = tx.send(f());
+    });
+    rx.recv_timeout(std::time::Duration::from_secs(120))
+        .unwrap_or_else(|_| panic!("it did not end: the reproduce loop runs on"))
+}
+
+#[test]
+fn a_rejected_reproduction_is_discarded_and_the_tries_run_out() {
+    // Inline: the person rejects every try; the author is called at most
+    // `reproduce_tries` times, then cannot_reproduce.
+    let r = repo("seeded");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    for _ in 0..3 {
+        f.will_structure(reproductions());
+        f.will_structure(held_out("refuses_blank"));
+    }
+    let rejects = Arc::new(Rejects::default());
+    let options = RunOptions {
+        approver: Some(rejects.clone()),
+        ..RunOptions::default()
+    };
+    let (root, st) = (r.path().to_path_buf(), state.path().to_path_buf());
+    let res = within(move || {
+        bug::bug_with(
+            &root,
+            &request(
+                &["an empty title is refused with a message"],
+                &["a title is saved"],
+                true,
+            ),
+            Via::Terminal,
+            &st,
+            Some(d),
+            None,
+            &options,
+        )
+    });
+    assert_eq!(
+        res.code().map(|c| c.name),
+        Some("BUG-CANNOT-REPRODUCE"),
+        "{}",
+        res.message()
+    );
+    let b = the_bug(&res);
+    assert_eq!(b.outcome, Outcome::CannotReproduce);
+    assert_eq!(b.tries.len(), 3);
+    assert!(
+        b.tries.iter().all(|t| t
+            .discarded
+            .as_deref()
+            .is_some_and(|d| d.starts_with("rejected"))),
+        "{:#?}",
+        b.tries
+    );
+    assert_eq!(rejects.0.load(std::sync::atomic::Ordering::SeqCst), 3);
+    assert_eq!(
+        f.calls(),
+        6,
+        "three reproduction and three held-out calls, no more"
+    );
+    assert!(
+        b.handoff.as_ref().unwrap().statements.reproduced.is_empty(),
+        "a rejected try reproduces nothing"
+    );
+
+    // From the command line: `bug confirm --reject` twice, a fresh try
+    // each time; the third rejection ends it without another author call.
+    let r = repo("seeded");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    for _ in 0..3 {
+        f.will_structure(reproductions());
+        f.will_structure(held_out("refuses_blank"));
+    }
+    let first = record_and_reproduce(r.path(), state.path(), &d);
+    let mut b = the_bug(&first).clone();
+    for n in 1..=3 {
+        let (root, st, key, digest, d) = (
+            r.path().to_path_buf(),
+            state.path().to_path_buf(),
+            b.key(),
+            b.confirm_digest.clone().unwrap(),
+            Arc::clone(&d),
+        );
+        let res = within(move || {
+            bug::confirm_with(
+                &root,
+                &key,
+                &digest,
+                Some("it tests the wrong field"),
+                Via::Terminal,
+                &st,
+                Some(d),
+                None,
+                &RunOptions::default(),
+            )
+        });
+        b = the_bug(&res).clone();
+        if n < 3 {
+            assert_eq!(
+                b.outcome,
+                Outcome::AwaitingConfirmation,
+                "{}",
+                res.message()
+            );
+            assert_eq!(b.tries.len(), n + 1);
+        } else {
+            assert_eq!(
+                res.code().map(|c| c.name),
+                Some("BUG-CANNOT-REPRODUCE"),
+                "{}",
+                res.message()
+            );
+        }
+    }
+    assert_eq!(f.calls(), 6, "no author call once the tries are used up");
+}
+
+#[test]
+fn a_regenerated_variant_runs_on_the_fixed_tree_before_verified() {
+    let r = repo("special-case");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_structure(reproductions());
+    // A held-out variant no stronger than the reproduction.
+    f.will_structure(held_out("refuses_empty"));
+    let first = record_and_reproduce(r.path(), state.path(), &d);
+    let b = the_bug(&first).clone();
+    let _ = bug::confirm_with(
+        r.path(),
+        &b.key(),
+        b.confirm_digest.as_deref().unwrap(),
+        None,
+        Via::Terminal,
+        state.path(),
+        None,
+        None,
+        &RunOptions::default(),
+    );
+    // The fix handles the empty title only.
+    fix(
+        &f,
+        "// saves_title\n// refuses_empty\npub fn save(title: &str) -> Result<char, String> {\n    title.chars().next().ok_or_else(|| \"a title is needed\".to_owned())\n}\n",
+    );
+    special_case(&f);
+    // The regenerated variant rejects the special case, and the fix too.
+    f.will_structure(json!({ "files": [{ "path": "tests/held_e1_2.txt", "content": "expect: refuses_whitespace\n", "scenarios": ["E1"], "argv": ["./check.sh", "--", "tests/held_e1_2.txt"], "composition": false }], "notes": [] }));
+    let res = bug::run_with(
+        r.path(),
+        None,
+        Some(&b.key()),
+        state.path(),
+        d,
+        None,
+        &RunOptions::default(),
+    );
+    let b = the_bug(&res);
+    assert_ne!(b.verdict, Some(Verdict::Verified), "{}", res.message());
+    assert!(
+        b.special_case.iter().any(|s| s.regenerated && s.rejected),
+        "{:?}",
+        b.special_case
+    );
+    assert!(
+        b.held_out.iter().any(|h| h.final_ == Final::Failed),
+        "{:?}",
+        b.held_out
+    );
+    assert!(b.commit.is_none());
+}
+
+#[test]
+fn a_special_case_author_that_does_not_answer_never_ends_verified() {
+    let r = repo("seeded");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_structure(reproductions());
+    f.will_structure(held_out("refuses_blank"));
+    let first = record_and_reproduce(r.path(), state.path(), &d);
+    let b = the_bug(&first).clone();
+    let _ = bug::confirm_with(
+        r.path(),
+        &b.key(),
+        b.confirm_digest.as_deref().unwrap(),
+        None,
+        Via::Terminal,
+        state.path(),
+        None,
+        None,
+        &RunOptions::default(),
+    );
+    // The fix, and nothing for the special-case author: its call fails.
+    fix(&f, FIXED);
+    let res = bug::run_with(
+        r.path(),
+        None,
+        Some(&b.key()),
+        state.path(),
+        d,
+        None,
+        &RunOptions::default(),
+    );
+    let b = the_bug(&res);
+    assert_ne!(b.verdict, Some(Verdict::Verified), "{}", res.message());
+    assert_ne!(b.outcome, Outcome::Fixed);
+    assert!(b.commit.is_none());
+    let tasks = fs::read_to_string(r.path().join("specs/001-bugfixes/tasks.md")).unwrap();
+    assert!(tasks.contains("- [ ] T001"), "{tasks}");
+}
+
+/// An approver who looks and decides later, keeping what it was shown.
+#[derive(Debug, Default)]
+struct Looks(std::sync::Mutex<Option<ConfirmRequest>>);
+impl Approver for Looks {
+    fn ask(&self, _: &Presentation) -> Answer {
+        panic!("no call should need approval")
+    }
+    fn confirm(&self, r: &ConfirmRequest) -> Option<ConfirmAnswer> {
+        *self.0.lock().unwrap() = Some(r.clone());
+        None
+    }
+}
+
+#[test]
+fn a_reproduction_is_red_only_by_its_own_test_and_the_person_sees_its_command() {
+    // An unrelated failing test in the repository.
+    let r = repo("seeded");
+    fs::write(
+        r.path().join("tests/broken.txt"),
+        "expect: nothing_says_this\n",
+    )
+    .unwrap();
+    git(r.path(), &["add", "-A"]);
+    git(r.path(), &["commit", "-q", "-m", "a broken test"]);
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    // The author's test passes on the untouched code; its command runs the
+    // broken test instead.
+    for _ in 0..3 {
+        f.will_structure(json!({ "files": [
+            { "path": "tests/repro_e1.txt", "content": "expect: saves_title\n", "statement": "E1", "test": "saves_title", "argv": ["./check.sh", "--", "tests/broken.txt"] },
+        ], "notes": [] }));
+    }
+    let res = bug::bug_with(
+        r.path(),
+        &request(&["an empty title is refused with a message"], &[], true),
+        Via::Terminal,
+        state.path(),
+        Some(d),
+        None,
+        &RunOptions::default(),
+    );
+    let b = the_bug(&res);
+    assert_ne!(
+        b.outcome,
+        Outcome::AwaitingConfirmation,
+        "an unrelated failure reproduced nothing: {}",
+        res.message()
+    );
+    assert_eq!(b.outcome, Outcome::AlreadySatisfied, "{}", res.message());
+    assert!(
+        b.reproductions
+            .iter()
+            .all(|x| x.argv == ["./check.sh", "--", "tests/repro_e1.txt"]),
+        "{:?}",
+        b.reproductions
+    );
+
+    // What the person confirms names the exact command, bound into the digest.
+    let r = repo("seeded");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_structure(reproductions());
+    f.will_structure(held_out("refuses_blank"));
+    let looks = Arc::new(Looks::default());
+    let options = RunOptions {
+        approver: Some(looks.clone()),
+        ..RunOptions::default()
+    };
+    let res = bug::bug_with(
+        r.path(),
+        &request(
+            &["an empty title is refused with a message"],
+            &["a title is saved"],
+            true,
+        ),
+        Via::Terminal,
+        state.path(),
+        Some(d),
+        None,
+        &options,
+    );
+    assert_eq!(the_bug(&res).outcome, Outcome::AwaitingConfirmation);
+    let shown = looks.0.lock().unwrap().clone().unwrap();
+    let e1 = shown
+        .reproductions
+        .iter()
+        .find(|x| x.statement == "E1")
+        .unwrap();
+    assert_eq!(e1.argv, ["./check.sh", "--", "tests/repro_e1.txt"]);
+    let text = speccoder_runtime::approvals::present::confirm_text(&shown);
+    assert!(
+        text.contains("$ ./check.sh -- tests/repro_e1.txt"),
+        "{text}"
+    );
+    let mut other = the_bug(&res).reproductions.clone();
+    other[0].argv = vec![
+        "./check.sh".to_owned(),
+        "--".to_owned(),
+        "tests/other.txt".to_owned(),
+    ];
+    assert_ne!(
+        speccoder_runtime::bug::confirm::digest(&other),
+        shown.digest,
+        "the command is part of what is confirmed"
+    );
 }

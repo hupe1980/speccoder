@@ -172,6 +172,7 @@ mod tests {
             reproductions: Vec::new(),
             held_out: Vec::new(),
             held_out_sealed: None,
+            held_out_reason: None,
             confirm_digest: None,
             confirmation: None,
             rejections: Vec::new(),
@@ -190,7 +191,7 @@ mod tests {
         };
         save(plane.path(), &bug).unwrap_or_else(|e| panic!("{e}"));
         assert_eq!(find(plane.path(), "bugs/x/bug:x"), Some(bug.clone()));
-        assert_eq!(all(plane.path()), vec![bug]);
+        assert_eq!(all(plane.path()), vec![bug.clone()]);
         save_repro(
             plane.path(),
             "bugs/x",

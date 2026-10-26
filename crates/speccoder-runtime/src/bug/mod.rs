@@ -700,6 +700,7 @@ fn new_report(
         reproductions: Vec::new(),
         held_out: Vec::new(),
         held_out_sealed: None,
+        held_out_reason: None,
         confirm_digest: None,
         confirmation: None,
         rejections: Vec::new(),
@@ -1038,7 +1039,13 @@ pub fn confirm_with(
             )
             .with_code("USAGE");
         }
-        crate::pipeline::bug_reject(&plane, &mut bug, reason, via);
+        if let Err(e) = crate::pipeline::bug_reject(&plane, &mut bug, reason, via) {
+            return CommandResult::new(
+                "bug",
+                CommandStatus::Error,
+                &format!("the rejection could not be kept: {e}; nothing was rejected"),
+            );
+        }
         emit(
             options,
             &bug.task,
@@ -1167,6 +1174,7 @@ pub fn shown(state: &Path, root: &Path, key: &str) -> Option<crate::approvals::C
                     .unwrap_or_default(),
                 file: r.file.clone(),
                 test: r.test.clone(),
+                argv: r.argv.clone(),
                 excerpt: String::new(),
                 content: files
                     .iter()
@@ -1175,5 +1183,15 @@ pub fn shown(state: &Path, root: &Path, key: &str) -> Option<crate::approvals::C
                     .unwrap_or_default(),
             })
             .collect(),
+        warning: held_out_warning(&bug),
+    })
+}
+
+/// What a person confirming `bug` must know first: no held-out variant
+/// could be kept, so the fix cannot be verified.
+#[must_use]
+pub fn held_out_warning(bug: &BugReport) -> Option<String> {
+    bug.held_out_reason.as_ref().map(|why| {
+        format!("no held-out variant could be kept ({why}): the fix cannot be verified until one is — confirming now only leads to a failed verdict")
     })
 }

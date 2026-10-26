@@ -20,13 +20,22 @@ pub fn now() -> u64 {
         .map_or(0, |d| d.as_secs())
 }
 
-/// `sha256:<hex>` over the reproductions shown: each statement, file and
-/// content digest, sorted.
+/// `sha256:<hex>` over the reproductions shown: each statement, file,
+/// content digest, test and the command that runs it, sorted.
 #[must_use]
 pub fn digest(reproductions: &[Reproduction]) -> String {
     let mut lines: Vec<String> = reproductions
         .iter()
-        .map(|r| format!("{}\t{}\t{}", r.statement, r.file, r.digest))
+        .map(|r| {
+            format!(
+                "{}\t{}\t{}\t{}\t{}",
+                r.statement,
+                r.file,
+                r.digest,
+                r.test,
+                serde_json::to_string(&r.argv).unwrap_or_default()
+            )
+        })
         .collect();
     lines.sort();
     format!("sha256:{}", sha256_hex(lines.join("\n").as_bytes()))
