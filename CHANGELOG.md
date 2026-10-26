@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Runs in a terminal, seen in the app.** A `speccoder run` from another
+  process shows in the status bar, on the Board and in Up next, with its
+  stage, last call and reasoning; an interrupted one offers Resume.
+
 ## [0.2.0] - 2026-10-26
 
 ### Added

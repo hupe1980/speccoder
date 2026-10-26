@@ -313,3 +313,28 @@ export interface AccountTurn {
   reasoning: string | null;
   said: string | null;
 }
+
+/** The project's current run, from whichever process: `live.json`. */
+export interface LiveRun {
+  live: {
+    pid: number;
+    feature: string;
+    task: string;
+    title: string;
+    stage: string | null;
+    stage_detail: string | null;
+    last_call: string | null;
+    said: string | null;
+    thinking: string | null;
+    input_tokens: number;
+    output_tokens: number;
+    usd: number | null;
+    finished: string | null;
+    started_at: number;
+    updated_at: number;
+  } | null;
+  running?: boolean;
+  own?: boolean;
+  interrupted?: boolean;
+  now?: number;
+}

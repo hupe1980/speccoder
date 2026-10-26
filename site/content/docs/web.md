@@ -101,6 +101,8 @@ A running job floats at the bottom of the page: the task, its stage and the time
 
 The **status bar** shows, left to right: the feature, its branch and unmerged commits, its verdicts, requirements approved, stale ticks; then the running task and stage, spend, the model, the sandbox, decisions waiting and the connection to the host. Every item opens where it leads.
 
+A run another speccoder does for the project, say a `speccoder run` in a terminal, shows too: a violet pill in the status bar (amber when that process died mid-run), its task on the Board's Running lane, and in **Up next** in place of Run. The pill opens its task, stage, last call, reasoning and spend; an interrupted run offers **Resume**. Runs started here while it holds the project are refused with its pid.
+
 ## Settings
 
 The gear (or `,`) opens `speccoder.toml` as a settings page: each section with what it decides, each key as a control with its default and meaning, checks and MCP servers as tables. Edits gather until **Save**, which writes the file only when every parser accepts it, keeping its comments. speccoder reads committed configuration only, so the page then offers to **Commit** `speccoder.toml` alone; the `speccoder config` commands that do the same are shown.

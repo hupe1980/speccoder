@@ -77,7 +77,18 @@
     <Preflight />
   {/if}
 
-  {#if primary}
+  {#if app.elsewhere && app.live?.live}
+    {@const l = app.live.live}
+    <!-- Another speccoder holds the project: what it does, not a Run that would wait. -->
+    <div class="next elsewhere">
+      <div class="text">
+        <span class="kicker"><span class="ring" aria-hidden="true"></span> Running in a terminal</span>
+        <h2><span class="mono">{l.task}</span> {l.title}</h2>
+        <p class="why">{l.stage ?? "starting"}{#if l.stage_detail}{" "}{l.stage_detail}{/if}{#if l.feature !== report?.feature}{" · in "}{l.feature}{/if} — another speccoder (pid {l.pid}) holds this project; its progress shows here as it goes.</p>
+        {#if l.thinking}<p class="why thought">∴ {l.thinking}</p>{/if}
+      </div>
+    </div>
+  {:else if primary}
     <div class="next" class:busy class:warned={stops.length > 0}>
       <div class="text">
         <span class="kicker"><Icon name="sparkle" size={13} weight={2} /> Up next</span>
@@ -126,6 +137,12 @@
 </section>
 
 <style>
+  .elsewhere .kicker { color: #a78bfa; display: inline-flex; align-items: center; gap: 0.4rem; }
+  .elsewhere .thought { color: color-mix(in srgb, #bf5af2 60%, var(--text-2)); }
+  .ring { width: 10px; height: 10px; border-radius: 50%; background: conic-gradient(from var(--a, 0deg), #ff9f0a, #ff375f, #bf5af2, #0a84ff, #64d2ff, #30d158, #ff9f0a); animation: turn 2.4s linear infinite; mask: radial-gradient(circle, transparent 30%, #000 34%); }
+  @property --a { syntax: "<angle>"; initial-value: 0deg; inherits: false; }
+  @keyframes turn { to { --a: 360deg; } }
+  @media (prefers-reduced-motion: reduce) { .ring { animation: none; } }
   .hero { display: grid; gap: 1.5rem; margin: 0 auto 2.25rem; max-width: 1180px; container-type: inline-size; }
   .hero.compact { gap: 1rem; margin-bottom: 1.5rem; }
   .top { display: flex; align-items: center; justify-content: space-between; gap: 2rem; }

@@ -10,7 +10,10 @@
 
   const tasks = $derived<Task[]>(app.report?.data?.tasks ?? []);
   const waitingFor = $derived(new Set(app.approvals.map((p) => p.task)));
-  const running = $derived(app.job?.running ? app.task?.id : undefined);
+  // This app's job, else another speccoder's run of this feature.
+  const running = $derived(
+    app.job?.running ? app.task?.id : app.elsewhere && app.live?.live?.feature === app.feature ? app.live.live.task : undefined,
+  );
 
   // Lanes in the order work flows; a task is in one lane.
   const lanes = [
@@ -32,7 +35,11 @@
     const m = s?.match(/^(\d\.\d\d)/);
     return m ? Number(m[1]) : null;
   };
-  const stage = $derived([...app.stages].reverse().find((x) => x.state === "started")?.stage ?? "starting");
+  const stage = $derived(
+    app.job?.running
+      ? ([...app.stages].reverse().find((x) => x.state === "started")?.stage ?? "starting")
+      : (app.live?.live?.stage ?? "starting") + " · in a terminal",
+  );
 
   // Right-click: the task's own commands, from the action model.
   async function menu(t: Task, e: MouseEvent) {

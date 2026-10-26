@@ -684,6 +684,33 @@ async fn pr_preview(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> J
     envelope(&r)
 }
 
+/// The project's current (or last) run, whoever started it: this host's
+/// job, or `speccoder run` in a terminal. `running`: its process lives and
+/// it has not finished; `own`: it is this host's.
+async fn live(State(s): State<Shared>) -> Json<Value> {
+    let root = s.root.clone();
+    Json(
+        off(move || {
+            let Some(state) = speccoder_runtime::worktree::state_dir() else {
+                return json!({ "live": null });
+            };
+            match speccoder_runtime::progress::read_live(&root, &state) {
+                Some((live, running)) => json!({
+                    "live": live,
+                    "running": running,
+                    "own": live.pid == std::process::id(),
+                    "interrupted": live.finished.is_none() && !running,
+                    "now": std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map_or(0, |d| d.as_secs()),
+                }),
+                None => json!({ "live": null }),
+            }
+        })
+        .await,
+    )
+}
+
 async fn job(State(s): State<Shared>) -> Json<Value> {
     Json(json!({ "job": s.hub.job(), "waiting": s.hub.waiting() }))
 }
@@ -767,6 +794,7 @@ pub fn router(s: Shared) -> Router {
         .route("/api/documents", get(documents))
         .route("/api/doctor", get(doctor))
         .route("/api/job", get(job))
+        .route("/api/live", get(live))
         .route("/api/config", get(config).post(config_save))
         .route("/api/config/commit", post(config_commit))
         .route("/api/cost", get(cost))
