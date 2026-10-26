@@ -60,6 +60,8 @@ fn projection(name: &str) -> &'static str {
         "bug.confirmed" => "events/bug.confirmed",
         "bug.confirm_rejected" => "events/bug.confirm_rejected",
         "bug.outcome" => "events/bug.outcome",
+        "oracle.frozen" => "events/oracle.frozen",
+        "oracle.lapsed" => "events/oracle.lapsed",
         _ => "",
     }
 }
@@ -101,6 +103,7 @@ const fn describe(payload: &str) -> &'static str {
         b"actions" => "actions: what a person can do now, and the feature's journey",
         b"bug" => "bug: a bug, its triad, reproductions, confirmation and how far it got",
         b"policy_coverage" => "config coverage: what a prefix entry would newly allow",
+        b"comments" => "review comments: the comment tray and the last revision turn",
         b"branch_verify" => {
             "attest verify --branch, speccoder-verify: every tick of a branch and what its evidence comes to"
         }
@@ -178,6 +181,9 @@ published! {
     "events/bug.confirmed", "PublicBugConfirmed" => crate::events::PublicBugConfirmed,
     "events/bug.confirm_rejected", "PublicBugConfirmRejected" => crate::events::PublicBugConfirmRejected,
     "events/bug.outcome", "PublicBugOutcome" => crate::events::PublicBugOutcome,
+    "events/oracle.frozen", "PublicOracleFrozen" => crate::events::PublicOracleFrozen,
+    "events/oracle.lapsed", "PublicOracleLapsed" => crate::events::PublicOracleLapsed,
+    "comments", "CommentsView" => core::oracle::CommentsView,
 }
 
 /// The predicate schema's name (`speccoder schema task-verification-v0`).

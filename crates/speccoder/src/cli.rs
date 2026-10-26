@@ -649,6 +649,49 @@ pub enum ReviewAction {
         /// A note kept with the approval.
         #[arg(long)]
         comment: Option<String>,
+        /// Approve and Run: approve every decision line, freeze the written tests and start the run, asking (`ask`) or on autopilot.
+        #[arg(long, value_enum, conflicts_with_all = ["ids", "comment"])]
+        run: Option<RunModeArg>,
+        /// Autopilot: a grant id (`speccoder review approve --run autopilot --list-grants`) the run may hold.
+        #[arg(long, value_name = "GRANT-ID", requires = "run")]
+        grant: Vec<String>,
+        /// Autopilot: list the grants offered for this feature, each in full, and approve nothing.
+        #[arg(long, requires = "run")]
+        list_grants: bool,
+    },
+    /// The tests the run would use, per requirement (`US1`): write them, reject, ask again, edit, choose a reading.
+    Tests {
+        /// The requirement, as `speccoder review` lists it under Tests.
+        req: String,
+        /// Write the tests: independent author calls, compared, red-checked on HEAD, a held-out set sealed.
+        #[arg(long, conflicts_with_all = ["reject", "again", "edit", "reading"])]
+        write: bool,
+        /// Reject a test (needs --reason).
+        #[arg(long, value_name = "PATH", conflicts_with_all = ["again", "edit", "reading"])]
+        reject: Option<String>,
+        /// Why the test is wrong.
+        #[arg(long, requires = "reject")]
+        reason: Option<String>,
+        /// Ask the author for one test again (with --comment).
+        #[arg(long, value_name = "PATH", conflicts_with_all = ["edit", "reading"])]
+        again: Option<String>,
+        /// What it should check instead.
+        #[arg(long, requires = "again")]
+        comment: Option<String>,
+        /// Replace a test's content with a file of yours (with --from), red-checked.
+        #[arg(long, value_name = "PATH", requires = "from")]
+        edit: Option<String>,
+        /// The file with the test's new content.
+        #[arg(long, value_name = "FILE", requires = "edit")]
+        from: Option<std::path::PathBuf>,
+        /// Which reading of an ambiguous scenario is meant: `A` or `B`, then the scenario.
+        #[arg(long, num_args = 2, value_names = ["A|B", "SCENARIO"])]
+        reading: Option<Vec<String>>,
+    },
+    /// Comments anchored to the spec, its changes, shown tests and findings; `send` revises in one turn.
+    Comments {
+        #[command(subcommand)]
+        action: Option<CommentsAction>,
     },
     /// Request changes to requirements: the comment says what they should say.
     Request {
@@ -682,6 +725,51 @@ pub enum ReviewAction {
         #[arg(required = true)]
         ids: Vec<String>,
     },
+}
+
+/// How a run started from the review asks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum RunModeArg {
+    /// Ask on risky calls, inline.
+    Ask,
+    /// Nothing asks: a call that would is refused for the run and listed.
+    Autopilot,
+}
+
+/// `speccoder review comments` actions; without one, the tray.
+#[derive(Debug, Subcommand)]
+pub enum CommentsAction {
+    /// Add a comment: on a passage (`--path P --lines 40-42`), a test line (`--test US1:PATH:LINE`) or a finding (`--finding SRC:ID`).
+    Add {
+        /// A feature document (project-relative).
+        #[arg(long, requires = "lines", conflicts_with_all = ["test", "finding"])]
+        path: Option<String>,
+        /// Its lines: `40` or `40-42`.
+        #[arg(long)]
+        lines: Option<String>,
+        /// A shown test's line: `US1:tests/a.rs:3`.
+        #[arg(long, conflicts_with = "finding")]
+        test: Option<String>,
+        /// A finding: `analyze:A1` or `review:FR-001`.
+        #[arg(long)]
+        finding: Option<String>,
+        /// The comment.
+        text: String,
+    },
+    /// Delete a comment.
+    Delete {
+        /// `c1`, …
+        id: String,
+    },
+    /// Keep an outdated comment, or keep a revision (`t1`).
+    Keep {
+        /// `c1` or `t1`.
+        id: String,
+    },
+    /// Send every comment as one revision turn.
+    Send,
+    /// Undo the last revision: the documents back, byte for byte.
+    Undo,
 }
 
 /// `speccoder issue` actions.

@@ -319,6 +319,32 @@ pub enum Body {
         #[serde(flatten)]
         public: PublicBugOutcome,
     },
+    /// Writing tests at review went one stage further.
+    #[serde(rename = "oracle.stage")]
+    OracleStage {
+        /// The requirement.
+        requirement: String,
+        /// `writing`, `comparing`, `checking_red`, `held_out`.
+        stage: String,
+        /// This stage's step.
+        n: u32,
+        /// Of.
+        of: u32,
+    },
+    /// An approval froze a requirement's tests.
+    #[serde(rename = "oracle.frozen")]
+    OracleFrozen {
+        /// The public projection.
+        #[serde(flatten)]
+        public: PublicOracleFrozen,
+    },
+    /// A frozen oracle lapsed with its requirement's wording.
+    #[serde(rename = "oracle.lapsed")]
+    OracleLapsed {
+        /// The public projection.
+        #[serde(flatten)]
+        public: PublicOracleLapsed,
+    },
     /// The last line: the command's result, as `--json` prints it.
     #[serde(rename = "result")]
     Result {
@@ -406,6 +432,92 @@ pub struct PublicBugOutcome {
     pub code: Option<String>,
     /// What to do next.
     pub next: Vec<String>,
+}
+
+/// `oracle.frozen`, as published: digests and counts, never a test.
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct PublicOracleFrozen {
+    /// The unit.
+    pub unit: String,
+    /// The requirement.
+    pub requirement: String,
+    /// The visible set's manifest digest.
+    pub manifest_sha256: String,
+    /// The approval's digest.
+    pub approval_sha256: String,
+    /// Visible tests frozen.
+    pub visible_count: usize,
+    /// Held-out tests sealed with them.
+    pub held_out_count: usize,
+    /// Who.
+    pub by: String,
+    /// Through what.
+    pub via: String,
+}
+
+/// `oracle.lapsed`, as published.
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct PublicOracleLapsed {
+    /// The unit.
+    pub unit: String,
+    /// The requirement.
+    pub requirement: String,
+    /// The wording it was frozen on.
+    pub frozen_wording_sha256: String,
+    /// The wording now.
+    pub current_wording_sha256: String,
+}
+
+/// The stream's body for the oracle's step.
+fn oracle_body(step: &progress::OracleEvent) -> Body {
+    use progress::OracleEvent as O;
+    match step {
+        O::Stage {
+            requirement,
+            stage,
+            n,
+            of,
+        } => Body::OracleStage {
+            requirement: clean(requirement),
+            stage: stage.clone(),
+            n: *n,
+            of: *of,
+        },
+        O::Frozen {
+            unit,
+            requirement,
+            manifest_sha256,
+            approval_sha256,
+            visible_count,
+            held_out_count,
+            by,
+            via,
+        } => Body::OracleFrozen {
+            public: PublicOracleFrozen {
+                unit: clean(unit),
+                requirement: clean(requirement),
+                manifest_sha256: manifest_sha256.clone(),
+                approval_sha256: approval_sha256.clone(),
+                visible_count: *visible_count,
+                held_out_count: *held_out_count,
+                by: clean(by),
+                via: via.clone(),
+            },
+        },
+        O::Lapsed {
+            unit,
+            requirement,
+            frozen_wording_sha256,
+            current_wording_sha256,
+        } => Body::OracleLapsed {
+            public: PublicOracleLapsed {
+                unit: clean(unit),
+                requirement: clean(requirement),
+                frozen_wording_sha256: frozen_wording_sha256.clone(),
+                current_wording_sha256: current_wording_sha256.clone(),
+            },
+        },
+    }
 }
 
 /// The stream's body for a bug's step.
@@ -722,6 +834,7 @@ pub fn body(event: &Event) -> Body {
         },
         Event::Notice { text } => Body::Notice { text: clean(text) },
         Event::Bug { task, step } => bug_body(task, step),
+        Event::Oracle { step } => oracle_body(step),
     }
 }
 
