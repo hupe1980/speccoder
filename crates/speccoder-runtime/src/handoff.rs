@@ -4,8 +4,10 @@
 //! The one place speccoder talks to a git remote, and only when a person
 //! runs it and confirms (or passes `--yes`); without that it is a dry run
 //! that prints the body and the commands. It never merges, never marks the
-//! pull request ready, and pushes only `speccoder/<feature>` and the
-//! attestation notes (`refs/notes/speccoder`, never forced).
+//! pull request ready, and pushes only `speccoder/<feature>`, the
+//! attestation notes (`refs/notes/speccoder`) and the held-out tests of
+//! the tasks closed on the pushed head (`refs/speccoder/held-out/<unit>`),
+//! none of them forced.
 
 use std::fmt::Write as _;
 use std::path::Path;
@@ -176,6 +178,67 @@ pub fn body(status: &StatusReport, trailers: &[(String, String, String)]) -> Str
     out
 }
 
+/// Where the guidance to add the evidence check is.
+pub const EVIDENCE_CHECK_DOCS: &str =
+    "https://hupe1980.github.io/speccoder/docs/github/#evidence-check";
+
+/// GitHub's cap on a pull request body, in characters.
+pub const BODY_LIMIT: usize = 65_536;
+
+/// The workflow under `.github/workflows/` that runs `speccoder-verify`,
+/// if one does (repository-relative).
+#[must_use]
+pub fn evidence_workflow(repo_root: &Path) -> Option<String> {
+    let dir = repo_root.join(".github/workflows");
+    let mut files: Vec<std::path::PathBuf> = std::fs::read_dir(&dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().is_some_and(|x| x == "yml" || x == "yaml"))
+        .collect();
+    files.sort();
+    files.into_iter().find_map(|p| {
+        let text = std::fs::read_to_string(&p).ok()?;
+        text.contains("speccoder-verify").then(|| {
+            format!(
+                ".github/workflows/{}",
+                p.file_name()
+                    .map(|n| n.to_string_lossy())
+                    .unwrap_or_default()
+            )
+        })
+    })
+}
+
+/// `### Evidence tour`: every tick's tour, collapsed, as many as fit in
+/// `room` characters (dropped last-first, counted).
+#[must_use]
+pub fn tours(tours: &[String], room: usize) -> String {
+    if tours.is_empty() {
+        return String::new();
+    }
+    let mut out = String::from("\n### Evidence tour\n\n");
+    let mut shown = 0;
+    for t in tours {
+        if out.chars().count() + t.chars().count() + 200 > room {
+            break;
+        }
+        out.push_str(t);
+        shown += 1;
+    }
+    if shown < tours.len() {
+        out.push_str(&format!(
+            "\n{} tour(s) not shown (GitHub's body limit) — `speccoder-verify tour --feature <unit> --task <id>`\n",
+            tours.len() - shown
+        ));
+    }
+    if shown == 0 && out.chars().count() > room {
+        return String::new();
+    }
+    out
+}
+
 /// `speccoder pr`.
 #[must_use]
 pub fn pr(path: &Path, feature: Option<&str>, options: &PrOptions<'_>) -> CommandResult {
@@ -288,6 +351,28 @@ pub fn pr(path: &Path, feature: Option<&str>, options: &PrOptions<'_>) -> Comman
     if let Some(section) = verify_section(report, options.remote, sigstore) {
         body.push_str(&section);
     }
+    // Each closed task's tour, from its signed statements and commit.
+    let tip = repo
+        .line(&["rev-parse", "--verify", &format!("{branch}^{{commit}}")])
+        .unwrap_or_default();
+    if let Ok(recorded) = crate::attest::branch::recorded(&repo_root, &tip, &report.feature) {
+        let room = BODY_LIMIT.saturating_sub(body.chars().count());
+        body.push_str(&tours(&crate::tour::markdown_all(&recorded), room));
+    }
+    // The held-out sets of exactly the tasks closed on the pushed head.
+    let project_state = crate::format::at(path)
+        .detect(path)
+        .zip(crate::worktree::state_dir())
+        .map(|(root, state)| crate::worktree::project_state_dir(&state, &root));
+    let selection = project_state
+        .as_ref()
+        .map(|s| {
+            let closed = crate::held_out::closed_on(&repo_root, &tip, &report.feature);
+            crate::held_out::select_closed(s, &report.feature, &closed)
+        })
+        .unwrap_or_default();
+    let held_out_ref = format!("{}/{}", crate::held_out::REF_PREFIX, report.feature);
+    let evidence = evidence_workflow(&repo_root);
     let refspec = format!("{branch}:refs/heads/{branch}");
     let notes = crate::attest::notes::REF;
     let push_notes = repo
@@ -296,6 +381,9 @@ pub fn pr(path: &Path, feature: Option<&str>, options: &PrOptions<'_>) -> Comman
     let mut commands = vec![format!("git push {} {refspec}", options.remote)];
     if push_notes {
         commands.push(format!("git push {} {notes}", options.remote));
+    }
+    if !selection.sets.is_empty() {
+        commands.push(format!("git push {} {held_out_ref}", options.remote));
     }
     // The repository the remote names on GitHub: where the draft opens.
     let github = crate::github::repo(&repo_root, Some(options.remote));
@@ -316,14 +404,44 @@ pub fn pr(path: &Path, feature: Option<&str>, options: &PrOptions<'_>) -> Comman
         commands,
         opened: false,
         url: None,
+        held_out_ref: (!selection.sets.is_empty()).then(|| held_out_ref.clone()),
+        held_out_tasks: selection.tasks.clone(),
+        held_out_withheld: selection.withheld,
+        evidence_check: if evidence.is_some() {
+            "present"
+        } else {
+            "absent"
+        }
+        .to_owned(),
     };
     if !options.open {
-        return CommandResult::new(
-            "pr",
-            CommandStatus::Ok,
-            "dry run: nothing was pushed (confirm, or pass --yes, to push and open the draft)",
-        )
-        .with_data(CommandData::Pr(Box::new(out)));
+        let mut message =
+            "dry run: nothing was pushed (confirm, or pass --yes, to push and open the draft)"
+                .to_owned();
+        message.push_str(&match &evidence {
+            Some(w) => format!("\nevidence check: {w} runs speccoder-verify"),
+            None => format!("\nevidence check: none — see {EVIDENCE_CHECK_DOCS}"),
+        });
+        if !selection.tasks.is_empty() {
+            message.push_str(&format!(
+                "\nheld-out: sets of {}",
+                selection.tasks.join(", ")
+            ));
+        }
+        if selection.withheld > 0 {
+            message.push_str(&format!(
+                "\nheld-out tests of {} open task(s) stay local",
+                selection.withheld
+            ));
+        }
+        if !selection.tampered.is_empty() {
+            message.push_str(&format!(
+                "\nheld-out sets changed since they judged, not published: {}",
+                selection.tampered.join(", ")
+            ));
+        }
+        return CommandResult::new("pr", CommandStatus::Ok, &message)
+            .with_data(CommandData::Pr(Box::new(out)));
     }
     // Nothing leaves the machine unless the pull request can be opened:
     // a GitHub repository the remote names, and someone signed in there.
@@ -365,6 +483,40 @@ pub fn pr(path: &Path, feature: Option<&str>, options: &PrOptions<'_>) -> Comman
             )
         })
         .unwrap_or_default();
+    // The held-out ref, built on the pushed tip and its previous
+    // publication: a fast-forward, never forced.
+    let held_out_warning = if selection.sets.is_empty() {
+        String::new()
+    } else {
+        let published = crate::held_out::publish_closed(
+            &repo_root,
+            &report.feature,
+            &tip,
+            &selection,
+            &project_state
+                .as_ref()
+                .map_or_else(std::env::temp_dir, |s| s.join("tmp")),
+        );
+        let pushed = published.and_then(|_| {
+            repo.run(&[
+                "push",
+                "--quiet",
+                options.remote,
+                &format!("{held_out_ref}:{held_out_ref}"),
+            ])
+            .map(|_| ())
+            .map_err(|e| e.0)
+        });
+        match pushed {
+            Ok(()) => String::new(),
+            Err(e) => format!(
+                "; the held-out tests were not pushed ({}): git fetch {r} {held_out_ref} and compare",
+                e.lines().last().unwrap_or_default().trim(),
+                r = options.remote,
+            ),
+        }
+    };
+    let notes_warning = format!("{notes_warning}{held_out_warning}");
     let failed = |e: &str, out: PrReport| {
         let r = crate::github::refused("pr", e);
         let status = r.status();
@@ -409,5 +561,42 @@ pub fn pr(path: &Path, feature: Option<&str>, options: &PrOptions<'_>) -> Comman
             .with_data(CommandData::Pr(Box::new(out)))
         }
         Err(e) => failed(&e, out),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_workflow_running_the_verifier_is_found() {
+        let d = tempfile::tempdir().unwrap();
+        assert_eq!(evidence_workflow(d.path()), None);
+        let w = d.path().join(".github/workflows");
+        std::fs::create_dir_all(&w).unwrap();
+        std::fs::write(w.join("ci.yml"), "jobs: {}\n").unwrap();
+        std::fs::write(
+            w.join("evidence.yaml"),
+            "steps:\n  - uses: hupe1980/speccoder-verify@v0.2.0\n",
+        )
+        .unwrap();
+        assert_eq!(
+            evidence_workflow(d.path()).as_deref(),
+            Some(".github/workflows/evidence.yaml")
+        );
+    }
+
+    #[test]
+    fn tours_fit_the_body_dropping_the_last_first() {
+        let all: Vec<String> = (0..10)
+            .map(|i| format!("<details>{i}{}</details>\n", "x".repeat(100)))
+            .collect();
+        let fitted = tours(&all, 700);
+        assert!(fitted.chars().count() <= 700, "{}", fitted.chars().count());
+        assert!(fitted.contains("<details>0"));
+        assert!(!fitted.contains("<details>9"));
+        assert!(fitted.contains("tour(s) not shown"));
+        assert_eq!(tours(&[], 100), "");
+        assert!(tours(&all, 100_000).contains("<details>9"));
     }
 }

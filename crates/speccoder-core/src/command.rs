@@ -1671,6 +1671,16 @@ pub struct PrReport {
     pub opened: bool,
     /// The pull request, when opened.
     pub url: Option<String>,
+    /// The unit's held-out ref pushed with the branch
+    /// (`refs/speccoder/held-out/<unit>`), when a closed task names a set.
+    pub held_out_ref: Option<String>,
+    /// The tasks closed on the pushed head whose held-out sets it carries.
+    pub held_out_tasks: Vec<String>,
+    /// Held-out sets of open tasks: they stay local.
+    pub held_out_withheld: usize,
+    /// `present`: a workflow under `.github/workflows/` runs
+    /// `speccoder-verify`; `absent`: none does.
+    pub evidence_check: String,
 }
 
 /// Result of `speccoder converge`.

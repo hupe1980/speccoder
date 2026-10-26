@@ -119,6 +119,9 @@ pub struct Repo {
     stranger: PathBuf,
     /// How many tasks the unit has.
     pub n: usize,
+    /// The held-out manifest digest a task's evidence names, when set
+    /// (else a made-up one).
+    pub held_out: std::cell::RefCell<std::collections::BTreeMap<String, String>>,
 }
 
 impl Repo {
@@ -155,6 +158,7 @@ impl Repo {
             allowed,
             stranger,
             n,
+            held_out: std::cell::RefCell::default(),
         }
     }
 
@@ -368,7 +372,12 @@ impl Repo {
                     passed: Vec::new(),
                     warned: Vec::new(),
                     failed: Vec::new(),
-                    config_sha256: format!("{:0>64}", task.to_lowercase()),
+                    config_sha256: self
+                        .held_out
+                        .borrow()
+                        .get(task)
+                        .cloned()
+                        .unwrap_or_else(|| format!("{:0>64}", task.to_lowercase())),
                 });
             }
             for p in &phases {

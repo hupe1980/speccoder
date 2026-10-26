@@ -22,9 +22,33 @@
       },
       "type": "array"
     },
+    "evidence_check": {
+      "description": "`present`: a workflow under `.github/workflows/` runs\n`speccoder-verify`; `absent`: none does.",
+      "type": "string"
+    },
     "feature": {
       "description": "Feature directory name.",
       "type": "string"
+    },
+    "held_out_ref": {
+      "description": "The unit's held-out ref pushed with the branch\n(`refs/speccoder/held-out/<unit>`), when a closed task names a set.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "held_out_tasks": {
+      "description": "The tasks closed on the pushed head whose held-out sets it carries.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "held_out_withheld": {
+      "description": "Held-out sets of open tasks: they stay local.",
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
     },
     "opened": {
       "description": "Whether the branch was pushed and the draft opened (`false`: a dry run).",
@@ -55,7 +79,11 @@
     "body",
     "commands",
     "opened",
-    "url"
+    "url",
+    "held_out_ref",
+    "held_out_tasks",
+    "held_out_withheld",
+    "evidence_check"
   ],
   "title": "pr: the draft pull request",
   "type": "object"

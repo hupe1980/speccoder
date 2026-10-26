@@ -699,7 +699,39 @@ pub fn locate(start: &Path, opts: &Options, feature: &str, task: &str) -> Result
         base: None,
         ..opts.clone()
     };
-    run(start, &opts, Some((feature, task)))
+    run(start, &opts, Some((feature, Some(task))))
+}
+
+/// Every tick of `feature` at `head`, read as recorded (no trust, no
+/// signature checked): what `pr`'s body tours show before a maintainer's
+/// verifier checks them.
+///
+/// # Errors
+///
+/// Not a git repository, or `head` does not resolve.
+pub fn recorded(start: &Path, head: &str, feature: &str) -> Result<Checked, Refusal> {
+    let opts = Options {
+        head: head.to_owned(),
+        all: true,
+        ..Options::default()
+    };
+    run(start, &opts, Some((feature, None)))
+}
+
+/// The tasks of `feature` closed on `head`: ticked there, with the commit
+/// reachable from it that carries the task's verdict — `(task, commit)`.
+/// What `pr` publishes held-out sets for; read as recorded, no trust.
+#[must_use]
+pub fn closed(start: &Path, head: &str, feature: &str) -> Vec<(String, String)> {
+    recorded(start, head, feature)
+        .map(|c| {
+            c.report
+                .ticks
+                .into_iter()
+                .filter_map(|t| t.commit.map(|c| (t.tick.task, c)))
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// The statements' own word, when there is no trust to check signatures
@@ -726,7 +758,11 @@ fn as_recorded(commit: &str, task: &str, statements: &[Value]) -> ObjectVerifica
 }
 
 #[allow(clippy::too_many_lines)] // one pass, in the report's order
-fn run(start: &Path, opts: &Options, only: Option<(&str, &str)>) -> Result<Checked, Refusal> {
+fn run(
+    start: &Path,
+    opts: &Options,
+    only: Option<(&str, Option<&str>)>,
+) -> Result<Checked, Refusal> {
     let top =
         Git::at(start).toplevel().ok().flatten().ok_or_else(|| {
             Refusal::new(CommandStatus::GitPrecondition, "not in a git repository")
@@ -863,7 +899,7 @@ fn run(start: &Path, opts: &Options, only: Option<(&str, &str)>) -> Result<Check
         let Some(mut u) = unit(format, &project, &f.name, &prefix, &skipped) else {
             continue;
         };
-        if let Some((_, task)) = only {
+        if let Some((_, Some(task))) = only {
             u.ticks.retain(|t| t.task == task);
         }
         report.features.push(u.name.clone());
