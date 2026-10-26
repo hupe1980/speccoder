@@ -3,7 +3,9 @@
 # disk (file://) and a stand-in GitHub API on 127.0.0.1: the check is
 # created on the pull request's head; a 403 falls back to the job's own
 # output; a tampered archive, a wrong digest or a failed provenance check is
-# refused before anything runs; neutral fails unless allowed.
+# refused before anything runs; neutral fails unless allowed; trust never
+# comes from the checked commit (a push: the commit before it, or the
+# default branch's tip; none: refused).
 #
 #   packaging/speccoder-verify-action/test.sh            # builds the verifier
 #   SPECCODER_VERIFY_BIN=path/to/speccoder-verify test.sh
@@ -192,5 +194,52 @@ set +e; run GITHUB_EVENT_NAME=pull_request_target GITHUB_WORKSPACE="$origin"; co
 git -C "$origin" checkout -q main
 [ "$code" = 1 ] || fail "pull_request_target with a checkout: exit $code"
 grep -q "checked out in the workspace" "$work/log" || fail "pull_request_target: no reason"
+
+# 6. Trust never comes from the checked commit itself. The branch adds a
+# key of its own to allowed_signers; whatever the event, the verifier is
+# given another commit's file.
+g checkout -q docs
+echo 'eve@example.com namespaces="in-toto" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEveEveEveEveEveEveEveEveEveEveEveEveEveEveEv' >> "$origin/.github/speccoder/allowed_signers"
+g commit -qam "trust my own key"
+own="$(g rev-parse HEAD)"
+g checkout -q main
+report="$work/tmp/speccoder-verify/report.json"
+trusted_rev() { jq -r '.data.trust.ssh_allowed_signers.rev // empty' "$report"; }
+push() { # head ref before
+  printf '{"before":"%s","repository":{"default_branch":"main"}}' "$3" > "$work/event.json"
+  set +e; run GITHUB_EVENT_NAME=push GITHUB_SHA="$1" GITHUB_REF="$2" SV_ALLOW_NEUTRAL=true; code=$?; set -e
+}
+# A push to another branch: the default branch's tip.
+push "$own" refs/heads/docs "$docs"
+[ "$code" = 0 ] || fail "push to a branch: exit $code ($(cat "$work/log"))"
+[ "$(trusted_rev)" = "$main" ] || fail "push to a branch trusted $(trusted_rev), not main's tip $main"
+grep -q "trust from the default branch's tip" "$work/log" || fail "push to a branch: trust not said"
+# A push to the default branch: the commit before it.
+push "$own" refs/heads/main "$main"
+[ "$code" = 0 ] || fail "push to main: exit $code ($(cat "$work/log"))"
+[ "$(trusted_rev)" = "$main" ] || fail "push to main trusted $(trusted_rev), not the commit before $main"
+# The push that creates the default branch: no commit before it, refused.
+for before in "" 0000000000000000000000000000000000000000; do
+  push "$own" refs/heads/main "$before"
+  [ "$code" = 1 ] || fail "push creating main (before '$before'): exit $code, want 1"
+  grep -q "no earlier commit to take trust from" "$work/log" || fail "push creating main: no reason ($(cat "$work/log"))"
+done
+# A push whose trust commit is the head itself: refused, even with allow-neutral.
+push "$main" refs/heads/docs "$docs"
+[ "$code" = 1 ] || fail "push of main's tip to a branch: exit $code, want 1"
+grep -q "is the checked commit itself" "$work/log" || fail "trust == head: no reason"
+push "$own" refs/heads/main "$own"
+[ "$code" = 1 ] || fail "push to main with before == head: exit $code, want 1"
+# A pull request: its base, never its head, and never a base that is the head.
+event "$own" "$main"
+set +e; run SV_ALLOW_NEUTRAL=true; code=$?; set -e
+[ "$code" = 0 ] || fail "pull request: exit $code ($(cat "$work/log"))"
+[ "$(trusted_rev)" = "$main" ] || fail "pull request trusted $(trusted_rev), not its base"
+event "$own" "$own"
+set +e; run SV_ALLOW_NEUTRAL=true; code=$?; set -e
+[ "$code" = 1 ] || fail "pull request with base == head: exit $code, want 1"
+event "$own" ""
+set +e; run SV_ALLOW_NEUTRAL=true; code=$?; set -e
+[ "$code" = 1 ] || fail "pull request without a base: exit $code, want 1"
 
 echo "action-test: ok"
