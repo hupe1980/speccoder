@@ -1296,9 +1296,21 @@ pub fn decide_with(
         Ok(x) => x,
         Err(r) => return *r,
     };
-    let mut decisions = match Decisions::load(&dir) {
-        Ok(d) => d,
+    // Decisions that cannot be read decide nothing; a listing says the
+    // calls a lane stopped are unknown, never that none wait.
+    let (mut decisions, decisions_unreadable) = match Decisions::load(&dir) {
+        Ok(d) => (d, None),
+        Err(e) if verb == Verb::List => (Decisions::default(), Some(e)),
         Err(e) => return CommandResult::new(command, CommandStatus::ConfigError, &e),
+    };
+    // A lane's stopped calls are those not decided yet: unknown without
+    // the decisions.
+    let lane_pending = |decisions: &Decisions, open: &[String]| {
+        if decisions_unreadable.is_some() {
+            Vec::new()
+        } else {
+            pending(&root, &feature, open, decisions)
+        }
     };
     // Open tasks, from the speccoder branch when there is one.
     let status = crate::status::report(&root, Some(&feature));
@@ -1315,7 +1327,11 @@ pub fn decide_with(
         Ok(rows) => (rows, None),
         Err(e) => (Vec::new(), Some(e)),
     };
-    let waiting = pending(&root, &feature, &open, &decisions);
+    let unreadable = match (unreadable, &decisions_unreadable) {
+        (Some(a), Some(b)) => Some(format!("{a}; {b}")),
+        (a, b) => a.or_else(|| b.clone()),
+    };
+    let waiting = lane_pending(&decisions, &open);
 
     // A call waiting on a task is decided there: who, how known, bound to
     // what was shown. Its attempt continues on the next run.
@@ -1406,20 +1422,21 @@ pub fn decide_with(
                     )
                 });
             }
+            // The calls waiting after the decision, or why they are unknown.
+            let (after, unreadable) = match waiting_tasks(&root, &dir, &feature) {
+                Ok(rows) => (rows, None),
+                Err(e) => (Vec::new(), Some(e)),
+            };
+            let lanes = lane_pending(&decisions, &open);
             let report = ApprovalsReport {
                 decided: decided(&feature, &decisions),
-                pending: waiting_tasks(&root, &dir, &feature)
-                    .unwrap_or_default()
+                pending: after
                     .into_iter()
                     .map(|(c, _)| c)
-                    .chain(
-                        pending(&root, &feature, &open, &decisions)
-                            .into_iter()
-                            .map(|(c, _)| c),
-                    )
+                    .chain(lanes.into_iter().map(|(c, _)| c))
                     .collect(),
                 feature,
-                unreadable: None,
+                unreadable,
                 batch: Vec::new(),
             };
             return CommandResult::new(
@@ -1536,16 +1553,13 @@ pub fn decide_with(
             format!("{what}; run the task again to continue (speccoder run --task {task})")
         }
     };
+    let lanes = lane_pending(&decisions, &open);
     let report = ApprovalsReport {
         decided: decided(&feature, &decisions),
         pending: tasks_waiting
             .into_iter()
             .map(|(c, _)| c)
-            .chain(
-                pending(&root, &feature, &open, &decisions)
-                    .into_iter()
-                    .map(|(c, _)| c),
-            )
+            .chain(lanes.into_iter().map(|(c, _)| c))
             .collect(),
         feature,
         unreadable,

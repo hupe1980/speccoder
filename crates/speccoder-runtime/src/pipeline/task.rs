@@ -1391,14 +1391,18 @@ pub(crate) fn run_task(
                 notices: notices.clone(),
                 ..bare_report(&feature_name, task, &wt_path, &attempt_status)
             };
-            record_inline_approvals(
+            if let Err(e) = record_inline_approvals(
                 &s.plane_dir,
                 &feature_name,
                 task,
                 &report.tool_calls,
                 &options.run_grants,
                 this_run.as_str(),
-            );
+            ) {
+                report.notices.push(format!(
+                    "the decisions made in this attempt were not recorded ({e}): later attempts ask again"
+                ));
+            }
             // A person approving an MCP call reviewed the tool as it is now.
             for c in report
                 .tool_calls

@@ -517,3 +517,50 @@ fn calls_waiting_in_a_journal_another_process_holds_are_unknown_never_none() {
     drop(held);
     assert_eq!(pending(r.path(), state.path()).len(), 1);
 }
+
+/// A decisions file that cannot be read (an earlier shape, a torn write)
+/// leaves a lane's stopped calls unknown, never none: the listing and the
+/// inbox say so, and nothing is decided against it.
+#[test]
+fn decisions_that_cannot_be_read_are_unknown_never_none() {
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    write_manifest(&f, "c1");
+    let first = speccoder_runtime::run_with(r.path(), None, "T005", state.path(), d, None);
+    assert_eq!(
+        first.status(),
+        CommandStatus::NeedsHuman,
+        "{}",
+        first.message()
+    );
+    std::fs::write(
+        plane_dir(r.path(), state.path()).join(speccoder_runtime::approvals::FILE),
+        "{\"tasks\": {\"001-graph/T005\": {\"grants\": [\"write\"]}}}",
+    )
+    .unwrap();
+    let listed = speccoder_runtime::approvals::list_with(r.path(), None, state.path());
+    let Some(CommandData::Approvals(a)) = listed.data() else {
+        panic!("{listed:?}");
+    };
+    let why = a.unreadable.as_deref().unwrap_or_default();
+    assert!(why.contains(speccoder_runtime::approvals::FILE), "{why}");
+    let inbox = speccoder_runtime::inbox::inbox_with(r.path(), None, Some(state.path()));
+    let Some(CommandData::Inbox(i)) = inbox.data() else {
+        panic!("{inbox:?}");
+    };
+    assert!(i.items.iter().any(|i| i.kind == "unknown"), "{:?}", i.items);
+    let approve = decide_with(
+        r.path(),
+        None,
+        Verb::Approve("T005"),
+        state.path(),
+        speccoder_core::actions::Via::Terminal,
+    );
+    assert_eq!(
+        approve.status(),
+        CommandStatus::ConfigError,
+        "{}",
+        approve.message()
+    );
+}
