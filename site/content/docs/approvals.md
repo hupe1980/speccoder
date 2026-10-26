@@ -107,6 +107,8 @@ Tests that existed before an attempt are **frozen**: changing them needs approva
 frozen = "additions"   # default "ask"; changing or removing existing lines still asks
 ```
 
+Removing a test, or renaming one, is refused outright, also with approval and also for tests inside a source file (`#[cfg(test)]` in `src/lib.rs`): the model is told to keep it, or to report the task blocked when the test contradicts the spec. An obsolete test is yours to remove, in a commit of your own.
+
 ## Human controls
 
 ```sh

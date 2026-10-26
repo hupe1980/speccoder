@@ -57,6 +57,10 @@ adheres to [Semantic Versioning](https://semver.org/).
 - The app read the journal for several requests at once and refused
   itself ("another speccoder is working on this project"); reads now share
   one handle and wait briefly for another process.
+- A write that removes a test is refused before it happens, inline tests
+  in a source file included (`#[cfg(test)]` in `src/lib.rs`), and the model
+  is told to keep it or report the task blocked; the audit names the
+  removed tests. Before, the removal failed the attempt afterwards.
 - A feature run reports the code of the task that stopped it
   (`CHECK-BROKEN`, not `CONFIG`).
 

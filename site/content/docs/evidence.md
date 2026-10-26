@@ -134,7 +134,7 @@ git diff speccoder/<feature> <ref>             # what it changed
 Whatever the checks say, a verdict fails when the attempt:
 
 - deletes or rewrites a test file that existed before it (adding tests can be allowed — see [frozen tests](@/docs/approvals.md#frozen-tests));
-- removes more test functions than it adds;
+- removes more test functions than it adds (the finding names them). speccoder's own tools refuse such a write before it happens, inline tests in a source file included, and tell the model to keep the test or report the task blocked; the audit catches what an external agent or a command does;
 - adds skip markers (`#[ignore]`, `@pytest.mark.skip`, `.skip(`, `xit(`, …);
 - changes anything that decides verification: `speccoder.toml`, CI configuration, test-runner configuration;
 - changes agent configuration (`.claude/`, `.agents/`, `.codex/`, `.gemini/`, `.cursor/`, `.kiro/`, `.mcp.json`, …), whose hooks and settings run code in a later agent session;

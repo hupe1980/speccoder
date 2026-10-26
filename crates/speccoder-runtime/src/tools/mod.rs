@@ -244,6 +244,28 @@ pub struct WorkspaceTools {
     env: Vec<(String, String)>,
 }
 
+/// A write that would take tests away, refused before it happens: a test
+/// that passed before the attempt is evidence, and its removal fails the
+/// attempt whatever else it did. The model is told which, and what to do.
+fn removes_tests(path: &str, before: &str, after: &str) -> Option<Value> {
+    let gone = crate::integrity::removed_tests(before, after);
+    if gone.is_empty() {
+        return None;
+    }
+    let (s, them) = if gone.len() == 1 {
+        ("", "it")
+    } else {
+        ("s", "them")
+    };
+    Some(failure(format!(
+        "refused: this removes the test{s} {} from `{path}`. Tests that passed before the attempt are evidence: removing or renaming one fails the attempt. Keep {them} and add new tests beside {them}; if one contradicts the spec, report the task blocked and say which test and why.",
+        gone.iter()
+            .map(|n| format!("`{n}`"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    )))
+}
+
 fn failure(error: impl Into<String>) -> Value {
     json!({ "ok": false, "error": error.into() })
 }
@@ -442,6 +464,11 @@ impl WorkspaceTools {
         let before = fs::read(&path)
             .ok()
             .map_or_else(|| "absent".to_owned(), |b| sha(&b));
+        if let Ok(old) = fs::read_to_string(&path)
+            && let Some(refused) = removes_tests(&a.path, &old, &a.content)
+        {
+            return refused;
+        }
         if let Some(parent) = path.parent()
             && let Err(e) = fs::create_dir_all(parent)
         {
@@ -476,6 +503,9 @@ impl WorkspaceTools {
                 ));
             }
         };
+        if let Some(refused) = removes_tests(&a.path, &text, &new) {
+            return refused;
+        }
         if let Err(e) = fs::write(&path, &new) {
             return failure(format!("`{}`: {e}", a.path));
         }

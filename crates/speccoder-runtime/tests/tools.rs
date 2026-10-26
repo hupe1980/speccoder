@@ -297,6 +297,41 @@ fn edit_file_replaces_one_unique_occurrence_and_reports_hashes() {
 }
 
 #[test]
+fn writes_that_remove_a_test_are_refused_before_they_happen() {
+    let w = worktree();
+    let t = tools(w.path());
+    let lib =
+        "pub fn greet() {}\n\n#[cfg(test)]\nmod tests {\n    #[test]\n    fn it_works() {}\n}\n";
+    write(w.path(), "src/greet.rs", lib);
+    let edit = call(
+        &t,
+        "edit_file",
+        json!({"path": "src/greet.rs", "old_string": "    #[test]\n    fn it_works() {}\n", "new_string": ""}),
+    );
+    assert!(err(&edit).contains("removes the test `it_works`"), "{edit}");
+    let rewrite = call(
+        &t,
+        "write_file",
+        json!({"path": "src/greet.rs", "content": "pub fn greet() {}\n"}),
+    );
+    assert!(
+        err(&rewrite).contains("report the task blocked"),
+        "{rewrite}"
+    );
+    assert_eq!(
+        fs::read_to_string(w.path().join("src/greet.rs")).unwrap(),
+        lib
+    );
+    // Adding a test beside it is the way.
+    let added = call(
+        &t,
+        "edit_file",
+        json!({"path": "src/greet.rs", "old_string": "    fn it_works() {}\n", "new_string": "    fn it_works() {}\n\n    #[test]\n    fn greets() {}\n"}),
+    );
+    assert_eq!(added["ok"], true, "{added}");
+}
+
+#[test]
 fn write_file_creates_nested_files_with_absent_before_hash() {
     let w = worktree();
     let t = tools(w.path());

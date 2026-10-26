@@ -2247,7 +2247,7 @@ fn the_monitor_is_off_by_default() {
 }
 
 #[test]
-fn an_approved_frozen_test_edit_passes_but_an_approved_weakening_does_not() {
+fn an_approved_frozen_test_edit_passes_but_an_approved_weakening_is_refused() {
     // Adding a test to an existing file, approved: a pass.
     let r = repo_with("", &[EXISTING_TEST]);
     let state = tempfile::tempdir().unwrap();
@@ -2267,7 +2267,7 @@ fn an_approved_frozen_test_edit_passes_but_an_approved_weakening_does_not() {
         report(&ok).integrity
     );
 
-    // Removing the test, approved: still a failed verdict.
+    // Removing the test, approved: refused when written — the test stays.
     let r = repo_with("[budget]\nmax_attempts = 1\n", &[EXISTING_TEST]);
     let state = tempfile::tempdir().unwrap();
     let (f, d) = fake();
@@ -2286,9 +2286,11 @@ fn an_approved_frozen_test_edit_passes_but_an_approved_weakening_does_not() {
     );
     f2.will_structure(done("simplified"));
     let bad = run(r.path(), state.path(), "T005", d2);
-    assert_eq!(
-        bad.status(),
-        CommandStatus::VerificationFailed,
+    let wt = PathBuf::from(&report(&bad).worktree);
+    assert!(
+        fs::read_to_string(wt.join("tests/existing.rs"))
+            .unwrap()
+            .contains("fn existing"),
         "{}",
         bad.message()
     );
@@ -2296,7 +2298,7 @@ fn an_approved_frozen_test_edit_passes_but_an_approved_weakening_does_not() {
         report(&bad)
             .integrity
             .iter()
-            .any(|i| i.contains("test removed")),
+            .all(|i| !i.contains("test removed")),
         "{:?}",
         report(&bad).integrity
     );
