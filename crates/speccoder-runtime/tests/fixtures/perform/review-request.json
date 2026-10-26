@@ -8,12 +8,18 @@
         {
           "id": "FR-001",
           "now": "- **FR-001**: Users MUST log in with a passkey.",
-          "then": "- **FR-001**: Users MUST log in."
+          "now_line": 9,
+          "path": "specs/001-graph/spec.md",
+          "then": "- **FR-001**: Users MUST log in.",
+          "then_line": 9
         },
         {
           "id": "FR-002",
           "now": "- **FR-002**: Sessions MUST expire after thirty minutes.",
-          "then": "- **FR-002**: Sessions MUST expire after [NEEDS CLARIFICATION: how long?]."
+          "now_line": 10,
+          "path": "specs/001-graph/spec.md",
+          "then": "- **FR-002**: Sessions MUST expire after [NEEDS CLARIFICATION: how long?].",
+          "then_line": 10
         }
       ],
       "feature": "001-graph",

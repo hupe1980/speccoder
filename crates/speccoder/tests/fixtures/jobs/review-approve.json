@@ -8,7 +8,10 @@
         {
           "id": "FR-002",
           "now": "- **FR-002**: Sessions MUST expire after thirty minutes.",
-          "then": "- **FR-002**: Sessions MUST expire after [NEEDS CLARIFICATION: how long?]."
+          "now_line": 10,
+          "path": "specs/001-graph/spec.md",
+          "then": "- **FR-002**: Sessions MUST expire after [NEEDS CLARIFICATION: how long?].",
+          "then_line": 10
         }
       ],
       "feature": "001-graph",
