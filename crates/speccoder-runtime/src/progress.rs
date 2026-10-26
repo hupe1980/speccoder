@@ -717,6 +717,13 @@ pub fn alive(pid: u32) -> bool {
 /// `speccoder report --live`: the project's current (or last) run, from
 /// `live.json`, in the state directory `state`.
 pub fn status_with(path: &Path, state: &Path) -> CommandResult {
+    status_at(path, state, agentplane::core::Timestamp::now_utc())
+}
+
+/// [`status_with`] as it reads at `now`: a call whose deadline passed by
+/// then is not listed as waiting.
+#[doc(hidden)]
+pub fn status_at(path: &Path, state: &Path, now: agentplane::core::Timestamp) -> CommandResult {
     // One inspection for both: what runs, and what waits.
     let inspected = crate::inspect(path, None);
     let root = match inspected.data() {
@@ -725,7 +732,7 @@ pub fn status_with(path: &Path, state: &Path) -> CommandResult {
     };
     let plane_dir = crate::worktree::project_state_dir(state, &root);
     let res = status_inner(&plane_dir);
-    let lines = waiting_lines(&plane_dir);
+    let lines = waiting_lines(&plane_dir, now);
     if lines.is_empty() {
         return res;
     }
@@ -742,8 +749,10 @@ pub fn status_with(path: &Path, state: &Path) -> CommandResult {
     res.reworded(status, &message).with_next(next)
 }
 
-/// One line per call waiting for a person: what, since when, until when.
-fn waiting_lines(plane_dir: &Path) -> Vec<String> {
+/// One line per call waiting for a person at `now`: what, since when,
+/// until when. A call past its deadline waits no more — the next writer
+/// denies it as expired — so it is not listed, as in every other listing.
+fn waiting_lines(plane_dir: &Path, now: agentplane::core::Timestamp) -> Vec<String> {
     // Unreadable is said, never shown as nothing waiting. Read beside the
     // journal's writer (a run in another process); no journal, nothing
     // waits — and a read never creates one.
@@ -757,12 +766,12 @@ fn waiting_lines(plane_dir: &Path) -> Vec<String> {
         Ok(None) => return Vec::new(),
         Err(e) => return unknown(e.0),
     };
-    let now = agentplane::core::Timestamp::now_utc();
     let open = match rt.block_on(plane.open_tasks()) {
         Ok(open) => open,
         Err(e) => return unknown(e.0),
     };
     open.into_iter()
+        .filter(|t| crate::approvals::still_waits(t.due_at, now))
         .filter_map(|t| {
             let request = crate::approvals::tasks::request_of(&t.justification.proposed_action)?;
             let since = (now - t.created_at).whole_minutes().max(0);

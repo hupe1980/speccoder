@@ -255,8 +255,21 @@ fn a_waiting_call_past_its_deadline_is_denied_as_nobodys_decision() {
         "{since} → {deadline}"
     );
 
-    // Two minutes later: the deadline has passed.
+    // Two minutes later: the deadline has passed. Every listing — status
+    // too — leaves the call out before anything denies it.
     let later = agentplane::core::Timestamp::now_utc() + std::time::Duration::from_secs(120);
+    let now = speccoder_runtime::progress::status_with(r.path(), state.path());
+    assert!(
+        now.message().contains("denied as expired in"),
+        "{}",
+        now.message()
+    );
+    let then = speccoder_runtime::progress::status_at(r.path(), state.path(), later);
+    assert!(
+        !then.message().contains("denied as expired in"),
+        "{}",
+        then.message()
+    );
     speccoder_runtime::approvals::expire_due(&plane_dir(r.path(), state.path()), later).unwrap();
 
     // The attempt continues with the call refused, and nobody is named.
