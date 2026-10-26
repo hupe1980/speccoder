@@ -414,7 +414,7 @@ impl Repo {
                 statement::VSA,
                 statement::vsa(&statement::Summary {
                     speccoder: "0.2.0".to_owned(),
-                    agentplane: "0.53.0".to_owned(),
+                    agentplane: "0.54.0".to_owned(),
                     time: "2026-10-26T00:00:00Z".to_owned(),
                     resource_uri: format!("git:{commit}"),
                     policy_sha256: String::new(),

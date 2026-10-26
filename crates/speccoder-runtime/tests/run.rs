@@ -3560,6 +3560,8 @@ fn the_model_s_account_is_live_and_kept() {
         usage: agentplane::model::Usage::default(),
         stop_reason: Some("tool_use".to_owned()),
         truncated: false,
+        commentary: None,
+        compacted: None,
         structured: None,
         continuation: None,
         reasoning: Some("The test only needs login() to exist.\nSo the smallest change is a new empty function.".to_owned()),

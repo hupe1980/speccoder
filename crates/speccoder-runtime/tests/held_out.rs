@@ -454,6 +454,7 @@ fn no_credits() -> agentplane::model::ModelError {
     agentplane::model::ModelError::Refused {
         model: agentplane::model::ModelId::new("openai", "gpt-5.4-mini"),
         detail: "credit_balance_exhausted: You have no credits remaining.".to_owned(),
+        code: Some("insufficient_quota".to_owned()),
     }
 }
 

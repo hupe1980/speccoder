@@ -200,7 +200,7 @@ pub fn read(d: &Decision) -> Read {
         .ok()
     });
     let expired = matches!(d.decided, Decided::OnExpiry(_));
-    let answer = if d.approved {
+    let answer = if d.approved() {
         let mut answer = Answer::approve(scope, a["note"].as_str().map(str::to_owned), by.clone());
         answer.always = a["always"] == true;
         answer

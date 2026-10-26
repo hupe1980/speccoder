@@ -271,6 +271,7 @@ fn an_account_the_provider_refuses_stops_the_suite() {
     fake.will_fail(agentplane::model::ModelError::Refused {
         model: agentplane::model::ModelId::new("openai", "gpt-5.4-mini"),
         detail: "credit_balance_exhausted: You have no credits remaining.".to_owned(),
+        code: Some("insufficient_quota".to_owned()),
     });
     let driver: Arc<dyn ModelProvider> = fake.clone();
     let r = run_suite(&suite(), None, &driver, None, None, 3);

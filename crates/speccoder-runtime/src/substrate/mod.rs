@@ -32,7 +32,7 @@ use self::propose::{CAPABILITY, Propose};
 
 /// The agentplane release speccoder is built against (the exact pin in the
 /// workspace `Cargo.toml`), named in every verification summary.
-pub const AGENTPLANE_VERSION: &str = "0.53.0";
+pub const AGENTPLANE_VERSION: &str = "0.54.0";
 
 /// The journal file inside a project's state directory.
 pub const JOURNAL: &str = "journal.redb";
@@ -653,7 +653,7 @@ impl Plane {
                 });
             };
             self.decide(task.id, &decision).await?;
-            if answer.always && decision.approved {
+            if answer.always && decision.approved() {
                 let via = answer
                     .by
                     .as_ref()
