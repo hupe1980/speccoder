@@ -134,7 +134,11 @@ fn each_releases_skills_are_hosted_and_their_scripts_allowed() {
             let rel = format!(".specify/scripts/bash/{script}");
             assert!(root.join(&rel).is_file(), "{v}: no {rel}");
             assert_eq!(
-                planning.classify("run_command", &json!({ "argv": ["bash", rel, "--json"] })),
+                planning.classify(
+                    "run_command",
+                    &json!({ "argv": ["bash", rel, "--json"] }),
+                    None
+                ),
                 Decision::Allow,
                 "{v}"
             );

@@ -11,6 +11,12 @@
   const sections: Record<string, { title: string; icon: string; tone: string; why: string }> = {
     unknown: { title: "Could Not Be Read", icon: "exclaim", tone: "needs_approval", why: "Another speccoder holds the journal — calls may be waiting for you that cannot be listed now." },
     approval: { title: "Waiting for Approval", icon: "hand", tone: "needs_approval", why: "A run is paused until you decide." },
+    bug_confirm: { title: "Confirm a Bug's Reproduction", icon: "exclaim", tone: "needs_approval", why: "It fails on the untouched code by an assertion — does it show the bug? Nothing is fixed before you say so." },
+    bug_cannot_reproduce: { title: "Could Not Reproduce", icon: "xoctagon", tone: "failed", why: "No test of every expected behaviour failed on an assertion; nothing was fixed. Bring a test, reword, or try again." },
+    bug_unchanged_not_holding: { title: "Unchanged Does Not Hold", icon: "exclaim", tone: "failed", why: "A statement of what must keep working is not true today." },
+    bug_repro_weak: { title: "Reproduction Too Weak", icon: "shield", tone: "needs_approval", why: "A fix that only recognises the reproduction's input passes it." },
+    bug_already_satisfied: { title: "Already Fixed", icon: "check", tone: "verified", why: "Every reproduction passes: keep one as a regression test, or drop it." },
+    approval_batch: { title: "Calls Waiting Together", icon: "hand", tone: "needs_approval", why: "The run used its approval budget: further calls wait here, decided together — each once." },
     ruling: { title: "Rule on the Tests", icon: "shield", tone: "needs_approval", why: "The tests reject an alternative the spec may allow." },
     gaming: { title: "Suspected Shortcuts", icon: "exclaim", tone: "failed", why: "The monitor saw what looks like gaming the tests." },
     stale: { title: "The Spec Changed", icon: "exclaim", tone: "needs_approval", why: "Evidence proves an earlier wording." },
@@ -49,6 +55,10 @@
     await app.perform(a);
   }
   async function open(i: InboxItem) {
+    if (i.kind.startsWith("bug_") && i.task) {
+      app.bugSheet = { key: `${i.feature}/${i.task}` };
+      return;
+    }
     if (app.feature !== i.feature) await app.selectFeature(i.feature);
     if (i.kind === "review" || i.kind === "revise" || i.kind === "question") {
       app.doc = "review";

@@ -17,10 +17,10 @@ use serde_json::{Value, json};
 use speccoder_core::strength::{Gate, Outcome, PermittedOutcome, State};
 use speccoder_core::{CommandData, CommandResult, CommandStatus, RunReport};
 
-const CONFIG: &str = "[model]\nprovider = \"openai\"\nmodel = \"gpt-5.4-mini\"\n\n[checks.has-ok]\nargv = [\"grep\", \"-q\", \"fn ok\", \"src/lib.rs\"]\n\n[commands]\nallow = [[\"grep\"], [\"./accept.sh\"]]\n\n[acceptance]\nheld_out = false\n";
+const CONFIG: &str = "[model]\nprovider = \"openai\"\nmodel = \"gpt-5.4-mini\"\n\n[checks.has-ok]\nargv = [\"grep\", \"-q\", \"fn ok\", \"src/lib.rs\"]\n\n[commands]\nallow_prefix = [[\"grep\", \"-q\"], [\"./accept.sh\", \"--\"]]\n\n[acceptance]\nheld_out = false\n";
 
 /// One test: "the pattern is in src/lib.rs", with libtest's summary line.
-const ACCEPT_SH: &str = "#!/bin/sh\nif grep -qF \"$1\" src/lib.rs; then\n  echo 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out'\nelse\n  echo 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out'\n  exit 101\nfi\n";
+const ACCEPT_SH: &str = "#!/bin/sh\n[ \"$1\" = -- ] && shift\nif grep -qF \"$1\" src/lib.rs; then\n  echo 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out'\nelse\n  echo 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out'\n  exit 101\nfi\n";
 
 const SPEC: &str = "# Spec\n\n### User Story 1 - Login\n\nUsers log in.\n\n**Acceptance**: a `login` function exists and does not panic.\n";
 
@@ -92,7 +92,7 @@ fn fake() -> (Arc<FakeProvider>, Arc<dyn ModelProvider>) {
 
 /// The visible set: only "`fn login` exists".
 fn thin() -> Value {
-    json!({ "files": [{ "path": "tests/acceptance_login.txt", "content": "login exists\n", "scenarios": [] }], "argv": ["./accept.sh", "fn login"], "notes": [] })
+    json!({ "files": [{ "path": "tests/acceptance_login.txt", "content": "login exists\n", "scenarios": [] }], "argv": ["./accept.sh", "--", "fn login"], "notes": [] })
 }
 
 fn implement(f: &FakeProvider) {
@@ -314,7 +314,7 @@ fn fresh_acceptance_sets_a_held_attempt_aside() {
     assert_eq!(report(&res).attempt_status, "over_strict");
     // Fresh tests that allow either name, a fresh attempt. The variants are
     // read back: the same spec and change get the same ones.
-    f.will_structure(json!({ "files": [{ "path": "tests/acceptance_login.txt", "content": "login or sign_in exists\n", "scenarios": [] }], "argv": ["./accept.sh", "pub fn login\npub fn sign_in"], "notes": [] }));
+    f.will_structure(json!({ "files": [{ "path": "tests/acceptance_login.txt", "content": "login or sign_in exists\n", "scenarios": [] }], "argv": ["./accept.sh", "--", "pub fn login\npub fn sign_in"], "notes": [] }));
     implement(&f);
     let options = speccoder_runtime::RunOptions {
         fresh_acceptance: true,
@@ -350,7 +350,7 @@ fn min_strength_strengthens_the_set_once() {
         PANICS,
     )]));
     // Told what got through, the author adds a test that rejects it.
-    f.will_structure(json!({ "files": [{ "path": "tests/acceptance_login_body.txt", "content": "login has an empty body\n", "scenarios": [] }], "argv": ["./accept.sh", "fn login() {}"], "notes": [] }));
+    f.will_structure(json!({ "files": [{ "path": "tests/acceptance_login_body.txt", "content": "login has an empty body\n", "scenarios": [] }], "argv": ["./accept.sh", "--", "fn login() {}"], "notes": [] }));
 
     let res = run(r.path(), state.path(), d);
     assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
@@ -387,7 +387,7 @@ fn a_set_still_too_weak_stops_for_a_person() {
         PANICS,
     )]));
     // An added test that passes before the change is no evidence.
-    f.will_structure(json!({ "files": [{ "path": "tests/acceptance_more.txt", "content": "ok exists\n", "scenarios": [] }], "argv": ["./accept.sh", "fn ok"], "notes": [] }));
+    f.will_structure(json!({ "files": [{ "path": "tests/acceptance_more.txt", "content": "ok exists\n", "scenarios": [] }], "argv": ["./accept.sh", "--", "fn ok"], "notes": [] }));
 
     let res = run(r.path(), state.path(), d);
     assert_eq!(res.status(), CommandStatus::NeedsHuman, "{}", res.message());
@@ -442,7 +442,7 @@ fn held_out_tests_count_in_the_combined_strength() {
         "path": "tests/held_out_login.txt",
         "content": "login has an empty body\n",
         "scenarios": ["US1-1"],
-        "argv": ["./accept.sh", "fn login() {}"],
+        "argv": ["./accept.sh", "--", "fn login() {}"],
         "composition": false,
     }], "notes": [] }));
     implement(&f);

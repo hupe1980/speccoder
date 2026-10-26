@@ -99,6 +99,8 @@ pub mod doctor {
 
 /// `speccoder.toml`.
 pub mod settings {
+    /// What a prefix entry would newly allow (`config coverage`).
+    pub use crate::approvals::coverage::show as coverage;
     pub use crate::settings::{apply, commit, show};
 }
 

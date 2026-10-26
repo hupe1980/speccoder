@@ -54,6 +54,8 @@ pub enum Kind {
     Unknown,
     /// A run waits on an approval.
     Approval,
+    /// A run's batch of calls waits for one decision.
+    ApprovalBatch,
     /// A verified attempt is held: its tests reject what the spec allows.
     Ruling,
     /// A bug's reproductions wait for the person's confirmation.
@@ -88,9 +90,10 @@ pub enum Kind {
 
 impl Kind {
     /// Every kind, the most urgent first.
-    pub const ALL: [Self; 17] = [
+    pub const ALL: [Self; 18] = [
         Self::Unknown,
         Self::Approval,
+        Self::ApprovalBatch,
         Self::Ruling,
         Self::BugConfirm,
         Self::BugCannotReproduce,
@@ -114,6 +117,7 @@ impl Kind {
         match self {
             Self::Unknown => "unknown",
             Self::Approval => "approval",
+            Self::ApprovalBatch => "approval_batch",
             Self::Ruling => "ruling",
             Self::BugConfirm => "bug_confirm",
             Self::BugCannotReproduce => "bug_cannot_reproduce",
@@ -138,6 +142,7 @@ impl Kind {
         match self {
             Self::Unknown
             | Self::Approval
+            | Self::ApprovalBatch
             | Self::Ruling
             | Self::BugConfirm
             | Self::BugCannotReproduce
@@ -173,7 +178,7 @@ impl Kind {
 
     /// Every recorded name, the most urgent first.
     #[must_use]
-    pub fn names() -> [&'static str; 17] {
+    pub fn names() -> [&'static str; 18] {
         Self::ALL.map(Self::as_str)
     }
 }
@@ -208,8 +213,19 @@ mod tests {
         assert_eq!(
             today,
             [
-                "unknown", "approval", "ruling", "gaming", "stale", "question", "review", "revise",
-                "stuck", "aside", "commit", "handoff"
+                "unknown",
+                "approval",
+                "approval_batch",
+                "ruling",
+                "gaming",
+                "stale",
+                "question",
+                "review",
+                "revise",
+                "stuck",
+                "aside",
+                "commit",
+                "handoff"
             ]
         );
         assert_eq!(Kind::BugAlreadySatisfied.group(), Group::ReadyToReview);

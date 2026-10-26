@@ -9,6 +9,7 @@ import type { Envelope, FeatureEntry, IssueEntry as GitHubIssue } from "./schema
 
 export type {
   Action,
+  BugReport,
   ActionId,
   ActionKind,
   ConfigKey,
@@ -22,6 +23,7 @@ export type {
   JourneyStep,
   OpenQuestion,
   PendingCall,
+  PolicyCoverage,
   Remedy,
   RequirementDrift,
   ReviewItem,
@@ -65,13 +67,20 @@ export interface Presentation {
     kind: string;
     arguments?: { argv?: unknown } & Record<string, unknown>;
     reason: string;
-    covers: string;
     risk: string;
     claim: string | null;
     options: string[];
+    sources?: { argument: string; from: string; turn: number }[];
+    batched?: boolean;
   };
   title: string;
   subject: string;
+  /** The object a decision covers, line by line. */
+  object: string[];
+  /** Where arguments of the call were copied from. */
+  sources: string[];
+  /** Said on the prompt that uses the run's asking budget. */
+  notice: string | null;
   body: string[];
   full: string[];
   sandbox: string;

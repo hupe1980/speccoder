@@ -317,6 +317,53 @@ pub fn resolve_for_write(root: &Path, rel: &str) -> Result<PathBuf, Refused> {
     Ok(full)
 }
 
+/// The file a write of `rel` reaches, workspace-relative: every existing
+/// ancestor's symlinks resolved (they must stay inside `root`, which is
+/// canonical), the components that do not exist yet appended as written,
+/// and the target itself never a symlink. Two spellings that reach the
+/// same file give the same answer; the same spelling after a directory was
+/// swapped for a symlink gives another.
+pub fn canonical_for_write(root: &Path, rel: &str) -> Result<String, Refused> {
+    let rel = normalise(rel)?;
+    let parts: Vec<&str> = rel.split('/').collect();
+    let mut at = root.to_path_buf();
+    for (i, part) in parts.iter().enumerate() {
+        let next = at.join(part);
+        let Ok(meta) = fs::symlink_metadata(&next) else {
+            // Not there yet: the rest is appended as written.
+            for rest in &parts[i..] {
+                at.push(rest);
+            }
+            break;
+        };
+        if i + 1 == parts.len() {
+            if meta.file_type().is_symlink() {
+                return Err(Refused(format!(
+                    "`{rel}` is a symlink; not written through"
+                )));
+            }
+            at = next;
+            break;
+        }
+        let canonical = fs::canonicalize(&next).map_err(|e| Refused(format!("`{rel}`: {e}")))?;
+        if !canonical.starts_with(root) {
+            return Err(Refused(format!("`{rel}` resolves outside the workspace")));
+        }
+        at = canonical;
+    }
+    let inside = at
+        .strip_prefix(root)
+        .map_err(|_| Refused(format!("`{rel}` resolves outside the workspace")))?;
+    let out: Vec<String> = inside
+        .components()
+        .map(|c| c.as_os_str().to_string_lossy().into_owned())
+        .collect();
+    if out.is_empty() {
+        return Err(Refused("empty path".to_owned()));
+    }
+    Ok(out.join("/"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -384,5 +431,37 @@ mod tests {
         for f in ["src/lib.rs", "src/testing.rs", "docs/tests.md"] {
             assert!(!is_test_path(f), "{f}");
         }
+    }
+
+    #[test]
+    fn a_write_reaches_its_canonical_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = fs::canonicalize(dir.path()).unwrap();
+        fs::create_dir_all(root.join("src/b")).unwrap();
+        fs::create_dir_all(root.join("src/a")).unwrap();
+        assert_eq!(
+            canonical_for_write(&root, "./src/a/x.rs").unwrap(),
+            "src/a/x.rs"
+        );
+        // Not there yet: appended as written.
+        assert_eq!(
+            canonical_for_write(&root, "src/new/deep/x.rs").unwrap(),
+            "src/new/deep/x.rs"
+        );
+        // A directory swapped for a symlink inside the root: another file.
+        fs::remove_dir(root.join("src/a")).unwrap();
+        std::os::unix::fs::symlink(root.join("src/b"), root.join("src/a")).unwrap();
+        assert_eq!(
+            canonical_for_write(&root, "src/a/x.rs").unwrap(),
+            "src/b/x.rs"
+        );
+        // An ancestor that leaves the root, and a symlinked target, are refused.
+        let outside = tempfile::tempdir().unwrap();
+        std::os::unix::fs::symlink(outside.path(), root.join("out")).unwrap();
+        assert!(canonical_for_write(&root, "out/x.rs").is_err());
+        fs::write(root.join("src/b/real.rs"), "").unwrap();
+        std::os::unix::fs::symlink(root.join("src/b/real.rs"), root.join("src/b/link.rs")).unwrap();
+        assert!(canonical_for_write(&root, "src/b/link.rs").is_err());
+        assert!(canonical_for_write(&root, "../x").is_err());
     }
 }

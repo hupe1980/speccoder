@@ -371,7 +371,7 @@ fn a_waiting_task_holds_the_worktree_until_it_is_decided() {
 
 #[test]
 fn calls_decided_without_a_person_name_the_rule() {
-    let r = repo("\n[commands]\nallow = [[\"grep\"]]\n");
+    let r = repo("\n[commands]\nallow = [[\"grep\", \"-q\", \"ok\", \"src/lib.rs\"]]\n");
     let state = tempfile::tempdir().unwrap();
     let (f, d) = fake();
     f.will_call_tool("c1", "read_file", json!({ "path": "src/lib.rs" }));
@@ -398,7 +398,11 @@ fn calls_decided_without_a_person_name_the_rule() {
         })
         .collect();
     assert_eq!(rules[0], ("rule", "workspace read"), "{calls:?}");
-    assert_eq!(rules[1], ("rule", "allowed command `grep`"), "{calls:?}");
+    assert_eq!(
+        rules[1],
+        ("rule", "exact command `grep -q ok src/lib.rs`"),
+        "{calls:?}"
+    );
     assert_eq!(rules[2].0, "rule", "{calls:?}");
     // No call a rule decided is recorded as a person's.
     assert!(calls.iter().all(|c| c["by"] != "person"));

@@ -263,7 +263,7 @@ fn validate(
             .filter_map(|v| v.as_str().map(str::to_owned))
             .collect();
         if argv.is_empty()
-            || policy.classify("run_command", &json!({ "argv": argv })) != Decision::Allow
+            || policy.classify("run_command", &json!({ "argv": argv }), None) != Decision::Allow
         {
             return Err(format!("`{}` is not an allowed command", argv.join(" ")));
         }
@@ -977,7 +977,10 @@ fn seal_variants(
         let ok_cites = cited.len() == 1
             && statements.contains(&cited[0])
             && !kept.iter().any(|(k, _)| k.scenarios == cited);
-        let ok_argv = c.policy.classify("run_command", &json!({ "argv": argv })) == Decision::Allow;
+        let ok_argv = c
+            .policy
+            .classify("run_command", &json!({ "argv": argv }), None)
+            == Decision::Allow;
         if !(ok_path && ok_cites && ok_argv) {
             discarded.push(held_out::Discarded {
                 path: rel,

@@ -27,6 +27,12 @@ export const KINDS: Record<ActionKind, { verb: string; icon?: string; holdsWorkt
   fix_setup: { verb: "Fix", icon: "check", holdsWorktree: true },
   feature: { verb: "Switch", icon: "list", holdsWorktree: false },
   pull_request: { verb: "Open", icon: "branch", holdsWorktree: false },
+  allow_always: { verb: "Always Allow", icon: "lock", holdsWorktree: false },
+  widen_policy: { verb: "Allow prefix", icon: "lock", holdsWorktree: false },
+  decide_batch: { verb: "Decide waiting calls", icon: "hand", holdsWorktree: false },
+  bug_fix: { verb: "Record", icon: "exclaim", holdsWorktree: true },
+  bug_confirm: { verb: "Confirm", icon: "check", holdsWorktree: true },
+  bug_run: { verb: "Reproduce", icon: "play", holdsWorktree: true },
   command: { verb: "Copy", icon: "terminal", holdsWorktree: false },
 };
 

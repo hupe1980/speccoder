@@ -141,6 +141,87 @@ pub enum Runnable {
         /// Or `<unit>/<task>`.
         task: Option<String>,
     },
+    /// Always Allow: approve the waiting command once and add exactly its
+    /// argv to `[commands] allow` (or `[sandbox] network_allow`).
+    AllowAlways {
+        /// The task.
+        task: String,
+        /// The waiting call's id.
+        call: String,
+    },
+    /// Add a prefix to a prefix list, as the confirmation of its coverage
+    /// preview (refused when the preview changed or is incomplete).
+    WidenPolicy {
+        /// Which list.
+        key: PolicyList,
+        /// The prefix (two elements or more).
+        prefix: Vec<String>,
+        /// The digest of the preview the person saw.
+        digest: String,
+    },
+    /// Decide the calls waiting in a run's batch together, each once.
+    DecideBatch {
+        /// The run.
+        run: String,
+        /// Approve or reject (the input is the reason).
+        verdict: BatchVerdict,
+        /// The listed calls decided (a non-empty subset).
+        calls: Vec<String>,
+        /// The digest of the list the person saw.
+        digest: String,
+        /// Start the run's asking budget again.
+        resume_asking: bool,
+    },
+}
+
+/// A prefix list in `speccoder.toml`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum PolicyList {
+    /// `[commands] allow_prefix`.
+    CommandsPrefix,
+    /// `[sandbox] network_allow_prefix`.
+    NetworkPrefix,
+}
+
+impl PolicyList {
+    /// Its name as serialized.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::CommandsPrefix => "commands_prefix",
+            Self::NetworkPrefix => "network_prefix",
+        }
+    }
+
+    /// The configuration key it is (`commands.allow_prefix`).
+    #[must_use]
+    pub const fn key(self) -> &'static str {
+        match self {
+            Self::CommandsPrefix => "commands.allow_prefix",
+            Self::NetworkPrefix => "sandbox.network_allow_prefix",
+        }
+    }
+
+    /// The list for a configuration key.
+    #[must_use]
+    pub fn of_key(key: &str) -> Option<Self> {
+        match key {
+            "commands.allow_prefix" | "commands_prefix" => Some(Self::CommandsPrefix),
+            "sandbox.network_allow_prefix" | "network_prefix" => Some(Self::NetworkPrefix),
+            _ => None,
+        }
+    }
+}
+
+/// A batch decision.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum BatchVerdict {
+    /// Each listed call once.
+    Approve,
+    /// Each listed call, with one reason.
+    Reject,
 }
 
 /// What kind of action it is: one per [`Runnable`] kind (a run split by
@@ -207,6 +288,12 @@ pub enum ActionKind {
     BugConfirm,
     /// [`Runnable::BugRun`].
     BugRun,
+    /// [`Runnable::AllowAlways`].
+    AllowAlways,
+    /// [`Runnable::WidenPolicy`].
+    WidenPolicy,
+    /// [`Runnable::DecideBatch`].
+    DecideBatch,
     /// No runnable: the person runs the command.
     Command,
 }
@@ -236,6 +323,9 @@ impl ActionKind {
         Self::BugFix,
         Self::BugConfirm,
         Self::BugRun,
+        Self::AllowAlways,
+        Self::WidenPolicy,
+        Self::DecideBatch,
         Self::Command,
     ];
 
@@ -265,6 +355,9 @@ impl ActionKind {
             Self::BugFix => "bug_fix",
             Self::BugConfirm => "bug_confirm",
             Self::BugRun => "bug_run",
+            Self::AllowAlways => "allow_always",
+            Self::WidenPolicy => "widen_policy",
+            Self::DecideBatch => "decide_batch",
             Self::Command => "command",
         }
     }
@@ -328,6 +421,22 @@ impl ActionKind {
                 slug: None,
                 task: Some("007-bugfixes/T001".to_owned()),
             },
+            Self::AllowAlways => Runnable::AllowAlways {
+                task: task(),
+                call: "0f3c".to_owned(),
+            },
+            Self::WidenPolicy => Runnable::WidenPolicy {
+                key: PolicyList::CommandsPrefix,
+                prefix: vec!["npm".to_owned(), "run".to_owned()],
+                digest: "d1".to_owned(),
+            },
+            Self::DecideBatch => Runnable::DecideBatch {
+                run: "run-1-0a0b0c0d".to_owned(),
+                verdict: BatchVerdict::Approve,
+                calls: vec!["0f3c".to_owned()],
+                digest: "d1".to_owned(),
+                resume_asking: false,
+            },
             Self::Command => return None,
         })
     }
@@ -366,6 +475,9 @@ impl Runnable {
             Self::BugFix { .. } => ActionKind::BugFix,
             Self::BugConfirm { .. } => ActionKind::BugConfirm,
             Self::BugRun { .. } => ActionKind::BugRun,
+            Self::AllowAlways { .. } => ActionKind::AllowAlways,
+            Self::WidenPolicy { .. } => ActionKind::WidenPolicy,
+            Self::DecideBatch { .. } => ActionKind::DecideBatch,
         }
     }
 }
@@ -412,7 +524,10 @@ pub fn identity(run: Option<&Runnable>, command: &str) -> ActionId {
         | Runnable::Nudge { task }
         | Runnable::Rule { task }
         | Runnable::KeepSetAside { task }
-        | Runnable::DropSetAside { task } => Some(task.clone()),
+        | Runnable::DropSetAside { task }
+        | Runnable::AllowAlways { task, .. } => Some(task.clone()),
+        Runnable::WidenPolicy { key, .. } => Some(key.as_str().to_owned()),
+        Runnable::DecideBatch { run, .. } => Some(run.clone()),
         Runnable::IssueComment { issue, .. } => Some(issue.to_string()),
         Runnable::BugConfirm { task, .. } => Some(task.clone()),
         Runnable::BugRun { slug, task } => task.clone().or_else(|| slug.clone()),

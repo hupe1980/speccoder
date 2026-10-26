@@ -82,7 +82,7 @@ fn fake() -> (Arc<FakeProvider>, Arc<dyn ModelProvider>) {
 }
 
 fn test_file(path: &str, statement: &str, pattern: &str) -> Value {
-    json!({ "path": path, "content": format!("expect: {pattern}\n"), "statement": statement, "test": pattern, "argv": ["./check.sh", path] })
+    json!({ "path": path, "content": format!("expect: {pattern}\n"), "statement": statement, "test": pattern, "argv": ["./check.sh", "--", path] })
 }
 
 /// The reproduction author's answer: E1 refused empty, U1 saves titles.
@@ -94,7 +94,7 @@ fn reproductions() -> Value {
 }
 
 fn held_out(pattern: &str) -> Value {
-    json!({ "files": [{ "path": "tests/held_e1.txt", "content": format!("expect: {pattern}\n"), "scenarios": ["E1"], "argv": ["./check.sh", "tests/held_e1.txt"], "composition": false }], "notes": [] })
+    json!({ "files": [{ "path": "tests/held_e1.txt", "content": format!("expect: {pattern}\n"), "scenarios": ["E1"], "argv": ["./check.sh", "--", "tests/held_e1.txt"], "composition": false }], "notes": [] })
 }
 
 fn done() -> Value {
@@ -437,7 +437,7 @@ fn a_symptom_that_cannot_be_reproduced_goes_to_the_person_and_nothing_is_fixed()
     let (f, d) = fake();
     for _ in 0..3 {
         f.will_structure(json!({ "files": [
-            { "path": "tests/repro_e1.txt", "content": "syntax error\n", "statement": "E1", "test": "t", "argv": ["./check.sh", "tests/repro_e1.txt"] },
+            { "path": "tests/repro_e1.txt", "content": "syntax error\n", "statement": "E1", "test": "t", "argv": ["./check.sh", "--", "tests/repro_e1.txt"] },
         ], "notes": ["I could not make it fail"] }));
     }
     let res = bug::bug_with(
@@ -778,7 +778,7 @@ fn a_fix_that_only_recognises_the_reproductions_input_is_never_verified() {
     );
     special_case(&f);
     // The one regeneration, as weak again.
-    f.will_structure(json!({ "files": [{ "path": "tests/held_e1_2.txt", "content": "expect: refuses_empty\n", "scenarios": ["E1"], "argv": ["./check.sh", "tests/held_e1_2.txt"], "composition": false }], "notes": [] }));
+    f.will_structure(json!({ "files": [{ "path": "tests/held_e1_2.txt", "content": "expect: refuses_empty\n", "scenarios": ["E1"], "argv": ["./check.sh", "--", "tests/held_e1_2.txt"], "composition": false }], "notes": [] }));
     let res = bug::run_with(
         r.path(),
         None,

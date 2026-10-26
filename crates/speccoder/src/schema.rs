@@ -100,6 +100,7 @@ const fn describe(payload: &str) -> &'static str {
         b"auth" => "auth: who speccoder is on a GitHub host, and where its token comes from",
         b"actions" => "actions: what a person can do now, and the feature's journey",
         b"bug" => "bug: a bug, its triad, reproductions, confirmation and how far it got",
+        b"policy_coverage" => "config coverage: what a prefix entry would newly allow",
         b"branch_verify" => {
             "attest verify --branch, speccoder-verify: every tick of a branch and what its evidence comes to"
         }
@@ -169,6 +170,7 @@ published! {
     "review", "ReviewReport" => core::ReviewReport,
     "auth", "AuthReport" => core::AuthReport,
     "actions", "ActionsReport" => core::ActionsReport,
+    "policy_coverage", "PolicyCoverage" => core::PolicyCoverage,
     "branch_verify", "BranchReport" => core::verify_branch::BranchReport,
     "evidence_tour", "EvidenceTour" => core::tour::EvidenceTour,
     "bug", "BugReport" => core::bug::BugReport,

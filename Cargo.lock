@@ -4807,6 +4807,7 @@ dependencies = [
  "landlock",
  "libc",
  "nix",
+ "proptest",
  "pulldown-cmark",
  "quick-xml",
  "regex",

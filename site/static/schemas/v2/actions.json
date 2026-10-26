@@ -216,8 +216,38 @@
           "type": "string"
         },
         {
+          "const": "allow_always",
+          "description": "[`Runnable::AllowAlways`].",
+          "type": "string"
+        },
+        {
+          "const": "widen_policy",
+          "description": "[`Runnable::WidenPolicy`].",
+          "type": "string"
+        },
+        {
+          "const": "decide_batch",
+          "description": "[`Runnable::DecideBatch`].",
+          "type": "string"
+        },
+        {
           "const": "command",
           "description": "No runnable: the person runs the command.",
+          "type": "string"
+        }
+      ]
+    },
+    "BatchVerdict": {
+      "description": "A batch decision.",
+      "oneOf": [
+        {
+          "const": "approve",
+          "description": "Each listed call once.",
+          "type": "string"
+        },
+        {
+          "const": "reject",
+          "description": "Each listed call, with one reason.",
           "type": "string"
         }
       ]
@@ -239,6 +269,21 @@
         "state"
       ],
       "type": "object"
+    },
+    "PolicyList": {
+      "description": "A prefix list in `speccoder.toml`.",
+      "oneOf": [
+        {
+          "const": "commands_prefix",
+          "description": "`[commands] allow_prefix`.",
+          "type": "string"
+        },
+        {
+          "const": "network_prefix",
+          "description": "`[sandbox] network_allow_prefix`.",
+          "type": "string"
+        }
+      ]
     },
     "Runnable": {
       "description": "How an interface runs an action itself.",
@@ -713,6 +758,101 @@
             "kind",
             "slug",
             "task"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Always Allow: approve the waiting command once and add exactly its\nargv to `[commands] allow` (or `[sandbox] network_allow`).",
+          "properties": {
+            "call": {
+              "description": "The waiting call's id.",
+              "type": "string"
+            },
+            "kind": {
+              "const": "allow_always",
+              "type": "string"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task",
+            "call"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Add a prefix to a prefix list, as the confirmation of its coverage\npreview (refused when the preview changed or is incomplete).",
+          "properties": {
+            "digest": {
+              "description": "The digest of the preview the person saw.",
+              "type": "string"
+            },
+            "key": {
+              "$ref": "#/$defs/PolicyList",
+              "description": "Which list."
+            },
+            "kind": {
+              "const": "widen_policy",
+              "type": "string"
+            },
+            "prefix": {
+              "description": "The prefix (two elements or more).",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "kind",
+            "key",
+            "prefix",
+            "digest"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Decide the calls waiting in a run's batch together, each once.",
+          "properties": {
+            "calls": {
+              "description": "The listed calls decided (a non-empty subset).",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "digest": {
+              "description": "The digest of the list the person saw.",
+              "type": "string"
+            },
+            "kind": {
+              "const": "decide_batch",
+              "type": "string"
+            },
+            "resume_asking": {
+              "description": "Start the run's asking budget again.",
+              "type": "boolean"
+            },
+            "run": {
+              "description": "The run.",
+              "type": "string"
+            },
+            "verdict": {
+              "$ref": "#/$defs/BatchVerdict",
+              "description": "Approve or reject (the input is the reason)."
+            }
+          },
+          "required": [
+            "kind",
+            "run",
+            "verdict",
+            "calls",
+            "digest",
+            "resume_asking"
           ],
           "type": "object"
         }

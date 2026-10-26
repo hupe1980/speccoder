@@ -6,10 +6,10 @@ model = "gpt-5.4-mini"
 argv = ["./check.sh", "tests/existing.txt"]
 
 [commands]
-allow = [["./check.sh"]]
+allow_prefix = [["./check.sh", "--"]]
 
 [acceptance]
 strength = false
 
 [bug]
-test = ["./check.sh", "{file}"]
+test = ["./check.sh", "--", "{file}"]

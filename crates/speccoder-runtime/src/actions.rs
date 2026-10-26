@@ -464,7 +464,10 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::PullRequest
             | K::BugFix
             | K::BugConfirm
-            | K::BugRun => Offer::Take,
+            | K::BugRun
+            | K::AllowAlways
+            | K::WidenPolicy
+            | K::DecideBatch => Offer::Take,
             K::Command => Offer::Refuse,
         },
         // Decisions belong to their own prompt; what leaves the machine
@@ -488,12 +491,15 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::BugFix
             | K::BugConfirm
             | K::BugRun
+            | K::AllowAlways
+            | K::WidenPolicy
+            | K::DecideBatch
             | K::Command => Offer::Refuse,
         },
         // Its keys decide the queue's calls and switch the feature; `n`
         // hands the next step to the line CLI's offer.
         Interface::Dashboard => match kind {
-            K::Approve | K::Reject | K::Feature => Offer::Take,
+            K::Approve | K::Reject | K::Feature | K::AllowAlways | K::DecideBatch => Offer::Take,
             K::Skill
             | K::RunTask
             | K::RunFeature
@@ -513,6 +519,7 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::BugFix
             | K::BugConfirm
             | K::BugRun
+            | K::WidenPolicy
             | K::Command => Offer::Refuse,
         },
         Interface::CliRemedy | Interface::AcpRemedy => match kind {
@@ -538,6 +545,9 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::BugFix
             | K::BugConfirm
             | K::BugRun
+            | K::AllowAlways
+            | K::WidenPolicy
+            | K::DecideBatch
             | K::Command => Offer::Refuse,
         },
     }
@@ -710,6 +720,40 @@ pub fn perform_in(
         Runnable::BugRun { slug, task } => {
             bug_run(root, slug.as_deref(), task.as_deref(), state, options)
         }
+        Runnable::AllowAlways { task, call } => {
+            crate::approvals::allow_always(root, feature, task, call, state, via)
+        }
+        Runnable::WidenPolicy {
+            key,
+            prefix,
+            digest,
+        } => crate::approvals::coverage::widen(root, state, *key, prefix, digest, via),
+        Runnable::DecideBatch {
+            run,
+            verdict,
+            calls,
+            digest,
+            resume_asking,
+        } => {
+            let approve = *verdict == speccoder_core::actions::BatchVerdict::Approve;
+            if !approve && text.is_none() {
+                return needs("a reason");
+            }
+            crate::approvals::decide_batch(
+                root,
+                feature,
+                crate::approvals::BatchChoice {
+                    run,
+                    approve,
+                    calls,
+                    digest,
+                    resume_asking: *resume_asking,
+                    reason: text,
+                },
+                state,
+                via,
+            )
+        }
         // The interface has confirmed it (the action's `confirm`): push
         // and open.
         Runnable::PullRequest => crate::handoff::pr(
@@ -724,6 +768,31 @@ pub fn perform_in(
             },
         ),
     }
+}
+
+/// The calls a person answered Always Allow inline: each one's exact argv
+/// joins the allow list through [`perform`] with the interface it was
+/// answered through. What each did, as notices.
+#[must_use]
+pub fn allow_always_inline(
+    root: &Path,
+    feature: &str,
+    always: &[crate::substrate::Always],
+    state: &Path,
+) -> Vec<String> {
+    always
+        .iter()
+        .map(|a| {
+            let task = a.task.rsplit('/').next().unwrap_or(&a.task).to_owned();
+            let run = Runnable::AllowAlways {
+                task,
+                call: a.call.clone(),
+            };
+            perform_in(root, Some(feature), Dispatch::new(&run, a.via), Some(state))
+                .message()
+                .to_owned()
+        })
+        .collect()
 }
 
 // The arms that run the model, one function each, so a build without the
@@ -818,7 +887,8 @@ mod tests {
         // The web host runs every runnable kind; the terminal the steps
         // it offers; the remedies only the setup's fix.
         let runnable = Runnable::examples().len();
-        assert_eq!(taken, runnable + 5 + 3 + 2);
+        // The dashboard also decides Always Allow and batches.
+        assert_eq!(taken, runnable + 5 + 5 + 2);
         assert_eq!(
             offered(Interface::CliFollow, ActionKind::PullRequest),
             Offer::Refuse

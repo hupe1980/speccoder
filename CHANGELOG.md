@@ -112,6 +112,30 @@ adheres to [Semantic Versioning](https://semver.org/).
   does not know under Other instead of dropping it, and its buttons say
   the action's verb (Keep, Discard, Rule).
 
+- **Approvals cover one resolved object.** "For the task", "for this run"
+  and `task approve` cover the canonical file a write reaches, a command's
+  exact argv with its directory and the executable it resolves to, or an
+  MCP tool as its server defines it now — checked again when the call
+  runs. Prompts show that object (`argv #1a2b…`, `@9f8e…`) and what changed
+  since an approval of the same name. Grants end with their run; a retry
+  keeps them, the next run asks again. `approvals.json` from 0.1.0 is
+  refused by name (`speccoder doctor` says so).
+- **`[commands] allow` and `[sandbox] network_allow` are exact.** Prefixes
+  move to `[commands] allow_prefix` / `[sandbox] network_allow_prefix`,
+  saved only from a preview of every journaled command they would newly
+  allow (`speccoder config coverage`, Settings, `config set … --yes`); a
+  bare program is refused.
+- **Always Allow everywhere, and exact.** The terminal prompt, the
+  dashboard, the app and editors offer it (`a`) for a command that is not
+  high risk; it allows the call once and adds exactly its argv — nothing
+  after it runs because of it.
+- **An asking budget.** A run prompts at most `[approvals] budget` times
+  (default 12); further calls wait together in one Needs You item, decided
+  in one action, each call once (`speccoder approvals batch`, `B` in the
+  dashboard).
+- `approval.requested` and `approval.decided` name the object's class and
+  short form.
+
 ### Fixed
 
 - An OpenSpec project without a change got no first step: Setup, the
@@ -139,6 +163,19 @@ adheres to [Semantic Versioning](https://semver.org/).
   `status` now say the calls are unknown and why (`unreadable` in the
   `approvals` payload, the `unknown` kind in `inbox`), and a decision is not
   made blind. A read no longer creates an empty journal.
+
+### Security
+
+- Closed four ways an approval reached more than the person saw: an
+  Always Allow that widened to a prefix (`npm run build` allowed `npm run
+  build --script-shell=…`), a path grant a symlinked directory carried to
+  another file, an MCP grant that survived a changed tool definition, and
+  a "for the task" grant that seeded every later run.
+- A command whose arguments the model copied from content it read (a
+  README, command output, an MCP result) names the source and can be
+  approved once only — planted text never becomes a standing rule.
+- A write through a symlinked directory into a protected path (the spec,
+  CI configuration) is refused: protection is judged on the file reached.
 
 ## [0.1.0] - 2026-10-25
 

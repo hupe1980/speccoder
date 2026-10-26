@@ -2,6 +2,7 @@
 # A stand-in test runner: a test file names what `src/lib.rs` must say
 # (`expect: <pattern>`); a missing pattern is an assertion failure, reported
 # with libtest's summary line. `syntax` in a test file is a build error.
+[ "$1" = "--" ] && shift
 f="$1"
 if grep -q '^syntax' "$f"; then
   echo 'error: expected one of `,`, `:`, or `}`, found `=`' >&2

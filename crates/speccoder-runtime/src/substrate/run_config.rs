@@ -170,6 +170,7 @@ impl Default for AttestConfig {
 #[serde(deny_unknown_fields)]
 struct RawApprovals {
     wait: Option<String>,
+    budget: Option<i64>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -183,7 +184,12 @@ struct RawGit {
 struct RawCommands {
     #[serde(default)]
     allow: Vec<Vec<String>>,
+    #[serde(default)]
+    allow_prefix: Vec<Vec<String>>,
 }
+
+/// `[approvals] budget` unless configured: prompts a run shows a person.
+pub const DEFAULT_BUDGET: u32 = 12;
 
 /// Limits and command allowances for an attempt.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -196,8 +202,14 @@ pub struct RunConfig {
     pub max_attempts: u32,
     /// Independent samples per task, the best by evidence kept.
     pub best_of: u32,
-    /// Extra allowed argv prefixes for `run_command`.
+    /// Exact argvs `run_command` runs without asking (`[commands] allow`).
     pub allow: Vec<Vec<String>>,
+    /// Argv prefixes (two elements or more) it runs without asking
+    /// (`[commands] allow_prefix`), saved only from a coverage preview.
+    pub allow_prefix: Vec<Vec<String>>,
+    /// Prompts a run shows a person before further calls wait together in
+    /// Needs You (`[approvals] budget`, 0–100, default 12).
+    pub approval_budget: u32,
     /// Commit each passed task on the speccoder branch (`[git] commit = "per-task"`).
     pub commit_per_task: bool,
     /// Derive acceptance tests from the spec before attempts (`[acceptance] generate`).
@@ -243,6 +255,8 @@ impl Default for RunConfig {
             max_attempts: 2,
             best_of: 1,
             allow: Vec::new(),
+            allow_prefix: Vec::new(),
+            approval_budget: DEFAULT_BUDGET,
             commit_per_task: true,
             acceptance: true,
             held_out: true,
@@ -445,6 +459,20 @@ pub fn parse(text: &str) -> Result<RunConfig, String> {
         Some(w) => wait(w)?,
         None => d.approval_wait,
     };
+    let approval_budget = match approvals.budget {
+        None => d.approval_budget,
+        Some(n) => u32::try_from(n)
+            .ok()
+            .filter(|n| *n <= 100)
+            .ok_or_else(|| format!("[approvals]: budget = {n} (a whole number from 0 to 100)"))?,
+    };
+    if let Some(why) = commands
+        .allow_prefix
+        .iter()
+        .find_map(|p| crate::tools::policy::prefix_refusal(p))
+    {
+        return Err(format!("[commands] allow_prefix: {why}"));
+    }
     Ok(RunConfig {
         max_turns: budget.max_turns.unwrap_or(d.max_turns).max(1),
         max_tool_calls: budget.max_tool_calls.unwrap_or(d.max_tool_calls),
@@ -455,6 +483,8 @@ pub fn parse(text: &str) -> Result<RunConfig, String> {
             .into_iter()
             .filter(|p| !p.is_empty())
             .collect(),
+        allow_prefix: commands.allow_prefix,
+        approval_budget,
         commit_per_task,
         acceptance: acceptance.generate.unwrap_or(true),
         held_out: acceptance.held_out.unwrap_or(true),
@@ -593,5 +623,22 @@ mod tests {
                 .frozen_additions
         );
         assert!(parse("[tests]\nfrozen = \"anything\"\n").is_err());
+    }
+
+    #[test]
+    fn the_asking_budget_and_prefixes_are_checked() {
+        assert_eq!(parse("").unwrap().approval_budget, 12);
+        assert_eq!(
+            parse("[approvals]\nbudget = 0\n").unwrap().approval_budget,
+            0
+        );
+        for bad in ["101", "-1"] {
+            let e = parse(&format!("[approvals]\nbudget = {bad}\n")).unwrap_err();
+            assert!(e.contains("budget"), "{e}");
+        }
+        let c = parse("[commands]\nallow_prefix = [[\"npm\", \"run\"]]\n").unwrap();
+        assert_eq!(c.allow_prefix, [vec!["npm".to_owned(), "run".to_owned()]]);
+        let e = parse("[commands]\nallow_prefix = [[\"python3\"]]\n").unwrap_err();
+        assert!(e.contains("a bare program allows any argument"), "{e}");
     }
 }

@@ -680,6 +680,7 @@ mod look_tests {
                 tool: "run_command".into(),
                 what: "cargo add x".into(),
                 class: String::new(),
+                object: String::new(),
             },
             Event::TaskFinished {
                 task: "T1".into(),

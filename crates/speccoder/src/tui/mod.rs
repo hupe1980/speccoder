@@ -152,6 +152,8 @@ pub enum Action {
     Approve(String),
     /// Reject it with a reason (the queue).
     Reject(String, String),
+    /// Approve every call of a run's batch once (`B` on a batched call).
+    Batch(Runnable),
     /// Answer the hosted run's waiting call.
     Answer(Answer),
     /// Answer its question (`None`: skipped).
@@ -265,6 +267,20 @@ impl App {
             .as_ref()
             .and_then(|a| a.pending.get(self.approval))
             .map(|p| p.task.clone())
+    }
+
+    /// The batch decision for the selected call's run, if it waits in one.
+    fn pending_batch(&self) -> Option<Runnable> {
+        let a = self.snap.approvals.as_ref()?;
+        let run = a.pending.get(self.approval)?.run.clone()?;
+        let b = a.batch.iter().find(|b| b.run == run)?;
+        Some(Runnable::DecideBatch {
+            run,
+            verdict: speccoder_core::actions::BatchVerdict::Approve,
+            calls: b.groups.iter().flat_map(|g| g.calls.clone()).collect(),
+            digest: b.digest.clone(),
+            resume_asking: false,
+        })
     }
 
     fn who(&self) -> Option<Who> {
@@ -533,6 +549,11 @@ impl App {
                     self.answered();
                     Action::Answer(a)
                 }
+                Parsed::Always => {
+                    let a = Answer::always(self.who());
+                    self.answered();
+                    Action::Answer(a)
+                }
                 Parsed::Reject { .. } => {
                     self.typing = Some((Typing::Reason, String::new()));
                     Action::None
@@ -766,6 +787,16 @@ impl App {
             KeyCode::Char('a') if self.focus == Focus::Approvals && self.screen == Screen::Run => {
                 self.pending_task().map_or(Action::None, Action::Approve)
             }
+            // A call waiting in its run's batch: the whole batch, each once.
+            KeyCode::Char('B') if self.focus == Focus::Approvals && self.screen == Screen::Run => {
+                match self.pending_batch() {
+                    Some(run) => Action::Batch(run),
+                    None => {
+                        self.flash = Some("this call does not wait in a batch".to_owned());
+                        Action::None
+                    }
+                }
+            }
             KeyCode::Char('r') if self.focus == Focus::Approvals && self.screen == Screen::Run => {
                 if self.pending_task().is_some() {
                     self.typing = Some((Typing::QueueReason, String::new()));
@@ -848,6 +879,7 @@ fn with_primary(mut snap: Snapshot, path: &Path, feature: Option<&str>) -> Snaps
                     pending: Vec::new(),
                     decided: Vec::new(),
                     unreadable: Some("the journal was busy".to_owned()),
+                    batch: Vec::new(),
                 }),
         ),
     ))
@@ -920,6 +952,11 @@ fn perform(app: &mut App, action: Action, path: &Path, chosen: &mut Option<Strin
         }
         Action::Reject(task, why) => {
             let r = take(path, feature, &Runnable::Reject { task }, Some(&why));
+            app.flash = Some(r.message().to_owned());
+            app.snap = load(path, feature, state);
+        }
+        Action::Batch(run) => {
+            let r = take(path, feature, &run, None);
             app.flash = Some(r.message().to_owned());
             app.snap = load(path, feature, state);
         }

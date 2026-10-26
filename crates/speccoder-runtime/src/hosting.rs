@@ -303,7 +303,19 @@ fn run_unguarded(
         plane
             .decide_inline(outcome, options.approver.as_deref(), &context)
             .await
-            .map(|(o, _)| o)
+    });
+    // Always Allow answered in a hosted skill: its exact argv joins the
+    // allow list, as anywhere else.
+    let outcome = outcome.map(|i| {
+        let _ = crate::actions::allow_always_inline(
+            &root,
+            &i.always.first().map_or_else(String::new, |a| {
+                a.task.split('/').next().unwrap_or_default().to_owned()
+            }),
+            &i.always,
+            state,
+        );
+        i.outcome
     });
     let outcome = match outcome {
         Ok(o) => o,

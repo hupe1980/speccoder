@@ -402,6 +402,36 @@ async fn config_save(State(s): State<Shared>, Json(b): Json<ConfigBody>) -> Json
     envelope(&r)
 }
 
+#[derive(Debug, Deserialize)]
+struct CoverageQuery {
+    /// `commands.allow_prefix` or `sandbox.network_allow_prefix`.
+    key: String,
+    /// The prefix as a JSON array of strings.
+    prefix: String,
+}
+
+/// What a prefix entry would newly allow, from the project's journal: the
+/// preview a prefix is saved from (`WidenPolicy` through `/api/run`).
+async fn policy_coverage(State(s): State<Shared>, Query(q): Query<CoverageQuery>) -> Json<Value> {
+    let Some(list) = speccoder_core::actions::PolicyList::of_key(&q.key) else {
+        return Json(
+            json!({ "status": "usage_error", "message": format!("`{}` is not a prefix list", q.key) }),
+        );
+    };
+    let Ok(prefix) = serde_json::from_str::<Vec<String>>(&q.prefix) else {
+        return Json(
+            json!({ "status": "usage_error", "message": "the prefix is a JSON list of strings" }),
+        );
+    };
+    let root = s.root.clone();
+    let r = off(move || {
+        let state = speccoder_runtime::service::worktree::state_dir();
+        speccoder_runtime::service::settings::coverage(&root, state.as_deref(), list, &prefix)
+    })
+    .await;
+    envelope(&r)
+}
+
 /// Commits `speccoder.toml` alone — not while a job runs (an in-place run
 /// commits in the same checkout).
 async fn config_commit(State(s): State<Shared>) -> Json<Value> {
@@ -826,6 +856,7 @@ pub fn router(s: Shared) -> Router {
         .route("/api/live", get(live))
         .route("/api/config", get(config).post(config_save))
         .route("/api/config/commit", post(config_commit))
+        .route("/api/policy/coverage", get(policy_coverage))
         .route("/api/cost", get(cost))
         .route("/api/changes", get(changes))
         .route("/api/tree", get(tree))

@@ -49,6 +49,7 @@ toml_edit = "0.25.17"
 base64.workspace = true
 agentplane = { workspace = true, features = ["fake-model", "testkit"] }
 tempfile.workspace = true
+proptest.workspace = true
 
 [lints]
 workspace = true

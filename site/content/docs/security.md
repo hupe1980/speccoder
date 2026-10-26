@@ -64,7 +64,11 @@ Every tool call is classified before it runs.
 
 **Needs a person:** agent context files (`AGENTS.md`, `CLAUDE.md`, `GEMINI.md`); dependency manifests; tests that existed before the attempt; shells, `env`, `xargs`, `eval`; network tools; recursive `rm`; git commands that change state; unlisted commands; MCP tools not in `allow`; any command that asks for the network.
 
-**Allowed:** reading the project, writing ordinary source files, the configured checks and `[commands] allow`. A check that starts with options (`python3 -m pytest …`) allows exactly that command, not its bare program.
+**Allowed:** reading the project, writing ordinary source files, the configured checks, the exact commands of `[commands] allow` and the extensions of a `[commands] allow_prefix` entry. A check that starts with options (`python3 -m pytest …`) allows exactly that command, not its bare program.
+
+### What an approval can never become
+
+A person's decision covers one resolved object — the canonical file a write reaches, a command's exact argv with its directory and the executable it resolves to, an MCP tool with the digest of its definition — and never outlives its run. It is resolved by a recorded step before the person is asked and checked again when the call runs, so a directory swapped for a symlink, a program shadowed on the path or a tool its server redefined is asked about again. Always Allow adds exactly one argv to `[commands] allow`; a prefix is configuration, saved only from a preview of every journaled command it would newly allow, and only while that preview is complete. Arguments the model copied from content it read (a README, command output, an MCP result) are named with their source, and such a call can be approved once only — planted text never becomes a standing rule. A run prompts at most `[approvals] budget` times; further calls wait together, so a flood of prompts cannot tire the reviewer into a yes. See [approvals](@/docs/approvals.md#what-a-decision-covers).
 
 Three denied calls in a row end an attempt.
 
@@ -85,7 +89,7 @@ Inside, a command:
 - **cannot connect to a Unix socket outside the writable paths** — the Docker daemon's, a database's, an agent's; a check that needs one lists its directory in `[sandbox] writable`;
 - on macOS **cannot open applications** or send Apple events, which would run code outside the sandbox.
 
-A command gets the network only when its prefix is in `[sandbox] network_allow`, or when a person approves that exact call. Fetch dependencies before a run (`cargo fetch`, `npm ci`), or allow the fetching command. CI runs an escape suite against these properties on macOS and Linux.
+A command gets the network only when it is exactly in `[sandbox] network_allow`, extends a `[sandbox] network_allow_prefix` entry, or a person approves that exact call. Fetch dependencies before a run (`cargo fetch`, `npm ci`), or allow the fetching command. CI runs an escape suite against these properties on macOS and Linux.
 
 Where the OS has no sandbox, every run says `commands run unsandboxed`; with `[sandbox] mode = "required"` it stops instead.
 

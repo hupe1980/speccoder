@@ -1,0 +1,1124 @@
+{
+  "head": "bug: signing in twice logs out",
+  "result": {
+    "command": "config",
+    "data": {
+      "committed": false,
+      "diff": "diff --git a/speccoder.toml b/speccoder.toml\nindex <hex>..<hex> 100644\n--- a/speccoder.toml\n+++ b/speccoder.toml\n@@ -7,3 +7,6 @@ argv = [\"grep\", \"-q\", \"fn ok\", \"src/lib.rs\"]\n \n [acceptance]\n generate = false\n+\n+[commands]\n+allow_prefix = [[\"npm\", \"run\"]]\n",
+      "error": null,
+      "exists": true,
+      "file": "speccoder.toml",
+      "sections": [
+        {
+          "about": "The model that makes the attempts. The key comes from ANTHROPIC_API_KEY or OPENAI_API_KEY — never from this file.",
+          "keys": [
+            {
+              "about": "Who serves the model; openai-compatible covers Ollama, vLLM, llama.cpp, LM Studio and others",
+              "choices": [
+                "anthropic",
+                "openai",
+                "openai-compatible"
+              ],
+              "default": null,
+              "key": "provider",
+              "kind": "choice",
+              "max": null,
+              "min": null,
+              "required": true,
+              "value": "openai"
+            },
+            {
+              "about": "The model, for example claude-sonnet-5-5",
+              "choices": [],
+              "default": null,
+              "key": "model",
+              "kind": "string",
+              "max": null,
+              "min": null,
+              "required": true,
+              "value": "gpt-5.4-mini"
+            },
+            {
+              "about": "Show the model's summary of its reasoning (a claim, not evidence)",
+              "choices": [],
+              "default": true,
+              "key": "reasoning_summary",
+              "kind": "bool",
+              "max": null,
+              "min": null,
+              "required": false,
+              "value": null
+            },
+            {
+              "about": "Output tokens per model turn",
+              "choices": [],
+              "default": 4096,
+              "key": "max_output_tokens",
+              "kind": "integer",
+              "max": 1000000.0,
+              "min": 1.0,
+              "required": false,
+              "value": null
+            },
+            {
+              "about": "Tokens per attempt",
+              "choices": [],
+              "default": 200000,
+              "key": "max_run_tokens",
+              "kind": "integer",
+              "max": 100000000.0,
+              "min": 1.0,
+              "required": false,
+              "value": null
+            },
+            {
+              "about": "Anthropic's prompt-cache lifetime",
+              "choices": [
+                "5m",
+                "1h"
+              ],
+              "default": "5m",
+              "key": "cache_ttl",
+              "kind": "choice",
+              "max": null,
+              "min": null,
+              "required": false,
+              "value": null
+            },
+            {
+              "about": "The server, required for openai-compatible (e.g. http://localhost:11434/v1)",
+              "choices": [],
+              "default": null,
+              "key": "base_url",
+              "kind": "string",
+              "max": null,
+              "min": null,
+              "required": false,
+              "value": null
+            },
+            {
+              "about": "openai-compatible only: the variable holding the server's key",
+              "choices": [],
+              "default": null,
+              "key": "api_key_env",
+              "kind": "string",
+              "max": null,
+              "min": null,
+              "required": false,
+              "value": null
+            },
+            {
+              "about": "openai-compatible only: native structured output, or a forced tool call",
+              "choices": [
+                "native",
+                "tool"
+              ],
+              "default": "native",
+              "key": "structured",
+              "kind": "choice",
+              "max": null,
+              "min": null,
+              "required": false,
+              "value": null
+            },
+            {
+              "about": "USD per million input tokens, for cost reports",
+              "choices": [],
+              "default": null,
+              "key": "price_input_per_mtok",
+              "kind": "number",
+              "max": 100000.0,
+              "min": 0.0,
+              "required": false,
+              "value": null
+            },
+            {
+              "about": "USD per million output tokens",
+              "choices": [],
+              "default": null,
+              "key": "price_output_per_mtok",
+              "kind": "number",
+              "max": 100000.0,
+              "min": 0.0,
+              "required": false,
+              "value": null
+            },
+            {
+              "about": "USD per million tokens read from the cache",
+              "choices": [],
+              "default": null,
+              "key": "price_cache_read_per_mtok",
+              "kind": "number",
+              "max": 100000.0,
+              "min": 0.0,
+              "required": false,
+              "value": null
+            },
+            {
+              "about": "USD per million tokens written to the five-minute cache",
+              "choices": [],
+              "default": null,
+              "key": "price_cache_write_per_mtok",
+              "kind": "number",
+              "max": 100000.0,
+              "min": 0.0,
+              "required": false,
+              "value": null
+            },
+            {
+              "about": "USD per million tokens written to the one-hour cache",
+              "choices": [],
+              "default": null,
+              "key": "price_cache_write_1h_per_mtok",
+              "kind": "number",
+              "max": 100000.0,
+              "min": 0.0,
+              "required": false,
+              "value": null
+            }
+          ],
+          "name": "model",
+          "named": false,
+          "tables": [],
+          "title": "Model"
+        },
+        {
+          "about": "The commands that decide whether nothing regressed. Each check's command up to its first option is also something the model may run.",
+          "keys": [
+            {
+              "about": "Program and arguments, run without a shell",
+              "choices": [],
+              "default": null,
+              "key": "argv",
+              "kind": "argv",
+              "max": null,
+              "min": null,
+              "required": true,
+              "value": null
+            },
+            {
+              "about": "Working directory, relative to the project root",
+              "choices": [],
+              "default": ".",
+              "key": "cwd",
+              "kind": "string",
+              "max": null,
+              "min": null,
+              "required": false,
+              "value": null
+            },
+            {
+              "about": "Run only if this path exists; otherwise skipped, never passed",
+              "choices": [],
+              "default": null,
+              "key": "when_exists",
+              "kind": "string",
+              "max": null,
+              "min": null,
+              "required": false,
+              "value": null
+            },
+            {
+              "about": "fast judges every task; full runs once after the feature's last task",
+              "choices": [
+                "fast",
+                "full"
+              ],
+              "default": "fast",
+              "key": "tier",
+              "kind": "choice",
+              "max": null,
+              "min": null,
+              "required": false,
+              "value": null
+            },
+            {
+              "about": "Deadline for the whole process group",
+              "choices": [],
+              "default": 600,
+              "key": "timeout_secs",
+              "kind": "integer",
+              "max": 86400.0,
+              "min": 1.0,
+              "required": false,
+              "value": null
+            },
+            {
+              "about": "A JUnit XML report the check writes, for per-test results",
+              "choices": [],
+              "default": null,
+              "key": "junit",
+              "kind": "string",
+              "max": null,
+              "min": null,
+              "required": false,
+              "value": null
+            }
+          ],
+          "name": "checks",
+          "named": true,
+          "tables": [
+            {
+              "keys": [
+                {
+                  "about": "Program and arguments, run without a shell",
+                  "choices": [],
+                  "default": null,
+                  "key": "argv",
+                  "kind": "argv",
+                  "max": null,
+                  "min": null,
+                  "required": true,
+                  "value": [
+                    "grep",
+                    "-q",
+                    "fn ok",
+                    "src/lib.rs"
+                  ]
+                },
+                {
+                  "about": "Working directory, relative to the project root",
+                  "choices": [],
+                  "default": ".",
+                  "key": "cwd",
+                  "kind": "string",
+                  "max": null,
+                  "min": null,
+                  "required": false,
+                  "value": null
+                },
+                {
+                  "about": "Run only if this path exists; otherwise skipped, never passed",
+                  "choices": [],
+                  "default": null,
+                  "key": "when_exists",
+                  "kind": "string",
+                  "max": null,
+                  "min": null,
+                  "required": false,
+                  "value": null
+                },
+                {
+                  "about": "fast judges every task; full runs once after the feature's last task",
+                  "choices": [
+                    "fast",
+                    "full"
+                  ],
+                  "default": "fast",
+                  "key": "tier",
+                  "kind": "choice",
+                  "max": null,
+                  "min": null,
+                  "required": false,
+                  "value": null
+                },
+                {
+                  "about": "Deadline for the whole process group",
+                  "choices": [],
+                  "default": 600,
+                  "key": "timeout_secs",
+                  "kind": "integer",
+                  "max": 86400.0,
+                  "min": 1.0,
+                  "required": false,
+                  "value": null
+                },
+                {
+                  "about": "A JUnit XML report the check writes, for per-test results",
+                  "choices": [],
+                  "default": null,
+                  "key": "junit",
+                  "kind": "string",
+                  "max": null,
+                  "min": null,
+                  "required": false,
+                  "value": null
+                }
+              ],
+              "name": "has-ok"
+            }
+          ],
+          "title": "Checks"
+        },
+        {
+          "about": "How much an attempt may do, and how often a task is tried.",
+          "keys": [
+            {
+              "about": "Model turns per attempt",
+              "choices": [],
+              "default": 30,
+              "key": "max_turns",
+              "kind": "integer",
+              "max": 1000.0,
+              "min": 1.0,
+              "required": false,
+              "value": null
+            },
+            {
+              "about": "Tool calls per attempt",
+              "choices": [],
+              "default": 100,
+              "key": "max_tool_calls",
+              "kind": "integer",
+              "max": 10000.0,
+              "min": 1.0,
+              "required": false,
+              "value": null
+            },
+            {
+              "about": "Attempts per task run; a failed verdict is retried with the verifier's facts",
+              "choices": [],
+              "default": 2,
+              "key": "max_attempts",
+              "kind": "integer",
+              "max": 20.0,
+              "min": 1.0,
+              "required": false,
+              "value": null
+            },
+            {
+              "about": "Independent samples per task, the best by evidence kept",
+              "choices": [],
+              "default": 1,
+              "key": "best_of",
+              "kind": "integer",
+              "max": 10.0,
+              "min": 1.0,
+              "required": false,
+              "value": null
+            }
+          ],
+          "name": "budget",
+          "named": false,
+          "tables": [],
+          "title": "Budget"
+        },
+        {
+          "about": "What the model may run without asking, besides the checks. `allow` is exact; a prefix in `allow_prefix` runs whatever follows it, so it is saved only from a preview of what it would newly allow.",
+          "keys": [
+            {
+              "about": "Exact commands that run without asking, e.g. [\"cargo\", \"check\"]; nothing after them",
+              "choices": [],
+              "default": [],
+              "key": "allow",
+              "kind": "argv_list",
+              "max": null,
+              "min": null,
+              "required": false,
+              "value": null
+            },
+            {
+              "about": "Command prefixes (two elements or more) whose every extension runs without asking; saved only from the coverage preview",
+              "choices": [],
+              "default": [],
+              "key": "allow_prefix",
+              "kind": "argv_list",
+              "max": null,
+              "min": null,
+              "required": false,
+              "value": [
+                [
+                  "npm",
+                  "run"
+                ]
+              ]
+            }
+          ],
+          "name": "commands",
+          "named": false,
+          "tables": [],
+          "title": "Commands"
+        },
+        {
+          "about": "How long a call waits for a person, and how often a run may ask.",
+          "keys": [
+            {
+              "about": "How long a call waits before it is denied as expired (m, h or d)",
+              "choices": [],
+              "default": "7d",
+              "key": "wait",
+              "kind": "duration",
+              "max": null,
+              "min": null,
+              "required": false,
+              "value": null
+            },
+            {
+              "about": "Prompts a run shows you; further calls wait together in Needs You",
+              "choices": [],
+              "default": 12,
+              "key": "budget",
+              "kind": "integer",
+              "max": 100.0,
+              "min": 0.0,
+              "required": false,
+              "value": null
+            }
+          ],
+          "name": "approvals",
+          "named": false,
+          "tables": [],
+          "title": "Approvals"
+        },
+        {
+          "about": "What the model may do with tests that existed before an attempt.",
+          "keys": [
+            {
+              "about": "ask before any change, or allow new lines without asking",
+              "choices": [
+                "ask",
+                "additions"
+              ],
+              "default": "ask",
+              "key": "frozen",
+              "kind": "choice",
+              "max": null,
+              "min": null,
+              "required": false,
+              "value": null
+            }
+          ],
+          "name": "tests",
+          "named": false,
+          "tables": [],
+          "title": "Tests"
+        },
+        {
+          "about": "Which spec format the project uses; detected when unset.",
+          "keys": [
+            {
+              "about": "The spec format; --format and SPECCODER_FORMAT override it",
+              "choices": [
+                "speckit",
+                "openspec",
+                "kiro"
+              ],
+              "default": null,
+              "key": "format",
+              "kind": "choice",
+              "max": null,
+              "min": null,
+              "required": false,
+              "value": null
+            }
+          ],
+          "name": "spec",
+          "named": false,
+          "tables": [],
+          "title": "Spec format"
+        },
+        {
+          "about": "The repository's instructions for agents, given to every attempt.",
+          "keys": [
+            {
+              "about": "File names read per directory, the first that exists; none to read none",
+              "choices": [],
+              "default": [
+                "AGENTS.md"
+              ],
+              "key": "instructions",
+              "kind": "string_list",
+              "max": null,
+              "min": null,
+              "required": false,
+              "value": null
+            }
+          ],
+          "name": "context",
+          "named": false,
+          "tables": [],
+          "title": "Instructions"
+        },
+        {
+          "about": "Tests derived from the spec, and how strong they are.",
+          "keys": [
+            {
+              "about": "Derive acceptance tests from the spec before each attempt",
+              "choices": [],
+              "default": true,
+              "key": "generate",
+              "kind": "bool",
+              "max": null,
+              "min": null,
+              "required": false,
+              "value": false
+            },
+            {
+              "about": "Also write held-out tests the implementer never sees; verified needs them to pass",
+              "choices": [],
+              "default": true,
+              "key": "held_out",
+              "kind": "bool",
+              "max": null,
+              "min": null,
+              "required": false,
+              "value": null
+            },
+            {
+              "about": "Measure the acceptance strength of every verified task",
+              "choices": [],
+              "default": true,
+              "key": "strength",
+              "kind": "bool",
+              "max": null,
+              "min": null,
+              "required": false,
+              "value": null
+            },
+            {
+              "about": "Below it the set is strengthened once, then the task stops for you",
+              "choices": [],
+              "default": null,
+              "key": "min_strength",
+              "kind": "number",
+              "max": 1.0,
+              "min": 0.0,
+              "required": false,
+              "value": null
+            },
+            {
+              "about": "Wrong variants to try",
+              "choices": [],
+              "default": 2,
+              "key": "near_miss",
+              "kind": "integer",
+              "max": 3.0,
+              "min": 0.0,
+              "required": false,
+              "value": null
+            },
+            {
+              "about": "Spec-permitted alternatives to try; 0 turns the over-strict check off",
+              "choices": [],
+              "default": 1,
+              "key": "permitted",
+              "kind": "integer",
+              "max": 2.0,
+              "min": 0.0,
+              "required": false,
+              "value": null
+            },
+            {
+              "about": "Budget for the whole strength measurement",
+              "choices": [],
+              "default": 900,
+              "key": "strength_timeout_secs",
+              "kind": "integer",
+              "max": 86400.0,
+              "min": 1.0,
+              "required": false,
+              "value": null
+            }
+          ],
+          "name": "acceptance",
+          "named": false,
+          "tables": [],
+          "title": "Acceptance"
+        },
+        {
+          "about": "`speccoder bug`: how hard reproduce tries before the bug goes to you as cannot reproduce. A project setting only: a value in your user config is ignored.",
+          "keys": [
+            {
+              "about": "Tries of the reproduction author before cannot reproduce (a rejection counts as one)",
+              "choices": [],
+              "default": 3,
+              "key": "reproduce_tries",
+              "kind": "integer",
+              "max": 5.0,
+              "min": 1.0,
+              "required": false,
+              "value": null
+            },
+            {
+              "about": "How one named test (`--test PATH::NAME`) runs, `{file}` and `{name}` filled in; default: the toolchain's own runner",
+              "choices": [],
+              "default": null,
+              "key": "test",
+              "kind": "argv",
+              "max": null,
+              "min": null,
+              "required": false,
+              "value": null
+            }
+          ],
+          "name": "bug",
+          "named": false,
+          "tables": [],
+          "title": "Bug fixes"
+        },
+        {
+          "about": "How often a feature may be brought back to its spec.",
+          "keys": [
+            {
+              "about": "Convergence phases a feature may get",
+              "choices": [],
+              "default": 3,
+              "key": "max_rounds",
+              "kind": "integer",
+              "max": 20.0,
+              "min": 1.0,
+              "required": false,
+              "value": null
+            }
+          ],
+          "name": "converge",
+          "named": false,
+          "tables": [],
+          "title": "Convergence"
+        },
+        {
+          "about": "Whether a run waits for every requirement to be approved.",
+          "keys": [
+            {
+              "about": "A run waits until every requirement is approved on its current wording",
+              "choices": [],
+              "default": false,
+              "key": "required",
+              "kind": "bool",
+              "max": null,
+              "min": null,
+              "required": false,
+              "value": null
+            }
+          ],
+          "name": "review",
+          "named": false,
+          "tables": [],
+          "title": "Spec review"
+        },
+        {
+          "about": "A second model that reviews every passing attempt for gaming.",
+          "keys": [
+            {
+              "about": "Review every passing attempt",
+              "choices": [],
+              "default": false,
+              "key": "enabled",
+              "kind": "bool",
+              "max": null,
+              "min": null,
+              "required": false,
+              "value": null
+            }
+          ],
+          "name": "monitor",
+          "named": false,
+          "tables": [],
+          "title": "Gaming monitor"
+        },
+        {
+          "about": "How passed tasks are recorded.",
+          "keys": [
+            {
+              "about": "Commit each passed task, or leave changes uncommitted",
+              "choices": [
+                "per-task",
+                "none"
+              ],
+              "default": "per-task",
+              "key": "commit",
+              "kind": "choice",
+              "max": null,
+              "min": null,
+              "required": false,
+              "value": null
+            }
+          ],
+          "name": "git",
+          "named": false,
+          "tables": [],
+          "title": "Git"
+        },
+        {
+          "about": "A formatter run after each attempt; its changes are part of the attempt and audited.",
+          "keys": [
+            {
+              "about": "The formatter, e.g. [\"cargo\", \"fmt\"]",
+              "choices": [],
+              "default": null,
+              "key": "argv",
+              "kind": "argv",
+              "max": null,
+              "min": null,
+              "required": false,
+              "value": null
+            }
+          ],
+          "name": "format",
+          "named": false,
+          "tables": [],
+          "title": "Formatter"
+        },
+        {
+          "about": "Where commands the model runs may write and connect.",
+          "keys": [
+            {
+              "about": "auto sandboxes where the OS can; required refuses to run unsandboxed",
+              "choices": [
+                "auto",
+                "required",
+                "off"
+              ],
+              "default": "auto",
+              "key": "mode",
+              "kind": "choice",
+              "max": null,
+              "min": null,
+              "required": false,
+              "value": null
+            },
+            {
+              "about": "Network for commands; loopback lets local test servers work",
+              "choices": [
+                "off",
+                "loopback",
+                "on"
+              ],
+              "default": "loopback",
+              "key": "network",
+              "kind": "choice",
+              "max": null,
+              "min": null,
+              "required": false,
+              "value": null
+            },
+            {
+              "about": "Exact commands that get the network, e.g. [\"cargo\", \"fetch\"]",
+              "choices": [],
+              "default": [],
+              "key": "network_allow",
+              "kind": "argv_list",
+              "max": null,
+              "min": null,
+              "required": false,
+              "value": null
+            },
+            {
+              "about": "Prefixes (two elements or more) whose extensions get the network; saved only from the coverage preview",
+              "choices": [],
+              "default": [],
+              "key": "network_allow_prefix",
+              "kind": "argv_list",
+              "max": null,
+              "min": null,
+              "required": false,
+              "value": null
+            },
+            {
+              "about": "Extra writable paths (~ is your home), e.g. ~/.m2",
+              "choices": [],
+              "default": [],
+              "key": "writable",
+              "kind": "string_list",
+              "max": null,
+              "min": null,
+              "required": false,
+              "value": null
+            }
+          ],
+          "name": "sandbox",
+          "named": false,
+          "tables": [],
+          "title": "Sandbox"
+        },
+        {
+          "about": "Signed statements of every tick, as git notes.",
+          "keys": [
+            {
+              "about": "Write the statements on each tick commit",
+              "choices": [],
+              "default": true,
+              "key": "enabled",
+              "kind": "bool",
+              "max": null,
+              "min": null,
+              "required": false,
+              "value": null
+            },
+            {
+              "about": "Your git signing key, keyless sigstore, or unsigned",
+              "choices": [
+                "git",
+                "sigstore",
+                "none"
+              ],
+              "default": "git",
+              "key": "signer",
+              "kind": "choice",
+              "max": null,
+              "min": null,
+              "required": false,
+              "value": null
+            },
+            {
+              "about": "Sign at each tick, or later with speccoder attest sign",
+              "choices": [
+                "tick",
+                "later"
+              ],
+              "default": "tick",
+              "key": "sign_at",
+              "kind": "choice",
+              "max": null,
+              "min": null,
+              "required": false,
+              "value": null
+            },
+            {
+              "about": "The identity you sign with, suggested to reviewers",
+              "choices": [],
+              "default": null,
+              "key": "sigstore.identity",
+              "kind": "string",
+              "max": null,
+              "min": null,
+              "required": false,
+              "value": null
+            },
+            {
+              "about": "Its OIDC issuer",
+              "choices": [],
+              "default": null,
+              "key": "sigstore.issuer",
+              "kind": "string",
+              "max": null,
+              "min": null,
+              "required": false,
+              "value": null
+            }
+          ],
+          "name": "attest",
+          "named": false,
+          "tables": [],
+          "title": "Attestations"
+        },
+        {
+          "about": "Mutants run against the suite after a passing verdict.",
+          "keys": [
+            {
+              "about": "cargo-mutants, or command for any tool writing the mutation-testing report",
+              "choices": [
+                "cargo-mutants",
+                "command"
+              ],
+              "default": null,
+              "key": "tool",
+              "kind": "choice",
+              "max": null,
+              "min": null,
+              "required": true,
+              "value": null
+            },
+            {
+              "about": "For command: the program; may use {diff}, {out}, {files}, {files_csv}",
+              "choices": [],
+              "default": null,
+              "key": "argv",
+              "kind": "argv",
+              "max": null,
+              "min": null,
+              "required": false,
+              "value": null
+            },
+            {
+              "about": "For command: the report file",
+              "choices": [],
+              "default": null,
+              "key": "report",
+              "kind": "string",
+              "max": null,
+              "min": null,
+              "required": false,
+              "value": null
+            },
+            {
+              "about": "report records; require fails the verdict when mutants survive",
+              "choices": [
+                "report",
+                "require"
+              ],
+              "default": "report",
+              "key": "mode",
+              "kind": "choice",
+              "max": null,
+              "min": null,
+              "required": false,
+              "value": null
+            },
+            {
+              "about": "Limit for the whole mutation run",
+              "choices": [],
+              "default": 900,
+              "key": "timeout_secs",
+              "kind": "integer",
+              "max": 86400.0,
+              "min": 1.0,
+              "required": false,
+              "value": null
+            },
+            {
+              "about": "Run mutants against the whole suite; false uses them for strength only",
+              "choices": [],
+              "default": true,
+              "key": "suite",
+              "kind": "bool",
+              "max": null,
+              "min": null,
+              "required": false,
+              "value": null
+            },
+            {
+              "about": "For command: runs the mutants against the acceptance tests alone",
+              "choices": [],
+              "default": null,
+              "key": "acceptance_argv",
+              "kind": "argv",
+              "max": null,
+              "min": null,
+              "required": false,
+              "value": null
+            }
+          ],
+          "name": "mutation",
+          "named": false,
+          "tables": [],
+          "title": "Mutation testing"
+        },
+        {
+          "about": "Who makes the attempts: speccoder's own loop or an external agent.",
+          "keys": [
+            {
+              "about": "native, Claude Code, Codex, or any command",
+              "choices": [
+                "native",
+                "claude",
+                "codex",
+                "command"
+              ],
+              "default": null,
+              "key": "kind",
+              "kind": "choice",
+              "max": null,
+              "min": null,
+              "required": true,
+              "value": null
+            },
+            {
+              "about": "The agent's model",
+              "choices": [],
+              "default": null,
+              "key": "model",
+              "kind": "string",
+              "max": null,
+              "min": null,
+              "required": false,
+              "value": null
+            },
+            {
+              "about": "How long one attempt may take",
+              "choices": [],
+              "default": 1800,
+              "key": "timeout_secs",
+              "kind": "integer",
+              "max": 86400.0,
+              "min": 1.0,
+              "required": false,
+              "value": null
+            },
+            {
+              "about": "For command: the program, which reads the task on stdin",
+              "choices": [],
+              "default": null,
+              "key": "argv",
+              "kind": "argv",
+              "max": null,
+              "min": null,
+              "required": false,
+              "value": null
+            }
+          ],
+          "name": "executor",
+          "named": false,
+          "tables": [],
+          "title": "Executor"
+        },
+        {
+          "about": "Stdio MCP servers started in the worktree for each task; their tools appear as mcp__<server>__<tool>.",
+          "keys": [
+            {
+              "about": "The server's program and arguments",
+              "choices": [],
+              "default": null,
+              "key": "command",
+              "kind": "argv",
+              "max": null,
+              "min": null,
+              "required": true,
+              "value": null
+            },
+            {
+              "about": "Tools called without approval",
+              "choices": [],
+              "default": [],
+              "key": "allow",
+              "kind": "string_list",
+              "max": null,
+              "min": null,
+              "required": false,
+              "value": null
+            },
+            {
+              "about": "Tools never offered",
+              "choices": [],
+              "default": [],
+              "key": "deny",
+              "kind": "string_list",
+              "max": null,
+              "min": null,
+              "required": false,
+              "value": null
+            }
+          ],
+          "name": "mcp",
+          "named": true,
+          "tables": [],
+          "title": "MCP servers"
+        }
+      ],
+      "valid": true
+    },
+    "exit_code": 0,
+    "message": "added [\"npm\",\"run\"] to `commands.allow_prefix` from its preview (0 command(s) newly allowed) — by Dana Example (web); commit speccoder.toml to put it in force",
+    "next": [
+      {
+        "command": "speccoder config commit",
+        "why": "speccoder reads committed configuration only"
+      }
+    ],
+    "payload": "config",
+    "schema_version": 2,
+    "status": "ok"
+  },
+  "review": {
+    "requirements": {
+      "FR-001": {
+        "at": 0,
+        "by": "Dana Example",
+        "comment": "looks right",
+        "line": "- **FR-001**: Users MUST log in with a passkey.",
+        "sha256": "sha256:<hex>",
+        "verdict": "approved",
+        "via": "web"
+      },
+      "FR-002": {
+        "at": 0,
+        "by": "Dana Example",
+        "line": "- **FR-002**: Sessions MUST expire after thirty minutes.",
+        "sha256": "sha256:<hex>",
+        "verdict": "approved",
+        "via": "web"
+      }
+    }
+  },
+  "status": " M speccoder.toml\n M specs/001-graph/spec.md\n?? .specify/feature.json\n"
+}

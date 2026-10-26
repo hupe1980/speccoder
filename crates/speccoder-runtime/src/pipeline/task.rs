@@ -233,6 +233,23 @@ pub(crate) fn run_task(
         .unwrap_or_default();
     let interrupted = resume::load(&marker_path)
         .filter(|m| m.head == head_now && options.lane.is_none() && !head_now.is_empty());
+    // A resumed attempt continues its run: this invocation adopts the
+    // run's id, its asking count and its grants.
+    if let Some(m) = &interrupted {
+        if let (Some(id), Ok(mut run)) = (&m.run_id, options.run_id.lock()) {
+            *run = crate::pipeline::RunId(id.clone());
+        }
+        if let Ok(mut asked) = options.asked.lock() {
+            *asked = (*asked).max(m.asked);
+        }
+        if let Ok(mut g) = options.run_grants.lock() {
+            for o in &m.run_grants {
+                if !g.contains(o) {
+                    g.push(o.clone());
+                }
+            }
+        }
+    }
     let marker_guard = resume::Guard::new(marker_path.clone());
     // Where the interrupted attempt was, from the live record it left
     // (read before this run overwrites it).
@@ -434,7 +451,9 @@ pub(crate) fn run_task(
         }
     };
     let check_argvs = verify::check_argvs(&config_root);
-    let policy = tools::policy::Policy::new(&check_argvs, &run_config.allow).rules(format.rules());
+    let policy = tools::policy::Policy::new(&check_argvs, &run_config.allow)
+        .with_prefixes(run_config.allow_prefix.clone())
+        .rules(format.rules());
     // In place: the model's view of the checkout confined (git that moves
     // it denied, ignored files hidden, `.git` read-only to commands).
     let (policy, runner, carve_notice) = match options.session.as_ref().and_then(|s| s.lock().ok())
@@ -463,9 +482,23 @@ pub(crate) fn run_task(
         .display()
         .to_string();
 
-    // A person's approvals and rejections for this task.
-    let decisions = match approvals::Decisions::load(&s.plane_dir) {
-        Ok(d) => d.for_task(&feature_name, task),
+    // A person's approvals (of this run only: a grant ends with its run)
+    // and rejections for this task.
+    let this_run = options.run();
+    let (decisions, task_grants) = match approvals::Decisions::load(&s.plane_dir) {
+        Ok(mut d) => {
+            // Decisions on a call a lane stopped belong to the run that
+            // now attempts the task.
+            if d.claim(&feature_name, task, this_run.as_str())
+                && let Err(e) = d.save(&s.plane_dir)
+            {
+                return refuse(CommandStatus::Error, e);
+            }
+            (
+                d.for_task(&feature_name, task),
+                d.for_run(&feature_name, task, this_run.as_str()),
+            )
+        }
         Err(e) => return refuse(CommandStatus::ConfigError, e),
     };
 
@@ -629,13 +662,9 @@ pub(crate) fn run_task(
         rt.block_on(mcp::connect(&servers, &project, &runner))
     };
     // An allowed tool its server changed since review needs approval again.
-    let approved_tools: Vec<String> = decisions
-        .approved
+    let approved_tools: Vec<String> = task_grants
         .iter()
-        .filter_map(|g| match g {
-            tools::policy::Grant::Tool { name } => Some(name.clone()),
-            _ => None,
-        })
+        .filter_map(|g| g.tool_name().map(str::to_owned))
         .collect();
     let pinned = mcp::pin_reviewed(&s.plane_dir, &mut connected.tools, &approved_tools);
     connected.notices.extend(pinned);
@@ -1015,8 +1044,14 @@ pub(crate) fn run_task(
                 .as_ref()
                 .and_then(|s| s.lock().ok().map(|s| s.hidden.clone()))
                 .unwrap_or_default();
+            // The task's grants of this run as they stand now (an earlier
+            // attempt's "for the task" answers included): journaled.
+            let task_grants: Vec<crate::tools::policy::Object> =
+                approvals::Decisions::load(&s.plane_dir)
+                    .map(|d| d.for_run(&feature_name, task, this_run.as_str()))
+                    .unwrap_or_else(|_| task_grants.clone());
             // This run's grants as they stand now: journaled with the input.
-            let run_approved: Vec<crate::tools::policy::Grant> = options
+            let run_approved: Vec<crate::tools::policy::Object> = options
                 .run_grants
                 .lock()
                 .map(|g| g.clone())
@@ -1027,11 +1062,12 @@ pub(crate) fn run_task(
                 &substrate::attempt::Settings {
                     checks: &check_argvs,
                     allow: &run_config.allow,
+                    allow_prefix: &run_config.allow_prefix,
                     max_turns: run_config.max_turns,
                     max_tool_calls: run_config.max_tool_calls,
                     reasoning: s.model.reasoning_summary,
                     frozen: &frozen,
-                    approved: &decisions.approved,
+                    approved: &task_grants,
                     rejected: &decisions.rejected,
                     run_approved: &run_approved,
                     nudges: &decisions.nudges,
@@ -1047,6 +1083,11 @@ pub(crate) fn run_task(
                     },
                     wait_secs: run_config.approval_wait.as_secs(),
                     network_allow: &sandbox_config.network_allow,
+                    network_allow_prefix: &sandbox_config.network_allow_prefix,
+                    run_id: this_run.as_str(),
+                    asked: options.asked_now(),
+                    budget: run_config.approval_budget,
+                    prompts: approver.is_some() && options.lane.is_none(),
                     in_place: options.session.is_some(),
                     hidden: &hidden,
                 },
@@ -1132,6 +1173,9 @@ pub(crate) fn run_task(
                         attempt: attempt_no,
                         sample: samples.len(),
                         acceptance: acceptance_saved.clone(),
+                        run_id: Some(this_run.to_string()),
+                        asked: options.asked_now(),
+                        run_grants: run_approved.clone(),
                     },
                 );
                 marker_guard.arm();
@@ -1164,7 +1208,17 @@ pub(crate) fn run_task(
                     approver.as_deref(),
                     &context,
                 )) {
-                    Ok(x) => x,
+                    Ok(x) => {
+                        // Always Allow: the call ran once; its exact argv
+                        // joins the allow list through the one action.
+                        notices.extend(crate::actions::allow_always_inline(
+                            path,
+                            &feature_name,
+                            &x.always,
+                            state,
+                        ));
+                        (x.outcome, x.waiting)
+                    }
                     Err(e) => return fail(CommandStatus::RunFailed, e.0),
                 };
                 if let Some(task_row) = waiting {
@@ -1182,6 +1236,7 @@ pub(crate) fn run_task(
                         "arguments": action["arguments"],
                         "decision": "approval",
                         "reason": action["request"]["reason"],
+                        "object": action["request"]["object"],
                         "waiting": true,
                         "call": task_row.id.to_hex(),
                     }));
@@ -1189,10 +1244,23 @@ pub(crate) fn run_task(
                         "tool": action["tool"],
                         "arguments": action["arguments"],
                         "reason": action["request"]["reason"],
+                        "object": action["request"]["object"],
+                        "request": action["request"],
                         "call": task_row.id.to_hex(),
                         "deadline": task_row.due_at.map(|t| t.unix_timestamp()),
                         "waiting": true,
+                        "batched": action["request"]["batched"],
                     }));
+                    // The prompts the attempt showed before it waits count
+                    // for the run.
+                    if let (Some(n), Ok(mut asked)) = (
+                        action["request"]["asked"]
+                            .as_u64()
+                            .and_then(|n| u32::try_from(n).ok()),
+                        options.asked.lock(),
+                    ) {
+                        *asked = (*asked).max(n);
+                    }
                     report.reason = Some(format!(
                         "waiting for a person: {} — `speccoder task approve {task}` or `speccoder task reject {task} --reason …`, then `speccoder run`",
                         task_row.justification.summary.peek()
@@ -1256,7 +1324,14 @@ pub(crate) fn run_task(
             // A frozen test a person approved writing (for the task, or inline)
             // is not a violation; the audit still flags removed tests and skip
             // markers in it — approval permits editing a test, not weakening it.
-            let approved_writes = approved_writes(&decisions.approved, &output["tool_calls"]);
+            // The prompts the attempt showed count for the run.
+            if let (Some(n), Ok(mut asked)) = (
+                output["asked"].as_u64().and_then(|n| u32::try_from(n).ok()),
+                options.asked.lock(),
+            ) {
+                *asked = n;
+            }
+            let approved_writes = approved_writes(&task_grants, &output["tool_calls"]);
             let findings = attempt_findings(&Audited {
                 wt_root: &wt_root,
                 policy: &policy,
@@ -1310,6 +1385,7 @@ pub(crate) fn run_task(
                 task,
                 &report.tool_calls,
                 &options.run_grants,
+                this_run.as_str(),
             );
             // A person approving an MCP call reviewed the tool as it is now.
             for c in report

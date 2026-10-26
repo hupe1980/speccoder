@@ -144,8 +144,10 @@ pub enum Body {
         tool: String,
         /// What waits.
         what: String,
-        /// What an approval for the task or run would cover.
+        /// The object's class: `write`, `command`, `network`, `mcp`.
         class: String,
+        /// The object's short form (path, `argv#…`, `tool@…`).
+        object: String,
     },
     /// A person decided a call.
     #[serde(rename = "approval.decided")]
@@ -162,6 +164,10 @@ pub enum Body {
         by: String,
         /// `asserted`, `connected`, `expired`.
         how: String,
+        /// The object's class.
+        class: String,
+        /// The object's short form.
+        object: String,
     },
     /// Tokens so far in the current attempt (at most once a second).
     #[serde(rename = "usage")]
@@ -623,12 +629,14 @@ pub fn body(event: &Event) -> Body {
             tool,
             what,
             class,
+            object,
         } => Body::ApprovalRequested {
             task: clean(task),
             call: clean(call),
             tool: clean(tool),
             what: clean(what),
             class: clean(class),
+            object: clean(object),
         },
         Event::ApprovalDecided {
             task,
@@ -637,6 +645,8 @@ pub fn body(event: &Event) -> Body {
             scope,
             by,
             how,
+            class,
+            object,
         } => Body::ApprovalDecided {
             task: clean(task),
             call: clean(call),
@@ -644,6 +654,8 @@ pub fn body(event: &Event) -> Body {
             scope: scope.clone(),
             by: clean(by),
             how: how.clone(),
+            class: clean(class),
+            object: clean(object),
         },
         Event::ToolCall {
             task,

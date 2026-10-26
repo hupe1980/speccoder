@@ -9,6 +9,7 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 use super::Request;
+use crate::tools::policy::Object;
 
 /// Lines of a body shown before "v to view all".
 pub const HEAD: usize = 20;
@@ -29,12 +30,12 @@ pub struct PresentContext {
     pub file_text: Option<String>,
 }
 
-/// One choice: `once`, `task`, `run`, `reject` or `stop`.
+/// One choice: `once`, `task`, `run`, `always`, `reject` or `stop`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Choice {
     /// Its name.
     pub choice: String,
-    /// Its key (`y`, `t`, `r`, `n`, `s`).
+    /// Its key (`y`, `t`, `r`, `a`, `n`, `s`).
     pub key: char,
     /// Its number, fixed whether or not the others are offered.
     pub number: u8,
@@ -52,6 +53,16 @@ pub struct Presentation {
     pub title: String,
     /// The path, the whole command, or the MCP tool — never cut.
     pub subject: String,
+    /// The object a decision covers, as lines: the file (and the name as
+    /// asked when it differs), the argv with its hash and the executable,
+    /// the tool with its digest; and what changed since an approval of the
+    /// same name, when something did.
+    pub object: Vec<String>,
+    /// Where arguments of the call were copied from: `contains text read
+    /// from README.md (turn 3): "…"`, then `and N more`.
+    pub sources: Vec<String>,
+    /// Said once, on the prompt that uses the run's asking budget.
+    pub notice: Option<String>,
     /// The body as shown: a diff, a file's head, the command, arguments.
     pub body: Vec<String>,
     /// The whole body (`v`).
@@ -107,15 +118,99 @@ pub fn shell_quote(argv: &[String]) -> String {
         .join(" ")
 }
 
-/// What "for the task" or "for this run" covers, by kind.
+/// What "for the task" or "for this run" covers, by kind: always this
+/// exact object.
 #[must_use]
 pub fn scope_text(kind: &str) -> &'static str {
     match kind {
-        "run" => "this exact command",
-        "network" => "this exact command with the network",
-        "mcp" => "any call of this MCP tool, any arguments",
-        _ => "this path, any content",
+        "run" => "exactly this command in this directory",
+        "network" => "exactly this command in this directory, with the network",
+        "mcp" => "this tool as defined now, any arguments",
+        _ => "this file, any content",
     }
+}
+
+fn first12(hex: &str) -> &str {
+    hex.get(..12).unwrap_or(hex)
+}
+
+/// The object's lines: what a decision covers, shown in full.
+#[must_use]
+pub fn object_lines(object: Option<&Object>, changed: Option<&str>) -> Vec<String> {
+    let mut out = Vec::new();
+    match object {
+        Some(Object::Path { canonical, asked }) => {
+            out.push(format!("file  {}", escape(canonical)));
+            if asked != canonical {
+                out.push(format!(
+                    "asked as  {} (resolves to the file above)",
+                    escape(asked)
+                ));
+            }
+        }
+        Some(Object::Command {
+            argv,
+            argv_sha256,
+            cwd,
+            executable,
+            network,
+        }) => {
+            let json = serde_json::to_string(argv).unwrap_or_default();
+            out.push(format!(
+                "argv  {}  #{}",
+                escape(&json),
+                first12(argv_sha256)
+            ));
+            out.push(format!("runs  {}  in  {}", escape(executable), escape(cwd)));
+            if *network {
+                out.push("network  yes".to_owned());
+            }
+        }
+        Some(Object::Tool { name, digest }) => {
+            out.push(format!("tool  {}  @{}", escape(name), first12(digest)));
+        }
+        None => {}
+    }
+    if let Some(c) = changed {
+        out.push(format!("changed since approved: {}", escape(c)));
+    }
+    out
+}
+
+/// The source lines of a request.
+#[must_use]
+pub fn source_lines(request: &Request) -> Vec<String> {
+    let mut out: Vec<String> = request
+        .sources
+        .iter()
+        .map(|s| {
+            let when = if s.turn == 0 {
+                "the attempt's prompt".to_owned()
+            } else {
+                format!("turn {}", s.turn)
+            };
+            format!(
+                "contains text read from {} ({when}): \"{}\"",
+                escape(&s.from),
+                escape(&s.argument)
+            )
+        })
+        .collect();
+    if request.more > 0 {
+        out.push(format!("and {} more", request.more));
+    }
+    out
+}
+
+/// The notice on the prompt that uses the run's asking budget.
+#[must_use]
+pub fn budget_notice(request: &Request) -> Option<String> {
+    (request.budget > 0 && request.asked == request.budget && !request.batched).then(|| {
+        format!(
+            "This is prompt {0} of {0} for this run; further calls will wait in Needs You.",
+            request.budget
+        )
+    })
 }
 
 fn head(lines: &[String]) -> (Vec<String>, usize) {
@@ -307,31 +402,15 @@ pub fn present(request: &Request, context: &PresentContext) -> Presentation {
     let options = request
         .options
         .iter()
-        .filter_map(|o| {
-            let (key, number, label) = match o.as_str() {
-                "once" => ('y', 1, "Yes, once".to_owned()),
-                "task" => ('t', 2, format!("Yes, for the rest of {task}: {scope}")),
-                "run" => ('r', 3, format!("Yes, for this run: {scope}, in any task")),
-                "reject" => ('n', 4, "No, and tell the model why …".to_owned()),
-                "stop" => (
-                    's',
-                    5,
-                    "Stop this task here (it waits; decide later)".to_owned(),
-                ),
-                _ => return None,
-            };
-            Some(Choice {
-                choice: o.clone(),
-                key,
-                number,
-                label,
-            })
-        })
+        .filter_map(|o| choice(o, task, &scope))
         .collect();
     Presentation {
         request: request.clone(),
         title: title.to_owned(),
         subject,
+        object: object_lines(request.object.as_ref(), request.changed.as_deref()),
+        sources: source_lines(request),
+        notice: budget_notice(request),
         body,
         full,
         sandbox,
@@ -374,6 +453,35 @@ pub fn confirm_text(r: &super::ConfirmRequest) -> String {
     out
 }
 
+/// The choice `o` as every interface offers it: its key, its fixed number
+/// and its label.
+#[must_use]
+pub fn choice(o: &str, task: &str, scope: &str) -> Option<Choice> {
+    let (key, number, label) = match o {
+        "once" => ('y', 1, "Yes, once".to_owned()),
+        "task" => ('t', 2, format!("Yes, for the rest of {task}: {scope}")),
+        "run" => ('r', 3, format!("Yes, for this run: {scope}, in any task")),
+        "always" => (
+            'a',
+            4,
+            "Always allow exactly this command (adds it to speccoder.toml)".to_owned(),
+        ),
+        "reject" => ('n', 5, "No, and tell the model why …".to_owned()),
+        "stop" => (
+            's',
+            6,
+            "Stop this task here (it waits; decide later)".to_owned(),
+        ),
+        _ => return None,
+    };
+    Some(Choice {
+        choice: o.to_owned(),
+        key,
+        number,
+        label,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -389,10 +497,9 @@ mod tests {
             arguments,
             kind: kind.to_owned(),
             reason: "why".to_owned(),
-            covers: "c".to_owned(),
             risk: risk.to_owned(),
-            claim: None,
-            options: crate::approvals::options(risk, true),
+            options: crate::approvals::options(risk, true, false, kind, risk),
+            ..Request::default()
         }
     }
 
@@ -461,11 +568,11 @@ mod tests {
         let labels: Vec<&str> = p.options.iter().map(|o| o.label.as_str()).collect();
         assert_eq!(
             labels[1],
-            "Yes, for the rest of T004: this path, any content"
+            "Yes, for the rest of T004: this file, any content"
         );
         assert_eq!(
             labels[2],
-            "Yes, for this run: this path, any content, in any task"
+            "Yes, for this run: this file, any content, in any task"
         );
     }
 
@@ -513,9 +620,9 @@ mod tests {
             p.sandbox,
             "sandbox on (Seatbelt) · network: none · writes: worktree"
         );
-        // High risk: no "for this run"; the numbers stay fixed.
+        // High risk: no "for this run", no "always"; the numbers stay fixed.
         let numbers: Vec<u8> = p.options.iter().map(|o| o.number).collect();
-        assert_eq!(numbers, [1, 2, 4, 5]);
+        assert_eq!(numbers, [1, 2, 5, 6]);
         let p = present(
             &request(
                 "run_command",
@@ -548,7 +655,7 @@ mod tests {
         assert!(
             p.options[1]
                 .label
-                .ends_with("any call of this MCP tool, any arguments")
+                .ends_with("this tool as defined now, any arguments")
         );
     }
 
@@ -567,5 +674,78 @@ mod tests {
             &ctx(d.path()),
         );
         assert_eq!(p.body, ["a binary file — not shown"]);
+    }
+
+    #[test]
+    fn the_object_sources_and_budget_are_shown() {
+        let d = tempfile::tempdir().unwrap();
+        let mut r = request(
+            "run_command",
+            json!({ "argv": ["make", "check"] }),
+            "run",
+            "low",
+        );
+        r.object = Some(Object::command(
+            vec!["make".to_owned(), "check".to_owned()],
+            ".".to_owned(),
+            "/w/bin/make".to_owned(),
+            false,
+        ));
+        r.changed = Some("executable /usr/bin/make → /w/bin/make".to_owned());
+        r.sources = vec![crate::approvals::Source {
+            argument: "make check".to_owned(),
+            from: "README.md".to_owned(),
+            turn: 2,
+        }];
+        r.more = 2;
+        r.asked = 12;
+        r.budget = 12;
+        r.options = crate::approvals::options("low", true, false, "run", "low");
+        let p = present(&r, &ctx(d.path()));
+        assert_eq!(
+            p.object[0],
+            format!(
+                "argv  [\"make\",\"check\"]  #{}",
+                &crate::tools::policy::argv_sha256(&["make".to_owned(), "check".to_owned()])[..12]
+            )
+        );
+        assert_eq!(p.object[1], "runs  /w/bin/make  in  .");
+        assert_eq!(
+            p.object[2],
+            "changed since approved: executable /usr/bin/make → /w/bin/make"
+        );
+        assert_eq!(
+            p.sources,
+            [
+                "contains text read from README.md (turn 2): \"make check\"",
+                "and 2 more"
+            ]
+        );
+        assert!(
+            p.notice
+                .as_deref()
+                .is_some_and(|n| n.starts_with("This is prompt 12 of 12"))
+        );
+        let keys: Vec<char> = p.options.iter().map(|o| o.key).collect();
+        assert_eq!(keys, ['y', 't', 'r', 'a', 'n', 's']);
+        // A path asked by another name shows both.
+        let mut w = request(
+            "write_file",
+            json!({ "path": "src/a/x.rs", "content": "" }),
+            "write",
+            "low",
+        );
+        w.object = Some(Object::Path {
+            canonical: "src/b/x.rs".to_owned(),
+            asked: "src/a/x.rs".to_owned(),
+        });
+        let p = present(&w, &ctx(d.path()));
+        assert_eq!(
+            p.object,
+            [
+                "file  src/b/x.rs",
+                "asked as  src/a/x.rs (resolves to the file above)"
+            ]
+        );
     }
 }

@@ -37,6 +37,8 @@ pub(crate) fn run_lanes(
                     fresh_acceptance: false,
                     allow_failing_baseline: options.allow_failing_baseline,
                     run_grants: std::sync::Arc::clone(&options.run_grants),
+                    run_id: std::sync::Arc::clone(&options.run_id),
+                    asked: std::sync::Arc::clone(&options.asked),
                     in_place: false,
                     session: None,
                     bug_home: None,

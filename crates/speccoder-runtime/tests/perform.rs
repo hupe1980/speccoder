@@ -335,7 +335,81 @@ fn cases() -> Vec<Case> {
         ),
         case("feature-empty", Runnable::Feature, Some("")),
         case("feature-name", Runnable::Feature, Some("001-graph")),
+        case(
+            "allow-always-not-a-call",
+            Runnable::AllowAlways {
+                task: task("T005"),
+                call: "zz".to_owned(),
+            },
+            None,
+        ),
+        case(
+            "allow-always-no-such-call",
+            Runnable::AllowAlways {
+                task: task("T005"),
+                call: "00".repeat(32),
+            },
+            None,
+        ),
+        case("widen-policy-bare-program", widen(&["npm"], "d"), None),
+        case(
+            "widen-policy-stale-digest",
+            widen(&["npm", "run"], "stale"),
+            None,
+        ),
+        case(
+            "widen-policy-unreadable",
+            widen(&["npm", "run"], &empty_preview(&["npm", "run"])),
+            None,
+        ),
+        case(
+            "widen-policy-ok",
+            widen(&["npm", "run"], &empty_preview(&["npm", "run"])),
+            None,
+        ),
+        case(
+            "decide-batch-none",
+            Runnable::DecideBatch {
+                run: "run-1-0a0b0c0d".to_owned(),
+                verdict: speccoder_core::actions::BatchVerdict::Approve,
+                calls: Vec::new(),
+                digest: "d".to_owned(),
+                resume_asking: false,
+            },
+            None,
+        ),
+        case(
+            "decide-batch-reject-empty",
+            Runnable::DecideBatch {
+                run: "run-1-0a0b0c0d".to_owned(),
+                verdict: speccoder_core::actions::BatchVerdict::Reject,
+                calls: Vec::new(),
+                digest: "d".to_owned(),
+                resume_asking: false,
+            },
+            None,
+        ),
     ]
+}
+
+fn widen(prefix: &[&str], digest: &str) -> Runnable {
+    Runnable::WidenPolicy {
+        key: speccoder_core::actions::PolicyList::CommandsPrefix,
+        prefix: prefix.iter().map(|s| (*s).to_owned()).collect(),
+        digest: digest.to_owned(),
+    }
+}
+
+/// The digest of a complete preview with nothing to show.
+fn empty_preview(prefix: &[&str]) -> String {
+    speccoder_runtime::approvals::coverage::digest(
+        &speccoder_core::CoverageEntry {
+            key: "commands.allow_prefix".to_owned(),
+            prefix: prefix.iter().map(|s| (*s).to_owned()).collect(),
+        },
+        &[],
+        true,
+    )
 }
 
 /// Placeholders for what differs between runs: the project's and the

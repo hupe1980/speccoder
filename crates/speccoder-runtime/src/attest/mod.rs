@@ -278,7 +278,7 @@ fn decisions(tool_calls: &[Value]) -> Vec<Value> {
         .map(|c| {
             json!({
                 "verb": if c["approved_by"] == "person" { "approve" } else if c["expired"] == true { "expired" } else { "reject" },
-                "grant": crate::tools::policy::Grant::of(c["tool"].as_str().unwrap_or_default(), &c["arguments"]).map(|g| g.describe()),
+                "grant": serde_json::from_value::<crate::tools::policy::Object>(c["object"].clone()).ok().map(|o| o.describe()),
                 "scope": c["scope"],
                 "reason": c["rejection"],
                 "by": c["operator"]["actor"],

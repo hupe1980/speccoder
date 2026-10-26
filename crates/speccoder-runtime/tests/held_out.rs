@@ -16,10 +16,10 @@ use serde_json::{Value, json};
 use speccoder_core::verify::Verdict;
 use speccoder_core::{CommandData, CommandResult, CommandStatus, RunReport};
 
-const CONFIG: &str = "[model]\nprovider = \"openai\"\nmodel = \"gpt-5.4-mini\"\n\n[checks.has-ok]\nargv = [\"grep\", \"-q\", \"fn ok\", \"src/lib.rs\"]\n\n[commands]\nallow = [[\"grep\"], [\"./accept.sh\"]]\n";
+const CONFIG: &str = "[model]\nprovider = \"openai\"\nmodel = \"gpt-5.4-mini\"\n\n[checks.has-ok]\nargv = [\"grep\", \"-q\", \"fn ok\", \"src/lib.rs\"]\n\n[commands]\nallow_prefix = [[\"grep\", \"-q\"], [\"./accept.sh\", \"--\"]]\n";
 
 /// One test: "the pattern is in src/lib.rs", with libtest's summary line.
-const ACCEPT_SH: &str = "#!/bin/sh\nif grep -q \"$1\" src/lib.rs; then\n  echo 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out'\nelse\n  echo 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out'\n  exit 101\nfi\n";
+const ACCEPT_SH: &str = "#!/bin/sh\n[ \"$1\" = -- ] && shift\nif grep -q \"$1\" src/lib.rs; then\n  echo 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out'\nelse\n  echo 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out'\n  exit 101\nfi\n";
 
 const SPEC: &str = "# Spec\n\n### User Story 1 - Login\n\nUsers log in.\n\n**Acceptance**: a `login` function exists.\n";
 
@@ -80,7 +80,7 @@ fn fake() -> (Arc<FakeProvider>, Arc<dyn ModelProvider>) {
 }
 
 fn visible() -> Value {
-    json!({ "files": [{ "path": "tests/acceptance_login.txt", "content": "login exists\n", "scenarios": [] }], "argv": ["./accept.sh", "fn login"], "notes": [] })
+    json!({ "files": [{ "path": "tests/acceptance_login.txt", "content": "login exists\n", "scenarios": [] }], "argv": ["./accept.sh", "--", "fn login"], "notes": [] })
 }
 
 fn held_out(pattern: &str, scenarios: &[&str]) -> Value {
@@ -88,7 +88,7 @@ fn held_out(pattern: &str, scenarios: &[&str]) -> Value {
         "path": HELD_OUT_PATH,
         "content": format!("login takes a password; token \"{SECRET}\"\n"),
         "scenarios": scenarios,
-        "argv": ["./accept.sh", pattern],
+        "argv": ["./accept.sh", "--", pattern],
         "composition": false,
     }], "notes": [] })
 }
@@ -283,7 +283,7 @@ fn each_visible_test_is_traced_to_the_scenario_it_cites() {
     f.will_structure(json!({ "files": [
         { "path": "tests/acceptance_login.txt", "content": "login exists\n", "scenarios": ["US1-1", "US9-9"] },
         { "path": "tests/acceptance_more.txt", "content": "more\n", "scenarios": [] },
-    ], "argv": ["./accept.sh", "fn login"], "notes": [] }));
+    ], "argv": ["./accept.sh", "--", "fn login"], "notes": [] }));
     write_lib(&f, "c1", TAILORED);
     let res = run(r.path(), state.path(), d);
     let rep = report(&res);
