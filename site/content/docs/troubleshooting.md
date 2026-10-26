@@ -11,7 +11,7 @@ Every failure names a [code](@/docs/codes.md) and the command that fixes it; `sp
 
 | Symptom | Cause and fix |
 |---|---|
-| `error[SETUP-INCOMPLETE]` (14) | The worktree lacks setup your checkout never committed (`.config/nextest.toml`, `speccoder.toml`), or the checks leave a lockfile or build output there on every run. At a terminal, `speccoder run` offers the fix and runs again on a yes; the web interface offers it as a button; else `speccoder fix` (`--dry-run` shows the commands). Undo: `git reset --soft HEAD~1`. |
+| `error[SETUP-INCOMPLETE]` (14) | The worktree lacks setup your checkout never committed, or the checks leave a lockfile or build output there. At a terminal, `speccoder run` offers the fix and runs again on a yes; the web interface offers a button; else [`speccoder fix`](@/docs/running.md#when-the-setup-stops-a-run). |
 | `error[CHECK-BROKEN]` (13) before any model call | A check fails on the untouched worktree without running a test; the message quotes the check's own error. When the first task creates the project, run with `--allow-failing-baseline`. |
 | `error[CONFIG-MISSING]` (13) | No `speccoder.toml`: run `speccoder init`. "The worktree has no speccoder.toml": commit it, since speccoder reads committed files. |
 | `error[CONFIG-INVALID]` (13), e.g. ``unknown section `[budgett]` `` | A typo or a wrong value in `speccoder.toml`; the message names the line and lists what is known. |
