@@ -7,18 +7,18 @@ weight = 20
 group = "Start"
 +++
 
-From a git repository to a pull request whose every tick carries its evidence. Each command below also prints what to do next.
+From a git repository to a pull request whose every tick carries its evidence. Each command prints what to do next.
 
 ## 1. Make it a Spec Kit project
 
-speccoder implements specs written in [GitHub Spec Kit](https://github.com/github/spec-kit)'s format, and runs Spec Kit's own planning skills. Install Spec Kit once, then in your repository:
+Install [GitHub Spec Kit](https://github.com/github/spec-kit) once, then in your repository:
 
 ```sh
 uv tool install specify-cli --from git+https://github.com/github/spec-kit.git
 specify init --here --integration claude
 ```
 
-`--integration claude` installs the planning skills under `.claude/skills/`, which speccoder runs with its own model; Claude Code is not needed. [OpenSpec](@/docs/openspec.md) projects work too.
+`--integration claude` installs the planning skills under `.claude/skills/`; speccoder runs them with its own model, so Claude Code is not needed. [OpenSpec](@/docs/openspec.md) projects work too.
 
 ## 2. Set up speccoder
 
@@ -34,7 +34,7 @@ Model      anthropic/claude-sonnet-5-5  (ANTHROPIC_API_KEY is not set)
 Commit speccoder.toml and .gitignore? speccoder reads committed files only. [Y/n]
 ```
 
-`init` detects the project (Cargo, npm/pnpm/yarn/bun, Python with its `.venv`, Go, a Makefile `test` target), writes **checks** — the commands that decide whether nothing regressed — to `speccoder.toml`, and runs them on the untouched code. A check that fails there is shown with the line that says why, since every task would be judged against a red baseline. Commit what it wrote (speccoder reads committed files only); change it later with `speccoder config` or **Settings** in the [app](@/docs/web.md).
+`init` detects the project (Cargo, npm/pnpm/yarn/bun, Python with its `.venv`, Go, a Makefile `test` target), writes **checks** (the commands that decide whether nothing regressed) to `speccoder.toml`, and runs them on the untouched code. A check that fails there is shown with the reason: every task would be judged against a red baseline. Commit what it wrote; speccoder reads committed files only. Change it later with [`speccoder config`](@/docs/configuration.md#changing-it) or **Settings** in the [app](@/docs/web.md).
 
 ## 3. A model key
 
@@ -42,7 +42,11 @@ Commit speccoder.toml and .gitignore? speccoder reads committed files only. [Y/n
 export ANTHROPIC_API_KEY=…   # or OPENAI_API_KEY
 ```
 
-The key is read from the environment only. For a local model (Ollama, vLLM, LM Studio), set `model.provider` to `openai-compatible` and its `base_url` ([`[model]`](@/docs/configuration.md#model)). `speccoder doctor` checks git, the sandbox, the key, the spec tools and the config, and changes nothing.
+The key is read from the environment only. For a local model (Ollama, vLLM, LM Studio), set `model.provider` to `openai-compatible` and `model.base_url` ([`[model]`](@/docs/configuration.md#model)). Then:
+
+```sh
+speccoder doctor   # git, the sandbox, the key, the spec tools, the config; changes nothing
+```
 
 ## 4. Write the spec
 
@@ -55,16 +59,16 @@ speccoder spec plan
 speccoder spec tasks
 ```
 
-Spec Kit's skills write `spec.md`, `plan.md` and `tasks.md`; after each, speccoder offers the next step and to commit exactly what was written. Read the spec before you go on: the result is judged against it. See [planning](@/docs/planning.md).
+Spec Kit's skills write `spec.md`, `plan.md` and `tasks.md`; after each, speccoder offers the next step and to commit exactly what was written. Read the spec before you go on: the result is judged against it. To sign it off requirement by requirement, use [`speccoder review`](@/docs/planning.md#review-the-spec).
 
 ## 5. Run
 
 ```sh
 speccoder run              # in the terminal
-speccoder ui --window      # or as an app (macOS; `speccoder ui` opens your browser)
+speccoder ui              # or in your browser (`--window`: speccoder's own window)
 ```
 
-speccoder works through the ready tasks: for each it writes acceptance tests from the spec that must fail first, lets the model work in its own worktree, then judges ([how it works](@/docs/how-it-works.md)). At a terminal this runs in the [dashboard](@/docs/running.md#the-dashboard); with `--plain` (abridged):
+speccoder works through the ready tasks: acceptance tests from the spec that must fail first, the model's attempt in its own worktree, then the judgement ([how it works](@/docs/how-it-works.md)). At a terminal this runs in the [dashboard](@/docs/running.md#the-dashboard); with `--plain` (abridged):
 
 ```text
 ▶ T002 Implement `slugify(text)` in src/lib.rs  (001-slugify)
@@ -81,7 +85,7 @@ speccoder works through the ready tasks: for each it writes acceptance tests fro
 ✓ T002 verified · 10.2k in / 798 out · 9s — verdict: verified
 ```
 
-When a call needs your approval, speccoder asks. When a task cannot pass, it stops and says why; run again after you have decided and it continues where it stopped.
+When a call needs your approval, speccoder asks. When a task cannot pass, it stops and says why; after you decide, `speccoder run` continues where it stopped.
 
 ## 6. Read the evidence
 
@@ -96,11 +100,11 @@ Phase 2: User Story 1 - URL slugs (Priority: P1)
 1/2 done: 1 verified; 1 ready
 ```
 
-`verified` means the tests derived from the spec went from red to green and nothing regressed. [Reading the evidence](@/docs/evidence.md) explains every state; the app's **Code** view shows each tick's commit.
+`verified` means the tests derived from the spec went from red to green and nothing regressed. [Reading the evidence](@/docs/evidence.md) explains every state.
 
 ## 7. Hand it off
 
-The work is on `speccoder/001-slugify`, one commit per task. Merge it, or open a draft pull request with the evidence in its description (and `Closes #42` for the issue it came from):
+The work is on `speccoder/001-slugify`, one commit per task. Merge it, or open a draft [pull request](@/docs/github.md#its-pull-request) with the evidence in its description:
 
 ```sh
 speccoder auth login   # once
