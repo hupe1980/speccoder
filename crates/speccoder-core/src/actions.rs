@@ -85,6 +85,17 @@ pub enum Runnable {
         /// Run it once recorded.
         run: bool,
     },
+    /// Commit the changes set aside before the task's run onto the
+    /// feature's branch, as the person's own.
+    KeepSetAside {
+        /// The task.
+        task: String,
+    },
+    /// Discard them.
+    DropSetAside {
+        /// The task.
+        task: String,
+    },
     /// Pick the current feature.
     Feature,
     /// Push the feature's branch and open (or update) its draft pull request.
@@ -109,8 +120,8 @@ pub struct Action {
     pub blocked: Option<String>,
     /// What to ask for before it runs (`Describe the feature`).
     pub input: Option<String>,
-    /// It leaves the machine (a push, a pull request): what an interface
-    /// says in a confirmation before it runs it.
+    /// It leaves the machine (a push, a pull request) or cannot be undone
+    /// (a discard): what an interface says in a confirmation before it runs it.
     pub confirm: Option<String>,
 }
 

@@ -1544,6 +1544,10 @@ pub struct TaskStatus {
     pub run_id: Option<String>,
     /// For an open task: its latest saved attempt.
     pub last_attempt: Option<LastAttempt>,
+    /// Changes found in the worktree when the task's run started (a person's
+    /// edits, or an interrupted run's leftovers), saved and set aside.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub set_aside: Option<SetAside>,
     /// The reason a person gave for `accept` or `skip`.
     pub note: Option<String>,
     /// A verified tick's acceptance strength as its trailer says
@@ -1563,6 +1567,15 @@ pub struct LastAttempt {
     pub run_id: Option<String>,
     /// The ref holding the attempt's tree.
     pub reference: String,
+}
+
+/// Changes saved and set aside so a run could start from the branch tip.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct SetAside {
+    /// The ref holding them.
+    pub reference: String,
+    /// The files they change, repository-relative.
+    pub files: Vec<String>,
 }
 
 /// One convergence round, from its commit.

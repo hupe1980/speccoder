@@ -558,6 +558,7 @@ pub fn asciify(text: &str) -> String {
             '│' | '┃' => out.push('|'),
             '┌' | '┐' | '└' | '┘' | '├' | '┤' | '┬' | '┴' | '┼' => out.push('+'),
             '“' | '”' => out.push('"'),
+            '∴' => out.push_str(":."),
             '‘' | '’' => out.push('\''),
             c => out.push(c),
         }

@@ -299,8 +299,8 @@ pub(crate) fn set_aside_leftovers(
         task,
         &crate::attempts::Record {
             run: None,
-            outcome: "interrupted",
-            reason: "the worktree had uncommitted changes when a run started (an interrupted run, or edits by hand); saved and set aside",
+            outcome: crate::controls::SET_ASIDE,
+            reason: "the worktree had uncommitted changes when a run started (an interrupted run, or edits by hand); saved and set aside — `speccoder task restore` keeps them, `task drop` discards them",
             pending: None,
             usage: None,
         },

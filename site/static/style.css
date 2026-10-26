@@ -151,6 +151,7 @@ code, kbd, pre { font-family: var(--mono); font-size: 0.9em; }
 .terminal-bar { display: flex; align-items: center; gap: 6px; padding: 0.7rem 0.9rem; background: rgb(255 255 255 / 4%); }
 .terminal-bar span { width: 11px; height: 11px; border-radius: 50%; background: #3a3f55; }
 .terminal-bar p { margin: 0 0 0 0.5rem; font: 500 0.8rem var(--mono); color: #8d93ab; }
+.terminal .t-violet { color: #d0a8ff; }
 .terminal pre { margin: 0; padding: 1.1rem 1.25rem 1.3rem; overflow-x: auto; font-size: 0.83rem; line-height: 1.75; background: transparent; }
 .t-dim { color: #8d93ab; } .t-ok { color: #4ade9b; } .t-red { color: #ff8a80; } .t-run { color: #a5a0ff; font-weight: 700; } .t-code { color: #ffd479; }
 

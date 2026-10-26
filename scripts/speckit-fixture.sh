@@ -17,10 +17,17 @@ trap 'rm -rf "$work"' EXIT
 
 cd "$work"
 git -c init.defaultBranch=main init -q
-uvx --quiet --from "git+https://github.com/github/spec-kit@v$version" \
-  specify init --here --integration claude --script sh --force >/dev/null 2>&1 \
-|| uvx --quiet --from "git+https://github.com/github/spec-kit@v$version" \
-  specify init --here --ai claude --script sh --force >/dev/null 2>&1
+# No Claude Code here (CI): --ignore-agent-tools skips init's check for it.
+# --integration since 1.0, --ai before; what failed is shown, not swallowed.
+specify() {
+  uvx --quiet --from "git+https://github.com/github/spec-kit@v$version" specify "$@"
+}
+if ! specify init --here --integration claude --script sh --force --ignore-agent-tools >"$work/init.log" 2>&1 \
+  && ! specify init --here --ai claude --script sh --force --ignore-agent-tools >>"$work/init.log" 2>&1; then
+  cat "$work/init.log" >&2
+  echo "specify init $version failed" >&2
+  exit 1
+fi
 
 test -d .specify || { echo "specify init $version produced no .specify/" >&2; exit 1; }
 

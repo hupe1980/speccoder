@@ -87,6 +87,9 @@
               {#if t.drift?.requirements.length}
                 <span class="foot changed" title="The spec changed since this tick: its evidence is for the earlier wording"><Icon name="exclaim" size={12} weight={2.2} />Spec changed: {t.drift.requirements.map((r) => r.id).join(", ")}</span>
               {/if}
+              {#if t.set_aside}
+                <span class="foot aside" title="Changes found in the worktree when its run started — keep or discard them in the inspector"><Icon name="tray" size={12} />Changes set aside</span>
+              {/if}
               {#if live}
                 <span class="stage" aria-live="polite"><span class="pulse" aria-hidden="true"></span>{stage}…</span>
               {:else if s !== null}
@@ -136,6 +139,7 @@
   .foot { display: flex; align-items: center; gap: 0.35rem; font-size: 0.76rem; }
   .fail { color: var(--danger); }
   .changed { color: var(--attention); font-weight: 600; }
+  .aside { color: var(--attention); font-weight: 600; }
   .meter { flex: 1; height: 4px; background: var(--fill); border-radius: 4px; overflow: hidden; }
   .meter span { display: block; height: 100%; background: var(--verified-fill); border-radius: 4px; }
   .meter span.low { background: var(--regression-fill); }

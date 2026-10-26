@@ -211,6 +211,16 @@ pub enum Body {
         /// The words.
         text: String,
     },
+    /// The model's summary of its reasoning in a turn: its account, a claim.
+    #[serde(rename = "reasoning")]
+    Reasoning {
+        /// Task ID.
+        task: String,
+        /// Model turn (1-based).
+        turn: u32,
+        /// The summary.
+        text: String,
+    },
     /// Anything else worth a line.
     #[serde(rename = "notice")]
     Notice {
@@ -402,6 +412,11 @@ pub fn body(event: &Event) -> Body {
             usd: *usd,
         },
         Event::Said { task, turn, text } => Body::Said {
+            task: clean(task),
+            turn: *turn,
+            text: text.clone(),
+        },
+        Event::Reasoning { task, turn, text } => Body::Reasoning {
             task: clean(task),
             turn: *turn,
             text: text.clone(),

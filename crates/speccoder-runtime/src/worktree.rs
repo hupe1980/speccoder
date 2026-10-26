@@ -297,7 +297,7 @@ pub fn remove_lane(repo_root: &Path, feature: &str, lane: &str) -> Result<(), Gi
 }
 
 /// The worktree checked out on `branch`, if any.
-fn worktree_for(repo: &Git, branch: &str) -> Result<Option<PathBuf>, GitError> {
+pub(crate) fn worktree_for(repo: &Git, branch: &str) -> Result<Option<PathBuf>, GitError> {
     let fields = nul_fields(&repo.run(&["worktree", "list", "--porcelain", "-z"])?);
     let wanted = format!("branch refs/heads/{branch}");
     let mut current: Option<PathBuf> = None;

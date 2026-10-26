@@ -170,6 +170,17 @@ pub enum Event {
         /// The words.
         text: String,
     },
+    /// The model's summary of its reasoning in a turn, as the provider
+    /// gave it (`[model] reasoning_summary`): its account of why — a claim,
+    /// never evidence. Control characters escaped; at most 4000 characters.
+    Reasoning {
+        /// Task ID.
+        task: String,
+        /// Model turn (1-based) within the attempt.
+        turn: u32,
+        /// The summary.
+        text: String,
+    },
     /// Anything else worth a line (convergence rounds, notices).
     Notice {
         /// The line.
@@ -205,6 +216,9 @@ pub struct LiveState {
     /// What the model last said, its first line (a claim).
     #[serde(default)]
     pub said: Option<String>,
+    /// The last line of the model's latest reasoning summary (a claim).
+    #[serde(default)]
+    pub thinking: Option<String>,
     /// The latest tool calls, oldest first (at most [`RECENT`]).
     #[serde(default)]
     pub recent: Vec<String>,
@@ -342,6 +356,14 @@ impl Progress for Live {
                 Event::Said { text, .. } => {
                     s.said = text
                         .lines()
+                        .find(|l| !l.trim().is_empty())
+                        .map(|l| l.chars().take(160).collect());
+                }
+                // Its conclusion: where the summary ends up.
+                Event::Reasoning { text, .. } => {
+                    s.thinking = text
+                        .lines()
+                        .rev()
                         .find(|l| !l.trim().is_empty())
                         .map(|l| l.chars().take(160).collect());
                 }
@@ -569,13 +591,17 @@ fn status_live(plane_dir: &Path) -> CommandResult {
     };
     let message = match (&live.finished, alive(live.pid)) {
         (None, true) => format!(
-            "running (pid {}): {} {} — {} for {}s; last: {}; {tokens}{}",
+            "running (pid {}): {} {} — {} for {}s; last: {}; {tokens}{}{}",
             live.pid,
             live.feature,
             live.task,
             stage_word(&live),
             now().saturating_sub(live.started_at),
             live.last_call.as_deref().unwrap_or("-"),
+            live.thinking
+                .as_deref()
+                .map(|s| format!("\nthe model thinks (a claim): {s}"))
+                .unwrap_or_default(),
             live.said
                 .as_deref()
                 .map(|s| format!("\nthe model says (a claim): “{s}”"))

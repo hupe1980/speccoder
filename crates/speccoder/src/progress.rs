@@ -209,6 +209,27 @@ pub fn lines(event: &Event, seconds: Option<u64>, verbosity: Verbosity) -> Vec<S
                 })
                 .collect()
         }
+        // Its reasoning, marked "therefore": the conclusion (verbose: all of it).
+        Event::Reasoning { text, .. } if !quiet => {
+            let lines: Vec<&str> = text
+                .lines()
+                .map(str::trim)
+                .filter(|l| !l.is_empty())
+                .collect();
+            let shown: Vec<&str> = if verbosity == Verbosity::Verbose {
+                lines
+            } else {
+                lines.last().copied().into_iter().collect()
+            };
+            shown
+                .into_iter()
+                .map(|l| {
+                    let cut: String = l.chars().take(110).collect();
+                    let more = if l.chars().count() > 110 { "…" } else { "" };
+                    format!("    ∴ {cut}{more}")
+                })
+                .collect()
+        }
         Event::Notice { text } if !quiet => vec![format!("» {text}")],
         // Running totals go to `speccoder report --live`; a line per turn is noise.
         _ => Vec::new(),
@@ -288,7 +309,7 @@ fn token_of(event: &Event) -> Option<crate::style::Token> {
             | "budget_exhausted" | "suspected_gaming" => Token::Attention,
             o => Glyph::of_state(o).token(),
         },
-        Event::Notice { .. } | Event::Said { .. } => Token::Muted,
+        Event::Notice { .. } | Event::Said { .. } | Event::Reasoning { .. } => Token::Muted,
         _ => return None,
     })
 }
@@ -366,6 +387,16 @@ pub fn reader_lines(event: &Event, verbosity: Verbosity) -> Vec<String> {
             vec![format!(
                 "model says: {}",
                 text.lines().next().unwrap_or_default()
+            )]
+        }
+        Event::Reasoning { text, .. } if !quiet => {
+            vec![format!(
+                "model thinks: {}",
+                text.lines()
+                    .rev()
+                    .find(|l| !l.trim().is_empty())
+                    .unwrap_or_default()
+                    .trim()
             )]
         }
         Event::Notice { text } if !quiet => vec![format!("notice: {text}")],

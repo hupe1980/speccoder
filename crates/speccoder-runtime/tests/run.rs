@@ -89,6 +89,10 @@ fn repo(extra_config: &str) -> tempfile::TempDir {
     .unwrap();
     write_accept_sh(r);
     git(r, &["init", "-q"]);
+    // A person's commit (`task restore`) uses the repository's identity; a
+    // fresh CI runner has no global one.
+    git(r, &["config", "user.name", "t"]);
+    git(r, &["config", "user.email", "t@example.com"]);
     git(r, &["add", "-A"]);
     git(r, &["commit", "-q", "-m", "init"]);
     dir
@@ -1439,7 +1443,7 @@ fn leftovers_of_an_interrupted_run_are_set_aside_before_the_next() {
     let rep = report(&res);
     let aside = rep.set_aside.clone().expect("set aside");
     assert!(
-        aside.starts_with("refs/speccoder/attempts/001-graph/T005/interrupted-"),
+        aside.starts_with("refs/speccoder/attempts/001-graph/T005/set_aside-"),
         "{aside}"
     );
     assert!(git_out(&wt, &["show", &format!("{aside}:src/lib.rs")]).contains("half_done"));
@@ -1454,6 +1458,103 @@ fn leftovers_of_an_interrupted_run_are_set_aside_before_the_next() {
         !fs::read_to_string(wt.join("src/lib.rs"))
             .unwrap()
             .contains("half_done")
+    );
+
+    // The person sees them, in the report and among the decisions …
+    let status = speccoder_runtime::status::report(r.path(), None);
+    let Some(CommandData::Report(st)) = status.data() else {
+        panic!("{}", status.message())
+    };
+    let t = st.tasks.iter().find(|t| t.id == "T005").unwrap();
+    assert_eq!(t.set_aside.as_ref().unwrap().files, ["src/lib.rs"]);
+    let inbox = speccoder_runtime::inbox::inbox_with(r.path(), None, Some(state.path()));
+    assert!(
+        inbox.message().contains("1 set-aside change"),
+        "{}",
+        inbox.message()
+    );
+    // … and keeps them: on the branch, in the worktree, the ref gone.
+    let kept = speccoder_runtime::controls::restore(r.path(), None, "T005");
+    assert_eq!(kept.status(), CommandStatus::Ok, "{}", kept.message());
+    assert!(git_out(r.path(), &["show", "speccoder/001-graph:src/lib.rs"]).contains("half_done"));
+    assert!(
+        fs::read_to_string(wt.join("src/lib.rs"))
+            .unwrap()
+            .contains("half_done")
+    );
+    assert!(git_out(r.path(), &["for-each-ref", &aside]).is_empty());
+    let again = speccoder_runtime::controls::restore(r.path(), None, "T005");
+    assert_eq!(again.status(), CommandStatus::NotFound);
+}
+
+/// Set-aside changes that conflict with what the branch has since are
+/// refused, and nothing moves: branch, worktree and the saved ref stay.
+#[test]
+fn a_conflicting_set_aside_change_is_refused_and_nothing_moves() {
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_call_tool("b", "report_blocked", json!({ "reason": "first" }));
+    let first = run(r.path(), state.path(), "T005", d);
+    let wt = PathBuf::from(&report(&first).worktree);
+    fs::write(wt.join("src/lib.rs"), "pub fn mine() {}\n").unwrap();
+    let (f2, d2) = fake();
+    f2.will_call_tool("b", "report_blocked", json!({ "reason": "second" }));
+    let res = run(r.path(), state.path(), "T005", d2);
+    let aside = report(&res).set_aside.clone().expect("set aside");
+    // The branch moves on with its own, conflicting, line.
+    fs::write(wt.join("src/lib.rs"), "pub fn theirs() {}\n").unwrap();
+    git(&wt, &["commit", "-qam", "their line"]);
+    let tip = git_out(r.path(), &["rev-parse", "speccoder/001-graph"]);
+    let kept = speccoder_runtime::controls::restore(r.path(), None, "T005");
+    assert_eq!(
+        kept.status(),
+        CommandStatus::NeedsHuman,
+        "{}",
+        kept.message()
+    );
+    assert!(
+        kept.message().contains("no longer apply cleanly"),
+        "{}",
+        kept.message()
+    );
+    assert_eq!(
+        git_out(r.path(), &["rev-parse", "speccoder/001-graph"]),
+        tip
+    );
+    assert!(
+        fs::read_to_string(wt.join("src/lib.rs"))
+            .unwrap()
+            .contains("theirs")
+    );
+    assert!(!git_out(r.path(), &["for-each-ref", &aside]).is_empty());
+}
+
+/// Set-aside changes the person lets go are deleted; the branch stays.
+#[test]
+fn set_aside_changes_can_be_discarded() {
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_call_tool("b", "report_blocked", json!({ "reason": "first" }));
+    let first = run(r.path(), state.path(), "T005", d);
+    let wt = PathBuf::from(&report(&first).worktree);
+    fs::write(
+        wt.join("src/lib.rs"),
+        "pub fn ok() {}\npub fn scratch() {}\n",
+    )
+    .unwrap();
+    let (f2, d2) = fake();
+    f2.will_call_tool("b", "report_blocked", json!({ "reason": "second" }));
+    let res = run(r.path(), state.path(), "T005", d2);
+    let aside = report(&res).set_aside.clone().expect("set aside");
+    let tip = git_out(r.path(), &["rev-parse", "speccoder/001-graph"]);
+    let dropped = speccoder_runtime::controls::drop_set_aside(r.path(), None, "T005");
+    assert_eq!(dropped.status(), CommandStatus::Ok, "{}", dropped.message());
+    assert!(git_out(r.path(), &["for-each-ref", &aside]).is_empty());
+    assert_eq!(
+        git_out(r.path(), &["rev-parse", "speccoder/001-graph"]),
+        tip
     );
 }
 
@@ -1927,6 +2028,7 @@ fn a_run_reports_its_steps_live_and_status_reads_them() {
             Event::Usage { .. } => "usage".to_owned(),
             Event::TaskFinished { outcome, .. } => format!("end {outcome}"),
             Event::Said { .. } => "said".to_owned(),
+            Event::Reasoning { .. } => "reasoning".to_owned(),
             Event::Notice { text } => text.clone(),
         })
         .filter(|k| k != "usage")
@@ -3317,9 +3419,9 @@ fn a_required_review_stops_the_run_until_the_spec_is_approved() {
     );
 }
 
-/// what the model says beside its calls is shown live as its own
-/// words (`Said`), and read back from the journal afterwards — a claim,
-/// apart from the evidence.
+/// What the model reasons and says beside its calls is shown live as its
+/// own (`Reasoning`, `Said`), and read back from the journal afterwards,
+/// turn by turn — a claim, apart from the evidence.
 #[test]
 fn the_model_s_account_is_live_and_kept() {
     let r = repo("");
@@ -3338,6 +3440,7 @@ fn the_model_s_account_is_live_and_kept() {
         truncated: false,
         structured: None,
         continuation: None,
+        reasoning: Some("The test only needs login() to exist.\nSo the smallest change is a new empty function.".to_owned()),
     });
     f.will_structure(done("added login"));
     let rec = Arc::new(Recorder::default());
@@ -3373,6 +3476,30 @@ fn the_model_s_account_is_live_and_kept() {
         "control characters escaped: {:?}",
         said[0].1
     );
+    let thought: Vec<(u32, String)> = rec
+        .0
+        .lock()
+        .unwrap()
+        .iter()
+        .filter_map(|e| match e {
+            Event::Reasoning { turn, text, .. } => Some((*turn, text.clone())),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(thought.len(), 1, "{thought:?}");
+    assert!(
+        thought[0].1.ends_with("a new empty function."),
+        "{}",
+        thought[0].1
+    );
+    // Every attempt turn asked for the summary (on by default).
+    assert!(
+        f.asked()
+            .iter()
+            .filter(|a| !a.tools.is_empty())
+            .all(|a| a.reasoning_summary),
+        "the attempt's turns ask for a reasoning summary"
+    );
     // Afterwards, from the journal.
     let plane = speccoder_runtime::worktree::project_state_dir(state.path(), r.path());
     let run_id = report(&res).run_id.clone();
@@ -3381,10 +3508,42 @@ fn the_model_s_account_is_live_and_kept() {
         .build()
         .unwrap();
     let kept = rt
-        .block_on(speccoder_runtime::substrate::narration(&plane, &run_id))
+        .block_on(speccoder_runtime::substrate::account(&plane, &run_id))
         .unwrap();
+    assert_eq!(kept.len(), 1, "{kept:?}");
+    assert_eq!(kept[0].turn, 1);
     assert!(
-        kept.iter().any(|t| t.starts_with("I'll add login()")),
-        "{kept:?}"
+        kept[0]
+            .said
+            .as_deref()
+            .unwrap()
+            .starts_with("I'll add login()")
     );
+    assert!(
+        kept[0]
+            .reasoning
+            .as_deref()
+            .unwrap()
+            .starts_with("The test only needs")
+    );
+}
+
+/// `[model] reasoning_summary = false`: no turn asks for one.
+#[test]
+fn reasoning_summaries_can_be_switched_off() {
+    let r = repo("");
+    let toml = r.path().join("speccoder.toml");
+    let text = fs::read_to_string(&toml).unwrap();
+    fs::write(
+        &toml,
+        text.replacen(MODEL, &format!("{MODEL}reasoning_summary = false\n"), 1),
+    )
+    .unwrap();
+    git(r.path(), &["commit", "-qam", "no reasoning"]);
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_structure(done("nothing to do"));
+    let res = run(r.path(), state.path(), "T005", d);
+    assert!(!f.asked().is_empty(), "{}", res.message());
+    assert!(f.asked().iter().all(|a| !a.reasoning_summary));
 }

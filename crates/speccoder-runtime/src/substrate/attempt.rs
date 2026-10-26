@@ -207,6 +207,7 @@ pub fn input(
         ("allow", trusted(json!(settings.allow))),
         ("max_turns", trusted(json!(settings.max_turns))),
         ("max_tool_calls", trusted(json!(settings.max_tool_calls))),
+        ("reasoning", trusted(json!(settings.reasoning))),
         ("frozen", trusted(json!(settings.frozen))),
         ("approved", trusted(json!(settings.approved))),
         ("rejected", trusted(json!(settings.rejected))),
@@ -279,6 +280,8 @@ pub struct Settings<'a> {
     pub max_turns: u32,
     /// Tool calls.
     pub max_tool_calls: u32,
+    /// Ask for the model's reasoning summary on every turn.
+    pub reasoning: bool,
     /// Test files frozen for this attempt.
     pub frozen: &'a [String],
     /// A person's approvals for this task.
@@ -377,20 +380,6 @@ fn argvs(v: &Value) -> Vec<Vec<String>> {
                 .collect()
         })
         .unwrap_or_default()
-}
-
-fn usage_sum(total: &mut [u64; 4], usage: &Value) {
-    for (i, key) in [
-        "input_tokens",
-        "output_tokens",
-        "cache_read_tokens",
-        "cache_write_tokens",
-    ]
-    .iter()
-    .enumerate()
-    {
-        total[i] += usage[*key].as_u64().unwrap_or(0);
-    }
 }
 
 #[async_trait]
@@ -563,6 +552,7 @@ impl Skill for Attempt {
                 policy,
                 max_turns,
                 max_tool_calls,
+                reasoning: settings["reasoning"] == true,
                 schema: report_schema(),
                 routes,
                 root: settings["root"].as_str().map(str::to_owned),
@@ -695,6 +685,8 @@ pub(crate) struct LoopSpec {
     pub max_turns: u32,
     /// Tool calls.
     pub max_tool_calls: u32,
+    /// Ask each turn for the model's reasoning summary.
+    pub reasoning: bool,
     /// The closing answer's schema.
     pub schema: Value,
     /// Declared tools served elsewhere: (name, server, tool) — MCP.
@@ -727,6 +719,7 @@ pub(crate) async fn tool_loop(
         policy,
         max_turns,
         max_tool_calls,
+        reasoning,
         schema,
         routes,
         root,
@@ -750,18 +743,22 @@ pub(crate) async fn tool_loop(
     let mut denied_in_a_row = 0u32;
     // Whether this attempt registered the `approval` obligation yet.
     let mut obligation = false;
-    let mut usage = [0u64; 4];
+    let mut usage = agentplane::model::Usage::default();
     let mut log: Vec<Value> = Vec::new();
 
-    let end = |status: &str, extra: Value, log: &[Value], usage: [u64; 4], conversation: &Label| {
+    let end = |status: &str,
+               extra: Value,
+               log: &[Value],
+               usage: agentplane::model::Usage,
+               conversation: &Label| {
         let mut out = json!({
             "status": status,
             "tool_calls": log,
             "usage": {
-                "input_tokens": usage[0],
-                "output_tokens": usage[1],
-                "cache_read_tokens": usage[2],
-                "cache_write_tokens": usage[3],
+                "input_tokens": usage.input_tokens,
+                "output_tokens": usage.output_tokens,
+                "cache_read_tokens": usage.cache_read_tokens,
+                "cache_write_tokens": usage.cache_write_tokens,
             },
         });
         if let (Some(o), Some(e)) = (out.as_object_mut(), extra.as_object()) {
@@ -782,27 +779,46 @@ pub(crate) async fn tool_loop(
         let read_so_far = &transcript;
         let completion = cx
             .complete_with(prompt, move |call| {
-                call.with_tools(tools_now)
+                let call = call
+                    .with_tools(tools_now)
                     .continuing(read_so_far)
-                    .expecting(schema_now)
+                    .expecting(schema_now);
+                if reasoning {
+                    call.with_reasoning_summary()
+                } else {
+                    call
+                }
             })
             .await?;
         conversation = transcript.label().join(completion.label());
-        usage_sum(
-            &mut usage,
-            &serde_json::to_value(completion.peek().usage).unwrap_or(Value::Null),
-        );
+        usage = usage.plus(completion.peek().usage);
         if let Some((task, p)) = &observer {
             p.event(&crate::progress::Event::Usage {
                 task: task.clone(),
-                input_tokens: usage[0],
-                output_tokens: usage[1],
-                cache_read_tokens: usage[2],
-                cache_write_tokens: usage[3],
+                input_tokens: usage.input_tokens,
+                output_tokens: usage.output_tokens,
+                cache_read_tokens: usage.cache_read_tokens,
+                cache_write_tokens: usage.cache_write_tokens,
                 usd: None,
             });
         }
 
+        // The model's summary of its reasoning, when asked and given: its
+        // account of why, a claim like its words.
+        if let (Some((task, p)), Some(reasoning)) =
+            (&observer, completion.peek().reasoning.as_deref())
+            && !reasoning.trim().is_empty()
+        {
+            let text: String = crate::approvals::present::escape(reasoning.trim())
+                .chars()
+                .take(4000)
+                .collect();
+            p.event(&crate::progress::Event::Reasoning {
+                task: task.clone(),
+                turn: turn + 1,
+                text,
+            });
+        }
         if completion.peek().truncated {
             return Ok(Outcome::fail(
                 "the model ran out of output budget mid-turn; nothing it was still writing was executed — raise [model] max_output_tokens",

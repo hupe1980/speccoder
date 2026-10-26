@@ -91,6 +91,176 @@ fn done(command: &str, report: ControlReport, message: &str) -> CommandResult {
         .with_data(CommandData::Control(Box::new(report)))
 }
 
+/// The outcome a run's set-aside changes are saved with.
+pub const SET_ASIDE: &str = "set_aside";
+
+/// The files `commit` changes against its parent, repository-relative.
+#[must_use]
+pub fn changed_files(root: &Path, commit: &str) -> Vec<String> {
+    Git::at(root)
+        .run(&["diff", "--name-only", &format!("{commit}^"), commit])
+        .map(|o| {
+            String::from_utf8_lossy(&o)
+                .lines()
+                .map(str::to_owned)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// The newest changes set aside before `task`'s run.
+fn set_aside_of(root: &Path, feature: &str, task: &str) -> Option<crate::attempts::Saved> {
+    crate::attempts::list(root, feature)
+        .into_iter()
+        .find(|a| a.task == task && a.outcome == SET_ASIDE)
+}
+
+/// `speccoder task restore TASK`: the changes set aside before the task's
+/// run, committed onto `speccoder/<feature>` as the person's own — merged
+/// three ways when the branch moved since, refused when they conflict.
+#[must_use]
+pub fn restore(path: &Path, feature: Option<&str>, task: &str) -> CommandResult {
+    let (feature, root) = match locate("restore", path, feature) {
+        Ok(x) => x,
+        Err(r) => return *r,
+    };
+    let refuse = |status, m: String| CommandResult::new("restore", status, &m);
+    let Some(saved) = set_aside_of(&root, &feature, task) else {
+        return refuse(
+            CommandStatus::NotFound,
+            format!("nothing was set aside before {task}'s run"),
+        );
+    };
+    let git = Git::at(&root);
+    let branch = format!("refs/heads/speccoder/{feature}");
+    let (Ok(tip), Ok(parent)) = (
+        git.line(&["rev-parse", "--verify", &branch]),
+        git.line(&["rev-parse", &format!("{}^", saved.commit)]),
+    ) else {
+        return refuse(
+            CommandStatus::NotFound,
+            format!("speccoder/{feature} or the saved changes are gone"),
+        );
+    };
+    let tree = if tip == parent {
+        git.line(&["rev-parse", &format!("{}^{{tree}}", saved.commit)])
+    } else {
+        git.line(&[
+            "merge-tree",
+            "--write-tree",
+            &format!("--merge-base={parent}"),
+            &tip,
+            &saved.commit,
+        ])
+    };
+    let Ok(tree) = tree else {
+        return refuse(
+            CommandStatus::NeedsHuman,
+            format!(
+                "the set-aside changes no longer apply cleanly to speccoder/{feature}; nothing was changed — see them with `git show {}`",
+                saved.reference
+            ),
+        );
+    };
+    let files = changed_files(&root, &saved.commit);
+    let message = format!(
+        "keep the changes set aside before {task}\n\n{}\n\nKept-From: {}",
+        files.join("\n"),
+        saved.reference
+    );
+    let kept = match git.line(&[
+        "-c",
+        "commit.gpgsign=false",
+        "commit-tree",
+        tree.lines().next().unwrap_or_default(),
+        "-p",
+        &tip,
+        "-m",
+        &message,
+    ]) {
+        Ok(kept) => kept,
+        // git says why (no identity configured, most often).
+        Err(e) => {
+            return refuse(
+                CommandStatus::Error,
+                format!("the commit could not be made: {e}"),
+            );
+        }
+    };
+    // The worktree follows its branch: clean, it fast-forwards; with
+    // changes, nothing moves.
+    let moved = match crate::worktree::worktree_for(&git, &format!("speccoder/{feature}")) {
+        Ok(Some(wt)) => {
+            if let Err(r) = crate::worktree::require_clean(&wt) {
+                return refuse(
+                    CommandStatus::NeedsHuman,
+                    format!(
+                        "the worktree has uncommitted changes again ({}); nothing was changed",
+                        r.message
+                    ),
+                );
+            }
+            Git::at(&wt)
+                .run(&["merge", "--ff-only", "-q", &kept])
+                .map(|_| ())
+        }
+        _ => git.run(&["update-ref", &branch, &kept, &tip]).map(|_| ()),
+    };
+    if let Err(e) = moved {
+        return refuse(
+            CommandStatus::Error,
+            format!("speccoder/{feature} could not move: {e}"),
+        );
+    }
+    let _ = git.run(&["update-ref", "-d", &saved.reference]);
+    done(
+        "restore",
+        ControlReport {
+            feature: feature.clone(),
+            task: task.to_owned(),
+            action: "restored".to_owned(),
+            text: Some(kept.chars().take(12).collect()),
+            record: Some(saved.reference.clone()),
+        },
+        &format!(
+            "kept the changes set aside before {task} ({} file(s)) as {} on speccoder/{feature}",
+            files.len(),
+            kept.chars().take(7).collect::<String>()
+        ),
+    )
+}
+
+/// `speccoder task drop TASK`: the changes set aside before the task's run,
+/// discarded.
+#[must_use]
+pub fn drop_set_aside(path: &Path, feature: Option<&str>, task: &str) -> CommandResult {
+    let (feature, root) = match locate("drop", path, feature) {
+        Ok(x) => x,
+        Err(r) => return *r,
+    };
+    let Some(saved) = set_aside_of(&root, &feature, task) else {
+        return CommandResult::new(
+            "drop",
+            CommandStatus::NotFound,
+            &format!("nothing was set aside before {task}'s run"),
+        );
+    };
+    if let Err(e) = Git::at(&root).run(&["update-ref", "-d", &saved.reference]) {
+        return CommandResult::new("drop", CommandStatus::Error, &e.to_string());
+    }
+    done(
+        "drop",
+        ControlReport {
+            feature,
+            task: task.to_owned(),
+            action: "dropped".to_owned(),
+            text: None,
+            record: Some(saved.reference),
+        },
+        &format!("discarded the changes set aside before {task}"),
+    )
+}
+
 /// The selected feature and the project root of the user's checkout.
 fn locate(
     command: &str,

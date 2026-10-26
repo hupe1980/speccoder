@@ -65,6 +65,7 @@ The commands that decide whether nothing regressed. A check's command up to its 
 |---|---|---|
 | `provider` | required | `anthropic`, `openai`, or `openai-compatible` (Ollama, vLLM, llama.cpp, LM Studio, TGI, …) |
 | `model` | required | For example `claude-sonnet-5-5` or `gpt-5.4-mini` |
+| `reasoning_summary` | `true` | Show the model's summary of its reasoning on attempt turns, as its account (never evidence); providers without a way to ask give none |
 | `max_output_tokens` | `4096` | Per model turn |
 | `max_run_tokens` | `200000` | Per attempt |
 | `cache_ttl` | `"5m"` | Anthropic prompt-cache lifetime: `5m` or `1h` |

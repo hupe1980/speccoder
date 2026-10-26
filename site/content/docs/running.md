@@ -22,7 +22,15 @@ It works on the [current feature](@/docs/planning.md#the-current-feature). Run i
 
 ## The model's account
 
-What the model says beside its calls is shown quoted and muted, apart from the calls: in the terminal (the first line of each turn; all of it with `-v`), in the dashboard, in the [app](@/docs/web.md), and in an editor as the agent's thoughts. Afterwards, `speccoder task show T005 --account` reads it from the journal. It is a claim; a verdict never rests on it.
+Each turn, the model's summary of its reasoning and its words beside its calls are shown apart from the calls, muted:
+
+- **terminal:** the reasoning's conclusion as `∴ …` and the words quoted (all of both with `-v`); screen-reader mode reads `model thinks:` and `model says:`;
+- **dashboard and `report --live`:** the latest of each;
+- **[app](@/docs/web.md):** a thinking line in the live panel, and per turn in the inspector's **The Model's Account**;
+- **editor (ACP):** the reasoning as the agent's thoughts, the words as its message;
+- **afterwards:** `speccoder task show T005 --account`, from the journal.
+
+It is a claim: a verdict never rests on it. The summary is the provider's (Anthropic, OpenAI Responses, Gemini; an OpenAI-compatible server gives none). It is asked for on the attempt's turns only; `[model] reasoning_summary = false` turns it off. On the OpenAI Responses API a model's words beside its calls are not passed on, so with OpenAI models only its reasoning shows.
 
 ## Quick changes
 

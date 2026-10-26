@@ -64,6 +64,7 @@ A run at the terminal (`--plain`; at a terminal it is a live dashboard):
   ✓ baseline
   ✓ red assertion
   · attempt 1/2
+    ∴ A single pass that remembers the last character pushed collapses every run.
     “Every run of other characters should become a single dash, so I'll track the last character pushed.”
     turn 1   read_file    src/lib.rs        allow
     turn 2   write_file   src/lib.rs        allow
@@ -77,7 +78,7 @@ A run at the terminal (`--plain`; at a terminal it is a live dashboard):
 
 Then, as you need them:
 
-- 👀 **Watch and decide.** At a terminal, `run` is a live dashboard that asks approvals with one key; [the app](#-the-app) shows the same work.
+- 👀 **Watch and decide.** At a terminal, `run` is a live dashboard that asks approvals with one key; [the app](#-the-app) shows the same work. The model's reasoning and words appear beside its calls — its account, never evidence.
 - ⚙️ **Automate.** Every command takes `--json` or `--events`, both with [published schemas](https://hupe1980.github.io/speccoder/docs/cli/#json-output); every failure names a [code](https://hupe1980.github.io/speccoder/docs/codes/) and the command that fixes it.
 - 🐙 **Work from GitHub.** `speccoder auth login` once; `speccoder issue start 42` specifies a feature from an issue, `speccoder pr` opens a draft whose description is the evidence. No `gh` needed.
 - 📝 **Plan with your spec tool.** `speccoder spec specify "…"`, then `plan` and `tasks`, runs Spec Kit's own skills (OpenSpec: `propose`).

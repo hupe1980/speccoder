@@ -139,6 +139,12 @@ pub const CATALOGUE: &[Section] = &[
                 "The model, for example claude-sonnet-5-5",
             ),
             k(
+                "reasoning_summary",
+                Kind::Bool,
+                Some("true"),
+                "Show the model's summary of its reasoning (a claim, not evidence)",
+            ),
+            k(
                 "max_output_tokens",
                 Kind::Int(1, 1_000_000),
                 Some("4096"),

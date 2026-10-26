@@ -243,7 +243,7 @@
       </aside>
       <div class="main">
         {#if !open}
-          <div class="state"><Icon name="doc" size={24} /><p class="muted">Pick a file to read it{#if tree} at <span class="mono">{tree.rev}</span>{/if}.</p></div>
+          <div class="state"><Icon name="doc" size={24} /><p class="muted">Pick a file to read it{#if tree}{" at "}<span class="mono">{tree.rev}</span>{/if}.</p></div>
         {:else if !text}
           <div class="state"><span class="spinner"></span></div>
         {:else if text.error}

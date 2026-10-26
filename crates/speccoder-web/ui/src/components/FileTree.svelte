@@ -44,6 +44,7 @@
   // closes or goes to the parent, Home/End, Enter opens, typing jumps to a
   // name. A dot marks what the feature changed; counts when given.
   import { tick } from "svelte";
+  import FileIcon from "./FileIcon.svelte";
   import Icon from "./Icon.svelte";
 
   let {
@@ -141,8 +142,6 @@
     }
     e.preventDefault();
   }
-  const ext = (name: string) => name.split(".").pop()?.toLowerCase() ?? "";
-  const tint: Record<string, string> = { rs: "#ff6b35", ts: "#3178c6", js: "#e5b800", svelte: "#ff3e00", py: "#3572a5", go: "#00add8", md: "#8e8e93", toml: "#9c6b4e", json: "#8e8e93", yml: "#cb171e", yaml: "#cb171e", lock: "#8e8e93" };
 </script>
 
 <ul class="tree" role="tree" aria-label={label} bind:this={list}>
@@ -152,7 +151,7 @@
       role="treeitem"
       class="row {r.kind}"
       class:on={r.kind === "file" && selected === r.path}
-      style="--d:{r.depth}; --t:{tint[ext(r.name)] ?? 'var(--muted)'}"
+      style="--d:{r.depth}"
       data-key={r.key}
       tabindex={active === r.key ? 0 : -1}
       aria-level={r.depth + 1}
@@ -169,7 +168,7 @@
         {#if r.holds}<span class="dot" title="Holds changes"></span>{/if}
       {:else}
         <span class="chev" aria-hidden="true"></span>
-        <svg class="doc" width="12" height="15" viewBox="0 0 12 15" aria-hidden="true"><path d="M1.5 1h6l3.5 3.5V14h-9.5z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" /><path d="M7.5 1v3.5H11" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" /></svg>
+        <FileIcon path={r.name} size={16} />
         <span class="name mono">{r.name}</span>
         {#if c}
           <span class="n a">{c.add == null ? "bin" : `+${c.add}`}</span>{#if c.del}<span class="n d">−{c.del}</span>{/if}
@@ -188,11 +187,12 @@
   .row:hover { background: var(--fill); }
   .row:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--focus); }
   .row.on { background: var(--accent); color: #fff; }
-  .row.on .doc, .row.on .n { color: rgba(255, 255, 255, 0.85); }
+  .row.on .n { color: rgba(255, 255, 255, 0.85); }
+  /* On the selected row the page stays legible: its tile turns white. */
+  .row.on :global(.fi .tile) { stroke: rgba(255, 255, 255, 0.9); stroke-width: 1.2; }
   .chev { width: 12px; display: grid; place-items: center; color: var(--muted); transition: transform 180ms var(--ease); flex: none; }
   .chev.o { transform: rotate(90deg); }
   .folder { color: #5aa7f5; flex: none; }
-  .doc { color: var(--t); flex: none; }
   .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .file .name { font-size: 0.8rem; }
   .dir .name { font-weight: 500; }

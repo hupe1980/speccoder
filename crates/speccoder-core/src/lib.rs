@@ -29,7 +29,7 @@ pub use command::{
     InitCheck, InitKey, InitReport, InitRun, InstructionFile, IssueEntry, IssuesReport,
     LastAttempt, MonitorScore, ObjectVerification, OpenQuestion, OperatorView, PAYLOADS,
     PendingCall, PrReport, ProposeReport, RefusedPath, ReplayReport, RequirementDrift, ReviewItem,
-    ReviewReport, ReviewTotals, RunReport, SCHEMA_VERSION, SchemaName, SchemaReport, SignerView,
-    SkillEntry, SkillRunReport, SkillsReport, SpecVersion, StatusReport, StatusTotals, TaskCost,
-    TaskStatus, TraceRow, UiReport, Usage, VerifyOutcome, VerifyReason, WorktreeReport,
+    ReviewReport, ReviewTotals, RunReport, SCHEMA_VERSION, SchemaName, SchemaReport, SetAside,
+    SignerView, SkillEntry, SkillRunReport, SkillsReport, SpecVersion, StatusReport, StatusTotals,
+    TaskCost, TaskStatus, TraceRow, UiReport, Usage, VerifyOutcome, VerifyReason, WorktreeReport,
 };

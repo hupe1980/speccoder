@@ -6,6 +6,33 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **The model's reasoning.** Each attempt turn asks the provider for a
+  summary of the model's reasoning (Anthropic, OpenAI Responses, Gemini;
+  `[model] reasoning_summary = false` turns it off). It is shown as the
+  model's account, never as evidence: `∴` lines in the terminal, a live
+  thinking line in the app, ACP thoughts, the `reasoning` event, and per
+  turn in `task show --account` and the inspector's timeline.
+- **Changes set aside, kept or let go.** What a worktree held when a run
+  started waits in Needs You and on the task's card: `speccoder task
+  restore T` commits it onto the feature's branch as yours, `task drop T`
+  discards it; the inspector shows the files and the diff.
+- File-type icons in the app's file tree and diffs.
+- `cargo binstall speccoder` takes the release archive.
+
+### Changed
+
+- agentplane 0.53.0. In an editor (ACP) the model's words arrive as its
+  message and its reasoning as its thoughts.
+- Needs You counts in words (`2 tasks that did not pass`).
+
+### Fixed
+
+- The app read the journal for several requests at once and refused
+  itself ("another speccoder is working on this project"); reads now share
+  one handle and wait briefly for another process.
+
 ## [0.1.0] - 2026-10-25
 
 The first release. speccoder implements GitHub Spec Kit features and

@@ -32,7 +32,7 @@ use self::propose::{CAPABILITY, Propose};
 
 /// The agentplane release speccoder is built against (the exact pin in the
 /// workspace `Cargo.toml`), named in every verification summary.
-pub const AGENTPLANE_VERSION: &str = "0.52.0";
+pub const AGENTPLANE_VERSION: &str = "0.53.0";
 
 /// The journal file inside a project's state directory.
 pub const JOURNAL: &str = "journal.redb";
@@ -164,20 +164,88 @@ pub struct Plane {
     runtime: Arc<Runtime>,
     /// Where an unreadable journal was moved before a fresh one was opened.
     pub replaced_journal: Option<std::path::PathBuf>,
+    /// The run's claim on its journal in this process, released on drop.
+    _run: Option<RunClaim>,
+}
+
+/// The journals a run holds in this process. Reads share a journal's
+/// handle; two runs on one journal would race, so a second is refused.
+static RUNS: std::sync::Mutex<Vec<std::path::PathBuf>> = std::sync::Mutex::new(Vec::new());
+
+struct RunClaim(std::path::PathBuf);
+
+impl RunClaim {
+    fn take(dir: &Path) -> Result<Self, PlaneError> {
+        let path = dir.join(JOURNAL);
+        let mut runs = RUNS
+            .lock()
+            .map_err(|_| PlaneError("the run registry is poisoned".to_owned()))?;
+        if runs.contains(&path) {
+            return Err(PlaneError(format!(
+                "another speccoder is working on this project (a run in this process holds its journal in {})",
+                dir.display()
+            )));
+        }
+        runs.push(path.clone());
+        Ok(Self(path))
+    }
+}
+
+impl Drop for RunClaim {
+    fn drop(&mut self) {
+        if let Ok(mut runs) = RUNS.lock() {
+            runs.retain(|p| *p != self.0);
+        }
+    }
 }
 
 fn open_store(dir: &Path) -> Result<Arc<RedbStore>, PlaneError> {
     open_or_replace(dir).map(|(store, _)| store)
 }
 
-/// Opens the journal. A journal this build cannot read — another format
-/// after an upgrade, or damage — is moved aside and a fresh one opened:
-/// durable outcomes live in git, the journal is replaceable
-///. A journal locked by another speccoder is an error.
+/// The journals this process has open, shared: redb locks the file per
+/// process, so a second open here (the web host answering two requests, a
+/// run beside a read) would refuse itself.
+static OPEN: std::sync::Mutex<Vec<(std::path::PathBuf, std::sync::Weak<RedbStore>)>> =
+    std::sync::Mutex::new(Vec::new());
+
+/// Opens the journal, sharing the handle this process already has. A
+/// journal this build cannot read — another format after an upgrade, or
+/// damage — is moved aside and a fresh one opened: durable outcomes live in
+/// git, the journal is replaceable. A journal another process holds is
+/// waited for briefly (a read holds it for milliseconds), then an error.
 fn open_or_replace(dir: &Path) -> Result<(Arc<RedbStore>, Option<std::path::PathBuf>), PlaneError> {
     std::fs::create_dir_all(dir).map_err(|e| PlaneError(format!("{}: {e}", dir.display())))?;
     let path = dir.join(JOURNAL);
-    match RedbStore::open(&path) {
+    let mut open = OPEN
+        .lock()
+        .map_err(|_| PlaneError("the journal registry is poisoned".to_owned()))?;
+    open.retain(|(_, w)| w.strong_count() > 0);
+    if let Some(store) = open
+        .iter()
+        .find(|(p, _)| *p == path)
+        .and_then(|(_, w)| w.upgrade())
+    {
+        return Ok((store, None));
+    }
+    let (store, aside) = open_fresh(dir, &path)?;
+    open.push((path, Arc::downgrade(&store)));
+    Ok((store, aside))
+}
+
+fn open_fresh(
+    dir: &Path,
+    path: &Path,
+) -> Result<(Arc<RedbStore>, Option<std::path::PathBuf>), PlaneError> {
+    let mut opened = RedbStore::open(path);
+    for _ in 0..20 {
+        if !matches!(opened, Err(agentplane::core::StoreError::InUse(_))) {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        opened = RedbStore::open(path);
+    }
+    match opened {
         Ok(store) => Ok((Arc::new(store), None)),
         // Another speccoder holds it: its run's record is live. Touch nothing.
         Err(agentplane::core::StoreError::InUse(e)) => Err(PlaneError(format!(
@@ -191,12 +259,12 @@ fn open_or_replace(dir: &Path) -> Result<(Arc<RedbStore>, Option<std::path::Path
                 .duration_since(std::time::UNIX_EPOCH)
                 .map_or(0, |d| d.as_secs());
             let aside = dir.join(format!("journal.{stamp}.unreadable.redb"));
-            std::fs::rename(&path, &aside).map_err(|r| {
+            std::fs::rename(path, &aside).map_err(|r| {
                 PlaneError(format!(
                     "the journal is unreadable ({e}) and cannot be moved aside: {r}"
                 ))
             })?;
-            RedbStore::open(&path)
+            RedbStore::open(path)
                 .map(|store| (Arc::new(store), Some(aside)))
                 .map_err(|e| PlaneError(format!("cannot open a fresh journal: {e}")))
         }
@@ -352,10 +420,12 @@ impl Plane {
         tools: Option<Arc<crate::tools::WorkspaceTools>>,
         hooks: Hooks,
     ) -> Result<Self, PlaneError> {
+        let claim = RunClaim::take(dir)?;
         let (store, replaced_journal) = open_or_replace(dir)?;
         Ok(Self {
             runtime: build(store, model, provider, tools, hooks)?,
             replaced_journal,
+            _run: Some(claim),
         })
     }
 
@@ -370,6 +440,7 @@ impl Plane {
         Ok(Self {
             runtime,
             replaced_journal,
+            _run: None,
         })
     }
 
@@ -413,18 +484,10 @@ impl Plane {
         &self,
         outcome: &RunOutcome,
     ) -> Result<Option<agentplane::core::Task>, PlaneError> {
-        let RunStatus::Suspended(agentplane::core::SuspendReason::AwaitingEvent {
-            correlation,
-            ..
-        }) = &outcome.status
-        else {
+        let RunStatus::Suspended(reason) = &outcome.status else {
             return Ok(None);
         };
-        let Some(id) = correlation
-            .iter()
-            .find(|k| k.namespace == "task")
-            .and_then(|k| agentplane::core::TaskId::parse(&k.value).ok())
-        else {
+        let Some(id) = reason.awaited_task() else {
             return Ok(None);
         };
         self.task(id).await
@@ -527,6 +590,7 @@ impl Plane {
         Ok(Self {
             runtime: build(store, model, provider, tools, Hooks::default())?,
             replaced_journal: None,
+            _run: None,
         })
     }
 
@@ -825,14 +889,27 @@ pub async fn replay_strict(
         .map_err(|e| PlaneError(e.to_string()))
 }
 
-/// What the model said in each turn of `run`, in order: the text
-/// of every `model.complete` effect the journal holds — its account, a
-/// claim. Empty turns are left out.
+/// One model turn of an attempt, as the person is shown it afterwards: the
+/// model's summary of its reasoning and its words beside its calls — its
+/// account, a claim. Control characters escaped.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct AccountTurn {
+    /// The turn (1-based) within the attempt.
+    pub turn: u32,
+    /// Its reasoning summary, when one was asked for and given.
+    pub reasoning: Option<String>,
+    /// Its words beside its calls (a turn without calls is the final
+    /// answer, reported as such).
+    pub said: Option<String>,
+}
+
+/// The model's account of `run`, turn by turn: every turn that reasoned or
+/// said something, in order.
 ///
 /// # Errors
 ///
 /// The journal cannot be read.
-pub async fn narration(dir: &Path, run: &str) -> Result<Vec<String>, PlaneError> {
+pub async fn account(dir: &Path, run: &str) -> Result<Vec<AccountTurn>, PlaneError> {
     let Ok(id) = agentplane::core::RunId::parse(run) else {
         return Ok(Vec::new());
     };
@@ -841,32 +918,24 @@ pub async fn narration(dir: &Path, run: &str) -> Result<Vec<String>, PlaneError>
         .read(id, 1)
         .await
         .map_err(|e| PlaneError(e.to_string()))?;
-    let mut out = Vec::new();
-    let mut model = false;
-    for r in &history {
-        match &r.body.kind {
-            agentplane::journal::RecordKind::EffectStarted { descriptor, .. } => {
-                model = descriptor.kind == "model.complete";
-            }
-            agentplane::journal::RecordKind::EffectDone { output, .. } if model => {
-                model = false;
-                // A turn without calls is the final answer, not narration.
-                let calls = output["tool_calls"]
-                    .as_array()
-                    .is_some_and(|c| !c.is_empty());
-                if let Some(text) = calls
-                    .then(|| output["text"].as_str())
-                    .flatten()
-                    .map(str::trim)
-                    .filter(|t| !t.is_empty())
-                {
-                    out.push(crate::approvals::present::escape(text));
-                }
-            }
-            _ => {}
-        }
-    }
-    Ok(out)
+    let text = |t: &str| {
+        let t = t.trim();
+        (!t.is_empty()).then(|| crate::approvals::present::escape(t))
+    };
+    Ok(agentplane::model::turns(&history)
+        .into_iter()
+        .zip(1u32..)
+        .filter_map(|(t, turn)| {
+            let c = t.completion?;
+            let said = (!c.tool_calls.is_empty()).then(|| text(&c.text)).flatten();
+            let reasoning = c.reasoning.as_deref().and_then(text);
+            (said.is_some() || reasoning.is_some()).then_some(AccountTurn {
+                turn,
+                reasoning,
+                said,
+            })
+        })
+        .collect())
 }
 
 /// The tool servers when no worktree is bound: every call is refused.
@@ -930,13 +999,19 @@ mod tests {
         let (store, aside) = open_or_replace(dir.path()).unwrap_or_else(|e| panic!("{}", e.0));
         let aside = aside.unwrap_or_else(|| panic!("moved aside"));
         assert!(aside.exists() && dir.path().join(JOURNAL).exists());
-        // While it is open, a second opener is refused, and nothing is moved.
+        // In this process a second opener shares the handle.
+        let shared = open_or_replace(dir.path()).unwrap_or_else(|e| panic!("{}", e.0));
+        assert!(Arc::ptr_eq(&store, &shared.0) && shared.1.is_none());
+        drop((store, shared));
+        // Held elsewhere (another process's lock, here a direct open): a
+        // brief wait, then refused, and nothing is moved.
+        let held = RedbStore::open(dir.path().join(JOURNAL)).unwrap_or_else(|e| panic!("{e}"));
         let second = open_or_replace(dir.path())
             .err()
             .map(|e| e.0)
             .unwrap_or_default();
         assert!(second.contains("another speccoder"), "{second}");
-        drop(store);
+        drop(held);
         assert!(
             open_or_replace(dir.path())
                 .unwrap_or_else(|e| panic!("{}", e.0))
