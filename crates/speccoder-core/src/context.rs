@@ -26,6 +26,12 @@ pub enum ContextKind {
     RetryDigest,
     /// A GitHub issue's title and body (untrusted).
     Issue,
+    /// A requirement's acceptance scenario.
+    Scenario,
+    /// A person's note to an author call (*Ask Again*, a reading).
+    Note,
+    /// A person's review comment, with its anchor's quote.
+    Comment,
 }
 
 /// One part handed to a call.

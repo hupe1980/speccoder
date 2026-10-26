@@ -127,6 +127,12 @@ impl PreFrozenAcceptance {
         Ok(())
     }
 
+    /// Whether it still stands for the wording as it reads now ([`current`]).
+    #[must_use]
+    pub fn is_current(&self, wording_now: &str) -> bool {
+        current(self, wording_now)
+    }
+
     /// The `Acceptance:` trailer: one form for every producer;
     /// `manifest` is the visible set's digest.
     #[must_use]
@@ -196,6 +202,7 @@ mod tests {
             let r = record(&a);
             prop_assert!(current(&r, &a));
             prop_assert_eq!(current(&r, &b), a == b);
+            prop_assert_eq!(r.is_current(&b), a == b);
         }
     }
 

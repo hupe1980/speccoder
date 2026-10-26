@@ -17,6 +17,7 @@ pub mod graph;
 pub mod inbox;
 pub mod ladder;
 pub mod next;
+pub mod oracle;
 pub mod predicate;
 pub mod retry;
 pub mod scope;

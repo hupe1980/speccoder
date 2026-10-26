@@ -72,12 +72,18 @@ pub enum Kind {
     Stale,
     /// The spec leaves questions open.
     Question,
+    /// Two independent test authors read a requirement differently: the
+    /// person says which reading is meant, or rewords it (spec 093).
+    Ambiguous,
     /// Requirements not approved on their current wording.
     Review,
     /// Changes requested on the spec.
     Revise,
     /// The last attempt did not pass.
     Stuck,
+    /// An autopilot run refused calls it would have asked about: listed
+    /// for the person afterwards (spec 093).
+    AutopilotDenied,
     /// A bug is already fixed: keep its reproduction, or drop it.
     BugAlreadySatisfied,
     /// Changes a run set aside.
@@ -90,7 +96,7 @@ pub enum Kind {
 
 impl Kind {
     /// Every kind, the most urgent first.
-    pub const ALL: [Self; 18] = [
+    pub const ALL: [Self; 20] = [
         Self::Unknown,
         Self::Approval,
         Self::ApprovalBatch,
@@ -102,9 +108,11 @@ impl Kind {
         Self::Gaming,
         Self::Stale,
         Self::Question,
+        Self::Ambiguous,
         Self::Review,
         Self::Revise,
         Self::Stuck,
+        Self::AutopilotDenied,
         Self::BugAlreadySatisfied,
         Self::Aside,
         Self::Commit,
@@ -126,9 +134,11 @@ impl Kind {
             Self::Gaming => "gaming",
             Self::Stale => "stale",
             Self::Question => "question",
+            Self::Ambiguous => "ambiguous",
             Self::Review => "review",
             Self::Revise => "revise",
             Self::Stuck => "stuck",
+            Self::AutopilotDenied => "autopilot_denied",
             Self::BugAlreadySatisfied => "bug_already_satisfied",
             Self::Aside => "aside",
             Self::Commit => "commit",
@@ -150,10 +160,12 @@ impl Kind {
             | Self::BugReproWeak
             | Self::Gaming
             | Self::Question
+            | Self::Ambiguous
             | Self::Revise
             | Self::Stuck
             | Self::Commit => Group::BlockedOnYou,
             Self::Stale
+            | Self::AutopilotDenied
             | Self::Review
             | Self::BugAlreadySatisfied
             | Self::Aside
@@ -178,7 +190,7 @@ impl Kind {
 
     /// Every recorded name, the most urgent first.
     #[must_use]
-    pub fn names() -> [&'static str; 18] {
+    pub fn names() -> [&'static str; 20] {
         Self::ALL.map(Self::as_str)
     }
 }
@@ -208,7 +220,7 @@ mod tests {
         // Today's kinds keep their order among themselves.
         let today: Vec<&str> = Kind::names()
             .into_iter()
-            .filter(|n| !n.starts_with("bug_"))
+            .filter(|n| !n.starts_with("bug_") && !matches!(*n, "ambiguous" | "autopilot_denied"))
             .collect();
         assert_eq!(
             today,
@@ -229,6 +241,8 @@ mod tests {
             ]
         );
         assert_eq!(Kind::BugAlreadySatisfied.group(), Group::ReadyToReview);
+        assert_eq!(Kind::Ambiguous.group(), Group::BlockedOnYou);
+        assert_eq!(Kind::AutopilotDenied.group(), Group::ReadyToReview);
         for k in [
             Kind::BugConfirm,
             Kind::BugCannotReproduce,

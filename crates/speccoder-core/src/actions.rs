@@ -172,6 +172,67 @@ pub enum Runnable {
         /// Start the run's asking budget again.
         resume_asking: bool,
     },
+    /// Write, reject, ask again for, edit or settle a requirement's tests
+    /// at review (the input: the reason, the comment or the content).
+    OracleTests {
+        /// The requirement (`US1`).
+        req: String,
+        /// What to do.
+        op: crate::oracle::OracleOp,
+        /// The test (reject, again, edit).
+        path: Option<String>,
+        /// The ambiguous scenario (reading).
+        scenario: Option<String>,
+        /// The reading meant (reading).
+        reading: Option<crate::oracle::Reading>,
+    },
+    /// Approve every approvable decision line, freeze the written tests and
+    /// start the feature's run, asking or on autopilot.
+    ApproveAndRun {
+        /// How the run asks.
+        mode: crate::oracle::RunMode,
+        /// The grant ids (F-125 objects) an autopilot run holds.
+        grants: Vec<String>,
+    },
+    /// Add, delete or keep a review comment (the input: its words).
+    Comment {
+        /// What to do.
+        op: CommentOp,
+        /// What a new comment is about.
+        anchor: Option<crate::oracle::Anchor>,
+        /// The draft (delete, keep).
+        id: Option<String>,
+    },
+    /// Send the comments as one revision turn.
+    CommentsSend {
+        /// The drafts the person saw (empty: every draft in the tray); a
+        /// draft sent already refuses the send.
+        ids: Vec<String>,
+    },
+    /// Undo the last revision turn: the documents back, byte for byte.
+    RevisionUndo {
+        /// The turn the person saw.
+        turn: Option<String>,
+    },
+    /// Code-view line comments as one nudge for the task's next attempt.
+    CodeNudge {
+        /// The task.
+        task: String,
+        /// The comments.
+        comments: Vec<crate::oracle::CodeComment>,
+    },
+}
+
+/// What a comment action does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum CommentOp {
+    /// A new draft.
+    Add,
+    /// Remove a draft.
+    Delete,
+    /// Keep an outdated draft.
+    Keep,
 }
 
 /// A prefix list in `speccoder.toml`.
@@ -294,6 +355,18 @@ pub enum ActionKind {
     WidenPolicy,
     /// [`Runnable::DecideBatch`].
     DecideBatch,
+    /// [`Runnable::OracleTests`].
+    OracleTests,
+    /// [`Runnable::ApproveAndRun`].
+    ApproveAndRun,
+    /// [`Runnable::Comment`].
+    Comment,
+    /// [`Runnable::CommentsSend`].
+    CommentsSend,
+    /// [`Runnable::RevisionUndo`].
+    RevisionUndo,
+    /// [`Runnable::CodeNudge`].
+    CodeNudge,
     /// No runnable: the person runs the command.
     Command,
 }
@@ -326,6 +399,12 @@ impl ActionKind {
         Self::AllowAlways,
         Self::WidenPolicy,
         Self::DecideBatch,
+        Self::OracleTests,
+        Self::ApproveAndRun,
+        Self::Comment,
+        Self::CommentsSend,
+        Self::RevisionUndo,
+        Self::CodeNudge,
         Self::Command,
     ];
 
@@ -358,6 +437,12 @@ impl ActionKind {
             Self::AllowAlways => "allow_always",
             Self::WidenPolicy => "widen_policy",
             Self::DecideBatch => "decide_batch",
+            Self::OracleTests => "oracle_tests",
+            Self::ApproveAndRun => "approve_and_run",
+            Self::Comment => "comment",
+            Self::CommentsSend => "comments_send",
+            Self::RevisionUndo => "revision_undo",
+            Self::CodeNudge => "code_nudge",
             Self::Command => "command",
         }
     }
@@ -437,6 +522,33 @@ impl ActionKind {
                 digest: "d1".to_owned(),
                 resume_asking: false,
             },
+            Self::OracleTests => Runnable::OracleTests {
+                req: "US1".to_owned(),
+                op: crate::oracle::OracleOp::Write,
+                path: None,
+                scenario: None,
+                reading: None,
+            },
+            Self::ApproveAndRun => Runnable::ApproveAndRun {
+                mode: crate::oracle::RunMode::Ask,
+                grants: Vec::new(),
+            },
+            Self::Comment => Runnable::Comment {
+                op: CommentOp::Delete,
+                anchor: None,
+                id: Some("c1".to_owned()),
+            },
+            Self::CommentsSend => Runnable::CommentsSend { ids: Vec::new() },
+            Self::RevisionUndo => Runnable::RevisionUndo { turn: None },
+            Self::CodeNudge => Runnable::CodeNudge {
+                task: task(),
+                comments: vec![crate::oracle::CodeComment {
+                    path: "src/lib.rs".to_owned(),
+                    line: 1,
+                    quote: "pub fn ok() {}".to_owned(),
+                    text: "name it".to_owned(),
+                }],
+            },
             Self::Command => return None,
         })
     }
@@ -478,6 +590,12 @@ impl Runnable {
             Self::AllowAlways { .. } => ActionKind::AllowAlways,
             Self::WidenPolicy { .. } => ActionKind::WidenPolicy,
             Self::DecideBatch { .. } => ActionKind::DecideBatch,
+            Self::OracleTests { .. } => ActionKind::OracleTests,
+            Self::ApproveAndRun { .. } => ActionKind::ApproveAndRun,
+            Self::Comment { .. } => ActionKind::Comment,
+            Self::CommentsSend { .. } => ActionKind::CommentsSend,
+            Self::RevisionUndo { .. } => ActionKind::RevisionUndo,
+            Self::CodeNudge { .. } => ActionKind::CodeNudge,
         }
     }
 }
@@ -525,7 +643,12 @@ pub fn identity(run: Option<&Runnable>, command: &str) -> ActionId {
         | Runnable::Rule { task }
         | Runnable::KeepSetAside { task }
         | Runnable::DropSetAside { task }
-        | Runnable::AllowAlways { task, .. } => Some(task.clone()),
+        | Runnable::AllowAlways { task, .. }
+        | Runnable::CodeNudge { task, .. } => Some(task.clone()),
+        Runnable::OracleTests { req, .. } => Some(req.clone()),
+        Runnable::ApproveAndRun { mode, .. } => Some(mode.as_str().to_owned()),
+        Runnable::Comment { id, .. } => id.clone(),
+        Runnable::RevisionUndo { turn } => turn.clone(),
         Runnable::WidenPolicy { key, .. } => Some(key.as_str().to_owned()),
         Runnable::DecideBatch { run, .. } => Some(run.clone()),
         Runnable::IssueComment { issue, .. } => Some(issue.to_string()),
@@ -543,7 +666,8 @@ pub fn identity(run: Option<&Runnable>, command: &str) -> ActionId {
         | Runnable::QuickChange { .. }
         | Runnable::FixSetup
         | Runnable::Feature
-        | Runnable::PullRequest => None,
+        | Runnable::PullRequest
+        | Runnable::CommentsSend { .. } => None,
     };
     ActionId {
         kind: run.kind(),

@@ -57,6 +57,49 @@ impl Origin {
     }
 }
 
+/// The rung a unit stands on (D-103): a quick change (L1), a bug (L2) or
+/// a feature. A quick-change or bug unit's pipeline authors and confirms
+/// its own acceptance, so the review writes no tests for it (D-126).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum Rung {
+    /// A quick change's standing unit (`speccoder do`, spec 084).
+    Quick,
+    /// A bug's home: a standing bug-fix unit or a bug of the format's own
+    /// bug structure (spec 090).
+    Bug,
+    /// Any other unit.
+    Feature,
+}
+
+impl Rung {
+    /// Its recorded name.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Quick => "quick",
+            Self::Bug => "bug",
+            Self::Feature => "feature",
+        }
+    }
+}
+
+/// The rung of `unit`, from the standing units the format names for the
+/// project (`(unit, rung)`): a standing unit, or a unit under one
+/// (`<standing>/<slug>`), is on its rung; every other unit is a feature.
+#[must_use]
+pub fn rung_of(unit: &str, standing: &[(String, Rung)]) -> Rung {
+    standing
+        .iter()
+        .find(|(name, _)| {
+            unit == name
+                || unit
+                    .strip_prefix(name.as_str())
+                    .is_some_and(|rest| rest.starts_with('/'))
+        })
+        .map_or(Rung::Feature, |(_, r)| *r)
+}
+
 /// The subject a bug's origin is recorded for: `<unit>/<requirement>`.
 #[must_use]
 pub fn subject(unit: &str, requirement: &str) -> String {
@@ -79,5 +122,21 @@ mod tests {
         assert_eq!(serde_json::from_value::<Origin>(v).ok(), Some(o.clone()));
         assert_eq!(o.describe(), "issue o/r#42");
         assert_eq!(subject("007-bugfixes", "FR-003"), "007-bugfixes/FR-003");
+    }
+
+    #[test]
+    fn every_rung_is_decided_by_the_standing_units() {
+        let standing = vec![
+            ("004-quick-changes".to_owned(), Rung::Quick),
+            ("007-bugfixes".to_owned(), Rung::Bug),
+            (".specify/bugs".to_owned(), Rung::Bug),
+        ];
+        assert_eq!(rung_of("004-quick-changes", &standing), Rung::Quick);
+        assert_eq!(rung_of("007-bugfixes", &standing), Rung::Bug);
+        assert_eq!(rung_of(".specify/bugs/empty-title", &standing), Rung::Bug);
+        assert_eq!(rung_of("007-bugfixes-extra", &standing), Rung::Feature);
+        assert_eq!(rung_of("001-greet", &standing), Rung::Feature);
+        assert_eq!(rung_of("001-greet", &[]), Rung::Feature);
+        assert_eq!(Rung::Quick.as_str(), "quick");
     }
 }

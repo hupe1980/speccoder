@@ -71,6 +71,9 @@ pub const REGISTRY: &[Name] = &[
     p("bug.unchanged_selected"),
     p("bug.discrimination"),
     d("bug.outcome"),
+    p("oracle.stage"),
+    d("oracle.frozen"),
+    d("oracle.lapsed"),
 ];
 
 /// The registered name `name`.
