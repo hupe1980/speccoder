@@ -314,6 +314,8 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
         );
         yes = yes.with_run(Runnable::Approve {
             task: p.task.clone(),
+            call: p.id(),
+            digest: p.digest.clone(),
         });
         if question {
             yes.input = Some("Your answer".to_owned());
@@ -326,6 +328,8 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
         );
         no = no.with_run(Runnable::Reject {
             task: p.task.clone(),
+            call: p.id(),
+            digest: p.digest.clone(),
         });
         no.input = Some("Why (the model is told)".to_owned());
         let mut i = item(

@@ -16,6 +16,7 @@ Every result that is not plainly `ok` names a code — `error[CODE]`, `stopped[C
 | [`USAGE`](#usage) | error | 2 | the arguments are not valid for this command |
 | [`USAGE-CONFLICT`](#usage-conflict) | error | 2 | two options were given that exclude each other |
 | [`USAGE-UNKNOWN-CODE`](#usage-unknown-code) | error | 2 | there is no code by that name |
+| [`CALL-CHANGED`](#call-changed) | error | 2 | the call waiting now is not the one that was shown |
 | [`INTERNAL`](#internal) | error | 1 | speccoder failed in a way it does not expect |
 | [`NO-PROJECT`](#no-project) | error | 10 | speccoder works on a Spec Kit or OpenSpec project, and found none here |
 | [`SPEC-DIAGNOSTICS`](#spec-diagnostics) | error | 11 | the spec artifacts have errors speccoder will not guess around |
@@ -104,6 +105,14 @@ There is no code by that name.
 `speccoder explain` knows the codes speccoder itself prints; the closest names are listed with the error.
 
 - `speccoder explain --list`
+
+### CALL-CHANGED
+
+The call waiting now is not the one that was shown.
+
+An approval or rejection from an interface names the call it showed and that call's object. The call expired or was decided and another waits now, or the attempt stopped on another object; nothing was decided.
+
+- `speccoder report --approvals`
 
 ### INTERNAL
 

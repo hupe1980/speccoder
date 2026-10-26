@@ -246,8 +246,9 @@ export type BatchVerdict = "approve" | "reject";
 /** A run whose asking budget is used, with its waiting calls by class. */
 export interface BatchView {
   /**
-   * SHA-256 over the sorted ids of every call listed: a decision names
-   * it and is refused when the list changed.
+   * SHA-256 over the sorted digests of every call listed
+   * ([`PendingCall::digest`]): a decision names it and is refused when
+   * the list, or the object of a call in it, changed.
    */
   digest: string;
   /** The calls by class, in the order write, command, network, mcp. */
@@ -1647,6 +1648,12 @@ export interface PendingCall {
   covers: string;
   /** Seconds since the epoch it is denied as expired at. */
   deadline: number | null;
+  /**
+   * SHA-256 over its id and the object a decision covers: a decision
+   * names it and is refused when another call (or another object) waits
+   * now.
+   */
+  digest: string;
   /** `approval` or `question`. */
   kind: string;
   /** The object a decision covers. */
@@ -2069,14 +2076,25 @@ export type Runnable =
     /** Repository-relative paths. */
     paths: string[];
   }
-  /** Approve the task's waiting call. */
+  /**
+   * Approve the task's waiting call: the one that was shown, refused
+   * when another waits now.
+   */
   | {
+    /** The call's id ([`crate::PendingCall::id`]). */
+    call: string;
+    /** The digest of the call that was shown ([`crate::PendingCall::digest`]). */
+    digest: string;
     kind: "approve";
     /** The task. */
     task: string;
   }
-  /** Reject it (the input is the reason). */
+  /** Reject it (the input is the reason), bound the same way. */
   | {
+    /** The call's id ([`crate::PendingCall::id`]). */
+    call: string;
+    /** The digest of the call that was shown ([`crate::PendingCall::digest`]). */
+    digest: string;
     kind: "reject";
     /** The task. */
     task: string;

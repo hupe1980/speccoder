@@ -434,6 +434,53 @@ fn a_task_grant_survives_a_retry_and_ends_with_its_run() {
     );
 }
 
+/// A call a lane stopped, approved in its run's batch, is approved once:
+/// the next attempt makes it one time without asking, a repeat asks, and
+/// a later attempt of the task is given nothing.
+#[test]
+fn a_batch_approval_of_a_lanes_call_covers_one_call() {
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    let plane = speccoder_runtime::worktree::project_state_dir(
+        state.path(),
+        &fs::canonicalize(r.path()).unwrap(),
+    );
+    let by = speccoder_runtime::approvals::Who::local(speccoder_core::actions::Via::Terminal);
+    let mut decisions = speccoder_runtime::approvals::Decisions::default();
+    let object = Object::Path {
+        canonical: "package.json".to_owned(),
+        asked: "package.json".to_owned(),
+    };
+    decisions.approve_once("001-graph", "T005", object, &by);
+    decisions.save(&plane).unwrap();
+    let (f, d) = fake();
+    write(&f, "c1", "package.json");
+    write(&f, "c2", "package.json");
+    f.will_structure(unfinished());
+    let person = Scripted::new(vec![once()]);
+    let res = run_asking(r.path(), state.path(), "T005", d, person.clone());
+    let rep = report(&res);
+    assert_eq!(rep.tool_calls[0]["scope"], "once", "{:?}", rep.tool_calls);
+    assert_eq!(
+        person.requests().len(),
+        1,
+        "the repeat asks: {}",
+        res.message()
+    );
+    let after = speccoder_runtime::approvals::Decisions::load(&plane).unwrap();
+    assert!(
+        after.for_task("001-graph", "T005").approved.is_empty(),
+        "{after:?}"
+    );
+    // The task's next attempt: asked again.
+    let (f2, d2) = fake();
+    write(&f2, "c1", "package.json");
+    f2.will_structure(unfinished());
+    let person2 = Scripted::new(vec![once()]);
+    let again = run_asking(r.path(), state.path(), "T005", d2, person2.clone());
+    assert_eq!(person2.requests().len(), 1, "{}", again.message());
+}
+
 /// W5: an MCP grant named the tool; a server that changed the tool's
 /// definition kept it. Now a run grant names the definition's digest.
 #[test]

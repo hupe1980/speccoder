@@ -251,6 +251,7 @@ impl Skill for Converge {
                 schema: schema(),
                 ask: None,
                 run_approved: Vec::new(),
+                once: Vec::new(),
                 run: None,
                 asking: super::attempt::Asking::default(),
                 parts: Vec::new(),

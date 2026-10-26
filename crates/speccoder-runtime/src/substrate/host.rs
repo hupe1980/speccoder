@@ -145,6 +145,7 @@ impl Skill for Host {
                 frozen_additions: false,
                 ask,
                 run_approved: Vec::new(),
+                once: Vec::new(),
                 run: None,
                 asking: super::attempt::Asking::default(),
                 parts: Vec::new(),

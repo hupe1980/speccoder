@@ -252,7 +252,11 @@ fn the_queue_approves_and_rejects_with_a_reason() {
     app.key(KeyCode::Tab);
     assert_eq!(
         app.key(KeyCode::Char('a')),
-        Action::Approve("T002".to_owned())
+        Action::Approve(Runnable::Approve {
+            task: "T002".to_owned(),
+            call: "attempt:T002".to_owned(),
+            digest: String::new(),
+        })
     );
     app.key(KeyCode::Char('r'));
     for c in "no deps".chars() {
@@ -261,7 +265,14 @@ fn the_queue_approves_and_rejects_with_a_reason() {
     assert!(screen(&app).contains("reason (the model is told"));
     assert_eq!(
         app.key(KeyCode::Enter),
-        Action::Reject("T002".to_owned(), "no deps".to_owned())
+        Action::Reject(
+            Runnable::Reject {
+                task: "T002".to_owned(),
+                call: "attempt:T002".to_owned(),
+                digest: String::new(),
+            },
+            "no deps".to_owned()
+        )
     );
     // An empty reason is refused; esc cancels typing.
     app.key(KeyCode::Char('r'));

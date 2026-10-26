@@ -1,0 +1,17 @@
+{
+  "head": "init",
+  "result": {
+    "code": "CALL-CHANGED",
+    "command": "approve",
+    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#call-changed",
+    "exit_code": 2,
+    "fix": [
+      "speccoder report --approvals"
+    ],
+    "message": "the call changed since it was shown; see `speccoder report --approvals` for the one waiting now",
+    "schema_version": 2,
+    "status": "usage_error"
+  },
+  "review": null,
+  "status": ""
+}

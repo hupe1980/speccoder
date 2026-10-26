@@ -121,17 +121,17 @@ fn cases() -> Vec<(&'static str, Value, Value)> {
         ("converge", json!({ "kind": "converge" }), Value::Null),
         (
             "approve-none",
-            json!({ "kind": "approve", "task": "T005" }),
+            json!({ "kind": "approve", "task": "T005", "call": "attempt:T005", "digest": "" }),
             Value::Null,
         ),
         (
             "reject-empty",
-            json!({ "kind": "reject", "task": "T005" }),
+            json!({ "kind": "reject", "task": "T005", "call": "attempt:T005", "digest": "" }),
             json!(" "),
         ),
         (
             "reject-reason",
-            json!({ "kind": "reject", "task": "T005" }),
+            json!({ "kind": "reject", "task": "T005", "call": "attempt:T005", "digest": "" }),
             json!("no new files"),
         ),
         (

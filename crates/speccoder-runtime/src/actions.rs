@@ -130,6 +130,8 @@ pub fn available_with(
         );
         a = a.with_run(Runnable::Approve {
             task: p.task.clone(),
+            call: p.id(),
+            digest: p.digest.clone(),
         });
         out.push(a);
         let mut r = action(
@@ -140,6 +142,8 @@ pub fn available_with(
         );
         r = r.with_run(Runnable::Reject {
             task: p.task.clone(),
+            call: p.id(),
+            digest: p.digest.clone(),
         });
         r.input = Some("Why (the model is told)".to_owned());
         out.push(r);
@@ -618,9 +622,11 @@ pub fn perform_in(
         Runnable::Run { task: None } => run_feature(root, feature, options, false),
         Runnable::Converge => run_feature(root, feature, options, true),
         Runnable::Commit { paths } => crate::hosting::commit_planning(root, feature, paths),
-        Runnable::Approve { task } => decide(Verb::Decide(Choice::approve(task, text))),
-        Runnable::Reject { task } => match text {
-            Some(why) => decide(Verb::Decide(Choice::reject(task, why))),
+        Runnable::Approve { task, call, digest } => decide(Verb::Decide(
+            Choice::approve(task, text).shown(call, digest),
+        )),
+        Runnable::Reject { task, call, digest } => match text {
+            Some(why) => decide(Verb::Decide(Choice::reject(task, why).shown(call, digest))),
             None => needs("a reason"),
         },
         Runnable::Accept { task } => match (text, state) {
@@ -823,6 +829,8 @@ mod tests {
         let dir = tempfile::tempdir().unwrap_or_else(|e| panic!("{e}"));
         let run = Runnable::Reject {
             task: "T001".to_owned(),
+            call: "attempt:T001".to_owned(),
+            digest: String::new(),
         };
         let r = perform_in(
             dir.path(),

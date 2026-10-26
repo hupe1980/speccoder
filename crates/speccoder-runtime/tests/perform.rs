@@ -118,6 +118,52 @@ fn task(t: &str) -> String {
     t.to_owned()
 }
 
+/// Approve `t`'s waiting call, bound to it when the case runs ([`shown`]).
+fn approve(t: &str) -> Runnable {
+    Runnable::Approve {
+        task: task(t),
+        call: format!("attempt:{t}"),
+        digest: String::new(),
+    }
+}
+
+/// Reject it, bound the same way.
+fn reject(t: &str) -> Runnable {
+    Runnable::Reject {
+        task: task(t),
+        call: format!("attempt:{t}"),
+        digest: String::new(),
+    }
+}
+
+/// `run` bound to the call an interface would show for its task now: the
+/// call's id and digest, as listed (unchanged when none is listed, or when
+/// it names a digest of its own).
+fn shown(root: &Path, state: Option<&Path>, run: &Runnable) -> Runnable {
+    let (Runnable::Approve { task, digest, .. } | Runnable::Reject { task, digest, .. }) = run
+    else {
+        return run.clone();
+    };
+    if !digest.is_empty() {
+        return run.clone();
+    }
+    let Some(state) = state else {
+        return run.clone();
+    };
+    let listed = speccoder_runtime::approvals::list_with(root, None, state);
+    let Some(speccoder_core::CommandData::Approvals(a)) = listed.data() else {
+        return run.clone();
+    };
+    let Some(p) = a.pending.iter().find(|p| p.task == *task) else {
+        return run.clone();
+    };
+    let (task, call, digest) = (task.clone(), p.id(), p.digest.clone());
+    match run {
+        Runnable::Approve { .. } => Runnable::Approve { task, call, digest },
+        _ => Runnable::Reject { task, call, digest },
+    }
+}
+
 fn review(ids: &[&str], verdict: &str) -> Runnable {
     Runnable::Review {
         ids: ids.iter().map(|s| (*s).to_owned()).collect(),
@@ -135,41 +181,23 @@ fn cases() -> Vec<Case> {
         c
     };
     vec![
+        case("approve-unreadable", approve("T005"), None),
+        case("reject-unreadable", reject("T005"), Some("no new files")),
+        case("reject-empty", reject("T005"), None),
+        case("reject-blank", reject("T005"), Some("   ")),
+        case("approve-none", approve("T006"), None),
+        no_state(case("approve-no-state", approve("T005"), None)),
+        // Shown another call than the one waiting now: nothing is decided.
         case(
-            "approve-unreadable",
-            Runnable::Approve { task: task("T005") },
+            "approve-changed",
+            Runnable::Approve {
+                task: task("T005"),
+                call: "attempt:T005".to_owned(),
+                digest: "0".repeat(64),
+            },
             None,
         ),
-        case(
-            "reject-unreadable",
-            Runnable::Reject { task: task("T005") },
-            Some("no new files"),
-        ),
-        case(
-            "reject-empty",
-            Runnable::Reject { task: task("T005") },
-            None,
-        ),
-        case(
-            "reject-blank",
-            Runnable::Reject { task: task("T005") },
-            Some("   "),
-        ),
-        case(
-            "approve-none",
-            Runnable::Approve { task: task("T006") },
-            None,
-        ),
-        no_state(case(
-            "approve-no-state",
-            Runnable::Approve { task: task("T005") },
-            None,
-        )),
-        case(
-            "reject-waiting",
-            Runnable::Reject { task: task("T005") },
-            Some("  no new files  "),
-        ),
+        case("reject-waiting", reject("T005"), Some("  no new files  ")),
         case(
             "accept-empty",
             Runnable::Accept { task: task("T006") },
@@ -495,7 +523,8 @@ fn against_goldens(
             held = None;
         }
         let s = c.state.then(|| state.path());
-        let result = dispatch(r.path(), None, &c.run, c.input, s);
+        let run = shown(r.path(), s, &c.run);
+        let result = dispatch(r.path(), None, &run, c.input, s);
         let got = observed(r.path(), &result, &norm);
         let text = format!("{}\n", serde_json::to_string_pretty(&got).unwrap());
         let file = dir.join(format!("{}.json", c.name));
@@ -659,7 +688,7 @@ fn a_decision_records_the_interface_it_came_through() {
     let r = repo();
     let state = tempfile::tempdir().unwrap();
     wait_on_t005(r.path(), state.path());
-    let run = Runnable::Reject { task: task("T005") };
+    let run = shown(r.path(), Some(state.path()), &reject("T005"));
     let mut d = Dispatch::new(&run, Via::Web);
     d.input = Some("no new files");
     let res = speccoder_runtime::actions::perform_in(r.path(), None, d, Some(state.path()));
