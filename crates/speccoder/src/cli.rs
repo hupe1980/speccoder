@@ -814,6 +814,14 @@ pub enum BugAction {
         #[arg(long)]
         no_run: bool,
     },
+    /// Keep an already-fixed bug's reproductions as a regression test: committed, the task attested.
+    Keep {
+        /// The bug, as `<unit>/<task>`.
+        task: String,
+        /// Why it is kept (recorded with the acceptance).
+        #[arg(long)]
+        reason: String,
+    },
     /// Continue a bug: reproduce it again, or run its confirmed fix.
     Run {
         /// A bug of Spec Kit's `bug` extension, by slug.

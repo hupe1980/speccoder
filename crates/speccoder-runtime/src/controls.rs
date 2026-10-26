@@ -22,19 +22,19 @@ const FS: char = '\u{1f}';
 const RS: char = '\u{1e}';
 
 /// One line: trailers and subjects never span lines.
-fn one_line(text: &str) -> String {
+pub(crate) fn one_line(text: &str) -> String {
     text.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 /// The person, named as every approval names them: `<name> (asserted)`.
-fn person(root: &Path) -> String {
+pub(crate) fn person(root: &Path) -> String {
     format!("{} (asserted)", crate::approvals::who_in(root))
 }
 
 /// A person's decision on a task as an attestation: one
 /// `task-verification`, verdict `attested` or `skipped`, no summary. A
 /// line for the message; empty when `[attest]` is off.
-fn attest_decision(
+pub(crate) fn attest_decision(
     repo: &Path,
     project: &Path,
     task: &speccoder_core::snapshot::Task,

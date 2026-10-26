@@ -836,6 +836,9 @@ fn main() {
                     &options(false),
                     ask(false),
                 ),
+                Some(cli::BugAction::Keep { task, reason }) => {
+                    speccoder_runtime::bug::keep(path, task, reason, None)
+                }
                 Some(cli::BugAction::Run {
                     slug,
                     task,

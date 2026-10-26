@@ -9,9 +9,12 @@
 pub mod candidate;
 pub mod confirm;
 pub mod handoff;
+pub mod keep;
 pub mod named;
 pub mod state;
 pub mod unchanged;
+
+pub use keep::{keep, keep_with};
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;

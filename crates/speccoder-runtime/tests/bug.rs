@@ -525,7 +525,7 @@ fn a_bug_already_fixed_is_said_so_and_never_ticked() {
     assert_eq!(item.group, "ready_to_review");
     assert!(item.actions.iter().any(|a| matches!(
         a.run,
-        Some(speccoder_core::actions::Runnable::Accept { .. })
+        Some(speccoder_core::actions::Runnable::BugKeep { .. })
     )));
 }
 
@@ -1394,7 +1394,6 @@ fn a_kiro_project_has_no_place_for_a_bug_yet() {
     assert!(res.message().contains("F-052"), "{}", res.message());
 }
 
-
 /// An approver who rejects every set of reproductions, counting.
 #[derive(Debug, Default)]
 struct Rejects(std::sync::atomic::AtomicUsize);
@@ -1729,6 +1728,160 @@ fn a_reproduction_is_red_only_by_its_own_test_and_the_person_sees_its_command() 
         speccoder_runtime::bug::confirm::digest(&other),
         shown.digest,
         "the command is part of what is confirmed"
+    );
+}
+
+#[test]
+fn an_already_satisfied_bug_is_kept_as_a_regression_test() {
+    let r = repo("already");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    for _ in 0..3 {
+        f.will_structure(json!({ "files": [test_file("tests/repro_e1.txt", "E1", "refuses_empty")], "notes": [] }));
+    }
+    let res = bug::bug_with(
+        r.path(),
+        &request(&["an empty title is refused with a message"], &[], true),
+        Via::Terminal,
+        state.path(),
+        Some(d),
+        None,
+        &RunOptions::default(),
+    );
+    let b = the_bug(&res).clone();
+    assert_eq!(b.outcome, Outcome::AlreadySatisfied);
+    assert!(
+        res.next().iter().any(|n| n
+            .command
+            .starts_with(&format!("speccoder bug keep {}", b.key()))),
+        "{:?}",
+        res.next()
+    );
+    assert_eq!(
+        bug::keep_with(r.path(), &b.key(), "  ", state.path()).status(),
+        CommandStatus::UsageError
+    );
+    let kept = bug::keep_with(
+        r.path(),
+        &b.key(),
+        "kept as a regression test",
+        state.path(),
+    );
+    assert_eq!(kept.status(), CommandStatus::Ok, "{}", kept.message());
+    let k = the_bug(&kept);
+    let commit = k.commit.clone().unwrap();
+    let message = git(r.path(), &["log", "-1", "--format=%B", &commit]);
+    for want in [
+        "Spec-Task: 001-bugfixes/T001",
+        "Verdict: attested",
+        "Accepted-By: ",
+        "Bug: already_satisfied (standing_speckit) triad=sha256:",
+    ] {
+        assert!(message.contains(want), "{want}: {message}");
+    }
+    assert_eq!(
+        git(r.path(), &["show", &format!("{commit}:tests/repro_e1.txt")]),
+        "expect: refuses_empty\n",
+        "the reproduction is committed"
+    );
+    let tasks = git(
+        r.path(),
+        &["show", &format!("{commit}:specs/001-bugfixes/tasks.md")],
+    );
+    assert!(tasks.contains("- [X] T001"), "{tasks}");
+    // Decided: not offered again, not kept twice.
+    let inbox = speccoder_runtime::inbox::inbox_with(r.path(), None, Some(state.path()));
+    let Some(CommandData::Inbox(i)) = inbox.data() else {
+        panic!()
+    };
+    assert!(!i.items.iter().any(|x| x.kind == "bug_already_satisfied"));
+    assert_ne!(
+        bug::keep_with(r.path(), &b.key(), "again", state.path()).status(),
+        CommandStatus::Ok
+    );
+}
+
+#[test]
+fn an_extension_bug_already_satisfied_is_kept_as_a_trailer_only_task() {
+    let r = extension_repo();
+    fs::copy(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/bug/already/src/lib.rs"),
+        r.path().join("src/lib.rs"),
+    )
+    .unwrap();
+    git(r.path(), &["commit", "-qam", "fixed already"]);
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_call_tool("w", "write_file", json!({ "path": ".specify/bugs/saving-an-empty-title/assessment.md", "content": ASSESSMENT }));
+    f.will_structure(
+        json!({ "summary": "assessed", "status": "done", "files_written": [], "questions": [] }),
+    );
+    for _ in 0..3 {
+        f.will_structure(json!({ "files": [
+            test_file("tests/repro_e1.txt", "E1", "refuses_empty"),
+            test_file("tests/repro_u1.txt", "U1", "saves_title"),
+        ], "notes": [] }));
+    }
+    let res = bug::bug_with(
+        r.path(),
+        &request(
+            &["an empty title is refused with a message"],
+            &["a title is saved"],
+            true,
+        ),
+        Via::Terminal,
+        state.path(),
+        Some(d),
+        None,
+        &RunOptions::default(),
+    );
+    let b = the_bug(&res).clone();
+    assert_eq!(b.outcome, Outcome::AlreadySatisfied, "{}", res.message());
+    let kept = bug::keep_with(
+        r.path(),
+        &b.key(),
+        "kept as a regression test",
+        state.path(),
+    );
+    assert_eq!(kept.status(), CommandStatus::Ok, "{}", kept.message());
+    let commit = the_bug(&kept).commit.clone().unwrap();
+    let message = git(r.path(), &["log", "-1", "--format=%B", &commit]);
+    assert!(
+        message.contains("Spec-Task: bugs/saving-an-empty-title/bug:saving-an-empty-title")
+            && message.contains("Verdict: attested"),
+        "{message}"
+    );
+    assert_eq!(
+        git(r.path(), &["show", &format!("{commit}:tests/repro_e1.txt")]),
+        "expect: refuses_empty\n"
+    );
+    // Nothing of the extension's is touched.
+    assert_eq!(
+        git(
+            r.path(),
+            &[
+                "show",
+                &format!("{commit}:.specify/bugs/saving-an-empty-title/assessment.md"),
+            ],
+        ),
+        ASSESSMENT
+    );
+    let checked = speccoder_runtime::attest::branch::recorded(
+        r.path(),
+        &commit,
+        "bugs/saving-an-empty-title",
+    )
+    .unwrap_or_else(|e| panic!("{e:?}"));
+    let t = checked
+        .report
+        .ticks
+        .iter()
+        .find(|t| t.tick.task == "bug:saving-an-empty-title")
+        .unwrap_or_else(|| panic!("{:#?}", checked.report));
+    assert_eq!(
+        t.outcome,
+        speccoder_core::verify_branch::TickOutcome::Evidenced,
+        "{t:?}"
     );
 }
 

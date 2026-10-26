@@ -469,6 +469,7 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::BugFix
             | K::BugConfirm
             | K::BugRun
+            | K::BugKeep
             | K::AllowAlways
             | K::WidenPolicy
             | K::DecideBatch => Offer::Take,
@@ -495,6 +496,7 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::BugFix
             | K::BugConfirm
             | K::BugRun
+            | K::BugKeep
             | K::AllowAlways
             | K::WidenPolicy
             | K::DecideBatch
@@ -523,6 +525,7 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::BugFix
             | K::BugConfirm
             | K::BugRun
+            | K::BugKeep
             | K::WidenPolicy
             | K::Command => Offer::Refuse,
         },
@@ -549,6 +552,7 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::BugFix
             | K::BugConfirm
             | K::BugRun
+            | K::BugKeep
             | K::AllowAlways
             | K::WidenPolicy
             | K::DecideBatch
@@ -726,6 +730,10 @@ pub fn perform_in(
         Runnable::BugRun { slug, task } => {
             bug_run(root, slug.as_deref(), task.as_deref(), state, options)
         }
+        Runnable::BugKeep { task } => match text {
+            Some(why) => crate::bug::keep(root, task, why, state),
+            None => needs("a reason"),
+        },
         Runnable::AllowAlways { task, call } => {
             crate::approvals::allow_always(root, feature, task, call, state, via)
         }

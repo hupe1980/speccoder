@@ -771,6 +771,8 @@ fn bug_item(
         Outcome::AwaitingConfirmation => Kind::BugConfirm,
         Outcome::CannotReproduce => Kind::BugCannotReproduce,
         Outcome::UnchangedNotHolding => Kind::BugUnchangedNotHolding,
+        // Kept as a regression test: decided.
+        Outcome::AlreadySatisfied if b.commit.is_some() => return None,
         Outcome::AlreadySatisfied => Kind::BugAlreadySatisfied,
         _ if b.code.as_deref() == Some("BUG-REPRO-WEAK") => Kind::BugReproWeak,
         _ => return None,
@@ -809,13 +811,10 @@ fn bug_item(
             let mut keep = action(
                 "next",
                 format!("keep {}'s reproduction as a regression test", b.task),
-                "accepted on your word: attested, not verified",
-                flag(format!(
-                    "speccoder task accept {} --reason \"kept as a regression test\"",
-                    b.task
-                )),
+                "the reproduction is committed and the task accepted on your word: attested, not verified",
+                format!("speccoder bug keep {key} --reason \"kept as a regression test\""),
             );
-            keep = keep.with_run(Runnable::Accept { task: task() });
+            keep = keep.with_run(Runnable::BugKeep { task: key.clone() });
             keep.input = Some("Why it is kept".to_owned());
             let mut drop = action(
                 "task",
