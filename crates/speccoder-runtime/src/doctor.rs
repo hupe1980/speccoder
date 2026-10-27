@@ -432,10 +432,22 @@ pub fn checks(
         .and_then(|t| crate::prepare::parse(t).ok())
         .unwrap_or_default();
     if let Some(dir) = crate::verify::find_config(path).filter(|_| worktree.prepare) {
+        // A run's worktree holds the current feature's branch when there is one.
+        let branch = opened
+            .as_ref()
+            .ok()
+            .and_then(|o| o.snapshot.feature.as_ref())
+            .map(|f| format!("speccoder/{}", f.feature.name))
+            .filter(|b| {
+                Git::at(&dir)
+                    .succeeds(&["rev-parse", "--verify", "-q", &format!("refs/heads/{b}")])
+                    .unwrap_or(false)
+            });
         out.extend(link_checks(
             &dir,
             &worktree.link,
             crate::sandbox::backend().is_ok() && sandbox.mode != crate::sandbox::Mode::Off,
+            branch.as_deref(),
         ));
     }
     // The state directory.
@@ -629,13 +641,16 @@ pub fn run(path: &Path, feature: Option<&str>, look: Option<&str>) -> CommandRes
     result.with_data(CommandData::Doctor(Box::new(report)))
 }
 
-/// Untracked configuration a worktree will not have: speccoder works on
-/// commits, so a check that reads `.config/nextest.toml` or an untracked
-/// `*.toml` passes here and cannot run there.
 /// A `worktree link` row per folder `[worktree] link` names: whether a
-/// run's worktree would link it now (a fresh worktree has the committed
-/// lockfile), or why it would install it instead.
-fn link_checks(project: &Path, link: &[String], sandboxed: bool) -> Vec<DoctorCheck> {
+/// run's worktree would link it now (its lockfile is the one committed on
+/// `branch`, the current feature's, else on `HEAD`), or why it would
+/// install it instead.
+fn link_checks(
+    project: &Path,
+    link: &[String],
+    sandboxed: bool,
+    branch: Option<&str>,
+) -> Vec<DoctorCheck> {
     let roots = crate::prepare::roots(project);
     link.iter()
         .map(|folder| {
@@ -653,7 +668,13 @@ fn link_checks(project: &Path, link: &[String], sandboxed: bool) -> Vec<DoctorCh
             if !sandboxed {
                 return instead("commands run unsandboxed, so it would be writable");
             }
-            match crate::prepare::link_state(project, root, None) {
+            let committed = branch.map(|b| {
+                Git::at(project)
+                    .run(&["show", &format!("{b}:./{}", root.lockfile)])
+                    .map(|t| crate::integrity::sha256_hex(&t))
+                    .unwrap_or_default()
+            });
+            match crate::prepare::link_state(project, root, committed.as_deref()) {
                 Ok(_) if root.toolchain == crate::prepare::Toolchain::Uv => check(
                     name,
                     DoctorLevel::Pass,
@@ -673,6 +694,9 @@ fn link_checks(project: &Path, link: &[String], sandboxed: bool) -> Vec<DoctorCh
         .collect()
 }
 
+/// Untracked configuration a worktree will not have: speccoder works on
+/// commits, so a check that reads `.config/nextest.toml` or an untracked
+/// `*.toml` passes here and cannot run there.
 fn untracked_check(root: &Path, feature: Option<&str>) -> Option<DoctorCheck> {
     let out = Git::at(root)
         .run(&["status", "--porcelain", "--untracked-files=normal", "."])
@@ -811,7 +835,7 @@ mod tests {
         git(&["commit", "-qm", "init"]);
         let link = ["node_modules".to_owned(), ".venv".to_owned()];
         let rows = |sandboxed| -> Vec<(DoctorLevel, String)> {
-            link_checks(r, &link, sandboxed)
+            link_checks(r, &link, sandboxed, None)
                 .into_iter()
                 .map(|c| (c.level, c.detail))
                 .collect()
@@ -830,6 +854,20 @@ mod tests {
             ]
         );
         assert!(rows(false)[0].1.contains("commands run unsandboxed"));
+        // The current feature's branch moved its lockfile on: a run's
+        // worktree holds that one, not HEAD's.
+        git(&["branch", "-q", "speccoder/001-x"]);
+        git(&["checkout", "-q", "speccoder/001-x"]);
+        std::fs::write(r.join("package-lock.json"), "{\"next\": 1}").unwrap();
+        git(&["commit", "-qam", "lock"]);
+        git(&["checkout", "-q", "-"]);
+        let on = |branch| link_checks(r, &link, true, branch)[0].detail.clone();
+        assert!(on(None).contains("linked"), "{}", on(None));
+        assert!(
+            on(Some("speccoder/001-x")).contains("package-lock.json differs from your checkout's"),
+            "{}",
+            on(Some("speccoder/001-x"))
+        );
         std::fs::write(r.join("package-lock.json"), "{\"changed\": 1}").unwrap();
         assert!(
             rows(true)[0]

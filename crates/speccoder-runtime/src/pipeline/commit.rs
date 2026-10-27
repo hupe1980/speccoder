@@ -313,7 +313,6 @@ fn held_out_trailer(acceptance: Option<&serde_json::Value>) -> String {
     }
 }
 
-/// `Flaky: <checks>` for checks that passed only when run again.
 /// One `Linked-Dependencies:` trailer per folder linked from the checkout:
 /// the checks ran against it, checked against this lockfile.
 pub(crate) fn linked_trailers(linked: &[speccoder_core::predicate::LinkedDependency]) -> String {
@@ -328,6 +327,7 @@ pub(crate) fn linked_trailers(linked: &[speccoder_core::predicate::LinkedDepende
         .collect()
 }
 
+/// `Flaky: <checks>` for checks that passed only when run again.
 fn flaky_trailer(verification: Option<&speccoder_core::verify::VerifyReport>) -> String {
     let names: Vec<&str> = verification
         .into_iter()
