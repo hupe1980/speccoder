@@ -108,6 +108,7 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Flags after a description were read as part of it: `speccoder spec specify "…" --through tasks --no-prompt` ran plain `specify` with the flags in its description. Flags may now follow it; a description that starts with `-` goes after `--`.
 - **Reading a project no longer creates a journal.** `task show --account`
   and a strict replay on a project speccoder never ran created an empty
   journal in the state directory, and `doctor` created the state directory

@@ -224,7 +224,7 @@ pub enum Command {
     #[command(hide = true)]
     Suggest {
         /// The description.
-        #[arg(required = true, trailing_var_arg = true)]
+        #[arg(required = true)]
         text: Vec<String>,
     },
     /// Fix what in the project's setup stops a run: commit it in your checkout.
@@ -340,7 +340,7 @@ pub enum Command {
         /// `similar "…"`: the requirements close to a description.
         query: Option<String>,
         /// With `similar`: the description.
-        #[arg(trailing_var_arg = true, hide = true)]
+        #[arg(hide = true)]
         text: Vec<String>,
         /// Forget the current feature.
         #[arg(long, conflicts_with = "query")]
@@ -350,8 +350,8 @@ pub enum Command {
     Spec {
         /// The skill, or `archive`; without it, list the installed skills.
         name: Option<String>,
-        /// What the skill is asked ($ARGUMENTS); for `archive`, the change.
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        /// What the skill is asked ($ARGUMENTS); for `archive`, the change. Flags may
+        /// follow it; a description that starts with `-` goes after `--`.
         arguments: Vec<String>,
         /// Never ask inline: questions are left as [NEEDS CLARIFICATION]; approvals stop the run.
         #[arg(long)]
@@ -1182,5 +1182,50 @@ impl From<ScopeArg> for speccoder_runtime::approvals::Scope {
             ScopeArg::Task => Self::Task,
             ScopeArg::Run => Self::Run,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use clap::Parser as _;
+
+    use super::{Cli, Command, ThroughArg};
+
+    #[test]
+    fn flags_after_a_description_are_flags() {
+        let cli = Cli::try_parse_from([
+            "speccoder",
+            "spec",
+            "specify",
+            "count the words",
+            "--through",
+            "tasks",
+            "--no-prompt",
+            "--json",
+        ])
+        .unwrap_or_else(|e| panic!("{e}"));
+        assert!(cli.json);
+        let Some(Command::Spec {
+            arguments,
+            no_prompt,
+            through,
+            ..
+        }) = cli.command
+        else {
+            panic!("not spec")
+        };
+        assert_eq!(arguments, ["count the words"]);
+        assert!(no_prompt);
+        assert!(matches!(through, Some(ThroughArg::Tasks)));
+    }
+
+    #[test]
+    fn a_description_that_starts_with_a_dash_follows_two_dashes() {
+        let cli = Cli::try_parse_from(["speccoder", "spec", "specify", "--", "-v means verbose"])
+            .unwrap_or_else(|e| panic!("{e}"));
+        let Some(Command::Spec { arguments, .. }) = cli.command else {
+            panic!("not spec")
+        };
+        assert_eq!(arguments, ["-v means verbose"]);
     }
 }
