@@ -45,6 +45,9 @@ pub struct Config {
     /// Folders linked from the checkout instead of installed,
     /// project-relative (`node_modules`, `api/.venv`).
     pub link: Vec<String>,
+    /// `link_with_executor = true`: `link` applies with an `[executor]`
+    /// too, whose agent runs unsandboxed (the default: it does not).
+    pub link_with_executor: bool,
 }
 
 impl Default for Config {
@@ -52,7 +55,31 @@ impl Default for Config {
         Self {
             prepare: true,
             link: Vec::new(),
+            link_with_executor: false,
         }
+    }
+}
+
+impl Config {
+    /// The configuration a task prepares with: with an `[executor]` and no
+    /// `link_with_executor`, nothing is linked (its agent runs unsandboxed
+    /// and could write the checkout's folders through a link), with the
+    /// note that says so.
+    #[must_use]
+    pub fn for_executor(&self, executor: bool) -> (Self, Option<String>) {
+        if !executor || self.link_with_executor || self.link.is_empty() {
+            return (self.clone(), None);
+        }
+        (
+            Self {
+                link: Vec::new(),
+                ..self.clone()
+            },
+            Some(format!(
+                "[worktree] link is not applied with an [executor]: its agent runs unsandboxed and could change your checkout's {} through a link, so the worktree installs its own ([worktree] link_with_executor = true links them anyway)",
+                self.link.join(", ")
+            )),
+        )
     }
 }
 
@@ -62,6 +89,8 @@ struct Raw {
     prepare: Option<String>,
     #[serde(default)]
     link: Vec<String>,
+    #[serde(default)]
+    link_with_executor: bool,
 }
 
 /// Reads `[worktree]`.
@@ -91,7 +120,11 @@ pub fn parse(text: &str) -> Result<Config, String> {
             link.push(p);
         }
     }
-    Ok(Config { prepare, link })
+    Ok(Config {
+        prepare,
+        link,
+        link_with_executor: raw.link_with_executor,
+    })
 }
 
 /// A `link` entry as stored (no trailing `/`), or why it is refused.
@@ -300,8 +333,66 @@ pub fn roots(project: &Path) -> Vec<Root> {
         }
     }
     let mut roots: Vec<Root> = out.into_iter().map(|(_, r)| r).collect();
+    // A workspace member: its lockfile is the workspace's, above it.
+    for uv in [false, true] {
+        let manifest = if uv { "pyproject.toml" } else { "package.json" };
+        if project.join(manifest).is_file()
+            && !roots
+                .iter()
+                .any(|r| r.dir.is_empty() && (r.toolchain == Toolchain::Uv) == uv)
+            && let Some(r) = above(project, uv)
+        {
+            roots.push(r);
+        }
+    }
     roots.sort_by(|a, b| (&a.dir, a.toolchain.folder()).cmp(&(&b.dir, b.toolchain.folder())));
     roots
+}
+
+/// The nearest committed lockfile (Node, or uv's) above the project, up to
+/// the repository's root, beside its manifest: the root that governs the
+/// project's dependencies, its `dir` made of `..` (still inside the tree).
+fn above(project: &Path, uv: bool) -> Option<Root> {
+    let g = Git::at(project);
+    let prefix = g.line(&["rev-parse", "--show-prefix"]).ok()?;
+    let parts: Vec<&str> = prefix.split('/').filter(|c| !c.is_empty()).collect();
+    for up in 1..=parts.len() {
+        let top = parts[..parts.len() - up].join("/");
+        let back = vec![".."; up].join("/");
+        for (name, toolchain) in LOCKFILES
+            .iter()
+            .filter(|(_, t)| (*t == Toolchain::Uv) == uv)
+        {
+            let committed = g
+                .run(&[
+                    "ls-files",
+                    "-z",
+                    "--",
+                    &format!(":(top){}", join(&top, name)),
+                ])
+                .is_ok_and(|o| !o.is_empty());
+            if !committed || !project.join(&back).join(toolchain.manifest()).is_file() {
+                continue;
+            }
+            let lockfile = join(&back, name);
+            let toolchain = match toolchain {
+                Toolchain::Yarn
+                    if std::fs::read_to_string(project.join(&lockfile)).is_ok_and(|t| {
+                        t.contains("\n__metadata:") || t.starts_with("__metadata:")
+                    }) =>
+                {
+                    Toolchain::YarnBerry
+                }
+                t => *t,
+            };
+            return Some(Root {
+                dir: back,
+                toolchain,
+                lockfile,
+            });
+        }
+    }
+    None
 }
 
 /// Whether the project has anything to prepare: a root, or a manifest
@@ -316,10 +407,12 @@ pub fn needed(project: &Path) -> bool {
 /// committed for: `(what is missing, the command that writes it)`.
 #[must_use]
 pub fn missing_lockfile(project: &Path, roots: &[Root]) -> Option<(String, String)> {
+    // The project's own directory, or a workspace's above it.
     let at_root = |uv: bool| {
-        roots
-            .iter()
-            .any(|r| r.dir.is_empty() && (r.toolchain == Toolchain::Uv) == uv)
+        roots.iter().any(|r| {
+            r.dir.split('/').all(|c| c.is_empty() || c == "..")
+                && (r.toolchain == Toolchain::Uv) == uv
+        })
     };
     let package = std::fs::read_to_string(project.join("package.json"))
         .ok()
@@ -486,25 +579,27 @@ pub fn recorded_env(worktree: &Path) -> Vec<(String, String)> {
 
 /// Removes a worktree's links — each only after `symlink_metadata` shows a
 /// link, so nothing is ever removed through one — and its record: before
-/// the worktree itself is removed.
+/// the worktree itself is removed, or when it needs preparing no more.
 pub fn unlink(worktree: &Path) {
     let path = record_path(worktree);
     if !path.is_file() {
         return;
     }
-    let canonical = |p: &Path| std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
-    let root = canonical(worktree);
-    for e in load(worktree).roots {
+    remove_links(worktree, &load(worktree));
+    let _ = std::fs::remove_file(path);
+}
+
+/// Removes the links `record` names that are links inside the worktree,
+/// reached without a symlink.
+fn remove_links(worktree: &Path, record: &Record) {
+    for e in &record.roots {
         if let Some(link) = e.link.as_deref().map(Path::new)
-            && link
-                .parent()
-                .is_some_and(|d| canonical(d).starts_with(&root))
+            && confined(worktree, link).is_ok()
             && std::fs::symlink_metadata(link).is_ok_and(|m| m.file_type().is_symlink())
         {
             let _ = std::fs::remove_file(link);
         }
     }
-    let _ = std::fs::remove_file(path);
 }
 
 /// sha256 of a file, hex; `None` when it cannot be read.
@@ -614,12 +709,14 @@ fn now() -> u64 {
 
 /// Prepares the worktree: each root's folder linked or installed, unless
 /// the record shows it prepared for the same lockfile and still there.
-/// `None`: the project has no root that needs it (Go, Rust).
+/// `None`: the project has no root that needs it (Go, Rust) — and what an
+/// earlier run linked is gone.
 ///
 /// # Errors
 ///
-/// A lockfile is missing, or an install failed: the task stops
-/// (`PREPARE-FAILED`), never a verdict.
+/// A lockfile is missing, a folder is not the worktree's own, or an
+/// install failed: the task stops (`PREPARE-FAILED`), never a verdict. No
+/// link stays then, made now or before.
 pub fn prepare(p: &Prepare<'_>) -> Result<Option<Prepared>, Failure> {
     let roots = roots(p.project);
     if let Some((what, writes)) = missing_lockfile(p.project, &roots) {
@@ -632,12 +729,42 @@ pub fn prepare(p: &Prepare<'_>) -> Result<Option<Prepared>, Failure> {
         });
     }
     if roots.is_empty() {
+        unlink(p.worktree);
         return Ok(None);
     }
     let old = load(p.worktree);
     let mut out = Prepared::default();
-    for root in &roots {
+    let done = prepare_roots(p, &roots, &old, &mut out).and_then(|()| {
+        if out.record == old && record_path(p.worktree).is_file() {
+            return Ok(());
+        }
+        store(p.worktree, &out.record).map_err(|e| Failure {
+            message: format!("the worktree's prepare record could not be written: {e}"),
+            fix: vec!["speccoder doctor".to_owned()],
+        })
+    });
+    if let Err(f) = done {
+        // Nothing linked stays unrecorded: every link goes, with the record.
+        remove_links(p.worktree, &out.record);
+        remove_links(p.worktree, &old);
+        let _ = std::fs::remove_file(record_path(p.worktree));
+        return Err(f);
+    }
+    Ok(Some(out))
+}
+
+fn prepare_roots(
+    p: &Prepare<'_>,
+    roots: &[Root],
+    old: &Record,
+    out: &mut Prepared,
+) -> Result<(), Failure> {
+    for root in roots {
         let folder = p.project.join(root.folder());
+        confined(p.worktree, &folder).map_err(|why| Failure {
+            message: format!("the worktree's {} cannot be prepared: {why}", root.folder()),
+            fix: vec!["speccoder doctor".to_owned()],
+        })?;
         let sha = sha256_file(&p.project.join(&root.lockfile)).unwrap_or_default();
         let asked = p.config.link.contains(&root.folder());
         let prev = old.roots.iter().find(|e| {
@@ -646,21 +773,13 @@ pub fn prepare(p: &Prepare<'_>) -> Result<Option<Prepared>, Failure> {
         if let Some(e) = prev
             && e.lock_sha256 == sha
             && e.link_asked == asked
-            && holds(e, &folder, p.checkout)
+            && holds(p, e, &folder)
         {
             out.record.roots.push(e.clone());
             continue;
         }
         // A link made earlier goes first — itself, never what it points to.
-        if std::fs::symlink_metadata(&folder).is_ok_and(|m| m.file_type().is_symlink()) {
-            std::fs::remove_file(&folder).map_err(|e| Failure {
-                message: format!(
-                    "the worktree's link {} could not be removed: {e}",
-                    root.folder()
-                ),
-                fix: vec!["speccoder doctor".to_owned()],
-            })?;
-        }
+        remove_link(&folder)?;
         let why = if asked {
             match link(p, root, &folder, &sha) {
                 Ok(entry) => {
@@ -696,36 +815,103 @@ pub fn prepare(p: &Prepare<'_>) -> Result<Option<Prepared>, Failure> {
             at: now(),
         });
     }
-    if out.record != old || !record_path(p.worktree).is_file() {
-        store(p.worktree, &out.record).map_err(|e| Failure {
-            message: format!("the worktree's prepare record could not be written: {e}"),
+    Ok(())
+}
+
+/// Removes `folder` when it is a link — the link itself, never what it
+/// points to.
+fn remove_link(folder: &Path) -> Result<(), Failure> {
+    if std::fs::symlink_metadata(folder).is_ok_and(|m| m.file_type().is_symlink()) {
+        std::fs::remove_file(folder).map_err(|e| Failure {
+            message: format!(
+                "the worktree's link {} could not be removed: {e}",
+                folder.display()
+            ),
             fix: vec!["speccoder doctor".to_owned()],
         })?;
     }
-    Ok(Some(out))
+    Ok(())
 }
 
-/// Whether a recorded root is still as recorded: an installed folder is
-/// the worktree's own; a link still points where it did, and the
-/// checkout's lockfile is still the one it was checked against (a person's
-/// `npm install` there changes what the link holds).
-fn holds(e: &Entry, folder: &Path, checkout: &Path) -> bool {
+/// `p` with each `..` taken back and each `.` dropped, without asking the
+/// file system.
+fn lexical(p: &Path) -> PathBuf {
+    use std::path::Component;
+    let mut out = PathBuf::new();
+    for c in p.components() {
+        match c {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                if !out.pop() {
+                    out.push("..");
+                }
+            }
+            c => out.push(c),
+        }
+    }
+    out
+}
+
+/// Where `folder` really lies, when that is inside the worktree and its
+/// parent is reached without a symlink on the way; else why not. Nothing
+/// is removed or linked at a folder that is not.
+fn confined(worktree: &Path, folder: &Path) -> Result<PathBuf, String> {
+    let root =
+        std::fs::canonicalize(worktree).map_err(|e| format!("{}: {e}", worktree.display()))?;
+    let (Some(parent), Some(name)) = (folder.parent(), folder.file_name()) else {
+        return Err("it is not a folder of the worktree".to_owned());
+    };
+    let lex = lexical(parent);
+    let rel = lex
+        .strip_prefix(lexical(worktree))
+        .or_else(|_| lex.strip_prefix(&root))
+        .map_err(|_| "it lies outside the worktree".to_owned())?
+        .to_path_buf();
+    let real = std::fs::canonicalize(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
+    if real != root.join(&rel) {
+        return Err(format!(
+            "`{}` is reached through a symlink (to {}), so it is not the worktree's own",
+            rel.display(),
+            real.display()
+        ));
+    }
+    Ok(real.join(name))
+}
+
+/// Whether a recorded root is still as recorded and still allowed: an
+/// installed folder is the worktree's own; a link still points where it
+/// did, every guard it was made under still stands (commands sandboxed,
+/// its target read-only to them, its exclude entry there, no loop), and
+/// the checkout's lockfile is still the one it was checked against (a
+/// person's `npm install` there changes what the link holds).
+fn holds(p: &Prepare<'_>, e: &Entry, folder: &Path) -> bool {
+    let Ok(at) = confined(p.worktree, folder) else {
+        return false;
+    };
     let meta = std::fs::symlink_metadata(folder);
     match e.mode {
         Mode::Installed => meta.is_ok_and(|m| m.is_dir()),
         Mode::Linked => {
+            let Some(target) = e.link_target.as_deref().map(Path::new) else {
+                return false;
+            };
             meta.is_ok_and(|m| m.file_type().is_symlink())
-                && std::fs::read_link(folder)
-                    .ok()
-                    .is_some_and(|t| Some(t.display().to_string()) == e.link_target)
+                && std::fs::read_link(folder).ok().as_deref() == Some(target)
                 && folder.is_dir()
-                && sha256_file(&checkout.join(&e.lockfile)).as_deref() == Some(&e.lock_sha256)
+                && at != target
+                && p.runner.is_sandboxed()
+                && !p.runner.writes(target)
+                && excluded(p.project, &e.folder())
+                && sha256_file(&p.checkout.join(&e.lockfile)).as_deref() == Some(&e.lock_sha256)
         }
     }
 }
 
 /// Serialises edits of the shared `info/exclude` (lanes prepare at once).
 static EXCLUDE: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// Serialises edits of a worktree's record by its commands (copy on write).
+static RECORD: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 /// Links `root`'s folder from the checkout, or says why not.
 fn link(p: &Prepare<'_>, root: &Root, folder: &Path, sha: &str) -> Result<Entry, String> {
@@ -736,6 +922,18 @@ fn link(p: &Prepare<'_>, root: &Root, folder: &Path, sha: &str) -> Result<Entry,
         );
     }
     let state = link_state(p.checkout, root, Some(sha))?;
+    if p.runner.writes(&state.target) {
+        return Err(format!(
+            "it lies where sandboxed commands may write ({}), so a link would not be read-only",
+            state.target.display()
+        ));
+    }
+    let at = confined(p.worktree, folder)?;
+    if at == state.target {
+        return Err(
+            "it is the worktree's own folder, so the link would point at itself".to_owned(),
+        );
+    }
     // The worktree's own install of it, from before: replaced.
     if std::fs::symlink_metadata(folder).is_ok_and(|m| m.is_dir()) {
         std::fs::remove_dir_all(folder)
@@ -769,6 +967,310 @@ fn link(p: &Prepare<'_>, root: &Root, folder: &Path, sha: &str) -> Result<Entry,
     })
 }
 
+/// Gives the worktree its own folder for each root `which` picks: a link
+/// removed (only it), the locked offline install made, and the record
+/// saying `installed`, `why`, for the lockfile there now. The checkout is
+/// never written. The run log's lines.
+fn materialise(
+    p: &Prepare<'_>,
+    which: &dyn Fn(&Entry) -> bool,
+    why: &str,
+) -> Result<Vec<String>, Failure> {
+    let _one = RECORD.lock();
+    let mut record = load(p.worktree);
+    let mut done = Vec::new();
+    let mut i = 0;
+    while i < record.roots.len() {
+        let e = record.roots[i].clone();
+        if !which(&e) {
+            i += 1;
+            continue;
+        }
+        let folder = p.project.join(e.folder());
+        let root = Root {
+            dir: e.dir.clone(),
+            toolchain: e.toolchain,
+            lockfile: e.lockfile.clone(),
+        };
+        let ran = confined(p.worktree, &folder)
+            .map_err(|why| Failure {
+                message: format!("the worktree's {} cannot be prepared: {why}", e.folder()),
+                fix: vec!["speccoder doctor".to_owned()],
+            })
+            .and_then(|_| remove_link(&folder))
+            .and_then(|()| install(p, &root));
+        match ran {
+            Ok(ran) => {
+                done.push(ran);
+                record.roots[i] = Entry {
+                    lock_sha256: sha256_file(&p.project.join(&e.lockfile)).unwrap_or_default(),
+                    mode: Mode::Installed,
+                    link: None,
+                    link_target: None,
+                    why: Some(why.to_owned()),
+                    pythonpath: None,
+                    fingerprint: None,
+                    at: now(),
+                    ..e
+                };
+                i += 1;
+            }
+            Err(f) => {
+                // The record keeps only a link that is still there.
+                if !std::fs::symlink_metadata(&folder).is_ok_and(|m| m.file_type().is_symlink()) {
+                    record.roots.remove(i);
+                }
+                let _ = store(p.worktree, &record);
+                return Err(f);
+            }
+        }
+    }
+    if !done.is_empty() {
+        store(p.worktree, &record).map_err(|e| Failure {
+            message: format!("the worktree's prepare record could not be written: {e}"),
+            fix: vec!["speccoder doctor".to_owned()],
+        })?;
+    }
+    Ok(done)
+}
+
+/// After an attempt, before its checks: a root whose lockfile the attempt
+/// changed is installed again for it — a linked one gets the worktree's
+/// own folder (a link holds only while the branch's lockfile equals the
+/// checkout's) — so the checks and the tick's evidence are about the
+/// lockfile committed. The run log's lines.
+///
+/// # Errors
+///
+/// Its install failed: the task stops (`PREPARE-FAILED`).
+pub fn recheck(p: &Prepare<'_>) -> Result<Vec<String>, Failure> {
+    materialise(
+        p,
+        &|e| sha256_file(&p.project.join(&e.lockfile)).as_deref() != Some(e.lock_sha256.as_str()),
+        "the attempt changed its lockfile",
+    )
+}
+
+/// Before one of the model's commands that changes dependencies
+/// ([`changes_dependencies`]): each linked root of its toolchain gets the
+/// worktree's own folder first (copy on write), so the command changes
+/// only the worktree. The run log's lines; none for any other command.
+///
+/// # Errors
+///
+/// The install failed: the command is not run.
+pub fn before_command(p: &Prepare<'_>, argv: &[String]) -> Result<Vec<String>, Failure> {
+    let Some(uv) = changes_dependencies(argv) else {
+        return Ok(Vec::new());
+    };
+    materialise(
+        p,
+        &|e| e.mode == Mode::Linked && (e.toolchain == Toolchain::Uv) == uv,
+        "the attempt changes dependencies",
+    )
+}
+
+/// Whether `argv` installs or changes dependencies: `Some(false)` for
+/// Node's (`npm`, `pnpm`, `yarn`, `bun` — `install`, `add`, `remove`,
+/// `update`, `ci` and their aliases), `Some(true)` for uv's (`add`,
+/// `remove`, `sync`, `lock`, `pip install`). A `sh -c` script's words count.
+#[must_use]
+pub fn changes_dependencies(argv: &[String]) -> Option<bool> {
+    const NODE: &[&str] = &[
+        "install",
+        "i",
+        "add",
+        "remove",
+        "rm",
+        "r",
+        "un",
+        "uninstall",
+        "update",
+        "up",
+        "upgrade",
+        "ci",
+    ];
+    let base = |w: &str| w.rsplit('/').next().unwrap_or(w).to_owned();
+    let words: Vec<String> = match argv {
+        [sh, c, script, ..]
+            if matches!(base(sh).as_str(), "sh" | "bash" | "zsh" | "dash") && c == "-c" =>
+        {
+            script
+                .split(|ch: char| ch.is_whitespace() || ";&|()`".contains(ch))
+                .filter(|w| !w.is_empty())
+                .map(str::to_owned)
+                .collect()
+        }
+        _ => argv.to_vec(),
+    };
+    for (i, w) in words.iter().enumerate() {
+        let mut rest = words[i + 1..].iter().filter(|a| !a.starts_with('-'));
+        match base(w).as_str() {
+            "npm" | "pnpm" | "bun" => {
+                if rest.next().is_some_and(|s| NODE.contains(&s.as_str())) {
+                    return Some(false);
+                }
+            }
+            "yarn" => match rest.next() {
+                Some(s) if NODE.contains(&s.as_str()) => return Some(false),
+                // A bare `yarn` installs.
+                None if i == 0 => return Some(false),
+                _ => {}
+            },
+            "uv" => match rest.next().map(String::as_str) {
+                Some("add" | "remove" | "sync" | "lock") => return Some(true),
+                Some("pip")
+                    if rest.next().is_some_and(|s| {
+                        matches!(s.as_str(), "install" | "uninstall" | "sync")
+                    }) =>
+                {
+                    return Some(true);
+                }
+                _ => {}
+            },
+            _ => {}
+        }
+    }
+    None
+}
+
+/// The links a worktree's record holds, relative to its root `top` (as
+/// git names them).
+#[must_use]
+pub fn recorded_links(top: &Path) -> Vec<String> {
+    let Ok(root) = std::fs::canonicalize(top) else {
+        return Vec::new();
+    };
+    load(top)
+        .roots
+        .iter()
+        .filter(|e| e.mode == Mode::Linked)
+        .filter_map(|e| {
+            let link = Path::new(e.link.as_deref()?);
+            let parent = std::fs::canonicalize(link.parent()?).ok()?;
+            let rel = parent.strip_prefix(&root).ok()?.join(link.file_name()?);
+            Some(rel.to_string_lossy().into_owned())
+        })
+        .collect()
+}
+
+/// The pathspecs that keep each recorded link of the worktree at `top` out
+/// of what `git add` stages, whatever the ignore rules say.
+#[must_use]
+pub fn link_pathspecs(top: &Path) -> Vec<String> {
+    recorded_links(top)
+        .iter()
+        .map(|l| format!(":(exclude,top,literal){l}"))
+        .collect()
+}
+
+/// Refuses a commit of the worktree at `top` whose index would hold a link
+/// to the person's checkout — a recorded link, or any symlink staged now
+/// that resolves into the checkout (another worktree of the repository, or
+/// a link's target) — or whose linked root's lockfile changed after the
+/// checks ran against the link. Those paths are unstaged; nothing is
+/// committed.
+///
+/// # Errors
+///
+/// What was refused, in a line.
+pub fn check_staged(top: &Path) -> Result<(), String> {
+    let g = Git::at(top);
+    let root = std::fs::canonicalize(top).unwrap_or_else(|_| top.to_path_buf());
+    let record = load(top);
+    let links = recorded_links(top);
+    let mut checkouts: Vec<PathBuf> = g
+        .run(&["worktree", "list", "--porcelain"])
+        .map(|o| String::from_utf8_lossy(&o).into_owned())
+        .unwrap_or_default()
+        .lines()
+        .filter_map(|l| l.strip_prefix("worktree "))
+        .map(|p| std::fs::canonicalize(p).unwrap_or_else(|_| PathBuf::from(p)))
+        .filter(|p| *p != root)
+        .collect();
+    checkouts.extend(
+        record
+            .roots
+            .iter()
+            .filter_map(|e| e.link_target.as_deref())
+            .map(PathBuf::from),
+    );
+    let raw = g
+        .run(&[
+            "diff",
+            "--cached",
+            "--raw",
+            "-z",
+            "--no-renames",
+            "--no-abbrev",
+        ])
+        .map_err(|e| e.0)?;
+    let fields = nul_fields(&raw);
+    let mut refused: Vec<String> = Vec::new();
+    for pair in fields.chunks(2) {
+        let [meta, path] = pair else { continue };
+        let m: Vec<&str> = meta.trim_start_matches(':').split(' ').collect();
+        let [_, mode, _, sha, status] = m[..] else {
+            continue;
+        };
+        if status.starts_with('D') {
+            continue;
+        }
+        let recorded = links
+            .iter()
+            .any(|l| path == l || path.starts_with(&format!("{l}/")));
+        let into_checkout = mode == "120000"
+            && g.run(&["cat-file", "blob", sha]).is_ok_and(|t| {
+                let text = String::from_utf8_lossy(&t).into_owned();
+                let at = Path::new(path)
+                    .parent()
+                    .map_or(root.clone(), |d| root.join(d));
+                let at = std::fs::canonicalize(&at).unwrap_or(at);
+                let to = at.join(text);
+                let to = std::fs::canonicalize(&to).unwrap_or_else(|_| lexical(&to));
+                !to.starts_with(&root) && checkouts.iter().any(|c| to.starts_with(c))
+            });
+        if recorded || into_checkout {
+            refused.push(path.clone());
+        }
+    }
+    if !refused.is_empty() {
+        let mut reset = vec!["reset", "-q", "--"];
+        reset.extend(refused.iter().map(String::as_str));
+        if g.run(&reset).is_err() {
+            let mut rm = vec!["rm", "--cached", "-q", "-r", "--ignore-unmatch", "--"];
+            rm.extend(refused.iter().map(String::as_str));
+            let _ = g.run(&rm);
+        }
+        return Err(format!(
+            "refused: {} would commit a link to your checkout ([worktree] link); unstaged, nothing committed",
+            refused
+                .iter()
+                .map(|p| format!("`{p}`"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
+    for e in record.roots.iter().filter(|e| e.mode == Mode::Linked) {
+        let Some(lockfile) = e
+            .link
+            .as_deref()
+            .map(Path::new)
+            .and_then(|l| Some(l.parent()?.join(Path::new(&e.lockfile).file_name()?)))
+        else {
+            continue;
+        };
+        if sha256_file(&lockfile).as_deref() != Some(e.lock_sha256.as_str()) {
+            return Err(format!(
+                "refused: {} changed after the checks ran against the linked {}; nothing committed",
+                e.lockfile,
+                e.folder()
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// A checkout folder that may be linked.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Linkable {
@@ -779,8 +1281,11 @@ pub struct Linkable {
 /// Whether `root`'s folder in `checkout` may be linked into a worktree
 /// whose lockfile has digest `sha` (`None`: the checkout's committed one):
 /// it exists, resolves inside the checkout, is ignored there, its lockfile
-/// is the worktree's byte for byte, and — for Node — no workspace package
-/// is linked into it from the checkout. Creates nothing.
+/// is the worktree's byte for byte, and nothing in it imports the
+/// checkout's code — for Node no workspace package and no `file:`/`link:`
+/// dependency links into the checkout; for a `.venv` no uv workspace, no
+/// path source, and no editable install outside the project's source
+/// root. Creates nothing.
 ///
 /// # Errors
 ///
@@ -794,6 +1299,12 @@ pub fn link_state(checkout: &Path, root: &Root, sha: Option<&str>) -> Result<Lin
     let home = std::fs::canonicalize(checkout).map_err(|e| e.to_string())?;
     let target = std::fs::canonicalize(&source).map_err(|e| e.to_string())?;
     let Ok(inside) = target.strip_prefix(&home) else {
+        if std::fs::symlink_metadata(&source).is_ok_and(|m| m.file_type().is_symlink()) {
+            return Err(format!(
+                "it resolves outside your checkout: your checkout's {rel} is itself a link (to {}), as in a Claude Code worktree — link from the checkout that holds the folder, or let the run install it",
+                target.display()
+            ));
+        }
         return Err("it resolves outside your checkout".to_owned());
     };
     let inside = inside.to_string_lossy().into_owned();
@@ -814,7 +1325,9 @@ pub fn link_state(checkout: &Path, root: &Root, sha: Option<&str>) -> Result<Lin
     if theirs.is_none() || theirs != ours {
         return Err(format!("{} differs from your checkout's", root.lockfile));
     }
-    if root.toolchain != Toolchain::Uv {
+    if root.toolchain == Toolchain::Uv {
+        uv_imports_checkout(checkout, root, &target, &home)?;
+    } else {
         let manifest = std::fs::read_to_string(checkout.join(&root.dir).join("package.json"))
             .ok()
             .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok());
@@ -829,8 +1342,180 @@ pub fn link_state(checkout: &Path, root: &Root, sha: Option<&str>) -> Result<Lin
                     .to_owned(),
             );
         }
+        if let Some(name) = linked_into(&target, &home) {
+            return Err(format!(
+                "`{name}` in it links into your checkout (a file:, link: or portal: dependency), so the checks would run your checkout's code"
+            ));
+        }
     }
     Ok(Linkable { target })
+}
+
+/// A top-level (or `@scope/`) entry of the `node_modules` at `folder` that
+/// is a symlink resolving inside `home` but outside the folder.
+fn linked_into(folder: &Path, home: &Path) -> Option<String> {
+    let is_link = |p: &Path| std::fs::symlink_metadata(p).is_ok_and(|m| m.file_type().is_symlink());
+    let mut entries = Vec::new();
+    for n in names(folder) {
+        let p = folder.join(&n);
+        if n.starts_with('@') && !is_link(&p) {
+            entries.extend(names(&p).into_iter().map(|m| p.join(m)));
+        } else {
+            entries.push(p);
+        }
+    }
+    entries.into_iter().find_map(|p| {
+        let to = std::fs::canonicalize(&p).ok()?;
+        (is_link(&p) && to.starts_with(home) && !to.starts_with(folder))
+            .then(|| p.strip_prefix(folder).unwrap_or(&p).display().to_string())
+    })
+}
+
+/// Why a uv root's `.venv` (resolved: `venv`) would import the checkout's
+/// code through a link: a uv workspace, a path or editable source, or an
+/// editable install pointing inside the checkout but outside the project's
+/// source root (which the worktree's own shadows).
+fn uv_imports_checkout(
+    checkout: &Path,
+    root: &Root,
+    venv: &Path,
+    home: &Path,
+) -> Result<(), String> {
+    let dir = checkout.join(&root.dir);
+    let table: toml::Table = std::fs::read_to_string(dir.join("pyproject.toml"))
+        .ok()
+        .and_then(|t| toml::from_str(&t).ok())
+        .unwrap_or_default();
+    let uv = table.get("tool").and_then(|t| t.get("uv"));
+    if uv.and_then(|u| u.get("workspace")).is_some() {
+        return Err(
+            "a uv workspace: its members are installed into it from your checkout, so the checks would import your checkout's code"
+                .to_owned(),
+        );
+    }
+    if let Some(sources) = uv
+        .and_then(|u| u.get("sources"))
+        .and_then(toml::Value::as_table)
+    {
+        let local = |v: &toml::Value| {
+            v.get("path").is_some()
+                || v.get("editable").and_then(toml::Value::as_bool) == Some(true)
+                || v.get("workspace").and_then(toml::Value::as_bool) == Some(true)
+        };
+        for (name, v) in sources {
+            let any = match v {
+                toml::Value::Array(a) => a.iter().any(local),
+                v => local(v),
+            };
+            if any {
+                return Err(format!(
+                    "[tool.uv.sources] installs `{name}` from a path, so the checks would import your checkout's code"
+                ));
+            }
+        }
+    }
+    let allowed = python_package(&dir).map(|(_, s)| std::fs::canonicalize(&s).unwrap_or(s));
+    // The project's own editable install names its directory.
+    let own = std::fs::canonicalize(&dir).unwrap_or(dir);
+    for p in editables(venv) {
+        let p = std::fs::canonicalize(&p).unwrap_or_else(|_| lexical(&p));
+        if p.starts_with(home)
+            && !p.starts_with(venv)
+            && p != own
+            && allowed.as_ref().is_none_or(|a| !p.starts_with(a))
+        {
+            return Err(format!(
+                "an editable install in it points at {} in your checkout, outside the project's source root, so the tests would import your checkout's code",
+                p.strip_prefix(home).unwrap_or(&p).display()
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// The sorted names in `dir` (none when it cannot be read).
+fn names(dir: &Path) -> Vec<String> {
+    let mut n: Vec<String> = std::fs::read_dir(dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .collect();
+    n.sort();
+    n
+}
+
+/// A `.venv`'s `site-packages` directories.
+fn site_packages(venv: &Path) -> Vec<PathBuf> {
+    names(&venv.join("lib"))
+        .into_iter()
+        .filter(|n| n.starts_with("python"))
+        .map(|py| venv.join("lib").join(py).join("site-packages"))
+        .collect()
+}
+
+/// Where a `.venv`'s editable installs point: each `*.pth` path line, each
+/// absolute path an `__editable__*` finder maps to, and each
+/// `direct_url.json` marked editable.
+fn editables(venv: &Path) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    for site in site_packages(venv) {
+        for n in names(&site) {
+            let file = site.join(&n);
+            if Path::new(&n).extension().is_some_and(|e| e == "pth") {
+                for l in std::fs::read_to_string(&file).unwrap_or_default().lines() {
+                    let l = l.trim();
+                    if l.is_empty() || l.starts_with('#') || l.starts_with("import") {
+                        continue;
+                    }
+                    out.push(site.join(l));
+                }
+            } else if n.starts_with("__editable__")
+                && Path::new(&n).extension().is_some_and(|e| e == "py")
+            {
+                let text = std::fs::read_to_string(&file).unwrap_or_default();
+                for q in ['\'', '"'] {
+                    out.extend(
+                        text.split(q)
+                            .skip(1)
+                            .step_by(2)
+                            .filter(|s| s.starts_with('/'))
+                            .map(PathBuf::from),
+                    );
+                }
+            } else if Path::new(&n).extension().is_some_and(|e| e == "dist-info")
+                && let Some(v) = std::fs::read_to_string(file.join("direct_url.json"))
+                    .ok()
+                    .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+                && v["dir_info"]["editable"] == true
+                && let Some(url) = v["url"].as_str().and_then(|u| u.strip_prefix("file://"))
+            {
+                out.push(PathBuf::from(percent_decoded(url)));
+            }
+        }
+    }
+    out
+}
+
+/// A `file://` URL's path, its `%XX` escapes decoded.
+fn percent_decoded(s: &str) -> String {
+    let b = s.as_bytes();
+    let mut out = Vec::with_capacity(b.len());
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == b'%'
+            && let Some(v) = s
+                .get(i + 1..i + 3)
+                .and_then(|h| u8::from_str_radix(h, 16).ok())
+        {
+            out.push(v);
+            i += 3;
+        } else {
+            out.push(b[i]);
+            i += 1;
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
 }
 
 /// A uv root's package and the directory it is imported from:
@@ -909,16 +1594,32 @@ fn probe(p: &Prepare<'_>, root: &Root, folder: &Path) -> Result<String, String> 
     }
 }
 
-/// Adds the folder's anchored entry under [`EXCLUDE_MARK`] in the
-/// repository's shared `info/exclude`, once.
-fn exclude(project: &Path, rel: &str) -> Result<(), String> {
+/// The repository's shared `info/exclude` and the folder's anchored entry
+/// in it.
+fn exclude_entry(project: &Path, rel: &str) -> Result<(PathBuf, String), String> {
     let g = Git::at(project);
     let common = g
         .line(&["rev-parse", "--path-format=absolute", "--git-common-dir"])
         .map_err(|e| e.0)?;
     let prefix = g.line(&["rev-parse", "--show-prefix"]).map_err(|e| e.0)?;
-    let entry = format!("/{prefix}{rel}");
-    let file = Path::new(&common).join("info").join("exclude");
+    Ok((
+        Path::new(&common).join("info").join("exclude"),
+        format!("/{prefix}{rel}"),
+    ))
+}
+
+/// Whether the folder's entry is in speccoder's block of the shared
+/// `info/exclude`.
+fn excluded(project: &Path, rel: &str) -> bool {
+    exclude_entry(project, rel).is_ok_and(|(file, entry)| {
+        with_entry(&std::fs::read_to_string(file).unwrap_or_default(), &entry).is_none()
+    })
+}
+
+/// Adds the folder's anchored entry under [`EXCLUDE_MARK`] in the
+/// repository's shared `info/exclude`, once.
+fn exclude(project: &Path, rel: &str) -> Result<(), String> {
+    let (file, entry) = exclude_entry(project, rel)?;
     let _one = EXCLUDE.lock();
     let text = std::fs::read_to_string(&file).unwrap_or_default();
     let Some(next) = with_entry(&text, &entry) else {
@@ -934,7 +1635,8 @@ fn exclude(project: &Path, rel: &str) -> Result<(), String> {
 }
 
 /// `text` with `entry` in speccoder's block (the block added at the end
-/// when there is none); `None` when it is there already.
+/// when there is none); `None` when it is there already (lines compared
+/// trimmed: a CRLF file is the same file).
 fn with_entry(text: &str, entry: &str) -> Option<String> {
     let lines: Vec<&str> = text.lines().collect();
     let Some(mark) = lines.iter().position(|l| l.trim() == EXCLUDE_MARK) else {
@@ -947,9 +1649,9 @@ fn with_entry(text: &str, entry: &str) -> Option<String> {
     };
     let end = lines[mark + 1..]
         .iter()
-        .position(|l| !l.starts_with('/'))
+        .position(|l| !l.trim().starts_with('/'))
         .map_or(lines.len(), |n| mark + 1 + n);
-    if lines[mark + 1..end].contains(&entry) {
+    if lines[mark + 1..end].iter().any(|l| l.trim() == entry) {
         return None;
     }
     let mut out: Vec<&str> = lines[..end].to_vec();
@@ -1385,6 +2087,119 @@ mod tests {
             grown,
             format!("{person}\n{EXCLUDE_MARK}\n/node_modules\n/api/.venv\n# mine\nfoo\n")
         );
+        // Lines are compared trimmed: a trailing blank or a last bare CR.
+        let edited = format!("{EXCLUDE_MARK}\r\n/node_modules \r\n/api/.venv\r");
+        assert_eq!(with_entry(&edited, "/node_modules"), None);
+        assert_eq!(with_entry(&edited, "/api/.venv"), None);
+    }
+
+    #[test]
+    fn a_workspace_members_lockfile_above_it_governs_it() {
+        let r = repo(&[
+            ("package.json", "{\"workspaces\": [\"app\"]}"),
+            ("package-lock.json", "{}"),
+            (
+                "app/package.json",
+                "{\"devDependencies\": {\"vitest\": \"^3\"}}",
+            ),
+            ("app/speccoder.toml", ""),
+        ]);
+        let app = r.path().join("app");
+        let got = roots(&app);
+        assert_eq!(
+            got,
+            [Root {
+                dir: "..".to_owned(),
+                toolchain: Toolchain::Npm,
+                lockfile: "../package-lock.json".to_owned(),
+            }]
+        );
+        assert_eq!(missing_lockfile(&app, &got), None);
+        // Its folder is the repository root's, inside the tree.
+        let folder = app.join(got[0].folder());
+        assert_eq!(
+            confined(r.path(), &folder).unwrap(),
+            std::fs::canonicalize(r.path())
+                .unwrap()
+                .join("node_modules")
+        );
+        // A lockfile nobody committed governs nothing.
+        let r = repo(&[(
+            "app/package.json",
+            "{\"devDependencies\": {\"vitest\": \"^3\"}}",
+        )]);
+        std::fs::write(r.path().join("package.json"), "{}").unwrap();
+        std::fs::write(r.path().join("package-lock.json"), "{}").unwrap();
+        let app = r.path().join("app");
+        assert!(roots(&app).is_empty());
+        assert!(missing_lockfile(&app, &[]).is_some());
+    }
+
+    #[test]
+    fn a_folder_reached_through_a_symlinked_parent_is_never_touched() {
+        let checkout = tempfile::tempdir().unwrap();
+        let api = checkout.path().join("api");
+        std::fs::create_dir_all(api.join("node_modules/left-pad")).unwrap();
+        std::fs::write(api.join("node_modules/left-pad/index.js"), "x").unwrap();
+        std::fs::write(api.join("package.json"), "{}").unwrap();
+        std::fs::write(api.join("package-lock.json"), "{}").unwrap();
+        let wt = repo(&[("api/package.json", "{}"), ("api/package-lock.json", "{}")]);
+        // The worktree's `api` replaced by a link to the checkout's.
+        std::fs::remove_dir_all(wt.path().join("api")).unwrap();
+        std::os::unix::fs::symlink(&api, wt.path().join("api")).unwrap();
+        let entry = Entry {
+            dir: "api".to_owned(),
+            toolchain: Toolchain::Npm,
+            lockfile: "api/package-lock.json".to_owned(),
+            lock_sha256: sha256_file(&api.join("package-lock.json")).unwrap(),
+            mode: Mode::Installed,
+            link_asked: false,
+            link: None,
+            link_target: None,
+            why: None,
+            pythonpath: None,
+            fingerprint: None,
+            at: 0,
+        };
+        store(wt.path(), &Record { roots: vec![entry] }).unwrap();
+        for link in [vec![], vec!["api/node_modules".to_owned()]] {
+            let config = Config {
+                link,
+                ..Config::default()
+            };
+            let got = prepare(&Prepare {
+                worktree: wt.path(),
+                project: wt.path(),
+                checkout: checkout.path(),
+                config: &config,
+                runner: &Runner::Plain,
+                state: None,
+            });
+            let f = got.unwrap_err();
+            assert!(
+                f.message.contains("reached through a symlink"),
+                "{}",
+                f.message
+            );
+            assert!(api.join("node_modules/left-pad/index.js").is_file());
+        }
+        assert!(
+            materialise(
+                &Prepare {
+                    worktree: wt.path(),
+                    project: wt.path(),
+                    checkout: checkout.path(),
+                    config: &Config::default(),
+                    runner: &Runner::Plain,
+                    state: None,
+                },
+                &|_| true,
+                "test"
+            )
+            .is_ok_and(|d| d.is_empty()),
+            "nothing recorded is left to touch"
+        );
+        assert!(api.join("node_modules/left-pad/index.js").is_file());
     }
 
     #[test]

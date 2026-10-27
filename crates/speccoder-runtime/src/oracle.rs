@@ -617,6 +617,8 @@ struct Ctx {
     config: substrate::run_config::RunConfig,
     sandbox: sandbox::Config,
     worktree: crate::prepare::Config,
+    /// speccoder's state directory (the cache `speccoder new` filled).
+    state: PathBuf,
     policy: tools::policy::Policy,
     model: Option<substrate::model_config::ModelConfig>,
 }
@@ -685,6 +687,7 @@ fn open(path: &Path, feature: Option<&str>, state: &Path) -> Result<Ctx, Box<Com
         config,
         sandbox,
         worktree: worktree_config,
+        state: state.to_path_buf(),
         policy,
         model,
     })
@@ -1226,7 +1229,7 @@ impl Bench {
                 checkout: &ctx.root,
                 config: &ctx.worktree,
                 runner: &runner,
-                state: None,
+                state: Some(&ctx.state),
             }) {
                 Ok(Some(p)) => runner.with_env(p.record.env()),
                 Ok(None) => runner,

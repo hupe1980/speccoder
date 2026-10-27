@@ -644,77 +644,82 @@ pub(crate) fn run_task(
     let mut prepare_notes: Vec<String> = Vec::new();
     let mut linked_dependencies = Vec::new();
     let mut linked_folders: Vec<(std::path::PathBuf, crate::prepare::Toolchain)> = Vec::new();
-    let runner =
-        if options.session.is_none() && worktree_config.prepare && crate::prepare::needed(&project)
-        {
-            let began = std::time::Instant::now();
-            stage(
-                &*live,
-                task,
-                Stage::Prepare,
-                StageState::Started,
-                None,
-                None,
-            );
-            let prepared = crate::prepare::prepare(&crate::prepare::Prepare {
-                worktree: &wt_root,
-                project: &project,
-                checkout: Path::new(&s.snapshot.root),
-                config: &worktree_config,
-                runner: &runner,
-                state: Some(state),
-            });
-            match prepared {
-                Ok(None) => runner,
-                Ok(Some(p)) => {
-                    for n in &p.notes {
-                        live.event(&progress::Event::Notice { text: n.clone() });
-                    }
-                    prepare_notes.clone_from(&p.notes);
-                    stage(
-                        &*live,
-                        task,
-                        Stage::Prepare,
-                        if p.done.is_empty() {
-                            StageState::Skipped
-                        } else {
-                            StageState::Passed
-                        },
-                        Some(if p.done.is_empty() {
-                            "reused: the lockfiles are unchanged".to_owned()
-                        } else {
-                            p.done.join(", ")
-                        }),
-                        Some(began),
-                    );
-                    linked_dependencies = p.record.linked();
-                    for e in p
-                        .record
-                        .roots
-                        .iter()
-                        .filter(|e| e.mode == crate::prepare::Mode::Linked)
-                    {
-                        linked_folders.push((project.join(e.folder()), e.toolchain));
-                    }
-                    runner.with_env(p.record.env())
+    let prepares =
+        options.session.is_none() && worktree_config.prepare && crate::prepare::needed(&project);
+    let runner = if prepares {
+        let began = std::time::Instant::now();
+        stage(
+            &*live,
+            task,
+            Stage::Prepare,
+            StageState::Started,
+            None,
+            None,
+        );
+        let prepared = crate::prepare::prepare(&crate::prepare::Prepare {
+            worktree: &wt_root,
+            project: &project,
+            checkout: Path::new(&s.snapshot.root),
+            config: &worktree_config,
+            runner: &runner,
+            state: Some(state),
+        });
+        match prepared {
+            Ok(None) => runner,
+            Ok(Some(p)) => {
+                for n in &p.notes {
+                    live.event(&progress::Event::Notice { text: n.clone() });
                 }
-                Err(f) => {
-                    stage(
-                        &*live,
-                        task,
-                        Stage::Prepare,
-                        StageState::Failed,
-                        Some(f.message.clone()),
-                        Some(began),
-                    );
-                    return fail(CommandStatus::ConfigError, f.message)
-                        .with_code("PREPARE-FAILED")
-                        .with_fix(f.fix);
+                prepare_notes.clone_from(&p.notes);
+                stage(
+                    &*live,
+                    task,
+                    Stage::Prepare,
+                    if p.done.is_empty() {
+                        StageState::Skipped
+                    } else {
+                        StageState::Passed
+                    },
+                    Some(if p.done.is_empty() {
+                        "reused: the lockfiles are unchanged".to_owned()
+                    } else {
+                        p.done.join(", ")
+                    }),
+                    Some(began),
+                );
+                linked_dependencies = p.record.linked();
+                for e in p
+                    .record
+                    .roots
+                    .iter()
+                    .filter(|e| e.mode == crate::prepare::Mode::Linked)
+                {
+                    linked_folders.push((project.join(e.folder()), e.toolchain));
                 }
+                runner.with_env(p.record.env())
             }
-        } else {
-            runner
-        };
+            Err(f) => {
+                stage(
+                    &*live,
+                    task,
+                    Stage::Prepare,
+                    StageState::Failed,
+                    Some(f.message.clone()),
+                    Some(began),
+                );
+                return fail(CommandStatus::ConfigError, f.message)
+                    .with_code("PREPARE-FAILED")
+                    .with_fix(f.fix);
+            }
+        }
+    } else {
+        // Nothing to prepare (any more): what an earlier run linked goes,
+        // and with it the variables its record gave every command.
+        if options.session.is_none() {
+            crate::prepare::unlink(&wt_root);
+        }
+        runner.with_env(Vec::new())
+    };
     // As the model names them: relative to the worktree's root.
     let linked_paths: Vec<String> = linked_folders
         .iter()
@@ -1724,6 +1729,56 @@ pub(crate) fn run_task(
                         "the formatter (`{}`) did not succeed",
                         argv.join(" ")
                     ));
+                }
+            }
+            // A lockfile the attempt changed: its root installed again for
+            // it before the checks, so they — and the tick's evidence — are
+            // about the lockfile committed.
+            if prepares {
+                let began = std::time::Instant::now();
+                match crate::prepare::recheck(&crate::prepare::Prepare {
+                    worktree: &wt_root,
+                    project: &project,
+                    checkout: Path::new(&s.snapshot.root),
+                    config: &worktree_config,
+                    runner: &runner,
+                    state: Some(state),
+                }) {
+                    Ok(done) if done.is_empty() => {}
+                    Ok(done) => {
+                        stage(
+                            &*live,
+                            task,
+                            Stage::Prepare,
+                            StageState::Passed,
+                            Some(format!(
+                                "{}: the attempt changed its lockfile",
+                                done.join(", ")
+                            )),
+                            Some(began),
+                        );
+                        let record = crate::prepare::load(&wt_root);
+                        linked_dependencies = record.linked();
+                        linked_folders = record
+                            .roots
+                            .iter()
+                            .filter(|e| e.mode == crate::prepare::Mode::Linked)
+                            .map(|e| (project.join(e.folder()), e.toolchain))
+                            .collect();
+                    }
+                    Err(f) => {
+                        stage(
+                            &*live,
+                            task,
+                            Stage::Prepare,
+                            StageState::Failed,
+                            Some(f.message.clone()),
+                            Some(began),
+                        );
+                        return fail(CommandStatus::ConfigError, f.message)
+                            .with_code("PREPARE-FAILED")
+                            .with_fix(f.fix);
+                    }
                 }
             }
             let after = match worktree::checkpoint(&wt_root, &tmp) {

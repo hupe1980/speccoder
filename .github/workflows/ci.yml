@@ -16,6 +16,8 @@ env:
   CARGO_TERM_COLOR: always
   # The sandbox escape suite fails instead of skipping where there is no sandbox.
   SPECCODER_REQUIRE_SANDBOX: "1"
+  # Tests that need a real toolchain fail instead of skipping where it is missing.
+  SPECCODER_REQUIRE_TOOLS: "npm"
   # Every failing test of a run is reported, not only the first.
   NEXTEST_PROFILE: ci
 

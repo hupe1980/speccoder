@@ -46,16 +46,34 @@ fn git(dir: &Path, args: &[&str]) -> String {
     String::from_utf8_lossy(&out.stdout).into_owned()
 }
 
+/// Whether `tool` is on `PATH`; skipped with a note when not — except
+/// where `SPECCODER_REQUIRE_TOOLS` names it (CI: `npm`), where a missing
+/// tool fails the test instead of passing it silently.
 fn have(tool: &str) -> bool {
-    Command::new(tool)
+    let ok = Command::new(tool)
         .arg("--version")
         .output()
-        .is_ok_and(|o| o.status.success())
+        .is_ok_and(|o| o.status.success());
+    let required = std::env::var("SPECCODER_REQUIRE_TOOLS")
+        .is_ok_and(|v| v.split([',', ' ']).any(|t| t == tool || t == "all"));
+    assert!(
+        ok || !required,
+        "{tool} is required here (SPECCODER_REQUIRE_TOOLS) but not on PATH"
+    );
+    if !ok {
+        eprintln!("skipped: {tool} is not on PATH");
+    }
+    ok
 }
 
-/// The sandbox this machine has, or a note that it has none.
+/// The sandbox this machine has, or a note that it has none — a failure
+/// where `SPECCODER_REQUIRE_SANDBOX` is set (CI).
 fn sandboxed() -> bool {
     let ok = sandbox::backend().is_ok();
+    assert!(
+        ok || std::env::var_os("SPECCODER_REQUIRE_SANDBOX").is_none(),
+        "no OS sandbox here, and SPECCODER_REQUIRE_SANDBOX requires one"
+    );
     if !ok {
         eprintln!("skipped: no OS sandbox here");
     }
@@ -262,7 +280,6 @@ const AGENT: &str = "echo done > done.txt\necho 'Did it.'";
 #[test]
 fn a_node_worktree_is_installed_once_and_reused() {
     if !have("npm") {
-        eprintln!("skipped: npm is not on PATH");
         return;
     }
     let f = fixture("", AGENT, Node::Npm);
@@ -297,7 +314,6 @@ fn a_node_worktree_is_installed_once_and_reused() {
 #[test]
 fn a_branch_that_changes_its_lockfile_is_prepared_again() {
     if !have("npm") {
-        eprintln!("skipped: npm is not on PATH");
         return;
     }
     // The agent changes the lockfile (a byte npm ignores): the tick commits it.
@@ -306,19 +322,138 @@ fn a_branch_that_changes_its_lockfile_is_prepared_again() {
         "printf '\\n' >> package-lock.json\necho done > done.txt\necho 'Did it.'",
         Node::Npm,
     );
-    let (res, _) = f.run("T005");
+    let (res, rec) = f.run("T005");
     assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
-    let (res, rec) = f.run("T006");
-    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    // Installed again before the checks, for the lockfile committed.
     let last = rec.prepare().pop().unwrap();
     assert_eq!(last.0, "passed", "{last:?}");
-    assert!(last.1.starts_with("npm ci --offline"), "{last:?}");
+    assert!(
+        last.1.starts_with("npm ci --offline")
+            && last.1.ends_with(": the attempt changed its lockfile"),
+        "{last:?}"
+    );
+    let wt = PathBuf::from(&report(&res).worktree);
+    let committed = git(&wt, &["show", "HEAD:package-lock.json"]);
+    assert_eq!(
+        prepare::load(&wt).roots[0].lock_sha256,
+        speccoder_runtime::integrity::sha256_hex(committed.as_bytes())
+    );
+    // The next task starts from that lockfile: nothing to install first.
+    let (res, rec) = f.run("T006");
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    assert_eq!(rec.prepare()[1].0, "skipped", "{:?}", rec.prepare());
+}
+
+#[test]
+fn a_linked_root_whose_lockfile_the_attempt_changes_is_installed_before_the_checks() {
+    if !have("npm") || !sandboxed() {
+        return;
+    }
+    let f = fixture(
+        "[worktree]\nlink = [\"node_modules\"]\n",
+        "printf '\\n' >> package-lock.json\necho done > done.txt\necho 'Did it.'",
+        Node::Npm,
+    );
+    let before = f.modules();
+    let (res, rec) = f.run("T005");
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let prepared = rec.prepare();
+    assert_eq!(prepared[1].1, "linked node_modules", "{prepared:?}");
+    assert!(
+        prepared[2]
+            .1
+            .ends_with(": the attempt changed its lockfile"),
+        "{prepared:?}"
+    );
+    let rep = report(&res);
+    assert!(rep.linked_dependencies.is_empty());
+    let wt = PathBuf::from(&rep.worktree);
+    let own = fs::symlink_metadata(wt.join("node_modules")).unwrap();
+    assert!(own.is_dir() && !own.file_type().is_symlink());
+    let message = git(&wt, &["log", "-1", "--format=%B"]);
+    assert!(!message.contains("Linked-Dependencies"), "{message}");
+    let entry = &prepare::load(&wt).roots[0];
+    assert_eq!(entry.mode, Mode::Installed);
+    assert_eq!(
+        entry.why.as_deref(),
+        Some("the attempt changed its lockfile")
+    );
+    assert_eq!(f.modules(), before);
+}
+
+#[test]
+fn prepare_off_after_a_link_removes_it_and_its_variables() {
+    if !sandboxed() {
+        return;
+    }
+    let f = fixture(
+        "[worktree]\nlink = [\"node_modules\"]\n",
+        AGENT,
+        Node::Handmade,
+    );
+    let (res, _) = f.run("T005");
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let wt = PathBuf::from(&report(&res).worktree);
+    assert!(prepare::record_path(&wt).is_file());
+    let config = f.path().join("speccoder.toml");
+    let text = fs::read_to_string(&config).unwrap();
+    fs::write(
+        &config,
+        text.replace("[worktree]\n", "[worktree]\nprepare = \"off\"\n"),
+    )
+    .unwrap();
+    git(f.path(), &["commit", "-qam", "prepare off"]);
+    let (res, rec) = f.run("T006");
+    assert!(rec.prepare().is_empty());
+    // The old link is not in force: the check that needs it fails.
+    assert_eq!(
+        res.code().map(|c| c.name),
+        Some("VERIFICATION-FAILED"),
+        "{}",
+        res.message()
+    );
+    assert!(fs::symlink_metadata(wt.join("node_modules")).is_err());
+    assert!(!prepare::record_path(&wt).exists());
+    assert!(report(&res).linked_dependencies.is_empty());
+}
+
+#[test]
+fn a_prepare_that_fails_after_linking_leaves_no_link() {
+    if !sandboxed() {
+        return;
+    }
+    let f = fixture("", AGENT, Node::Handmade);
+    // A second root whose install cannot succeed offline.
+    let api = f.path().join("api");
+    fs::create_dir_all(&api).unwrap();
+    fs::write(
+        api.join("package.json"),
+        "{\"name\": \"api\", \"version\": \"1.0.0\", \"dependencies\": {\"speccoder-never-cached\": \"1.0.0\"}}\n",
+    )
+    .unwrap();
+    let zeros = format!("sha512-{}==", "A".repeat(86));
+    fs::write(
+        api.join("package-lock.json"),
+        format!(
+            "{{\"name\": \"api\", \"version\": \"1.0.0\", \"lockfileVersion\": 3, \"requires\": true, \"packages\": {{\"\": {{\"name\": \"api\", \"version\": \"1.0.0\", \"dependencies\": {{\"speccoder-never-cached\": \"1.0.0\"}}}}, \"node_modules/speccoder-never-cached\": {{\"version\": \"1.0.0\", \"resolved\": \"https://registry.npmjs.org/speccoder-never-cached/-/speccoder-never-cached-1.0.0.tgz\", \"integrity\": \"{zeros}\"}}}}}}\n"
+        ),
+    )
+    .unwrap();
+    git(f.path(), &["add", "-A"]);
+    git(f.path(), &["commit", "-qm", "api"]);
+    let (wt, runner) = worktree(&f);
+    let before = f.modules();
+    let failed = prepare_in(&f, &wt, &runner, &["node_modules"]).unwrap_err();
+    assert!(failed.message.contains("in api"), "{}", failed.message);
+    // The root linked first is not left linked without a record.
+    assert!(fs::symlink_metadata(wt.join("node_modules")).is_err());
+    assert!(!prepare::record_path(&wt).exists());
+    assert_eq!(f.modules(), before);
 }
 
 #[test]
 fn a_package_missing_from_the_cache_stops_with_the_fix() {
     if !have("npm") {
-        eprintln!("skipped: npm is not on PATH");
         return;
     }
     let f = fixture("", AGENT, Node::Handmade);
@@ -569,6 +704,7 @@ fn prepare_in(
     let config = prepare::Config {
         prepare: true,
         link: link.iter().map(|s| (*s).to_owned()).collect(),
+        link_with_executor: false,
     };
     prepare::prepare(&Prepare {
         worktree: wt,
@@ -583,7 +719,6 @@ fn prepare_in(
 #[test]
 fn a_lockfile_that_differs_is_installed_with_the_reason() {
     if !have("npm") || !sandboxed() {
-        eprintln!("skipped: needs npm and the OS sandbox");
         return;
     }
     let f = fixture("", AGENT, Node::Npm);
@@ -652,17 +787,35 @@ fn a_link_resolving_outside_the_checkout_or_unsandboxed_is_refused() {
     let root = prepare::roots(f.path()).remove(0);
     assert_eq!(
         prepare::link_state(f.path(), &root, None).unwrap_err(),
-        "it resolves outside your checkout"
+        format!(
+            "it resolves outside your checkout: your checkout's node_modules is itself a link (to {}), as in a Claude Code worktree — link from the checkout that holds the folder, or let the run install it",
+            fs::canonicalize(outside.path().join("nm"))
+                .unwrap()
+                .display()
+        )
     );
     let (wt, _) = worktree(&f);
-    let p = prepare_in(&f, &wt, &sandbox::Runner::Plain, &["node_modules"]);
-    let notes = p.map(|p| p.map(|p| p.notes).unwrap_or_default());
-    // Unsandboxed, a link would be writable: refused before anything else.
-    if let Ok(notes) = notes {
-        assert!(
-            notes[0].contains("commands run unsandboxed here"),
-            "{notes:?}"
-        );
+    // Unsandboxed, a link would be writable: refused before anything else,
+    // so the run installs instead — here it cannot (no cache holds the
+    // handmade lockfile), and with npm it would say why it did not link.
+    fs::remove_file(f.path().join("node_modules")).unwrap();
+    fs::rename(outside.path().join("nm"), f.path().join("node_modules")).unwrap();
+    match prepare_in(&f, &wt, &sandbox::Runner::Plain, &["node_modules"]) {
+        Ok(p) => {
+            let notes = p.map(|p| p.notes).unwrap_or_default();
+            assert_eq!(
+                notes,
+                [
+                    "node_modules not linked: commands run unsandboxed here, so a linked folder would be writable; installed in the worktree instead"
+                ]
+            );
+        }
+        Err(f) => assert!(
+            f.message
+                .contains("`npm ci --offline` failed in the worktree"),
+            "the install was tried instead: {}",
+            f.message
+        ),
     }
     assert!(
         fs::symlink_metadata(wt.join("node_modules")).map_or(true, |m| !m.file_type().is_symlink())
@@ -698,7 +851,6 @@ fn linking_a_large_folder_takes_under_a_second() {
 /// editable, else a virtual project.
 fn uv_fixture(packaged: bool) -> Option<Fixture> {
     if !have("uv") {
-        eprintln!("skipped: uv is not on PATH");
         return None;
     }
     let f = fixture("", AGENT, Node::Handmade);
@@ -730,6 +882,10 @@ fn uv_fixture(packaged: bool) -> Option<Fixture> {
             .is_ok_and(|o| o.status.success())
     };
     if !uv(&["lock", "--offline"]) || !uv(&["sync", "--offline"]) {
+        assert!(
+            !std::env::var("SPECCODER_REQUIRE_TOOLS").is_ok_and(|v| v.contains("uv")),
+            "uv is required here (SPECCODER_REQUIRE_TOOLS) but cannot lock or sync offline"
+        );
         eprintln!(
             "skipped: uv cannot lock or sync offline here (no Python, or uv_build not cached)"
         );

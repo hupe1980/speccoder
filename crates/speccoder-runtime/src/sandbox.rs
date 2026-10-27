@@ -667,6 +667,26 @@ impl Runner {
         }
     }
 
+    /// Whether a command may write at or below `path`: it lies under a
+    /// writable tree (not carved read-only) or the private temporary
+    /// directory, or a writable tree lies inside it. A plain runner writes
+    /// everywhere.
+    #[must_use]
+    pub fn writes(&self, path: &Path) -> bool {
+        match self {
+            Self::Plain => true,
+            Self::Sandboxed(s) => {
+                let p = canonical(path);
+                let carved = |w: &Path| s.profile.read_only.iter().any(|r| w.starts_with(r));
+                s.profile
+                    .writable
+                    .iter()
+                    .chain(std::iter::once(&s.profile.tmp))
+                    .any(|w| (p.starts_with(w) && !carved(&p)) || (w.starts_with(&p) && !carved(w)))
+            }
+        }
+    }
+
     /// Whether `argv` gets the network by `[sandbox] network_allow` (or a
     /// prefix): never for a plain runner, which asks nobody.
     #[must_use]
