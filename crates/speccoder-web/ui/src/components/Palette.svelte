@@ -19,6 +19,8 @@
     ["view.sidebar", "toggle the sidebar"],
     ["view.statusbar", "toggle the status bar"],
     ["file.bug", "report a bug", "reproduced, confirmed by you once, fixed on evidence"],
+    ["file.new_feature", "new feature", "the spec tool writes the spec; you review it, then it is planned"],
+    ["file.new_project", "new project", "the stack's and the spec format's own tools, then one commit"],
   ] as [string, string, string?][]).map(([id, label, why]) => ({ ...offer(null, { group: "page", label, why: why ?? "", command: "" }), menu: id }));
   const isMenu = (a?: Entry) => !!a?.menu;
   const matched = $derived(
@@ -43,6 +45,13 @@
     if (isMenu(a)) {
       app.palette = false;
       window.dispatchEvent(new CustomEvent("speccoder:menu", { detail: a.menu }));
+      return;
+    }
+    // The creating skill opens the New Feature sheet: a description, how
+    // far to plan it, what will run.
+    if ("role" in a && a.role === "create") {
+      app.palette = false;
+      app.newFeature = { text: filter.trim().length >= 6 ? filter.trim() : "" };
       return;
     }
     if (a === quick) {

@@ -303,11 +303,11 @@ fn ui(
         let served_root = root.clone();
         std::thread::spawn(move || {
             let _ = speccoder_web::serve(&served_root, port, |s| {
-                let _ = tx.send((s.url, s.events));
+                let _ = tx.send((s.url, s.events, s.root));
             });
         });
         return match rx.recv() {
-            Ok((url, events)) => match app::run(&url, events, root.clone()) {
+            Ok((url, events, bound)) => match app::run(&url, events, bound) {
                 Ok(()) => CommandResult::new("ui", CommandStatus::Ok, "the window was closed"),
                 Err(e) => CommandResult::new(
                     "ui",

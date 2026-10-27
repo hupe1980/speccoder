@@ -42,6 +42,11 @@ export const KINDS: Record<ActionKind, { verb: string; icon?: string; holdsWorkt
   code_nudge: { verb: "Send as a Nudge", icon: "sparkle", holdsWorktree: false },
   acceptance_at: { verb: "Write Acceptance Here", icon: "shield", holdsWorktree: false },
   preset_add: { verb: "Add the Preset", icon: "doc", holdsWorktree: false },
+  plan_through: { verb: "Start", icon: "sparkle", holdsWorktree: false },
+  new_project: { verb: "Create", icon: "plus", holdsWorktree: false },
+  undo_new_project: { verb: "Undo", icon: "undo", holdsWorktree: false },
+  clone_repository: { verb: "Clone", icon: "branch", holdsWorktree: false },
+  open_sample: { verb: "Try the Sample", icon: "play", holdsWorktree: false },
   command: { verb: "Copy", icon: "terminal", holdsWorktree: false },
 };
 

@@ -2748,6 +2748,16 @@ export interface Phase {
   title: string;
 }
 
+/** Where a requirement is written. */
+export interface Place {
+  /** The line, 1-based. */
+  line: number;
+  /** The document, project-relative. */
+  path: string;
+  /** That line, verbatim. */
+  quote: string;
+}
+
 /** A plan check of the new task list (`PLAN-*`): a warning, never a stop. */
 export interface PlanCheck {
   /** The check's code. */
@@ -4286,6 +4296,8 @@ export type SimilarLevel = "close" | "very_close";
 
 /** A requirement close to the description. */
 export interface SimilarMatch {
+  /** Where it is written. */
+  at: Place | null;
   /** `close` or `very_close`. */
   level: SimilarLevel;
   /** The requirement's identifier (`FR-004`). */

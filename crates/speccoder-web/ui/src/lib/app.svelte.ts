@@ -3,7 +3,7 @@
 
 import { get, post, q, listen } from "./api";
 import { KINDS, kindOf, type Offer } from "./actions";
-import type { Action, Reply, Inbox, LiveRun, Project, Report, PendingCall, Presentation, Runnable, Document, Remedy } from "./types";
+import type { Action, Reply, Inbox, LiveRun, Project, Report, PendingCall, Presentation, Runnable, Document, Remedy, PlanningChainReport, PlanStepResult, Through, WelcomeView } from "./types";
 
 export interface StageView {
   stage: string;
@@ -50,6 +50,27 @@ class AppState {
   /** The Bug sheet is open: a new bug (prefilled from an issue), or the
    *  bug `<unit>/<task>` it shows. */
   bugSheet = $state<{ key?: string; symptom?: string; issue?: number } | null>(null);
+  /** The composer is open, with what it opens with. */
+  composer = $state<{ text?: string } | null>(null);
+  /** The New Feature sheet is open: prefilled text, the source a hand-off
+   *  supplied, the *Plan it* choice. */
+  newFeature = $state<{ text?: string; source?: { kind: "issue"; number: number; title: string } | null; through?: Through } | null>(null);
+  /** The New Project sheet is open (`existing`: the folder is the host's own). */
+  newProject = $state<{ idea?: string; path?: string; existing?: boolean } | null>(null);
+  /** The Clone sheet is open. */
+  clone = $state(false);
+  /** The keys (`?`) are shown. */
+  keys = $state(false);
+  /** The host serves no project yet: the welcome. */
+  welcome = $state<WelcomeView | null>(null);
+  /** Where the last plan through stopped (the job's result; the stop is
+   *  derived from the files again on the next one). */
+  chain = $state<PlanningChainReport | null>(null);
+  /** A plan through is writing a new unit: follow it when it appears. */
+  following = $state(false);
+  /** A new project's steps as they run: the finished ones, the running one. */
+  steps = $state<PlanStepResult[]>([]);
+  stepRunning = $state<string | null>(null);
   /** An open context menu: where, and its items. */
   context = $state<{ x: number; y: number; title: string; items: { label: string; icon?: string; disabled?: string | null; hint?: string; act: () => void }[] } | null>(null);
   /** Whether the sidebar and the status bar are shown (View menu). */
@@ -109,6 +130,19 @@ class AppState {
 
   async refresh() {
     try {
+      if (this.welcome || !this.project) {
+        // A host outside a project answers 409 until it is bound.
+        try {
+          await get<Project>("/api/project");
+          this.welcome = null;
+        } catch (e) {
+          if ((e as { status?: number }).status === 409) {
+            this.welcome = await get<WelcomeView>("/api/welcome");
+            return;
+          }
+          throw e;
+        }
+      }
       const f = this.feature ?? undefined;
       const [project, report, actions, approvals, documents] = await Promise.all([
         get<Project>("/api/project"),
@@ -132,6 +166,13 @@ class AppState {
       this.approvals = approvals.data?.pending ?? [];
       this.documents = documents;
       if (!this.feature && project.features?.current) this.feature = project.features.current;
+      // A plan through made a new unit current: the page follows it.
+      if (this.following && project.features?.current && project.features.current !== this.feature) {
+        this.feature = project.features.current;
+        this.view = "documents";
+        this.doc = "spec";
+        void this.refresh();
+      }
     } catch (e) {
       this.toast({ tone: "error", text: "The host did not answer", detail: String(e) });
     } finally {
@@ -211,6 +252,21 @@ class AppState {
     }
   }
 
+  #waiters = new Map<number, (r: Reply | null) => void>();
+
+  /** Takes `a` as a job and waits for its result (a step of a sequence:
+   *  the review's approval, then plan through). */
+  async run(a: Action | Offer, input?: string, root?: string): Promise<Reply | null> {
+    if (!a.run) return null;
+    try {
+      const { id } = await post<{ id: number }>("/api/run", { run: a.run as Runnable, input: input ?? null, feature: this.feature, command: a.command, root: root ?? null });
+      return await new Promise<Reply | null>((resolve) => this.#waiters.set(id, resolve));
+    } catch (e) {
+      this.toast({ tone: "error", text: String((e as Error).message ?? e) });
+      return null;
+    }
+  }
+
   async answer(body: Record<string, unknown>) {
     if (!this.waiting) return;
     const id = this.waiting.id;
@@ -232,6 +288,8 @@ class AppState {
         this.job = { id: e.id, command: e.command, running: true, result: null };
         this.stages = [];
         this.calls = [];
+        this.steps = [];
+        this.stepRunning = null;
         this.said = null;
         this.thinking = null;
         this.usage = { in: 0, out: 0, usd: null };
@@ -248,11 +306,23 @@ class AppState {
       case "answered":
         if (this.waiting?.id === e.id) this.waiting = null;
         break;
+      case "bound":
+        // Bound to the project a job made, cloned or opened.
+        location.reload();
+        break;
       case "done": {
         const r = e.result as Reply;
         this.job = { id: e.id, command: this.job?.command ?? "", running: false, result: r };
         this.waiting = null;
         this.oracleStage = null;
+        if (r?.payload === "planning_chain" && r.data) this.chain = r.data as PlanningChainReport;
+        const waiter = this.#waiters.get(e.id);
+        if (waiter) {
+          this.#waiters.delete(e.id);
+          waiter(r);
+          void this.refresh();
+          break;
+        }
         if (this.#fixing !== undefined) {
           const then = this.#fixing;
           this.#fixing = undefined;
@@ -329,6 +399,12 @@ class AppState {
       }
       case "tool_call":
         this.calls = [...this.calls.slice(-199), `turn ${ev.turn}  ${ev.tool} ${ev.target}  ${ev.decision}${ev.ok === false ? "  failed" : ""}`];
+        // A skill writing the documents: show them as they are written.
+        if (this.following && /write|edit/.test(String(ev.tool))) this.#soon();
+        break;
+      case "planning_stopped":
+        this.following = false;
+        void this.refresh();
         break;
       case "usage":
         this.usage = { in: ev.input_tokens, out: ev.output_tokens, usd: ev.usd ?? null };
@@ -340,11 +416,31 @@ class AppState {
       case "notice":
         this.calls = [...this.calls, ev.text];
         break;
+      case "project": {
+        // A new project's step: names and states only (never the idea).
+        const step = ev.step ?? {};
+        if (step.event === "scaffold_started") this.stepRunning = step.step;
+        if (step.event === "scaffold_finished") {
+          this.stepRunning = null;
+          this.steps = [...this.steps.filter((r) => r.id !== step.step), { id: step.step, state: step.state, exit: step.exit ?? null, duration_ms: step.duration_ms ?? 0, output_tail: [] }];
+        }
+        break;
+      }
       case "oracle":
         // Names and counts only: never a test, never held-out material.
         if (ev.step?.kind === "stage") this.oracleStage = { requirement: ev.step.requirement, stage: ev.step.stage, n: ev.step.n, of: ev.step.of };
         break;
     }
+  }
+
+  #timer: ReturnType<typeof setTimeout> | null = null;
+  /** A refresh within a second, once for a burst of writes. */
+  #soon() {
+    if (this.#timer) return;
+    this.#timer = setTimeout(() => {
+      this.#timer = null;
+      void this.refresh();
+    }, 900);
   }
 
   /** A feature's title: its spec's own, else its directory name in words. */
@@ -393,6 +489,20 @@ class AppState {
     }
   }
 
+  /** A project speccoder just created opens its first feature, prefilled
+   *  with the idea — once, while it has no unit. */
+  async #firstFeature() {
+    if (this.welcome || !this.project) return;
+    try {
+      const f = await post<{ idea: string | null; name: string | null; commit: string | null }>("/api/new/first-feature", {});
+      if (!f.idea) return;
+      if (f.name) this.toast({ tone: "ok", text: `${f.name} is ready${f.commit ? ` — committed ${f.commit.slice(0, 7)}` : ""}`, detail: "Write the first feature: it is prefilled with your idea" });
+      this.newFeature = { text: f.idea, through: "tasks" };
+    } catch {
+      /* nothing offered */
+    }
+  }
+
   start() {
     this.#restore();
     void this.pollLive();
@@ -403,7 +513,8 @@ class AppState {
       this.#restore();
       void this.refresh();
     });
-    void this.refresh();
+    void this.refresh().then(() => this.#firstFeature());
+    addEventListener("speccoder:toast", (e) => this.toast({ tone: "ok", text: String((e as CustomEvent).detail ?? "") }));
     void get<{ job: any; waiting: Waiting | null }>("/api/job").then((j) => {
       if (j.job) this.job = j.job;
       if (j.waiting) this.waiting = j.waiting;

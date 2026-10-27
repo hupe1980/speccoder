@@ -40,16 +40,18 @@ unicode-width.workspace = true
 # feature (it needs WebKitGTK installed); on macOS and Windows always, on
 # the system's own WebView (WKWebView, WebView2), which adds no library.
 tauri = { version = "2", optional = true }
+tauri-plugin-dialog = { version = "2.8", optional = true }
 
 [target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
 tauri = { version = "2" }
+tauri-plugin-dialog = { version = "2.8" }
 
 [build-dependencies]
 tauri-build = { version = "2" }
 
 [features]
 default = []
-app = ["dep:tauri"]
+app = ["dep:tauri", "dep:tauri-plugin-dialog"]
 
 [dev-dependencies]
 assert_cmd.workspace = true

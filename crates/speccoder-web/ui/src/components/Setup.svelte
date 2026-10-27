@@ -81,8 +81,8 @@
     app.toast({ tone: "ok", text: "Copied", detail: text });
   }
   function start() {
-    if (specify && idea.trim()) void app.perform(specify, idea.trim());
-    app.view = "board";
+    // The New Feature sheet: what will run, how far to plan it, Start.
+    if (specify && idea.trim()) app.newFeature = { text: idea.trim(), through: "tasks" };
   }
   const level = (c?: Check) => c?.level ?? "pass";
 </script>
@@ -112,7 +112,11 @@
         {/each}
       </ul>
       {#if level(project) === "fail"}
-        <p class="note"><Icon name="info" size={14} /> speccoder works on a Spec Kit project. Run the command above in your terminal, then come back — this page updates.</p>
+        <div class="make">
+          <button class="btn primary" onclick={() => (app.newProject = { path: app.project?.root ?? "", existing: true })}><Icon name="plus" size={13} /> Make it a project</button>
+          <span class="muted small">The spec format's own init, then speccoder's setup and one commit — every command shown first.</span>
+        </div>
+        <p class="note"><Icon name="info" size={14} /> Or run the command above in your terminal, then come back — this page updates.</p>
       {/if}
     {:else if step === 1}
       <h1>Choose a model</h1>
@@ -212,6 +216,7 @@
   h1 { margin: 0; text-align: center; font: 700 1.9rem/1.15 var(--display); letter-spacing: -0.026em; }
   .lead { margin: 0 auto 0.5rem; max-width: 52ch; text-align: center; color: var(--text-2); font-size: 1rem; }
   ul { list-style: none; margin: 0; padding: 0; }
+  .make { display: grid; gap: 0.35rem; justify-items: start; margin: 0.8rem 0 0; }
   .found li, .ran li, .proposed li { display: grid; grid-template-columns: auto 1fr auto; gap: 0.75rem; align-items: center; padding: 0.65rem 0.9rem; }
   .ic { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; color: #fff; background: var(--verified-fill); }
   .warn .ic { background: var(--attention-fill); }
