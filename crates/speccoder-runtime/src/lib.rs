@@ -5,6 +5,7 @@
 //! through the embedded `agentplane` runtime (see [`substrate`]).
 //! The CLI only parses arguments, calls a service and renders its result.
 
+pub mod acceptance_at;
 pub mod actions;
 pub mod approvals;
 pub mod attempts;
@@ -43,6 +44,7 @@ pub mod mutation;
 pub mod next;
 pub mod oracle;
 pub mod pipeline;
+pub mod plan_lint;
 pub mod pre_frozen;
 pub mod progress;
 pub mod quick;
@@ -62,5 +64,5 @@ pub mod verify;
 pub mod worktree;
 
 pub use commands::*;
-pub use format::speckit::{hooks, workflow};
+pub use format::speckit::{hooks, preset, workflow};
 pub use pipeline::*;

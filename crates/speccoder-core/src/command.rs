@@ -208,6 +208,8 @@ pub enum CommandData {
     PolicyCoverage(Box<PolicyCoverage>),
     /// `review comments`: the comment tray and the last revision turn.
     Comments(Box<crate::oracle::CommentsView>),
+    /// `preset add`: the speccoder Spec Kit preset, installed or offered.
+    Preset(Box<PresetReport>),
 }
 
 /// What a prefix entry of `[commands] allow_prefix` or `[sandbox]
@@ -714,6 +716,9 @@ pub struct DoctorCheck {
     /// The fix speccoder can apply itself, on the person's yes.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub remedy: Option<Remedy>,
+    /// The tasks a plan check names.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tasks: Vec<String>,
 }
 
 /// Result of `speccoder doctor`.
@@ -771,6 +776,7 @@ impl CommandData {
             Self::Bug(_) => "bug",
             Self::PolicyCoverage(_) => "policy_coverage",
             Self::Comments(_) => "comments",
+            Self::Preset(_) => "preset",
         }
     }
 }
@@ -815,7 +821,34 @@ pub const PAYLOADS: &[&str] = &[
     "bug",
     "policy_coverage",
     "comments",
+    "preset",
 ];
+
+/// Result of `speccoder preset add`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct PresetReport {
+    /// The preset's id (`speccoder`).
+    pub preset: String,
+    /// The bundled version.
+    pub version: String,
+    /// The Spec Kit command, as run (or to be confirmed).
+    pub command: Vec<String>,
+    /// Spec Kit's own output (its last lines).
+    pub output: String,
+    /// The preset as Spec Kit reports it.
+    pub state: PresetState,
+}
+
+/// The speccoder preset in a project, as Spec Kit reports it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct PresetState {
+    /// The installed version, when installed.
+    pub installed: Option<String>,
+    /// `specify preset resolve tasks-template` names it.
+    pub active_for_tasks_template: bool,
+    /// The version this speccoder bundles.
+    pub bundled: String,
+}
 
 /// A repository instructions file given to an attempt.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]

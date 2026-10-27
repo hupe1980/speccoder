@@ -142,10 +142,10 @@
     </div>
     {#if tab === "evidence"}
       <dl class="grouped">
-        {#each data.rows as r (r.label + r.text)}
+        {#each data.rows as r, n (r.label + r.text)}
           <div class="row" class:claim={r.label === "Model says"}>
             <dt><span class="dot s-{r.mark}"><Icon name={symbol(r.mark)} size={11} weight={2.4} /></span>{r.label}</dt>
-            <dd><Code text={r.text} />{#if r.label === "Acceptance" && culprit}{" "}<button class="link" aria-label="Open task {culprit}" onclick={() => app.selectTask(culprit)}>Open {culprit}</button>{/if}</dd>
+            <dd><Code text={r.text} />{#if n === 0 && culprit}{" "}<button class="link" aria-label="Open task {culprit}" onclick={() => app.selectTask(culprit)}>Open {culprit}</button>{/if}</dd>
           </div>
         {/each}
       </dl>

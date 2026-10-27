@@ -240,6 +240,25 @@ pub enum Runnable {
         /// The comments.
         comments: Vec<crate::oracle::CodeComment>,
     },
+    /// Write a story's acceptance tests at a Setup or Foundational task
+    /// (`revoke`: take the decision back) — a decision recorded in the
+    /// state directory, never an edit of the spec.
+    AcceptanceAt {
+        /// The feature.
+        feature: String,
+        /// The story (`US1`).
+        story: String,
+        /// The task.
+        task: String,
+        /// Take the decision back.
+        revoke: bool,
+    },
+    /// Install the bundled `speccoder` Spec Kit preset through Spec Kit's
+    /// own `specify preset add` (`update`: the installed one, replaced).
+    PresetAdd {
+        /// Replace an installed older version.
+        update: bool,
+    },
 }
 
 /// What a comment action does.
@@ -388,6 +407,10 @@ pub enum ActionKind {
     RevisionUndo,
     /// [`Runnable::CodeNudge`].
     CodeNudge,
+    /// [`Runnable::AcceptanceAt`].
+    AcceptanceAt,
+    /// [`Runnable::PresetAdd`].
+    PresetAdd,
     /// No runnable: the person runs the command.
     Command,
 }
@@ -427,6 +450,8 @@ impl ActionKind {
         Self::CommentsSend,
         Self::RevisionUndo,
         Self::CodeNudge,
+        Self::AcceptanceAt,
+        Self::PresetAdd,
         Self::Command,
     ];
 
@@ -466,6 +491,8 @@ impl ActionKind {
             Self::CommentsSend => "comments_send",
             Self::RevisionUndo => "revision_undo",
             Self::CodeNudge => "code_nudge",
+            Self::AcceptanceAt => "acceptance_at",
+            Self::PresetAdd => "preset_add",
             Self::Command => "command",
         }
     }
@@ -584,6 +611,13 @@ impl ActionKind {
                     text: "name it".to_owned(),
                 }],
             },
+            Self::AcceptanceAt => Runnable::AcceptanceAt {
+                feature: "001-greet-function".to_owned(),
+                story: "US1".to_owned(),
+                task: "T003".to_owned(),
+                revoke: false,
+            },
+            Self::PresetAdd => Runnable::PresetAdd { update: false },
             Self::Command => return None,
         })
     }
@@ -632,6 +666,8 @@ impl Runnable {
             Self::CommentsSend { .. } => ActionKind::CommentsSend,
             Self::RevisionUndo { .. } => ActionKind::RevisionUndo,
             Self::CodeNudge { .. } => ActionKind::CodeNudge,
+            Self::AcceptanceAt { .. } => ActionKind::AcceptanceAt,
+            Self::PresetAdd { .. } => ActionKind::PresetAdd,
         }
     }
 }
@@ -680,7 +716,8 @@ pub fn identity(run: Option<&Runnable>, command: &str) -> ActionId {
         | Runnable::KeepSetAside { task }
         | Runnable::DropSetAside { task }
         | Runnable::AllowAlways { task, .. }
-        | Runnable::CodeNudge { task, .. } => Some(task.clone()),
+        | Runnable::CodeNudge { task, .. }
+        | Runnable::AcceptanceAt { task, .. } => Some(task.clone()),
         Runnable::OracleTests { req, .. } => Some(req.clone()),
         Runnable::ApproveAndRun { mode, .. } => Some(mode.as_str().to_owned()),
         Runnable::Comment { id, .. } => id.clone(),
@@ -703,6 +740,7 @@ pub fn identity(run: Option<&Runnable>, command: &str) -> ActionId {
         | Runnable::FixSetup
         | Runnable::Feature
         | Runnable::PullRequest
+        | Runnable::PresetAdd { .. }
         | Runnable::CommentsSend { .. } => None,
     };
     ActionId {

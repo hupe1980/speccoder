@@ -704,6 +704,7 @@ The preset could not be added: `specify preset add` failed.
 
 Spec Kit refused or failed to install the preset; its own output is shown. Nothing in `specs/` was changed.
 
+- `speccoder preset add`
 - `speccoder doctor`
 
 ### NEEDS-HUMAN

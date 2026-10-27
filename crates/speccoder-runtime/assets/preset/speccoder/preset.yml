@@ -1,0 +1,14 @@
+schema_version: "1.0"
+preset:
+  id: speccoder
+  name: speccoder
+  version: "{version}"
+  description: "Tasks that plan for evidence: a story's behaviour inside its story, no test-only tasks, tests where the runner collects them."
+requires:
+  speckit_version: ">=1.2.0"
+provides:
+  templates:
+    - type: template
+      name: tasks-template
+      file: templates/tasks-template.md
+      replaces: tasks-template

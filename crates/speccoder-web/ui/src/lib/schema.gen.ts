@@ -98,7 +98,7 @@ export interface ActionId {
  * kind arrives with its `Runnable` variant (the *adding a kind* contract
  * of `speccoder_runtime::actions::perform`).
  */
-export type ActionKind = "skill" | "run_task" | "run_feature" | "converge" | "commit" | "approve" | "reject" | "accept" | "skip" | "nudge" | "rule" | "review" | "issue_comment" | "quick_change" | "keep_set_aside" | "drop_set_aside" | "fix_setup" | "feature" | "pull_request" | "bug_fix" | "bug_confirm" | "bug_run" | "bug_keep" | "allow_always" | "widen_policy" | "decide_batch" | "oracle_tests" | "approve_and_run" | "comment" | "comments_send" | "revision_undo" | "code_nudge" | "command";
+export type ActionKind = "skill" | "run_task" | "run_feature" | "converge" | "commit" | "approve" | "reject" | "accept" | "skip" | "nudge" | "rule" | "review" | "issue_comment" | "quick_change" | "keep_set_aside" | "drop_set_aside" | "fix_setup" | "feature" | "pull_request" | "bug_fix" | "bug_confirm" | "bug_run" | "bug_keep" | "allow_always" | "widen_policy" | "decide_batch" | "oracle_tests" | "approve_and_run" | "comment" | "comments_send" | "revision_undo" | "code_nudge" | "acceptance_at" | "preset_add" | "command";
 
 /**
  * Result of `speccoder actions`: what a person can do now in the
@@ -651,7 +651,7 @@ export interface CollectionRule {
 }
 
 /** Command-specific payload of a result. */
-export type CommandData = ProjectSnapshot | VerifyReport | WorktreeReport | ProposeReport | ReplayReport | RunReport | EvalReport | FeatureReport | ConvergeReport | StatusReport | ApprovalsReport | ControlReport | CostReport | PrReport | BenchReport | InitReport | SkillsReport | SkillRunReport | ChecklistStatus[] | ArchiveReport | InPlaceReport | AttestReport | ExplainReport | SchemaReport | DoctorReport | FeaturesReport | UiReport | ConfigReport | IssuesReport | InboxReport | ReviewReport | AuthReport | BranchReport | EvidenceTour | ActionsReport | BugReport | PolicyCoverage | CommentsView;
+export type CommandData = ProjectSnapshot | VerifyReport | WorktreeReport | ProposeReport | ReplayReport | RunReport | EvalReport | FeatureReport | ConvergeReport | StatusReport | ApprovalsReport | ControlReport | CostReport | PrReport | BenchReport | InitReport | SkillsReport | SkillRunReport | ChecklistStatus[] | ArchiveReport | InPlaceReport | AttestReport | ExplainReport | SchemaReport | DoctorReport | FeaturesReport | UiReport | ConfigReport | IssuesReport | InboxReport | ReviewReport | AuthReport | BranchReport | EvidenceTour | ActionsReport | BugReport | PolicyCoverage | CommentsView | PresetReport;
 
 /**
  * The envelope as it is serialised — the schema of [`CommandResult`]
@@ -1153,6 +1153,8 @@ export interface DoctorCheck {
   level: DoctorLevel;
   /** The fix speccoder can apply itself, on the person's yes. */
   remedy?: Remedy | null;
+  /** The tasks a plan check names. */
+  tasks?: string[];
 }
 
 /** How a doctor check came out. */
@@ -2628,6 +2630,30 @@ export interface PreFrozenRef {
   wording: string;
 }
 
+/** Result of `speccoder preset add`. */
+export interface PresetReport {
+  /** The Spec Kit command, as run (or to be confirmed). */
+  command: string[];
+  /** Spec Kit's own output (its last lines). */
+  output: string;
+  /** The preset's id (`speccoder`). */
+  preset: string;
+  /** The preset as Spec Kit reports it. */
+  state: PresetState;
+  /** The bundled version. */
+  version: string;
+}
+
+/** The speccoder preset in a project, as Spec Kit reports it. */
+export interface PresetState {
+  /** `specify preset resolve tasks-template` names it. */
+  active_for_tasks_template: boolean;
+  /** The version this speccoder bundles. */
+  bundled: string;
+  /** The installed version, when installed. */
+  installed: string | null;
+}
+
 /** Everything discovered about one Spec Kit project. */
 export interface ProjectSnapshot {
   /** State of `.specify/memory/constitution.md`. */
@@ -3572,6 +3598,31 @@ export type Runnable =
     kind: "code_nudge";
     /** The task. */
     task: string;
+  }
+  /**
+   * Write a story's acceptance tests at a Setup or Foundational task
+   * (`revoke`: take the decision back) — a decision recorded in the
+   * state directory, never an edit of the spec.
+   */
+  | {
+    /** The feature. */
+    feature: string;
+    kind: "acceptance_at";
+    /** Take the decision back. */
+    revoke: boolean;
+    /** The story (`US1`). */
+    story: string;
+    /** The task. */
+    task: string;
+  }
+  /**
+   * Install the bundled `speccoder` Spec Kit preset through Spec Kit's
+   * own `specify preset add` (`update`: the installed one, replaced).
+   */
+  | {
+    kind: "preset_add";
+    /** Replace an installed older version. */
+    update: boolean;
   };
 
 /**

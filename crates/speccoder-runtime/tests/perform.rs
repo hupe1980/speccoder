@@ -477,6 +477,32 @@ fn cases() -> Vec<Case> {
             Runnable::RevisionUndo { turn: None },
             None,
         ),
+        // A story task is not where another story's acceptance is written.
+        case(
+            "acceptance-at-story-task",
+            Runnable::AcceptanceAt {
+                feature: "001-graph".to_owned(),
+                story: "US1".to_owned(),
+                task: "T005".to_owned(),
+                revoke: false,
+            },
+            None,
+        ),
+        case(
+            "acceptance-at-foundational",
+            Runnable::AcceptanceAt {
+                feature: "001-graph".to_owned(),
+                story: "US1".to_owned(),
+                task: "T003".to_owned(),
+                revoke: false,
+            },
+            None,
+        ),
+        no_state(case(
+            "preset-add-no-state",
+            Runnable::PresetAdd { update: false },
+            None,
+        )),
         case(
             "code-nudge-empty",
             Runnable::CodeNudge {

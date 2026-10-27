@@ -40,6 +40,8 @@ export const KINDS: Record<ActionKind, { verb: string; icon?: string; holdsWorkt
   comments_send: { verb: "Send Comments", icon: "sparkle", holdsWorktree: false },
   revision_undo: { verb: "Undo Revision", icon: "undo", holdsWorktree: false },
   code_nudge: { verb: "Send as a Nudge", icon: "sparkle", holdsWorktree: false },
+  acceptance_at: { verb: "Write Acceptance Here", icon: "shield", holdsWorktree: false },
+  preset_add: { verb: "Add the Preset", icon: "doc", holdsWorktree: false },
   command: { verb: "Copy", icon: "terminal", holdsWorktree: false },
 };
 

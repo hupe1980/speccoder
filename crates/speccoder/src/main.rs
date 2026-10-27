@@ -1394,6 +1394,34 @@ fn main() {
             acp::serve(std::io::stdin().lock(), Box::new(std::io::stdout()));
             return;
         }
+        Command::Preset {
+            action: cli::PresetAction::Add { yes },
+        } => match speccoder_runtime::worktree::state_dir() {
+            None => no_state("preset add"),
+            Some(state) => {
+                // Spec Kit writes the project: a person's decision; never
+                // without a terminal unless --yes.
+                use std::io::IsTerminal;
+                let preview = speccoder_runtime::preset::add(path, false, *yes, &state);
+                if !*yes
+                    && !machine
+                    && std::io::stdin().is_terminal()
+                    && preview.status() == speccoder_core::CommandStatus::NeedsHuman
+                    && matches!(preview.data(), Some(speccoder_core::CommandData::Preset(_)))
+                {
+                    eprint!("{} [y/N] ", preview.message());
+                    let mut line = String::new();
+                    let _ = std::io::stdin().read_line(&mut line);
+                    if matches!(line.trim(), "y" | "Y" | "yes") {
+                        speccoder_runtime::preset::add(path, false, true, &state)
+                    } else {
+                        preview
+                    }
+                } else {
+                    preview
+                }
+            }
+        },
         Command::Pr {
             remote,
             base,
@@ -1979,6 +2007,7 @@ fn command_name(command: Option<&Command>) -> &'static str {
             C::Review { .. } => "review",
             C::Run { .. } => "run",
             C::Task { action } => match action {
+                cli::TaskAction::AcceptanceAt { .. } => "task acceptance-at",
                 cli::TaskAction::Approve { .. } => "task approve",
                 cli::TaskAction::Reject { .. } => "task reject",
                 cli::TaskAction::Accept { .. } => "task accept",
@@ -1991,6 +2020,7 @@ fn command_name(command: Option<&Command>) -> &'static str {
             },
             C::Report { .. } => "report",
             C::Pr { .. } => "pr",
+            C::Preset { .. } => "preset add",
             C::Attest { .. } => "attest",
             C::Help { .. } => "help",
             C::Verify { .. } => "verify",
@@ -2070,6 +2100,20 @@ fn task_action(
                 path, feature, task, reason, &state, *in_place,
             ),
             None => no_state("task accept"),
+        },
+        T::AcceptanceAt {
+            task,
+            story,
+            revoke,
+        } => match speccoder_runtime::worktree::state_dir() {
+            Some(state) => speccoder_runtime::acceptance_at::decide(
+                path,
+                feature,
+                (story, task, *revoke),
+                speccoder_core::actions::Via::Terminal,
+                &state,
+            ),
+            None => no_state("task acceptance-at"),
         },
         T::Skip { task, reason, .. } => {
             speccoder_runtime::controls::skip(path, feature, task, reason.as_deref())

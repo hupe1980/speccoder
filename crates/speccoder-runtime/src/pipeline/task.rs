@@ -415,6 +415,34 @@ pub(crate) fn run_task(
             );
         }
     };
+    // A person's decision (FR-034): this Setup or Foundational task writes
+    // a story's acceptance tests — its author gets the story's scenarios.
+    let acceptance_story = native
+        .is_none()
+        .then(|| crate::acceptance_at::story_at(&s.plane_dir, &feature_name, task))
+        .flatten();
+    let story_task: Option<String> = acceptance_story.as_ref().and_then(|st| {
+        snap.feature
+            .as_ref()
+            .and_then(|f| f.tasks.as_ref())
+            .and_then(|t| {
+                t.tasks
+                    .iter()
+                    .find(|t| t.story.as_deref() == Some(st.as_str()))
+            })
+            .map(|t| t.id.clone())
+    });
+    let bundle = match (&acceptance_story, &story_task) {
+        (Some(st), Some(other)) => {
+            let mut b = bundle;
+            if let Ok(of) = format.bundle(&snap, other) {
+                b.story = of.story;
+            }
+            b.task.story.clone_from(st);
+            b
+        }
+        _ => bundle,
+    };
     let Some(config_root) = verify::find_config(&project) else {
         return refuse(
             CommandStatus::ConfigError,
@@ -890,7 +918,7 @@ pub(crate) fn run_task(
     let story_files = super::commit::story_files(&wt_root, &feature_name);
     let scenarios = match &bug_fix {
         Some(f) => super::bug::scenarios(&f.bug),
-        None => format.scenarios(&snap, task),
+        None => format.scenarios(&snap, story_task.as_deref().unwrap_or(task)),
     };
     // A requirement's oracle frozen at review: reused by the
     // first task citing its scenarios while its wording is unchanged.
@@ -2422,7 +2450,9 @@ pub(crate) fn run_task(
         use speccoder_core::regression::{Regression, RegressionFacts, RegressionReason, decide};
         let facts = RegressionFacts {
             acceptance_on: run_config.acceptance,
-            story: parsed_task.as_ref().and_then(|t| t.story.clone()),
+            story: acceptance_story
+                .clone()
+                .or_else(|| parsed_task.as_ref().and_then(|t| t.story.clone())),
             scenarios: scenarios.len(),
             skip: acceptance.as_ref().and_then(|a| a.skip_cause.clone()),
             // Red first but green only on a re-run: the evidence was flaky.

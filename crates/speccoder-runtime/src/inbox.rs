@@ -589,6 +589,24 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
                     actions.push(checks.clone());
                 }
             }
+            // The plan put the behaviour early or outside a story: the
+            // preset changes how future plans are written.
+            "already_passing" | "no_story"
+                if crate::format::at(path).kind() == speccoder_core::spec::FormatKind::Speckit
+                    && crate::preset::state(path).installed.is_none() =>
+            {
+                let mut a = action(
+                    "plan",
+                    "add the speccoder preset",
+                    "future task lists keep a story's behaviour inside its story; no spec file changes",
+                    "speccoder preset add --yes".to_owned(),
+                );
+                a = a.with_run(Runnable::PresetAdd { update: false });
+                a.confirm = Some(
+                    "Install the speccoder preset with the spec tool's own preset command? It writes the spec tool's preset directory and registry; no spec file changes.".to_owned(),
+                );
+                actions.push(a);
+            }
             _ => actions.push(checks.clone()),
         }
         let mut converge = action(

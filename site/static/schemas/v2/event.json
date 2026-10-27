@@ -395,6 +395,16 @@
           "type": "string"
         },
         {
+          "const": "acceptance_at",
+          "description": "[`Runnable::AcceptanceAt`].",
+          "type": "string"
+        },
+        {
+          "const": "preset_add",
+          "description": "[`Runnable::PresetAdd`].",
+          "type": "string"
+        },
+        {
           "const": "command",
           "description": "No runnable: the person runs the command.",
           "type": "string"
@@ -2152,6 +2162,10 @@
         {
           "$ref": "#/$defs/CommentsView",
           "description": "`review comments`: the comment tray and the last revision turn."
+        },
+        {
+          "$ref": "#/$defs/PresetReport",
+          "description": "`preset add`: the speccoder Spec Kit preset, installed or offered."
         }
       ],
       "description": "Command-specific payload of a result."
@@ -3710,6 +3724,13 @@
             }
           ],
           "description": "The fix speccoder can apply itself, on the person's yes."
+        },
+        "tasks": {
+          "description": "The tasks a plan check names.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         }
       },
       "required": [
@@ -6724,6 +6745,68 @@
       ],
       "type": "object"
     },
+    "PresetReport": {
+      "description": "Result of `speccoder preset add`.",
+      "properties": {
+        "command": {
+          "description": "The Spec Kit command, as run (or to be confirmed).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "output": {
+          "description": "Spec Kit's own output (its last lines).",
+          "type": "string"
+        },
+        "preset": {
+          "description": "The preset's id (`speccoder`).",
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/$defs/PresetState",
+          "description": "The preset as Spec Kit reports it."
+        },
+        "version": {
+          "description": "The bundled version.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "preset",
+        "version",
+        "command",
+        "output",
+        "state"
+      ],
+      "type": "object"
+    },
+    "PresetState": {
+      "description": "The speccoder preset in a project, as Spec Kit reports it.",
+      "properties": {
+        "active_for_tasks_template": {
+          "description": "`specify preset resolve tasks-template` names it.",
+          "type": "boolean"
+        },
+        "bundled": {
+          "description": "The version this speccoder bundles.",
+          "type": "string"
+        },
+        "installed": {
+          "description": "The installed version, when installed.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "installed",
+        "active_for_tasks_template",
+        "bundled"
+      ],
+      "type": "object"
+    },
     "ProjectSnapshot": {
       "description": "Everything discovered about one Spec Kit project.",
       "properties": {
@@ -9019,6 +9102,57 @@
             "kind",
             "task",
             "comments"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Write a story's acceptance tests at a Setup or Foundational task\n(`revoke`: take the decision back) — a decision recorded in the\nstate directory, never an edit of the spec.",
+          "properties": {
+            "feature": {
+              "description": "The feature.",
+              "type": "string"
+            },
+            "kind": {
+              "const": "acceptance_at",
+              "type": "string"
+            },
+            "revoke": {
+              "description": "Take the decision back.",
+              "type": "boolean"
+            },
+            "story": {
+              "description": "The story (`US1`).",
+              "type": "string"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "feature",
+            "story",
+            "task",
+            "revoke"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Install the bundled `speccoder` Spec Kit preset through Spec Kit's\nown `specify preset add` (`update`: the installed one, replaced).",
+          "properties": {
+            "kind": {
+              "const": "preset_add",
+              "type": "string"
+            },
+            "update": {
+              "description": "Replace an installed older version.",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "kind",
+            "update"
           ],
           "type": "object"
         }

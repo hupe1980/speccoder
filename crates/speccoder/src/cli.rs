@@ -319,6 +319,12 @@ pub enum Command {
         #[arg(long)]
         markdown: bool,
     },
+    /// The speccoder Spec Kit preset: a tasks template that plans for evidence.
+    #[command(hide = true)]
+    Preset {
+        #[command(subcommand)]
+        action: PresetAction,
+    },
     /// Push `speccoder/<feature>` and open a draft pull request with every task's evidence (asks first).
     Pr {
         /// The git remote to push to.
@@ -447,6 +453,17 @@ pub enum Command {
 /// `speccoder task` verbs; the task comes first after the verb.
 #[derive(Debug, Subcommand)]
 pub enum TaskAction {
+    /// Write a story's acceptance tests at this Setup or Foundational task (a decision, not a spec edit).
+    AcceptanceAt {
+        /// The task, e.g. T003.
+        task: String,
+        /// The story whose acceptance tests it writes, e.g. US1.
+        #[arg(long)]
+        story: String,
+        /// Take the decision back.
+        #[arg(long)]
+        revoke: bool,
+    },
     /// Approve the call the task stopped for (that object for the rest of the task, by default).
     Approve {
         /// The task, e.g. T005.
@@ -692,6 +709,17 @@ pub enum BenchAction {
 }
 
 /// `speccoder auth` actions; without one, `status`.
+/// What `speccoder preset` does.
+#[derive(Debug, Subcommand)]
+pub enum PresetAction {
+    /// Install (or update) the bundled preset with `specify preset add --dev` (asks first).
+    Add {
+        /// Run it without asking.
+        #[arg(long)]
+        yes: bool,
+    },
+}
+
 #[derive(Debug, Subcommand)]
 pub enum AuthAction {
     /// Sign in with a short code in your browser; `--with-token` reads a token from stdin.

@@ -657,7 +657,10 @@ pub const CATALOG: &[Entry] = &[
         S::Ok,
         "a story's behaviour is planned before the story",
         "A Setup or Foundational task names a symbol a user story is about. If that task implements it, the story's acceptance tests already pass when the story's tasks run: they cannot go red, and the tasks tick regression-only. Write the story's acceptance tests at that task, or re-plan.",
-        ["speccoder spec tasks"]
+        [
+            "speccoder task acceptance-at {task} --story <US>",
+            "speccoder spec tasks"
+        ]
     ),
     entry!(
         "PLAN-TEST-ONLY-TASKS",
@@ -692,7 +695,7 @@ pub const CATALOG: &[Entry] = &[
         S::Error,
         "the preset could not be added: `specify preset add` failed",
         "Spec Kit refused or failed to install the preset; its own output is shown. Nothing in `specs/` was changed.",
-        ["speccoder doctor"]
+        ["speccoder preset add", "speccoder doctor"]
     ),
     // ── stops ─────────────────────────────────────────────────────────
     entry!(
