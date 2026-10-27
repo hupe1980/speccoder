@@ -147,6 +147,53 @@ fn version(program: &str) -> Option<String> {
     })
 }
 
+/// Bedrock's `model key` row: the region and where the AWS chain will take
+/// credentials from, named offline (never a value, never a call); and a
+/// `model region` warning when `AWS_REGION` names another region than
+/// the file, which wins.
+fn bedrock_key(
+    m: &crate::substrate::model_config::ModelConfig,
+    env: &dyn Fn(&str) -> Option<String>,
+) -> Vec<DoctorCheck> {
+    let set = |k: &str| env(k).filter(|v| !v.is_empty());
+    let home = std::path::PathBuf::from(set("HOME").unwrap_or_default());
+    let region = m.region.clone().unwrap_or_default();
+    let mut out = vec![match crate::aws::detect(&set, &home) {
+        Some(source) => {
+            let mut detail = format!("bedrock {} · {region} · {}", m.model, source.describe());
+            if source.kind == crate::aws::Kind::ApiKey
+                && let Some(p) = crate::aws::profile(&set, &home)
+            {
+                detail.push_str(&format!(
+                    " (the API key is used; profile {} is not)",
+                    p.name
+                ));
+            }
+            check("model key", DoctorLevel::Pass, detail)
+        }
+        None => DoctorCheck {
+            code: Some("KEY-MISSING".to_owned()),
+            fix: crate::substrate::model_config::bedrock_fixes(),
+            ..check(
+                "model key",
+                DoctorLevel::Fail,
+                format!(
+                    "{} is not set and no AWS profile was found",
+                    crate::aws::API_KEY
+                ),
+            )
+        },
+    }];
+    if let Some(other) = set("AWS_REGION").filter(|r| r.trim() != region) {
+        out.push(check(
+            "model region",
+            DoctorLevel::Warn,
+            format!("{region} in speccoder.toml, AWS_REGION is {other} — the file is used"),
+        ));
+    }
+    out
+}
+
 /// Every check, in order, for the project at `path`.
 #[must_use]
 pub fn checks(
@@ -329,25 +376,29 @@ pub fn checks(
             format!("{}/{}", m.provider, m.model),
         ));
         let variable = m.key_variable().to_owned();
-        out.push(
-            if variable.is_empty() || env(&variable).is_some_and(|v| !v.is_empty()) {
-                check(
-                    "model key",
-                    DoctorLevel::Pass,
-                    format!("{} {}", m.provider, m.model),
-                )
-            } else {
-                DoctorCheck {
-                    code: Some("KEY-MISSING".to_owned()),
-                    fix: vec![format!("export {variable}=…")],
-                    ..check(
+        if m.provider == "bedrock" {
+            out.extend(bedrock_key(m, env));
+        } else {
+            out.push(
+                if variable.is_empty() || env(&variable).is_some_and(|v| !v.is_empty()) {
+                    check(
                         "model key",
-                        DoctorLevel::Fail,
-                        format!("{variable} is not set"),
+                        DoctorLevel::Pass,
+                        format!("{} {}", m.provider, m.model),
                     )
-                }
-            },
-        );
+                } else {
+                    DoctorCheck {
+                        code: Some("KEY-MISSING".to_owned()),
+                        fix: vec![format!("export {variable}=…")],
+                        ..check(
+                            "model key",
+                            DoctorLevel::Fail,
+                            format!("{variable} is not set"),
+                        )
+                    }
+                },
+            );
+        }
     }
     // The sandbox.
     let sandbox = text

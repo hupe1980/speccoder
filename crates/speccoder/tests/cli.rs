@@ -15,6 +15,15 @@ fn speccoder() -> Command {
     cmd.env("SPECCODER_STATE_DIR", support::isolated_state());
     cmd.env_remove("SPECIFY_FEATURE_DIRECTORY");
     cmd.env_remove("SPECCODER_FORMAT");
+    // No AWS credentials of the machine's: `init` would choose Bedrock.
+    for (k, _) in std::env::vars().filter(|(k, _)| k.starts_with("AWS_")) {
+        cmd.env_remove(k);
+    }
+    cmd.env("AWS_CONFIG_FILE", "/nonexistent/aws/config");
+    cmd.env(
+        "AWS_SHARED_CREDENTIALS_FILE",
+        "/nonexistent/aws/credentials",
+    );
     cmd
 }
 

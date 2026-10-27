@@ -35,6 +35,20 @@
   };
   const section = $derived(report?.sections.find((s) => s.name === pick) ?? null);
   const dirty = $derived(Object.keys(draft).length);
+  // The model's keys for its provider: Bedrock's region (required), and
+  // none of a compatible server's (its credentials and endpoint are AWS's).
+  const providerKey = $derived(report?.sections.find((s) => s.name === "model")?.keys.find((k) => k.key === "provider"));
+  const bedrock = $derived(!!providerKey && effective("model.provider", providerKey) === "bedrock");
+  const SERVER_KEYS = ["base_url", "api_key_env", "structured"];
+  const shown = (s: ConfigSection) =>
+    s.name !== "model" ? s.keys : s.keys.filter((k) => (bedrock ? !SERVER_KEYS.includes(k.key) : k.key !== "region"));
+  const required = (path: string, k: ConfigKey) => k.required || (bedrock && path === "model.region");
+  // Where Bedrock's credentials come from, as `doctor` names it.
+  const source = $derived.by(() => {
+    const c = app.doctor.find((x) => x.check === "model key");
+    if (!bedrock || !c) return null;
+    return c.level === "fail" ? c.detail : (c.detail.split(" · ").pop() ?? c.detail);
+  });
 
   const names: Record<string, string> = {
     price_input_per_mtok: "Input price", price_output_per_mtok: "Output price", price_cache_read_per_mtok: "Cache read price",
@@ -260,13 +274,13 @@
   {@const isSet = current(path, k) !== undefined}
   <div class="row" class:changed>
     <div class="what">
-      <span class="name">{label(k.key)}{#if k.required}<span class="req">required</span>{/if}</span>
+      <span class="name">{label(k.key)}{#if required(path, k)}<span class="req">required</span>{/if}</span>
       <span class="about">{k.about}</span>
       <span class="meta mono">{path}{#if k.default !== null && k.default !== undefined}{" · "}default {JSON.stringify(k.default)}{/if}</span>
     </div>
     <div class="ctl">
       {@render control(path, k)}
-      {#if isSet && !k.required}
+      {#if isSet && !required(path, k)}
         <button class="reset" title="Use the default" aria-label="Reset {label(k.key)}" onclick={() => reset(path, k)}><Icon name="undo" size={12} weight={2} /></button>
       {/if}
     </div>
@@ -328,8 +342,11 @@
           <button class="btn small tinted" disabled={!/^[a-z0-9_-]+$/.test(newTable.trim())} onclick={() => addTable(section)}><Icon name="plus" size={11} weight={2.4} /> Add {section.name === "checks" ? "check" : "server"}</button>
         </div>
       {:else}
+        {#if section.name === "model" && source}
+          <p class="muted small source"><Icon name="key" size={12} /> Credentials: {source}</p>
+        {/if}
         <div class="grouped">
-          {#each section.keys as k (k.key)}{@render row(`${section.name}.${k.key}`, k)}{/each}
+          {#each shown(section) as k (k.key)}{@render row(`${section.name}.${k.key}`, k)}{/each}
         </div>
         {#if section.name === "commands" && fromChecks.length}
           <h3 class="sub">From checks</h3>

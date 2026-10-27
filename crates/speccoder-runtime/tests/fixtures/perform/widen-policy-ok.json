@@ -10,14 +10,15 @@
       "file": "speccoder.toml",
       "sections": [
         {
-          "about": "The model that makes the attempts. The key comes from ANTHROPIC_API_KEY or OPENAI_API_KEY — never from this file.",
+          "about": "The model that makes the attempts. The key comes from ANTHROPIC_API_KEY or OPENAI_API_KEY, Bedrock's credentials from AWS — never from this file.",
           "keys": [
             {
-              "about": "Who serves the model; openai-compatible covers Ollama, vLLM, llama.cpp, LM Studio and others",
+              "about": "Who serves the model; openai-compatible covers Ollama, vLLM, llama.cpp, LM Studio and others; bedrock is Amazon Bedrock, credentials from AWS",
               "choices": [
                 "anthropic",
                 "openai",
-                "openai-compatible"
+                "openai-compatible",
+                "bedrock"
               ],
               "default": null,
               "key": "provider",
@@ -37,6 +38,17 @@
               "min": null,
               "required": true,
               "value": "gpt-5.4-mini"
+            },
+            {
+              "about": "Bedrock only: the AWS region calls go to (the journal records it)",
+              "choices": [],
+              "default": null,
+              "key": "region",
+              "kind": "string",
+              "max": null,
+              "min": null,
+              "required": false,
+              "value": null
             },
             {
               "about": "Show the model's summary of its reasoning (a claim, not evidence)",

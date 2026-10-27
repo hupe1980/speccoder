@@ -280,7 +280,7 @@ pub fn perform(
                 }
                 r
             }
-            Kind::Init => match crate::init::prepare(&root, None, None, false, false) {
+            Kind::Init => match crate::init::prepare(&root, None, None, None, false, false) {
                 Ok(p) => {
                     let lines = p
                         .report

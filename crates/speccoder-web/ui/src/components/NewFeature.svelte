@@ -44,7 +44,9 @@
   const blocked = $derived(
     !create
       ? `${format} has no skill that creates a ${unit}`
-      : noKey
+      : noKey === "AWS_BEARER_TOKEN_BEDROCK"
+        ? "No model key: set AWS_BEARER_TOKEN_BEDROCK or run aws login where you start speccoder"
+        : noKey
         ? `No model key: set ${noKey} where you start speccoder`
         : running
           ? `A job is running — ${running}`

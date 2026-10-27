@@ -123,6 +123,12 @@ describe("NewFeature", () => {
     expect(document.body.textContent).toContain("No model key: set OPENAI_API_KEY where you start speccoder");
     expect(button("Settings › Model")).toBeTruthy();
     unmount(s!);
+    // Bedrock's credentials come from AWS: a key or a session.
+    host.app.doctor = [{ check: "model key", level: "fail", detail: "AWS_BEARER_TOKEN_BEDROCK is not set and no AWS profile was found" }];
+    open({ text: "x y z" });
+    expect(button(/^Start/).disabled).toBe(true);
+    expect(document.body.textContent).toContain("No model key: set AWS_BEARER_TOKEN_BEDROCK or run aws login where you start speccoder");
+    unmount(s!);
     host.app.doctor = [];
     host.app.job = { running: true, command: "run" };
     open({ text: "x y z" });

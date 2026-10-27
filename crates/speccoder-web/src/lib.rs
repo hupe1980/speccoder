@@ -611,6 +611,8 @@ async fn setup(State(s): State<Shared>) -> Json<Value> {
 struct SetupBody {
     provider: Option<String>,
     model: Option<String>,
+    /// Bedrock's region.
+    region: Option<String>,
 }
 
 /// Writes `speccoder.toml` and runs its checks on the untouched code; the
@@ -625,6 +627,7 @@ async fn setup_init(State(s): State<Shared>, Json(b): Json<SetupBody>) -> Json<V
             &root,
             b.provider.as_deref(),
             b.model.as_deref(),
+            b.region.as_deref(),
             false,
             false,
         )

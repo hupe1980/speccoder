@@ -8,8 +8,8 @@ use std::fs;
 use speccoder_core::{CommandData, CommandStatus};
 use speccoder_runtime::init::{Found, detect, init_with};
 
-fn no_keys(_: &str) -> bool {
-    false
+fn no_keys(_: &str) -> Option<String> {
+    None
 }
 
 #[test]
@@ -24,7 +24,7 @@ fn detects_a_node_project_and_writes_a_file_speccoder_accepts() {
     fs::write(r.join("pnpm-lock.yaml"), "").unwrap();
     assert_eq!(detect(r).node_manager.as_deref(), Some("pnpm"));
 
-    let res = init_with(r, None, None, false, None, &no_keys);
+    let res = init_with(r, None, None, None, false, None, &no_keys);
     assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
     let text = fs::read_to_string(r.join("speccoder.toml")).unwrap();
     let checks = speccoder_runtime::verify::config::parse(&text).unwrap();
@@ -50,12 +50,12 @@ fn detects_a_node_project_and_writes_a_file_speccoder_accepts() {
     assert_eq!(i.wrote, ["speccoder.toml", ".gitignore"]);
 
     // An existing file is not replaced without --force.
-    let again = init_with(r, None, None, false, None, &no_keys);
+    let again = init_with(r, None, None, None, false, None, &no_keys);
     assert_eq!(again.status(), CommandStatus::ConfigError);
     // It exists: change it, or start over — never "init" again.
     assert_eq!(again.code().map(|c| c.name), Some("CONFIG-EXISTS"));
     assert_eq!(again.fix(), ["speccoder config", "speccoder init --force"]);
-    let forced = init_with(r, Some("openai"), None, true, None, &no_keys);
+    let forced = init_with(r, Some("openai"), None, None, true, None, &no_keys);
     assert_eq!(forced.status(), CommandStatus::Ok, "{}", forced.message());
     assert!(
         fs::read_to_string(r.join("speccoder.toml"))
@@ -64,7 +64,7 @@ fn detects_a_node_project_and_writes_a_file_speccoder_accepts() {
     );
     // An unknown provider is a usage error.
     assert_eq!(
-        init_with(r, Some("acme"), None, true, None, &no_keys).status(),
+        init_with(r, Some("acme"), None, None, true, None, &no_keys).status(),
         CommandStatus::UsageError
     );
 }
@@ -85,7 +85,7 @@ fn a_nextest_check_comes_with_its_profile_and_keeps_an_existing_config() {
         nextest: true,
         ..Found::default()
     };
-    let res = init_with(r, None, None, false, Some(found), &no_keys);
+    let res = init_with(r, None, None, None, false, Some(found), &no_keys);
     assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
     let nextest = fs::read_to_string(r.join(".config/nextest.toml")).unwrap();
     assert!(
@@ -104,6 +104,7 @@ fn a_nextest_check_comes_with_its_profile_and_keeps_an_existing_config() {
     // Run again with --force: the profile is not added twice.
     init_with(
         r,
+        None,
         None,
         None,
         true,
@@ -126,7 +127,7 @@ fn a_nextest_check_comes_with_its_profile_and_keeps_an_existing_config() {
 #[test]
 fn nothing_detected_still_writes_a_valid_file_and_says_what_is_missing() {
     let dir = tempfile::tempdir().unwrap();
-    let res = init_with(dir.path(), None, None, false, None, &no_keys);
+    let res = init_with(dir.path(), None, None, None, false, None, &no_keys);
     assert_eq!(res.status(), CommandStatus::Ok);
     assert!(
         res.message().contains("without checks"),
@@ -139,4 +140,134 @@ fn nothing_detected_still_writes_a_valid_file_and_says_what_is_missing() {
             .unwrap()
             .is_empty()
     );
+}
+
+/// A view of the environment: these variables, and a home whose
+/// `.aws/config` has an `aws login` profile `dev` in `us-west-2`.
+fn aws_env(
+    home: &std::path::Path,
+    vars: &[(&str, &str)],
+) -> impl Fn(&str) -> Option<String> + use<> {
+    fs::create_dir_all(home.join(".aws")).unwrap();
+    fs::write(
+        home.join(".aws/config"),
+        "[profile dev]\nlogin_session = arn:aws:iam::123456789012:user/me\nregion = us-west-2\n[profile bare]\nlogin_session = arn:aws:iam::1:user/x\n",
+    )
+    .unwrap();
+    let mut vars: Vec<(String, String)> = vars
+        .iter()
+        .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
+        .collect();
+    vars.push(("HOME".to_owned(), home.to_string_lossy().into_owned()));
+    move |k: &str| vars.iter().find(|(n, _)| n == k).map(|(_, v)| v.clone())
+}
+
+fn report(r: &speccoder_core::CommandResult) -> &speccoder_core::InitReport {
+    match r.data() {
+        Some(CommandData::Init(i)) => i,
+        _ => panic!("{}", r.message()),
+    }
+}
+
+#[test]
+fn bedrock_is_chosen_when_aws_credentials_are_the_only_ones_found() {
+    let dir = tempfile::tempdir().unwrap();
+    let home = tempfile::tempdir().unwrap();
+    let env = aws_env(home.path(), &[("AWS_PROFILE", "dev")]);
+    let res = init_with(dir.path(), None, None, None, false, None, &env);
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let text = fs::read_to_string(dir.path().join("speccoder.toml")).unwrap();
+    assert!(
+        text.contains("# The model. Bedrock's credentials come from AWS — a Bedrock API key in\n# AWS_BEARER_TOKEN_BEDROCK, or a profile (aws login, SSO) — never from this file.\n[model]\nprovider = \"bedrock\"\nmodel = \"global.anthropic.claude-sonnet-5-5\"\nregion = \"us-west-2\"\n"),
+        "{text}"
+    );
+    let m = speccoder_runtime::substrate::model_config::parse(&text)
+        .unwrap()
+        .unwrap();
+    assert_eq!(m.region.as_deref(), Some("us-west-2"));
+    let i = report(&res);
+    assert_eq!(i.model, "bedrock/global.anthropic.claude-sonnet-5-5");
+    assert_eq!(i.region.as_deref(), Some("us-west-2"));
+    assert!(i.key.set);
+    assert_eq!(
+        i.key.source.as_deref(),
+        Some("aws login session (profile dev)")
+    );
+
+    // A key of Anthropic or OpenAI keeps today's choice.
+    let both = aws_env(
+        home.path(),
+        &[("AWS_PROFILE", "dev"), ("ANTHROPIC_API_KEY", "k")],
+    );
+    let res = init_with(dir.path(), None, None, None, true, None, &both);
+    assert_eq!(report(&res).model, "anthropic/claude-sonnet-5-5");
+}
+
+#[test]
+fn bedrock_takes_the_flags_and_without_a_region_says_to_set_one() {
+    let dir = tempfile::tempdir().unwrap();
+    let home = tempfile::tempdir().unwrap();
+    let keyed = aws_env(
+        home.path(),
+        &[
+            ("AWS_BEARER_TOKEN_BEDROCK", "sk-test-secret-123"),
+            ("AWS_REGION", "eu-west-1"),
+        ],
+    );
+    let res = init_with(
+        dir.path(),
+        Some("bedrock"),
+        Some("us.anthropic.claude-haiku-4-5"),
+        Some("eu-central-1"),
+        false,
+        None,
+        &keyed,
+    );
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let text = fs::read_to_string(dir.path().join("speccoder.toml")).unwrap();
+    assert!(
+        text.contains("model = \"us.anthropic.claude-haiku-4-5\"\nregion = \"eu-central-1\"\n"),
+        "{text}"
+    );
+    assert_eq!(
+        report(&res).key.source.as_deref(),
+        Some("Bedrock API key (AWS_BEARER_TOKEN_BEDROCK)")
+    );
+    assert!(
+        !serde_json::to_string(&res)
+            .unwrap()
+            .contains("sk-test-secret-123")
+    );
+    assert!(!text.contains("sk-test-secret-123"));
+
+    // No region anywhere: written commented out, and said.
+    let bare = aws_env(home.path(), &[("AWS_PROFILE", "bare")]);
+    let res = init_with(dir.path(), Some("bedrock"), None, None, true, None, &bare);
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    assert!(
+        res.message()
+            .ends_with("no AWS region was found — speccoder config set model.region <region>"),
+        "{}",
+        res.message()
+    );
+    let text = fs::read_to_string(dir.path().join("speccoder.toml")).unwrap();
+    assert!(
+        text.contains("# region = \"…\"  # required: set it\n"),
+        "{text}"
+    );
+    assert!(report(&res).region.is_none());
+    let e = speccoder_runtime::substrate::model_config::parse(&text).unwrap_err();
+    assert!(e.contains("speccoder config set model.region"), "{e}");
+
+    // --region is Bedrock's.
+    let r = init_with(
+        dir.path(),
+        Some("openai"),
+        None,
+        Some("us-east-1"),
+        true,
+        None,
+        &bare,
+    );
+    assert_eq!(r.status(), CommandStatus::UsageError, "{}", r.message());
 }

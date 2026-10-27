@@ -1422,6 +1422,7 @@ fn main() {
         Command::Init {
             provider,
             model,
+            region,
             force,
             no_verify,
             yes,
@@ -1430,6 +1431,7 @@ fn main() {
             path,
             provider.as_deref(),
             model.as_deref(),
+            region.as_deref(),
             *force,
             *no_verify,
             *yes,
@@ -1998,11 +2000,13 @@ fn look_line() -> String {
 /// untouched code, and at a terminal offer to commit it. Without a
 /// terminal, with `--json` or `--yes`, nothing is committed; the fix line
 /// says what to commit.
+#[allow(clippy::too_many_arguments)] // the command's flags, one each
 fn init(
     cli: &Cli,
     path: &std::path::Path,
     provider: Option<&str>,
     model: Option<&str>,
+    region: Option<&str>,
     force: bool,
     no_verify: bool,
     yes: bool,
@@ -2012,7 +2016,7 @@ fn init(
         eprintln!("Writing speccoder.toml, then running its checks on the untouched code…");
     }
     let mut prepared =
-        match speccoder_runtime::init::prepare(path, provider, model, force, no_verify) {
+        match speccoder_runtime::init::prepare(path, provider, model, region, force, no_verify) {
             Ok(p) => p,
             Err(refused) => return *refused,
         };

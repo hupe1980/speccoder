@@ -166,12 +166,15 @@ pub struct Cli {
 pub enum Command {
     /// Set up speccoder here: detect the checks, run them, offer to commit the config.
     Init {
-        /// `anthropic` or `openai` (default: the one whose API key variable is set).
+        /// `anthropic`, `openai` or `bedrock` (default: the one whose API key variable is set, else Bedrock when AWS credentials are found).
         #[arg(long)]
         provider: Option<String>,
         /// The model (default: the provider's speccoder default).
         #[arg(long)]
         model: Option<String>,
+        /// Bedrock's AWS region (default: AWS_REGION, AWS_DEFAULT_REGION, else the profile's).
+        #[arg(long)]
+        region: Option<String>,
         /// Replace an existing `speccoder.toml`.
         #[arg(long)]
         force: bool,

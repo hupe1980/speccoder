@@ -125,18 +125,24 @@ pub const CATALOGUE: &[Section] = &[
     Section {
         name: "model",
         title: "Model",
-        about: "The model that makes the attempts. The key comes from ANTHROPIC_API_KEY or OPENAI_API_KEY — never from this file.",
+        about: "The model that makes the attempts. The key comes from ANTHROPIC_API_KEY or OPENAI_API_KEY, Bedrock's credentials from AWS — never from this file.",
         named: false,
         keys: &[
             req(
                 "provider",
-                Kind::Choice(&["anthropic", "openai", "openai-compatible"]),
-                "Who serves the model; openai-compatible covers Ollama, vLLM, llama.cpp, LM Studio and others",
+                Kind::Choice(&["anthropic", "openai", "openai-compatible", "bedrock"]),
+                "Who serves the model; openai-compatible covers Ollama, vLLM, llama.cpp, LM Studio and others; bedrock is Amazon Bedrock, credentials from AWS",
             ),
             req(
                 "model",
                 Kind::Str,
                 "The model, for example claude-sonnet-5-5",
+            ),
+            k(
+                "region",
+                Kind::Str,
+                None,
+                "Bedrock only: the AWS region calls go to (the journal records it)",
             ),
             k(
                 "reasoning_summary",
@@ -676,8 +682,13 @@ pub const CATALOGUE: &[Section] = &[
 ///
 /// The first parser's complaint.
 pub fn validate(text: &str) -> Result<(), String> {
-    crate::verify::config::parse(text)?;
     crate::substrate::model_config::parse(text)?;
+    validate_but_model(text)
+}
+
+/// [`validate`] without `[model]`.
+fn validate_but_model(text: &str) -> Result<(), String> {
+    crate::verify::config::parse(text)?;
     crate::substrate::run_config::parse(text)?;
     crate::sandbox::parse(text)?;
     crate::mcp::parse(text)?;
@@ -1101,7 +1112,16 @@ pub fn edit(text: &str, changes: &[ConfigChange]) -> Result<String, String> {
         }
     }
     let out = doc.to_string();
-    validate(&out)?;
+    match crate::substrate::model_config::parse(&out) {
+        // A step on the way to Bedrock: its provider before its region,
+        // which `config set model.region` adds next (until then every
+        // command, and `config commit`, refuses the file and says so).
+        Err(e) if e.contains("provider `bedrock` needs `region`") => {}
+        other => {
+            other?;
+        }
+    }
+    validate_but_model(&out)?;
     Ok(out)
 }
 
@@ -1411,6 +1431,13 @@ mod tests {
                 append: None,
             });
         }
+        if section.name == "model" && key.key == "region" {
+            changes.push(ConfigChange {
+                key: "model.provider".into(),
+                value: Some(json!("bedrock")),
+                append: None,
+            });
+        }
         changes
     }
 
@@ -1484,6 +1511,32 @@ mod tests {
             missing.is_empty(),
             "documented but not catalogued: {missing:?}"
         );
+    }
+
+    #[test]
+    fn bedrock_is_set_provider_first_then_region() {
+        let set = |key: &str, v: Value| ConfigChange {
+            key: key.into(),
+            value: Some(v),
+            append: None,
+        };
+        let text = "[model]\nprovider = \"anthropic\"\nmodel = \"claude-sonnet-5-5\"\n";
+        // A region before the provider is refused: it is Bedrock's.
+        assert!(edit(text, &[set("model.region", json!("us-west-2"))]).is_err());
+        let step = edit(text, &[set("model.provider", json!("bedrock"))]).unwrap();
+        assert!(validate(&step).is_err(), "not in force without a region");
+        let done = edit(&step, &[set("model.region", json!("us-west-2"))]).unwrap();
+        let m = crate::substrate::model_config::parse(&done)
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            (m.provider.as_str(), m.region.as_deref()),
+            ("bedrock", Some("us-west-2"))
+        );
+        // Anything else wrong is still refused on the way.
+        assert!(edit(&step, &[set("model.max_output_tokens", json!(0))]).is_err());
+        let p = place("model.provider").unwrap();
+        assert!(matches!(p.key.kind, Kind::Choice(c) if c.contains(&"bedrock")));
     }
 
     #[test]

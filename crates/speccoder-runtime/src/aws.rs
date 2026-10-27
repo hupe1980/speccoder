@@ -242,14 +242,17 @@ struct Section {
 
 /// The profile `name` from both files, or `None` when neither has it.
 fn read(env: &dyn Fn(&str) -> Option<String>, home: &Path, name: &str) -> Option<Section> {
+    // Without a home, only a file a variable names.
     let file = |var: &str, default: &str| {
-        env(var).map_or_else(
-            || home.join(".aws").join(default),
-            |p| match p.strip_prefix("~/") {
-                Some(rest) => home.join(rest),
-                None => PathBuf::from(p),
+        let home = Some(home).filter(|h| !h.as_os_str().is_empty());
+        match env(var) {
+            Some(p) => match (p.strip_prefix("~/"), home) {
+                (Some(rest), Some(h)) => Some(h.join(rest)),
+                (Some(_), None) => None,
+                (None, _) => Some(PathBuf::from(p)),
             },
-        )
+            None => home.map(|h| h.join(".aws").join(default)),
+        }
     };
     let config = file("AWS_CONFIG_FILE", "config");
     let credentials = file("AWS_SHARED_CREDENTIALS_FILE", "credentials");
@@ -266,7 +269,7 @@ fn read(env: &dyn Fn(&str) -> Option<String>, home: &Path, name: &str) -> Option
         (&config, &in_config as &dyn Fn(&str) -> bool),
         (&credentials, &in_credentials),
     ] {
-        let Ok(text) = std::fs::read_to_string(path) else {
+        let Some(Ok(text)) = path.as_ref().map(std::fs::read_to_string) else {
             continue;
         };
         let mut ours = false;

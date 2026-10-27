@@ -389,7 +389,7 @@ pub fn parse(text: &str) -> Result<Option<ModelConfig>, String> {
         }
     } else if raw.region.is_some() {
         return Err(format!(
-            "[model]: `region` applies only to provider `bedrock`, not `{}` — remove it",
+            "[model]: `region` applies only to provider `bedrock`, not `{}` — speccoder config unset model.region",
             raw.provider
         ));
     }

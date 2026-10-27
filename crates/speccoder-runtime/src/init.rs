@@ -377,19 +377,29 @@ fn quote(s: &str) -> String {
     serde_json::to_string(s).unwrap_or_else(|_| "\"\"".to_owned())
 }
 
+/// The model `init` writes for Bedrock unless `--model` names another: a
+/// Claude inference profile every commercial region offers.
+pub const BEDROCK_MODEL: &str = "global.anthropic.claude-sonnet-5-5";
+
 /// The provider and model `init` writes: the flag, else the provider whose
-/// key variable is set (presence only — the value is never read).
+/// key variable is set (presence only — the value is never read), else
+/// Bedrock when an AWS credential source is found, else Anthropic.
 fn model_choice(
     provider: Option<&str>,
     model: Option<&str>,
-    env: &dyn Fn(&str) -> bool,
+    env: &dyn Fn(&str) -> Option<String>,
 ) -> (String, String) {
+    let set = |v: &str| env(v).is_some_and(|x| !x.is_empty());
     let provider = provider.map_or_else(
         || {
-            if env("ANTHROPIC_API_KEY") || !env("OPENAI_API_KEY") {
+            if set("ANTHROPIC_API_KEY") {
                 "anthropic".to_owned()
-            } else {
+            } else if set("OPENAI_API_KEY") {
                 "openai".to_owned()
+            } else if crate::aws::detect(env, &home(env)).is_some() {
+                "bedrock".to_owned()
+            } else {
+                "anthropic".to_owned()
             }
         },
         str::to_owned,
@@ -397,11 +407,17 @@ fn model_choice(
     let model = model.map_or_else(
         || match provider.as_str() {
             "openai" => "gpt-5.4-mini".to_owned(),
+            "bedrock" => BEDROCK_MODEL.to_owned(),
             _ => "claude-sonnet-5-5".to_owned(),
         },
         str::to_owned,
     );
     (provider, model)
+}
+
+/// The home the AWS files are found under, as `env` names it.
+fn home(env: &dyn Fn(&str) -> Option<String>) -> PathBuf {
+    PathBuf::from(env("HOME").unwrap_or_default())
 }
 
 /// The file `init` writes.
@@ -412,6 +428,7 @@ pub fn render(
     format: Option<&[String]>,
     provider: &str,
     model: &str,
+    region: Option<&str>,
 ) -> String {
     let mut out = String::from(
         "# speccoder configuration — written by `speccoder init`; review it, then commit it\n\
@@ -442,9 +459,30 @@ pub fn render(
             out.push_str(&format!("junit = {}\n", quote(j)));
         }
     }
+    let (about, region) = if provider == "bedrock" {
+        (
+            "Bedrock's credentials come from AWS — a Bedrock API key in\n# AWS_BEARER_TOKEN_BEDROCK, or a profile (aws login, SSO) — never from this file.".to_owned(),
+            region.map_or_else(
+                || "# region = \"…\"  # required: set it\n".to_owned(),
+                |r| format!("region = {}\n", quote(r)),
+            ),
+        )
+    } else {
+        (
+            format!(
+                "The API key comes only from the environment ({}).",
+                if provider == "openai" {
+                    "OPENAI_API_KEY"
+                } else {
+                    "ANTHROPIC_API_KEY"
+                }
+            ),
+            String::new(),
+        )
+    };
     out.push_str(&format!(
-        "\n# The model. The API key comes only from the environment ({}).\n\
-         [model]\nprovider = {}\nmodel = {}\n\
+        "\n# The model. {}\n\
+         [model]\nprovider = {}\nmodel = {}\n{}\
          # price_input_per_mtok = 0.0       # USD per million tokens, for `speccoder report --cost`\n\
          # price_output_per_mtok = 0.0\n\
          # price_cache_read_per_mtok = 0.0\n\
@@ -457,13 +495,10 @@ pub fn render(
          # no network beyond loopback. Give commands that fetch the network, or switch it off.\n\
          # [sandbox]\n# network_allow = [[\"cargo\", \"fetch\"]]\n# mode = \"auto\"           # \"required\" refuses to run unsandboxed; \"off\"\n\
          \n# Commands the model may run besides the checks (argv prefixes); others need approval.\n",
-        if provider == "openai" {
-            "OPENAI_API_KEY"
-        } else {
-            "ANTHROPIC_API_KEY"
-        },
+        about,
         quote(provider),
-        quote(model)
+        quote(model),
+        region
     ));
     if let Some(argv) = format {
         out.push_str(&format!(
@@ -491,15 +526,17 @@ pub fn render(
 /// The nextest profile speccoder's JUnit report path expects.
 pub const NEXTEST_PROFILE: &str = "\n# Written by `speccoder init`: speccoder reads this JUnit report.\n[profile.speccoder]\nfail-fast = false\n\n[profile.speccoder.junit]\npath = \"junit.xml\"\n";
 
-/// `speccoder init [--provider] [--model] [--force]` with an
-/// explicit view of the environment and of what is installed.
+/// `speccoder init [--provider] [--model] [--region] [--force]` with an
+/// explicit view of the environment (a variable's value when it is set)
+/// and of what is installed.
 pub fn init_with(
     path: &Path,
     provider: Option<&str>,
     model: Option<&str>,
+    region: Option<&str>,
     force: bool,
     found: Option<Found>,
-    env: &dyn Fn(&str) -> bool,
+    env: &dyn Fn(&str) -> Option<String>,
 ) -> CommandResult {
     let refuse = |status, m: String| CommandResult::new("init", status, &m);
     // The Spec Kit root when there is one; else the path itself.
@@ -520,21 +557,38 @@ pub fn init_with(
             "speccoder init --force".to_owned(),
         ]);
     }
-    if let Some(p) = provider.filter(|p| !matches!(*p, "anthropic" | "openai")) {
+    if let Some(p) = provider.filter(|p| !matches!(*p, "anthropic" | "openai" | "bedrock")) {
         return refuse(
             CommandStatus::UsageError,
-            format!("--provider {p}: anthropic or openai"),
+            format!("--provider {p}: anthropic, openai or bedrock"),
         );
     }
+    let (provider, model) = model_choice(provider, model, env);
+    let bedrock = provider == "bedrock";
+    if region.is_some() && !bedrock {
+        return refuse(
+            CommandStatus::UsageError,
+            format!("--region is for --provider bedrock, not {provider}"),
+        );
+    }
+    // Bedrock's region: the flag, else where the AWS tools find it.
+    let region = bedrock
+        .then(|| {
+            region
+                .map(|r| r.trim().to_owned())
+                .filter(|r| !r.is_empty())
+                .or_else(|| crate::aws::region(env, &home(env)).map(|(r, _)| r))
+        })
+        .flatten();
     let found = found.unwrap_or_else(|| detect(&root));
     let checks = propose(&found);
-    let (provider, model) = model_choice(provider, model, env);
     let mut text = render(
         &checks,
         &allow(&found),
         formatter(&found).as_deref(),
         &provider,
         &model,
+        region.as_deref(),
     );
     // The repository's instructions for agents: AGENTS.md is read by
     // default; a repository that only has CLAUDE.md gets it named too.
@@ -548,19 +602,40 @@ pub fn init_with(
             "\n# The repository's instructions for agents, given to every attempt: CLAUDE.md\n# here, AGENTS.md wherever a directory has one.\n[context]\ninstructions = [\"AGENTS.md\", \"CLAUDE.md\"]\n",
         );
     }
-    let variable = if provider == "openai" {
-        "OPENAI_API_KEY"
+    let key = if bedrock {
+        // Where the AWS chain will take credentials from, by kind and name.
+        let source = crate::aws::detect(env, &home(env));
+        speccoder_core::InitKey {
+            variable: crate::aws::API_KEY.to_owned(),
+            set: source.is_some(),
+            source: source.map(|s| s.describe()),
+        }
     } else {
-        "ANTHROPIC_API_KEY"
-    }
-    .to_owned();
-    let key = speccoder_core::InitKey {
-        set: env(&variable),
-        variable,
+        let variable = if provider == "openai" {
+            "OPENAI_API_KEY"
+        } else {
+            "ANTHROPIC_API_KEY"
+        }
+        .to_owned();
+        speccoder_core::InitKey {
+            set: env(&variable).is_some_and(|v| !v.is_empty()),
+            variable,
+            source: None,
+        }
     };
-    // Never write what speccoder itself would refuse.
+    // Never write what speccoder itself would refuse — but Bedrock without
+    // a region found, which every command then names with its fix.
+    let model_parsed = crate::substrate::model_config::parse(&text)
+        .map(|_| ())
+        .or_else(|e| {
+            if bedrock && region.is_none() && e.contains("needs `region`") {
+                Ok(())
+            } else {
+                Err(e)
+            }
+        });
     if let Err(e) = crate::verify::config::parse(&text)
-        .and_then(|_| crate::substrate::model_config::parse(&text).map(|_| ()))
+        .and(model_parsed)
         .and_then(|()| crate::substrate::run_config::parse(&text).map(|_| ()))
     {
         return refuse(
@@ -637,7 +712,7 @@ pub fn init_with(
             }
         }
     }
-    let message = if checks.is_empty() {
+    let mut message = if checks.is_empty() {
         format!("wrote {FILE} without checks — add one before `speccoder run`")
     } else {
         format!(
@@ -646,6 +721,9 @@ pub fn init_with(
             checks.len()
         )
     };
+    if bedrock && region.is_none() {
+        message.push_str("; no AWS region was found — speccoder config set model.region <region>");
+    }
     CommandResult::new("init", CommandStatus::Ok, &message).with_data(CommandData::Init(Box::new(
         speccoder_core::InitReport {
             path: file.display().to_string(),
@@ -663,6 +741,7 @@ pub fn init_with(
             ran: Vec::new(),
             instructions,
             key,
+            region,
             committed: None,
         },
     )))
@@ -767,11 +846,10 @@ pub fn init(
     path: &Path,
     provider: Option<&str>,
     model: Option<&str>,
+    region: Option<&str>,
     force: bool,
 ) -> CommandResult {
-    init_with(path, provider, model, force, None, &|v| {
-        std::env::var_os(v).is_some_and(|x| !x.is_empty())
-    })
+    init_with(path, provider, model, region, force, None, &crate::aws::var)
 }
 
 /// `init` written and its checks run on the untouched code: what a person
@@ -815,10 +893,11 @@ pub fn prepare(
     path: &Path,
     provider: Option<&str>,
     model: Option<&str>,
+    region: Option<&str>,
     force: bool,
     no_verify: bool,
 ) -> Result<Prepared, Box<CommandResult>> {
-    let written = init(path, provider, model, force);
+    let written = init(path, provider, model, region, force);
     let Some(CommandData::Init(report)) = written.data() else {
         return Err(Box::new(written));
     };
@@ -968,7 +1047,12 @@ pub fn finish(p: Prepared) -> CommandResult {
             "speccoder reads committed files only",
         ));
     }
-    if !report.key.set {
+    if !report.key.set && report.model.starts_with("bedrock/") {
+        next.push(step(
+            format!("export {}=…", report.key.variable),
+            "a Bedrock API key — or run aws login where you start speccoder",
+        ));
+    } else if !report.key.set {
         next.push(step(
             format!("export {}=…", report.key.variable),
             "the model key, from the environment only",
@@ -1008,6 +1092,18 @@ pub struct Preview {
     pub formatter: Option<Vec<String>>,
     /// The model key variables, and whether each is set.
     pub keys: Vec<(String, bool)>,
+    /// Amazon Bedrock's credential source and region, as found here.
+    pub bedrock: BedrockPreview,
+}
+
+/// Where Bedrock's credentials and region would come from: named, never a
+/// value.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct BedrockPreview {
+    /// The source, as `doctor` describes it (`aws login session (profile dev)`).
+    pub source: Option<String>,
+    /// The region `init` would write.
+    pub region: Option<String>,
 }
 
 /// Where `init` writes for `path`: the spec project's root, else `path`.
@@ -1034,6 +1130,10 @@ pub fn preview(path: &Path) -> Preview {
             .iter()
             .map(|v| ((*v).to_owned(), set(v)))
             .collect(),
+        bedrock: BedrockPreview {
+            source: crate::aws::detect_here().map(|s| s.describe()),
+            region: crate::aws::region_here().map(|(r, _)| r),
+        },
     }
 }
 
@@ -1130,8 +1230,8 @@ mod tests {
 
     #[test]
     fn the_model_follows_the_key_that_is_set() {
-        let none = |_: &str| false;
-        let openai = |v: &str| v == "OPENAI_API_KEY";
+        let none = |_: &str| None;
+        let openai = |v: &str| (v == "OPENAI_API_KEY").then(|| "k".to_owned());
         assert_eq!(model_choice(None, None, &none).0, "anthropic");
         assert_eq!(
             model_choice(None, None, &openai),
@@ -1166,6 +1266,7 @@ mod tests {
                 formatter(&found).as_deref(),
                 "openai",
                 "gpt-5.4-mini",
+                None,
             );
             if found.cargo {
                 assert!(

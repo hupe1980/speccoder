@@ -474,3 +474,77 @@ fn bedrock_runs_a_task_for_real() {
     let usage = rep.usage.as_ref().expect("usage");
     assert!(usage["input_tokens"].as_u64().unwrap_or(0) > 0, "{usage}");
 }
+
+#[test]
+fn doctor_names_the_region_and_the_source_never_a_value() {
+    use speccoder_core::DoctorLevel;
+    let r = poc(CLAUDE);
+    let home = tempfile::tempdir().unwrap();
+    fs::create_dir_all(home.path().join(".aws")).unwrap();
+    fs::write(
+        home.path().join(".aws/config"),
+        "[profile dev]\nlogin_session = arn:aws:iam::123456789012:user/me\n",
+    )
+    .unwrap();
+    let h = home.path().to_string_lossy().into_owned();
+    let rows = |vars: &[(&str, &str)]| {
+        let vars: Vec<(String, String)> = vars
+            .iter()
+            .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
+            .chain([("HOME".to_owned(), h.clone())])
+            .collect();
+        speccoder_runtime::doctor::checks(r.path(), None, &move |k| {
+            vars.iter().find(|(n, _)| n == k).map(|(_, v)| v.clone())
+        })
+    };
+    let row = |checks: &[speccoder_core::DoctorCheck], name: &str| {
+        checks.iter().find(|c| c.check == name).cloned()
+    };
+
+    let login = rows(&[("AWS_PROFILE", "dev")]);
+    let key = row(&login, "model key").unwrap();
+    assert_eq!(key.level, DoctorLevel::Pass);
+    assert_eq!(
+        key.detail,
+        "bedrock global.anthropic.claude-sonnet-5-5 · eu-central-1 · aws login session (profile dev)"
+    );
+    assert!(row(&login, "model region").is_none());
+
+    let both = rows(&[
+        ("AWS_PROFILE", "dev"),
+        ("AWS_BEARER_TOKEN_BEDROCK", "sk-test-secret-123"),
+        ("AWS_REGION", "us-west-2"),
+    ]);
+    let key = row(&both, "model key").unwrap();
+    assert!(
+        key.detail.ends_with(
+            "Bedrock API key (AWS_BEARER_TOKEN_BEDROCK) (the API key is used; profile dev is not)"
+        ),
+        "{}",
+        key.detail
+    );
+    let region = row(&both, "model region").unwrap();
+    assert_eq!(region.level, DoctorLevel::Warn);
+    assert_eq!(
+        region.detail,
+        "eu-central-1 in speccoder.toml, AWS_REGION is us-west-2 — the file is used"
+    );
+    assert!(
+        !serde_json::to_string(&both)
+            .unwrap()
+            .contains("sk-test-secret-123")
+    );
+
+    let none = rows(&[("AWS_PROFILE", "gone")]);
+    let key = row(&none, "model key").unwrap();
+    assert_eq!(key.level, DoctorLevel::Fail);
+    assert_eq!(key.code.as_deref(), Some("KEY-MISSING"));
+    assert_eq!(
+        key.detail,
+        "AWS_BEARER_TOKEN_BEDROCK is not set and no AWS profile was found"
+    );
+    assert_eq!(
+        key.fix[..2],
+        ["export AWS_BEARER_TOKEN_BEDROCK=…", "aws login"]
+    );
+}

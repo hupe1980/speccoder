@@ -125,11 +125,18 @@
       "description": "The model key `init` looked for.",
       "properties": {
         "set": {
-          "description": "Set in this environment.",
+          "description": "Set in this environment (Bedrock: a credential source was found).",
           "type": "boolean"
         },
+        "source": {
+          "description": "Bedrock: where the AWS chain will take credentials from, by kind and\nname (`aws login session (profile dev)`), never a value.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "variable": {
-          "description": "`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`.",
+          "description": "`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `AWS_BEARER_TOKEN_BEDROCK`.",
           "type": "string"
         }
       },
@@ -181,6 +188,13 @@
             "$ref": "#/$defs/InitRun"
           },
           "type": "array"
+        },
+        "region": {
+          "description": "The region written (Bedrock only).",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "wrote": {
           "description": "Files written, relative to the project root.",

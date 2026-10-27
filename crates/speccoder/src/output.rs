@@ -249,12 +249,24 @@ fn human_body(
                     }
                 }
             }
-            let key = if i.key.set {
-                format!("{} found", i.key.variable)
+            if let Some(model) = i.model.strip_prefix("bedrock/") {
+                // Where calls go, and where their credentials come from.
+                let region = i.region.clone().unwrap_or_else(|| {
+                    look.paint(Token::Attention, "no region: set [model] region")
+                });
+                let source = match &i.key.source {
+                    Some(s) => s.clone(),
+                    None => look.paint(Token::Attention, "AWS credentials not found"),
+                };
+                writeln!(out, "Model      bedrock {model} · {region} · {source}")?;
             } else {
-                look.paint(Token::Attention, &format!("{} is not set", i.key.variable))
-            };
-            writeln!(out, "Model      {}  ({key})", i.model)?;
+                let key = if i.key.set {
+                    format!("{} found", i.key.variable)
+                } else {
+                    look.paint(Token::Attention, &format!("{} is not set", i.key.variable))
+                };
+                writeln!(out, "Model      {}  ({key})", i.model)?;
+            }
             if !i.instructions.is_empty() {
                 writeln!(
                     out,

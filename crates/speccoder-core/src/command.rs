@@ -1490,6 +1490,9 @@ pub struct InitReport {
     pub instructions: Vec<String>,
     /// The model key: the variable and whether it is set.
     pub key: InitKey,
+    /// The region written (Bedrock only).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub region: Option<String>,
     /// The commit holding `speccoder.toml`, when one was made.
     pub committed: Option<String>,
 }
@@ -1513,10 +1516,14 @@ pub struct InitRun {
 /// The model key `init` looked for.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, schemars::JsonSchema)]
 pub struct InitKey {
-    /// `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`.
+    /// `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `AWS_BEARER_TOKEN_BEDROCK`.
     pub variable: String,
-    /// Set in this environment.
+    /// Set in this environment (Bedrock: a credential source was found).
     pub set: bool,
+    /// Bedrock: where the AWS chain will take credentials from, by kind and
+    /// name (`aws login session (profile dev)`), never a value.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
 }
 
 /// One detected check.

@@ -2204,9 +2204,14 @@ export interface InitCheck {
 
 /** The model key `init` looked for. */
 export interface InitKey {
-  /** Set in this environment. */
+  /** Set in this environment (Bedrock: a credential source was found). */
   set: boolean;
-  /** `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`. */
+  /**
+   * Bedrock: where the AWS chain will take credentials from, by kind and
+   * name (`aws login session (profile dev)`), never a value.
+   */
+  source?: string | null;
+  /** `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `AWS_BEARER_TOKEN_BEDROCK`. */
   variable: string;
 }
 
@@ -2226,6 +2231,8 @@ export interface InitReport {
   path: string;
   /** The checks run on the untouched code (empty: not run). */
   ran: InitRun[];
+  /** The region written (Bedrock only). */
+  region?: string | null;
   /** Files written, relative to the project root. */
   wrote: string[];
 }

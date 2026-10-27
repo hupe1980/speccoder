@@ -13,14 +13,15 @@
   interface Proposed { name: string; argv: string[]; tier: string; junit: string | null; why: string }
   interface SetupState {
     doctor: Reply<{ checks: Check[] }>;
-    preview: { configured: boolean; checks: Proposed[]; allow: string[][]; formatter: string[] | null; keys: [string, boolean][] };
+    preview: { configured: boolean; checks: Proposed[]; allow: string[][]; formatter: string[] | null; keys: [string, boolean][]; bedrock: { source: string | null; region: string | null } };
   }
   interface Ran { name: string; passed: boolean; status: string; duration_ms: number }
 
   let setup = $state<SetupState | null>(null);
   let step = $state(0);
-  let provider = $state<"anthropic" | "openai">("anthropic");
+  let provider = $state<"anthropic" | "openai" | "bedrock">("anthropic");
   let model = $state("");
+  let region = $state("");
   let busy = $state(false);
   let result = $state<(Reply<{ ran: Ran[]; wrote: string[]; committed: string | null }> & { to_commit?: string[]; failed?: string[] }) | null>(null);
   let committed = $state<string | null>(null);
@@ -36,6 +37,8 @@
       setup = s;
       const set = new Map(s.preview.keys);
       if (!set.get("ANTHROPIC_API_KEY") && set.get("OPENAI_API_KEY")) provider = "openai";
+      else if (!set.get("ANTHROPIC_API_KEY") && s.preview.bedrock.source) provider = "bedrock";
+      region = s.preview.bedrock.region ?? "";
     });
   });
 
@@ -44,18 +47,23 @@
   const project = $derived(row("project"));
   const keySet = $derived(new Map(setup?.preview.keys ?? []));
   const keyVar = $derived(provider === "openai" ? "OPENAI_API_KEY" : "ANTHROPIC_API_KEY");
-  const providers: [string, string, string, string][] = [["anthropic", "Anthropic", "Claude models", "ANTHROPIC_API_KEY"], ["openai", "OpenAI", "GPT models", "OPENAI_API_KEY"]];
+  const providers: [string, string, string, string][] = [["anthropic", "Anthropic", "Claude models", "ANTHROPIC_API_KEY"], ["openai", "OpenAI", "GPT models", "OPENAI_API_KEY"], ["bedrock", "Amazon Bedrock", "Claude and other models through AWS", ""]];
+  // Bedrock's credentials come from AWS: a key or a session, named, never shown.
+  const awsSource = $derived(setup?.preview.bedrock.source ?? null);
+  const providerName = $derived(provider === "openai" ? "OpenAI" : provider === "bedrock" ? "Amazon Bedrock" : "Anthropic");
   const steps = ["Welcome", "Model", "Checks", "Set Up", "First Feature"];
   // The format's skill that creates a unit, by its role: whatever it is named.
   const specify = $derived(byRole(app.actions, "create").find((a) => a.input));
   const words = (a: string[]) => a.map((w) => (/\s/.test(w) ? JSON.stringify(w) : w)).join(" ");
-  const cli = $derived(`speccoder init --provider ${provider}${model.trim() ? ` --model ${model.trim()}` : ""}`);
+  const cli = $derived(
+    `speccoder init --provider ${provider}${provider === "bedrock" && region.trim() ? ` --region ${region.trim()}` : ""}${model.trim() ? ` --model ${model.trim()}` : ""}`,
+  );
 
   async function setUp() {
     busy = true;
     error = null;
     try {
-      result = await post("/api/setup", { provider, model: model.trim() || null });
+      result = await post("/api/setup", { provider, model: model.trim() || null, region: provider === "bedrock" ? region.trim() || null : null });
       if (result?.status !== "ok") error = result?.message ?? "init refused";
     } catch (e) {
       error = String((e as Error).message ?? e);
@@ -125,12 +133,21 @@
         {#each providers as [id, name, sub, v] (id)}
           <button role="radio" aria-checked={provider === id} class:on={provider === id} onclick={() => (provider = id as typeof provider)}>
             <span class="pname">{name}</span><span class="psub">{sub}</span>
-            <span class="key" class:ok={keySet.get(v)}>{#if keySet.get(v)}<Icon name="check" size={11} weight={2.6} /> {v} is set{:else}<Icon name="key" size={11} /> {v} not set{/if}</span>
+            {#if id === "bedrock"}
+              <span class="key" class:ok={awsSource}>{#if awsSource}<Icon name="check" size={11} weight={2.6} /> {awsSource}{:else}<Icon name="key" size={11} /> AWS credentials not found{/if}</span>
+            {:else}
+              <span class="key" class:ok={keySet.get(v)}>{#if keySet.get(v)}<Icon name="check" size={11} weight={2.6} /> {v} is set{:else}<Icon name="key" size={11} /> {v} not set{/if}</span>
+            {/if}
           </button>
         {/each}
       </div>
-      <label class="field-row"><span>Model</span><input class="field" bind:value={model} placeholder="speccoder's default for {provider === 'openai' ? 'OpenAI' : 'Anthropic'}" /></label>
-      {#if !keySet.get(keyVar)}
+      <label class="field-row"><span>Model</span><input class="field" bind:value={model} placeholder="speccoder's default for {providerName}" /></label>
+      {#if provider === "bedrock"}
+        <label class="field-row"><span>Region</span><input class="field" bind:value={region} placeholder="e.g. eu-central-1 (required)" /></label>
+        {#if !awsSource}
+          <p class="note"><Icon name="key" size={14} /> Set AWS_BEARER_TOKEN_BEDROCK or run aws login where you start speccoder. You can finish setting up first.</p>
+        {/if}
+      {:else if !keySet.get(keyVar)}
         <p class="note"><Icon name="key" size={14} /> Set the key where you start speccoder: <button class="fix mono" onclick={() => copy(`export ${keyVar}=…`)}>export {keyVar}=…</button> You can finish setting up first.</p>
       {/if}
       <p class="muted small">Local models (Ollama, vLLM, LM Studio) are set in Settings › Model after setup.</p>
@@ -227,7 +244,7 @@
   .note { display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap; margin: 0; padding: 0.7rem 0.9rem; border-radius: var(--radius); background: var(--accent-soft); font-size: 0.88rem; }
   .note.bad { background: var(--danger-bg); color: var(--danger); }
   .note.ok { background: var(--verified-bg); color: var(--verified); }
-  .providers { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+  .providers { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; }
   .providers button { display: grid; gap: 0.2rem; text-align: left; padding: 1rem 1.1rem; border-radius: var(--radius-lg); border: 0; background: var(--surface); box-shadow: var(--shadow); cursor: pointer; transition: box-shadow var(--speed) var(--ease), transform 220ms var(--spring); }
   .providers button:hover { transform: translateY(-1px); }
   .providers button.on { box-shadow: 0 0 0 2.5px var(--accent), var(--shadow-md); }
