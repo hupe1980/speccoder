@@ -200,12 +200,6 @@ pub fn detect_here() -> Option<Source> {
     detect(&var, &home())
 }
 
-/// [`profile`] in this process's environment and home.
-#[must_use]
-pub fn profile_here() -> Option<Source> {
-    profile(&var, &home())
-}
-
 /// [`region`] in this process's environment and home.
 #[must_use]
 pub fn region_here() -> Option<(String, RegionFrom)> {
