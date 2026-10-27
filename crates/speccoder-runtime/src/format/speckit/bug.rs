@@ -33,6 +33,7 @@ pub static ASSESS_RULES: Rules = Rules {
     authoring_path: |p| p.starts_with(".specify/bugs/") && !p.contains(".."),
     command: |_, _| None,
     env: &[],
+    found_env: super::python::command_env,
     authoring_refusal: |p| {
         format!(
             "the `bug` extension's assess step writes only its bug's directory (.specify/bugs/<slug>/); `{p}` is not in it"

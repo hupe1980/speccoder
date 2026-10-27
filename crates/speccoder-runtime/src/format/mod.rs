@@ -336,6 +336,16 @@ pub trait Adapter: Send + Sync + std::fmt::Debug {
         None
     }
 
+    /// The format's own checks of what its tool needs on this machine, as
+    /// `doctor` rows, given the person's environment `env`.
+    fn doctor_checks(
+        &self,
+        _root: &Path,
+        _env: &dyn Fn(&str) -> Option<String>,
+    ) -> Vec<speccoder_core::DoctorCheck> {
+        Vec::new()
+    }
+
     /// The format's own command-line tool and how to install it, for
     /// `doctor` (`None`: the format has none).
     fn tool(&self) -> Option<(&'static str, &'static str)> {
@@ -520,6 +530,16 @@ pub trait Adapter: Send + Sync + std::fmt::Debug {
     ) -> CommitPrecondition;
 }
 
+/// [`Rules::found_env`]: the variables, given a lookup of the command's
+/// environment.
+pub type FoundEnv = fn(&dyn Fn(&str) -> Option<String>) -> Vec<(String, String)>;
+
+/// No variables found.
+#[must_use]
+pub fn no_found_env(_: &dyn Fn(&str) -> Option<String>) -> Vec<(String, String)> {
+    Vec::new()
+}
+
 /// A format's ruling on a command (`argv`, whether a planning skill asks):
 /// `Some(Ok)` allowed, `Some(Err(why))` refused, `None` no opinion.
 pub type CommandRule = fn(&[String], bool) -> Option<Result<(), String>>;
@@ -540,6 +560,10 @@ pub struct Rules {
     pub command: CommandRule,
     /// Environment variables every command of the project gets.
     pub env: &'static [(&'static str, &'static str)],
+    /// Variables found on this machine every command of the project gets,
+    /// given a lookup of the command's environment; a variable already in
+    /// it (the person's) is kept.
+    pub found_env: FoundEnv,
     /// Why a planning skill's other write needs approval (`path` given).
     pub authoring_refusal: fn(&str) -> String,
 }

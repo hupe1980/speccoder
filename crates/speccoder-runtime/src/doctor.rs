@@ -229,6 +229,7 @@ pub fn checks(
             {
                 out.push(preset_check(Path::new(&o.snapshot.root)));
             }
+            out.extend(o.adapter.doctor_checks(Path::new(&o.snapshot.root), env));
             // The plan checks of the selected feature (FR-035): warnings.
             if o.snapshot.feature.is_some() {
                 out.extend(plan_checks(

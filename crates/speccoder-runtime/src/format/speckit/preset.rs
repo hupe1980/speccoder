@@ -67,6 +67,7 @@ pub fn extract(state: &Path) -> Result<PathBuf, String> {
 fn specify(root: &Path, args: &[&str]) -> Option<std::process::Output> {
     let mut child = Command::new("specify")
         .args(args)
+        .envs(super::python::command_env(&|k| std::env::var(k).ok()))
         .current_dir(root)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
@@ -260,14 +261,24 @@ pub fn add(root: &Path, update: bool, confirmed: bool, state_dir: &Path) -> Comm
         output,
         state,
     };
+    // Spec Kit's scripts resolve a preset's templates with PyYAML.
+    let python = super::python::warning_before_add(&|k| std::env::var(k).ok());
+    let warn = |message: String| match &python {
+        Some(w) => format!("{message}. Warning: {w}"),
+        None => message,
+    };
+    let fix: Vec<String> = python
+        .iter()
+        .flat_map(|_| super::python::FIX.iter().map(|f| (*f).to_owned()))
+        .collect();
     if !confirmed {
-        return CommandResult::new(
+        let asked = CommandResult::new(
             "preset",
             CommandStatus::NeedsHuman,
-            &format!(
+            &warn(format!(
                 "Run `{}`? It writes .specify/presets/{ID}/ and Spec Kit's preset registry; nothing in specs/ changes",
                 command.join(" ")
-            ),
+            )),
         )
         .with_code("NEEDS-HUMAN")
         .with_next(vec![speccoder_core::next::NextStep {
@@ -275,6 +286,11 @@ pub fn add(root: &Path, update: bool, confirmed: bool, state_dir: &Path) -> Comm
             why: "confirm: Spec Kit installs the preset".to_owned(),
         }])
         .with_data(CommandData::Preset(Box::new(report(String::new(), before))));
+        return if fix.is_empty() {
+            asked
+        } else {
+            asked.with_fix(fix)
+        };
     }
     let args: Vec<&str> = command.iter().skip(1).map(String::as_str).collect();
     let Some(out) = specify(&project, &args) else {
@@ -307,10 +323,10 @@ pub fn add(root: &Path, update: bool, confirmed: bool, state_dir: &Path) -> Comm
         .with_data(CommandData::Preset(Box::new(report(excerpt, before))));
     }
     let after = state(&project);
-    CommandResult::new(
+    let added = CommandResult::new(
         "preset",
         CommandStatus::Ok,
-        &format!(
+        &warn(format!(
             "the speccoder preset {} is {} for tasks-template",
             version(),
             if after.active_for_tasks_template {
@@ -318,9 +334,14 @@ pub fn add(root: &Path, update: bool, confirmed: bool, state_dir: &Path) -> Comm
             } else {
                 "installed (not active)"
             }
-        ),
+        )),
     )
-    .with_data(CommandData::Preset(Box::new(report(excerpt, after))))
+    .with_data(CommandData::Preset(Box::new(report(excerpt, after))));
+    if fix.is_empty() {
+        added
+    } else {
+        added.with_fix(fix)
+    }
 }
 
 #[cfg(test)]

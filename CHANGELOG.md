@@ -108,6 +108,7 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- With a Spec Kit preset installed (as `speccoder new` and `preset add` install speccoder's), `spec tasks` failed when the system `python3` lacked PyYAML ("Template 'tasks-template' was not found"). Commands of a Spec Kit project now get the installed `specify`'s own interpreter as `SPECKIT_PYTHON_EXECUTABLE` when it imports PyYAML (a value you set is kept); `doctor` and `preset add` warn, with the fix, when no such Python is found.
 - On macOS, `mktemp` failed inside the sandbox (it ignores `TMPDIR`), so Spec Kit's own scripts — and with them `spec plan` — could fail; its default names in the per-user temporary directory are writable now, nothing else there.
 - A planning skill that stopped incomplete gave no reason; it now quotes the skill's own words, or says it gave none and how to run it again.
 - Flags after a description were read as part of it: `speccoder spec specify "…" --through tasks --no-prompt` ran plain `specify` with the flags in its description. Flags may now follow it; a description that starts with `-` goes after `--`.

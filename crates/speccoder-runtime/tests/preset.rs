@@ -172,3 +172,73 @@ fn a_plan_written_to_the_preset_raises_no_plan_check() {
     git(r, &["commit", "-qam", "the preset's plan"]);
     assert!(lints(r).is_empty(), "{:?}", lints(r));
 }
+
+/// A fake `specify` in `<dir>/bin`: its shebang interpreter imports a fake
+/// `yaml` when `yaml`.
+#[cfg(unix)]
+fn fake_specify(dir: &Path, yaml: bool) -> PathBuf {
+    use std::os::unix::fs::PermissionsExt as _;
+    fs::create_dir_all(dir.join("bin")).unwrap();
+    fs::create_dir_all(dir.join("venv")).unwrap();
+    let python = dir.join("venv/python");
+    fs::write(
+        &python,
+        "#!/bin/sh\ncase \"$2\" in *'import sys, yaml'*) [ -f \"$(dirname \"$0\")/yaml.py\" ] && exit 0;; esac\nexit 1\n",
+    )
+    .unwrap();
+    if yaml {
+        fs::write(dir.join("venv/yaml.py"), "").unwrap();
+    }
+    let specify = dir.join("bin/specify");
+    fs::write(
+        &specify,
+        format!("#!{}\nprint('specify')\n", python.display()),
+    )
+    .unwrap();
+    for f in [&python, &specify] {
+        fs::set_permissions(f, fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    dir.join("bin")
+}
+
+/// Spec Kit's scripts resolve preset templates with a Python that imports
+/// PyYAML: with a preset installed and none found, doctor warns with the
+/// fix; `specify`'s own interpreter importing it is enough.
+#[cfg(unix)]
+#[test]
+fn doctor_warns_when_a_preset_is_installed_and_no_python_has_pyyaml() {
+    let dir = tempfile::tempdir().unwrap();
+    let r = dir.path();
+    git(r, &["init", "-q"]);
+    fs::create_dir_all(r.join(".specify/presets/speccoder")).unwrap();
+    fs::write(r.join(".specify/init-options.json"), "{}\n").unwrap();
+    git(r, &["add", "-A"]);
+    git(r, &["commit", "-qm", "init"]);
+    let tools = tempfile::tempdir().unwrap();
+    let tools = fs::canonicalize(tools.path()).unwrap();
+    let python_row = |path: &Path| {
+        let path = path.display().to_string();
+        speccoder_runtime::doctor::checks(r, None, &|k| (k == "PATH").then(|| path.clone()))
+            .into_iter()
+            .find(|c| c.check == "spec tool python")
+    };
+    let without = fake_specify(&tools.join("without"), false);
+    let row = python_row(&without).unwrap_or_else(|| panic!("no warning"));
+    assert_eq!(row.level, speccoder_core::DoctorLevel::Warn, "{row:?}");
+    assert!(
+        row.detail.contains("speccoder") && row.detail.contains("PyYAML"),
+        "{row:?}"
+    );
+    assert!(
+        row.fix.iter().any(|f| f.contains("pip install pyyaml")),
+        "{row:?}"
+    );
+    assert!(
+        row.fix
+            .iter()
+            .any(|f| f.contains("SPECKIT_PYTHON_EXECUTABLE")),
+        "{row:?}"
+    );
+    let with = fake_specify(&tools.join("with"), true);
+    assert_eq!(python_row(&with), None);
+}

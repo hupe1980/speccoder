@@ -516,6 +516,56 @@ fn run_command_executes_allowed_argv_with_closed_stdin() {
     }
 }
 
+/// Spec Kit's `common.sh` resolves preset templates with a Python that
+/// imports PyYAML: a command of a Spec Kit project gets the installed
+/// `specify`'s own interpreter as `SPECKIT_PYTHON_EXECUTABLE` — a fake
+/// `specify` here, whose shebang interpreter imports a fake `yaml` — and a
+/// value already set is kept.
+#[cfg(unix)]
+#[test]
+fn a_speckit_command_gets_specify_s_python_unless_one_is_set() {
+    use std::os::unix::fs::PermissionsExt as _;
+    let w = worktree();
+    let fake = tempfile::tempdir().unwrap();
+    let fake = fs::canonicalize(fake.path()).unwrap();
+    let python = fake.join("venv/python");
+    write(
+        &fake,
+        "venv/python",
+        "#!/bin/sh\ncase \"$2\" in *'import sys, yaml'*) [ -f \"$(dirname \"$0\")/yaml.py\" ] && exit 0;; esac\nexit 1\n",
+    );
+    write(&fake, "venv/yaml.py", "");
+    write(
+        &fake,
+        "bin/specify",
+        &format!("#!{}\nprint('specify')\n", python.display()),
+    );
+    for f in [&python, &fake.join("bin/specify")] {
+        fs::set_permissions(f, fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    let path = format!("{}:/usr/bin:/bin", fake.join("bin").display());
+    let tools = |extra: Vec<(String, String)>| {
+        let mut env = vec![("PATH".to_owned(), path.clone())];
+        env.extend(extra);
+        WorkspaceTools::new(
+            w.path(),
+            Policy::new(&[], &[vec!["sh".to_owned()]])
+                .rules(&speccoder_runtime::format::speckit::RULES),
+        )
+        .unwrap()
+        .with_env(env)
+    };
+    let echo = json!({"argv": ["sh", "-c", "printf %s \"$SPECKIT_PYTHON_EXECUTABLE\""]});
+    let v = call(&tools(Vec::new()), "run_command", echo.clone());
+    assert_eq!(v["stdout"], python.display().to_string(), "{v}");
+    let mine = vec![(
+        "SPECKIT_PYTHON_EXECUTABLE".to_owned(),
+        "/mine/python3".to_owned(),
+    )];
+    let v = call(&tools(mine), "run_command", echo);
+    assert_eq!(v["stdout"], "/mine/python3", "{v}");
+}
+
 #[test]
 fn denied_commands_never_run() {
     let w = worktree();

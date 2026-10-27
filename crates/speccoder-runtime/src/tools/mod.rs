@@ -552,9 +552,21 @@ impl WorkspaceTools {
             env.retain(|(name, _)| name != k);
             env.push((k.clone(), v.clone()));
         }
-        for (k, v) in self.policy.protected().rules().env {
+        let rules = self.policy.protected().rules();
+        for (k, v) in rules.env {
             env.retain(|(name, _)| name != k);
             env.push(((*k).to_owned(), (*v).to_owned()));
+        }
+        // Found on this machine: never in place of a value already there.
+        let found = (rules.found_env)(&|k: &str| {
+            env.iter()
+                .find(|(name, _)| name == k)
+                .map(|(_, v)| v.clone())
+        });
+        for (k, v) in found {
+            if !env.iter().any(|(name, _)| *name == k) {
+                env.push((k, v));
+            }
         }
         if let Some(id) = call_id {
             env.push(("SPECCODER_CALL_ID".to_owned(), id.to_owned()));

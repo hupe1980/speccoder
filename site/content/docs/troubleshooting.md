@@ -33,6 +33,7 @@ Every failure names a [code](@/docs/codes.md) and the command that fixes it; `sp
 | `MCP tool … changed since it was allowed` | The server changed a tool you allowed. Read it again; approving one call records it as it is now. |
 | No colour | Output is not a terminal, `NO_COLOR` or `TERM=dumb` is set, or screen-reader mode is on. `--color always` forces it (not in screen-reader mode). |
 | Odd symbols or boxes | The font lacks them: `--ascii`, or `[ui] ascii = true` in [your settings](@/docs/configuration.md#your-settings). |
+| `spec tasks` stops: "Template 'tasks-template' was not found…" | A Spec Kit preset is installed and Spec Kit's scripts found no Python with PyYAML (`common.sh` reads a preset's manifest with it; the system `python3` usually lacks it). speccoder gives its commands the installed `specify`'s own interpreter as `SPECKIT_PYTHON_EXECUTABLE` when it imports PyYAML, and never replaces a value you set; `speccoder doctor` warns when none is found. Fix: `python3 -m pip install pyyaml`, or `export SPECKIT_PYTHON_EXECUTABLE=/path/to/a/python-with-pyyaml`. |
 | A run seems stuck | `speccoder report --live` from another terminal shows the step and the last tool call. |
 
 ## Getting help

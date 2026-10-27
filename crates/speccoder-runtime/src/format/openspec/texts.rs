@@ -18,6 +18,7 @@ pub static RULES: Rules = Rules {
         ("DO_NOT_TRACK", "1"),
         ("OPENSPEC_NO_UPDATE_CHECK", "1"),
     ],
+    found_env: crate::format::no_found_env,
     authoring_refusal,
 };
 

@@ -23,6 +23,8 @@ pub static RULES: Rules = Rules {
     authoring_path: is_authoring_path,
     command,
     env: &[],
+    // The Python Spec Kit's scripts resolve preset templates with.
+    found_env: super::python::command_env,
     authoring_refusal,
 };
 

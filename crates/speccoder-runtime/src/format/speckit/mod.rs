@@ -8,6 +8,7 @@ pub mod bug;
 pub mod extensions;
 pub mod hooks;
 pub mod preset;
+pub mod python;
 mod quick;
 mod texts;
 pub mod workflow;
@@ -129,7 +130,7 @@ impl Adapter for SpecKit {
             argv,
             hosts,
             writes: ".specify/, .claude/skills/speckit-*/".to_owned(),
-            env: Vec::new(),
+            env: python::command_env(&|k| std::env::var(k).ok()),
             marker: ".specify",
             note: choices
                 .preset
@@ -143,6 +144,25 @@ impl Adapter for SpecKit {
             preset::extract(&choices.state)?;
         }
         Ok(())
+    }
+
+    fn doctor_checks(
+        &self,
+        root: &Path,
+        env: &dyn Fn(&str) -> Option<String>,
+    ) -> Vec<speccoder_core::DoctorCheck> {
+        python::warning(root, env)
+            .map(|detail| speccoder_core::DoctorCheck {
+                check: "spec tool python".to_owned(),
+                level: speccoder_core::DoctorLevel::Warn,
+                detail,
+                code: None,
+                fix: python::FIX.iter().map(|f| (*f).to_owned()).collect(),
+                remedy: None,
+                tasks: Vec::new(),
+            })
+            .into_iter()
+            .collect()
     }
 
     fn tool(&self) -> Option<(&'static str, &'static str)> {
