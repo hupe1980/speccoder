@@ -70,18 +70,42 @@ fn review_and_continue(
     if requirements.is_empty() {
         return result;
     }
+    // What is approved is the wording, so it is shown, as written now.
+    let wording = |unit: &str| -> Vec<(String, String)> {
+        speccoder_runtime::review::summary(path, Some(unit))
+            .map(|r| {
+                r.requirements
+                    .iter()
+                    .map(|i| (i.id.clone(), i.text.clone()))
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    let read = wording(&unit);
     let shown = match requirements.as_slice() {
         [one] => one.clone(),
         [a, .., z] => format!("{a} … {z}"),
         [] => String::new(),
     };
     eprintln!("{}", result.message());
+    for line in approval_lines(&read) {
+        eprintln!("{line}");
+    }
     eprint!("Approve {shown} and plan? [y/N] ");
     let _ = std::io::stderr().flush();
     let mut line = String::new();
     let _ = std::io::stdin().read_line(&mut line);
     if !matches!(line.trim().to_ascii_lowercase().as_str(), "y" | "yes") {
         return result;
+    }
+    // Changed while it was read: nothing is approved.
+    if wording(&unit) != read {
+        return CommandResult::new(
+            "spec",
+            CommandStatus::NeedsHuman,
+            "the spec changed while you read it; nothing was approved — review it again",
+        )
+        .with_code("THROUGH-REVIEW");
     }
     let approve = Runnable::Review {
         ids: requirements.clone(),
@@ -96,6 +120,16 @@ fn review_and_continue(
         return approved;
     }
     speccoder_runtime::planning_chain::resume(path, Some(&unit), through, options)
+}
+
+/// The requirements a terminal approval is about, one line each, as
+/// written now.
+#[must_use]
+pub fn approval_lines(requirements: &[(String, String)]) -> Vec<String> {
+    requirements
+        .iter()
+        .map(|(id, text)| format!("  {id:<8} {text}"))
+        .collect()
 }
 
 /// The human rendering of a `planning_chain` payload.
@@ -194,5 +228,29 @@ pub fn render_suggestion(
         RungPick::None => writeln!(out, "{}", s.reason),
         RungPick::Ask => writeln!(out, "Just ask (not built yet) — {}", s.reason),
         r => writeln!(out, "{} — {}", r.label(), s.reason),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn the_approval_shows_the_wording_it_approves() {
+        let lines = super::approval_lines(&[
+            (
+                "FR-001".to_owned(),
+                "Users MUST export a report as CSV.".to_owned(),
+            ),
+            (
+                "FR-002".to_owned(),
+                "The export MUST keep the columns.".to_owned(),
+            ),
+        ]);
+        assert_eq!(
+            lines,
+            [
+                "  FR-001   Users MUST export a report as CSV.",
+                "  FR-002   The export MUST keep the columns."
+            ]
+        );
     }
 }
