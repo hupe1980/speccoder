@@ -25,22 +25,30 @@ cargo build --quiet -p speccoder
 bin="$root/target/debug/speccoder"
 idea="A Rust library that counts the words of a text, ignoring punctuation"
 project="$work/wordcount"
+# A result's own words: its message, a failed skill's message, its code and
+# fix lines — or its raw output when it is not a result.
+said() {
+  jq -r '[.message, (.data.stop.message // empty), (.code // empty | "code: \(.)"), ((.fix // [])[] | "fix: \(.)")] | map(select(. != null and . != "")) | reduce .[] as $x ([]; if any(.[]; . == $x) then . else . + [$x] end) | join("\n  ")' "$1" 2>/dev/null \
+    || { printf 'not a result: '; head -c 2000 "$1"; }
+}
 
 "$bin" new "$project" --idea "$idea" --stack rust --yes
 cd "$project"
 "$bin" --json spec specify "$idea" --through spec --no-prompt > "$work/spec.json" || true
-unit="$(jq -r '.data.unit // empty' "$work/spec.json")"
-[ -n "$unit" ] || { echo "record-sample: specify made no unit: $(jq -r .message "$work/spec.json")" >&2; exit 1; }
+unit="$(jq -r '.data.unit // empty' "$work/spec.json" 2>/dev/null || true)"
+[ -n "$unit" ] || { echo "record-sample: specify made no unit: $(said "$work/spec.json")" >&2; exit 1; }
 "$bin" review approve --feature "$unit"
 "$bin" --json spec plan --through tasks --no-prompt --feature "$unit" > "$work/plan.json" || true
-[ "$(jq -r '.data.stop.kind' "$work/plan.json")" = done ] || {
-  echo "record-sample: planning stopped: $(jq -r .message "$work/plan.json")" >&2; exit 1; }
+[ "$(jq -r '.data.stop.kind // empty' "$work/plan.json" 2>/dev/null)" = "done" ] || {
+  echo "record-sample: planning stopped: $(said "$work/plan.json")" >&2; exit 1; }
 git add -- "specs/$unit"
 git commit -q -m "plan $unit"
 "$bin" --json review approve --run autopilot --feature "$unit" > "$work/run.json" || true
 runs=()
 while IFS= read -r id; do runs+=("$id"); done < <(jq -r '.. | objects | select(has("run_id")) | .run_id | select(. != "")' "$work/run.json" | sort -u)
-[ "${#runs[@]}" -gt 0 ] || { echo "record-sample: the run recorded nothing: $(jq -r .message "$work/run.json")" >&2; exit 1; }
+[ "${#runs[@]}" -gt 0 ] || { echo "record-sample: the run recorded nothing: $(said "$work/run.json")" >&2; exit 1; }
+# A recording shows work: at least one task ticked `verified` — else it is empty.
+"$root/scripts/sample-verified.sh" "$work/run.json" "$project"
 journal="$(find "$SPECCODER_STATE_DIR" -name journal.redb | head -1)"
 [ -n "$journal" ] || { echo "record-sample: no journal" >&2; exit 1; }
 

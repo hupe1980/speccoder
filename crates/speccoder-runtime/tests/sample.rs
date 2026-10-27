@@ -243,3 +243,83 @@ fn the_credential_check_reads_the_history_not_the_compressed_bundle() {
     );
     assert!(!check(), "the history holds the key");
 }
+
+/// A recording that verified nothing is refused: the run must have ticked
+/// a task `verified`, in its payload and in a tick's trailers, and the
+/// refusal quotes the run's own message.
+#[test]
+fn a_recording_without_a_verified_tick_is_refused_with_the_run_s_words() {
+    // The recording itself needs `jq` (record-sample checks for it).
+    if Command::new("jq").arg("--version").output().is_err() {
+        eprintln!("skipped: needs `jq`");
+        return;
+    }
+    let script = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../scripts/sample-verified.sh");
+    let dir = tempfile::tempdir().unwrap();
+    let r = dir.path().join("p");
+    fs::create_dir_all(&r).unwrap();
+    git(&r, &["init", "-q"]);
+    fs::write(r.join("a.txt"), "x\n").unwrap();
+    git(&r, &["add", "-A"]);
+    git(&r, &["commit", "-qm", "plan"]);
+    let run = dir.path().join("run.json");
+    let check = || {
+        let out = Command::new("bash")
+            .arg(&script)
+            .arg(&run)
+            .arg(&r)
+            .output()
+            .unwrap();
+        (
+            out.status.success(),
+            String::from_utf8_lossy(&out.stderr).into_owned(),
+        )
+    };
+    // The empty recording: approved, then nothing to run.
+    let empty = json!({
+        "message": "approved 2 decision line(s) — no tasks yet: 001-x has no tasks.md",
+        "code": "NO-TASKS",
+        "fix": ["speccoder spec tasks"],
+        "data": { "attempts": [] },
+    });
+    fs::write(&run, empty.to_string()).unwrap();
+    let (ok, err) = check();
+    assert!(!ok, "an empty recording passes");
+    assert!(
+        err.contains("ticked no task verified")
+            && err.contains("no tasks yet: 001-x has no tasks.md")
+            && err.contains("code: NO-TASKS")
+            && err.contains("fix: speccoder spec tasks"),
+        "{err}"
+    );
+    // Verified in the payload, but no tick in the history: refused.
+    let ticked = json!({
+        "message": "feature done",
+        "data": { "attempts": [
+            { "task": "T001", "ticked": true, "verdict": { "verdict": "regression_only" } },
+            { "task": "T002", "ticked": true, "verdict": { "verdict": "verified" } },
+        ] },
+    });
+    fs::write(&run, ticked.to_string()).unwrap();
+    assert!(!check().0, "a payload alone is not a tick");
+    // Both: accepted.
+    fs::write(r.join("a.txt"), "y\n").unwrap();
+    git(&r, &["add", "-A"]);
+    git(
+        &r,
+        &[
+            "commit",
+            "-qm",
+            "speccoder: T002 x\n\nSpec-Task: 001-x/T002\nVerdict: verified\n",
+        ],
+    );
+    let (ok, err) = check();
+    assert!(ok, "{err}");
+    // Not a result at all: refused, its output quoted.
+    fs::write(&run, "thread 'main' panicked").unwrap();
+    let (ok, err) = check();
+    assert!(
+        !ok && err.contains("not a result: thread 'main' panicked"),
+        "{err}"
+    );
+}
