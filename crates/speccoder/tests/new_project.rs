@@ -670,3 +670,97 @@ fn an_existing_repository_gets_the_format_and_init_and_undo_reverts_only_speccod
     assert_eq!(log.lines().count(), 3, "{log}");
     assert!(log.starts_with("Revert \"new project: existing\""), "{log}");
 }
+
+/// With the real tools (`SPECCODER_REAL_TOOLS=1`, a developer's machine
+/// with cargo, specify and openspec): the format's files of a project
+/// `speccoder new` made are byte for byte what the same init writes run by
+/// hand in an empty repository (SC-004).
+#[test]
+fn with_the_real_tools_the_formats_files_are_the_formats_own() {
+    if std::env::var_os("SPECCODER_REAL_TOOLS").is_none() {
+        eprintln!("set SPECCODER_REAL_TOOLS=1 to run against the real cargo, specify and openspec");
+        return;
+    }
+    // The toolchain the developer has: rustup and cargo live under the real home.
+    let real = std::env::var("HOME").unwrap_or_default();
+    let rustup = std::env::var("RUSTUP_HOME").unwrap_or_else(|_| format!("{real}/.rustup"));
+    let cargo = std::env::var("CARGO_HOME").unwrap_or_else(|_| format!("{real}/.cargo"));
+    for format in ["speckit", "openspec"] {
+        let m = Machine::new();
+        let run = |args: &[&str]| {
+            let mut c = Command::new(env!("CARGO_BIN_EXE_speccoder"));
+            c.args(["--json", "--format", format])
+                .args(args)
+                .current_dir(m.work.path())
+                .env("HOME", m.home.path())
+                .env("RUSTUP_HOME", &rustup)
+                .env("CARGO_HOME", &cargo)
+                .env("GIT_CONFIG_GLOBAL", m.home.path().join(".gitconfig"))
+                .env("SPECCODER_STATE_DIR", m.state.path());
+            c.output().unwrap()
+        };
+        let out = run(&[
+            "new",
+            "real",
+            "--idea",
+            "a rust library",
+            "--stack",
+            "rust",
+            "--yes",
+        ]);
+        let v: Value = serde_json::from_slice(&out.stdout).unwrap();
+        assert_eq!(v["status"], "ok", "{format}: {v}");
+        let init = v["data"]["plan"]["steps"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|s| s["id"] == "format_init")
+            .unwrap()["argv"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|a| a.as_str().unwrap().to_owned())
+            .collect::<Vec<_>>();
+        let alone = tempfile::tempdir().unwrap();
+        git(alone.path(), &["init", "-q"]);
+        let config = tempfile::tempdir().unwrap();
+        let st = Command::new(&init[0])
+            .args(&init[1..])
+            .current_dir(alone.path())
+            .env("HOME", m.home.path())
+            .env("XDG_CONFIG_HOME", config.path())
+            .stdin(std::process::Stdio::null())
+            .status()
+            .unwrap();
+        assert!(st.success(), "{init:?}");
+        let dirs: &[&str] = if format == "speckit" {
+            &[".specify", ".claude"]
+        } else {
+            &["openspec", ".claude"]
+        };
+        // Spec Kit records when it installed things: those registries differ by their times.
+        let strip = |t: Vec<(String, Vec<u8>)>| -> Vec<(String, Vec<u8>)> {
+            t.into_iter()
+                .filter(|(p, _)| {
+                    !p.ends_with("init-options.json")
+                        && !p.contains("integrations/")
+                        && !p.ends_with(".registry")
+                        && !p.ends_with("-registry.json")
+                })
+                .collect()
+        };
+        let (made, own) = (
+            strip(tree(&m.target("real"), dirs)),
+            strip(tree(alone.path(), dirs)),
+        );
+        let names = |t: &[(String, Vec<u8>)]| t.iter().map(|(p, _)| p.clone()).collect::<Vec<_>>();
+        assert_eq!(names(&made), names(&own), "{format}: the same files");
+        let differ: Vec<&String> = made
+            .iter()
+            .zip(&own)
+            .filter(|(a, b)| a.1 != b.1)
+            .map(|(a, _)| &a.0)
+            .collect();
+        assert!(differ.is_empty(), "{format}: these differ: {differ:?}");
+    }
+}
