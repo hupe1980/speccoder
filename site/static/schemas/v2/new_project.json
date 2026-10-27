@@ -327,7 +327,7 @@
           "type": "string"
         },
         "hosts": {
-          "description": "The hosts a network step reaches.",
+          "description": "The hosts a network step is expected to reach: shown, not enforced —\nthe step gets the full network.",
           "items": {
             "type": "string"
           },
@@ -674,7 +674,7 @@
         },
         {
           "const": "network",
-          "description": "It reaches the hosts it names.",
+          "description": "It gets the full network (the hosts it names are expected, not enforced).",
           "type": "string"
         }
       ]

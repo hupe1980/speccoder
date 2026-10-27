@@ -100,6 +100,20 @@ describe("NewProject", () => {
     expect(await violations()).toEqual([]);
   });
 
+  it("never creates a plan the fields no longer ask for", async () => {
+    type(document.querySelector("textarea")!, "a CLI");
+    await wait();
+    expect(document.body.textContent).toContain("This will run, in /w/md2csv");
+    // A change, before the new plan is in: Create waits for it.
+    type(document.querySelector("textarea")!, "a CLI for something else");
+    expect(button(/^Create/).disabled).toBe(true);
+    button(/^Create/).click();
+    await settle();
+    expect(host.app.run).not.toHaveBeenCalled();
+    await wait();
+    expect(button(/^Create/).disabled).toBe(false);
+  });
+
   it("asks the host again on every change", async () => {
     type(document.querySelector("textarea")!, "a CLI");
     await wait();
@@ -135,13 +149,15 @@ describe("NewProject", () => {
     current = plan({ steps: [step("scaffold.1", ["uv", "init"]), step("scaffold.2", ["uv", "add", "--dev", "pytest"], "network", ["pypi.org"])] });
     type(document.querySelector("textarea")!, "a python script");
     await wait();
-    expect(document.body.textContent).toContain("⇅ network: pypi.org");
+    // Honest: the step gets the full network; the hosts are expected, not enforced.
+    expect(document.body.textContent).toContain("⇅ full network (expected: pypi.org)");
     button(/^Create/).click();
     flushSync();
     expect(host.app.run).not.toHaveBeenCalled();
     const ask = document.querySelector('[aria-label="These reach the network"]')!;
     expect(ask.textContent).toContain("uv add --dev pytest");
     expect(ask.textContent).toContain("pypi.org");
+    expect(ask.textContent).toContain("the sandbox does not limit the hosts");
     button("Run").click();
     await settle(10);
     expect(host.app.run).toHaveBeenCalledTimes(1);

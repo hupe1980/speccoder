@@ -29,6 +29,10 @@
   let running = $state(false);
   let result = $state<Reply<NewProjectReport> | null>(null);
   let folders = $state<string[]>([]);
+  // What the plan on screen was made for: Create runs it only while the
+  // fields still say the same (never a plan the screen no longer shows).
+  let shownFor = $state<string | null>(null);
+  const asking = $derived(JSON.stringify({ where, idea, stack, format, ext: [bugExtension ? "bug" : "", ...more].filter((x) => x.trim()).join("\n"), preset }));
   /** Undo asked about, inline (not a second modal). */
   let undoAsk = $state<string | null>(null);
 
@@ -43,13 +47,14 @@
       return;
     }
     loading = true;
+    const key = JSON.stringify({ where: args.where, idea: args.idea, stack: args.stack, format: args.format, ext: args.ext, preset: args.preset });
     try {
       const r = await get<{ plan?: ProjectPlan; choices?: NewChoices; error?: string }>(
         `/api/new/plan${q({ path: args.where, idea: args.idea, stack: args.stack, format: args.format, extensions: args.ext, no_preset: args.preset ? null : "true" })}`,
       );
       plan = r.plan ?? null;
       choices = r.choices ?? null;
-      if (!stack && r.plan) stack = r.plan.stack.id;
+      shownFor = key;
     } catch (e) {
       plan = null;
       app.toast({ tone: "error", text: "The plan could not be made", detail: String((e as Error).message ?? e) });
@@ -74,7 +79,8 @@
 
   const net = $derived(plan ? networkSteps(plan) : { steps: [], hosts: [] });
   const refusal = $derived(plan?.refusal ?? null);
-  const ready = $derived(!!plan && !refusal && !loading && !app.job?.running && !running);
+  const stale = $derived(shownFor !== asking);
+  const ready = $derived(!!plan && !refusal && !loading && !stale && !app.job?.running && !running);
   const rows = $derived(plan ? checklist(plan, result?.data?.results?.length ? result.data.results : app.steps, app.stepRunning) : []);
   const failed = $derived(rows.find((r) => r.state === "failed") ?? null);
   const done = $derived(result?.status === "ok" ? result.data ?? null : null);
@@ -190,11 +196,11 @@
           <div class="d-radios" role="radiogroup" aria-labelledby="np-stack">
             {#each plan?.stacks ?? [] as s (s.id)}
               <label class:off={!!s.disabled} title={s.disabled ?? (s.version ? `${s.label} ${s.version}` : s.label)}>
-                <input type="radio" name="np-stack" value={s.id} bind:group={stack} disabled={!!s.disabled || running || plan?.mode === "existing_repository"} /> {s.label}
+                <input type="radio" name="np-stack" value={s.id} checked={(stack ?? plan?.stack.id) === s.id} onchange={() => (stack = s.id)} disabled={!!s.disabled || running || plan?.mode === "existing_repository"} /> {s.label}
               </label>
             {/each}
           </div>
-          {#if plan}<div class="d-note">{plan.mode === "existing_repository" ? "found" : stack === plan.stack.id && plan.stack.reason !== "chosen" ? "suggested" : "chosen"}: {plan.stack.reason}</div>{/if}
+          {#if plan}<div class="d-note">{plan.mode === "existing_repository" ? "found" : stack === null ? "suggested" : "chosen"}: {plan.stack.reason}</div>{/if}
           {#each (plan?.stacks ?? []).filter((s) => s.disabled) as s (s.id)}<div class="d-note">{s.disabled}</div>{/each}
         </dd>
         <dt id="np-format">Specs</dt>
@@ -229,7 +235,7 @@
         </div>
       {:else if plan}
         <div class="d-field">
-          <span class="d-label" id="np-plan">This will run, in {where}:</span>
+          <span class="d-label" id="np-plan">This will run, in <code>{plan.target}</code>:</span>
           <ol class="d-steps" aria-labelledby="np-plan">
             {#each rows as r, i (r.step.id)}
               {@const m = stepMark(r.state)}
@@ -242,7 +248,7 @@
                   {#if r.step.note}<div class="d-note">{r.step.note}</div>{/if}
                   {#if r.result && r.result.duration_ms}<span class="muted"> · {(r.result.duration_ms / 1000).toFixed(1)}s</span>{/if}
                 </span>
-                <span class={r.step.access === "network" ? "badge-net" : "badge-local"}>{r.step.access === "network" ? `⇅ network: ${(r.step.hosts ?? []).join(", ")}` : "local"}</span>
+                <span class={r.step.access === "network" ? "badge-net" : "badge-local"}>{r.step.access === "network" ? `⇅ full network (expected: ${(r.step.hosts ?? []).join(", ")})` : "local"}</span>
                 {#if r.state === "failed" && r.result}
                   <details open>
                     <summary>exit {r.result.exit ?? "—"}: the last lines</summary>
@@ -271,7 +277,7 @@
 
       {#if confirming}
         <div class="d-warn attention" role="group" aria-label="These reach the network">
-          <span>{net.steps.length} command{net.steps.length === 1 ? "" : "s"} reach the network: {net.steps.map((s) => shell(s.argv)).join(" · ")} ({net.hosts.join(", ")})</span>
+          <span>{net.steps.length} command{net.steps.length === 1 ? " gets" : "s get"} full network access: {net.steps.map((s) => shell(s.argv)).join(" · ")}. {net.steps.length === 1 ? "It is" : "They are"} expected to reach {net.hosts.join(", ")}; the sandbox does not limit the hosts.</span>
           <div class="d-row"><button class="btn" onclick={() => (confirming = false)}>Cancel</button><button class="btn primary" onclick={create}>Run</button></div>
         </div>
       {/if}

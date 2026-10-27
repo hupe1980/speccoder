@@ -146,8 +146,8 @@ pub fn run(
             String::new()
         } else {
             format!(
-                " ({network} reach{} the network: {})",
-                if network == 1 { "es" } else { "" },
+                " ({network} get{} full network access, expected to reach {})",
+                if network == 1 { "s" } else { "" },
                 hosts.join(", ")
             )
         };
@@ -313,7 +313,7 @@ pub fn plan_text(
             StepAccess::Local => "local".to_owned(),
             StepAccess::Network => look.paint(
                 Token::Attention,
-                &format!("⇅ network: {}", s.hosts.join(", ")),
+                &format!("⇅ full network (expected: {})", s.hosts.join(", ")),
             ),
         };
         let mark = match results.get(i).map(|r| r.state) {

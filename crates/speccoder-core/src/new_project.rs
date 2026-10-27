@@ -101,7 +101,7 @@ impl Stack {
 pub enum StepAccess {
     /// No network.
     Local,
-    /// It reaches the hosts it names.
+    /// It gets the full network (the hosts it names are expected, not enforced).
     Network,
 }
 
@@ -226,7 +226,8 @@ pub struct PlanStep {
     pub cwd: String,
     /// Local, or network.
     pub access: StepAccess,
-    /// The hosts a network step reaches.
+    /// The hosts a network step is expected to reach: shown, not enforced —
+    /// the step gets the full network.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub hosts: Vec<String>,
     /// What it writes, in one line.
