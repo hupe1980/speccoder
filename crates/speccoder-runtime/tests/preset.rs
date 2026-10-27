@@ -93,11 +93,32 @@ fn the_preset_installs_through_spec_kit_and_resolves_the_tasks_template() {
         Some(speccoder_runtime::preset::version())
     );
     assert!(s.active_for_tasks_template, "{s:?}");
-    // Again: an update through Spec Kit's own update.
+    // Again, the same version active: nothing runs.
     let again = speccoder_runtime::preset::add(r, false, true, state.path());
     assert_eq!(again.status(), CommandStatus::Ok, "{}", again.message());
+    assert!(
+        again.message().contains("already active"),
+        "{}",
+        again.message()
+    );
     let Some(speccoder_core::CommandData::Preset(p)) = again.data() else {
         panic!()
+    };
+    assert!(p.command.is_empty());
+    // An older version installed: Spec Kit's own update replaces it.
+    let manifest = r.join(".specify/presets/speccoder/preset.yml");
+    let text = fs::read_to_string(&manifest).unwrap();
+    fs::write(
+        &manifest,
+        text.replace(
+            &format!("version: \"{}\"", speccoder_runtime::preset::version()),
+            "version: \"0.0.1\"",
+        ),
+    )
+    .unwrap();
+    let update = speccoder_runtime::preset::add(r, false, false, state.path());
+    let Some(speccoder_core::CommandData::Preset(p)) = update.data() else {
+        panic!("{}", update.message())
     };
     assert_eq!(p.command[1..3], ["preset".to_owned(), "update".to_owned()]);
     // Nothing in the spec tree was touched.

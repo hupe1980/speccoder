@@ -207,11 +207,9 @@ pub fn detail(cause: &SkipCause) -> String {
             format!("{why} of {}", code_path(path))
         }
         SkipCause::Refused { path, why } => format!("{} {why}", code_path(path)),
-        SkipCause::CommandNotAllowed { argv } => {
-            format!(
-                "the command {} is not allowed by the policy",
-                code_path(argv)
-            )
+        // The model's command is its own words: not repeated here.
+        SkipCause::CommandNotAllowed { .. } => {
+            "the command it gave is not one the policy allows".to_owned()
         }
         SkipCause::WriteFailed { path } => format!("writing {} failed", code_path(path)),
         SkipCause::NoPlace => "no place the runner collects".to_owned(),

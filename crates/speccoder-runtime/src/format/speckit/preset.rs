@@ -16,7 +16,10 @@ const MANIFEST: &str = include_str!("../../../assets/preset/speccoder/preset.yml
 const TEMPLATE: &str = include_str!("../../../assets/preset/speccoder/templates/tasks-template.md");
 
 /// The Spec Kit version the preset needs (`requires.speckit_version`).
-const NEEDS: (u64, u64, u64) = (1, 2, 0);
+pub const NEEDS: (u64, u64, u64) = (1, 2, 0);
+
+/// How long a `specify` command may take.
+const SPECIFY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
 
 /// This build's preset version: speccoder's.
 #[must_use]
@@ -52,12 +55,30 @@ pub fn extract(state: &Path) -> Result<PathBuf, String> {
     Ok(dir)
 }
 
+/// Runs `specify` in `root` with a deadline; `None` when it cannot run or
+/// does not finish.
 fn specify(root: &Path, args: &[&str]) -> Option<std::process::Output> {
-    Command::new("specify")
+    let mut child = Command::new("specify")
         .args(args)
         .current_dir(root)
-        .output()
-        .ok()
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .ok()?;
+    let began = std::time::Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => return child.wait_with_output().ok(),
+            Ok(None) if began.elapsed() > SPECIFY_TIMEOUT => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return None;
+            }
+            Ok(None) => std::thread::sleep(std::time::Duration::from_millis(50)),
+            Err(_) => return None,
+        }
+    }
 }
 
 fn parse_version(text: &str) -> Option<(u64, u64, u64)> {
@@ -79,7 +100,7 @@ fn parse_version(text: &str) -> Option<(u64, u64, u64)> {
 /// The installed `specify`'s version, when it runs.
 #[must_use]
 pub fn speckit_version() -> Option<(u64, u64, u64)> {
-    let out = Command::new("specify").arg("--version").output().ok()?;
+    let out = specify(Path::new("."), &["--version"])?;
     let text = String::from_utf8_lossy(&out.stdout);
     text.lines().rev().find_map(parse_version)
 }
@@ -181,6 +202,24 @@ pub fn add(root: &Path, update: bool, confirmed: bool, state_dir: &Path) -> Comm
     };
     let dir_text = dir.display().to_string();
     let before = state(&project);
+    // Already this version and active: nothing to do, nothing run.
+    if before.installed.as_deref() == Some(version()) && before.active_for_tasks_template {
+        return CommandResult::new(
+            "preset",
+            CommandStatus::Ok,
+            &format!(
+                "the speccoder preset {} is already active for tasks-template",
+                version()
+            ),
+        )
+        .with_data(CommandData::Preset(Box::new(PresetReport {
+            preset: ID.to_owned(),
+            version: version().to_owned(),
+            command: Vec::new(),
+            output: String::new(),
+            state: before,
+        })));
+    }
     let update = update || before.installed.is_some();
     let command: Vec<String> = if update {
         vec![

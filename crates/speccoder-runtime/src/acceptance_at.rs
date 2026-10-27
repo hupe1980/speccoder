@@ -32,13 +32,25 @@ fn file(plane: &Path) -> PathBuf {
     plane.join("decisions").join("acceptance-at.json")
 }
 
-/// Every recorded decision of the project whose state is `plane`.
+/// Every recorded decision of the project whose state is `plane`; an
+/// absent file is none, an unreadable one an error (never silently none).
+///
+/// # Errors
+///
+/// The file exists but cannot be read or parsed.
+pub fn read_all(plane: &Path) -> Result<Vec<Decision>, String> {
+    let path = file(plane);
+    match std::fs::read_to_string(&path) {
+        Ok(t) => serde_json::from_str(&t).map_err(|e| format!("{}: {e}", path.display())),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
+        Err(e) => Err(format!("{}: {e}", path.display())),
+    }
+}
+
+/// [`read_all`], an unreadable file read as no decision.
 #[must_use]
 pub fn all(plane: &Path) -> Vec<Decision> {
-    std::fs::read_to_string(file(plane))
-        .ok()
-        .and_then(|t| serde_json::from_str(&t).ok())
-        .unwrap_or_default()
+    read_all(plane).unwrap_or_default()
 }
 
 /// The story `task` of `feature` writes the acceptance tests of, if any.
@@ -106,8 +118,17 @@ pub fn decide(
         );
     }
     let plane = crate::worktree::project_state_dir(state, Path::new(&opened.snapshot.root));
-    let mut list = all(&plane);
-    list.retain(|x| !(x.feature == name && x.story == story));
+    let mut list = match read_all(&plane) {
+        Ok(l) => l,
+        Err(e) => {
+            return refuse(
+                CommandStatus::Error,
+                format!("the recorded decisions cannot be read, so none is changed: {e}"),
+            );
+        }
+    };
+    // One decision per story, and one story per task.
+    list.retain(|x| !(x.feature == name && (x.story == story || x.task == task)));
     if !revoke {
         list.push(Decision {
             feature: name.clone(),

@@ -10,24 +10,29 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 - **A test file the runner never collected fails the verdict.** After every
   attempt, each test file it added or changed is checked against what the
-  run collected — the toolchain's rule (Cargo, pytest, vitest/jest, Go), the
-  check's JUnit report, then the runner's listing or the check's new `list`
-  command. A file nothing ran fails with the rule as the reason, and the
-  retry is told where tests run (`TESTS-NOT-COLLECTED`); one speccoder
-  cannot tell about stops the task, never ticked
-  (`TESTS-COLLECTION-UNKNOWN`). Acceptance tests count at green only when
-  they collected what red did.
+  fast checks collected — the toolchain's rule (Cargo, pytest, vitest/jest,
+  Go), the check's fresh JUnit report, then a listing built from that
+  check's own command (or its new `list` command); ignored and skipped
+  tests never count. A file nothing ran fails with the rule as the reason,
+  and the retry is told where tests run (`TESTS-NOT-COLLECTED`); one
+  speccoder cannot tell about stops the task, never ticked
+  (`TESTS-COLLECTION-UNKNOWN`), and `task accept` then ticks the saved
+  attempt's code. Acceptance tests count at green only when they collected
+  what red did, what the files declare when red had no count, and at least
+  one.
 - **Every regression-only tick says why**: no story, no scenarios,
   acceptance off, the author's tests unusable or absent, none collected,
   not red first, or already passing — with the task whose tick implemented
-  it, found by running the tests on the feature's earlier ticks. In the
+  it, found by running the tests (a section's tests, for an appended
+  section) on the feature's earlier ticks, or "could not be determined". In the
   `Regression-Only:` trailer, the signed statement, status, report, the
   board, the TUI and ACP; older ticks read "not recorded". A feature whose
   ticks are mostly regression-only gets one *Little Was Verified* item in
   Needs You.
 - **Tests go where the runner finds them.** speccoder detects the test
   layout and gives it to the implementer and every test author; its own
-  acceptance tests go to one file per story, grown by sections.
+  acceptance tests go to one file per story, a later task's section only
+  ever appended.
 - **Plan checks before the run** (`doctor --feature`, *Before you run*):
   tests named where the runner won't collect them, a story's behaviour
   planned in Setup or Foundational, tasks that only write tests — warnings

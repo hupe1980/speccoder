@@ -708,7 +708,6 @@ pub enum BenchAction {
     },
 }
 
-/// `speccoder auth` actions; without one, `status`.
 /// What `speccoder preset` does.
 #[derive(Debug, Subcommand)]
 pub enum PresetAction {
@@ -720,6 +719,7 @@ pub enum PresetAction {
     },
 }
 
+/// `speccoder auth` actions; without one, `status`.
 #[derive(Debug, Subcommand)]
 pub enum AuthAction {
     /// Sign in with a short code in your browser; `--with-token` reads a token from stdin.

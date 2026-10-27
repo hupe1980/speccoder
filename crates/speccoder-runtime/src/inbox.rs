@@ -603,7 +603,7 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
                 );
                 a = a.with_run(Runnable::PresetAdd { update: false });
                 // Refused anyway without Spec Kit: say why, never offer it bare.
-                if !crate::preset::speckit_version().is_some_and(|v| v >= (1, 2, 0)) {
+                if !crate::preset::speckit_version().is_some_and(|v| v >= crate::preset::NEEDS) {
                     a.blocked =
                         Some("needs Spec Kit's `specify` 1.2.0 or newer on PATH".to_owned());
                 }
