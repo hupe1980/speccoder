@@ -426,6 +426,18 @@ pub fn checks(
             &["→ prefer a container or VM without your credentials"],
         ),
     });
+    // `[worktree] link`: each folder, linked now or why not — nothing made.
+    let worktree = text
+        .as_deref()
+        .and_then(|t| crate::prepare::parse(t).ok())
+        .unwrap_or_default();
+    if let Some(dir) = crate::verify::find_config(path).filter(|_| worktree.prepare) {
+        out.extend(link_checks(
+            &dir,
+            &worktree.link,
+            crate::sandbox::backend().is_ok() && sandbox.mode != crate::sandbox::Mode::Off,
+        ));
+    }
     // The state directory.
     out.push(match crate::worktree::state_dir() {
         Some(dir) => {
@@ -620,6 +632,47 @@ pub fn run(path: &Path, feature: Option<&str>, look: Option<&str>) -> CommandRes
 /// Untracked configuration a worktree will not have: speccoder works on
 /// commits, so a check that reads `.config/nextest.toml` or an untracked
 /// `*.toml` passes here and cannot run there.
+/// A `worktree link` row per folder `[worktree] link` names: whether a
+/// run's worktree would link it now (a fresh worktree has the committed
+/// lockfile), or why it would install it instead.
+fn link_checks(project: &Path, link: &[String], sandboxed: bool) -> Vec<DoctorCheck> {
+    let roots = crate::prepare::roots(project);
+    link.iter()
+        .map(|folder| {
+            let name = "worktree link";
+            let instead = |why: &str| {
+                warned(
+                    name,
+                    format!("{folder}: not linked — {why}; a run installs it instead"),
+                    &[],
+                )
+            };
+            let Some(root) = roots.iter().find(|r| r.folder() == *folder) else {
+                return instead("no committed lockfile beside it names it");
+            };
+            if !sandboxed {
+                return instead("commands run unsandboxed, so it would be writable");
+            }
+            match crate::prepare::link_state(project, root, None) {
+                Ok(_) if root.toolchain == crate::prepare::Toolchain::Uv => check(
+                    name,
+                    DoctorLevel::Pass,
+                    format!(
+                        "{folder}: linked ({} matches) once the import probe shows the package resolves in the worktree",
+                        root.lockfile
+                    ),
+                ),
+                Ok(_) => check(
+                    name,
+                    DoctorLevel::Pass,
+                    format!("{folder}: linked ({} matches)", root.lockfile),
+                ),
+                Err(why) => instead(&why),
+            }
+        })
+        .collect()
+}
+
 fn untracked_check(root: &Path, feature: Option<&str>) -> Option<DoctorCheck> {
     let out = Git::at(root)
         .run(&["status", "--porcelain", "--untracked-files=normal", "."])
@@ -726,6 +779,68 @@ fn current_check(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn each_linked_folder_says_whether_a_run_would_link_it_and_makes_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let r = dir.path();
+        let git = |args: &[&str]| {
+            assert!(
+                Command::new("git")
+                    .args([
+                        "-c",
+                        "user.name=t",
+                        "-c",
+                        "user.email=t@e",
+                        "-c",
+                        "commit.gpgsign=false"
+                    ])
+                    .args(args)
+                    .current_dir(r)
+                    .status()
+                    .unwrap()
+                    .success()
+            );
+        };
+        std::fs::write(r.join(".gitignore"), "node_modules/\n").unwrap();
+        std::fs::write(r.join("package.json"), "{}").unwrap();
+        std::fs::write(r.join("package-lock.json"), "{}").unwrap();
+        std::fs::create_dir_all(r.join("node_modules/tiny")).unwrap();
+        git(&["init", "-q"]);
+        git(&["add", "-A"]);
+        git(&["commit", "-qm", "init"]);
+        let link = ["node_modules".to_owned(), ".venv".to_owned()];
+        let rows = |sandboxed| -> Vec<(DoctorLevel, String)> {
+            link_checks(r, &link, sandboxed)
+                .into_iter()
+                .map(|c| (c.level, c.detail))
+                .collect()
+        };
+        assert_eq!(
+            rows(true),
+            [
+                (
+                    DoctorLevel::Pass,
+                    "node_modules: linked (package-lock.json matches)".to_owned()
+                ),
+                (
+                    DoctorLevel::Warn,
+                    ".venv: not linked — no committed lockfile beside it names it; a run installs it instead".to_owned()
+                ),
+            ]
+        );
+        assert!(rows(false)[0].1.contains("commands run unsandboxed"));
+        std::fs::write(r.join("package-lock.json"), "{\"changed\": 1}").unwrap();
+        assert!(
+            rows(true)[0]
+                .1
+                .contains("package-lock.json differs from your checkout's")
+        );
+        std::fs::remove_dir_all(r.join("node_modules")).unwrap();
+        assert!(rows(true)[0].1.contains("missing in your checkout"));
+        let exclude = std::fs::read_to_string(r.join(".git/info/exclude")).unwrap_or_default();
+        assert!(!exclude.contains("speccoder"), "doctor writes nothing");
+    }
 
     #[test]
     fn outside_any_repository_every_problem_is_named_with_its_fix() {

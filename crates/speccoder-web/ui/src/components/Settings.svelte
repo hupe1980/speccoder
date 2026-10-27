@@ -31,7 +31,7 @@
     approvals: ["hand", "#ff9f0a"], tests: ["list", "#30b0c7"], spec: ["doc", "#007aff"], context: ["doc", "#64d2ff"],
     acceptance: ["seal", "#34c759"], converge: ["loop", "#5856d6"], monitor: ["shield", "#ff2d55"], git: ["branch", "#ff3b30"],
     format: ["sparkle", "#af52de"], sandbox: ["lock", "#636366"], attest: ["signature", "#bf5af2"], mutation: ["exclaim", "#ff9500"],
-    executor: ["play", "#0a84ff"], mcp: ["grid", "#30b0c7"],
+    executor: ["play", "#0a84ff"], mcp: ["grid", "#30b0c7"], worktree: ["copy", "#5ac8fa"],
   };
   const section = $derived(report?.sections.find((s) => s.name === pick) ?? null);
   const dirty = $derived(Object.keys(draft).length);

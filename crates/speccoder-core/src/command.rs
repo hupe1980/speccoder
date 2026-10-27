@@ -1499,6 +1499,15 @@ pub struct InitReport {
     pub region: Option<String>,
     /// The commit holding `speccoder.toml`, when one was made.
     pub committed: Option<String>,
+    /// The folders proposed for `[worktree] link`: those
+    /// `.claude/settings.json` links into Claude Code's worktrees that the
+    /// checkout ignores.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub link: Vec<String>,
+    /// The proposal was written as the setting (confirmed, or `--yes`);
+    /// else it is commented.
+    #[serde(default)]
+    pub link_active: bool,
 }
 
 /// One check `init` ran on the untouched code.

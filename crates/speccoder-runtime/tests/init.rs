@@ -271,3 +271,76 @@ fn bedrock_takes_the_flags_and_without_a_region_says_to_set_one() {
     );
     assert_eq!(r.status(), CommandStatus::UsageError, "{}", r.message());
 }
+
+fn git_init(dir: &std::path::Path) {
+    assert!(
+        std::process::Command::new("git")
+            .args(["init", "-q"])
+            .current_dir(dir)
+            .status()
+            .unwrap()
+            .success()
+    );
+}
+
+#[test]
+fn claude_codes_linked_folders_are_proposed_for_worktree_link() {
+    let dir = tempfile::tempdir().unwrap();
+    let r = dir.path();
+    git_init(r);
+    fs::write(r.join(".gitignore"), "node_modules/\n.venv/\n").unwrap();
+    fs::create_dir_all(r.join(".claude")).unwrap();
+    // Ignored ones only; nothing outside the project, nothing tracked.
+    fs::write(
+        r.join(".claude/settings.json"),
+        r#"{ "worktree": { "symlinkDirectories": ["node_modules", ".venv/", "dist", "../shared", ".git"] } }"#,
+    )
+    .unwrap();
+    assert_eq!(detect(r).link, ["node_modules", ".venv"]);
+    let res = init_with(r, None, None, None, false, None, &no_keys);
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let Some(CommandData::Init(i)) = res.data() else {
+        panic!()
+    };
+    assert_eq!(i.link, ["node_modules", ".venv"]);
+    assert!(!i.link_active);
+    let text = fs::read_to_string(r.join("speccoder.toml")).unwrap();
+    assert!(
+        text.contains("# [worktree]\n# link = [\"node_modules\", \".venv\"]\n"),
+        "{text}"
+    );
+    // Written commented: not in force until confirmed.
+    assert!(
+        speccoder_runtime::prepare::parse(&text)
+            .unwrap()
+            .link
+            .is_empty()
+    );
+    speccoder_runtime::init::activate_link(r).unwrap();
+    let text = fs::read_to_string(r.join("speccoder.toml")).unwrap();
+    assert_eq!(
+        speccoder_runtime::prepare::parse(&text).unwrap().link,
+        ["node_modules", ".venv"]
+    );
+    assert!(speccoder_runtime::settings::validate(&text).is_ok());
+    assert!(speccoder_runtime::init::activate_link(r).is_err(), "once");
+}
+
+#[test]
+fn without_claude_codes_setting_worktree_is_explained_commented() {
+    let dir = tempfile::tempdir().unwrap();
+    git_init(dir.path());
+    let res = init_with(dir.path(), None, None, None, false, None, &no_keys);
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let text = fs::read_to_string(dir.path().join("speccoder.toml")).unwrap();
+    assert!(
+        text.contains("# [worktree]\n# prepare = \"auto\""),
+        "{text}"
+    );
+    assert!(text.contains("\n# link = [\"node_modules\"]"), "{text}");
+    assert_eq!(
+        speccoder_runtime::prepare::parse(&text).unwrap(),
+        speccoder_runtime::prepare::Config::default()
+    );
+    assert!(speccoder_runtime::init::activate_link(dir.path()).is_err());
+}

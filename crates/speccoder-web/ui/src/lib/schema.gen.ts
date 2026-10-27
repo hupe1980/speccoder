@@ -2225,6 +2225,17 @@ export interface InitReport {
   instructions: string[];
   /** The model key: the variable and whether it is set. */
   key: InitKey;
+  /**
+   * The folders proposed for `[worktree] link`: those
+   * `.claude/settings.json` links into Claude Code's worktrees that the
+   * checkout ignores.
+   */
+  link?: string[];
+  /**
+   * The proposal was written as the setting (confirmed, or `--yes`);
+   * else it is commented.
+   */
+  link_active: boolean;
   /** `provider/model`. */
   model: string;
   /** The configuration file. */

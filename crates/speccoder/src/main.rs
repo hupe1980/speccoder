@@ -2025,6 +2025,28 @@ fn init(
         && !cli.events
         && std::io::stdin().is_terminal()
         && std::io::stderr().is_terminal();
+    // Folders `.claude/settings.json` links into Claude Code's worktrees:
+    // the same for speccoder's with `--yes` or the person's yes, else left
+    // commented in the file.
+    if !prepared.report.link.is_empty() {
+        let listed = prepared.report.link.join(", ");
+        let link = yes
+            || (interactive
+                && {
+                    eprint!(
+                        "Link {listed} from this checkout into run worktrees instead of installing there? Read-only to every command, and only while the lockfile matches. [y/N] "
+                    );
+                    let mut line = String::new();
+                    let _ = std::io::stdin().read_line(&mut line);
+                    line.trim().to_lowercase().starts_with('y')
+                });
+        if link {
+            match speccoder_runtime::init::activate_link(&prepared.root) {
+                Ok(()) => prepared.report.link_active = true,
+                Err(e) => eprintln!("[worktree] link was not written: {e}"),
+            }
+        }
+    }
     if interactive {
         let default_yes = prepared.failed.is_empty();
         // What the answer rests on, before the question: each check on the

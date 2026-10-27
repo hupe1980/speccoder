@@ -25,8 +25,9 @@
   const running = $derived(!!app.job?.running);
   const ok = $derived(app.job?.result?.status === "ok");
   const waiting = $derived(!!app.waiting);
-  const stages = ["baseline", "red", "attempt", "verify", "audit", "mutation", "strength", "monitor", "commit"];
   const at = $derived(new Map(app.stages.map((s) => [s.stage, s])));
+  // `prepare` shows once a task reaches it (a worktree with Node or uv dependencies).
+  const stages = $derived([...(at.has("prepare") ? ["prepare"] : []), "baseline", "red", "attempt", "verify", "audit", "mutation", "strength", "monitor", "commit"]);
   const current = $derived([...app.stages].reverse().find((x) => x.state === "started")?.stage);
   const passed = $derived(app.stages.filter((s) => s.state === "passed" || s.state === "skipped").length);
   const elapsed = $derived(started ? Math.max(0, Math.floor((now - started) / 1000)) : 0);

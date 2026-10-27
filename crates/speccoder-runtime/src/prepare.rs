@@ -812,10 +812,7 @@ pub fn link_state(checkout: &Path, root: &Root, sha: Option<&str>) -> Result<Lin
             .map(|b| crate::integrity::sha256_hex(&b)),
     };
     if theirs.is_none() || theirs != ours {
-        return Err(format!(
-            "{} differs from your checkout's (the branch changed its dependencies)",
-            root.lockfile
-        ));
+        return Err(format!("{} differs from your checkout's", root.lockfile));
     }
     if root.toolchain != Toolchain::Uv {
         let manifest = std::fs::read_to_string(checkout.join(&root.dir).join("package.json"))

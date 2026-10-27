@@ -599,7 +599,7 @@ fn a_lockfile_that_differs_is_installed_with_the_reason() {
     assert_eq!(
         p.notes,
         [
-            "node_modules not linked: package-lock.json differs from your checkout's (the branch changed its dependencies); installed in the worktree instead"
+            "node_modules not linked: package-lock.json differs from your checkout's; installed in the worktree instead"
         ]
     );
     assert!(p.record.linked().is_empty());
