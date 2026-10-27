@@ -1,0 +1,8 @@
+case = "wordcount"
+run_ids = ["run_01M5Y56KBXJS8VXJ17J33PS2E0", "run_01M5Y56PQX5DFKV62Z2HZCS3GC", "run_01M5Y56SN0JM0R6F6XK688JBJT", "run_01M5Y572MF2GD6ENQE9FNM61AA", "run_01M5Y577T7WAXM111P9GE5Q057", "run_01M5Y57BD3VMQ224BA1MCRPK80", "run_01M5Y57KKSS9F2S8EDE9HZTW4S", "run_01M5Y57NTWMGXH70MQFZJ3CNV4"]
+provider = "openai"
+model = "gpt-5.4-mini"
+agentplane = "0.54.0"
+speccoder = "0.2.0"
+recorded_at = "2026-10-27"
+expect = "reproduced"
