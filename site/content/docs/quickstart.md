@@ -78,11 +78,11 @@ Commit speccoder.toml and .gitignore? speccoder reads committed files only. [Y/n
 ## 3. A model key
 
 ```sh
-export ANTHROPIC_API_KEY=…   # or OPENAI_API_KEY
+export ANTHROPIC_API_KEY=…   # or OPENAI_API_KEY, or AWS_BEARER_TOKEN_BEDROCK / aws login
 speccoder doctor             # git, the sandbox, the key, the spec tools, the config; changes nothing
 ```
 
-The key is read from the environment only. For a local model (Ollama, vLLM, LM Studio), set `model.provider = "openai-compatible"` and `model.base_url` ([`[model]`](@/docs/configuration.md#model)).
+The key is read from the environment only. For Amazon Bedrock, `speccoder init --provider bedrock --region <region>` (chosen by itself when AWS credentials are the only ones found). For a local model (Ollama, vLLM, LM Studio), set `model.provider = "openai-compatible"` and `model.base_url` ([`[model]`](@/docs/configuration.md#model)).
 
 ## 4. Write the spec
 

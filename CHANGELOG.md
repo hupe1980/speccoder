@@ -6,6 +6,14 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Amazon Bedrock as a model provider.** `[model] provider = "bedrock"`
+  with a `region`; credentials from AWS — a Bedrock API key
+  (`AWS_BEARER_TOKEN_BEDROCK`) or an `aws login`/SSO profile — never from
+  the file. `init --provider bedrock [--region]` writes
+  `global.anthropic.claude-sonnet-5-5`; `doctor` names the source.
+
 ### Fixed
 
 - A uv project's checks ran `.venv/bin/python`, which a run's worktree never has (`.venv/` is not committed), so every task stopped at the baseline. `init` now writes `uv run --locked --offline python -m pytest …`; a check run through `uv run` (or `poetry run`, `uvx`, …) allows exactly itself, never the runner as a prefix.

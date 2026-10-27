@@ -35,7 +35,7 @@ Coding agents are good at writing code and too good at declaring victory. specco
 - 🚦 **Every call governed.** Each tool call is allowed, sent to you, or denied before it runs. An approval covers exactly what you saw — that file, that command, that tool — and ends with the run. Every decision records who made it.
 - 💾 **Durable and replayable.** Every model and tool call is journaled. A killed run resumes without repeating finished calls; a recorded run replays offline.
 - 🧾 **Proof a maintainer can check.** Every tick leaves signed in-toto statements in git. `speccoder attest verify --branch` (no model, no network) checks each `[X]` against them, and its GitHub Action posts the result as the `speccoder / evidence` check ([proof in pull requests](https://hupe1980.github.io/speccoder/docs/verifier/)).
-- 🤖 **Your model, or your agent.** Anthropic, OpenAI, any OpenAI-compatible server (Ollama, vLLM, …), or Claude Code and Codex making the attempts under speccoder's judgement.
+- 🤖 **Your model, or your agent.** Anthropic, OpenAI, Amazon Bedrock, any OpenAI-compatible server (Ollama, vLLM, …), or Claude Code and Codex making the attempts under speccoder's judgement.
 
 ## 🚀 Quickstart
 
@@ -48,7 +48,7 @@ brew install hupe1980/tap/speccoder
 # or: cargo install speccoder --locked
 
 cd my-project
-export ANTHROPIC_API_KEY=…           # or OPENAI_API_KEY — read from the environment only
+export ANTHROPIC_API_KEY=…           # or OPENAI_API_KEY, or Bedrock's AWS credentials — read from the environment only
 speccoder init                       # detects your checks, runs them, offers to commit speccoder.toml
 speccoder run                        # works through the feature's tasks
 speccoder do "make the login button blue"   # a small change, judged like any other

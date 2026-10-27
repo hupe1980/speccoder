@@ -62,20 +62,34 @@ The commands that decide whether nothing regressed. A check's command up to its 
 
 | Key | Default | Meaning |
 |---|---|---|
-| `provider` | required | `anthropic`, `openai`, or `openai-compatible` (Ollama, vLLM, llama.cpp, LM Studio, …) |
-| `model` | required | For example `claude-sonnet-5-5` |
+| `provider` | required | `anthropic`, `openai`, `openai-compatible` (Ollama, vLLM, llama.cpp, LM Studio, …) or `bedrock` (Amazon Bedrock) |
+| `model` | required | For example `claude-sonnet-5-5`; for Bedrock a model id, inference profile id or ARN (`init` writes `global.anthropic.claude-sonnet-5-5`) |
+| `region` | — | Required for `bedrock`, refused otherwise: the AWS region calls go to (the journal records it) |
 | `reasoning_summary` | `true` | Show the model's summary of its reasoning, as its account (never evidence); providers without one give none |
 | `max_output_tokens` | `4096` | Output tokens per model turn |
 | `max_run_tokens` | `200000` | Tokens per attempt |
 | `cache_ttl` | `"5m"` | Anthropic's prompt-cache lifetime: `5m` or `1h` |
-| `base_url` | — | Required for `openai-compatible` (e.g. `http://localhost:11434/v1`); for `openai`, a gateway in front of the Responses API |
+| `base_url` | — | Required for `openai-compatible` (e.g. `http://localhost:11434/v1`); for `openai`, a gateway in front of the Responses API; refused for `bedrock` |
 | `api_key_env` | — | `openai-compatible` only: the variable holding the server's key, if it needs one |
 | `structured` | `"native"` | `openai-compatible` only: `native` structured output, or `tool` (a forced tool call) |
 | `price_input_per_mtok`, `price_output_per_mtok` | — | USD per million tokens, for `speccoder report --cost` and live cost; without both, cost is tokens only |
 | `price_cache_read_per_mtok` | the input price | USD per million tokens read from the cache |
-| `price_cache_write_per_mtok`, `price_cache_write_1h_per_mtok` | Anthropic: 1.25× and 2× input; others: input | USD per million tokens written to the five-minute and the one-hour cache |
+| `price_cache_write_per_mtok`, `price_cache_write_1h_per_mtok` | Claude (Anthropic, or on Bedrock): 1.25× and 2× input; others: input | USD per million tokens written to the five-minute and the one-hour cache |
 
 The API key comes from the environment, never from this file. A local model must support tool calls and structured output; the [evaluation suite](@/docs/evaluation.md) tells whether it is good enough.
+
+### Amazon Bedrock
+
+```toml
+[model]
+provider = "bedrock"
+model = "global.anthropic.claude-sonnet-5-5"
+region = "eu-central-1"
+```
+
+Credentials come from the AWS credential chain where you start speccoder: a Bedrock API key in `AWS_BEARER_TOKEN_BEDROCK` (it wins over everything else), or a profile (`AWS_PROFILE`, else `default`) — an `aws login` session, SSO, `credential_process`, static keys or a role — or keys, web identity or a container role from the environment. `speccoder doctor` names the source it will use and the region, never a value. Claude models get prompt caching; other families run without it. For exact costs, state all four prices (unstated cache-write prices for Claude follow Anthropic's rule).
+
+`speccoder config set model.provider bedrock`, then `speccoder config set model.region <region>`; the file is refused until the region is set.
 
 ## `[budget]`
 
@@ -227,6 +241,7 @@ stall_after = "15m"    # Ns | Nm | Nh, at least 30s
 | Variable | Meaning |
 |---|---|
 | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` | Model credentials |
+| `AWS_BEARER_TOKEN_BEDROCK`, `AWS_PROFILE`, `AWS_REGION`, … | Bedrock's credentials and region, as the AWS tools read them; `init` takes the region from `AWS_REGION`, `AWS_DEFAULT_REGION`, else the profile |
 | `GH_TOKEN`, `GITHUB_TOKEN` | A GitHub token, instead of `speccoder auth login` ([GitHub](@/docs/github.md)) |
 | `SPECCODER_STATE_DIR` | Where worktrees, journals and decisions live (default `$XDG_STATE_HOME/speccoder`, else `~/.local/state/speccoder`) |
 | `SPECIFY_FEATURE_DIRECTORY` | Spec Kit's feature selection, honoured by every command |

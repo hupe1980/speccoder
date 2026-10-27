@@ -368,7 +368,7 @@ pub const CATALOG: &[Entry] = &[
         E,
         S::ConfigError,
         "the model provider's API key is not in the environment",
-        "speccoder reads API keys from the environment only. The message names the variable the configured provider needs.",
+        "speccoder reads API keys from the environment only. The message names the variable the configured provider needs; for Amazon Bedrock, AWS_BEARER_TOKEN_BEDROCK or an AWS profile (aws login).",
         ["→ export the variable the message names, e.g. export ANTHROPIC_API_KEY=…"]
     ),
     entry!(
@@ -1000,7 +1000,7 @@ pub const CATALOG: &[Entry] = &[
         E,
         S::RunFailed,
         "the model provider refused the request",
-        "No credits, a rejected or revoked key, or an account limit. speccoder stops instead of judging the task on less evidence.",
+        "No credits, a rejected, revoked or expired key or session, or an account limit. speccoder stops instead of judging the task on less evidence; for Amazon Bedrock the first fix renews the credential source.",
         [
             "→ check the provider account's credits and the API key",
             "speccoder run --feature {feature}"

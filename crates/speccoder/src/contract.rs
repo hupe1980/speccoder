@@ -230,6 +230,27 @@ fn the_codes_page_is_the_catalog_and_the_cli_reference_lists_every_status() {
     }
 }
 
+/// Every page that lists the model providers names Amazon Bedrock.
+#[test]
+fn every_page_listing_the_providers_names_bedrock() {
+    let root = site().join("..");
+    for page in [
+        "site/content/docs/configuration.md",
+        "site/content/docs/quickstart.md",
+        "site/content/docs/installation.md",
+        "site/content/docs/cli.md",
+        "site/content/_index.md",
+        "site/templates/index.html",
+        "README.md",
+    ] {
+        let text = std::fs::read_to_string(root.join(page)).unwrap_or_default();
+        assert!(
+            text.contains("Bedrock") || text.contains("bedrock"),
+            "{page} lists the providers without Amazon Bedrock"
+        );
+    }
+}
+
 #[test]
 fn every_status_with_its_default_code_validates() {
     let mut seen = std::collections::BTreeSet::new();

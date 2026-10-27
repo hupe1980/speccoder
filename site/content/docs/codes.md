@@ -411,7 +411,7 @@ An unknown section or key, a wrong type, or a value outside the allowed set. Unk
 
 The model provider's API key is not in the environment.
 
-speccoder reads API keys from the environment only. The message names the variable the configured provider needs.
+speccoder reads API keys from the environment only. The message names the variable the configured provider needs; for Amazon Bedrock, AWS_BEARER_TOKEN_BEDROCK or an AWS profile (aws login).
 
 - Export the variable the message names, e.g. export ANTHROPIC_API_KEY=…
 
@@ -990,7 +990,7 @@ The provider returned an error, the journal could not be written, or the run bro
 
 The model provider refused the request.
 
-No credits, a rejected or revoked key, or an account limit. speccoder stops instead of judging the task on less evidence.
+No credits, a rejected, revoked or expired key or session, or an account limit. speccoder stops instead of judging the task on less evidence; for Amazon Bedrock the first fix renews the credential source.
 
 - Check the provider account's credits and the API key
 - `speccoder run`

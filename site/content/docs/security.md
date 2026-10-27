@@ -102,7 +102,7 @@ Held-out tests are sealed in the state directory ([where they are kept](@/docs/e
 
 ## Secrets
 
-- API keys are read only from the environment, and never written to the journal or the output.
+- API keys are read only from the environment, and never written to the journal or the output. Bedrock's AWS credentials (an API key, an `aws login` or SSO session, a profile) are loaded by speccoder's own process for its model calls; `doctor` and `init` name their source, never a value.
 - Every command speccoder starts gets an environment without secret-looking variables: `*_API_KEY`, `*_TOKEN`, `*SECRET*`, `*PASSWORD*`, `AWS_*`, `ANTHROPIC_*`, `OPENAI_*`, `SSH_AUTH_SOCK`, `GIT_ASKPASS`, `SSH_ASKPASS`. Colour is off for these commands (`NO_COLOR=1`, `CARGO_TERM_COLOR=never`).
 - Commands run with stdin closed, a deadline for their whole process group, and capped output.
 - Signing keys: see [what a signature proves](@/docs/attestations.md#what-a-signature-proves).

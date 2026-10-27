@@ -16,7 +16,8 @@ Every failure names a [code](@/docs/codes.md) and the command that fixes it; `sp
 | `error[CONFIG-MISSING]` (13) | No `speccoder.toml`: run `speccoder init`. "The worktree has no speccoder.toml": commit it, since speccoder reads committed files. |
 | `error[CONFIG-INVALID]` (13), e.g. ``unknown section `[budgett]` `` | A typo or a wrong value in `speccoder.toml`; the message names the line and lists what is known. |
 | `error[UNCOMMITTED-INTENT]` (14) | Commit the feature's spec files, or run with `--in-place`. |
-| `error[KEY-MISSING]` (13) | Export the variable the message names in this shell, e.g. `set -a; . ./.env; set +a`. |
+| `error[KEY-MISSING]` (13) | Export the variable the message names in this shell, e.g. `set -a; . ./.env; set +a`. For Bedrock: `export AWS_BEARER_TOKEN_BEDROCK=…`, or `aws login` (and `AWS_PROFILE`) in the shell you start speccoder from. |
+| `error[CONFIG-INVALID]`: provider `bedrock` needs `region` | `speccoder config set model.region <region>`, e.g. `eu-central-1`. |
 | Every attempt stops for the same command | The stop names the command and its exact `[commands] allow` entry. `[commands] allow` matches exact commands: add the command there, or a prefix to `[commands] allow_prefix` after `speccoder config coverage` ([prefix lists](@/docs/configuration.md#prefix-lists)). |
 | `… is not an allowed command` (acceptance skipped) | The acceptance tests' command must be allowed. The one that runs only their file (`cargo test --test acceptance_us1`) is; another needs `[commands] allow`. |
 | The baseline fails on a project without tests | For nextest add `--no-tests=warn`, as `init` does. |
@@ -25,7 +26,7 @@ Every failure names a [code](@/docs/codes.md) and the command that fixes it; `sp
 | `commands run unsandboxed: …` | The OS offers no sandbox (Linux without Landlock, another OS). Set `[sandbox] mode = "required"` to refuse instead. |
 | `error[TASK-NOT-READY]` or `TASK-BLOCKED` (16) | `speccoder inspect` shows what blocks what; a skipped task blocks its dependents. |
 | `stopped[BUDGET-EXHAUSTED]` (23) | Raise the `[budget]` limit it hit, or split the task in `tasks.md`. |
-| `error[PROVIDER-REFUSED]` (21) or `stopped[ACCEPTANCE-UNWRITTEN]` (23), e.g. `credit_balance_exhausted` | The provider refuses the account, not the request; nothing is retried. Top it up or fix the key, and run again. |
+| `error[PROVIDER-REFUSED]` (21) or `stopped[ACCEPTANCE-UNWRITTEN]` (23), e.g. `credit_balance_exhausted` | The provider refuses the account, not the request; nothing is retried. Top it up or fix the key, and run again. On Bedrock, e.g. `ExpiredTokenException`: the session expired — the first fix is the command that renews it (`aws login --profile P`, `aws sso login --profile P`). |
 | `another speccoder is working on this project` | Another process is writing the journal (a run, or a decision). Reads still work beside it; wait for it to finish before you decide or run, or watch it with `speccoder report --live`. |
 | `waiting for a person: unknown — the last run ended without closing its journal…` | A run was killed (Ctrl-C at a terminal, a closed terminal, out of memory) before it closed the journal. A read cannot repair it; the next `speccoder run`, `task approve` or `task reject` does, and decides as usual. Nothing is reported as not waiting meanwhile. |
 | `waiting for a person: unknown — …` (other) | The journal could not be read: damaged, or held alone by a speccoder 0.2.0 or earlier (let that process finish). Nothing is reported as not waiting. |

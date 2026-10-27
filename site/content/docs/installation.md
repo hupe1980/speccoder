@@ -13,7 +13,7 @@ group = "Start"
 |---|---|
 | **git** | speccoder works in a git worktree and records every attempt in git. |
 | **A spec project** | A GitHub Spec Kit project (Spec Kit **0.13 to 1.2**) or an [OpenSpec](@/docs/openspec.md) project (OpenSpec 1.0 or newer). Kiro specs are recognised and refused. |
-| **A model** | An Anthropic or OpenAI API key in the environment, or a local OpenAI-compatible server such as Ollama or vLLM. |
+| **A model** | An Anthropic or OpenAI API key in the environment, AWS credentials for Amazon Bedrock (a Bedrock API key or an `aws login` session), or a local OpenAI-compatible server such as Ollama or vLLM. |
 | **Your toolchain** | Whatever your checks run: `cargo` (ideally with `cargo-nextest`), `pytest`, and so on. |
 | **macOS or Linux** | The OS sandbox uses Seatbelt on macOS and Landlock on Linux 6.2 or newer (Landlock ABI 3). |
 
@@ -66,7 +66,7 @@ gh attestation verify speccoder-0.3.0-aarch64-apple-darwin.tar.gz --repo hupe198
 
 ## API keys
 
-speccoder reads keys **only from the environment** (`ANTHROPIC_API_KEY` or `OPENAI_API_KEY`) and never writes them to its journal or output. To use a gitignored `.env` file, load it into the shell first:
+speccoder reads keys **only from the environment** (`ANTHROPIC_API_KEY` or `OPENAI_API_KEY`; for Bedrock the AWS credential chain: `AWS_BEARER_TOKEN_BEDROCK` or a profile) and never writes them to its journal or output. To use a gitignored `.env` file, load it into the shell first:
 
 ```sh
 set -a; . ./.env; set +a
