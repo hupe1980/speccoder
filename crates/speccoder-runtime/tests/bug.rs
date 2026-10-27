@@ -432,6 +432,58 @@ fn a_fix_that_leaves_the_reproduction_red_fails_and_nothing_is_ticked() {
 }
 
 #[test]
+fn a_fix_the_provider_refuses_the_account_for_is_provider_refused_with_its_fix() {
+    let r = repo("seeded");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_structure(reproductions());
+    f.will_structure(held_out("refuses_blank"));
+    let first = record_and_reproduce(r.path(), state.path(), &d);
+    let b = the_bug(&first).clone();
+    let digest = b.confirm_digest.clone().unwrap();
+    let _ = bug::confirm_with(
+        r.path(),
+        &b.key(),
+        &digest,
+        None,
+        Via::Terminal,
+        state.path(),
+        None,
+        None,
+        &RunOptions::default(),
+    );
+    f.will_fail(agentplane::model::ModelError::Refused {
+        model: agentplane::model::ModelId::new("anthropic", "claude-sonnet-5-5"),
+        detail: "invalid x-api-key".to_owned(),
+        code: Some("authentication_error".to_owned()),
+    });
+    let res = bug::run_with(
+        r.path(),
+        None,
+        Some(&b.key()),
+        state.path(),
+        d,
+        None,
+        &RunOptions::default(),
+    );
+    assert_eq!(res.status(), CommandStatus::RunFailed, "{}", res.message());
+    assert_eq!(
+        res.code().map(|c| c.name),
+        Some("PROVIDER-REFUSED"),
+        "{}",
+        res.message()
+    );
+    assert!(
+        res.fix()
+            .iter()
+            .any(|f| f.contains("check the provider account")),
+        "{:?}",
+        res.fix()
+    );
+    assert_eq!(the_bug(&res).outcome, Outcome::Failed);
+}
+
+#[test]
 fn a_symptom_that_cannot_be_reproduced_goes_to_the_person_and_nothing_is_fixed() {
     let r = repo("not-a-bug");
     let state = tempfile::tempdir().unwrap();

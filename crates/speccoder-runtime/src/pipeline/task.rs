@@ -2868,8 +2868,26 @@ pub(crate) fn run_task(
             s.model.model
         ));
     }
+    // The provider refused the account: no retry helps, and for Bedrock the
+    // first fix renews the credentials the calls were signed with.
+    let refusal = |result: CommandResult| {
+        if !result.has_explicit_code()
+            && refused_account
+            && result.status() == CommandStatus::RunFailed
+        {
+            result.with_code("PROVIDER-REFUSED").with_fix(
+                substrate::model_config::provider_refused_fix(
+                    &s.model,
+                    crate::aws::detect_here().as_ref(),
+                    feature,
+                ),
+            )
+        } else {
+            result
+        }
+    };
     if let Some(fix) = bug_fix.as_mut() {
-        return super::bug::finished(
+        return refusal(super::bug::finished(
             &bug_ctx,
             fix,
             report,
@@ -2877,7 +2895,7 @@ pub(crate) fn run_task(
             passed,
             status,
             redact(&message, secret),
-        );
+        ));
     }
     live.event(&finished_event(
         task,
@@ -2890,14 +2908,7 @@ pub(crate) fn run_task(
     let result = CommandResult::new("run", status, &redact(&message, secret));
     match code {
         Some(c) => result.with_code(c),
-        None if refused_account && status == CommandStatus::RunFailed => result
-            .with_code("PROVIDER-REFUSED")
-            .with_fix(substrate::model_config::provider_refused_fix(
-                &s.model,
-                crate::aws::detect_here().as_ref(),
-                feature,
-            )),
-        None => result,
+        None => refusal(result),
     }
     .with_data(CommandData::Run(Box::new(report)))
 }
