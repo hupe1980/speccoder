@@ -234,7 +234,14 @@ impl Attention {
                     .map_or("see the report", |s| s.command.as_str())
             )
         };
-        self.set_title(Urgency::Done, "speccoder ✓ done".to_owned(), true);
+        // Only a run that finished is done; one that stopped (no tasks yet,
+        // a call waiting) says so.
+        let ended = if result.status() == speccoder_core::CommandStatus::Ok {
+            "speccoder ✓ done"
+        } else {
+            "speccoder ■ stopped"
+        };
+        self.set_title(Urgency::Done, ended.to_owned(), true);
         self.signal(Signal::FeatureDone, &message);
     }
 
@@ -521,6 +528,39 @@ mod tests {
         assert!(out.contains("\x1b]2;speccoder △ approval T004\x07"));
         assert!(out.contains("\x1b]9;speccoder 001-x: T004 needs approval — cargo add x\x07"));
         assert!(out.ends_with("\x1b]2;\x07"), "{out:?}");
+    }
+
+    #[test]
+    fn a_run_that_stopped_without_a_task_is_never_titled_done() {
+        let (a, rec) = layer(
+            Notify {
+                method: Method::Osc9,
+                ..Notify::default()
+            },
+            &[],
+        );
+        let stopped = speccoder_core::CommandResult::new(
+            "run",
+            speccoder_core::CommandStatus::TaskNotReady,
+            "no tasks yet: 001-x has no tasks.md",
+        )
+        .with_data(speccoder_core::CommandData::Feature(Box::new(
+            speccoder_core::FeatureReport {
+                feature: "001-x".to_owned(),
+                attempts: Vec::new(),
+                stop: "no tasks yet: 001-x has no tasks.md".to_owned(),
+                converge: Vec::new(),
+                hooks: Vec::new(),
+                parallel: Vec::new(),
+                full_tier: None,
+                mode: speccoder_core::oracle::RunMode::default(),
+                autopilot_denied: Vec::new(),
+            },
+        )));
+        a.finish(&stopped);
+        let out = bytes(&rec);
+        assert!(out.contains("speccoder ■ stopped"), "{out:?}");
+        assert!(!out.contains("done"), "{out:?}");
     }
 
     #[test]

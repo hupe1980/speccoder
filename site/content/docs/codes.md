@@ -69,6 +69,7 @@ Every result that is not plainly `ok` names a code — `error[CODE]`, `stopped[C
 | [`NOT-FOUND`](#not-found) | error | 15 | nothing by that name exists |
 | [`NOT-FOUND-SCHEMA`](#not-found-schema) | error | 15 | there is no schema by that name |
 | [`TASK-NOT-READY`](#task-not-ready) | error | 16 | no task can run now |
+| [`NO-TASKS`](#no-tasks) | error | 16 | the feature has no tasks yet |
 | [`TASK-DONE`](#task-done) | error | 16 | the task is already ticked |
 | [`TASK-BLOCKED`](#task-blocked) | error | 16 | the task waits for tasks it depends on |
 | [`VERIFICATION-FAILED`](#verification-failed) | error | 20 | the checks or the acceptance tests did not pass |
@@ -618,6 +619,14 @@ There is no schema by that name.
 No task can run now.
 
 The task is done, or waits for tasks it depends on.
+
+- `speccoder report`
+
+### NO-TASKS
+
+The feature has no tasks yet.
+
+Its task list is not written yet, or lists no task: nothing ran, and the feature is not done. The spec format's planning skills write the tasks; `speccoder report` names the next one.
 
 - `speccoder report`
 

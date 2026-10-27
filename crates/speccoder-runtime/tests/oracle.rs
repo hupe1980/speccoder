@@ -1845,3 +1845,82 @@ fn a_crash_between_writing_the_frozen_files_and_the_red_check_resumes_without_an
     );
     assert_eq!(author_calls(&f), before, "no author call after the crash");
 }
+
+/// Approve and Run on a feature without a task, and a run of it: never
+/// "feature done" — the tasks are not written yet (no tasks.md, or one
+/// without a task), nothing is approved, no model is called.
+#[test]
+fn approve_and_run_without_a_task_is_not_done_and_approves_nothing() {
+    for tasks in [None, Some("# Tasks\n\n## Phase 1: Setup\n\nNothing yet.\n")] {
+        let r = repo();
+        let state = tempfile::tempdir().unwrap();
+        let list = r.path().join("specs/001-graph/tasks.md");
+        match tasks {
+            None => fs::remove_file(&list).unwrap(),
+            Some(text) => fs::write(&list, text).unwrap(),
+        }
+        git(r.path(), &["add", "-A"]);
+        git(r.path(), &["commit", "-q", "-m", "no tasks"]);
+        let (f, d) = fake();
+        let res = speccoder_runtime::review::approve_and_run(
+            r.path(),
+            None,
+            RunMode::Ask,
+            &[],
+            None,
+            Via::Terminal,
+            Some(state.path()),
+            Some(Arc::clone(&d)),
+            &one_task(),
+        );
+        assert_eq!(
+            res.status(),
+            CommandStatus::TaskNotReady,
+            "{}",
+            res.message()
+        );
+        assert_eq!(res.code().map(|c| c.name), Some("NO-TASKS"));
+        assert!(
+            res.message().starts_with("no tasks yet: 001-graph"),
+            "{}",
+            res.message()
+        );
+        assert!(
+            res.message().contains("`speccoder spec tasks`"),
+            "{}",
+            res.message()
+        );
+        assert!(!res.message().contains("done"), "{}", res.message());
+        assert!(
+            res.next()
+                .iter()
+                .any(|s| s.command.starts_with("speccoder spec tasks")),
+            "{:?}",
+            res.next()
+        );
+        assert!(!r.path().join("specs/001-graph/review.json").exists());
+        // The run itself says the same.
+        let ran = speccoder_runtime::pipeline::run_feature_with(
+            r.path(),
+            None,
+            state.path(),
+            &d,
+            None,
+            &one_task(),
+        );
+        assert_eq!(
+            ran.status(),
+            CommandStatus::TaskNotReady,
+            "{}",
+            ran.message()
+        );
+        assert_eq!(ran.code().map(|c| c.name), Some("NO-TASKS"));
+        assert!(
+            ran.message().starts_with("no tasks yet"),
+            "{}",
+            ran.message()
+        );
+        assert!(!ran.message().contains("done"), "{}", ran.message());
+        assert!(f.asked().is_empty(), "no model call");
+    }
+}

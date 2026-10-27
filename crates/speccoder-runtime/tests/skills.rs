@@ -605,6 +605,36 @@ fn a_feature_without_tasks_is_being_planned_not_an_error() {
         panic!()
     };
     assert_eq!(s.planning, ["tasks"]);
+    // A task list without a task: nothing is done, the tasks come next.
+    fs::write(
+        r.path().join("specs/002-login/tasks.md"),
+        "# Tasks\n\n## Phase 1: Setup\n",
+    )
+    .unwrap();
+    let res = speccoder_runtime::next::attach(
+        speccoder_runtime::status::report(r.path(), Some("002")),
+        None,
+    );
+    assert!(
+        res.message()
+            .starts_with("no tasks yet: tasks.md lists none; `speccoder spec tasks` writes it"),
+        "{}",
+        res.message()
+    );
+    assert!(!res.message().contains("0/0 done"), "{}", res.message());
+    let Some(CommandData::Report(s)) = res.data() else {
+        panic!()
+    };
+    assert_eq!(s.planning, ["tasks"]);
+    assert!(
+        s.journey
+            .iter()
+            .any(|j| j.name == "tasks" && j.state == speccoder_core::actions::StepState::Now),
+        "{:?}",
+        s.journey
+    );
+    let steps: Vec<&str> = res.next().iter().map(|n| n.command.as_str()).collect();
+    assert_eq!(steps, ["speccoder spec tasks", "speccoder run"]);
 }
 
 #[test]

@@ -1135,8 +1135,9 @@ pub fn journey(f: JourneyFacts) -> Vec<JourneyStep> {
     let done = [
         ("spec", f.spec),
         ("plan", f.plan),
-        ("tasks", f.tasks),
-        ("commit", f.tasks && !f.uncommitted),
+        // A task list without a task is not written yet.
+        ("tasks", f.tasks && f.total > 0),
+        ("commit", f.tasks && f.total > 0 && !f.uncommitted),
         ("run", f.total > 0 && f.finished == f.total),
         ("review", false),
     ];
@@ -1309,6 +1310,12 @@ mod tests {
             ..running
         };
         assert_eq!(states(finished), at([Done, Done, Done, Done, Done, Now]));
+        // A task list with no task: the tasks are still to write, never run.
+        let empty = JourneyFacts {
+            tasks: true,
+            ..planned
+        };
+        assert_eq!(states(empty), at([Done, Done, Now, Todo, Todo, Todo]));
     }
 
     #[test]

@@ -77,6 +77,7 @@ speccoder do "Make the login button blue" --no-run      # record it; prints the 
 | `failed` (`TESTS-NOT-COLLECTED`) | 20 | A test file the attempt wrote never ran | Retried with the runner's rule; see [tests that never ran](@/docs/evidence.md#tests-that-never-ran) |
 | `stopped[TESTS-COLLECTION-UNKNOWN]` | 23 | speccoder cannot tell whether a changed test file ran; not ticked | Declare `junit` or `list` for the check, or `task accept` (it ticks the saved attempt's code) |
 | `acceptance_failed` | 23 | The acceptance tests could not be written (`ACCEPTANCE-UNWRITTEN`); nothing was attempted | Check the provider and key, then run again |
+| `error[NO-TASKS]` | 16 | The feature has no task list yet, or one without a task: nothing ran, and it is not done | `speccoder spec tasks` (OpenSpec: `spec propose`), then run |
 | feature done, full tier failed | 20 | Every task is ticked, but a `full` check failed | Fix it, or `speccoder pr --force` |
 | unfinished checklists | 23 | `checklists/*.md` has unchecked items; nothing ran | Finish them, or `--ignore-checklists` |
 | `blocked` | 23 | The model says the task cannot be done as written | Fix the spec or a wrong test, or `task skip` |

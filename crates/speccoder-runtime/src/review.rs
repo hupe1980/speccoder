@@ -1100,6 +1100,27 @@ pub fn approve_and_run(
             ),
         );
     }
+    // Nothing to run: refused before anything is approved or frozen — a
+    // unit without a task is never done.
+    if let Some(stop) = u
+        .snapshot
+        .as_ref()
+        .and_then(|s| s.feature.as_ref())
+        .and_then(|f| crate::pipeline::feature::no_tasks(u.format, f))
+    {
+        let mut fix = vec![format!(
+            "speccoder review approve --feature {}  (approve the spec without a run)",
+            u.feature
+        )];
+        fix.extend(stop.fix);
+        return refuse(
+            CommandStatus::TaskNotReady,
+            "NO-TASKS",
+            format!("{}; nothing was approved", stop.message),
+        )
+        .with_fix(fix)
+        .with_next(stop.next);
+    }
     // Nothing writes the unit's tests while they are frozen.
     let lock = match crate::oracle::UnitLock::take(&plane, &u.feature) {
         Ok(l) => l,

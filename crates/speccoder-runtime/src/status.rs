@@ -478,7 +478,24 @@ pub fn report(path: &Path, feature: Option<&str>) -> CommandResult {
     .filter(|(n, _)| *n > 0)
     .map(|(n, w)| format!("{n} {w}"))
     .collect();
-    let mut message = format!("{done}/{} done", tasks.len());
+    // A task list without a task: nothing is done, the tasks are to write.
+    let mut message = if tasks.is_empty() {
+        format!(
+            "no tasks yet: {} lists none; {}",
+            format.messages().tasks_file,
+            format.messages().make_tasks
+        )
+    } else {
+        format!("{done}/{} done", tasks.len())
+    };
+    let planning: Vec<String> = if tasks.is_empty() {
+        (format.planning().toward_tasks)(f.artifacts.plan)
+            .iter()
+            .map(|s| (*s).to_owned())
+            .collect()
+    } else {
+        Vec::new()
+    };
     if !parts.is_empty() {
         message.push_str(&format!(": {}", parts.join(", ")));
     }
@@ -552,7 +569,7 @@ pub fn report(path: &Path, feature: Option<&str>) -> CommandResult {
             selected_by: crate::current::reason_text(snapshot.selection.reason, format),
             journey: journey_of(&artifacts, &uncommitted, tasks.len(), finished),
             artifacts,
-            planning: Vec::new(),
+            planning,
             uncommitted,
             unmerged_commits: unmerged,
             tasks,

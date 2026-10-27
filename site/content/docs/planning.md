@@ -118,7 +118,7 @@ speccoder review approve --run autopilot --list-grants    # the grants offered; 
 speccoder review approve --run autopilot --grant ID       # nobody is asked
 ```
 
-`--run` approves every open or lapsed decision line, freezes each requirement's red tests (`review.json` records `oracle` and `approval`, digests only), commits `review.json` and starts the run. It is refused while a question is open (`REVIEW-PENDING`), a requirement is read two ways, or a run is active. `autopilot` needs the OS sandbox and holds only the grants you name ([autopilot](@/docs/approvals.md#autopilot)).
+`--run` approves every open or lapsed decision line, freezes each requirement's red tests (`review.json` records `oracle` and `approval`, digests only), commits `review.json` and starts the run. It is refused while a question is open (`REVIEW-PENDING`), a requirement is read two ways, a run is active, or the feature has no task yet (`NO-TASKS`: nothing is approved — `review approve` without `--run` approves the spec alone, `spec tasks` writes the tasks). `autopilot` needs the OS sandbox and holds only the grants you name ([autopilot](@/docs/approvals.md#autopilot)).
 
 - In the app it binds to what its sheet showed: a test changed in between is refused (`REVIEW-CHANGED`) and the sheet shown again.
 - Frozen tests are read only (`ORACLE-FROZEN`) until a reworded requirement lapses the freeze; the run then writes tests anew. A checkout without the stored set (a teammate's) says *frozen oracle not present here* and does the same.

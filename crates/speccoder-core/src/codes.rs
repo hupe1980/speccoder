@@ -580,6 +580,14 @@ pub const CATALOG: &[Entry] = &[
         ["speccoder report"]
     ),
     entry!(
+        "NO-TASKS",
+        E,
+        S::TaskNotReady,
+        "the feature has no tasks yet",
+        "Its task list is not written yet, or lists no task: nothing ran, and the feature is not done. The spec format's planning skills write the tasks; `speccoder report` names the next one.",
+        ["speccoder report"]
+    ),
+    entry!(
         "TASK-DONE",
         E,
         S::TaskNotReady,

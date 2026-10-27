@@ -342,6 +342,19 @@ pub fn run_feature_with(
                 }
             }
         }
+        // No task to work: the feature is not done, its tasks are not
+        // written yet (no task list, or one without a task).
+        if let Some(stop) = snap.feature.as_ref().and_then(|f| no_tasks(format, f)) {
+            return finish(
+                feature_name,
+                attempts,
+                CommandStatus::TaskNotReady,
+                stop.message,
+            )
+            .with_code("NO-TASKS")
+            .with_fix(stop.fix)
+            .with_next(stop.next);
+        }
         // Skipped tasks are passed by; what depends on them stays blocked.
         let skipped = controls::skipped(&project, feature_name.as_deref().unwrap_or_default());
         let Some(next) = schedule
@@ -502,4 +515,51 @@ pub fn run_feature_with(
         CommandStatus::Ok,
         "stopped at --max-tasks".to_owned(),
     )
+}
+
+/// Why a unit has nothing to run: no task list, or one without a task.
+#[derive(Debug, Clone)]
+pub(crate) struct NoTasks {
+    /// `no tasks yet: …`, naming the format's file and how to write it.
+    pub message: String,
+    /// The planning skills that write the tasks, as commands.
+    pub fix: Vec<String>,
+    /// The same as next steps, then the run.
+    pub next: Vec<speccoder_core::next::NextStep>,
+}
+
+/// [`NoTasks`] for `feature`, unless it has a task: such a unit is never
+/// done (code `NO-TASKS`).
+pub(crate) fn no_tasks(
+    format: &dyn crate::format::Adapter,
+    feature: &speccoder_core::snapshot::FeatureSnapshot,
+) -> Option<NoTasks> {
+    if feature.tasks.as_ref().is_some_and(|t| !t.tasks.is_empty()) {
+        return None;
+    }
+    let messages = format.messages();
+    let skills: Vec<String> = (format.planning().toward_tasks)(feature.artifacts.plan)
+        .iter()
+        .map(|s| (*s).to_owned())
+        .collect();
+    let name = &feature.feature.name;
+    Some(NoTasks {
+        message: format!(
+            "no tasks yet: {name} {}; {}",
+            if feature.tasks.is_some() {
+                format!("has a {} without a task", messages.tasks_file)
+            } else {
+                format!("has no {}", messages.tasks_file)
+            },
+            messages.make_tasks
+        ),
+        fix: skills
+            .iter()
+            .map(|s| format!("speccoder spec {s}"))
+            .collect(),
+        next: speccoder_core::next::next(
+            &speccoder_core::next::Outcome::Planning { skills },
+            Some(name),
+        ),
+    })
 }
