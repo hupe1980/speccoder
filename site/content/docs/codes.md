@@ -23,7 +23,7 @@ Every result that is not plainly `ok` names a code — `error[CODE]`, `stopped[C
 | [`FEATURE-SELECTION`](#feature-selection) | error | 12 | more than one feature could be meant |
 | [`CHECK-BROKEN`](#check-broken) | error | 13 | a check cannot run on the untouched code |
 | [`PREPARE-FAILED`](#prepare-failed) | error | 13 | the worktree's dependencies could not be installed |
-| [`LINK-CHANGED`](#link-changed) | stop | 23 | the external agent changed a dependency folder linked from your checkout |
+| [`SECRET-IN-DIFF`](#secret-in-diff) | stop | 23 | the attempt's change holds a value copied from your secret files |
 | [`FEATURE-GONE`](#feature-gone) | error | 12 | the current feature no longer exists |
 | [`REVIEW-PENDING`](#review-pending) | stop | 23 | the spec is not approved yet |
 | [`REVIEW-AMBIGUOUS`](#review-ambiguous) | stop | 23 | two readings of a requirement disagree |
@@ -223,14 +223,14 @@ Before the baseline speccoder installs a Node or uv project's dependencies in th
 - Or allow the network for the install's exact online form: [sandbox] network_allow = [["npm", "ci"]]
 - `speccoder doctor`
 
-### LINK-CHANGED
+### SECRET-IN-DIFF
 
-The external agent changed a dependency folder linked from your checkout.
+The attempt's change holds a value copied from your secret files.
 
-With `[worktree] link`, a folder such as `node_modules` is your checkout's own, read-only to every sandboxed command. An `[executor]` agent works outside the sandbox, and its attempt changed one: a verdict would rest on dependencies the attempt changed in your checkout, so nothing was judged or ticked.
+`[worktree] include` (or `.worktreeinclude`) copied a git-ignored secret file such as `.env` from your checkout into the worktree. The attempt's diff adds one of its values to a file git would commit, so it was undone: nothing was judged, ticked or committed. The variable is named, its value never.
 
-- Restore your checkout's install (`npm ci`, `uv sync`)
-- Or remove the folder from [worktree] link, or run without an [executor]
+- The code should read the variable from the environment or the file, never copy its value
+- Run the task again; the attempt starts from the committed tree
 
 ### FEATURE-GONE
 

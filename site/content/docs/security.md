@@ -75,7 +75,7 @@ Every command speccoder starts for a task (checks, the model's commands, the for
 
 Inside, a command:
 
-- **writes** only to the worktree, a private temporary directory and the package caches builds need (`~/.cargo/registry`, `~/.cache`, `~/.npm`, `~/go/pkg/mod`, `~/Library/Caches`, …), plus `[sandbox] writable`; not to speccoder's state, `~/.cargo/bin` or your checkout — a folder [linked from your checkout](@/docs/running.md#dependency-folders) is read-only, and a write refused there says so;
+- **writes** only to the worktree, a private temporary directory and the package caches builds need (`~/.cargo/registry`, `~/.cache`, `~/.npm`, `~/go/pkg/mod`, `~/Library/Caches`, …), plus `[sandbox] writable`; not to speccoder's state, `~/.cargo/bin` or your checkout;
 - **cannot read** credentials: `~/.ssh`, `~/.aws`, `~/.azure`, `~/.gnupg`, `~/.netrc`, `~/.docker`, `~/.kube`, `~/.npmrc`, `~/.pypirc`, `~/.git-credentials`, `~/.password-store`, `~/.config/gh`, `~/.config/gcloud`, `~/.cargo/credentials`, keyrings and keychains;
 - **has no network** beyond loopback (`[sandbox] network = "loopback"`, the default), so local test servers work; on Linux loopback is blocked too;
 - **cannot connect to a Unix socket outside the writable paths** (the Docker daemon's, a database's, an agent's); a check that needs one lists its directory in `[sandbox] writable`;
@@ -105,6 +105,7 @@ Held-out tests are sealed in the state directory ([where they are kept](@/docs/e
 - API keys are read only from the environment, and never written to the journal or the output. Bedrock's AWS credentials (an API key, an `aws login` or SSO session, a profile) are loaded by speccoder's own process for its model calls; `doctor` and `init` name their source, never a value.
 - Every command speccoder starts gets an environment without secret-looking variables: `*_API_KEY`, `*_TOKEN`, `*SECRET*`, `*PASSWORD*`, `AWS_*`, `ANTHROPIC_*`, `OPENAI_*`, `SSH_AUTH_SOCK`, `GIT_ASKPASS`, `SSH_ASKPASS`. Colour is off for these commands (`NO_COLOR=1`, `CARGO_TERM_COLOR=never`).
 - Commands run with stdin closed, a deadline for their whole process group, and capped output.
+- A git-ignored secret file [copied into a worktree](@/docs/running.md#copied-files) (`[worktree] include`, `.worktreeinclude`) stays unreadable to the model's file tools. Its values (8 characters or more, not a plain number) are masked as `[redacted:NAME]`, also base64-, hex- and URL-encoded, in command and check output, tool results, the journal and everything shown; a commit never holds the file, and a diff adding a value stops the task (`SECRET-IN-DIFF`). A value transformed otherwise is not recognised.
 - Signing keys: see [what a signature proves](@/docs/attestations.md#what-a-signature-proves).
 
 ## Provenance labels
@@ -113,7 +114,7 @@ speccoder runs on the [agentplane](https://crates.io/crates/agentplane) runtime,
 
 ## External agents
 
-With an [`[executor]`](@/docs/integrations.md#external-agents), another agent makes the attempt with its own tools, outside speccoder's sandbox and with your environment (it needs its own credentials). speccoder's policy cannot refuse its individual calls; its own permission system is the boundary. The worktree, the diff audit, the checks and the verdict still apply. It can write a folder linked from your checkout: speccoder compares the folder's install fingerprint (npm's `node_modules/.package-lock.json` and top-level entries, a `.venv`'s installed distributions and `.pth` files) before and after the attempt, and a change stops the task with `stopped[LINK-CHANGED]`, nothing judged.
+With an [`[executor]`](@/docs/integrations.md#external-agents), another agent makes the attempt with its own tools, outside speccoder's sandbox and with your environment (it needs its own credentials). speccoder's policy cannot refuse its individual calls; its own permission system is the boundary. The worktree, the diff audit, the checks and the verdict still apply.
 
 ## Checking someone else's evidence
 

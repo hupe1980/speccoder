@@ -18,7 +18,7 @@ Within v0 the predicate only grows: an added field raises **`revision`** (an int
 - **Verifiers** MUST tolerate unknown fields and higher revisions within v0: keep the signed bytes as they are, ignore those fields for the outcome, and name them as not evaluated. A predicate of another major version is reported as malformed (`predicate …/v1 not supported by this verifier`), never guessed at.
 - **Producers** MUST NOT make an [opaque field](#opaque-fields) required.
 
-This page describes revision **4**.
+This page describes revision **2**.
 
 ## Prerequisites
 
@@ -37,7 +37,7 @@ Every statement of a tick has the same subject: `[{ "name": "<unit>/<task>", "di
 
 A person's decision (`attested` by accept, `skipped` by skip) is one task-verification line alone, with `decider` and no test results or summary.
 
-The task commit's trailers repeat what a reader needs without the note: `Spec-Task: <unit>/<task>`, `Verdict:`, and `Run:`, `Accepted-By:`, `Held-Out:`, `Linked-Dependencies:` where they apply.
+The task commit's trailers repeat what a reader needs without the note: `Spec-Task: <unit>/<task>`, `Verdict:`, and `Run:`, `Accepted-By:`, `Held-Out:` where they apply.
 
 ## Fields
 
@@ -62,9 +62,6 @@ The [JSON Schema](https://hupe1980.github.io/speccoder/schemas/task-verification
 | `policy_sha256` | string | yes | sha256 of the judge's configuration in `speccoder.toml` at the parent commit |
 | `time` | string | yes | RFC 3339, UTC |
 | `red` | object | no (revision 2) | the red run's output: `kind` (`assertion`, `missing_symbol`), `excerpt` (its last ≤ 2048 bytes, or `null`), `excerpt_sha256`, `output_sha256`, `withheld` |
-| `regression` | object | no (revision 3) | why a `regression_only` tick is one |
-| `collection` | object | no (revision 3) | the test files the attempt added or changed, and whether the run collected each |
-| `linked_dependencies` | array | no (revision 4) | `{path, lockfile, sha256}` per dependency folder [linked from the checkout](@/docs/running.md#dependency-folders) the checks ran against; absent: none |
 
 ### Opaque fields
 
@@ -101,7 +98,7 @@ One verified tick's task-verification predicate (abbreviated):
 
 ```json
 {
-  "revision": 4,
+  "revision": 2,
   "verdict": "verified",
   "unit": { "format": "speckit", "feature": "001-login", "dir": "specs/001-login" },
   "task": { "id": "T001", "line_hash": "3f9a…", "title": "Log in (FR-001)" },
