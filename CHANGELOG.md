@@ -6,6 +6,10 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- A uv project's checks ran `.venv/bin/python`, which a run's worktree never has (`.venv/` is not committed), so every task stopped at the baseline. `init` now writes `uv run --locked --offline python -m pytest …`; a check run through `uv run` (or `poetry run`, `uvx`, …) allows exactly itself, never the runner as a prefix.
+
 ## [0.3.0] - 2026-10-27
 
 ### Added

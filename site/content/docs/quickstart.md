@@ -67,13 +67,13 @@ speccoder init
 
 ```text
 Checks speccoder runs to decide "nothing regressed":
-  test       fast  .venv/bin/python -m pytest -q --junitxml=.speccoder/junit.xml   a Python project (pytest, .venv/bin/python)
+  test       fast  uv run --locked --offline python -m pytest -q --junitxml=.speccoder/junit.xml   a Python project (pytest, uv run --locked --offline python)
 On the untouched code  test ✓ 0.4s
 Model      anthropic/claude-sonnet-5-5  (ANTHROPIC_API_KEY is not set)
 Commit speccoder.toml and .gitignore? speccoder reads committed files only. [Y/n]
 ```
 
-`init` detects the project (Cargo, npm/pnpm/yarn/bun, Python with its `.venv`, Go, a Makefile `test` target), writes **checks** (the commands that decide whether nothing regressed) to `speccoder.toml`, and runs them on the untouched code; a check that fails there is shown with the reason. Commit what it wrote. Change it later with [`speccoder config`](@/docs/configuration.md#changing-it) or **Settings** in the [app](@/docs/web.md).
+`init` detects the project (Cargo, npm/pnpm/yarn/bun, Python, Go, a Makefile `test` target), writes **checks** (the commands that decide whether nothing regressed) to `speccoder.toml`, and runs them on the untouched code; a check that fails there is shown with the reason. A uv project's checks run through `uv run --locked --offline`: each run's worktree gets its own `.venv` from `uv.lock` and uv's cache, so `.venv/` stays out of git. Commit what it wrote. Change it later with [`speccoder config`](@/docs/configuration.md#changing-it) or **Settings** in the [app](@/docs/web.md).
 
 ## 3. A model key
 

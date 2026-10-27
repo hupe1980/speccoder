@@ -28,9 +28,12 @@ pub struct Found {
     pub node_manager: Option<String>,
     /// `pyproject.toml`, `setup.cfg`, `setup.py` or `pytest.ini` exists.
     pub python: bool,
-    /// The project's own interpreter (`.venv/bin/python`), when it has one:
-    /// checks use it, so they work without an activated environment.
-    pub python_bin: Option<String>,
+    /// How checks start the project's Python: `uv run --locked --offline
+    /// python` for a uv project (uv makes the environment in whichever tree
+    /// the check runs in — a run's worktree has no `.venv/`, which is never
+    /// committed), else a project-local virtualenv's interpreter, else
+    /// `python3`.
+    pub python_run: Vec<String>,
     /// pytest runs with that interpreter (or `python3`).
     pub pytest: bool,
     /// `[tool.ruff]` (or `ruff.toml`) is configured.
@@ -41,6 +44,19 @@ pub struct Found {
     pub go: bool,
     /// A `Makefile` with a `test:` target exists.
     pub make_test: bool,
+}
+
+impl Found {
+    /// How checks start the project's Python (`python3` when nothing more
+    /// specific was found).
+    #[must_use]
+    pub fn python_command(&self) -> Vec<String> {
+        if self.python_run.is_empty() {
+            vec!["python3".to_owned()]
+        } else {
+            self.python_run.clone()
+        }
+    }
 }
 
 /// One check `init` proposes.
@@ -155,23 +171,26 @@ pub fn propose(found: &Found) -> Vec<Proposed> {
         } else {
             "test"
         };
-        let python = found.python_bin.as_deref().unwrap_or("python3");
+        let run = found.python_command();
+        let python = run.join(" ");
+        let uv = run.first().is_some_and(|p| p == "uv");
         let why = if found.pytest {
             format!("a Python project (pytest, {python})")
+        } else if uv {
+            "a Python project — pytest is not a dependency: `uv add --dev pytest`".to_owned()
         } else {
             format!(
                 "a Python project — pytest is not installed for {python}: `{python} -m pip install pytest`"
             )
         };
+        let argv: Vec<&str> = run
+            .iter()
+            .map(String::as_str)
+            .chain(["-m", "pytest", "-q", "--junitxml=.speccoder/junit.xml"])
+            .collect();
         out.push(check(
             name,
-            &[
-                python,
-                "-m",
-                "pytest",
-                "-q",
-                "--junitxml=.speccoder/junit.xml",
-            ],
+            &argv,
             "fast",
             Some(".speccoder/junit.xml"),
             &why,
@@ -245,11 +264,9 @@ pub fn allow(found: &Found) -> Vec<Vec<String>> {
         out.extend([v(&[pm, "test"]), v(&[pm, "run", "test"])]);
     }
     if found.python {
-        out.push(v(&[
-            found.python_bin.as_deref().unwrap_or("python3"),
-            "-m",
-            "pytest",
-        ]));
+        let mut pytest = found.python_command();
+        pytest.extend(["-m".to_owned(), "pytest".to_owned()]);
+        out.push(pytest);
     }
     if found.go {
         out.extend([v(&["go", "test"]), v(&["go", "build"]), v(&["go", "vet"])]);
@@ -313,11 +330,18 @@ pub fn detect(root: &Path) -> Found {
     let python = ["pyproject.toml", "setup.cfg", "setup.py", "pytest.ini"]
         .iter()
         .any(|p| exists(p));
-    // A project-local virtualenv: its interpreter, by the path checks run it.
-    let python_bin = [".venv/bin/python", "venv/bin/python"]
-        .iter()
-        .find(|p| python && exists(p))
-        .map(|p| (*p).to_owned());
+    // A uv project's environment is made by uv in the tree the check runs
+    // in, from the committed lockfile and uv's cache; a plain virtualenv is
+    // used by its interpreter's path.
+    let words = |w: &[&str]| w.iter().map(|x| (*x).to_owned()).collect::<Vec<_>>();
+    let python_run = if python && exists("uv.lock") {
+        words(&["uv", "run", "--locked", "--offline", "python"])
+    } else {
+        [".venv/bin/python", "venv/bin/python"]
+            .iter()
+            .find(|p| python && exists(p))
+            .map_or_else(|| words(&["python3"]), |p| words(&[p]))
+    };
     Found {
         cargo,
         nextest,
@@ -325,12 +349,13 @@ pub fn detect(root: &Path) -> Found {
         node_manager,
         python,
         pytest: python && {
-            let bin = python_bin.as_deref().unwrap_or("python3");
+            let bin = python_run[0].as_str();
             std::process::Command::new(if root.join(bin).is_file() {
                 root.join(bin)
             } else {
                 bin.into()
             })
+            .args(&python_run[1..])
             .args(["-m", "pytest", "--version"])
             .current_dir(root)
             .stdin(std::process::Stdio::null())
@@ -339,7 +364,7 @@ pub fn detect(root: &Path) -> Found {
             .status()
             .is_ok_and(|s| s.success())
         },
-        python_bin,
+        python_run,
         ruff: pyproject.contains("[tool.ruff") || exists("ruff.toml") || exists(".ruff.toml"),
         mypy: pyproject.contains("[tool.mypy") || exists("mypy.ini"),
         go: exists("go.mod"),
@@ -1015,6 +1040,28 @@ pub fn preview(path: &Path) -> Preview {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_uv_project_runs_its_checks_through_uv_never_an_uncommitted_venv() {
+        let d = tempfile::tempdir().unwrap();
+        std::fs::write(d.path().join("pyproject.toml"), "[project]\nname = \"p\"\n").unwrap();
+        std::fs::write(d.path().join("uv.lock"), "version = 1\n").unwrap();
+        std::fs::create_dir_all(d.path().join(".venv/bin")).unwrap();
+        std::fs::write(d.path().join(".venv/bin/python"), "").unwrap();
+        let found = detect(d.path());
+        assert_eq!(
+            found.python_run,
+            ["uv", "run", "--locked", "--offline", "python"]
+        );
+        let test = &propose(&found)[0];
+        assert_eq!(
+            test.argv.join(" "),
+            "uv run --locked --offline python -m pytest -q --junitxml=.speccoder/junit.xml"
+        );
+        // Without a lockfile, a project-local virtualenv's interpreter.
+        std::fs::remove_file(d.path().join("uv.lock")).unwrap();
+        assert_eq!(detect(d.path()).python_run, [".venv/bin/python"]);
+    }
 
     #[test]
     fn proposals_follow_what_was_found() {

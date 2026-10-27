@@ -436,6 +436,17 @@ const GIT_IN_PLACE: &[&str] = &[
     "am",
 ];
 
+/// Prefixes that run whatever program follows them.
+const RUNNERS: &[&[&str]] = &[
+    &["uv", "run"],
+    &["uv", "tool", "run"],
+    &["uvx"],
+    &["poetry", "run"],
+    &["pipx", "run"],
+    &["pdm", "run"],
+    &["hatch", "run"],
+];
+
 impl Policy {
     /// A policy allowing the command prefixes of `checks` (program and
     /// subcommands, up to the first option) and exactly the argvs of
@@ -451,9 +462,20 @@ impl Policy {
                     .cloned()
                     .collect();
                 // `python3 -m pytest …` would leave the bare interpreter as
-                // the prefix — and allow `python3 -c <anything>`. A check
-                // whose prefix is only its program allows exactly itself.
-                if prefix.len() == 1 && argv.len() > 1 {
+                // the prefix — and allow `python3 -c <anything>`; `uv run`
+                // would allow any program. A check whose prefix is only its
+                // program, or a runner of another program, allows exactly
+                // itself.
+                if (prefix.len() == 1
+                    || RUNNERS.iter().any(|r| {
+                        prefix
+                            .iter()
+                            .map(String::as_str)
+                            .take(r.len())
+                            .eq(r.iter().copied())
+                    }))
+                    && argv.len() > prefix.len()
+                {
                     argv.clone()
                 } else {
                     prefix
@@ -1232,6 +1254,30 @@ mod tests {
             ),
             Decision::Approval(_)
         ));
+    }
+
+    #[test]
+    fn a_check_through_a_runner_allows_only_itself() {
+        let argv = |s: &str| s.split(' ').map(str::to_owned).collect::<Vec<_>>();
+        let check = "uv run --locked --offline python -m pytest -q --junitxml=.speccoder/junit.xml";
+        let p = Policy::new(&[argv(check), argv("poetry run pytest -q")], &[]);
+        assert_eq!(
+            p.classify("run_command", &cmd(check), None),
+            Decision::Allow
+        );
+        for other in [
+            "uv run python -c print(1)",
+            "uv run --locked --offline sh",
+            "poetry run sh",
+        ] {
+            assert!(
+                matches!(
+                    p.classify("run_command", &cmd(other), None),
+                    Decision::Approval(_)
+                ),
+                "{other}"
+            );
+        }
     }
 
     #[test]
