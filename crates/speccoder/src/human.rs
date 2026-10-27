@@ -812,7 +812,10 @@ pub fn status(w: &mut impl Write, r: &StatusReport, message: &str) -> io::Result
         }
         let note = match t.state.as_str() {
             "verified" => "verified".to_owned(),
-            "regression_only" => "regression only".to_owned(),
+            "regression_only" => match &t.regression {
+                Some(r) if look.screen_reader => format!("regression only, because: {}", r.text),
+                _ => "regression only".to_owned(),
+            },
             "ticked_without_evidence" => "ticked, no speccoder evidence".to_owned(),
             "evidence_without_tick" => {
                 "committed, local tick missing — `run --in-place` ticks it".to_owned()
@@ -838,6 +841,9 @@ pub fn status(w: &mut impl Write, r: &StatusReport, message: &str) -> io::Result
         }
         if let Some(n) = &t.note {
             writeln!(w, "      reason: {}", shorten(n, 90))?;
+        }
+        if let Some(r) = t.regression.as_ref().filter(|_| !look.screen_reader) {
+            writeln!(w, "      why: {}", r.text)?;
         }
         if let Some(d) = &t.drift {
             if d.stale() {
@@ -1468,6 +1474,7 @@ pub fn inbox(r: &speccoder_core::InboxReport, look: &crate::style::Look) -> Vec<
             "unknown" | "approval" | "ruling" | "gaming" | "stale" | "aside" => Glyph::Attention,
             "stuck" => Glyph::Failed,
             "handoff" => Glyph::Verified,
+            "unverified" => Glyph::of_state("regression_only"),
             _ => Glyph::Ready,
         };
         let place = match &i.task {
@@ -1481,7 +1488,12 @@ pub fn inbox(r: &speccoder_core::InboxReport, look: &crate::style::Look) -> Vec<
             look.paint(Token::Muted, &place),
             i.title
         ));
-        if !i.detail.is_empty() {
+        if let Some(u) = &i.unverified {
+            // One line per reason, its tasks after it.
+            for c in &u.counts {
+                out.push(format!("            {} · {}", c.text, c.tasks.join(" ")));
+            }
+        } else if !i.detail.is_empty() {
             out.push(format!("            {}", shorten(&i.detail, 100)));
         }
         if let Some((first, rest)) = i.actions.split_first() {
@@ -1784,6 +1796,10 @@ pub fn branch_verify(
     use speccoder_core::verify_branch::TickOutcome;
     for r in &report.ticks {
         let what = match (r.outcome, r.verdict.as_deref(), r.reason) {
+            (TickOutcome::Evidenced, Some("regression_only"), _) => match &r.regression {
+                Some(why) => format!("regression_only — {why}"),
+                None => "regression_only".to_owned(),
+            },
             (TickOutcome::Evidenced, Some(v), _) => v.to_owned(),
             (TickOutcome::Stale, ..) => "stale".to_owned(),
             (TickOutcome::Regressed, ..) => "regressed".to_owned(),

@@ -40,7 +40,7 @@ class AppState {
   inbox = $state<Reply<Inbox> | null>(null);
   documents = $state<Document[]>([]);
   /** The doctor's warnings and failures: what would stop or spoil a run. */
-  preflight = $state<{ check: string; level: string; detail: string; fix: string[]; code?: string | null; remedy?: Remedy }[]>([]);
+  preflight = $state<{ check: string; level: string; detail: string; fix: string[]; code?: string | null; remedy?: Remedy; tasks?: string[] }[]>([]);
   /** Every doctor check (the status bar reads the model and the sandbox). */
   doctor = $state<{ check: string; level: string; detail: string }[]>([]);
   /** The quick-change sheet is open. */

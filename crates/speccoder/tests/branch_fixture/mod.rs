@@ -310,6 +310,8 @@ impl Repo {
             }),
             bug: None,
             acceptance: None,
+            regression: None,
+            collection: None,
             context: None,
             dependencies: None,
             extra: std::collections::BTreeMap::new(),

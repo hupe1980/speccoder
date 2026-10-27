@@ -507,6 +507,23 @@ pub fn object(cx: &Context<'_>, target: &Target) -> ObjectVerification {
             &mut worst,
         );
         want("Verdict", &verdict, &mut out, &mut worst);
+        // Why a regression-only tick is one: the trailer and the signed
+        // reason agree (a tick from before reasons has neither).
+        let regression = serde_json::from_value::<speccoder_core::regression::RegressionReason>(
+            tv["regression"].clone(),
+        )
+        .ok();
+        if regression.is_some() || tr.contains_key(speccoder_core::regression::TRAILER) {
+            want(
+                speccoder_core::regression::TRAILER,
+                &regression
+                    .as_ref()
+                    .map(speccoder_core::regression::trailer)
+                    .unwrap_or_default(),
+                &mut out,
+                &mut worst,
+            );
+        }
         if let Some(run) = tv["run"].as_str() {
             want("Run", run, &mut out, &mut worst);
         }

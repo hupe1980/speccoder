@@ -79,6 +79,7 @@ Every stop and finish ends with a `Next:` block of commands to copy (`next` in J
 | `speccoder task nudge T (--note N \| --clear)` | Leave a note the next attempts read, or remove the notes |
 | `speccoder task rule T --tests-right --reason R [--variant ID]` | Rule that the tests are right ([over-strict tests](@/docs/evidence.md#over-strict-tests)); the next run ticks the held attempt without a model call |
 | `speccoder task restore T` / `task drop T` | Keep or discard the [changes set aside](@/docs/running.md#changes-set-aside) |
+| `speccoder task acceptance-at T --story US [--revoke]` | Write the story's acceptance tests at this Setup or Foundational task ([plan checks](@/docs/planning.md#plan-checks)) |
 | `speccoder task show T [--account]` | The task's state and evidence; `--account` adds what the model said in its last attempt (a claim) |
 
 ## Review
@@ -98,6 +99,7 @@ Every stop and finish ends with a `Next:` block of commands to copy (`next` in J
 
 | Command | What it does |
 |---|---|
+| `speccoder preset add [--yes]` | Install or update the [speccoder Spec Kit preset](@/docs/planning.md#the-speccoder-preset) with `specify preset add --dev` |
 | `speccoder actions [--task T]` | What you can do now, as every interface offers it: each action's command, why it is blocked, what it asks for (payload `actions`) |
 | `speccoder approvals` | Calls waiting for a person, and the decisions made |
 | `speccoder approvals batch RUN approve\|reject --digest D [--call ID]… [--reason R] [--resume-asking]` | Decide the [calls waiting together](@/docs/approvals.md#the-asking-budget) |

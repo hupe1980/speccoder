@@ -31,6 +31,8 @@ struct Evidence {
     intent: String,
     /// `Acceptance-Strength:`.
     strength: String,
+    /// `Regression-Only:`.
+    regression: String,
 }
 
 /// Reads the trailers speccoder writes (`Spec-Task`, `Verdict`, `Run`) and
@@ -51,6 +53,7 @@ fn read_log(log: &str, feature: &str) -> (BTreeMap<String, Evidence>, Vec<Conver
             task_line,
             intent,
             strength,
+            regression,
             body,
         ] = fields[..]
         else {
@@ -65,6 +68,7 @@ fn read_log(log: &str, feature: &str) -> (BTreeMap<String, Evidence>, Vec<Conver
                 task_line: task_line.trim().to_owned(),
                 intent: intent.trim().trim_start_matches("sha256:").to_owned(),
                 strength: strength.trim().to_owned(),
+                regression: regression.trim().to_owned(),
             });
         } else if let Some(n) = subject
             .strip_prefix("speccoder: converge round ")
@@ -87,6 +91,14 @@ fn read_log(log: &str, feature: &str) -> (BTreeMap<String, Evidence>, Vec<Conver
     }
     rounds.reverse();
     (evidence, rounds)
+}
+
+/// A regression-only tick's reason from its trailer; a tick without one
+/// (made before reasons were recorded) reads `unrecorded`, never a guess.
+#[must_use]
+pub fn regression_of(trailer: &str) -> speccoder_core::regression::Regression {
+    use speccoder_core::regression::{Regression, RegressionReason, parse_trailer};
+    Regression::of(parse_trailer(trailer.trim()).unwrap_or(RegressionReason::Unrecorded))
 }
 
 /// Each task's state: evidence for ticked tasks, the schedule for open ones.
@@ -156,6 +168,9 @@ fn statuses(
                     }),
                 set_aside: None,
                 bug: None,
+                regression: found
+                    .filter(|e| t.done && e.verdict == "regression_only")
+                    .map(|e| regression_of(&e.regression)),
                 note: if t.done {
                     found.map(|e| e.reason.clone()).filter(|r| !r.is_empty())
                 } else {
@@ -366,7 +381,7 @@ pub fn report(path: &Path, feature: Option<&str>) -> CommandResult {
             }
         };
         let format = format!(
-            "--format=%H{FS}%s{FS}%(trailers:key=Spec-Task,valueonly){FS}%(trailers:key=Verdict,valueonly){FS}%(trailers:key=Run,valueonly){FS}%(trailers:key=Reason,valueonly){FS}%(trailers:key=Task-Line,valueonly){FS}%(trailers:key=Intent-Digest,valueonly){FS}%(trailers:key=Acceptance-Strength,valueonly){FS}%b{RS}"
+            "--format=%H{FS}%s{FS}%(trailers:key=Spec-Task,valueonly){FS}%(trailers:key=Verdict,valueonly){FS}%(trailers:key=Run,valueonly){FS}%(trailers:key=Reason,valueonly){FS}%(trailers:key=Task-Line,valueonly){FS}%(trailers:key=Intent-Digest,valueonly){FS}%(trailers:key=Acceptance-Strength,valueonly){FS}%(trailers:key=Regression-Only,valueonly){FS}%b{RS}"
         );
         let log = git
             .run(&["log", &format, &branch])
@@ -674,6 +689,7 @@ mod tests {
             last_attempt: None,
             set_aside: None,
             bug: None,
+            regression: None,
             note: None,
             attestation: None,
             strength: None,
@@ -713,7 +729,7 @@ mod tests {
     #[test]
     fn trailers_and_rounds_are_read_newest_first() {
         let rec = |c: &str, s: &str, t: &str, v: &str, r: &str, b: &str| {
-            format!("{c}{FS}{s}{FS}{t}\n{FS}{v}\n{FS}{r}\n{FS}{FS}{FS}{FS}{FS}{b}{RS}\n")
+            format!("{c}{FS}{s}{FS}{t}\n{FS}{v}\n{FS}{r}\n{FS}{FS}{FS}{FS}{FS}{FS}{b}{RS}\n")
         };
         let log = [
             rec(

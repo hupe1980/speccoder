@@ -98,7 +98,7 @@ export interface ActionId {
  * kind arrives with its `Runnable` variant (the *adding a kind* contract
  * of `speccoder_runtime::actions::perform`).
  */
-export type ActionKind = "skill" | "run_task" | "run_feature" | "converge" | "commit" | "approve" | "reject" | "accept" | "skip" | "nudge" | "rule" | "review" | "issue_comment" | "quick_change" | "keep_set_aside" | "drop_set_aside" | "fix_setup" | "feature" | "pull_request" | "bug_fix" | "bug_confirm" | "bug_run" | "bug_keep" | "allow_always" | "widen_policy" | "decide_batch" | "oracle_tests" | "approve_and_run" | "comment" | "comments_send" | "revision_undo" | "code_nudge" | "command";
+export type ActionKind = "skill" | "run_task" | "run_feature" | "converge" | "commit" | "approve" | "reject" | "accept" | "skip" | "nudge" | "rule" | "review" | "issue_comment" | "quick_change" | "keep_set_aside" | "drop_set_aside" | "fix_setup" | "feature" | "pull_request" | "bug_fix" | "bug_confirm" | "bug_run" | "bug_keep" | "allow_always" | "widen_policy" | "decide_batch" | "oracle_tests" | "approve_and_run" | "comment" | "comments_send" | "revision_undo" | "code_nudge" | "acceptance_at" | "preset_add" | "command";
 
 /**
  * Result of `speccoder actions`: what a person can do now in the
@@ -629,8 +629,29 @@ export interface CodeInfo {
   title: string;
 }
 
+/** The attempt's changed test files and whether the run collected them. */
+export interface Collection {
+  /** Every judged file, by path. */
+  files: FileCollection[];
+  /** The listings run, in order. */
+  listing?: ListingRun[];
+}
+
+/**
+ * A runner's collection rule: one sentence a person reads, and where it
+ * came from.
+ */
+export interface CollectionRule {
+  /** Where it came from (`Cargo.toml (default)`, `pyproject.toml [tool.pytest.ini_options]`). */
+  source: string;
+  /** The rule (``Cargo builds `tests/*.rs` and `tests/<dir>/main.rs` (and the modules they declare)``). */
+  text: string;
+  /** The toolchain. */
+  toolchain: Toolchain;
+}
+
 /** Command-specific payload of a result. */
-export type CommandData = ProjectSnapshot | VerifyReport | WorktreeReport | ProposeReport | ReplayReport | RunReport | EvalReport | FeatureReport | ConvergeReport | StatusReport | ApprovalsReport | ControlReport | CostReport | PrReport | BenchReport | InitReport | SkillsReport | SkillRunReport | ChecklistStatus[] | ArchiveReport | InPlaceReport | AttestReport | ExplainReport | SchemaReport | DoctorReport | FeaturesReport | UiReport | ConfigReport | IssuesReport | InboxReport | ReviewReport | AuthReport | BranchReport | EvidenceTour | ActionsReport | BugReport | PolicyCoverage | CommentsView;
+export type CommandData = ProjectSnapshot | VerifyReport | WorktreeReport | ProposeReport | ReplayReport | RunReport | EvalReport | FeatureReport | ConvergeReport | StatusReport | ApprovalsReport | ControlReport | CostReport | PrReport | BenchReport | InitReport | SkillsReport | SkillRunReport | ChecklistStatus[] | ArchiveReport | InPlaceReport | AttestReport | ExplainReport | SchemaReport | DoctorReport | FeaturesReport | UiReport | ConfigReport | IssuesReport | InboxReport | ReviewReport | AuthReport | BranchReport | EvidenceTour | ActionsReport | BugReport | PolicyCoverage | CommentsView | PresetReport;
 
 /**
  * The envelope as it is serialised — the schema of [`CommandResult`]
@@ -875,6 +896,36 @@ export interface Confirmation {
 /** State of the project constitution. */
 export type ConstitutionState = "present" | "unfilled" | "absent";
 
+/** One part handed to a call. */
+export interface ContextEntry {
+  /** Their size. */
+  bytes: number;
+  /** Cut to a budget. */
+  cut: boolean;
+  /** What it is. */
+  kind: ContextKind;
+  /** A path, an id or a part pointer (`/bundle/plan`). */
+  reference: string;
+  /** Hex SHA-256 of the exact bytes given. */
+  sha256: string;
+  /**
+   * Where it came from: `person`, `worktree`, `speccoder://<producer>/<name>`,
+   * `github:<owner>/<repo>#<n>`.
+   */
+  source: string;
+}
+
+/** What a part is. A new kind is a new variant, never a free string. */
+export type ContextKind = "constitution" | "plan" | "story" | "task" | "rejection" | "retry_digest" | "issue" | "scenario" | "note" | "comment" | "test_layout";
+
+/** Every part of one call, sorted by kind and reference. */
+export interface ContextManifest {
+  /** Hex SHA-256 of [`ContextManifest::canonical`]. */
+  digest: string;
+  /** The parts. */
+  entries: ContextEntry[];
+}
+
 /** Result of `accept`, `skip` and `nudge`. */
 export interface ControlReport {
   /** `accepted`, `skipped`, `unskipped`, `nudged` or `nudges_cleared`. */
@@ -985,6 +1036,9 @@ export interface CoverageRow {
   still_asks: string | null;
 }
 
+/** What decided a file's state. */
+export type DecidedBy = "static" | "junit" | "listing";
+
 /** A person's decision. */
 export interface DecidedCall {
   /** Who decided, as `name (via)`. */
@@ -1078,6 +1132,11 @@ export interface Digest {
   discarded: string[];
   /** The verdict's reasons. */
   reasons: string[];
+  /**
+   * Test files it wrote that never ran: one line each — the path, the
+   * runner's rule and the ways out.
+   */
+  uncollected?: string[];
 }
 
 /** One doctor check. */
@@ -1094,6 +1153,8 @@ export interface DoctorCheck {
   level: DoctorLevel;
   /** The fix speccoder can apply itself, on the person's yes. */
   remedy?: Remedy | null;
+  /** The tasks a plan check names. */
+  tasks?: string[];
 }
 
 /** How a doctor check came out. */
@@ -1443,6 +1504,10 @@ export type EventLine = {
     outcome: string;
     /** Output tokens. */
     output_tokens: number;
+    /** A regression-only tick: the reason with its details and wording. */
+    regression?: RegressionOnly | null;
+    /** A regression-only tick: the reason's name. */
+    regression_reason?: string | null;
     /** The attempt's run id. */
     run: string | null;
     /** Task ID. */
@@ -1450,6 +1515,24 @@ export type EventLine = {
     type: "task.finished";
     /** USD, when priced. */
     usd: number | null;
+  }
+  /** The attempt's changed test files were checked against what the run collected. */
+  | {
+    /** Each judged test file. */
+    files: PublicCollectionFile[];
+    /** The task. */
+    task: string;
+    type: "collection.checked";
+  }
+  /** The search for the tick that made already-passing tests pass ended. */
+  | {
+    /** The implementing task, `before_feature`, or `null`. */
+    result: string | null;
+    /** Acceptance runs it took. */
+    runs: number;
+    /** Task ID. */
+    task: string;
+    type: "regression.bisected";
   }
   /** What the model said in a turn: its account, a claim. */
   | {
@@ -1765,6 +1848,32 @@ export interface FeaturesReport {
   unit: string;
 }
 
+/** One judged test file. */
+export interface FileCollection {
+  /** What decided it; `null` only when unknown. */
+  decided_by: DecidedBy | null;
+  /** The ways out, for this toolchain and file. */
+  fixes?: string[];
+  /** Workspace-relative path. */
+  path: string;
+  /** The runner's rule (not collected). */
+  rule?: CollectionRule | null;
+  /** Collected, not collected, or unknown. */
+  state: FileState;
+  /** The first 20 of their ids. */
+  test_ids: string[];
+  /** Tests from it that ran (skipped and ignored ones excluded). */
+  tests: number;
+  /**
+   * Not collected: which part of the rule the file breaks; unknown: why
+   * speccoder cannot tell.
+   */
+  why?: string | null;
+}
+
+/** Whether the run collected a test from a file. */
+export type FileState = "collected" | "not_collected" | "unknown";
+
 /** A reproduction on the final tree. */
 export type FinalState = "passed" | "failed" | "not_run";
 
@@ -1853,6 +1962,21 @@ export interface HeldOutVariant {
 /** Where the format keeps the bug. */
 export type HomeKind = "native_speckit_bug" | "native_kiro_bugfix" | "standing_speckit" | "standing_openspec";
 
+/** Which tick made already-passing acceptance tests pass. */
+export type ImplementedBy =
+  /** A tick on the feature branch. */
+  | {
+    /** Its commit (short). */
+    commit: string;
+    /** Its task. */
+    task: string;
+  }
+  /** They passed before the feature's first tick. */
+  | {
+    /** Always `true`. */
+    before_feature: boolean;
+  };
+
 /** Why an in-place run refused or stopped. */
 export interface InPlaceReport {
   /**
@@ -1899,6 +2023,8 @@ export interface InboxItem {
   task: string | null;
   /** What to decide, in a line. */
   title: string;
+  /** `unverified`: the feature's ticks and why each regression-only one is. */
+  unverified?: Unverified | null;
 }
 
 /**
@@ -2053,6 +2179,16 @@ export interface LastAttempt {
   reference: string;
   /** The agentplane run, when there was one. */
   run_id: string | null;
+}
+
+/** A listing speccoder ran because the earlier sources left a file undecided. */
+export interface ListingRun {
+  /** The command. */
+  argv: string[];
+  /** How long it took. */
+  duration_ms: number;
+  /** How it ended. */
+  status: CheckStatus;
 }
 
 /** A pass-to-pass member on the final tree. */
@@ -2494,6 +2630,30 @@ export interface PreFrozenRef {
   wording: string;
 }
 
+/** Result of `speccoder preset add`. */
+export interface PresetReport {
+  /** The Spec Kit command, as run (or to be confirmed). */
+  command: string[];
+  /** Spec Kit's own output (its last lines). */
+  output: string;
+  /** The preset's id (`speccoder`). */
+  preset: string;
+  /** The preset as Spec Kit reports it. */
+  state: PresetState;
+  /** The bundled version. */
+  version: string;
+}
+
+/** The speccoder preset in a project, as Spec Kit reports it. */
+export interface PresetState {
+  /** `specify preset resolve tasks-template` names it. */
+  active_for_tasks_template: boolean;
+  /** The version this speccoder bundles. */
+  bundled: string;
+  /** The installed version, when installed. */
+  installed: string | null;
+}
+
 /** Everything discovered about one Spec Kit project. */
 export interface ProjectSnapshot {
   /** State of `.specify/memory/constitution.md`. */
@@ -2581,6 +2741,24 @@ export interface PublicBugRecorded {
   via: string;
 }
 
+/** `collection.checked`, as published: paths and states. */
+export interface PublicCollectionChecked {
+  /** Each judged test file. */
+  files: PublicCollectionFile[];
+  /** The task. */
+  task: string;
+}
+
+/** One file of [`PublicCollectionChecked`]. */
+export interface PublicCollectionFile {
+  /** `static`, `junit`, `listing`; `null` when unknown. */
+  decided_by: DecidedBy | null;
+  /** Workspace-relative path. */
+  path: string;
+  /** `collected`, `not_collected`, `unknown`. */
+  state: FileState;
+}
+
 /** `oracle.frozen`, as published: digests and counts, never a test. */
 export interface PublicOracleFrozen {
   /** The approval's digest. */
@@ -2624,6 +2802,20 @@ export interface ReadingText {
   given: string;
 }
 
+/** How many regression-only ticks had one reason, and which. */
+export interface ReasonCount {
+  /** `already_passing`: the tasks that made the tests pass. */
+  implemented_by?: string[];
+  /** How many ticks. */
+  n: number;
+  /** The reason (`no_story`, `already_passing`, …, `unrecorded`). */
+  reason: string;
+  /** Their tasks. */
+  tasks: string[];
+  /** speccoder's words for the group (`7 had no user story`). */
+  text: string;
+}
+
 /**
  * What a red run of acceptance tests showed.
  *
@@ -2649,6 +2841,61 @@ export interface Regression {
   /** `failed`, `skipped`, or `missing`. */
   now: string;
 }
+
+/** A regression-only tick's reason with its one-line wording. */
+export interface RegressionOnly {
+  /** The reason with its typed details. */
+  reason: RegressionReason;
+  /** speccoder's sentence for it, the same in every interface. */
+  text: string;
+}
+
+/** Why a tick is regression-only. */
+export type RegressionReason =
+  /** The task belongs to no user story. */
+  | {
+    reason: "no_story";
+  }
+  /** Its story states no acceptance scenario. */
+  | {
+    reason: "no_scenarios";
+    /** The story. */
+    story: string;
+  }
+  /** `[acceptance] generate = false`. */
+  | {
+    reason: "acceptance_off";
+  }
+  /** The test author returned no file. */
+  | {
+    reason: "author_wrote_none";
+  }
+  /** The author's answer could not be used. */
+  | {
+    /** What speccoder refused (its own words). */
+    detail: string;
+    reason: "author_failed";
+  }
+  /** The acceptance tests passed before the attempt. */
+  | {
+    /** The tick that made them pass; `null` when it could not be determined. */
+    implemented_by: ImplementedBy | null;
+    reason: "already_passing";
+  }
+  /** They did not fail on an assertion or an absent symbol. */
+  | {
+    reason: "not_red";
+    /** How the red run ended. */
+    red_class: RedClass;
+  }
+  /** The acceptance command collected no test. */
+  | {
+    reason: "tests_not_collected";
+  }
+  /** A tick made before reasons were recorded (read side only). */
+  | {
+    reason: "unrecorded";
+  };
 
 /**
  * The person rejected the reproductions shown; the reason goes to the
@@ -2980,8 +3227,15 @@ export interface RunReport {
   bug?: BugReport | null;
   /** Paths changed between the checkpoints: `added` / `modified` / `deleted`. */
   changes: ([string, string])[];
+  /**
+   * The test files the attempt added or changed, and whether the run
+   * collected a test from each.
+   */
+  collection?: Collection | null;
   /** The commit on `speccoder/<feature>` holding the attempt and the tick. */
   commit: string | null;
+  /** What reached the implementer, by digest (constitution VIII). */
+  context?: ContextManifest | null;
   /** Earlier attempts at this task in this run, discarded and retried. */
   earlier: EarlierAttempt[];
   /** Feature directory name. */
@@ -3011,6 +3265,8 @@ export interface RunReport {
   pending: unknown;
   /** Why the attempt stopped, when it did not complete. */
   reason: string | null;
+  /** Why a regression-only verdict is one (set with that verdict only). */
+  regression?: RegressionOnly | null;
   /** Why no further attempt was made after a failed one, if it failed. */
   retry_stop: string | null;
   /** The agentplane run of the attempt. */
@@ -3342,6 +3598,31 @@ export type Runnable =
     kind: "code_nudge";
     /** The task. */
     task: string;
+  }
+  /**
+   * Write a story's acceptance tests at a Setup or Foundational task
+   * (`revoke`: take the decision back) — a decision recorded in the
+   * state directory, never an edit of the spec.
+   */
+  | {
+    /** The feature. */
+    feature: string;
+    kind: "acceptance_at";
+    /** Take the decision back. */
+    revoke: boolean;
+    /** The story (`US1`). */
+    story: string;
+    /** The task. */
+    task: string;
+  }
+  /**
+   * Install the bundled `speccoder` Spec Kit preset through Spec Kit's
+   * own `specify preset add` (`update`: the installed one, replaced).
+   */
+  | {
+    kind: "preset_add";
+    /** Replace an installed older version. */
+    update: boolean;
   };
 
 /**
@@ -3814,6 +4095,11 @@ export interface TaskStatus {
   note: string | null;
   /** Enclosing phase heading. */
   phase: string;
+  /**
+   * A regression-only tick: why, with speccoder's wording
+   * (`unrecorded` for a tick made before reasons were recorded).
+   */
+  regression?: RegressionOnly | null;
   /** The agentplane run of that attempt. */
   run_id: string | null;
   /**
@@ -3896,6 +4182,8 @@ export interface TickReport {
   outcome: TickOutcome;
   /** For `unverifiable`. */
   reason: Unverifiable | null;
+  /** A regression-only tick: why, in speccoder's wording (signed). */
+  regression?: string | null;
   /** Who signed. */
   signer: SignerView | null;
   /** For `stale`: the cited requirements that changed since the tick. */
@@ -3909,6 +4197,9 @@ export interface TickReport {
   /** `attest verify`'s object for the commit, unchanged. */
   verification: ObjectVerification | null;
 }
+
+/** A test toolchain speccoder knows how to ask. */
+export type Toolchain = "rust" | "python" | "javascript" | "go";
 
 /** Task counts. */
 export interface Totals {
@@ -4004,6 +4295,16 @@ export interface Untestable {
 
 /** Why a tick's evidence does not verify. */
 export type Unverifiable = "ticked_without_evidence" | "missing" | "malformed" | "bad_signature" | "mismatch" | "untrusted_signer" | "unsigned" | "commit_unreachable" | "tool_missing";
+
+/** A feature whose ticks are mostly regression-only, counted by reason. */
+export interface Unverified {
+  /** The reasons, the most frequent first. */
+  counts: ReasonCount[];
+  /** Of them, regression-only. */
+  regression_only: number;
+  /** Ticks speccoder judged (`verified` and `regression_only`). */
+  ticks: number;
+}
 
 /** Token counts, and USD when prices are configured. */
 export interface Usage {

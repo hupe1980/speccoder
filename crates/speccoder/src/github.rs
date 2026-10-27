@@ -154,6 +154,7 @@ mod tests {
             attestation: None,
             strength: None,
             bug: None,
+            regression: None,
         }
     }
 

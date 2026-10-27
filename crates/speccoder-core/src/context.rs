@@ -32,6 +32,8 @@ pub enum ContextKind {
     Note,
     /// A person's review comment, with its anchor's quote.
     Comment,
+    /// The test layout speccoder detected from the checkout.
+    TestLayout,
 }
 
 /// One part handed to a call.

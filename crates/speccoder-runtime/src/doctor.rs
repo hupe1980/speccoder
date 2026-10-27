@@ -22,6 +22,7 @@ fn check(name: &str, level: DoctorLevel, detail: impl Into<String>) -> DoctorChe
         code: None,
         fix: Vec::new(),
         remedy: None,
+        tasks: Vec::new(),
     }
 }
 
@@ -37,6 +38,99 @@ fn warned(name: &str, detail: impl Into<String>, fix: &[&str]) -> DoctorCheck {
     DoctorCheck {
         fix: fix.iter().map(|f| (*f).to_owned()).collect(),
         ..check(name, DoctorLevel::Warn, detail)
+    }
+}
+
+/// The plan checks as doctor rows: `check: "plan"`, level `warn`, the
+/// code's catalog entry, the tasks, the fixes and, for behaviour planned
+/// early, the decision speccoder records as the remedy.
+#[must_use]
+pub fn plan_checks(
+    adapter: &dyn crate::format::Adapter,
+    snapshot: &speccoder_core::snapshot::ProjectSnapshot,
+    root: &Path,
+) -> Vec<DoctorCheck> {
+    let feature = snapshot
+        .feature
+        .as_ref()
+        .map(|f| f.feature.name.clone())
+        .unwrap_or_default();
+    crate::plan_lint::lints(adapter, snapshot, root)
+        .into_iter()
+        .map(|l| DoctorCheck {
+            code: Some(l.code.to_owned()),
+            fix: l.fix.clone(),
+            tasks: l.tasks.clone(),
+            remedy: l
+                .acceptance_at
+                .as_ref()
+                .map(|(task, story)| speccoder_core::Remedy {
+                    label: format!("Write {story}'s acceptance at {task}"),
+                    effect: format!("{task}'s tick can be verified on {story}'s scenarios"),
+                    command: format!("speccoder task acceptance-at {task} --story {story}"),
+                    undo: Some(format!(
+                        "speccoder task acceptance-at {task} --story {story} --revoke"
+                    )),
+                    history: false,
+                    run: speccoder_core::actions::Runnable::AcceptanceAt {
+                        feature: feature.clone(),
+                        story: story.clone(),
+                        task: task.clone(),
+                        revoke: false,
+                    },
+                }),
+            ..check("plan", DoctorLevel::Warn, l.detail)
+        })
+        .collect()
+}
+
+/// Whether the speccoder preset is active for the tasks template (FR-042).
+fn preset_check(root: &Path) -> DoctorCheck {
+    let state = crate::preset::state(root);
+    let offer = |update: bool| speccoder_core::Remedy {
+        label: if update {
+            "Update the speccoder preset".to_owned()
+        } else {
+            "Add the speccoder preset".to_owned()
+        },
+        effect: "future task lists plan for evidence; no spec file changes".to_owned(),
+        command: "speccoder preset add --yes".to_owned(),
+        undo: Some("specify preset remove speccoder".to_owned()),
+        history: false,
+        run: speccoder_core::actions::Runnable::PresetAdd { update },
+    };
+    match (&state.installed, state.active_for_tasks_template) {
+        (Some(v), true) if v == &state.bundled || v == "unknown" => check(
+            "preset",
+            DoctorLevel::Pass,
+            format!("speccoder preset {v} active for tasks-template"),
+        ),
+        (Some(v), active) => DoctorCheck {
+            remedy: Some(offer(true)),
+            fix: vec!["speccoder preset add --yes".to_owned()],
+            ..check(
+                "preset",
+                DoctorLevel::Info,
+                format!(
+                    "speccoder preset {v} installed{} — this speccoder bundles {}",
+                    if active {
+                        ""
+                    } else {
+                        ", not active for tasks-template"
+                    },
+                    state.bundled
+                ),
+            )
+        },
+        (None, _) => DoctorCheck {
+            remedy: Some(offer(false)),
+            fix: vec!["speccoder preset add --yes".to_owned()],
+            ..check(
+                "preset",
+                DoctorLevel::Info,
+                "speccoder preset not installed (tasks-template from Spec Kit's core)",
+            )
+        },
     }
 }
 
@@ -129,7 +223,34 @@ pub fn checks(
                     },
                 });
             }
-            std::path::PathBuf::from(&o.snapshot.root)
+            // The speccoder preset, as Spec Kit reports it (FR-042).
+            if o.adapter.kind() == speccoder_core::spec::FormatKind::Speckit
+                && version("specify").is_some()
+            {
+                out.push(preset_check(Path::new(&o.snapshot.root)));
+            }
+            // The plan checks of the selected feature (FR-035): warnings.
+            if o.snapshot.feature.is_some() {
+                out.extend(plan_checks(
+                    o.adapter,
+                    &o.snapshot,
+                    Path::new(&o.snapshot.root),
+                ));
+            }
+            // Where speccoder's acceptance tests would go (FR-033).
+            let root = std::path::PathBuf::from(&o.snapshot.root);
+            let layout = crate::layout::detect(&root, &crate::verify::check_argvs(&root));
+            if let Some(r) = layout.primary().filter(|r| r.story_dir.is_none()) {
+                out.push(warned(
+                    "tests",
+                    format!(
+                        "no place the runner collects new test files, so no acceptance test is written: {}",
+                        r.unknown.join("; ")
+                    ),
+                    &["→ let the runner collect a tests directory (Cargo: drop `autotests = false`; pytest: a `testpaths` entry that exists)"],
+                ));
+            }
+            root
         }
         Err(r) => {
             let fix = speccoder_core::codes::lookup("NO-PROJECT")

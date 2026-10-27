@@ -37,7 +37,7 @@ A project without `speccoder.toml` opens in the **setup assistant**: what was fo
 
 <figure class="shot"><img class="shot-light" src="../../screenshots/inbox-light.webp" alt="Needs You: a call waiting for approval, an open question and requirements to review, across two features" width="1440" height="900" loading="lazy" decoding="async"><img class="shot-dark" src="../../screenshots/inbox-dark.webp" alt="Needs You: a call waiting for approval, an open question and requirements to review, across two features" width="1440" height="900" loading="lazy" decoding="async"></figure>
 
-- Groups, in order: Waiting for Approval; the bug stops (Confirm a Bug's Reproduction, Could Not Reproduce, Unchanged Does Not Hold, Reproduction Too Weak, Already Fixed); Calls Waiting Together (the [batch](@/docs/approvals.md#the-asking-budget)); Rule on the Tests; Suspected Shortcuts; The Spec Changed; Read Two Ways; Open Questions; Review the Spec; Change Requests; Refused on Autopilot; Did Not Pass; Changes Set Aside; Plans to Commit; Ready to Hand Off.
+- Groups, in order: Waiting for Approval; the bug stops (Confirm a Bug's Reproduction, Could Not Reproduce, Unchanged Does Not Hold, Reproduction Too Weak, Already Fixed); Calls Waiting Together (the [batch](@/docs/approvals.md#the-asking-budget)); Rule on the Tests; Suspected Shortcuts; Little Was Verified (most ticks regression-only, the reasons by count, each task a button); The Spec Changed; Read Two Ways; Open Questions; Review the Spec; Change Requests; Refused on Autopilot; Did Not Pass; Changes Set Aside; Plans to Commit; Ready to Hand Off.
 - Each row decides in place; **Open** shows it with its evidence (a bug's row opens the [Bug sheet](#bug-sheet)). A disabled button says why on hover.
 - The tab and the page title carry the count. **Quick Change** (`q`) opens a sheet for a [quick change](@/docs/running.md#quick-changes). The terminal's equivalent is `speccoder inbox`.
 
@@ -52,7 +52,8 @@ Per feature: its ring of verdicts, stage, tasks done, requirements proven, spend
 <figure class="shot"><img class="shot-light" src="../../screenshots/board-light.webp" alt="The board: tasks by verdict, the next step above them" width="1440" height="900" loading="lazy" decoding="async"><img class="shot-dark" src="../../screenshots/board-dark.webp" alt="The board: tasks by verdict, the next step above them" width="1440" height="900" loading="lazy" decoding="async"></figure>
 
 - Lanes: Waiting for You, Running, Ready, Blocked, Verified, Regression Only, Attested, No Evidence, Skipped. A lane folds after five cards.
-- A ready card has **Run**; the running card shows its stage; a stale tick says *Spec changed: FR-001*. Right-click a card for its actions.
+- A ready card has **Run**; the running card shows its stage; a stale tick says *Spec changed: FR-001*; a task whose test file never ran says *Tests never ran*. A regression-only card says why on hover and to a screen reader. Right-click a card for its actions.
+- **Before you run** lists what `speccoder doctor` would warn about, the plan checks included: each with its tasks as buttons and its fix.
 
 Click a card to open the **inspector**:
 

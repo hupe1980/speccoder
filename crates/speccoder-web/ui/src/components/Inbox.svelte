@@ -19,6 +19,7 @@
     approval_batch: { title: "Calls Waiting Together", icon: "hand", tone: "needs_approval", why: "The run used its approval budget: further calls wait here, decided together — each once." },
     ruling: { title: "Rule on the Tests", icon: "shield", tone: "needs_approval", why: "The tests reject an alternative the spec may allow." },
     gaming: { title: "Suspected Shortcuts", icon: "exclaim", tone: "failed", why: "The monitor saw what looks like gaming the tests." },
+    unverified: { title: "Little Was Verified", icon: "loop", tone: "regression_only", why: "Most ticks rest on the regression checks alone — why, by reason, and what changes it." },
     stale: { title: "The Spec Changed", icon: "exclaim", tone: "needs_approval", why: "Evidence proves an earlier wording." },
     ambiguous: { title: "Read Two Ways", icon: "exclaim", tone: "needs_approval", why: "Two test authors read a requirement differently — say which reading is meant, or reword it. Approve and Run waits." },
     question: { title: "Open Questions", icon: "exclaim", tone: "needs_approval", why: "The spec leaves these undecided — answer before it is built on." },
@@ -56,6 +57,11 @@
     if (app.feature !== i.feature) await app.selectFeature(i.feature);
     await app.perform(a);
   }
+  async function openTask(i: InboxItem, task: string) {
+    if (app.feature !== i.feature) await app.selectFeature(i.feature);
+    app.view = "board";
+    void app.selectTask(task);
+  }
   async function open(i: InboxItem) {
     if (i.kind.startsWith("bug_") && i.task) {
       app.bugSheet = { key: `${i.feature}/${i.task}` };
@@ -67,7 +73,7 @@
       app.view = "documents";
       return;
     }
-    app.view = i.kind === "handoff" || i.kind === "stale" ? "report" : "board";
+    app.view = i.kind === "handoff" || i.kind === "stale" || i.kind === "unverified" ? "report" : "board";
     if (i.task) void app.selectTask(i.task);
   }
 </script>
@@ -103,7 +109,13 @@
                   {#if i.since}<span class="age">{ago(i.since)}</span>{/if}
                 </span>
                 <strong>{i.title}</strong>
-                {#if i.detail}<span class="detail"><Code text={i.detail} /></span>{/if}
+                {#if i.unverified}
+                  <ul class="reasons">
+                    {#each i.unverified.counts as c (c.reason)}
+                      <li><span>{c.text}</span>{#each c.tasks as t (t)}<button class="chip mono" aria-label="Open {t}" onclick={() => openTask(i, t)}>{t}</button>{/each}</li>
+                    {/each}
+                  </ul>
+                {:else if i.detail}<span class="detail"><Code text={i.detail} /></span>{/if}
               </div>
               <div class="acts">
                 {#each i.actions as a, n (key(a))}
@@ -136,6 +148,10 @@
   .feat { padding: 0 0.45rem; border-radius: 999px; background: var(--fill); color: var(--text-2); font-weight: 600; }
   .task { color: var(--text-2); }
   .detail { color: var(--text-2); font-size: 0.86rem; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .reasons { display: grid; gap: 0.25rem; margin: 0.2rem 0 0; padding: 0; }
+  .reasons li { display: flex; flex-wrap: wrap; gap: 0.3rem; align-items: center; padding: 0; color: var(--text-2); font-size: 0.86rem; grid-template-columns: none; }
+  .chip { border: 0; border-radius: 6px; padding: 0 0.4rem; background: var(--fill); color: var(--text-2); font-size: 0.74rem; cursor: pointer; }
+  .chip:hover { background: var(--fill-2); }
   .acts { display: flex; gap: 0.35rem; flex-wrap: wrap; justify-content: flex-end; max-width: 22rem; }
   .clear { display: grid; justify-items: center; gap: 0.4rem; padding: 3.5rem 1rem; text-align: center; }
   .clear strong { font: 650 1.2rem/1.3 var(--display); }

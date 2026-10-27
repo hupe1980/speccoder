@@ -1,0 +1,67 @@
+{
+  "$defs": {
+    "PresetState": {
+      "description": "The speccoder preset in a project, as Spec Kit reports it.",
+      "properties": {
+        "active_for_tasks_template": {
+          "description": "`specify preset resolve tasks-template` names it.",
+          "type": "boolean"
+        },
+        "bundled": {
+          "description": "The version this speccoder bundles.",
+          "type": "string"
+        },
+        "installed": {
+          "description": "The installed version, when installed.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "installed",
+        "active_for_tasks_template",
+        "bundled"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/preset.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Result of `speccoder preset add`.",
+  "properties": {
+    "command": {
+      "description": "The Spec Kit command, as run (or to be confirmed).",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "output": {
+      "description": "Spec Kit's own output (its last lines).",
+      "type": "string"
+    },
+    "preset": {
+      "description": "The preset's id (`speccoder`).",
+      "type": "string"
+    },
+    "state": {
+      "$ref": "#/$defs/PresetState",
+      "description": "The preset as Spec Kit reports it."
+    },
+    "version": {
+      "description": "The bundled version.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "preset",
+    "version",
+    "command",
+    "output",
+    "state"
+  ],
+  "title": "preset add: the speccoder Spec Kit preset, installed or offered",
+  "type": "object"
+}

@@ -71,6 +71,17 @@ pub fn rows(task: &TaskStatus, statements: &[Value], run: Option<&RunReport>) ->
         .iter()
         .find(|s| s["predicateType"] == "https://speccoder.dev/task-verification/v0")
         .map(|s| &s["predicate"]);
+    // Why a regression-only tick is one: the signed reason, else the trailer's.
+    let why = tv
+        .and_then(|tv| {
+            serde_json::from_value::<speccoder_core::regression::RegressionReason>(
+                tv["regression"].clone(),
+            )
+            .ok()
+        })
+        .map(|r| speccoder_core::regression::wording(&r))
+        .or_else(|| task.regression.as_ref().map(|r| r.text.clone()))
+        .filter(|_| task.state == "regression_only");
     // Acceptance: red, then green.
     match (phase(statements, "red"), phase(statements, "green")) {
         (Some(red), Some(green)) => out.push(row(
@@ -85,12 +96,37 @@ pub fn rows(task: &TaskStatus, statements: &[Value], run: Option<&RunReport>) ->
         (None, Some(green)) => out.push(row(
             "Acceptance",
             "regression_only",
-            format!(
-                "none red first — the checks alone ({} passing)",
-                names(&green["passedTests"])
+            why.clone().map_or_else(
+                || {
+                    format!(
+                        "none red first — the checks alone ({} passing)",
+                        names(&green["passedTests"])
+                    )
+                },
+                |w| format!("none red first — {w}"),
             ),
         )),
-        _ => out.push(row("Acceptance", "ready", "not run".to_owned())),
+        _ => out.push(match why.clone() {
+            Some(w) => row(
+                "Acceptance",
+                "regression_only",
+                format!("none red first — {w}"),
+            ),
+            None => row("Acceptance", "ready", "not run".to_owned()),
+        }),
+    }
+    // Collection: whether the test files the attempt wrote ever ran.
+    let collection = tv
+        .and_then(|tv| {
+            serde_json::from_value::<speccoder_core::collection::Collection>(
+                tv["collection"].clone(),
+            )
+            .ok()
+        })
+        .or_else(|| run.and_then(|r| r.collection.clone()));
+    let recorded = tv.is_some_and(|tv| tv["revision"].as_u64().is_some_and(|r| r >= 3));
+    if let Some(r) = collection_row(collection.as_ref(), recorded || run.is_some()) {
+        out.push(r);
     }
     out.push(match phase(statements, "held_out") {
         Some(h) if h["result"] == "PASSED" => row(
@@ -283,6 +319,22 @@ pub fn rows(task: &TaskStatus, statements: &[Value], run: Option<&RunReport>) ->
                 format!("{} — run {}", e.attempt_status.replace('_', " "), e.run_id),
             ));
         }
+        // The test author's notes: a model's words, in the task's detail only.
+        for note in r
+            .acceptance
+            .as_ref()
+            .and_then(|a| a["notes"].as_array())
+            .into_iter()
+            .flatten()
+            .filter_map(|n| n.as_str())
+            .filter(|n| !n.trim().is_empty())
+        {
+            out.push(row(
+                "Test author",
+                "ready",
+                format!("the test author's note (a model's words): \"{note}\""),
+            ));
+        }
         if let Some(claim) = r.model_report.as_ref().and_then(|m| m["summary"].as_str()) {
             out.push(row(
                 "Model says",
@@ -292,6 +344,65 @@ pub fn rows(task: &TaskStatus, statements: &[Value], run: Option<&RunReport>) ->
         }
     }
     out
+}
+
+/// The *Collection* row: "2 test files collected (5 tests)", "1 never ran:
+/// `x` — the rule", "no test files changed"; `None` when nothing was recorded
+/// (a tick from before collection was judged).
+#[must_use]
+pub fn collection_row(
+    c: Option<&speccoder_core::collection::Collection>,
+    recorded: bool,
+) -> Option<Row> {
+    use speccoder_core::collection::FileState;
+    let row = |mark: &str, text: String| Row {
+        label: "Collection".to_owned(),
+        mark: mark.to_owned(),
+        text,
+    };
+    let Some(c) = c.filter(|c| !c.files.is_empty()) else {
+        return recorded.then(|| row("ready", "no test files changed".to_owned()));
+    };
+    let never: Vec<&speccoder_core::collection::FileCollection> = c.not_collected().collect();
+    let unknown = c.unknown().count();
+    let ran: Vec<_> = c
+        .files
+        .iter()
+        .filter(|f| f.state == FileState::Collected)
+        .collect();
+    let mut parts = Vec::new();
+    if !ran.is_empty() {
+        let tests: usize = ran.iter().map(|f| f.tests).sum();
+        parts.push(format!(
+            "{} test file{} collected ({tests} test{})",
+            ran.len(),
+            if ran.len() == 1 { "" } else { "s" },
+            if tests == 1 { "" } else { "s" }
+        ));
+    }
+    if let Some(first) = never.first() {
+        parts.push(format!(
+            "{} never ran: `{}`{}",
+            never.len(),
+            first.path,
+            first
+                .rule
+                .as_ref()
+                .map(|r| format!(" — {}", r.text))
+                .unwrap_or_default()
+        ));
+    }
+    if unknown > 0 {
+        parts.push(format!("{unknown} could not be told"));
+    }
+    let mark = if !never.is_empty() {
+        "failed"
+    } else if unknown > 0 {
+        "needs_approval"
+    } else {
+        "verified"
+    };
+    Some(row(mark, parts.join(" · ")))
 }
 
 /// The model's account of `run`, turn by turn, read from the project's
@@ -333,6 +444,7 @@ mod tests {
             last_attempt: None,
             set_aside: None,
             bug: None,
+            regression: None,
             note: None,
             attestation: Some("signed ssh SHA256:x".to_owned()),
             strength: None,
@@ -373,6 +485,65 @@ mod tests {
         assert!(text("Approvals").contains("Ada via dashboard"));
         assert_eq!(text("Instructions"), "AGENTS.md");
         assert!(text("Attestation").starts_with("signed"));
+    }
+
+    #[test]
+    fn a_regression_only_tick_says_why_and_its_collection_is_a_row() {
+        let statements = vec![
+            phase_stmt("green", "PASSED", &["a"], &[]),
+            json!({ "predicateType": "https://speccoder.dev/task-verification/v0", "predicate": {
+                "revision": 3,
+                "regression": { "reason": "already_passing", "implemented_by": { "task": "T003", "commit": "d433d77" } },
+                "collection": { "files": [
+                    { "path": "tests/greet.rs", "state": "collected", "decided_by": "junit", "tests": 2, "test_ids": ["greet::greet::a", "greet::greet::b"] },
+                    { "path": "tests/unit/x.rs", "state": "not_collected", "decided_by": "static", "tests": 0, "test_ids": [],
+                      "rule": { "toolchain": "rust", "text": "Cargo builds `tests/*.rs` and `tests/<dir>/main.rs` (and the modules they declare)", "source": "Cargo.toml (default)" } }
+                ] } } }),
+        ];
+        let rows = rows(&task("regression_only"), &statements, None);
+        let row = |label: &str| rows.iter().find(|r| r.label == label).cloned().unwrap();
+        assert_eq!(
+            row("Acceptance").text,
+            "none red first — already passing before the attempt — implemented by T003"
+        );
+        let c = row("Collection");
+        assert_eq!(c.mark, "failed");
+        assert_eq!(
+            c.text,
+            "1 test file collected (2 tests) · 1 never ran: `tests/unit/x.rs` — Cargo builds `tests/*.rs` and `tests/<dir>/main.rs` (and the modules they declare)"
+        );
+        // Revision 3 with nothing changed; revision 2 records nothing.
+        assert_eq!(
+            collection_row(None, true).map(|r| r.text),
+            Some("no test files changed".to_owned())
+        );
+        assert_eq!(collection_row(None, false), None);
+        // A legacy tick: the trailer said nothing — unrecorded, never a guess.
+        let mut legacy = task("regression_only");
+        legacy.regression = Some(speccoder_core::regression::Regression::of(
+            speccoder_core::regression::RegressionReason::Unrecorded,
+        ));
+        let rows = super::rows(&legacy, &[phase_stmt("green", "PASSED", &["a"], &[])], None);
+        assert!(
+            rows[0]
+                .text
+                .ends_with("why was not recorded (ticked by an earlier speccoder)")
+        );
+    }
+
+    #[test]
+    fn the_test_author_s_note_is_a_model_s_words_in_the_detail() {
+        let mut run = crate::pipeline::outcome::bare_report("001-x", "T002", "/w", "completed");
+        run.acceptance = Some(json!({ "notes": ["the spec has no example for an empty name"] }));
+        let rows = rows(&task("regression_only"), &[], Some(&run));
+        let note = rows
+            .iter()
+            .find(|r| r.label == "Test author")
+            .unwrap_or_else(|| panic!("{rows:?}"));
+        assert_eq!(
+            note.text,
+            "the test author's note (a model's words): \"the spec has no example for an empty name\""
+        );
     }
 
     #[test]

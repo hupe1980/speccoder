@@ -511,6 +511,7 @@ mod tests {
                 path: "specs/001-x/spec.md".to_owned(),
                 line: 9,
             }),
+            regression: None,
             newer_fields: Vec::new(),
             verification: None,
         }

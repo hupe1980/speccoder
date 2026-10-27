@@ -390,6 +390,13 @@
           ],
           "description": "For `unverifiable`."
         },
+        "regression": {
+          "description": "A regression-only tick: why, in speccoder's wording (signed).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "signer": {
           "anyOf": [
             {

@@ -386,6 +386,12 @@ fn manifest(
         "worktree",
         "/bundle/task",
         c.bundle["task"].to_string().as_bytes(),
+    )
+    .push(
+        ContextKind::TestLayout,
+        "worktree",
+        "/test_layout",
+        crate::layout::text_at(c.project).as_bytes(),
     );
     for (i, r) in bug.rejections.iter().enumerate() {
         m.push(
@@ -421,6 +427,8 @@ fn project_view(c: &Ctx<'_>) -> (Vec<String>, String) {
         scenarios: &[],
         instructions: c.instructions,
         runner: c.runner,
+        layout: None,
+        story_files: &[],
     };
     let files: Vec<String> = worktree::checkpoint(setup.worktree, setup.tmp)
         .and_then(|cp| worktree::files(setup.worktree, &cp))
@@ -606,6 +614,7 @@ pub(crate) fn reproduce(c: &Ctx<'_>, mut bug: BugReport) -> Result<Fix, Box<Comm
         }
         if !want.is_empty() {
             let (files, manifest_text) = project_view(c);
+            let layout_text = crate::layout::text_at(c.project);
             let input =
                 substrate::acceptance::reproduce_input(&substrate::acceptance::ReproduceParts {
                     set: "reproduce",
@@ -622,6 +631,7 @@ pub(crate) fn reproduce(c: &Ctx<'_>, mut bug: BugReport) -> Result<Fix, Box<Comm
                         .map(|i| (i.title.as_str(), i.body.as_str())),
                     instructions: c.instructions,
                     context: &context,
+                    test_layout: Some(&layout_text),
                 });
             match author(c, input) {
                 Err(why) => t.discarded = Some(why),
@@ -1070,6 +1080,7 @@ fn seal_variants(
         issue: None,
         instructions: c.instructions,
         context: &context,
+        test_layout: Some(&crate::layout::text_at(c.project)),
     });
     let (answer, run_id, _, _) =
         author(c, input).map_err(|e| format!("the held-out author: {e}"))?;
@@ -1132,6 +1143,7 @@ fn seal_variants(
                 scenarios: cited,
                 argv,
                 composition: false,
+                red_tests: None,
             },
             content.to_owned(),
         ));

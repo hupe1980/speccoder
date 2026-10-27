@@ -74,11 +74,19 @@ Every result that is not plainly `ok` names a code — `error[CODE]`, `stopped[C
 | [`VERIFICATION-FAILED`](#verification-failed) | error | 20 | the checks or the acceptance tests did not pass |
 | [`REGRESSION-ONLY`](#regression-only) | warning | 0 | ticked on the regression checks alone, nothing task-specific was shown |
 | [`ATTESTATION-FAILED`](#attestation-failed) | error | 26 | an attestation is missing, unsigned where required, or does not hold |
+| [`TESTS-NOT-COLLECTED`](#tests-not-collected) | error | 20 | a test file the attempt wrote never ran |
+| [`PLAN-TESTS-UNCOLLECTED`](#plan-tests-uncollected) | warning | 0 | the plan puts tests where the runner won't collect them |
+| [`PLAN-BEHAVIOUR-EARLY`](#plan-behaviour-early) | warning | 0 | a story's behaviour is planned before the story |
+| [`PLAN-TEST-ONLY-TASKS`](#plan-test-only-tasks) | warning | 0 | tasks that only write tests |
+| [`PRESET-NOT-SPECKIT`](#preset-not-speckit) | error | 2 | presets are a Spec Kit mechanism |
+| [`PRESET-SPECKIT-MISSING`](#preset-speckit-missing) | error | 13 | the Spec Kit tool `specify` is missing or too old |
+| [`PRESET-FAILED`](#preset-failed) | error | 1 | the preset could not be added: `specify preset add` failed |
 | [`NEEDS-HUMAN`](#needs-human) | stop | 23 | the run stopped for a person |
 | [`NEEDS-APPROVAL`](#needs-approval) | stop | 23 | a call waits for a person's decision; nothing ran |
 | [`BLOCKED`](#blocked) | stop | 23 | the model says the task cannot be done as written |
 | [`BUDGET-EXHAUSTED`](#budget-exhausted) | stop | 23 | the attempt ran out of turns, calls or tokens |
 | [`NOT-DEMONSTRATED`](#not-demonstrated) | stop | 23 | the evidence the task needs could not be produced |
+| [`TESTS-COLLECTION-UNKNOWN`](#tests-collection-unknown) | stop | 23 | speccoder cannot tell whether the runner ran a test file |
 | [`ACCEPTANCE-UNWRITTEN`](#acceptance-unwritten) | stop | 23 | the acceptance tests could not be written, so nothing was attempted |
 | [`SUSPECTED-GAMING`](#suspected-gaming) | stop | 23 | the gaming monitor suspects a shortcut |
 | [`TESTS-OVER-STRICT`](#tests-over-strict) | stop | 23 | an acceptance test rejects an implementation the spec appears to allow |
@@ -626,7 +634,7 @@ After the retries, a check regressed or the spec-derived acceptance tests did no
 
 Ticked on the regression checks alone, nothing task-specific was shown.
 
-The checks still pass, but no acceptance test showed this task's behaviour (the spec has no example for it, or the tests could not be made red first). It is ticked `regression_only`, never `verified`.
+The checks still pass, but no acceptance test showed this task's behaviour. It is ticked `regression_only`, never `verified`, with one recorded reason: `no_story` (no user story to derive a test from), `no_scenarios` (its story states no acceptance scenario), `acceptance_off` (`[acceptance] generate = false`), `author_wrote_none` (the test author wrote no test), `author_failed` (its tests could not be used), `already_passing` (they passed before the attempt — with the task that implemented it), `not_red` (they did not fail on an assertion first) or `tests_not_collected` (the command collected no test).
 
 - Add an acceptance example to the task's story, then converge
 - `speccoder converge`
@@ -638,6 +646,66 @@ An attestation is missing, unsigned where required, or does not hold.
 `attest verify` found a tick whose signed statements are missing, malformed, edited, about another commit, or signed by no one you trust.
 
 - `speccoder attest verify --json`
+
+### TESTS-NOT-COLLECTED
+
+A test file the attempt wrote never ran.
+
+The attempt added or changed a test file, but the runner collected no test from it: the toolchain's rule says it is never built or picked up (a Rust file no target declares, a pytest file outside `python_files`, a vitest file outside `include`, a Go file under `testdata/`), or the run's report and listing hold none of its tests. A test that never ran is evidence of nothing, so the verdict fails and the retry is told the rule.
+
+- `speccoder report`
+- Move the tests where the runner collects them (the reason names the rule)
+
+### PLAN-TESTS-UNCOLLECTED
+
+The plan puts tests where the runner won't collect them.
+
+A task names a test path the project's runner would not collect (Cargo builds only `tests/*.rs` and `tests/<dir>/main.rs`), and no task creates the file that would declare it; or a test file in the tree is collected by nothing. Tests written there would never run. A warning: the run is not stopped.
+
+- `speccoder doctor`
+- `speccoder spec tasks`
+
+### PLAN-BEHAVIOUR-EARLY
+
+A story's behaviour is planned before the story.
+
+A Setup or Foundational task names a symbol a user story is about. If that task implements it, the story's acceptance tests already pass when the story's tasks run: they cannot go red, and the tasks tick regression-only. Write the story's acceptance tests at that task, or re-plan.
+
+- `speccoder spec tasks`
+
+### PLAN-TEST-ONLY-TASKS
+
+Tasks that only write tests.
+
+A story has tasks whose only outputs are test files next to the task that implements it. speccoder writes each story's acceptance tests itself and judges the implementing task by them; a test-only task has nothing of its own to show and ticks regression-only.
+
+- `speccoder spec tasks`
+
+### PRESET-NOT-SPECKIT
+
+Presets are a Spec Kit mechanism.
+
+`speccoder preset add` installs the speccoder preset through Spec Kit's own `specify preset add`; this project is not a Spec Kit project, so there is nothing to add it to.
+
+- `speccoder doctor`
+
+### PRESET-SPECKIT-MISSING
+
+The Spec Kit tool `specify` is missing or too old.
+
+Adding the preset runs `specify preset add`, which needs `specify` at the version the preset requires. It is not installed, or older.
+
+- Install or upgrade Spec Kit (`uv tool install specify-cli`)
+- `speccoder doctor`
+
+### PRESET-FAILED
+
+The preset could not be added: `specify preset add` failed.
+
+Spec Kit refused or failed to install the preset; its own output is shown. Nothing in `specs/` was changed.
+
+- `speccoder preset add`
+- `speccoder doctor`
 
 ### NEEDS-HUMAN
 
@@ -679,6 +747,15 @@ The evidence the task needs could not be produced.
 The acceptance tests could not be made red before the attempt (they already pass, or fail for another reason), or a convergence gap shows in no failing test. Ticking would claim more than was shown.
 
 - `speccoder report`
+
+### TESTS-COLLECTION-UNKNOWN
+
+Speccoder cannot tell whether the runner ran a test file.
+
+The attempt changed a test file, and neither the toolchain's static rule, the check's JUnit report nor the runner's listing says whether a test from it ran (an unrecognised runner, a listing that failed or timed out, no report). A tick on tests that may not have run would claim more than was shown, so the task stops; the attempt is saved under its ref. It is not retried: the model cannot fix it.
+
+- Declare a JUnit report for the check (`junit = "…"`)
+- Set the check's `list` command in speccoder.toml
 
 ### ACCEPTANCE-UNWRITTEN
 

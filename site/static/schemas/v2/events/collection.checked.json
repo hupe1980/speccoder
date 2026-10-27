@@ -1,0 +1,96 @@
+{
+  "$defs": {
+    "DecidedBy": {
+      "description": "What decided a file's state.",
+      "oneOf": [
+        {
+          "const": "static",
+          "description": "The toolchain's static rule.",
+          "type": "string"
+        },
+        {
+          "const": "junit",
+          "description": "The check's fresh JUnit report.",
+          "type": "string"
+        },
+        {
+          "const": "listing",
+          "description": "The runner's own listing.",
+          "type": "string"
+        }
+      ]
+    },
+    "FileState": {
+      "description": "Whether the run collected a test from a file.",
+      "oneOf": [
+        {
+          "const": "collected",
+          "description": "At least one test from it ran (passed or failed).",
+          "type": "string"
+        },
+        {
+          "const": "not_collected",
+          "description": "None did.",
+          "type": "string"
+        },
+        {
+          "const": "unknown",
+          "description": "speccoder cannot tell.",
+          "type": "string"
+        }
+      ]
+    },
+    "PublicCollectionFile": {
+      "description": "One file of [`PublicCollectionChecked`].",
+      "properties": {
+        "decided_by": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DecidedBy"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "`static`, `junit`, `listing`; `null` when unknown."
+        },
+        "path": {
+          "description": "Workspace-relative path.",
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/$defs/FileState",
+          "description": "`collected`, `not_collected`, `unknown`."
+        }
+      },
+      "required": [
+        "path",
+        "state",
+        "decided_by"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/events/collection.checked.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "`collection.checked`, as published: paths and states.",
+  "properties": {
+    "files": {
+      "description": "Each judged test file.",
+      "items": {
+        "$ref": "#/$defs/PublicCollectionFile"
+      },
+      "type": "array"
+    },
+    "task": {
+      "description": "The task.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "task",
+    "files"
+  ],
+  "title": "a domain event's public projection: ids, digests and counts",
+  "type": "object"
+}

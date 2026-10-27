@@ -39,6 +39,7 @@ struct RawCheck {
     tier: Option<Tier>,
     timeout_secs: Option<u64>,
     junit: Option<String>,
+    list: Option<Vec<String>>,
 }
 
 /// One declared check.
@@ -58,6 +59,9 @@ pub struct Check {
     pub timeout: Duration,
     /// Root-relative JUnit report the check writes.
     pub junit: Option<String>,
+    /// A command listing the tests the check would run (one test id or
+    /// file path per line), for deciding which test files it collects.
+    pub list: Option<Vec<String>>,
 }
 
 /// The top-level sections of `speccoder.toml`.
@@ -130,6 +134,9 @@ pub fn parse(text: &str) -> Result<Vec<Check>, String> {
                 tier: raw.tier.unwrap_or(Tier::Fast),
                 timeout: Duration::from_secs(raw.timeout_secs.unwrap_or(DEFAULT_TIMEOUT_SECS)),
                 junit: raw.junit,
+                list: raw
+                    .list
+                    .filter(|l| l.first().is_some_and(|p| !p.is_empty())),
             })
         })
         .collect()
@@ -172,6 +179,12 @@ timeout_secs = 30
         assert_eq!(checks[0].timeout, Duration::from_secs(600));
         assert_eq!(checks[1].tier, Tier::Full);
         assert_eq!(checks[1].timeout, Duration::from_secs(30));
+        assert_eq!(checks[0].list, None);
+        let listed = parse("[checks.t]\nargv = [\"x\"]\nlist = [\"x\", \"--list\"]\n").unwrap();
+        assert_eq!(
+            listed[0].list.as_deref(),
+            Some(&["x".to_owned(), "--list".to_owned()][..])
+        );
     }
 
     #[test]

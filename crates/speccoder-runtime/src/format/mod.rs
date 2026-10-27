@@ -174,6 +174,59 @@ impl OracleRequirement {
     }
 }
 
+/// What kind of phase a task sits in, as the format's structure says.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PhaseKind {
+    /// Shared setup (Spec Kit: *Setup*).
+    Setup,
+    /// Prerequisites every story builds on (Spec Kit: *Foundational*).
+    Foundational,
+    /// A user story's phase.
+    Story,
+    /// Cross-cutting polish.
+    Polish,
+    /// Anything else.
+    Other,
+}
+
+/// One task as the plan checks read it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlannedTask {
+    /// Task ID.
+    pub id: String,
+    /// Its title.
+    pub title: String,
+    /// Its phase's kind.
+    pub phase: PhaseKind,
+    /// Its story (`US1`), when it has one.
+    pub story: Option<String>,
+    /// The code spans of its title, in order.
+    pub spans: Vec<String>,
+    /// Ticked.
+    pub done: bool,
+}
+
+/// A unit's plan structure: phases and stories (FR-037). Formats without
+/// that structure have none.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct PlanStructure {
+    /// Every task, in document order.
+    pub tasks: Vec<PlannedTask>,
+    /// Each story's text (its scenarios), by story.
+    pub stories: std::collections::BTreeMap<String, String>,
+}
+
+/// The code spans of a text (between single backticks).
+#[must_use]
+pub fn code_spans(text: &str) -> Vec<String> {
+    text.split('`')
+        .enumerate()
+        .filter(|(i, _)| i % 2 == 1)
+        .map(|(_, s)| s.to_owned())
+        .filter(|s| !s.trim().is_empty())
+        .collect()
+}
+
 /// One spec format the runtime can run.
 pub trait Adapter: Send + Sync + std::fmt::Debug {
     /// Which format.
@@ -242,6 +295,12 @@ pub trait Adapter: Send + Sync + std::fmt::Debug {
 
     /// The unit's unfinished-checklist state.
     fn checklists(&self, root: &Path, unit_dir: &str) -> Vec<ChecklistStatus>;
+
+    /// The selected unit's phases and stories, for the plan checks that
+    /// need them (`None`: the format has no such structure).
+    fn plan_structure(&self, _snapshot: &ProjectSnapshot) -> Option<PlanStructure> {
+        None
+    }
 
     /// The format's own command-line tool and how to install it, for
     /// `doctor` (`None`: the format has none).

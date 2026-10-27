@@ -7,6 +7,7 @@ pub mod bench;
 pub mod bug;
 pub mod extensions;
 pub mod hooks;
+pub mod preset;
 mod quick;
 mod texts;
 pub mod workflow;
@@ -46,6 +47,51 @@ impl Detect for SpecKit {
 }
 
 impl Adapter for SpecKit {
+    fn plan_structure(&self, snapshot: &ProjectSnapshot) -> Option<crate::format::PlanStructure> {
+        use crate::format::{PhaseKind, PlannedTask, code_spans};
+        let feature = snapshot.feature.as_ref()?;
+        let tasks = feature.tasks.as_ref()?;
+        let kind = |phase: &str, story: bool| {
+            let p = phase.to_ascii_lowercase();
+            if p.contains("setup") {
+                PhaseKind::Setup
+            } else if p.contains("foundational") {
+                PhaseKind::Foundational
+            } else if story || p.contains("user story") {
+                PhaseKind::Story
+            } else if p.contains("polish") || p.contains("cross-cutting") {
+                PhaseKind::Polish
+            } else {
+                PhaseKind::Other
+            }
+        };
+        let mut stories = std::collections::BTreeMap::new();
+        let planned = tasks
+            .tasks
+            .iter()
+            .map(|t| {
+                if let Some(st) = &t.story
+                    && !stories.contains_key(st)
+                    && let Ok(b) = self.bundle(snapshot, &t.id)
+                {
+                    stories.insert(st.clone(), b.story);
+                }
+                PlannedTask {
+                    id: t.id.clone(),
+                    title: t.title.clone(),
+                    phase: kind(t.phase.as_deref().unwrap_or_default(), t.story.is_some()),
+                    story: t.story.clone(),
+                    spans: code_spans(&t.title),
+                    done: t.done,
+                }
+            })
+            .collect();
+        Some(crate::format::PlanStructure {
+            tasks: planned,
+            stories,
+        })
+    }
+
     fn tool(&self) -> Option<(&'static str, &'static str)> {
         Some((
             "specify",

@@ -172,6 +172,21 @@ fn run_check(
         }
     };
 
+    // A report left from before (or planted) is removed: only what this
+    // run writes is read.
+    // A tracked file is never a run's report (and is never deleted).
+    let mut tracked_report = false;
+    if let Some(report) = &check.junit
+        && let Ok(path) = ws.resolve(report)
+        && path.is_file()
+    {
+        tracked_report = crate::git::Git::at(ws.root())
+            .succeeds(&["ls-files", "--error-unmatch", "--", report])
+            .unwrap_or(false);
+        if !tracked_report {
+            let _ = std::fs::remove_file(&path);
+        }
+    }
     let outcome = runner.run(&Invocation {
         argv: check.argv.clone(),
         cwd,
@@ -196,8 +211,13 @@ fn run_check(
         CheckStatus::Failed
     };
 
-    if let Some(report) = &check.junit {
-        match fresh_report(ws, report, outcome.started) {
+    if let Some(report) = check.junit.as_ref().filter(|_| tracked_report) {
+        result
+            .note
+            .get_or_insert(format!("{report} is tracked by git: not a run's report"));
+    } else if let Some(report) = &check.junit {
+        let finished = outcome.started + outcome.duration;
+        match fresh_report(ws, report, outcome.started, finished) {
             Ok(xml) => match junit::parse(&xml) {
                 Ok(tests) => result.tests = Some(tests),
                 Err(e) => result.note = Some(format!("{report}: {e}")),
@@ -215,6 +235,7 @@ fn fresh_report(
     ws: &Workspace,
     rel: &str,
     started: std::time::SystemTime,
+    finished: std::time::SystemTime,
 ) -> Result<String, String> {
     let path = ws
         .resolve(rel)
@@ -230,6 +251,10 @@ fn fresh_report(
     };
     if since(modified) + 1 < since(started) {
         return Err(format!("{rel} predates this run; ignored"));
+    }
+    // Written after the run ended: not the run's report.
+    if since(modified) > since(finished) + 1 {
+        return Err(format!("{rel} is dated after this run ended; ignored"));
     }
     ws.read_text_limited(rel, MAX_REPORT_BYTES)
         .map_err(|e| format!("{rel}: {e:?}"))

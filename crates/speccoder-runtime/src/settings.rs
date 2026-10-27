@@ -253,6 +253,12 @@ pub const CATALOGUE: &[Section] = &[
                 None,
                 "A JUnit XML report the check writes, for per-test results",
             ),
+            k(
+                "list",
+                Kind::Argv,
+                None,
+                "A command that lists the tests the check would run (one test id or file path per line); speccoder runs it when it cannot otherwise tell",
+            ),
         ],
     },
     Section {

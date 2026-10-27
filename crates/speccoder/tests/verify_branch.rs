@@ -180,6 +180,7 @@ fn store_set(state: &std::path::Path, root: &std::path::Path, key: &str, task: &
             scenarios: vec!["US1-1".to_owned()],
             argv: vec!["true".to_owned()],
             composition: false,
+            red_tests: None,
         }],
         discarded: Vec::new(),
     };

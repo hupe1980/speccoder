@@ -258,10 +258,20 @@ impl Progress for Updates {
                 task,
                 outcome,
                 message,
+                regression,
                 ..
             } => {
+                let why = regression
+                    .as_ref()
+                    .filter(|_| outcome == "regression_only")
+                    .map(|r| r.text.clone());
                 match outcome.as_str() {
                     "verified" => self.set(task, "completed", String::new()),
+                    "regression_only" if why.is_some() => self.set(
+                        task,
+                        "completed",
+                        format!(" (regression only: {})", why.as_deref().unwrap_or_default()),
+                    ),
                     "regression_only" | "attested" | "skipped" => {
                         self.set(
                             task,
@@ -279,7 +289,7 @@ impl Progress for Updates {
                     );
                     c.update(
                         &self.session,
-                        json!({ "sessionUpdate": "tool_call_update", "toolCallId": id, "status": if ok { "completed" } else { "failed" }, "content": text(&format!("{outcome}: {message}")) }),
+                        json!({ "sessionUpdate": "tool_call_update", "toolCallId": id, "status": if ok { "completed" } else { "failed" }, "content": text(&why.as_ref().map_or_else(|| format!("{outcome}: {message}"), |w| format!("regression only: {w}"))) }),
                     );
                 }
             }
@@ -1027,6 +1037,7 @@ mod tests {
             cache_read_tokens: 0,
             cache_write_tokens: 0,
             usd: None,
+            regression: None,
         });
         let plan = next(&rx);
         assert_eq!(
@@ -1036,6 +1047,41 @@ mod tests {
         assert_eq!(
             plan["params"]["update"]["entries"][1]["status"],
             "completed"
+        );
+        // A recorded reason is said in the plan entry and the finish message.
+        let _t002_finished = next(&rx);
+        u.event(&Event::TaskStarted {
+            feature: "f".to_owned(),
+            task: "T003".to_owned(),
+            title: "do T003".to_owned(),
+        });
+        let _plan = next(&rx);
+        let _tool_call = next(&rx);
+        u.event(&Event::TaskFinished {
+            task: "T003".to_owned(),
+            outcome: "regression_only".to_owned(),
+            message: "m".to_owned(),
+            run: None,
+            input_tokens: 0,
+            output_tokens: 0,
+            cache_read_tokens: 0,
+            cache_write_tokens: 0,
+            usd: None,
+            regression: Some(speccoder_core::regression::Regression::of(
+                speccoder_core::regression::RegressionReason::NoStory,
+            )),
+        });
+        let plan = next(&rx);
+        assert_eq!(
+            plan["params"]["update"]["entries"][2]["content"],
+            "T003 do T003 (regression only: no user story — nothing to derive a test from)"
+        );
+        let finish = next(&rx);
+        assert!(
+            finish
+                .to_string()
+                .contains("regression only: no user story"),
+            "{finish}"
         );
     }
 }

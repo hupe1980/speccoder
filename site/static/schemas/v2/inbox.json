@@ -266,6 +266,16 @@
           "type": "string"
         },
         {
+          "const": "acceptance_at",
+          "description": "[`Runnable::AcceptanceAt`].",
+          "type": "string"
+        },
+        {
+          "const": "preset_add",
+          "description": "[`Runnable::PresetAdd`].",
+          "type": "string"
+        },
+        {
           "const": "command",
           "description": "No runnable: the person runs the command.",
           "type": "string"
@@ -534,6 +544,17 @@
         "title": {
           "description": "What to decide, in a line.",
           "type": "string"
+        },
+        "unverified": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Unverified"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "`unverified`: the feature's ticks and why each regression-only one is."
         }
       },
       "required": [
@@ -607,6 +628,46 @@
           "type": "string"
         }
       ]
+    },
+    "ReasonCount": {
+      "description": "How many regression-only ticks had one reason, and which.",
+      "properties": {
+        "implemented_by": {
+          "description": "`already_passing`: the tasks that made the tests pass.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "n": {
+          "description": "How many ticks.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "reason": {
+          "description": "The reason (`no_story`, `already_passing`, …, `unrecorded`).",
+          "type": "string"
+        },
+        "tasks": {
+          "description": "Their tasks.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "text": {
+          "description": "speccoder's words for the group (`7 had no user story`).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "reason",
+        "n",
+        "tasks",
+        "text"
+      ],
+      "type": "object"
     },
     "RunMode": {
       "description": "How a run started from the review asks for a person.",
@@ -1421,6 +1482,57 @@
             "comments"
           ],
           "type": "object"
+        },
+        {
+          "description": "Write a story's acceptance tests at a Setup or Foundational task\n(`revoke`: take the decision back) — a decision recorded in the\nstate directory, never an edit of the spec.",
+          "properties": {
+            "feature": {
+              "description": "The feature.",
+              "type": "string"
+            },
+            "kind": {
+              "const": "acceptance_at",
+              "type": "string"
+            },
+            "revoke": {
+              "description": "Take the decision back.",
+              "type": "boolean"
+            },
+            "story": {
+              "description": "The story (`US1`).",
+              "type": "string"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "feature",
+            "story",
+            "task",
+            "revoke"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Install the bundled `speccoder` Spec Kit preset through Spec Kit's\nown `specify preset add` (`update`: the installed one, replaced).",
+          "properties": {
+            "kind": {
+              "const": "preset_add",
+              "type": "string"
+            },
+            "update": {
+              "description": "Replace an installed older version.",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "kind",
+            "update"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -1453,6 +1565,36 @@
           "type": "string"
         }
       ]
+    },
+    "Unverified": {
+      "description": "A feature whose ticks are mostly regression-only, counted by reason.",
+      "properties": {
+        "counts": {
+          "description": "The reasons, the most frequent first.",
+          "items": {
+            "$ref": "#/$defs/ReasonCount"
+          },
+          "type": "array"
+        },
+        "regression_only": {
+          "description": "Of them, regression-only.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "ticks": {
+          "description": "Ticks speccoder judged (`verified` and `regression_only`).",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "ticks",
+        "regression_only",
+        "counts"
+      ],
+      "type": "object"
     }
   },
   "$id": "https://hupe1980.github.io/speccoder/schemas/v2/inbox.json",

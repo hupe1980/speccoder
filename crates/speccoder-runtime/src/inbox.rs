@@ -18,7 +18,7 @@ use crate::actions::action;
 /// The kinds, most urgent first: what blocks a run, what questions the
 /// evidence, what stops a task, what blocks a hand-off — derived from the
 /// one registry, `speccoder_core::inbox::Kind`.
-pub const KINDS: [&str; 18] = [
+pub const KINDS: [&str; 19] = [
     Kind::ALL[0].as_str(),
     Kind::ALL[1].as_str(),
     Kind::ALL[2].as_str(),
@@ -37,6 +37,7 @@ pub const KINDS: [&str; 18] = [
     Kind::ALL[15].as_str(),
     Kind::ALL[16].as_str(),
     Kind::ALL[17].as_str(),
+    Kind::ALL[18].as_str(),
 ];
 
 use speccoder_core::inbox::Kind;
@@ -133,6 +134,10 @@ fn counted(kind: &str, n: usize) -> String {
         ),
         "ruling" => ("ruling", "rulings"),
         "gaming" => ("suspected shortcut", "suspected shortcuts"),
+        "unverified" => (
+            "feature little was verified in",
+            "features little was verified in",
+        ),
         "stale" => (
             "tick the spec changed under",
             "ticks the spec changed under",
@@ -222,6 +227,7 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
         detail,
         since: None,
         actions,
+        unverified: None,
     };
     let mut out = Vec::new();
     let waiting: Vec<&str> = approvals
@@ -551,6 +557,95 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
         ));
     }
 
+    // Most ticks regression-only: one diagnosis, never stored, never a stop.
+    if let Some(u) = unverified(r, path) {
+        let dominant = u
+            .counts
+            .first()
+            .map(|c| c.reason.clone())
+            .unwrap_or_default();
+        let mut actions = Vec::new();
+        let checks = action(
+            "next",
+            "show the plan checks",
+            "deterministic checks of the task list: where the plan leaves nothing to show",
+            flag("speccoder doctor".to_owned()),
+        );
+        match dominant.as_str() {
+            "no_scenarios" => {
+                if let Some(skill) = crate::format::at(path).planning().revises {
+                    let mut a = action(
+                        "plan",
+                        "add scenarios",
+                        "the format's clarify skill asks for the examples a test is written from",
+                        flag(format!("speccoder spec {skill}")),
+                    );
+                    a = a.with_run(Runnable::Skill {
+                        name: skill.to_owned(),
+                        arguments: String::new(),
+                    });
+                    actions.push(a);
+                } else {
+                    actions.push(checks.clone());
+                }
+            }
+            // The plan put the behaviour early or outside a story: the
+            // preset changes how future plans are written.
+            "already_passing" | "no_story"
+                if crate::format::at(path).kind() == speccoder_core::spec::FormatKind::Speckit
+                    && crate::preset::state(path).installed.is_none() =>
+            {
+                let mut a = action(
+                    "plan",
+                    "add the speccoder preset",
+                    "future task lists keep a story's behaviour inside its story; no spec file changes",
+                    "speccoder preset add --yes".to_owned(),
+                );
+                a = a.with_run(Runnable::PresetAdd { update: false });
+                // Refused anyway without Spec Kit: say why, never offer it bare.
+                if !crate::preset::speckit_version().is_some_and(|v| v >= crate::preset::NEEDS) {
+                    a.blocked =
+                        Some("needs Spec Kit's `specify` 1.2.0 or newer on PATH".to_owned());
+                }
+                a.confirm = Some(
+                    "Install the speccoder preset with the spec tool's own preset command? It writes the spec tool's preset directory and registry; no spec file changes.".to_owned(),
+                );
+                actions.push(a);
+            }
+            _ => actions.push(checks.clone()),
+        }
+        let mut converge = action(
+            "next",
+            "converge",
+            "assess the code against the spec as it is now and append what remains",
+            flag("speccoder converge".to_owned()),
+        );
+        converge = converge.with_run(Runnable::Converge);
+        actions.push(converge);
+        actions.push(action(
+            "review",
+            "open the report",
+            "each task's evidence and why",
+            flag("speccoder report".to_owned()),
+        ));
+        let mut it = item(
+            "unverified",
+            None,
+            format!(
+                "Little was verified in `{}`: {} of {} ticks are regression-only",
+                r.feature, u.regression_only, u.ticks
+            ),
+            u.counts
+                .iter()
+                .map(|c| format!("{} · {}", c.text, c.tasks.join(" ")))
+                .collect::<Vec<_>>()
+                .join("; "),
+            actions,
+        );
+        it.unverified = Some(u);
+        out.push(it);
+    }
+
     // What the last autopilot run refused instead of asking.
     let denied = project_state
         .as_deref()
@@ -837,6 +932,103 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
     out
 }
 
+/// The feature's diagnosis when it has at least 3 speccoder ticks and more
+/// than half are regression-only, and it has not been handed off (its
+/// branch pushed, or merged with every task done).
+fn unverified(r: &StatusReport, path: &Path) -> Option<speccoder_core::Unverified> {
+    use speccoder_core::ReasonCount;
+    let ticks = r.totals.verified + r.totals.regression_only;
+    let regression = r.totals.regression_only;
+    if ticks < 3 || regression * 2 <= ticks || handed_off(r, path) {
+        return None;
+    }
+    let mut counts: Vec<ReasonCount> = Vec::new();
+    for t in r.tasks.iter().filter(|t| t.state == "regression_only") {
+        let reason = t
+            .regression
+            .as_ref()
+            .map(|g| g.reason.clone())
+            .unwrap_or(speccoder_core::regression::RegressionReason::Unrecorded);
+        let name = reason.name().to_owned();
+        let by = match &reason {
+            speccoder_core::regression::RegressionReason::AlreadyPassing {
+                implemented_by: Some(speccoder_core::regression::ImplementedBy::Task { task, .. }),
+            } => Some(task.clone()),
+            _ => None,
+        };
+        let c = match counts.iter_mut().position(|c| c.reason == name) {
+            Some(i) => &mut counts[i],
+            None => {
+                counts.push(ReasonCount {
+                    reason: name,
+                    n: 0,
+                    tasks: Vec::new(),
+                    implemented_by: Vec::new(),
+                    text: String::new(),
+                });
+                let last = counts.len() - 1;
+                &mut counts[last]
+            }
+        };
+        c.n += 1;
+        c.tasks.push(t.id.clone());
+        if let Some(b) = by.filter(|b| !c.implemented_by.contains(b)) {
+            c.implemented_by.push(b);
+        }
+    }
+    counts.sort_by(|a, b| b.n.cmp(&a.n).then(a.reason.cmp(&b.reason)));
+    for c in &mut counts {
+        c.text = reason_count_words(c);
+    }
+    Some(speccoder_core::Unverified {
+        ticks,
+        regression_only: regression,
+        counts,
+    })
+}
+
+/// `7 had no user story`, `7 were already passing — implemented by T003`.
+fn reason_count_words(c: &speccoder_core::ReasonCount) -> String {
+    let n = c.n;
+    let were = if n == 1 { "was" } else { "were" };
+    let what = match c.reason.as_str() {
+        "no_story" => "had no user story".to_owned(),
+        "no_scenarios" => "had a story with no acceptance scenario".to_owned(),
+        "acceptance_off" => format!("{were} ticked with acceptance tests off"),
+        "author_wrote_none" => "got no test from the test author".to_owned(),
+        "author_failed" => "had acceptance tests that could not be used".to_owned(),
+        "already_passing" if c.implemented_by.is_empty() => format!("{were} already passing"),
+        "already_passing" => format!(
+            "{were} already passing — implemented by {}",
+            c.implemented_by.join(", ")
+        ),
+        "not_red" => "had acceptance tests that did not fail first".to_owned(),
+        "tests_not_collected" => "had acceptance tests that never ran".to_owned(),
+        _ => format!("{were} ticked before reasons were recorded"),
+    };
+    format!("{n} {what}")
+}
+
+/// The feature was handed off: its speccoder branch was pushed, or it is
+/// merged with every task done.
+fn handed_off(r: &StatusReport, path: &Path) -> bool {
+    let merged = !r.tasks.is_empty()
+        && r.totals.ready == 0
+        && r.totals.blocked == 0
+        && r.unmerged_commits == 0
+        && r.branch.is_some();
+    let pushed = r.branch.as_deref().is_some_and(|b| {
+        crate::git::Git::at(path)
+            .line(&[
+                "for-each-ref",
+                "--format=%(refname)",
+                &format!("refs/remotes/*/{b}"),
+            ])
+            .is_ok_and(|l| !l.trim().is_empty())
+    });
+    merged || pushed
+}
+
 /// Every task finished and the branch carries work not merged.
 fn handoff(r: &StatusReport) -> bool {
     !r.tasks.is_empty()
@@ -1028,6 +1220,7 @@ fn bug_item(
         })
         .unwrap_or_else(|| format!("{} — {}", b.title, b.outcome.as_str().replace('_', " ")));
     Some(InboxItem {
+        unverified: None,
         kind: kind.as_str().to_owned(),
         group: kind.group().as_str().to_owned(),
         feature: b.unit.clone(),

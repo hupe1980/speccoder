@@ -108,7 +108,7 @@ Then, as you need them:
 2. 📏 **Baseline** — your checks run on the untouched worktree, so existing failures are not blamed on the change.
 3. 🔴 **Red** — a separate model call with no tools writes acceptance tests from the spec. They must fail now, and the implementer cannot change them.
 4. 🛠️ **Attempt** — the model works in the worktree; every call is classified before it runs.
-5. ⚖️ **Judgement** — `verified` when the acceptance tests went red → green and nothing regressed; `regression_only` when nothing task-specific was shown; `failed` otherwise. A verified task's tests then meet wrong variants of the change: how many they reject is its acceptance strength.
+5. ⚖️ **Judgement** — `verified` when the acceptance tests went red → green and nothing regressed; `regression_only` when nothing task-specific was shown, with the reason why; `failed` otherwise — a test file the attempt wrote that the runner never collected fails it too. A verified task's tests then meet wrong variants of the change: how many they reject is its acceptance strength.
 6. 🏁 **Outcome** — a verified task is ticked and committed by speccoder. A failed one is retried once with the verifier's facts. Anything else is saved under `refs/speccoder/attempts/…`, undone, and handed to a person.
 
 🐞 **A bug** (`speccoder bug`) must first be reproduced: one test per expected behaviour that fails by an assertion, confirmed by you. The fix is `verified` only if undoing it makes a reproduction fail again; a bug that cannot be reproduced comes back to you ([bug fixes](https://hupe1980.github.io/speccoder/docs/bugs/)).

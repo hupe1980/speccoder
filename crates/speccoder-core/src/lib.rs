@@ -9,6 +9,7 @@ pub mod acceptance;
 pub mod actions;
 pub mod bug;
 pub mod codes;
+pub mod collection;
 mod command;
 pub mod context;
 pub mod event;
@@ -19,6 +20,7 @@ pub mod ladder;
 pub mod next;
 pub mod oracle;
 pub mod predicate;
+pub mod regression;
 pub mod retry;
 pub mod scope;
 pub mod snapshot;
@@ -41,9 +43,10 @@ pub use command::{
     FeaturesReport, FullTier, HeldOutGap, HeldOutOracle, InPlaceReport, InboxItem, InboxReport,
     InitCheck, InitKey, InitReport, InitRun, InstructionFile, IssueEntry, IssuesReport,
     LastAttempt, MonitorScore, ObjectVerification, ObjectView, OpenQuestion, OperatorView,
-    PAYLOADS, PendingCall, PolicyCoverage, PrReport, ProposeReport, RefusedPath, Remedy,
-    ReplayReport, RequirementDrift, ReviewChange, ReviewItem, ReviewReport, ReviewTotals,
-    RunReport, SCHEMA_VERSION, SchemaName, SchemaReport, SetAside, SignerView, SkillEntry,
-    SkillRunReport, SkillsReport, SpecVersion, StatusReport, StatusTotals, TaskCost, TaskStatus,
-    TraceRow, UiReport, Usage, VerifyOutcome, VerifyReason, WorktreeReport,
+    PAYLOADS, PendingCall, PolicyCoverage, PrReport, PresetReport, PresetState, ProposeReport,
+    ReasonCount, RefusedPath, Remedy, ReplayReport, RequirementDrift, ReviewChange, ReviewItem,
+    ReviewReport, ReviewTotals, RunReport, SCHEMA_VERSION, SchemaName, SchemaReport, SetAside,
+    SignerView, SkillEntry, SkillRunReport, SkillsReport, SpecVersion, StatusReport, StatusTotals,
+    TaskCost, TaskStatus, TraceRow, UiReport, Unverified, Usage, VerifyOutcome, VerifyReason,
+    WorktreeReport,
 };

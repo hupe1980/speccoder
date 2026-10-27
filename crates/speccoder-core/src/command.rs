@@ -208,6 +208,8 @@ pub enum CommandData {
     PolicyCoverage(Box<PolicyCoverage>),
     /// `review comments`: the comment tray and the last revision turn.
     Comments(Box<crate::oracle::CommentsView>),
+    /// `preset add`: the speccoder Spec Kit preset, installed or offered.
+    Preset(Box<PresetReport>),
 }
 
 /// What a prefix entry of `[commands] allow_prefix` or `[sandbox]
@@ -482,6 +484,36 @@ pub struct InboxItem {
     /// The decisions, the one that moves the work forward first; each runs
     /// in the item's feature.
     pub actions: Vec<crate::actions::Action>,
+    /// `unverified`: the feature's ticks and why each regression-only one is.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unverified: Option<Unverified>,
+}
+
+/// A feature whose ticks are mostly regression-only, counted by reason.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct Unverified {
+    /// Ticks speccoder judged (`verified` and `regression_only`).
+    pub ticks: usize,
+    /// Of them, regression-only.
+    pub regression_only: usize,
+    /// The reasons, the most frequent first.
+    pub counts: Vec<ReasonCount>,
+}
+
+/// How many regression-only ticks had one reason, and which.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct ReasonCount {
+    /// The reason (`no_story`, `already_passing`, …, `unrecorded`).
+    pub reason: String,
+    /// How many ticks.
+    pub n: usize,
+    /// Their tasks.
+    pub tasks: Vec<String>,
+    /// `already_passing`: the tasks that made the tests pass.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub implemented_by: Vec<String>,
+    /// speccoder's words for the group (`7 had no user story`).
+    pub text: String,
 }
 
 /// Result of `speccoder issue`: the repository's open GitHub issues, read
@@ -684,6 +716,9 @@ pub struct DoctorCheck {
     /// The fix speccoder can apply itself, on the person's yes.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub remedy: Option<Remedy>,
+    /// The tasks a plan check names.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tasks: Vec<String>,
 }
 
 /// Result of `speccoder doctor`.
@@ -741,6 +776,7 @@ impl CommandData {
             Self::Bug(_) => "bug",
             Self::PolicyCoverage(_) => "policy_coverage",
             Self::Comments(_) => "comments",
+            Self::Preset(_) => "preset",
         }
     }
 }
@@ -785,7 +821,34 @@ pub const PAYLOADS: &[&str] = &[
     "bug",
     "policy_coverage",
     "comments",
+    "preset",
 ];
+
+/// Result of `speccoder preset add`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct PresetReport {
+    /// The preset's id (`speccoder`).
+    pub preset: String,
+    /// The bundled version.
+    pub version: String,
+    /// The Spec Kit command, as run (or to be confirmed).
+    pub command: Vec<String>,
+    /// Spec Kit's own output (its last lines).
+    pub output: String,
+    /// The preset as Spec Kit reports it.
+    pub state: PresetState,
+}
+
+/// The speccoder preset in a project, as Spec Kit reports it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct PresetState {
+    /// The installed version, when installed.
+    pub installed: Option<String>,
+    /// `specify preset resolve tasks-template` names it.
+    pub active_for_tasks_template: bool,
+    /// The version this speccoder bundles.
+    pub bundled: String,
+}
 
 /// A repository instructions file given to an attempt.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
@@ -1122,6 +1185,16 @@ pub struct RunReport {
     /// fix's discrimination).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bug: Option<Box<crate::bug::BugReport>>,
+    /// The test files the attempt added or changed, and whether the run
+    /// collected a test from each.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub collection: Option<crate::collection::Collection>,
+    /// Why a regression-only verdict is one (set with that verdict only).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub regression: Option<crate::regression::Regression>,
+    /// What reached the implementer, by digest (constitution VIII).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context: Option<crate::context::ContextManifest>,
 }
 
 /// A failed attempt that was undone and retried.
@@ -1802,6 +1875,10 @@ pub struct TaskStatus {
     /// `cannot_reproduce`, `fixed`, …).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bug: Option<String>,
+    /// A regression-only tick: why, with speccoder's wording
+    /// (`unrecorded` for a tick made before reasons were recorded).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub regression: Option<crate::regression::Regression>,
 }
 
 /// An attempt that did not pass, as saved under `refs/speccoder/attempts/`.

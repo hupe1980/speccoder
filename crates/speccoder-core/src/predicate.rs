@@ -19,8 +19,9 @@ pub const TYPE: &str = "https://speccoder.dev/task-verification/v0";
 
 /// The revision this build writes. 1: the fields before `revision`
 /// existed (a statement without it); 2: `revision`, `red` and the reserved
-/// fields of other specs.
-pub const REVISION: u32 = 2;
+/// fields of other specs; 3: `regression` (why a tick is regression-only)
+/// and `collection` (which changed test files the run collected).
+pub const REVISION: u32 = 3;
 
 /// The longest red-output excerpt a statement carries, in bytes.
 pub const RED_EXCERPT_MAX: usize = 2048;
@@ -214,6 +215,14 @@ pub struct TaskVerificationV0 {
     /// Opaque here.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub acceptance: Option<Value>,
+    /// Why a `regression_only` tick is one (revision 3); absent on other
+    /// verdicts and in earlier revisions (read as unrecorded).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub regression: Option<crate::regression::RegressionReason>,
+    /// The test files the attempt added or changed and whether the run
+    /// collected each (revision 3).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub collection: Option<crate::collection::Collection>,
     /// Reserved: what reached the model, by digest. Opaque here.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context: Option<Value>,

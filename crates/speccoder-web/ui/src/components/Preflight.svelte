@@ -13,11 +13,24 @@
 
   const badge: Record<string, string> = {
     "model key": "key", untracked: "tray", signing: "signature", sandbox: "shield", git: "branch", "spec tool": "terminal",
-    config: "doc", feature: "doc", project: "doc", state: "tray", instructions: "doc",
+    config: "doc", tests: "list", plan: "list", feature: "doc", project: "doc", state: "tray", instructions: "doc",
   };
   // A fix line is a command, sometimes followed by "(why)" or prose.
   const command = (f: string) => f.replace(/^→\s*/, "").replace(/\s+\(.*\)$/, "");
   const runnable = (f: string) => /^[a-z][\w.-]*( |$)/.test(command(f)) && !/\b(set|add|configure)\b.*\bto\b/i.test(command(f));
+
+  // A plan check reads its code's catalog title; any other check its name.
+  const PLAN: Record<string, string> = {
+    "PLAN-TESTS-UNCOLLECTED": "The plan puts tests where the runner won't collect them",
+    "PLAN-BEHAVIOUR-EARLY": "A story's behaviour is planned before the story",
+    "PLAN-TEST-ONLY-TASKS": "Tasks that only write tests",
+  };
+  const title = (i: { check: string; code?: string | null }) =>
+    (i.code && PLAN[i.code]) ?? i.check.charAt(0).toUpperCase() + i.check.slice(1);
+  function openTask(t: string) {
+    app.view = "board";
+    void app.selectTask(t);
+  }
 
   function copy(cmd: string) {
     navigator.clipboard?.writeText(cmd);
@@ -30,12 +43,15 @@
   <section class="pre" aria-label="Before you run">
     <h3 class="section-title">{failing ? "Fix before running" : "Worth a look"}</h3>
     <ul class="grouped">
-      {#each items as i (i.check)}
+      {#each items as i (i.check + (i.code ?? "") + (i.tasks ?? []).join(","))}
         <li class={i.level}>
           <span class="badge" aria-hidden="true"><Icon name={badge[i.check] ?? "exclaim"} size={15} weight={2} /></span>
           <span class="what">
-            <strong>{i.check.charAt(0).toUpperCase() + i.check.slice(1)}<span class="sr-only">: {i.level}</span></strong>
+            <strong>{title(i)}<span class="sr-only">: {i.level}</span></strong>
             <span class="d"><Code text={i.detail} /></span>
+            {#if i.tasks?.length}
+              <span class="chips">{#each i.tasks as t (t)}<button class="chip mono" aria-label="Open {t}" onclick={() => openTask(t)}>{t}</button>{/each}</span>
+            {/if}
           </span>
           <span class="fixes">
             {#if i.remedy}
@@ -73,6 +89,9 @@
   .what { display: grid; min-width: 0; }
   strong { font-weight: 600; }
   .d { color: var(--muted); font-size: 0.86rem; }
+  .chips { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.25rem; }
+  .chip { border: 0; border-radius: 6px; padding: 0 0.4rem; background: var(--fill); color: var(--text-2); font-size: 0.74rem; cursor: pointer; }
+  .chip:hover { background: var(--fill-2); }
   .fixes { display: flex; flex-wrap: wrap; gap: 0.35rem; justify-content: flex-end; max-width: 46ch; }
   .fix {
     display: inline-flex; align-items: center; gap: 0.45rem; max-width: 100%; height: 26px; padding: 0 0.35rem 0 0.65rem;

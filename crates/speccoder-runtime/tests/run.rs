@@ -21,6 +21,10 @@ const MODEL: &str = "[model]\nprovider = \"openai\"\nmodel = \"gpt-5.4-mini\"\n"
 /// The check, and `grep` allowed for the scripted acceptance tests (a
 /// check whose prefix is a bare program allows only itself).
 const CHECK: &str = "[checks.has-ok]\nargv = [\"grep\", \"-q\", \"fn ok\", \"src/lib.rs\"]\n";
+/// A check whose `list` names every Rust file under `tests/`: how a
+/// project without Cargo tells speccoder which test files its run collects.
+const LISTED: &str =
+    "[checks.listed]\nargv = [\"true\"]\nlist = [\"find\", \"tests\", \"-name\", \"*.rs\"]\n";
 const GREP: &str = "[commands]\nallow_prefix = [[\"grep\", \"-q\"], [\"./accept.sh\", \"--\"]]\n";
 
 /// A stand-in test runner for scripted acceptance tests: one test, "the
@@ -458,7 +462,7 @@ fn editing_a_frozen_test_stops_for_approval() {
 
 #[test]
 fn new_test_files_are_free_to_write() {
-    let r = repo_with("", &[EXISTING_TEST]);
+    let r = repo_with(LISTED, &[EXISTING_TEST]);
     let state = tempfile::tempdir().unwrap();
     let (f, d) = fake();
     f.will_call_tool(
@@ -2119,6 +2123,8 @@ fn a_run_reports_its_steps_live_and_status_reads_them() {
             Event::Notice { text } => text.clone(),
             Event::Bug { step, .. } => step.name().to_owned(),
             Event::Oracle { .. } => "oracle".to_owned(),
+            Event::CollectionChecked { .. } => "collection".to_owned(),
+            Event::RegressionBisected { .. } => "bisected".to_owned(),
         })
         .filter(|k| k != "usage")
         .collect();
@@ -2275,7 +2281,7 @@ fn the_monitor_is_off_by_default() {
 #[test]
 fn an_approved_frozen_test_edit_passes_but_an_approved_weakening_is_refused() {
     // Adding a test to an existing file, approved: a pass.
-    let r = repo_with("", &[EXISTING_TEST]);
+    let r = repo_with(LISTED, &[EXISTING_TEST]);
     let state = tempfile::tempdir().unwrap();
     let (f, d) = fake();
     f.will_call_tool("c1", "write_file", json!({ "path": "tests/existing.rs", "content": "#[test]\nfn existing() {}\n#[test]\nfn added() {}\n" }));
@@ -2368,7 +2374,10 @@ fn a_spec_without_template_story_headings_still_yields_acceptance_tests() {
 
 #[test]
 fn in_additions_mode_new_tests_in_a_frozen_file_need_no_approval() {
-    let r = repo_with("[tests]\nfrozen = \"additions\"\n", &[EXISTING_TEST]);
+    let r = repo_with(
+        &format!("{LISTED}[tests]\nfrozen = \"additions\"\n"),
+        &[EXISTING_TEST],
+    );
     let state = tempfile::tempdir().unwrap();
     let (f, d) = fake();
     f.will_call_tool("c1", "edit_file", json!({ "path": "tests/existing.rs", "old_string": "fn existing() {}\n", "new_string": "fn existing() {}\n\n#[test]\nfn added() {}\n" }));
@@ -3792,4 +3801,474 @@ fn the_model_s_commentary_is_what_it_said() {
         .map(|t| (t.turn, t.said.unwrap_or_default()))
         .collect();
     assert_eq!(kept, expected);
+}
+
+// ── tests where the runner finds them (spec 102, US1) ────────────────
+
+/// A Cargo manifest for the fixture, so its `.rs` test files have Cargo's rule.
+const CARGO: (&str, &str) = (
+    "Cargo.toml",
+    "[package]\nname = \"demo\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+);
+
+/// A listing that names the integration tests Cargo builds (`tests/*.rs`).
+const LISTS_TESTS_RS: &str =
+    "[checks.listed]\nargv = [\"true\"]\nlist = [\"sh\", \"-c\", \"ls tests/*.rs\"]\n";
+
+fn writes_test(f: &FakeProvider, id: &str, path: &str) {
+    f.will_call_tool(
+        id,
+        "write_file",
+        json!({ "path": path, "content": "#[test]\nfn greets() {}\n" }),
+    );
+    f.will_structure(done("added the test"));
+}
+
+#[test]
+fn a_test_file_cargo_never_builds_fails_and_the_retry_learns_where_it_runs() {
+    let r = repo_with(
+        &format!("{LISTS_TESTS_RS}[budget]\nmax_attempts = 2\n"),
+        &[CARGO],
+    );
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    writes_test(&f, "c1", "tests/unit/greet_name.rs");
+    writes_test(&f, "c2", "tests/greet_name.rs");
+    let res = run(r.path(), state.path(), "T005", d);
+    let rep = report(&res);
+    assert_eq!(
+        rep.verdict,
+        Some(Verdict::RegressionOnly),
+        "{}",
+        res.message()
+    );
+    let first = &rep.earlier[0];
+    assert_eq!(
+        first.verdict,
+        Some(Verdict::Failed {
+            reasons: vec!["tests not collected: `tests/unit/greet_name.rs` — Cargo builds `tests/*.rs` and `tests/<dir>/main.rs` (and the modules they declare); this file is neither".to_owned()]
+        })
+    );
+    let line = "`tests/unit/greet_name.rs` never ran: Cargo builds `tests/*.rs` and `tests/<dir>/main.rs`. Move the tests to `tests/greet_name.rs`, or add `tests/unit/main.rs` with `mod greet_name;`.";
+    assert_eq!(first.digest.uncollected, [line]);
+    assert!(
+        first
+            .fingerprint
+            .contains("uncollected: tests/unit/greet_name.rs")
+    );
+    let second = f
+        .asked()
+        .iter()
+        .map(|a| serde_json::to_string(&a.prompt).unwrap())
+        .find(|p| p.contains("Tests that never ran"))
+        .expect("the retry is told");
+    assert!(second.contains("never ran: Cargo builds"), "{second}");
+    // The retry's file is collected: the check's listing names it.
+    let c = rep.collection.as_ref().unwrap();
+    assert_eq!(c.files[0].path, "tests/greet_name.rs");
+    assert_eq!(
+        c.files[0].state,
+        speccoder_core::collection::FileState::Collected
+    );
+}
+
+#[test]
+fn the_same_uncollected_file_twice_stops_retrying() {
+    let r = repo_with(
+        &format!("{LISTS_TESTS_RS}[budget]\nmax_attempts = 3\n"),
+        &[CARGO],
+    );
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    writes_test(&f, "c1", "tests/unit/greet_name.rs");
+    writes_test(&f, "c2", "tests/unit/greet_name.rs");
+    f.will_structure(done("third"));
+    let res = run(r.path(), state.path(), "T005", d);
+    let rep = report(&res);
+    assert_eq!(
+        res.status(),
+        CommandStatus::VerificationFailed,
+        "{}",
+        res.message()
+    );
+    assert_eq!(res.code().map(|c| c.name), Some("TESTS-NOT-COLLECTED"));
+    assert!(
+        rep.retry_stop
+            .as_deref()
+            .unwrap_or_default()
+            .starts_with("same failure twice"),
+        "{:?}",
+        rep.retry_stop
+    );
+    assert!(!rep.ticked);
+}
+
+#[test]
+fn a_test_file_speccoder_cannot_tell_about_stops_for_a_person() {
+    // A listing that times out: neither collected nor not — never ticked.
+    let r = repo_with(
+        "[checks.listed]\nargv = [\"true\"]\nlist = [\"sleep\", \"5\"]\ntimeout_secs = 1\n[budget]\nmax_attempts = 2\n",
+        &[CARGO],
+    );
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    writes_test(&f, "c1", "tests/greet_name.rs");
+    let res = run(r.path(), state.path(), "T005", d);
+    let rep = report(&res);
+    assert_eq!(res.status(), CommandStatus::NeedsHuman, "{}", res.message());
+    assert_eq!(res.code().map(|c| c.name), Some("TESTS-COLLECTION-UNKNOWN"));
+    assert!(
+        res.message()
+            .starts_with("speccoder cannot tell whether the runner ran `tests/greet_name.rs` ("),
+        "{}",
+        res.message()
+    );
+    assert!(!rep.ticked && rep.saved_attempt.is_some());
+    assert!(rep.earlier.is_empty(), "never retried");
+}
+
+// ── every regression-only tick says why (spec 102, US2) ──────────────
+
+fn last_message(worktree: &str) -> String {
+    let out = Command::new("git")
+        .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
+        .args(["log", "-1", "--format=%B"])
+        .current_dir(worktree)
+        .output()
+        .unwrap();
+    String::from_utf8_lossy(&out.stdout).into_owned()
+}
+
+#[test]
+fn a_story_without_scenarios_ticks_with_its_reason_in_the_trailer() {
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_structure(done("nothing to test"));
+    let res = run(r.path(), state.path(), "T005", d);
+    let rep = report(&res);
+    assert_eq!(
+        rep.verdict,
+        Some(Verdict::RegressionOnly),
+        "{}",
+        res.message()
+    );
+    let why = rep.regression.as_ref().unwrap();
+    assert_eq!(why.text, "its story US1 states no acceptance scenario");
+    assert!(last_message(&rep.worktree).contains("Regression-Only: no_scenarios story=US1\n"));
+    // Read back from the commit: status says the same.
+    let status = speccoder_runtime::status::report(r.path(), None);
+    let Some(CommandData::Report(s)) = status.data() else {
+        panic!("{}", status.message())
+    };
+    let t = s.tasks.iter().find(|t| t.id == "T005").unwrap();
+    assert_eq!(
+        t.regression.as_ref().map(|r| r.text.as_str()),
+        Some(why.text.as_str())
+    );
+}
+
+#[test]
+fn acceptance_off_is_the_reason_whatever_else_holds() {
+    let r = repo_with("[acceptance]\ngenerate = false\n", &[ACCEPTANCE_SPEC]);
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_structure(done("done"));
+    let res = run(r.path(), state.path(), "T005", d);
+    let rep = report(&res);
+    assert_eq!(
+        rep.regression.as_ref().map(|r| r.reason.name()),
+        Some("acceptance_off"),
+        "{}",
+        res.message()
+    );
+    assert!(last_message(&rep.worktree).contains("Regression-Only: acceptance_off\n"));
+}
+
+#[test]
+fn already_passing_tests_name_the_tick_that_made_them_pass() {
+    let r = repo_with("[acceptance]\nheld_out = false\n", &[ACCEPTANCE_SPEC]);
+    let state = tempfile::tempdir().unwrap();
+    // T005 implements login, red then green.
+    let (f, d) = fake();
+    f.will_structure(acceptance("tests/acceptance_login.txt", GREP_LOGIN));
+    f.will_call_tool("c1", "edit_file", json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\npub fn login() {}" }));
+    f.will_structure(done("login"));
+    let first = run(r.path(), state.path(), "T005", d);
+    assert_eq!(
+        report(&first).verdict,
+        Some(Verdict::Verified),
+        "{}",
+        first.message()
+    );
+    let t005 = report(&first).commit.clone().unwrap();
+    // T006's acceptance tests already pass: T005 did it.
+    let (f, d) = fake();
+    f.will_structure(acceptance("tests/acceptance_session.txt", GREP_LOGIN));
+    f.will_structure(done("nothing left"));
+    let second = run(r.path(), state.path(), "T006", d);
+    let rep = report(&second);
+    assert_eq!(
+        rep.verdict,
+        Some(Verdict::RegressionOnly),
+        "{}",
+        second.message()
+    );
+    let why = rep.regression.as_ref().unwrap();
+    assert_eq!(
+        why.text,
+        "already passing before the attempt — implemented by T005"
+    );
+    let short: String = t005.chars().take(7).collect();
+    assert!(
+        last_message(&rep.worktree).contains(&format!(
+            "Regression-Only: already_passing implemented_by=T005 commit={short}\n"
+        )),
+        "{}",
+        last_message(&rep.worktree)
+    );
+}
+
+#[test]
+fn tests_that_passed_before_any_tick_passed_before_the_feature() {
+    let r = repo_with("[acceptance]\nheld_out = false\n", &[ACCEPTANCE_SPEC]);
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_structure(acceptance(
+        "tests/acceptance_ok.txt",
+        &["./accept.sh", "--", "fn ok"],
+    ));
+    f.will_structure(done("nothing to do"));
+    let res = run(r.path(), state.path(), "T005", d);
+    let rep = report(&res);
+    assert_eq!(
+        rep.regression.as_ref().map(|r| r.text.as_str()),
+        Some("already passing before this feature"),
+        "{}",
+        res.message()
+    );
+    assert!(
+        last_message(&rep.worktree)
+            .contains("Regression-Only: already_passing before_feature=true\n")
+    );
+}
+
+#[test]
+fn a_mostly_unverified_feature_is_diagnosed_once_until_it_is_handed_off() {
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    for task in ["T005", "T006", "T007"] {
+        let (f, d) = fake();
+        f.will_structure(done("nothing to test"));
+        let res = run(r.path(), state.path(), task, d);
+        assert_eq!(
+            report(&res).verdict,
+            Some(Verdict::RegressionOnly),
+            "{}",
+            res.message()
+        );
+    }
+    let inbox =
+        |r: &Path| match speccoder_runtime::inbox::inbox_with(r, None, Some(state.path())).data() {
+            Some(CommandData::Inbox(i)) => i.items.clone(),
+            other => panic!("{other:?}"),
+        };
+    let items = inbox(r.path());
+    let u: Vec<_> = items.iter().filter(|i| i.kind == "unverified").collect();
+    assert_eq!(u.len(), 1, "{items:?}");
+    assert_eq!(u[0].group, "ready_to_review");
+    assert_eq!(
+        u[0].title,
+        "Little was verified in `001-graph`: 3 of 3 ticks are regression-only"
+    );
+    let counts = &u[0].unverified.as_ref().unwrap().counts;
+    assert_eq!(counts[0].text, "3 had a story with no acceptance scenario");
+    assert_eq!(counts[0].tasks, ["T005", "T006", "T007"]);
+    let commands: Vec<&str> = u[0].actions.iter().map(|a| a.command.as_str()).collect();
+    assert!(
+        commands.iter().any(|c| c.starts_with("speccoder converge")),
+        "{commands:?}"
+    );
+    assert!(
+        commands.iter().all(|c| !c.contains("spec tasks")),
+        "never re-plans: {commands:?}"
+    );
+    // Pushed (handed off): the diagnosis is gone.
+    let worktree = report(&run(r.path(), state.path(), "T008", {
+        let (f, d) = fake();
+        f.will_structure(done("x"));
+        d
+    }))
+    .worktree
+    .clone();
+    git(
+        Path::new(&worktree),
+        &[
+            "update-ref",
+            "refs/remotes/origin/speccoder/001-graph",
+            "HEAD",
+        ],
+    );
+    assert!(inbox(r.path()).iter().all(|i| i.kind != "unverified"));
+}
+
+/// FR-048: collection, reasons, the bisection, the layout and the plan
+/// checks add no model call to judging and pass nothing that failed.
+#[test]
+fn nothing_of_spec_102_adds_a_model_call_or_passes_a_failure() {
+    // A verified task: the author's call and the attempt's turns, no more.
+    let r = repo_with(
+        "[acceptance]\nheld_out = false\nstrength = false\n",
+        &[ACCEPTANCE_SPEC],
+    );
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_structure(acceptance("tests/acceptance_login.txt", GREP_LOGIN));
+    f.will_call_tool("c1", "edit_file", json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\npub fn login() {}" }));
+    f.will_structure(done("login"));
+    let res = run(r.path(), state.path(), "T005", d);
+    assert_eq!(
+        report(&res).verdict,
+        Some(Verdict::Verified),
+        "{}",
+        res.message()
+    );
+    let calls: Vec<String> = f
+        .asked()
+        .iter()
+        .map(|a| {
+            serde_json::to_string(&a.prompt)
+                .unwrap()
+                .chars()
+                .take(160)
+                .collect()
+        })
+        .collect();
+    assert_eq!(f.asked().len(), 3, "author + two attempt turns: {calls:#?}");
+    // A failing attempt stays failed.
+    let r = repo("[budget]\nmax_attempts = 1\n");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    break_lib(&f, "b1");
+    let res = run(r.path(), state.path(), "T005", d);
+    assert!(
+        matches!(report(&res).verdict, Some(Verdict::Failed { .. })),
+        "{}",
+        res.message()
+    );
+}
+
+/// M2 (spec 102 review): a listing runs the project's code; a tree it
+/// changed is never committed, and the attempt is not retried.
+#[test]
+fn a_listing_that_changes_the_tree_fails_the_attempt() {
+    let r = repo_with(
+        "[checks.listed]\nargv = [\"true\"]\nlist = [\"sh\", \"-c\", \"echo planted > src/planted.rs; ls tests/*.rs\"]\n[budget]\nmax_attempts = 2\n",
+        &[CARGO],
+    );
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    writes_test(&f, "c1", "tests/greet_name.rs");
+    let res = run(r.path(), state.path(), "T005", d);
+    let rep = report(&res);
+    assert!(
+        rep.integrity
+            .iter()
+            .any(|i| i.contains("a test listing changed the worktree: src/planted.rs")),
+        "{:?} {}",
+        rep.integrity,
+        res.message()
+    );
+    assert!(!rep.ticked && rep.earlier.is_empty());
+}
+
+/// H3 (spec 102 review): red that only failed to build has no count; a
+/// green that then collects nothing is still no evidence.
+#[test]
+fn a_green_run_that_collects_nothing_never_verifies() {
+    use std::os::unix::fs::PermissionsExt;
+    let r = repo_with(
+        "[acceptance]\nheld_out = false\nstrength = false\n[budget]\nmax_attempts = 1\n",
+        &[ACCEPTANCE_SPEC],
+    );
+    // The stand-in runner, made to collect nothing at green.
+    let zero = r.path().join("accept.sh");
+    fs::write(
+        &zero,
+        "#!/bin/sh\nif grep -q 'fn login' src/lib.rs; then\n  echo 'test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out'\nelse\n  echo 'error[E0425]: cannot find function `login` in this scope' >&2\n  echo 'error: could not compile `demo` (test \"acceptance\") due to 1 previous error' >&2\n  exit 101\nfi\n",
+    )
+    .unwrap();
+    fs::set_permissions(&zero, fs::Permissions::from_mode(0o755)).unwrap();
+    git(r.path(), &["add", "-A"]);
+    git(r.path(), &["commit", "-q", "-m", "zero"]);
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_structure(acceptance(
+        "tests/acceptance_login.txt",
+        &["./accept.sh", "--"],
+    ));
+    f.will_call_tool("c1", "edit_file", json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\npub fn login() {}" }));
+    f.will_structure(done("login"));
+    let res = run(r.path(), state.path(), "T005", d);
+    let rep = report(&res);
+    assert_eq!(
+        rep.acceptance.as_ref().map(|a| a["red_class"].clone()),
+        Some(json!("absent")),
+        "{:?} {} {}",
+        rep.acceptance,
+        res.message(),
+        f.asked().len()
+    );
+    assert!(
+        matches!(&rep.verdict, Some(Verdict::Failed { reasons }) if reasons[0] == "acceptance tests not collected at green"),
+        "{:?} {}",
+        rep.verdict,
+        res.message()
+    );
+}
+
+/// M7 (spec 102 review): accepting a task that stopped on
+/// TESTS-COLLECTION-UNKNOWN ticks the attempt's code, never the undone tree.
+#[test]
+fn accepting_a_collection_unknown_stop_ticks_the_attempt_s_code() {
+    let r = repo_with(
+        "[checks.listed]\nargv = [\"true\"]\nlist = [\"sleep\", \"5\"]\ntimeout_secs = 1\n",
+        &[CARGO],
+    );
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    writes_test(&f, "c1", "tests/greet_name.rs");
+    let res = run(r.path(), state.path(), "T005", d);
+    assert_eq!(
+        res.code().map(|c| c.name),
+        Some("TESTS-COLLECTION-UNKNOWN"),
+        "{}",
+        res.message()
+    );
+    let worktree = report(&res).worktree.clone();
+    assert!(
+        !Path::new(&worktree).join("tests/greet_name.rs").exists(),
+        "the attempt was undone"
+    );
+    let accepted = speccoder_runtime::controls::accept_in(
+        r.path(),
+        None,
+        "T005",
+        "I ran it myself",
+        state.path(),
+        false,
+    );
+    assert_eq!(
+        accepted.status(),
+        CommandStatus::Ok,
+        "{}",
+        accepted.message()
+    );
+    assert!(
+        accepted.message().contains("with its saved attempt"),
+        "{}",
+        accepted.message()
+    );
+    let shown = git_out(Path::new(&worktree), &["show", "HEAD:tests/greet_name.rs"]);
+    assert!(shown.contains("fn greets"), "{shown}");
 }

@@ -156,8 +156,9 @@ pub fn sections(r: &StatusReport) -> Vec<Section> {
         });
     }
 
-    let mut table =
-        String::from("### Tasks\n\n| Task | Title | Verdict | Attestation |\n|---|---|---|---|\n");
+    let mut table = String::from(
+        "### Tasks\n\n| Task | Title | Verdict | Why | Attestation |\n|---|---|---|---|---|\n",
+    );
     for task in &r.tasks {
         let title: String = task.title.chars().take(80).collect();
         let state = if task.state == "blocked" && !task.blocked_by.is_empty() {
@@ -183,9 +184,15 @@ pub fn sections(r: &StatusReport) -> Vec<Section> {
             ),
             None => state,
         };
+        // Why a tick is regression-only: speccoder's own wording, never a model's.
+        let why = task
+            .regression
+            .as_ref()
+            .map(|r| escape(&r.text))
+            .unwrap_or_default();
         let _ = writeln!(
             table,
-            "| {} | {} | {state} | {} |",
+            "| {} | {} | {state} | {why} | {} |",
             escape(&task.id),
             escape(&title),
             task.attestation.as_deref().map(escape).unwrap_or_default()
@@ -281,6 +288,7 @@ mod tests {
             attestation: Some("signed ssh SHA256:x".to_owned()),
             strength: None,
             bug: None,
+            regression: None,
         }
     }
 
@@ -313,6 +321,58 @@ mod tests {
                 ..StatusTotals::default()
             },
         }
+    }
+
+    /// One wording source (SC-003): every interface says a regression-only
+    /// tick's reason in the same bytes — the report's Markdown, the plain
+    /// report, `--json`, the evidence rows and the finish line.
+    #[test]
+    fn a_regression_only_reason_reads_the_same_everywhere() {
+        use speccoder_core::regression::{ImplementedBy, Regression, RegressionReason};
+        let why = Regression::of(RegressionReason::AlreadyPassing {
+            implemented_by: Some(ImplementedBy::Task {
+                task: "T003".to_owned(),
+                commit: "d433d77".to_owned(),
+            }),
+        });
+        let text = "already passing before the attempt — implemented by T003";
+        assert_eq!(why.text, text);
+        let mut r = report(1);
+        r.tasks[0].state = "regression_only".to_owned();
+        r.tasks[0].regression = Some(why.clone());
+        // Markdown: the Why column, nothing but speccoder's words.
+        let md = within(&r, &[], usize::MAX);
+        assert!(md.contains(&format!("| {} |", escape(text))), "{md}");
+        // Plain report.
+        let mut plain = Vec::new();
+        crate::human::status(&mut plain, &r, "").unwrap();
+        assert!(String::from_utf8_lossy(&plain).contains(&format!("why: {text}")));
+        // --json.
+        assert_eq!(
+            serde_json::to_value(&r.tasks[0]).unwrap()["regression"]["text"],
+            text
+        );
+        // Evidence rows (every interface's drawer).
+        let rows = speccoder_runtime::evidence::rows(&r.tasks[0], &[], None);
+        assert_eq!(rows[0].text, format!("none red first — {text}"));
+        // The finish line.
+        let finished = speccoder_runtime::progress::Event::TaskFinished {
+            task: "T007".to_owned(),
+            outcome: "regression_only".to_owned(),
+            message: String::new(),
+            run: None,
+            input_tokens: 0,
+            output_tokens: 0,
+            cache_read_tokens: 0,
+            cache_write_tokens: 0,
+            usd: None,
+            regression: Some(why),
+        };
+        assert!(
+            crate::progress::line(&finished, None)
+                .unwrap_or_default()
+                .contains(&format!("regression only — {text}"))
+        );
     }
 
     #[test]

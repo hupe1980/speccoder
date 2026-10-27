@@ -1,0 +1,53 @@
+# speccoder configuration — written by `speccoder init`; review it, then commit it
+# (runs read the committed file in their worktree).
+
+# Checks: speccoder runs them before and after every attempt and decides the
+# verdict from them. `fast` runs per task; `full` at phase ends and `verify --tier full`.
+
+# Cargo.toml; cargo-nextest is installed (its JUnit report names every test)
+[checks.test]
+argv = ["cargo", "nextest", "run", "--workspace", "--profile", "speccoder", "--no-tests=warn"]
+junit = "target/nextest/speccoder/junit.xml"
+
+# Cargo.toml
+[checks.fmt]
+argv = ["cargo", "fmt", "--all", "--check"]
+
+# Cargo.toml
+[checks.clippy]
+argv = ["cargo", "clippy", "--workspace", "--all-targets", "--", "-D", "warnings"]
+tier = "full"
+
+# The model. The API key comes only from the environment (OPENAI_API_KEY).
+[model]
+provider = "openai"
+model = "gpt-5.4-mini"
+# price_input_per_mtok = 0.0       # USD per million tokens, for `speccoder report --cost`
+# price_output_per_mtok = 0.0
+# price_cache_read_per_mtok = 0.0
+
+# Limits per attempt, and attempts per task (a failed verdict is retried once).
+# [budget]
+# max_turns = 30
+# max_tool_calls = 100
+# max_attempts = 2
+
+# Test files that existed before an attempt: "ask" before any change (default), or
+# "additions" to let new tests be added without asking (changed lines still ask).
+# [tests]
+# frozen = "additions"
+
+# Commands run in an OS sandbox: writes only to the worktree, credentials unreadable,
+# no network beyond loopback. Give commands that fetch the network, or switch it off.
+# [sandbox]
+# network_allow = [["cargo", "fetch"]]
+# mode = "auto"           # "required" refuses to run unsandboxed; "off"
+
+# Commands the model may run besides the checks (argv prefixes); others need approval.
+
+# The formatter speccoder runs after each attempt, before the checks.
+[format]
+argv = ["cargo", "fmt", "--all"]
+
+[commands]
+allow = [["cargo", "test"], ["cargo", "check"], ["cargo", "build"]]

@@ -1,0 +1,40 @@
+{
+  "head": "bug: signing in twice logs out",
+  "result": {
+    "command": "task",
+    "data": {
+      "action": "acceptance_at",
+      "feature": "001-graph",
+      "record": "<state>/<hex>/decisions/acceptance-at.json",
+      "task": "T003",
+      "text": "US1"
+    },
+    "exit_code": 0,
+    "message": "T003 writes US1's acceptance tests: its tick can be verified on US1's scenarios",
+    "payload": "control",
+    "schema_version": 2,
+    "status": "ok"
+  },
+  "review": {
+    "requirements": {
+      "FR-001": {
+        "at": 0,
+        "by": "Dana Example",
+        "comment": "looks right",
+        "line": "- **FR-001**: Users MUST log in with a passkey.",
+        "sha256": "sha256:<hex>",
+        "verdict": "approved",
+        "via": "web"
+      },
+      "FR-002": {
+        "at": 0,
+        "by": "Dana Example",
+        "line": "- **FR-002**: Sessions MUST expire after thirty minutes.",
+        "sha256": "sha256:<hex>",
+        "verdict": "approved",
+        "via": "web"
+      }
+    }
+  },
+  "status": " M speccoder.toml\n M specs/001-graph/spec.md\n?? .specify/feature.json\n"
+}

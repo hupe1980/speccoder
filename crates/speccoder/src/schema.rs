@@ -62,6 +62,7 @@ fn projection(name: &str) -> &'static str {
         "bug.outcome" => "events/bug.outcome",
         "oracle.frozen" => "events/oracle.frozen",
         "oracle.lapsed" => "events/oracle.lapsed",
+        "collection.checked" => "events/collection.checked",
         _ => "",
     }
 }
@@ -102,6 +103,7 @@ const fn describe(payload: &str) -> &'static str {
         b"auth" => "auth: who speccoder is on a GitHub host, and where its token comes from",
         b"actions" => "actions: what a person can do now, and the feature's journey",
         b"bug" => "bug: a bug, its triad, reproductions, confirmation and how far it got",
+        b"preset" => "preset add: the speccoder Spec Kit preset, installed or offered",
         b"policy_coverage" => "config coverage: what a prefix entry would newly allow",
         b"comments" => "review comments: the comment tray and the last revision turn",
         b"branch_verify" => {
@@ -183,7 +185,9 @@ published! {
     "events/bug.outcome", "PublicBugOutcome" => crate::events::PublicBugOutcome,
     "events/oracle.frozen", "PublicOracleFrozen" => crate::events::PublicOracleFrozen,
     "events/oracle.lapsed", "PublicOracleLapsed" => crate::events::PublicOracleLapsed,
+    "events/collection.checked", "PublicCollectionChecked" => crate::events::PublicCollectionChecked,
     "comments", "CommentsView" => core::oracle::CommentsView,
+    "preset", "PresetReport" => core::PresetReport,
 }
 
 /// The predicate schema's name (`speccoder schema task-verification-v0`).

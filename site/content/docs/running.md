@@ -74,6 +74,8 @@ speccoder do "Make the login button blue" --no-run      # record it; prints the 
 | `failed` | 20 | Checks or acceptance tests failed after the retries | Inspect the saved attempt; `task nudge`, or fix the spec |
 | `failed` (judge input changed) | 20 | A command changed `speccoder.toml`, CI, test-runner or agent configuration; not retried | The task must not need that change |
 | `stopped[ACCEPTANCE-WEAK]`, `stopped[TESTS-OVER-STRICT]` | 23 | The acceptance tests are too weak, or stricter than the spec; not ticked | [Strength](@/docs/evidence.md#acceptance-strength), [over-strict tests](@/docs/evidence.md#over-strict-tests) |
+| `failed` (`TESTS-NOT-COLLECTED`) | 20 | A test file the attempt wrote never ran | Retried with the runner's rule; see [tests that never ran](@/docs/evidence.md#tests-that-never-ran) |
+| `stopped[TESTS-COLLECTION-UNKNOWN]` | 23 | speccoder cannot tell whether a changed test file ran; not ticked | Declare `junit` or `list` for the check, or `task accept` (it ticks the saved attempt's code) |
 | `acceptance_failed` | 23 | The acceptance tests could not be written (`ACCEPTANCE-UNWRITTEN`); nothing was attempted | Check the provider and key, then run again |
 | feature done, full tier failed | 20 | Every task is ticked, but a `full` check failed | Fix it, or `speccoder pr --force` |
 | unfinished checklists | 23 | `checklists/*.md` has unchecked items; nothing ran | Finish them, or `--ignore-checklists` |
@@ -86,6 +88,10 @@ speccoder do "Make the login button blue" --no-run      # record it; prints the 
 | `interrupted` | 23 | Killed while a tool call was running | Run again; see [recovery](@/docs/recovery.md) |
 
 The `task` commands (`approve`, `reject`, `accept`, `skip`, `nudge`, `rule`, `restore`, `drop`, `show`) are in the [CLI reference](@/docs/cli.md#work). `task accept` ticks on your word and shows as `attested`, never `verified`.
+
+## Where tests go
+
+speccoder detects the project's test layout — each runner's collection rule as configured, where tests live today, the naming habit, files nothing runs — and gives it to the implementer and every test author as a fact. Its own acceptance tests go to **one file per story** in that layout (`tests/acceptance_us1.rs`, `tests/test_acceptance_us1.py`, `src/acceptance-us1.test.ts`, `<package>/acceptance_us1_test.go`); a later task of the story adds its section at the end — a section that changes or inserts among the earlier tests, or skips a test, is refused — and is red only by what its section adds. Convergence tasks keep a file of their own. With no place the runner collects (Cargo's `autotests = false`, a `testpaths` that does not exist), no acceptance test is written and `speccoder doctor` names the setting.
 
 ## Retries
 

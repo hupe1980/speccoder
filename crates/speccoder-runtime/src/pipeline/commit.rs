@@ -193,7 +193,7 @@ pub(crate) struct TickFacts<'a> {
 }
 
 /// The commit message of a ticked task: subject, title, and the trailers
-/// `report` reads back (`Spec-Task`, `Verdict`, `Red`, `Flaky`,
+/// `report` reads back (`Spec-Task`, `Verdict`, `Regression-Only`, `Red`, `Flaky`,
 /// `Scope-Outside`, `Checklists`, `Held-Out`, `Acceptance-Strength`,
 /// `Ruling`, `Run`, `Usage`, `Mutation`).
 pub(crate) fn tick_message(f: &TickFacts<'_>) -> String {
@@ -216,11 +216,27 @@ pub(crate) fn tick_message(f: &TickFacts<'_>) -> String {
             .and_then(|a| a.get("held_out"))
             .and_then(|h| h.get("usage")),
     );
-    let mut evidence = f
-        .red
-        .map(|c| format!("Red: {}\n", super::acceptance::class_word(c)))
-        .unwrap_or_default();
+    let mut evidence = match (&report.regression, verdict_word.as_str()) {
+        (Some(r), "regression_only") => format!(
+            "{}: {}\n",
+            speccoder_core::regression::TRAILER,
+            speccoder_core::regression::trailer(&r.reason)
+        ),
+        _ => String::new(),
+    };
+    evidence.push_str(
+        &f.red
+            .map(|c| format!("Red: {}\n", super::acceptance::class_word(c)))
+            .unwrap_or_default(),
+    );
     evidence.push_str(&held_out_trailer(report.acceptance.as_ref()));
+    if let Some(story) = report
+        .acceptance
+        .as_ref()
+        .and_then(|a| a["story_file"].as_str())
+    {
+        evidence.push_str(&format!("Story-File: {story}\n"));
+    }
     evidence.push_str(&flaky_trailer(report.verification.as_ref()));
     evidence.push_str(&scope_trailer(report.scope.as_ref()));
     if let Some(strength) = &report.strength {
@@ -244,6 +260,33 @@ pub(crate) fn tick_message(f: &TickFacts<'_>) -> String {
             .and_then(crate::mutation::trailer)
             .unwrap_or_default()
     )
+}
+
+/// The story files speccoder created on the feature's branch: the
+/// `Story-File:` trailers of its ticks (FR-029).
+pub(crate) fn story_files(repo: &std::path::Path, feature: &str) -> Vec<String> {
+    let log = crate::git::Git::at(repo)
+        .run(&[
+            "log",
+            "--first-parent",
+            "--format=%(trailers:key=Spec-Task,valueonly)%x1f%(trailers:key=Story-File,valueonly)%x1e",
+            "HEAD",
+        ])
+        .map(|b| String::from_utf8_lossy(&b).into_owned())
+        .unwrap_or_default();
+    let mut out: Vec<String> = log
+        .split('\u{1e}')
+        .filter_map(|r| {
+            let (task, file) = r.trim().split_once('\u{1f}')?;
+            task.trim()
+                .starts_with(&format!("{feature}/"))
+                .then(|| file.trim().to_owned())
+        })
+        .filter(|f| !f.is_empty())
+        .collect();
+    out.sort();
+    out.dedup();
+    out
 }
 
 /// `Held-Out: passed=<k>/<k> manifest=sha256:<hex>`, `absent=<reason>` or

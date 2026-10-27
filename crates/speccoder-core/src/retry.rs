@@ -42,6 +42,10 @@ pub struct Digest {
     pub checks: Vec<FailedCheck>,
     /// Paths the previous attempt changed; its changes were discarded.
     pub discarded: Vec<String>,
+    /// Test files it wrote that never ran: one line each — the path, the
+    /// runner's rule and the ways out.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub uncollected: Vec<String>,
 }
 
 /// The retry reason for failed held-out tests: the scenario IDs and the
@@ -116,6 +120,7 @@ pub fn digest(
         reasons: reasons.to_vec(),
         checks,
         discarded: discarded.to_vec(),
+        uncollected: Vec::new(),
     }
 }
 
@@ -129,12 +134,26 @@ pub fn fingerprint(digest: &Digest) -> String {
         .map(|c| format!("{}: {}", c.name, normalise(first_error(&c.excerpt))))
         .collect();
     parts.sort();
-    if parts.is_empty() {
+    let joined = if parts.is_empty() {
         let mut reasons: Vec<String> = digest.reasons.iter().map(|r| normalise(r)).collect();
         reasons.sort();
-        return reasons.join(" | ");
+        reasons.join(" | ")
+    } else {
+        parts.join(" | ")
+    };
+    // The same file never running twice is the same failure.
+    let mut paths: Vec<&str> = digest
+        .uncollected
+        .iter()
+        .filter_map(|l| l.split('`').nth(1))
+        .collect();
+    paths.sort_unstable();
+    paths.dedup();
+    if paths.is_empty() {
+        joined
+    } else {
+        format!("{joined} | uncollected: {}", paths.join(", "))
     }
-    parts.join(" | ")
 }
 
 fn output(stderr: &str, stdout: &str) -> String {

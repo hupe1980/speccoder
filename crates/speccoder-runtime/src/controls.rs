@@ -478,6 +478,43 @@ fn accept_task(
         )
         .with_code("TASK-DONE");
     }
+    // The attempt that stopped because speccoder could not tell whether
+    // its tests ran was saved and undone: accepting it accepts that code,
+    // so it is put back first — never a tick on the code without it.
+    let mut restored = String::new();
+    if let Some(saved) = crate::attempts::list(&wt_root, &w.feature)
+        .into_iter()
+        .find(|a| a.task == task && !is_set_aside(a))
+        .filter(|a| a.outcome == "collection_unknown")
+    {
+        if options.session.is_some() {
+            return refuse(
+                CommandStatus::GitPrecondition,
+                format!(
+                    "{task}'s attempt ({}) was saved and undone; in place it cannot be put back for you: restore it with `git checkout {} -- .`, then accept",
+                    saved.reference, saved.reference
+                ),
+            );
+        }
+        let tree = crate::git::Git::at(&wt_root)
+            .line(&["rev-parse", &format!("{}^{{tree}}", saved.commit)])
+            .map(|t| t.trim().to_owned());
+        let put_back = tree.map_err(|e| e.0).and_then(|tree| {
+            let tmp = tempfile::tempdir().map_err(|e| e.to_string())?;
+            crate::worktree::restore(&wt_root, tmp.path(), &crate::worktree::Checkpoint(tree))
+                .map_err(|e| e.0)
+        });
+        if let Err(e) = put_back {
+            return refuse(
+                CommandStatus::Error,
+                format!(
+                    "{task}'s saved attempt ({}) could not be put back: {e}",
+                    saved.reference
+                ),
+            );
+        }
+        restored = format!(" with its saved attempt ({})", saved.reference);
+    }
     let reason = one_line(reason);
     let by = person(&project);
     let message = format!(
@@ -544,7 +581,7 @@ fn accept_task(
                     record: Some(commit),
                 },
                 &format!(
-                    "{task} ticked as attested by {by} (not verified); `report` shows it as such{attested}"
+                    "{task} ticked as attested by {by}{restored} (not verified); `report` shows it as such{attested}"
                 ),
             )
         }

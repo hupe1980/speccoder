@@ -170,6 +170,25 @@ pub fn removed_tests(before: &str, after: &str) -> Vec<String> {
     gone
 }
 
+/// The section `new` adds at the end of `old`: `None` when `new` changes,
+/// removes or inserts among `old`'s lines, or adds nothing.
+#[must_use]
+pub fn appended_section<'n>(old: &str, new: &'n str) -> Option<&'n str> {
+    // The old text whole, then new lines: never a line inserted among it.
+    let added = new.strip_prefix(old).or_else(|| {
+        (!old.ends_with('\n'))
+            .then(|| new.strip_prefix(&format!("{old}\n")))
+            .flatten()
+    })?;
+    (!added.trim().is_empty()).then_some(added)
+}
+
+/// Whether `text` holds a marker that skips a test.
+#[must_use]
+pub fn has_skip_marker(text: &str) -> bool {
+    Regex::new(SKIP_MARKERS).is_ok_and(|r| r.is_match(text))
+}
+
 /// Whether every line of `old` survives, unchanged and in order, in `new`:
 /// the change only adds lines (`[tests] frozen = "additions"`).
 #[must_use]

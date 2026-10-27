@@ -268,6 +268,15 @@ fn task_list(f: &mut Frame<'_>, app: &App, area: Rect, focused: bool) {
                     },
                     st(Token::Attention),
                 ),
+                // Why a regression-only tick is one, muted after its title.
+                Span::styled(
+                    t.regression
+                        .as_ref()
+                        .filter(|_| t.state == "regression_only")
+                        .map(|r| format!(" — {}", a(&r.text)))
+                        .unwrap_or_default(),
+                    st(Token::Muted),
+                ),
             ]))
         })
         .collect();

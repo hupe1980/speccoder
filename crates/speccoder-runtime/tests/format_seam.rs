@@ -94,6 +94,7 @@ fn bundles_and_acceptance_input_are_unchanged() {
         &["src/lib.rs".to_owned()],
         "Cargo.toml:\n[package]",
         &[],
+        None,
     );
     golden(
         "acceptance-input.json",

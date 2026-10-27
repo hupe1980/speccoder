@@ -957,6 +957,8 @@ struct Author<'a> {
     plane: substrate::Plane,
     bundle: Value,
     instructions: Vec<crate::instructions::Instruction>,
+    /// The test layout's text: where the review's files are placed.
+    test_layout: String,
 }
 
 impl<'a> Author<'a> {
@@ -1014,6 +1016,7 @@ impl<'a> Author<'a> {
             plane,
             bundle,
             instructions,
+            test_layout: crate::layout::text_at(&ctx.root),
         })
     }
 
@@ -1053,6 +1056,12 @@ impl<'a> Author<'a> {
             "/bundle/plan",
             self.bundle["plan"].as_str().unwrap_or_default().as_bytes(),
         );
+        m.push(
+            ContextKind::TestLayout,
+            "worktree",
+            "/test_layout",
+            self.test_layout.as_bytes(),
+        );
         for (i, n) in notes.iter().enumerate() {
             let kind = if n.starts_with("Rejected `") {
                 ContextKind::Rejection
@@ -1089,6 +1098,7 @@ impl<'a> Author<'a> {
             instructions: &self.instructions,
             context: &context,
             sample,
+            test_layout: Some(&self.test_layout),
         });
         let task = format!("req-{}", req.key);
         let outcome = self
@@ -1533,6 +1543,7 @@ fn held_out(
         red_class: Some(RedClass::Assertion),
         held_out: None,
         generation_failed: None,
+        skip_cause: None,
     };
     let task = format!("req-{}", req.key);
     let store = crate::held_out::sealed_dir(&ctx.plane_dir, &ctx.feature, &req.key);
@@ -1550,6 +1561,8 @@ fn held_out(
             scenarios: &req.scenarios,
             instructions: &author.instructions,
             runner: &bench.runner,
+            layout: None,
+            story_files: &[],
         },
         &visible,
         &req.scenarios,

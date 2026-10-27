@@ -114,6 +114,7 @@ fn project(state: &Path) -> tempfile::TempDir {
                 "src/lib.rs".to_owned(),
             ],
             composition: false,
+            red_tests: None,
         }],
         discarded: Vec::new(),
     };

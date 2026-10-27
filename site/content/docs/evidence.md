@@ -53,6 +53,42 @@ Anything else is **not demonstrated** (another build or syntax error, a collecti
 - A check that fails, then passes on a rerun, is `flaky`: it does not fail the task, and a flaky task-specific check is never evidence for `verified`.
 - If writing the acceptance tests fails, nothing is attempted and the task stops for you.
 
+## Tests that never ran
+
+A test that never ran is evidence of nothing. After every attempt, each test file it added or changed (a test path that defines tests: `#[test]` and `#[<crate>::test]`, `def test…`, `it(`/`test(`, `func Test…`) is checked against what the fast checks collected — a test counts only if a check the verdict rests on runs it, and ignored or skipped tests never count. In this order:
+
+1. The toolchain's static rule, which alone can prove a file is never collected: Cargo builds `tests/*.rs` and `tests/<dir>/main.rs` and the modules they declare (`mod`, `#[path]`, `autotests`, `[[test]]`); pytest collects `python_files` under `testpaths`, outside `norecursedirs`; vitest and jest collect their `include`/`testMatch` (read from `package.json` or a JSON config, never from a config written as code); Go runs `*_test.go` outside `testdata/` and `_`/`.` directories, under the build tags the check sets, with functions named `Test…`, `Example…`, `Fuzz…`.
+2. The check's JUnit report, when it was freshly written by this run.
+3. A listing built from the command of a fast check that runs the toolchain — its packages, targets, paths and filters kept: `cargo nextest list`, `cargo test … -- --list` (with `--ignored` to leave ignored tests out), `pytest --collect-only`, `vitest list`, `jest --listTests`, `go test -list` — or the check's own [`list`](@/docs/configuration.md#checks-name) command; sandboxed, under the check's deadline. A listing that changes the worktree fails the attempt.
+
+A file from which no test ran fails the verdict with the rule as the reason, and the retry is told the file, the rule and the ways out:
+
+```text
+tests not collected: `tests/unit/greet_name.rs` — Cargo builds `tests/*.rs` and `tests/<dir>/main.rs` (and the modules they declare); this file is neither
+```
+
+A file none of the three can decide stops the task (`TESTS-COLLECTION-UNKNOWN`): it is never ticked. That includes a file no fast check runs, a file with a skip a listing cannot see (`pytest.mark.skip`, `it.skip`, `t.Skip`), and one the static rule cannot settle (a report names its tests, or the checkout is too large to walk). Declare a JUnit report or a `list` command for the check, or `speccoder task accept` it — which puts the saved attempt back before ticking. Test helpers without tests, deleted files and build output are not judged. A JUnit report is read only when this run wrote it: a report left from before is removed first, one dated after the run is ignored, and a report tracked by git is never read. The evidence rows show a **Collection** row; the signed statement carries the files and what decided each.
+
+Acceptance and held-out tests count at green only when the green run collected at least as many tests as the red run — or, when red reported no count (it did not build), as many as the files declare — and at least one. A green run whose count cannot be read is no evidence.
+
+## Why a tick is regression-only
+
+Every `regression_only` tick carries one reason, decided by code, recorded in the commit (`Regression-Only:` trailer) and its signed statement, and worded the same everywhere:
+
+| Reason | Means |
+|---|---|
+| `acceptance_off` | `[acceptance] generate = false` |
+| `no_story` | The task belongs to no user story: nothing to derive a test from |
+| `no_scenarios` | Its story states no acceptance scenario |
+| `author_failed` | The test author's files could not be used (refused path, command not allowed, no place the runner collects) |
+| `author_wrote_none` | The test author wrote no test |
+| `tests_not_collected` | The acceptance command collected no test |
+| `not_red` | The acceptance tests did not fail first (build error, timeout, flaky, …) |
+| `already_passing` | They passed before the attempt — with the task whose tick made them pass |
+| `unrecorded` | Ticked by an earlier speccoder: the reason was not recorded |
+
+For `already_passing`, speccoder runs the acceptance tests on the feature's earlier ticks (bisected, at most five sandboxed runs, each in a scratch worktree of its own, under the checks' deadline) to find which task implemented the behaviour, or that it passed before the feature. For a section added to a story's file, only that section's tests run (Rust, pytest and Go; for others no answer is given). Any run that cannot say — a worktree that cannot be made, a timeout, output that cannot be read — ends the search with "could not be determined", never a task's name. A feature with at least three ticks of which more than half are regression-only gets one **Little Was Verified** item in Needs You, with the reasons by count and the fix, until its branch is pushed.
+
 ## Held-out tests
 
 Frozen visible tests stop an implementer from editing the tests, not from tailoring code to them. So after the visible tests are red, a second author call writes **held-out** tests for the same scenarios, with other inputs and the edge cases the spec states. They must be red too.

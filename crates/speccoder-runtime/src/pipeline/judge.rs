@@ -125,14 +125,35 @@ pub(crate) fn judge_checks(
 ) -> Result<(), String> {
     let mut current = verify::run_checks(project, Some(verify::config::Tier::Fast), runner)?;
     let mut task_checks: Vec<&str> = Vec::new();
+    let mut uncollected_at_green = false;
     if let Some(a) = acceptance.filter(|a| a.argv.is_some()) {
         let argv = a.argv.as_deref().unwrap_or_default();
         let all: Vec<&[String]> = std::iter::once(argv)
             .chain(a.more_argv.iter().map(Vec::as_slice))
             .collect();
-        let green = verify::rerun_once(run_all_acceptance(project, &all, runner), || {
-            run_all_acceptance(project, &all, runner)
+        let counted = std::cell::Cell::new(None);
+        let green = verify::rerun_once(run_all_acceptance(project, &all, runner, &counted), || {
+            run_all_acceptance(project, &all, runner, &counted)
         });
+        // Green is evidence only when it collected what red did (FR-008):
+        // red's count, else what the files declare, and at least one; a
+        // green run whose count cannot be read is no evidence.
+        let red_tests = a.report["red_tests"]
+            .as_u64()
+            .and_then(|n| usize::try_from(n).ok());
+        let required = red_tests
+            .unwrap_or_else(|| declared(project, &a.report))
+            .max(1);
+        if let Some(r) = report.acceptance.as_mut() {
+            r["green_tests"] = serde_json::json!(counted.get());
+            r["green_needs"] = serde_json::json!(required);
+        }
+        if a.red
+            && green.status == CheckStatus::Passed
+            && counted.get().is_none_or(|seen| seen < required)
+        {
+            uncollected_at_green = true;
+        }
         if let Some(r) = report.acceptance.as_mut() {
             r["green"] = serde_json::json!(green.status == CheckStatus::Passed);
             if green.flaky {
@@ -147,7 +168,14 @@ pub(crate) fn judge_checks(
     }
     let cmp = compare(baseline, &current);
     current.passed = passes(&current.checks, Some(&cmp));
-    let judged = verdict(&task_checks, &current.checks, Some(&cmp));
+    let mut judged = verdict(&task_checks, &current.checks, Some(&cmp));
+    if uncollected_at_green {
+        let mut reasons = vec![GREEN_UNCOLLECTED.to_owned()];
+        if let Verdict::Failed { reasons: more } = judged {
+            reasons.extend(more);
+        }
+        judged = Verdict::Failed { reasons };
+    }
     report.verdict = Some(if findings.is_empty() {
         judged
     } else {
@@ -162,16 +190,42 @@ pub(crate) fn judge_checks(
     Ok(())
 }
 
+/// The tests the acceptance files declare by their toolchains' markers.
+fn declared(project: &Path, acceptance: &serde_json::Value) -> usize {
+    acceptance["files"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|f| f.as_str())
+        .filter_map(|f| {
+            let t = speccoder_core::collection::toolchain_of(f)?;
+            let text = std::fs::read_to_string(project.join(f)).ok()?;
+            Some(speccoder_core::collection::declared_tests(t, &text))
+        })
+        .sum()
+}
+
+/// The verdict reason when green collected fewer tests than red did.
+pub(crate) const GREEN_UNCOLLECTED: &str = "acceptance tests not collected at green";
+
 /// Every command of an acceptance set, as one result: passed only when
-/// each passed (the first failure's output is kept).
+/// each passed (the first failure's output is kept). `counted`: the tests
+/// the first command collected.
 fn run_all_acceptance(
     project: &Path,
     all: &[&[String]],
     runner: &sandbox::Runner,
+    counted: &std::cell::Cell<Option<usize>>,
 ) -> speccoder_core::verify::CheckResult {
     let mut first = None;
-    for argv in all {
-        let r = run_acceptance(project, argv, runner);
+    for (i, argv) in all.iter().enumerate() {
+        let (r, summary) = super::acceptance::acceptance_run(project, argv, runner);
+        if i == 0 {
+            counted.set(speccoder_core::verify::collected_count(
+                &r,
+                summary.as_ref(),
+            ));
+        }
         if r.status != CheckStatus::Passed {
             return r;
         }

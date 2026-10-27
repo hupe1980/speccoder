@@ -74,6 +74,8 @@ pub const REGISTRY: &[Name] = &[
     p("oracle.stage"),
     d("oracle.frozen"),
     d("oracle.lapsed"),
+    d("collection.checked"),
+    p("regression.bisected"),
 ];
 
 /// The registered name `name`.

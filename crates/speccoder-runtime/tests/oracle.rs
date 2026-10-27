@@ -1497,6 +1497,7 @@ fn the_code_view_never_shows_a_held_out_file_or_follows_a_link_out_of_the_worktr
             scenarios: vec!["US1-1".to_owned()],
             argv: vec!["sleep".to_owned(), "1".to_owned()],
             composition: false,
+            red_tests: None,
         },
         format!("{SECRET}\n"),
     )];

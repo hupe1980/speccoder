@@ -56,6 +56,7 @@ The commands that decide whether nothing regressed. A check's command up to its 
 | `tier` | `"fast"` | `fast` judges every task; `full` (slow linters, audits) runs once after a run ticks the feature's last task, and with `speccoder verify` |
 | `timeout_secs` | `600` | Deadline for the whole process group (1–86400) |
 | `junit` | — | A JUnit XML report the check writes, for per-test results and regression detection |
+| `list` | — | A command that lists the tests the check would run, one test id or file path per line; speccoder runs it when it cannot otherwise tell whether a changed test file was [collected](@/docs/evidence.md#tests-that-never-ran) |
 
 ## `[model]`
 

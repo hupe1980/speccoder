@@ -68,6 +68,8 @@ pub enum Kind {
     BugReproWeak,
     /// The monitor suspects a shortcut.
     Gaming,
+    /// Most of a feature's ticks are regression-only: one diagnosis.
+    Unverified,
     /// Proven against an earlier wording.
     Stale,
     /// The spec leaves questions open.
@@ -96,7 +98,7 @@ pub enum Kind {
 
 impl Kind {
     /// Every kind, the most urgent first.
-    pub const ALL: [Self; 20] = [
+    pub const ALL: [Self; 21] = [
         Self::Unknown,
         Self::Approval,
         Self::ApprovalBatch,
@@ -106,6 +108,7 @@ impl Kind {
         Self::BugUnchangedNotHolding,
         Self::BugReproWeak,
         Self::Gaming,
+        Self::Unverified,
         Self::Stale,
         Self::Question,
         Self::Ambiguous,
@@ -132,6 +135,7 @@ impl Kind {
             Self::BugUnchangedNotHolding => "bug_unchanged_not_holding",
             Self::BugReproWeak => "bug_repro_weak",
             Self::Gaming => "gaming",
+            Self::Unverified => "unverified",
             Self::Stale => "stale",
             Self::Question => "question",
             Self::Ambiguous => "ambiguous",
@@ -164,7 +168,8 @@ impl Kind {
             | Self::Revise
             | Self::Stuck
             | Self::Commit => Group::BlockedOnYou,
-            Self::Stale
+            Self::Unverified
+            | Self::Stale
             | Self::AutopilotDenied
             | Self::Review
             | Self::BugAlreadySatisfied
@@ -190,7 +195,7 @@ impl Kind {
 
     /// Every recorded name, the most urgent first.
     #[must_use]
-    pub fn names() -> [&'static str; 20] {
+    pub fn names() -> [&'static str; 21] {
         Self::ALL.map(Self::as_str)
     }
 }
@@ -220,7 +225,10 @@ mod tests {
         // Today's kinds keep their order among themselves.
         let today: Vec<&str> = Kind::names()
             .into_iter()
-            .filter(|n| !n.starts_with("bug_") && !matches!(*n, "ambiguous" | "autopilot_denied"))
+            .filter(|n| {
+                !n.starts_with("bug_")
+                    && !matches!(*n, "ambiguous" | "autopilot_denied" | "unverified")
+            })
             .collect();
         assert_eq!(
             today,
@@ -243,6 +251,9 @@ mod tests {
         assert_eq!(Kind::BugAlreadySatisfied.group(), Group::ReadyToReview);
         assert_eq!(Kind::Ambiguous.group(), Group::BlockedOnYou);
         assert_eq!(Kind::AutopilotDenied.group(), Group::ReadyToReview);
+        // First of its group: before `stale`.
+        assert_eq!(Kind::Unverified.group(), Group::ReadyToReview);
+        assert_eq!(Kind::Unverified.rank() + 1, Kind::Stale.rank());
         for k in [
             Kind::BugConfirm,
             Kind::BugCannotReproduce,
