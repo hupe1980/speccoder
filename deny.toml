@@ -11,6 +11,11 @@ ignore = [
     # Through Tauri's Linux stack (gtk3-macros), only with the `app` feature;
     # a build-time macro crate, no code of it runs in the window.
     { id = "RUSTSEC-2024-0370", reason = "proc-macro-error via gtk3-macros, `app` feature only, build time only" },
+    # crypto-bigint 0.5 through p256 0.13, which aws-config's `aws login`
+    # credentials sign their DPoP proofs with; no 0.5 release is fixed and
+    # aws-config pins p256 0.13. A local timing side channel on the session's
+    # own key, in speccoder's process only.
+    { id = "RUSTSEC-2026-0387", reason = "crypto-bigint 0.5 via p256 0.13 in aws-config's credentials-login; no fixed 0.5 release" },
 ]
 
 [licenses]

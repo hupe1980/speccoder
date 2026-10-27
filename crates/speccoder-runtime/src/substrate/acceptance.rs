@@ -771,10 +771,15 @@ impl Skill for Acceptance {
                 }
                 let (key, kind) = match style {
                     PromptStyle::OpenAi => ("input", "input_text"),
-                    PromptStyle::Anthropic | PromptStyle::Chat => ("messages", "text"),
+                    PromptStyle::Anthropic | PromptStyle::Chat | PromptStyle::Parts { .. } => {
+                        ("messages", "text")
+                    }
                 };
                 if let Some(content) = p[key][0]["content"].as_array_mut() {
                     content.push(json!({ "type": kind, "text": text }));
+                }
+                if let PromptStyle::Parts { caches } = style {
+                    super::model_config::to_parts(&mut p, caches);
                 }
                 p
             },

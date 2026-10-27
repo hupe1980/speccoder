@@ -531,7 +531,9 @@ impl Skill for Attempt {
                 if let Some(text) = crate::instructions::section(&given) {
                     let (key, kind) = match style {
                         PromptStyle::OpenAi => ("input", "input_text"),
-                        PromptStyle::Anthropic | PromptStyle::Chat => ("messages", "text"),
+                        PromptStyle::Anthropic | PromptStyle::Chat | PromptStyle::Parts { .. } => {
+                            ("messages", "text")
+                        }
                     };
                     if let Some(content) = p[key][0]["content"].as_array_mut() {
                         content.push(json!({ "type": kind, "text": text }));
@@ -540,7 +542,9 @@ impl Skill for Attempt {
                 if let Some(text) = input["test_layout"].as_str().filter(|t| !t.is_empty()) {
                     let (key, kind) = match style {
                         PromptStyle::OpenAi => ("input", "input_text"),
-                        PromptStyle::Anthropic | PromptStyle::Chat => ("messages", "text"),
+                        PromptStyle::Anthropic | PromptStyle::Chat | PromptStyle::Parts { .. } => {
+                            ("messages", "text")
+                        }
                     };
                     if let Some(content) = p[key][0]["content"].as_array_mut() {
                         content.push(json!({ "type": kind, "text": text }));
@@ -549,7 +553,9 @@ impl Skill for Attempt {
                 if !input["digest"].is_null() {
                     let (key, kind) = match style {
                         PromptStyle::OpenAi => ("input", "input_text"),
-                        PromptStyle::Anthropic | PromptStyle::Chat => ("messages", "text"),
+                        PromptStyle::Anthropic | PromptStyle::Chat | PromptStyle::Parts { .. } => {
+                            ("messages", "text")
+                        }
                     };
                     if let Some(content) = p[key][0]["content"].as_array_mut() {
                         content
@@ -568,7 +574,9 @@ impl Skill for Attempt {
                 if !notes.is_empty() {
                     let (key, kind) = match style {
                         PromptStyle::OpenAi => ("input", "input_text"),
-                        PromptStyle::Anthropic | PromptStyle::Chat => ("messages", "text"),
+                        PromptStyle::Anthropic | PromptStyle::Chat | PromptStyle::Parts { .. } => {
+                            ("messages", "text")
+                        }
                     };
                     let text = format!("# Notes from a person\n\n{}\n", notes.join("\n"));
                     if let Some(content) = p[key][0]["content"].as_array_mut() {
@@ -579,7 +587,9 @@ impl Skill for Attempt {
                 if !told.is_empty() {
                     let (key, kind) = match style {
                         PromptStyle::OpenAi => ("input", "input_text"),
-                        PromptStyle::Anthropic | PromptStyle::Chat => ("messages", "text"),
+                        PromptStyle::Anthropic | PromptStyle::Chat | PromptStyle::Parts { .. } => {
+                            ("messages", "text")
+                        }
                     };
                     let lines: Vec<String> = told
                         .iter()
@@ -592,6 +602,9 @@ impl Skill for Attempt {
                     if let Some(content) = p[key][0]["content"].as_array_mut() {
                         content.push(json!({ "type": kind, "text": text }));
                     }
+                }
+                if let PromptStyle::Parts { caches } = style {
+                    super::model_config::to_parts(&mut p, caches);
                 }
                 p
             },

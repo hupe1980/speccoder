@@ -10,6 +10,7 @@ pub mod actions;
 pub mod approvals;
 pub mod attempts;
 pub mod attest;
+pub mod aws;
 pub mod bench;
 pub mod bug;
 pub mod code;

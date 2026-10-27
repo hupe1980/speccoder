@@ -117,6 +117,10 @@ impl Skill for Host {
                         "system": policy(self.format.wording()),
                         "messages": [{ "role": "user", "content": [{ "type": "text", "text": text }] }],
                     }),
+                    super::model_config::PromptStyle::Parts { .. } => json!({
+                        "system": policy(self.format.wording()),
+                        "input": [{ "type": "text", "text": text }],
+                    }),
                 }
             },
             &label,

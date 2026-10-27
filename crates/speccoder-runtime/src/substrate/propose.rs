@@ -53,7 +53,8 @@ fn breakpoint(ttl: CacheTtl) -> Value {
 ///
 /// Order is stability order: policy and constitution (identical for the whole
 /// project), then the plan (identical for the feature), then the task. A
-/// breakpoint closes each stable part.
+/// breakpoint closes each stable part. For [`PromptStyle::Parts`] this is
+/// the Anthropic layout; callers convert it once they have appended to it.
 #[must_use]
 pub fn layout(
     bundle: &Value,
@@ -175,7 +176,13 @@ impl Skill for Propose {
     ) -> Result<Outcome, SkillError> {
         let (ttl, style) = (self.cache_ttl, self.style);
         let policy = policy(self.format.wording());
-        let prompt = input.map(|bundle| layout(&bundle, ttl, style, &policy, self.format));
+        let prompt = input.map(|bundle| {
+            let mut p = layout(&bundle, ttl, style, &policy, self.format);
+            if let PromptStyle::Parts { caches } = style {
+                super::model_config::to_parts(&mut p, caches);
+            }
+            p
+        });
         let completion = cx
             .complete_with(&prompt, |call| call.expecting(schema()))
             .await?;

@@ -1275,6 +1275,8 @@ pub(crate) fn run_task(
     let mut held_out_log: Vec<serde_json::Value> = Vec::new();
     // A special case that survived a bug task's reproductions.
     let mut bug_weak: Option<speccoder_core::strength::Permitted> = None;
+    // The provider refused the account (its code says so): no retry helps.
+    let mut refused_account = false;
     let (mut report, attempt_status) = loop {
         let mut earlier: Vec<speccoder_core::EarlierAttempt> = Vec::new();
         let mut digest: Option<serde_json::Value> = None;
@@ -1542,6 +1544,10 @@ pub(crate) fn run_task(
                         .with_data(CommandData::Run(Box::new(report)));
                 }
                 let succeeded = matches!(outcome.status, agentplane::prelude::RunStatus::Succeeded);
+                refused_account = outcome
+                    .failed_effect
+                    .as_ref()
+                    .is_some_and(agentplane::journal::FailedEffect::refuses_the_account);
                 let mut output = outcome
                     .output
                     .as_ref()
@@ -2846,7 +2852,22 @@ pub(crate) fn run_task(
         }
     }
 
-    let (status, message) = status_and_message(&report, &attempt_status, suspected);
+    let (status, mut message) = status_and_message(&report, &attempt_status, suspected);
+    // Bedrock's refusals name where the call went: a model the region does
+    // not offer reads the same as one the account may not use.
+    if status == CommandStatus::RunFailed
+        && let Some(region) = s.model.region.as_deref()
+        && report
+            .reason
+            .as_deref()
+            .and_then(substrate::provider_refusal)
+            .is_some()
+    {
+        message.push_str(&format!(
+            " — Amazon Bedrock, region {region}, model {}",
+            s.model.model
+        ));
+    }
     if let Some(fix) = bug_fix.as_mut() {
         return super::bug::finished(
             &bug_ctx,
@@ -2869,6 +2890,13 @@ pub(crate) fn run_task(
     let result = CommandResult::new("run", status, &redact(&message, secret));
     match code {
         Some(c) => result.with_code(c),
+        None if refused_account && status == CommandStatus::RunFailed => result
+            .with_code("PROVIDER-REFUSED")
+            .with_fix(substrate::model_config::provider_refused_fix(
+                &s.model,
+                crate::aws::detect_here().as_ref(),
+                feature,
+            )),
         None => result,
     }
     .with_data(CommandData::Run(Box::new(report)))

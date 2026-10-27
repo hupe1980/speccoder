@@ -140,7 +140,7 @@ fn prompt_raw(input: &Value, ttl: CacheTtl, style: PromptStyle, w: &Wording) -> 
             "system": system_policy,
             "input": [{ "role": "user", "content": parts.iter().map(|t| json!({ "type": "input_text", "text": t })).collect::<Vec<_>>() }],
         }),
-        PromptStyle::Anthropic | PromptStyle::Chat => {
+        PromptStyle::Anthropic | PromptStyle::Chat | PromptStyle::Parts { .. } => {
             let breakpoint = match ttl {
                 CacheTtl::FiveMinutes => json!({ "type": "ephemeral" }),
                 CacheTtl::OneHour => json!({ "type": "ephemeral", "ttl": "1h" }),
@@ -160,6 +160,9 @@ fn prompt(input: &Value, ttl: CacheTtl, style: PromptStyle, w: &Wording) -> Valu
     let mut out = prompt_raw(input, ttl, style, w);
     if style == PromptStyle::Chat {
         super::model_config::strip_cache_control(&mut out);
+    }
+    if let PromptStyle::Parts { caches } = style {
+        super::model_config::to_parts(&mut out, caches);
     }
     out
 }
