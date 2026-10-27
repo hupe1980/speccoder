@@ -47,6 +47,15 @@ pub(crate) fn recipe(stack: Stack, name: &str) -> Vec<Recipe> {
                 marker: "",
                 note: None,
             },
+            // An empty file is not rustfmt-clean: the project's `fmt` check
+            // would fail before the first task.
+            Recipe {
+                argv: words(&["cargo", "fmt", "--all"]),
+                hosts: Vec::new(),
+                writes: "src/lib.rs (formatted)",
+                marker: "",
+                note: None,
+            },
         ],
         Stack::Python => vec![
             Recipe {

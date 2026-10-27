@@ -108,7 +108,7 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
-- `speccoder new --stack rust` left cargo's placeholder `add` and its test, which the first task found frozen and could not replace; the library starts empty.
+- `speccoder new --stack rust` left cargo's placeholder `add` and its test, which the first task found frozen and could not replace; the library starts empty and formatted.
 - `just record-sample` accepted a recording in which nothing was verified; it now fails unless the run ticked at least one task `verified` (in its payload and its tick's trailers), and every stop — planning's `--through tasks` included — quotes the result's own message, code and fix.
 - A planning skill or attempt that stopped for a call nobody could be asked about (`--no-prompt`) said only "needs_approval: not a configured check or allowed command". It now names the call — a command as typed — and how to let it run: its exact `[commands] allow` entry, `task approve`, or a run with prompts.
 - *Approve and Run* (`review approve --run`) and `run` on a feature without a task said "feature done: every task is ticked". Now neither is done: `NO-TASKS` (exit 16) says *no tasks yet* and names `speccoder spec tasks`; Approve and Run approves nothing. `report` says the same for a task list without a task (not "0/0 done"), the journey keeps *tasks* as the step now, and a terminal title says *stopped*, not *done*, for a run that stopped.

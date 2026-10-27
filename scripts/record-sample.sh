@@ -28,7 +28,7 @@ project="$work/wordcount"
 # A result's own words: its message, a failed skill's message, its code and
 # fix lines — or its raw output when it is not a result.
 said() {
-  jq -r '[.message, (.data.stop.message // empty), (.code // empty | "code: \(.)"), ((.fix // [])[] | "fix: \(.)")] | map(select(. != null and . != "")) | reduce .[] as $x ([]; if any(.[]; . == $x) then . else . + [$x] end) | join("\n  ")' "$1" 2>/dev/null \
+  jq -r '[.message, (.data.stop | objects | .message // empty), (.code // empty | "code: \(.)"), ((.fix // [])[] | "fix: \(.)")] | map(select(. != null and . != "")) | reduce .[] as $x ([]; if any(.[]; . == $x) then . else . + [$x] end) | join("\n  ")' "$1" 2>/dev/null \
     || { printf 'not a result: '; head -c 2000 "$1"; }
 }
 

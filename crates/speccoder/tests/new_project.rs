@@ -710,6 +710,19 @@ fn with_the_real_tools_the_formats_files_are_the_formats_own() {
         ]);
         let v: Value = serde_json::from_slice(&out.stdout).unwrap();
         assert_eq!(v["status"], "ok", "{format}: {v}");
+        // The first task starts from a library the project's checks pass on.
+        let fmt = Command::new("cargo")
+            .args(["fmt", "--all", "--check"])
+            .current_dir(m.target("real"))
+            .env("RUSTUP_HOME", &rustup)
+            .env("CARGO_HOME", &cargo)
+            .output()
+            .unwrap();
+        assert!(
+            fmt.status.success(),
+            "{format}: {}",
+            String::from_utf8_lossy(&fmt.stdout)
+        );
         let init = v["data"]["plan"]["steps"]
             .as_array()
             .unwrap()
