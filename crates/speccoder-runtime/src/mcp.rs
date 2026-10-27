@@ -232,7 +232,7 @@ async fn connect_one(
             digest: t.digest.to_hex(),
         });
     }
-    Ok((Arc::new(client), tools, notices))
+    Ok((Arc::new(Masking(Arc::new(client))), tools, notices))
 }
 
 /// Where the digests of reviewed tools are kept, in the project's state directory.
@@ -292,9 +292,68 @@ pub fn mark_reviewed(state: &Path, tools: &[McpTool], name: &str) {
     save_reviewed(state, &map);
 }
 
+/// A server's client whose results are masked ([`crate::secrets`]): a
+/// value copied from the person's secret files never reaches the model, nor
+/// the journal, through an MCP tool either.
+#[derive(Debug)]
+struct Masking(Arc<dyn ToolClient>);
+
+#[async_trait::async_trait]
+impl ToolClient for Masking {
+    async fn call(
+        &self,
+        tool: &agentplane::tools::ToolId,
+        arguments: &Value,
+        provenance: Option<&agentplane::core::Provenance>,
+    ) -> Result<Value, agentplane::tools::ToolError> {
+        let mut v = self.0.call(tool, arguments, provenance).await?;
+        crate::secrets::mask_json(&mut v);
+        Ok(v)
+    }
+
+    fn destination(&self, tool: &agentplane::tools::ToolId) -> Destination {
+        self.0.destination(tool)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_servers_result_is_masked() {
+        #[derive(Debug)]
+        struct Echo;
+        #[async_trait::async_trait]
+        impl ToolClient for Echo {
+            async fn call(
+                &self,
+                _: &agentplane::tools::ToolId,
+                arguments: &Value,
+                _: Option<&agentplane::core::Provenance>,
+            ) -> Result<Value, agentplane::tools::ToolError> {
+                Ok(arguments.clone())
+            }
+            fn destination(&self, _: &agentplane::tools::ToolId) -> Destination {
+                Destination::Local
+            }
+        }
+        crate::secrets::register("MCP_SECRET", "mcp-masked-Lr5 value");
+        let tool = agentplane::tools::ToolId {
+            server: "s".to_owned(),
+            tool: "t".to_owned(),
+        };
+        let v = tokio::runtime::Builder::new_current_thread()
+            .build()
+            .unwrap()
+            .block_on(Masking(Arc::new(Echo)).call(
+                &tool,
+                &serde_json::json!({"text": "it is mcp-masked-Lr5 value"}),
+                None,
+            ))
+            .unwrap();
+        assert_eq!(v["text"], "it is [redacted:MCP_SECRET]");
+    }
 
     #[test]
     fn servers_parse_and_bad_names_are_refused() {
