@@ -151,8 +151,25 @@ pub fn refused(command: &str, error: &str) -> speccoder_core::CommandResult {
                     "→ or another provider, or a local model: speccoder config set model.provider openai-compatible (see Settings › Model)".to_owned(),
                 ]
             }),
-        None => CommandResult::new(command, CommandStatus::ConfigError, error).with_code("CONFIG-INVALID"),
+        None => {
+            let r = CommandResult::new(command, CommandStatus::ConfigError, error)
+                .with_code("CONFIG-INVALID");
+            match config_fix(error) {
+                Some(fix) => r.with_fix(vec![fix]),
+                None => r,
+            }
+        }
     }
+}
+
+/// The `speccoder config …` command a `[model]` error ends with, if any.
+#[must_use]
+pub fn config_fix(error: &str) -> Option<String> {
+    error
+        .rsplit_once(" — ")
+        .map(|(_, fix)| fix.trim())
+        .filter(|fix| fix.starts_with("speccoder config "))
+        .map(str::to_owned)
 }
 
 /// What gets Bedrock credentials when none is found: a Bedrock API key, an
@@ -184,6 +201,29 @@ pub fn provider_refused_fix(
         fix.extend(speccoder_core::codes::fixes(entry, "run", None, feature));
     }
     fix
+}
+
+/// How [`parse`]'s error for a Bedrock file without its region begins; that
+/// error is never reported while another one stands.
+pub const NEEDS_REGION: &str = "[model]: provider `bedrock` needs `region`";
+
+/// What to say when `model` is not a Bedrock model id (`vendor.model`,
+/// an inference profile `global.vendor.model`, or an ARN): a warning, since
+/// Bedrock alone knows its ids.
+#[must_use]
+pub fn bedrock_model_warning(model: &str) -> Option<String> {
+    let model = model.trim();
+    if model.is_empty() || model.contains('.') || model.starts_with("arn:") {
+        return None;
+    }
+    let suggested = if model.starts_with("claude-") {
+        format!("global.anthropic.{model}")
+    } else {
+        crate::init::BEDROCK_MODEL.to_owned()
+    };
+    Some(format!(
+        "`{model}` is not a Bedrock model id; Bedrock names models like {suggested} — speccoder config set model.model {suggested}"
+    ))
 }
 
 /// The model driver for `model`, and the secret to redact from messages.
@@ -368,11 +408,6 @@ pub fn parse(text: &str) -> Result<Option<ModelConfig>, String> {
     }
     let bedrock = raw.provider == "bedrock";
     if bedrock {
-        // Credentials and the endpoint come from AWS; the region is the
-        // file's, so the journal attests where the calls went.
-        if raw.region.as_deref().is_none_or(|r| r.trim().is_empty()) {
-            return Err("[model]: provider `bedrock` needs `region`, e.g. \"eu-central-1\" — speccoder config set model.region <region>".to_owned());
-        }
         for (key, set) in [
             ("base_url", raw.base_url.is_some()),
             ("api_key_env", raw.api_key_env.is_some()),
@@ -380,7 +415,7 @@ pub fn parse(text: &str) -> Result<Option<ModelConfig>, String> {
         ] {
             if set {
                 return Err(format!(
-                    "[model]: `{key}` does not apply to provider `bedrock` (its credentials and endpoint come from AWS) — remove it"
+                    "[model]: `{key}` does not apply to provider `bedrock` (its credentials and endpoint come from AWS) — speccoder config unset model.{key}"
                 ));
             }
         }
@@ -409,6 +444,15 @@ pub fn parse(text: &str) -> Result<Option<ModelConfig>, String> {
     };
     if raw.model.trim().is_empty() {
         return Err("[model]: `model` is empty".to_owned());
+    }
+    // Credentials and the endpoint come from AWS; the region is the file's,
+    // so the journal attests where the calls went. Checked last: when this
+    // is the error, it is the only one (`config set` takes the provider
+    // before the region).
+    if bedrock && raw.region.as_deref().is_none_or(|r| r.trim().is_empty()) {
+        return Err(format!(
+            "{NEEDS_REGION}, e.g. \"eu-central-1\" — speccoder config set model.region <region>"
+        ));
     }
     // Claude bills cache writes alike wherever it is served.
     let anthropic = raw.provider == "anthropic" || (bedrock && raw.model.contains("anthropic."));

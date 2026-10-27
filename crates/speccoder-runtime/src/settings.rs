@@ -797,7 +797,14 @@ pub fn read(root: &Path) -> ConfigReport {
                         .map(|k| {
                             let mut path = vec![s.name];
                             path.extend(k.key.split('.'));
-                            key_view(k, lookup(&table, &path).map(json_of))
+                            let mut view = key_view(k, lookup(&table, &path).map(json_of));
+                            // Bedrock's region is required with that provider.
+                            view.required |= s.name == "model"
+                                && k.key == "region"
+                                && lookup(&table, &["model", "provider"])
+                                    .and_then(toml::Value::as_str)
+                                    == Some("bedrock");
+                            view
                         })
                         .collect(),
                     tables: Vec::new(),
@@ -1116,13 +1123,45 @@ pub fn edit(text: &str, changes: &[ConfigChange]) -> Result<String, String> {
         // A step on the way to Bedrock: its provider before its region,
         // which `config set model.region` adds next (until then every
         // command, and `config commit`, refuses the file and says so).
-        Err(e) if e.contains("provider `bedrock` needs `region`") => {}
+        Err(e) if e.starts_with(crate::substrate::model_config::NEEDS_REGION) => {}
         other => {
             other?;
         }
     }
     validate_but_model(&out)?;
     Ok(out)
+}
+
+/// What a change to `[model]` leaves to do: Bedrock's region when it is
+/// still missing (the step [`edit`] lets through), and a warning when a
+/// change made the model a Bedrock one with an id Bedrock does not use.
+fn model_notes(
+    text: &str,
+    changes: &[ConfigChange],
+) -> (Vec<String>, Vec<speccoder_core::next::NextStep>) {
+    use crate::substrate::model_config;
+    let mut notes = Vec::new();
+    let mut next = Vec::new();
+    if model_config::parse(text).is_err_and(|e| e.starts_with(model_config::NEEDS_REGION)) {
+        notes.push("provider bedrock needs model.region, set it next".to_owned());
+        next.push(speccoder_core::next::NextStep {
+            command: "speccoder config set model.region <region>".to_owned(),
+            why: "provider bedrock needs the AWS region its calls go to".to_owned(),
+        });
+    }
+    let touched = changes
+        .iter()
+        .any(|c| c.key == "model.provider" || c.key == "model.model");
+    let model: toml::Table = toml::from_str(text).unwrap_or_default();
+    let model = model.get("model").and_then(toml::Value::as_table);
+    let field = |k: &str| model.and_then(|m| m.get(k)).and_then(toml::Value::as_str);
+    if touched
+        && field("provider") == Some("bedrock")
+        && let Some(w) = field("model").and_then(model_config::bedrock_model_warning)
+    {
+        notes.push(format!("warning: {w}"));
+    }
+    (notes, next)
 }
 
 /// `speccoder config`: the settings.
@@ -1204,29 +1243,37 @@ pub(crate) fn apply_confirmed(root: &Path, changes: &[ConfigChange]) -> CommandR
     match edit(&text, changes) {
         Err(e) => CommandResult::new("config", CommandStatus::ConfigError, &e)
             .with_code("CONFIG-INVALID")
-            .with_fix(vec![format!(
-                "speccoder config get {}",
-                changes.first().map_or("", |c| c.key.as_str())
-            )]),
+            .with_fix(vec![
+                crate::substrate::model_config::config_fix(&e).unwrap_or_else(|| {
+                    format!(
+                        "speccoder config get {}",
+                        changes.first().map_or("", |c| c.key.as_str())
+                    )
+                }),
+            ]),
         Ok(out) if out == text => show(root),
-        Ok(out) => match std::fs::write(&path, out) {
+        Ok(out) => match std::fs::write(&path, &out) {
             Ok(()) => {
                 let keys: Vec<&str> = changes.iter().map(|c| c.key.as_str()).collect();
                 let r = show(root);
-                CommandResult::new(
-                    "config",
-                    CommandStatus::Ok,
-                    &format!("changed {} — commit it to put it in force", keys.join(", ")),
-                )
-                .with_next(vec![speccoder_core::next::NextStep {
+                let (notes, mut next) = model_notes(&out, changes);
+                next.push(speccoder_core::next::NextStep {
                     command: "speccoder config commit".to_owned(),
                     why: "speccoder reads committed configuration only".to_owned(),
-                }])
-                .with_data(
-                    r.data()
-                        .cloned()
-                        .unwrap_or(CommandData::Config(Box::new(read(root)))),
-                )
+                });
+                let mut message =
+                    format!("changed {} — commit it to put it in force", keys.join(", "));
+                for n in notes {
+                    message.push('\n');
+                    message.push_str(&n);
+                }
+                CommandResult::new("config", CommandStatus::Ok, &message)
+                    .with_next(next)
+                    .with_data(
+                        r.data()
+                            .cloned()
+                            .unwrap_or(CommandData::Config(Box::new(read(root)))),
+                    )
             }
             Err(e) => CommandResult::new(
                 "config",
@@ -1537,6 +1584,108 @@ mod tests {
         assert!(edit(&step, &[set("model.max_output_tokens", json!(0))]).is_err());
         let p = place("model.provider").unwrap();
         assert!(matches!(p.key.kind, Kind::Choice(c) if c.contains(&"bedrock")));
+    }
+
+    #[test]
+    fn the_step_to_bedrock_is_let_through_only_when_the_region_is_all_that_is_missing() {
+        let set = |key: &str, v: Value| ConfigChange {
+            key: key.into(),
+            value: Some(v),
+            append: None,
+        };
+        // A key Bedrock does not use, left from the provider before.
+        let compat = "[model]\nprovider = \"openai-compatible\"\nmodel = \"m.x\"\nbase_url = \"http://localhost:11434/v1\"\n";
+        let e = edit(compat, &[set("model.provider", json!("bedrock"))]).unwrap_err();
+        assert_eq!(
+            e,
+            "[model]: `base_url` does not apply to provider `bedrock` (its credentials and endpoint come from AWS) — speccoder config unset model.base_url"
+        );
+        // Its fix is the unset, from `config set` and from every command.
+        assert_eq!(
+            crate::substrate::model_config::config_fix(&e).as_deref(),
+            Some("speccoder config unset model.base_url")
+        );
+        assert_eq!(
+            crate::substrate::model_config::refused("run", &e).fix(),
+            ["speccoder config unset model.base_url"]
+        );
+        // Any other `[model]` error on the way is still refused.
+        let step = "[model]\nprovider = \"bedrock\"\nmodel = \"m.x\"\n";
+        assert!(edit(step, &[set("model.model", json!(""))]).is_err());
+        assert!(edit(step, &[set("model.structured", json!("tool"))]).is_err());
+        assert!(edit(step, &[set("model.reasoning_summary", json!(false))]).is_ok());
+    }
+
+    #[test]
+    fn switching_to_bedrock_says_to_set_the_region_and_warns_of_a_model_id_bedrock_does_not_use() {
+        let dir = tempfile::tempdir().unwrap();
+        let ok = std::process::Command::new("git")
+            .args(["init", "-q"])
+            .current_dir(dir.path())
+            .status()
+            .unwrap();
+        assert!(ok.success());
+        std::fs::write(
+            dir.path().join(FILE),
+            "[model]\nprovider = \"anthropic\"\nmodel = \"claude-sonnet-5-5\"\n",
+        )
+        .unwrap();
+        let r = apply(
+            dir.path(),
+            &[ConfigChange {
+                key: "model.provider".into(),
+                value: Some(json!("bedrock")),
+                append: None,
+            }],
+        );
+        assert_eq!(r.status(), CommandStatus::Ok, "{}", r.message());
+        assert!(
+            r.message().contains(
+                "warning: `claude-sonnet-5-5` is not a Bedrock model id; Bedrock names models like global.anthropic.claude-sonnet-5-5"
+            ),
+            "{}",
+            r.message()
+        );
+        assert_eq!(
+            r.next().first().map(|n| n.command.as_str()),
+            Some("speccoder config set model.region <region>")
+        );
+        // The listing marks the region required for this provider.
+        let region = read(dir.path())
+            .sections
+            .into_iter()
+            .find(|s| s.name == "model")
+            .and_then(|s| s.keys.into_iter().find(|k| k.key == "region"))
+            .unwrap();
+        assert!(region.required);
+        // With the region set: nothing left to say about it.
+        let r = apply(
+            dir.path(),
+            &[ConfigChange {
+                key: "model.region".into(),
+                value: Some(json!("eu-central-1")),
+                append: None,
+            }],
+        );
+        assert_eq!(r.status(), CommandStatus::Ok, "{}", r.message());
+        assert!(!r.message().contains("set it next"), "{}", r.message());
+        assert_eq!(
+            r.next().first().map(|n| n.command.as_str()),
+            Some("speccoder config commit")
+        );
+        // An id Bedrock uses: no warning.
+        assert_eq!(
+            crate::substrate::model_config::bedrock_model_warning(
+                "global.anthropic.claude-sonnet-5-5"
+            ),
+            None
+        );
+        assert_eq!(
+            crate::substrate::model_config::bedrock_model_warning(
+                "arn:aws:bedrock:eu-central-1:123456789012:inference-profile/x"
+            ),
+            None
+        );
     }
 
     #[test]
