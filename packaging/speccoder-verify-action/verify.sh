@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # The speccoder-verify action's one step (action.yml passes its inputs as
-# SV_*): download the pinned verifier and refuse it unless its build
-# provenance and sha256 check out; fetch the pull request's head and its
+# SV_*): download the pinned speccoder release and refuse it unless its
+# build provenance and sha256 check out; fetch the pull request's head and its
 # attestation notes as objects (nothing checked out, nothing from the
-# pull request run); run the verifier with trust from a commit the checked
+# pull request run); run `speccoder attest verify --branch` with trust from a commit the checked
 # one did not write (a pull request's base; on a push, the commit before it
 # or the default branch's tip) and no token in its environment; publish the `speccoder / evidence` check with
 # curl, or fall back to the job summary and workflow annotations.
@@ -31,15 +31,15 @@ jqe() { jq -r "$1 // empty" "$event" 2>/dev/null || true; }
 
 # 1. The binary for this runner, verified before it runs.
 case "${RUNNER_OS:-$(uname -s)} ${RUNNER_ARCH:-$(uname -m)}" in
-  "Linux X64" | "Linux x86_64") target=x86_64-unknown-linux-musl ;;
-  "Linux ARM64" | "Linux aarch64" | "Linux arm64") target=aarch64-unknown-linux-musl ;;
+  "Linux X64" | "Linux x86_64") target=x86_64-unknown-linux-gnu ;;
+  "Linux ARM64" | "Linux aarch64" | "Linux arm64") target=aarch64-unknown-linux-gnu ;;
   "macOS ARM64" | "Darwin arm64") target=aarch64-apple-darwin ;;
-  *) die "no speccoder-verify build for this runner (${RUNNER_OS:-?} ${RUNNER_ARCH:-?}); builds exist for Linux x64, Linux ARM64 and macOS ARM64" ;;
+  *) die "no speccoder build for this runner (${RUNNER_OS:-?} ${RUNNER_ARCH:-?}); builds exist for Linux x64, Linux ARM64 and macOS ARM64" ;;
 esac
 work="${RUNNER_TEMP:-$(mktemp -d)}/speccoder-verify"
 rm -rf "$work" && mkdir -p "$work"
 releases="${SPECCODER_VERIFY_RELEASES:-https://github.com/hupe1980/speccoder/releases/download}"
-pkg="speccoder-verify-$version-$target"
+pkg="speccoder-$version-$target"
 curl -fsSL --retry 3 -o "$work/$pkg.tar.gz" "$releases/v$version/$pkg.tar.gz" \
   || die "cannot download $pkg.tar.gz from $releases/v$version"
 if ! GH_TOKEN="$token" gh attestation verify "$work/$pkg.tar.gz" \
@@ -59,8 +59,12 @@ fi
 actual="$(sum "$work/$pkg.tar.gz")"
 [ "$actual" = "$expected" ] || die "checksum mismatch for $pkg.tar.gz: expected $expected, got $actual; not run"
 tar -xzf "$work/$pkg.tar.gz" -C "$work"
-bin="$work/$pkg/speccoder-verify"
-[ -x "$bin" ] || die "$pkg.tar.gz holds no speccoder-verify"
+bin="$work/$pkg/speccoder"
+[ -x "$bin" ] || die "$pkg.tar.gz holds no speccoder"
+# The check moved into speccoder after 0.2.0 (`attest verify --branch`
+# with the check-run flags); an older release has no such command.
+"$bin" attest verify --help 2>/dev/null | grep -q -- '--github-check' \
+  || die "speccoder $version has no \`attest verify --branch --github-check\`: set version to a later release, or use the action at v0.2.0"
 
 # 2. What to check: the pull request's head (never github.sha, the base
 # under pull_request_target), from the fork when it is one.
@@ -81,7 +85,7 @@ esac
 [ -n "$head" ] || die "no head commit in the $event_name event"
 if [ "$event_name" = pull_request_target ] && [ -n "${GITHUB_WORKSPACE:-}" ] \
   && [ "$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD 2>/dev/null || true)" = "$head" ]; then
-  die "the pull request's head is checked out in the workspace under pull_request_target: remove the checkout step, the verifier reads git objects only"
+  die "the pull request's head is checked out in the workspace under pull_request_target: remove the checkout step, the check reads git objects only"
 fi
 base_url="${SPECCODER_VERIFY_REMOTE:-${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY:?}.git}"
 if [ -z "$head_url" ] || [ -n "${SPECCODER_VERIFY_REMOTE:-}" ]; then
@@ -153,8 +157,8 @@ if ! fetch "$head_url" "+refs/notes/speccoder:refs/notes/speccoder" 2>/dev/null;
   echo "::warning title=speccoder-verify::no attestation notes (refs/notes/speccoder) at $head_url: every tick is unverifiable until they are pushed (git push origin refs/notes/speccoder)"
 fi
 
-# 3. The verifier: that trust, no token, nothing else in its environment.
-args=(check --repo "$repo" --head "$head" --json --github-check "$work/check.json" --check-name "$name"
+# 3. The check: that trust, no token, nothing else in its environment.
+args=(attest verify --branch "$head" -C "$repo" --json --github-check "$work/check.json" --check-name "$name"
   "--require-signed=${SV_REQUIRE_SIGNED:-true}")
 if [ "$mode" = touched ] && [ -n "$base" ]; then args+=(--base "$base"); else args+=(--all); fi
 if [ -n "${SV_IDENTITY:-}" ]; then
@@ -166,13 +170,13 @@ if git -C "$repo" cat-file -e "$trust_rev:$allowed" 2>/dev/null || [ -z "${SV_ID
 fi
 [ "${SV_REQUIRE_VERIFIED:-false}" = true ] && args+=(--require-verified)
 [ "${SV_ALLOW_NEUTRAL:-false}" = true ] && args+=(--allow-neutral)
-verifier() {
+speccoder() {
   env -i PATH="$PATH" HOME="${HOME:-/tmp}" LANG="${LANG:-C.UTF-8}" \
     ${GNUPGHOME:+GNUPGHOME="$GNUPGHOME"} ${GITHUB_STEP_SUMMARY:+GITHUB_STEP_SUMMARY="$GITHUB_STEP_SUMMARY"} \
     "$bin" "$@"
 }
 set +e
-verifier "${args[@]}" > "$work/report.json"
+speccoder "${args[@]}" > "$work/report.json"
 code=$?
 set -e
 out report "$work/report.json"
@@ -183,7 +187,7 @@ for k in verified regression_only attested stale unverifiable; do
 done
 out share "$(jq -r '.data.share // empty' "$work/report.json" 2>/dev/null || true)"
 if [ ! -s "$work/check.json" ]; then
-  die "$(jq -r '.message // "the verifier refused"' "$work/report.json" 2>/dev/null || echo "the verifier refused")"
+  die "$(jq -r '.message // "the check refused"' "$work/report.json" 2>/dev/null || echo "the check refused")"
 fi
 
 # 4. The check run, on the head commit: one POST, then a PATCH per further
@@ -205,7 +209,7 @@ if [ "$status" = 201 ]; then
   echo "published the check \"$name\" on $head"
 else
   why="HTTP $status: $(jq -r '.message // empty' "$work/response.json" 2>/dev/null || true)"
-  verifier "${args[@]}" --github-annotations > "$work/fallback.txt" || true
+  speccoder "${args[@]}" --github-annotations > "$work/fallback.txt" || true
   grep '^::' "$work/fallback.txt" || true
   echo "::notice title=speccoder-verify::the named check was not published: $why (a pull_request run from a fork has a read-only token); this job's status carries the outcome"
 fi
@@ -213,10 +217,10 @@ fi
 # 5. The badge: a push to the default branch only, on the maintainer's opt-in.
 if [ -n "${SV_BADGE_BRANCH:-}" ] && [ "$event_name" = push ] && [ -n "$default_branch" ] \
   && [ "${GITHUB_REF:-}" = "refs/heads/$default_branch" ]; then
-  badge_args=(badge --repo "$repo" --head "$head" --svg "$work/speccoder-evidence.svg" --endpoint "$work/speccoder-evidence.json")
+  badge_args=(attest badge "$head" -C "$repo" --svg "$work/speccoder-evidence.svg" --endpoint "$work/speccoder-evidence.json")
   [[ " ${args[*]} " == *" --allowed-signers-rev "* ]] && badge_args+=(--allowed-signers-rev "$trust_rev:$allowed")
   [ -n "${SV_IDENTITY:-}" ] && badge_args+=(--certificate-identity "$SV_IDENTITY" --certificate-oidc-issuer "${SV_ISSUER:-}")
-  if verifier "${badge_args[@]}" > /dev/null; then
+  if speccoder "${badge_args[@]}" > /dev/null; then
     svg="$(git -C "$repo" hash-object -w "$work/speccoder-evidence.svg")"
     endpoint="$(git -C "$repo" hash-object -w "$work/speccoder-evidence.json")"
     tree="$(printf '100644 blob %s\tspeccoder-evidence.json\n100644 blob %s\tspeccoder-evidence.svg\n' "$endpoint" "$svg" | git -C "$repo" mktree)"
@@ -230,10 +234,11 @@ if [ -n "${SV_BADGE_BRANCH:-}" ] && [ "$event_name" = push ] && [ -n "$default_b
   fi
 fi
 
-# 6. The outcome: neutral fails the job unless allowed.
-case "$code" in
-  0) exit 0 ;;
-  78)
+# 6. The outcome, from the report (speccoder exits 0 success, 26 failure,
+# 15 neutral): neutral fails the job unless allowed.
+case "$conclusion $code" in
+  "success 0") exit 0 ;;
+  "neutral 15")
     if [ "${SV_ALLOW_NEUTRAL:-false}" = true ]; then exit 0; fi
     echo "neutral: no ticks checked — not proof (set allow-neutral: true to pass it)"
     exit 1

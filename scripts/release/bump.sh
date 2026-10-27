@@ -42,7 +42,7 @@ awk -v v="$version" '
   { print }
 ' Cargo.toml > "$tmp" && mv "$tmp" Cargo.toml
 cargo update --workspace --quiet
-# The verifier action downloads the release it is cut with.
+# The evidence action downloads the speccoder release it is cut with.
 action=packaging/speccoder-verify-action/action.yml
 if [ -f "$action" ]; then
   tmp="$(mktemp)"
