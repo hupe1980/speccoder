@@ -276,7 +276,13 @@ fn read(env: &dyn Fn(&str) -> Option<String>, home: &Path, name: &str) -> Option
             if line.is_empty() || line.starts_with(['#', ';']) {
                 continue;
             }
-            if let Some(header) = line.strip_prefix('[').and_then(|l| l.strip_suffix(']')) {
+            // A header may end in a comment: `[profile dev] # work`.
+            if let Some(header) = line
+                .strip_prefix('[')
+                .and_then(|l| l.split_once(']'))
+                .filter(|(_, rest)| rest.trim().is_empty() || rest.trim().starts_with(['#', ';']))
+                .map(|(header, _)| header)
+            {
                 ours = is_ours(header);
                 found |= ours;
                 continue;
@@ -385,6 +391,19 @@ mod tests {
                 "[profile  dev]\nsso_start_url = https://x\n",
                 "",
                 Some("SSO (profile dev)"),
+            ),
+            // A header with a comment after it.
+            (
+                &[("AWS_PROFILE", "dev")],
+                "[profile dev] # work\nsso_start_url = https://x\n",
+                "",
+                Some("SSO (profile dev)"),
+            ),
+            (
+                &[("AWS_PROFILE", "ci")],
+                "",
+                "[ci] ; build\naws_access_key_id = AKIA\naws_secret_access_key = SECRETVALUE\n",
+                Some("profile ci (static keys)"),
             ),
             (
                 &[],
