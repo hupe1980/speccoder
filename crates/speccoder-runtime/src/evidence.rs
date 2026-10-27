@@ -319,6 +319,22 @@ pub fn rows(task: &TaskStatus, statements: &[Value], run: Option<&RunReport>) ->
                 format!("{} — run {}", e.attempt_status.replace('_', " "), e.run_id),
             ));
         }
+        // The test author's notes: a model's words, in the task's detail only.
+        for note in r
+            .acceptance
+            .as_ref()
+            .and_then(|a| a["notes"].as_array())
+            .into_iter()
+            .flatten()
+            .filter_map(|n| n.as_str())
+            .filter(|n| !n.trim().is_empty())
+        {
+            out.push(row(
+                "Test author",
+                "ready",
+                format!("the test author's note (a model's words): \"{note}\""),
+            ));
+        }
         if let Some(claim) = r.model_report.as_ref().and_then(|m| m["summary"].as_str()) {
             out.push(row(
                 "Model says",
@@ -331,7 +347,7 @@ pub fn rows(task: &TaskStatus, statements: &[Value], run: Option<&RunReport>) ->
 }
 
 /// The *Collection* row: "2 test files collected (5 tests)", "1 never ran:
-/// `x` — <rule>", "no test files changed"; `None` when nothing was recorded
+/// `x` — the rule", "no test files changed"; `None` when nothing was recorded
 /// (a tick from before collection was judged).
 #[must_use]
 pub fn collection_row(
@@ -512,6 +528,21 @@ mod tests {
             rows[0]
                 .text
                 .ends_with("why was not recorded (ticked by an earlier speccoder)")
+        );
+    }
+
+    #[test]
+    fn the_test_author_s_note_is_a_model_s_words_in_the_detail() {
+        let mut run = crate::pipeline::outcome::bare_report("001-x", "T002", "/w", "completed");
+        run.acceptance = Some(json!({ "notes": ["the spec has no example for an empty name"] }));
+        let rows = rows(&task("regression_only"), &[], Some(&run));
+        let note = rows
+            .iter()
+            .find(|r| r.label == "Test author")
+            .unwrap_or_else(|| panic!("{rows:?}"));
+        assert_eq!(
+            note.text,
+            "the test author's note (a model's words): \"the spec has no example for an empty name\""
         );
     }
 
