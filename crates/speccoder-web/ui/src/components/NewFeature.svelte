@@ -23,7 +23,7 @@
   let starting = $state(false);
   let matches = $state<SimilarMatch[]>([]);
   let limited = $state(false);
-  let cost = $state<{ cost: { tokens: number; usd: number | null; runs: number } | null; model: string | null } | null>(null);
+  let cost = $state<{ cost: { tokens: number; calls: number | null; usd: number | null; runs: number } | null; model: string | null } | null>(null);
 
   const planning = $derived(app.project?.planning);
   const create = $derived(planning?.creates ?? null);
@@ -79,7 +79,8 @@
     const c = cost?.cost;
     if (!c) return `cost: unknown until it runs${cost?.model ? ` — ${cost.model}` : ""}`;
     const tokens = c.tokens >= 1000 ? `${Math.round(c.tokens / 1000)}k tokens` : `${c.tokens} tokens`;
-    return `about ${tokens}${c.usd != null ? ` · ~$${c.usd.toFixed(2)}` : ""} (from your last ${plural(c.runs, "run")} of these skills)`;
+    const calls = c.calls != null ? `about ${plural(c.calls, "model call")} · ` : "about ";
+    return `${calls}${tokens}${c.usd != null ? ` · ~$${c.usd.toFixed(2)}` : ""} (from your last ${plural(c.runs, "run")} of these skills)`;
   });
 
   function edited() {

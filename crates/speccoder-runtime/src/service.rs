@@ -61,7 +61,7 @@ pub mod welcome {
 
 /// The bundled sample.
 pub mod sample {
-    pub use crate::sample::{available, copy, home};
+    pub use crate::sample::{available, copy, home, missing_tool};
 }
 
 /// Needs You.

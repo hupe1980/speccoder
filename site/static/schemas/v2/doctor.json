@@ -1462,7 +1462,7 @@
           "type": "object"
         },
         {
-          "description": "Clone a repository of the person's through their `gh`.",
+          "description": "Clone a repository of the person's with their git (their credentials).",
           "properties": {
             "kind": {
               "const": "clone_repository",
@@ -1499,6 +1499,19 @@
           "required": [
             "kind",
             "fresh"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Run the sample's own checks, offline, in its copy (the sample's\nend card, *Run the checks yourself*).",
+          "properties": {
+            "kind": {
+              "const": "sample_checks",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
           ],
           "type": "object"
         }

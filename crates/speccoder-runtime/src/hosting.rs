@@ -226,10 +226,16 @@ fn run_unguarded(
             );
         }
     };
+    // The model's turns, counted from the run's own tool calls (for the
+    // record of what this skill cost: its model calls).
+    let turns = Arc::new(Turns::default());
     let live: Arc<dyn progress::Progress> = Arc::new(progress::Live::new(
         &s.plane_dir,
         s.model.prices,
-        options.progress.clone(),
+        Some(Arc::new(Counted {
+            turns: Arc::clone(&turns),
+            next: options.progress.clone(),
+        }) as Arc<dyn progress::Progress>),
     ));
     live.event(&progress::Event::TaskStarted {
         feature: "skill".to_owned(),
@@ -456,6 +462,7 @@ fn run_unguarded(
             tokens("cache_write_tokens"),
         ],
         s.model.prices,
+        u64::from(turns.calls()),
     );
     live.event(&progress::Event::TaskFinished {
         task: skill.name.clone(),
@@ -776,4 +783,35 @@ fn repo_dir(root: &Path, unit_dir: &str) -> (std::path::PathBuf, String) {
         format!("{prefix}/{unit_dir}")
     };
     (top, dir)
+}
+
+/// The highest model turn a run's tool calls named.
+#[derive(Debug, Default)]
+struct Turns(std::sync::atomic::AtomicU32);
+
+impl Turns {
+    /// The model calls: every turn with a tool call, and the one that answered.
+    fn calls(&self) -> u32 {
+        self.0.load(std::sync::atomic::Ordering::SeqCst) + 1
+    }
+}
+
+/// A progress sink that counts the turns and passes every event on.
+#[derive(Debug)]
+struct Counted {
+    turns: Arc<Turns>,
+    next: Option<Arc<dyn progress::Progress>>,
+}
+
+impl progress::Progress for Counted {
+    fn event(&self, event: &progress::Event) {
+        if let progress::Event::ToolCall { turn, .. } = event {
+            self.turns
+                .0
+                .fetch_max(*turn, std::sync::atomic::Ordering::SeqCst);
+        }
+        if let Some(n) = &self.next {
+            n.event(event);
+        }
+    }
 }

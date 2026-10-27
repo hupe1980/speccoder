@@ -1036,6 +1036,7 @@ pub(crate) fn record_skill_usage(
     skill: &str,
     [input, output, cache_read, cache_write]: [u64; 4],
     prices: Option<crate::substrate::model_config::Prices>,
+    calls: u64,
 ) {
     use std::io::Write as _;
     if input + output == 0 {
@@ -1047,6 +1048,7 @@ pub(crate) fn record_skill_usage(
         "input_tokens": input,
         "output_tokens": output,
         "usd": usd,
+        "calls": calls,
     });
     if let Ok(mut f) = std::fs::OpenOptions::new()
         .create(true)
@@ -1064,6 +1066,8 @@ pub(crate) fn record_skill_usage(
 pub struct SkillCost {
     /// Tokens (input and output), the medians summed.
     pub tokens: u64,
+    /// Model calls, the medians summed (`None`: a run on record did not count them).
+    pub calls: Option<u64>,
     /// USD, when every run was priced.
     pub usd: Option<f64>,
     /// The fewest runs any of the skills has on record.
@@ -1101,6 +1105,7 @@ fn cost_from(text: &str, skills: &[String]) -> Option<SkillCost> {
         }
     };
     let mut tokens = 0.0;
+    let mut calls = Some(0.0);
     let mut usd = Some(0.0);
     let mut runs = usize::MAX;
     for skill in skills {
@@ -1121,6 +1126,16 @@ fn cost_from(text: &str, skills: &[String]) -> Option<SkillCost> {
             })
             .collect();
         tokens += median(t);
+        #[allow(clippy::cast_precision_loss)]
+        let counted: Vec<f64> = mine
+            .iter()
+            .filter_map(|r| r["calls"].as_u64())
+            .map(|c| c as f64)
+            .collect();
+        calls = match calls {
+            Some(sum) if counted.len() == mine.len() => Some(sum + median(counted)),
+            _ => None,
+        };
         let priced: Vec<f64> = mine.iter().filter_map(|r| r["usd"].as_f64()).collect();
         usd = match usd {
             Some(sum) if priced.len() == mine.len() => Some(sum + median(priced)),
@@ -1130,6 +1145,7 @@ fn cost_from(text: &str, skills: &[String]) -> Option<SkillCost> {
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     let cost = SkillCost {
         tokens: tokens.round() as u64,
+        calls: calls.map(|c| c.round() as u64),
         usd,
         runs,
     };
@@ -1143,22 +1159,26 @@ mod skill_cost_tests {
     #[test]
     fn the_cost_line_is_the_median_of_runs_on_record_or_nothing() {
         let rows = [
-            r#"{"skill":"speckit-specify","input_tokens":100,"output_tokens":10,"usd":0.01}"#,
-            r#"{"skill":"speckit-specify","input_tokens":300,"output_tokens":30,"usd":0.03}"#,
-            r#"{"skill":"speckit-specify","input_tokens":200,"output_tokens":20,"usd":0.02}"#,
+            r#"{"skill":"speckit-specify","input_tokens":100,"output_tokens":10,"usd":0.01,"calls":3}"#,
+            r#"{"skill":"speckit-specify","input_tokens":300,"output_tokens":30,"usd":0.03,"calls":5}"#,
+            r#"{"skill":"speckit-specify","input_tokens":200,"output_tokens":20,"usd":0.02,"calls":4}"#,
             r#"{"skill":"speckit-plan","input_tokens":1000,"output_tokens":100,"usd":null}"#,
         ]
         .join("\n");
         let one =
             cost_from(&rows, &["speckit-specify".to_owned()]).unwrap_or_else(|| panic!("none"));
-        assert_eq!((one.tokens, one.runs), (220, 3));
+        assert_eq!((one.tokens, one.runs, one.calls), (220, 3, Some(4)));
         assert!((one.usd.unwrap_or_default() - 0.02).abs() < 1e-9);
         let two = cost_from(
             &rows,
             &["speckit-specify".to_owned(), "speckit-plan".to_owned()],
         )
         .unwrap_or_else(|| panic!("none"));
-        assert_eq!((two.tokens, two.runs, two.usd), (1320, 1, None));
+        // A run on record without its count: no count is made up.
+        assert_eq!(
+            (two.tokens, two.runs, two.usd, two.calls),
+            (1320, 1, None, None)
+        );
         assert_eq!(cost_from(&rows, &["speckit-tasks".to_owned()]), None);
     }
 }

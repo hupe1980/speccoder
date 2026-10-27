@@ -284,7 +284,7 @@ pub enum Runnable {
         /// speccoder's commit, as recorded.
         commit: String,
     },
-    /// Clone a repository of the person's through their `gh`.
+    /// Clone a repository of the person's with their git (their credentials).
     CloneRepository {
         /// `owner/repo`.
         repo: String,
@@ -297,6 +297,9 @@ pub enum Runnable {
         /// Replace an existing copy.
         fresh: bool,
     },
+    /// Run the sample's own checks, offline, in its copy (the sample's
+    /// end card, *Run the checks yourself*).
+    SampleChecks,
 }
 
 /// How far plan through goes.
@@ -526,6 +529,8 @@ pub enum ActionKind {
     CloneRepository,
     /// [`Runnable::OpenSample`].
     OpenSample,
+    /// [`Runnable::SampleChecks`].
+    SampleChecks,
     /// No runnable: the person runs the command.
     Command,
 }
@@ -572,6 +577,7 @@ impl ActionKind {
         Self::UndoNewProject,
         Self::CloneRepository,
         Self::OpenSample,
+        Self::SampleChecks,
         Self::Command,
     ];
 
@@ -618,6 +624,7 @@ impl ActionKind {
             Self::UndoNewProject => "undo_new_project",
             Self::CloneRepository => "clone_repository",
             Self::OpenSample => "open_sample",
+            Self::SampleChecks => "sample_checks",
             Self::Command => "command",
         }
     }
@@ -766,6 +773,7 @@ impl ActionKind {
                 target: "/tmp/hello".to_owned(),
             },
             Self::OpenSample => Runnable::OpenSample { fresh: false },
+            Self::SampleChecks => Runnable::SampleChecks,
             Self::Command => return None,
         })
     }
@@ -821,6 +829,7 @@ impl Runnable {
             Self::UndoNewProject { .. } => ActionKind::UndoNewProject,
             Self::CloneRepository { .. } => ActionKind::CloneRepository,
             Self::OpenSample { .. } => ActionKind::OpenSample,
+            Self::SampleChecks => ActionKind::SampleChecks,
         }
     }
 }
@@ -896,6 +905,7 @@ pub fn identity(run: Option<&Runnable>, command: &str) -> ActionId {
         Runnable::CloneRepository { repo, .. } => Some(repo.clone()),
         Runnable::Converge
         | Runnable::OpenSample { .. }
+        | Runnable::SampleChecks
         | Runnable::Commit { .. }
         | Runnable::QuickChange { .. }
         | Runnable::FixSetup

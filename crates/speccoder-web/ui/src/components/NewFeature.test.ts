@@ -182,6 +182,17 @@ describe("NewFeature", () => {
     expect(document.body.textContent).toContain("compared with the 2 000 most recently changed features");
   });
 
+  it("says what these skills cost before, from the runs on record", async () => {
+    host.get.mockImplementation(async (path: string) => {
+      if (path.startsWith("/api/similar")) return { status: "ok", data: { query: "", compared: 0, limited: false, matches: [] } };
+      if (path.startsWith("/api/skill-cost")) return { cost: { tokens: 42000, calls: 7, usd: 0.31, runs: 2 }, model: "m" };
+      throw new Error(path);
+    });
+    open({ text: "Users can export a report as CSV" });
+    await wait();
+    expect(document.body.textContent).toContain("about 7 model calls · 42k tokens · ~$0.31 (from your last 2 runs of these skills)");
+  });
+
   it("shows no hint when nothing is close", async () => {
     routes([]);
     open({ text: "dark mode for the settings page" });

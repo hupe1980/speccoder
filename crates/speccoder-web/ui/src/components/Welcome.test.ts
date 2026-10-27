@@ -12,9 +12,10 @@ const host = vi.hoisted(() => ({
     newProject: null as unknown,
     clone: false,
     view: "inbox",
-    report: { data: { tasks: [{ id: "T001", commit: "a1", state: "verified" }, { id: "T002", commit: "b2", state: "verified" }, { id: "T003", commit: null, state: "ready" }] } } as unknown,
+    report: { data: { tasks: [{ id: "T001", commit: "a1", state: "verified", run_id: "r2" }, { id: "T002", commit: "b2", state: "verified", run_id: "r1" }, { id: "T003", commit: null, state: "ready", run_id: null }] } } as unknown,
     run: vi.fn(async (_a: unknown, _i?: string, _r?: string) => ({ status: "ok", message: "ok" }) as unknown),
     selectTask: vi.fn(async (_t: string | null) => {}),
+    perform: vi.fn(async (_a: unknown) => {}),
     toast: vi.fn(),
   },
   get: vi.fn(),
@@ -117,6 +118,14 @@ describe("Welcome", () => {
 describe("SamplePlayback", () => {
   const sample = (over: Partial<SampleInfo> = {}): SampleInfo => ({ path: "/s/sample/0.2.0/wordcount", recorded: { model: "claude-sonnet-5-5", recorded_at: "2026-11-02", agentplane: "0.54.0" }, runs: [{ id: "r1", result: "reproduced" }], ...over });
 
+  it("plays the tasks in the order the recording ran them", () => {
+    c = mount(SamplePlayback, { target: document.body, props: { sample: sample({ runs: [{ id: "r1", result: "reproduced" }, { id: "r2", result: "reproduced" }] }) } });
+    flushSync();
+    button(/^Play/).click();
+    flushSync();
+    expect(host.app.selectTask).toHaveBeenLastCalledWith("T002");
+  });
+
   it("names the recording and plays its judged tasks in order at a readable pace", async () => {
     vi.useFakeTimers();
     c = mount(SamplePlayback, { target: document.body, props: { sample: sample() } });
@@ -125,13 +134,30 @@ describe("SamplePlayback", () => {
     expect(banner.textContent).toContain("A recorded run of wordcount, replayed strictly — no model was called. Recorded 2026-11-02 with claude-sonnet-5-5.");
     button(/^Play/).click();
     flushSync();
-    expect(host.app.selectTask).toHaveBeenLastCalledWith("T001");
+    // r1 is T002's run: it ran first.
+    expect(host.app.selectTask).toHaveBeenLastCalledWith("T002");
     await vi.advanceTimersByTimeAsync(599);
     expect(host.app.selectTask).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(1000);
     flushSync();
-    expect(host.app.selectTask).toHaveBeenLastCalledWith("T002");
+    expect(host.app.selectTask).toHaveBeenLastCalledWith("T001");
     expect(document.body.textContent).toContain("Start your own");
+  });
+
+  it("runs the sample's checks through their kind, or says which tool is missing", () => {
+    c = mount(SamplePlayback, { target: document.body, props: { sample: sample() } });
+    flushSync();
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "End" }));
+    flushSync();
+    button("Run the checks yourself").click();
+    expect((host.app.perform.mock.calls[0]![0] as { run: unknown }).run).toEqual({ kind: "sample_checks" });
+    unmount(c);
+    c = mount(SamplePlayback, { target: document.body, props: { sample: sample({ checks_missing: "cargo is not installed — install it: https://rustup.rs" }) } });
+    flushSync();
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "End" }));
+    flushSync();
+    expect(button("Run the checks yourself").disabled).toBe(true);
+    expect(document.body.textContent).toContain("cargo is not installed");
   });
 
   it("skips to the end with End, and a divergence is said, never played", () => {
@@ -139,7 +165,7 @@ describe("SamplePlayback", () => {
     flushSync();
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "End" }));
     flushSync();
-    expect(host.app.selectTask).toHaveBeenLastCalledWith("T002");
+    expect(host.app.selectTask).toHaveBeenLastCalledWith("T001");
     unmount(c);
     host.app.selectTask.mockClear();
     c = mount(SamplePlayback, { target: document.body, props: { sample: sample({ runs: [{ id: "r1", result: "diverged", finding: "diverged: an effect differs" }] }) } });

@@ -199,7 +199,7 @@ pub fn open_from(asset: &Asset, state: &Path, fresh: bool) -> CommandResult {
         },
         runs,
     };
-    let _ = std::fs::write(
+    if let Err(e) = std::fs::write(
         base.join("sample.json"),
         serde_json::json!({
             "version": env!("CARGO_PKG_VERSION"),
@@ -208,7 +208,11 @@ pub fn open_from(asset: &Asset, state: &Path, fresh: bool) -> CommandResult {
             "runs": report.runs,
         })
         .to_string(),
-    );
+    ) {
+        return failed(&format!(
+            "the sample's record (sample.json) could not be written, so the app cannot show it: {e}"
+        ));
+    }
     let diverged = report.runs.iter().find(|r| r.result != "reproduced");
     let result = match diverged {
         Some(r) => CommandResult::new(
@@ -242,4 +246,58 @@ pub fn open_from(asset: &Asset, state: &Path, fresh: bool) -> CommandResult {
         ]),
     };
     result.with_data(CommandData::Sample(Box::new(report)))
+}
+
+/// The tool the sample's checks need that is not on the `PATH`, with how
+/// to get it (`None`: they can run here).
+#[must_use]
+pub fn missing_tool(copy: &Path) -> Option<String> {
+    let text = std::fs::read_to_string(copy.join(crate::verify::config::FILE)).ok()?;
+    let checks = crate::verify::config::parse(&text).ok()?;
+    let env: Vec<(String, String)> = std::env::vars().collect();
+    checks
+        .iter()
+        .filter_map(|c| c.argv.first())
+        .find(|p| crate::sandbox::resolve_executable(p, copy, &env).is_none())
+        .map(|p| match p.as_str() {
+            "cargo" => "cargo is not installed — install it: https://rustup.rs".to_owned(),
+            other => format!("{other} is not installed"),
+        })
+}
+
+/// *Run the checks yourself*: the sample's own fast checks, in its copy,
+/// confined like a run's (no network). Refused anywhere but the sample.
+#[must_use]
+pub fn run_checks(state: &Path, root: &Path) -> CommandResult {
+    let copy = copy(state).and_then(|c| std::fs::canonicalize(c).ok());
+    if copy.is_none() || copy != std::fs::canonicalize(root).ok() {
+        return CommandResult::new(
+            COMMAND,
+            CommandStatus::UsageError,
+            "these are the sample's checks: run them in its copy (speccoder sample)",
+        )
+        .with_code("USAGE");
+    }
+    if let Some(why) = missing_tool(root) {
+        return CommandResult::new(COMMAND, CommandStatus::ConfigError, &why).with_code("CONFIG");
+    }
+    let runner = match crate::sandbox::runner_at(root) {
+        Ok((r, _)) => r,
+        Err(e) => return CommandResult::new(COMMAND, CommandStatus::ConfigError, &e),
+    };
+    match crate::verify::run_checks(root, Some(crate::verify::config::Tier::Fast), &runner) {
+        Ok(report) => {
+            let (status, message) = if report.passed {
+                (CommandStatus::Ok, "the sample's checks pass here, offline")
+            } else {
+                (
+                    CommandStatus::VerificationFailed,
+                    "a check of the sample fails here",
+                )
+            };
+            CommandResult::new(COMMAND, status, message)
+                .with_data(CommandData::Verify(Box::new(report)))
+        }
+        Err(e) => CommandResult::new(COMMAND, CommandStatus::Error, &e),
+    }
 }

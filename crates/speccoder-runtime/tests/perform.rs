@@ -255,6 +255,7 @@ fn cases() -> Vec<Case> {
             },
             None,
         ),
+        case("sample-checks-not-the-sample", Runnable::SampleChecks, None),
         no_state(case(
             "open-sample-no-state",
             Runnable::OpenSample { fresh: false },

@@ -47,6 +47,7 @@ export const KINDS: Record<ActionKind, { verb: string; icon?: string; holdsWorkt
   undo_new_project: { verb: "Undo", icon: "undo", holdsWorktree: false },
   clone_repository: { verb: "Clone", icon: "branch", holdsWorktree: false },
   open_sample: { verb: "Try the Sample", icon: "play", holdsWorktree: false },
+  sample_checks: { verb: "Run the checks", icon: "check", holdsWorktree: false },
   command: { verb: "Copy", icon: "terminal", holdsWorktree: false },
 };
 

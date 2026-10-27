@@ -6,13 +6,22 @@
   // shown as if it had worked. Nothing here runs anything.
   import { app } from "../lib/app.svelte";
   import { pace } from "../lib/start";
+  import { offer } from "../lib/actions";
   import type { SampleInfo } from "../lib/types";
 
   let { sample }: { sample: SampleInfo } = $props();
   const diverged = $derived(sample.runs.find((r) => r.result !== "reproduced") ?? null);
   const name = $derived(sample.path.split("/").filter(Boolean).at(-1) ?? "the sample");
-  // The tasks the recorded run judged, in the task list's order.
-  const order = $derived((app.report?.data?.tasks ?? []).filter((t) => t.commit || t.state !== "ready").map((t) => t.id));
+  // The tasks the recording judged, in the order it ran them (its runs, as
+  // the manifest lists them); a judged task no run names comes after.
+  const order = $derived.by(() => {
+    const tasks = (app.report?.data?.tasks ?? []).filter((t) => t.commit || t.state !== "ready");
+    const at = (id: string | null | undefined) => {
+      const i = sample.runs.findIndex((r) => r.id === id);
+      return i < 0 ? Number.MAX_SAFE_INTEGER : i;
+    };
+    return [...tasks].sort((a, b) => at(a.run_id) - at(b.run_id)).map((t) => t.id);
+  });
   let at = $state(-1);
   let playing = $state(false);
   let hidden = $state(false);
@@ -101,7 +110,8 @@
     <p><strong>That was speccoder.</strong> Every tick above is a commit with its evidence.</p>
     <div class="row">
       <button class="btn primary" onclick={() => (app.newProject = {})}>Start your own</button>
-      <button class="btn" title="speccoder verify, with the sample's checks: needs cargo" onclick={async () => { await navigator.clipboard?.writeText(`speccoder verify -C ${sample.path}`).catch(() => {}); app.toast({ tone: "ok", text: "Copied — the sample's checks need cargo", detail: `speccoder verify -C ${sample.path}` }); }}>Run the checks yourself</button>
+      <button class="btn" disabled={!!sample.checks_missing} title={sample.checks_missing ?? "the sample's own checks, here, offline"} onclick={() => app.perform(offer({ kind: "sample_checks" }, { group: "work", label: "run the sample's checks", why: "offline, in the sample's copy", command: `speccoder verify -C ${sample.path}` }))}>Run the checks yourself</button>
+      {#if sample.checks_missing}<span class="d-note">{sample.checks_missing}</span>{/if}
       <button class="btn ghost" onclick={() => (hidden = true)}>Close the sample</button>
     </div>
   </aside>

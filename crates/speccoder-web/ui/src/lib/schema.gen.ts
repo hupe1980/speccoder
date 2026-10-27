@@ -98,7 +98,7 @@ export interface ActionId {
  * kind arrives with its `Runnable` variant (the *adding a kind* contract
  * of `speccoder_runtime::actions::perform`).
  */
-export type ActionKind = "skill" | "run_task" | "run_feature" | "converge" | "commit" | "approve" | "reject" | "accept" | "skip" | "nudge" | "rule" | "review" | "issue_comment" | "quick_change" | "keep_set_aside" | "drop_set_aside" | "fix_setup" | "feature" | "pull_request" | "bug_fix" | "bug_confirm" | "bug_run" | "bug_keep" | "allow_always" | "widen_policy" | "decide_batch" | "oracle_tests" | "approve_and_run" | "comment" | "comments_send" | "revision_undo" | "code_nudge" | "acceptance_at" | "preset_add" | "plan_through" | "new_project" | "undo_new_project" | "clone_repository" | "open_sample" | "command";
+export type ActionKind = "skill" | "run_task" | "run_feature" | "converge" | "commit" | "approve" | "reject" | "accept" | "skip" | "nudge" | "rule" | "review" | "issue_comment" | "quick_change" | "keep_set_aside" | "drop_set_aside" | "fix_setup" | "feature" | "pull_request" | "bug_fix" | "bug_confirm" | "bug_run" | "bug_keep" | "allow_always" | "widen_policy" | "decide_batch" | "oracle_tests" | "approve_and_run" | "comment" | "comments_send" | "revision_undo" | "code_nudge" | "acceptance_at" | "preset_add" | "plan_through" | "new_project" | "undo_new_project" | "clone_repository" | "open_sample" | "sample_checks" | "command";
 
 /**
  * Result of `speccoder actions`: what a person can do now in the
@@ -2801,7 +2801,10 @@ export interface PlanStep {
   argv: string[];
   /** Where it runs: always the target. */
   cwd: string;
-  /** The hosts a network step reaches. */
+  /**
+   * The hosts a network step is expected to reach: shown, not enforced —
+   * the step gets the full network.
+   */
   hosts?: string[];
   /** `git_init`, `scaffold.<n>`, `format_init`, `speccoder_init`, `commit`. */
   id: string;
@@ -4084,7 +4087,7 @@ export type Runnable =
     commit: string;
     kind: "undo_new_project";
   }
-  /** Clone a repository of the person's through their `gh`. */
+  /** Clone a repository of the person's with their git (their credentials). */
   | {
     kind: "clone_repository";
     /** `owner/repo`. */
@@ -4100,6 +4103,13 @@ export type Runnable =
     /** Replace an existing copy. */
     fresh: boolean;
     kind: "open_sample";
+  }
+  /**
+   * Run the sample's own checks, offline, in its copy (the sample's
+   * end card, *Run the checks yourself*).
+   */
+  | {
+    kind: "sample_checks";
   };
 
 /** How the sample was recorded. */

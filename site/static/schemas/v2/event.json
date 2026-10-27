@@ -430,6 +430,11 @@
           "type": "string"
         },
         {
+          "const": "sample_checks",
+          "description": "[`Runnable::SampleChecks`].",
+          "type": "string"
+        },
+        {
           "const": "command",
           "description": "No runnable: the person runs the command.",
           "type": "string"
@@ -7148,7 +7153,7 @@
           "type": "string"
         },
         "hosts": {
-          "description": "The hosts a network step reaches.",
+          "description": "The hosts a network step is expected to reach: shown, not enforced —\nthe step gets the full network.",
           "items": {
             "type": "string"
           },
@@ -10297,7 +10302,7 @@
           "type": "object"
         },
         {
-          "description": "Clone a repository of the person's through their `gh`.",
+          "description": "Clone a repository of the person's with their git (their credentials).",
           "properties": {
             "kind": {
               "const": "clone_repository",
@@ -10334,6 +10339,19 @@
           "required": [
             "kind",
             "fresh"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Run the sample's own checks, offline, in its copy (the sample's\nend card, *Run the checks yourself*).",
+          "properties": {
+            "kind": {
+              "const": "sample_checks",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
           ],
           "type": "object"
         }
@@ -11753,7 +11771,7 @@
         },
         {
           "const": "network",
-          "description": "It reaches the hosts it names.",
+          "description": "It gets the full network (the hosts it names are expected, not enforced).",
           "type": "string"
         }
       ]

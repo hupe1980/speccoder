@@ -513,7 +513,8 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::NewProject
             | K::UndoNewProject
             | K::CloneRepository
-            | K::OpenSample => Offer::Take,
+            | K::OpenSample
+            | K::SampleChecks => Offer::Take,
             K::Command => Offer::Refuse,
         },
         // Decisions belong to their own prompt; what leaves the machine
@@ -556,6 +557,7 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::UndoNewProject
             | K::CloneRepository
             | K::OpenSample
+            | K::SampleChecks
             | K::Command => Offer::Refuse,
         },
         // Its keys decide the queue's calls and switch the feature; `n`
@@ -596,6 +598,7 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::UndoNewProject
             | K::CloneRepository
             | K::OpenSample
+            | K::SampleChecks
             | K::Command => Offer::Refuse,
         },
         Interface::CliRemedy | Interface::AcpRemedy => match kind {
@@ -638,6 +641,7 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::UndoNewProject
             | K::CloneRepository
             | K::OpenSample
+            | K::SampleChecks
             | K::Command => Offer::Refuse,
         },
     }
@@ -969,6 +973,10 @@ pub fn perform_in(
         }
         Runnable::OpenSample { fresh } => match state {
             Some(s) => crate::sample::open(s, *fresh),
+            None => no_state(),
+        },
+        Runnable::SampleChecks => match state {
+            Some(s) => crate::sample::run_checks(s, root),
             None => no_state(),
         },
         // The interface has confirmed it (the action's `confirm`): push

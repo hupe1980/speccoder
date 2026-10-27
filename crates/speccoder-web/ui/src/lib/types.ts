@@ -90,6 +90,8 @@ export interface SampleInfo {
   path: string;
   recorded?: { model: string; recorded_at: string; agentplane: string };
   runs: { id: string; result: string; finding?: string | null }[];
+  /** The tool the sample's checks need that is missing here, with its hint. */
+  checks_missing?: string | null;
 }
 
 /** A recent project, as the welcome shows it. */
