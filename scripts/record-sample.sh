@@ -23,7 +23,9 @@ export SPECCODER_STATE_DIR="$work/state"
 cd "$root"
 cargo build --quiet -p speccoder
 bin="$root/target/debug/speccoder"
-idea="A Rust library that counts the words of a text, ignoring punctuation"
+# Precise enough that the spec leaves no open question: the recording runs
+# unattended, and a question honestly stops it.
+idea="A Rust library with one function, word_count(text: &str) -> usize, that counts the words of a text: a word is a run of letters or digits; punctuation and whitespace separate words and are never counted; an empty text or one with only punctuation has 0 words."
 project="$work/wordcount"
 # A result's own words: its message, a failed skill's message, its code and
 # fix lines — or its raw output when it is not a result.

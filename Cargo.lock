@@ -4828,6 +4828,7 @@ dependencies = [
  "agentplane",
  "async-trait",
  "base64 0.22.1",
+ "flate2",
  "globset",
  "ignore",
  "keyring",
