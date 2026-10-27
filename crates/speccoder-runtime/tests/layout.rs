@@ -295,3 +295,102 @@ fn a_held_out_file_the_runner_would_not_collect_is_discarded_at_authoring() {
         "{asked}"
     );
 }
+
+/// H6 (spec 102 review): an already-passing section is searched alone — the
+/// story's earlier sections (failing at earlier ticks) never name a later task.
+#[test]
+fn an_already_passing_section_names_the_task_that_made_it_pass() {
+    let r = project();
+    fs::write(
+        r.path().join("specs/001-greet/tasks.md"),
+        "# Tasks: greet\n\n## Phase 1: Setup\n\n- [ ] T001 Handle the empty name in src/lib.rs\n\n## Phase 2: User Story 1 - Greeting (Priority: P1)\n\n- [ ] T002 [US1] Implement `greet` for names in src/lib.rs\n- [ ] T003 [US1] Implement the empty-name default of `greet` in src/lib.rs\n",
+    )
+    .unwrap();
+    git(r.path(), &["commit", "-qam", "tasks"]);
+    let state = tempfile::tempdir().unwrap();
+    // T001: only the empty name (greet("Ada") is still wrong).
+    let f = FakeProvider::new();
+    f.will_call_tool("c1", "write_file", json!({ "path": "src/lib.rs", "content": "pub fn greet(name: &str) -> String {\n    if name.is_empty() {\n        return \"Hello, world!\".to_owned();\n    }\n    String::new()\n}\n" }));
+    f.will_structure(done("empty"));
+    let t001 = run(r.path(), state.path(), "T001", f);
+    assert_eq!(
+        report(&t001).verdict,
+        Some(Verdict::RegressionOnly),
+        "{}",
+        t001.message()
+    );
+    // T002: the story's file, red on names, then green.
+    let f = FakeProvider::new();
+    f.will_structure(author(T001));
+    f.will_call_tool("c1", "write_file", json!({ "path": "src/lib.rs", "content": "pub fn greet(name: &str) -> String {\n    if name.is_empty() {\n        return \"Hello, world!\".to_owned();\n    }\n    format!(\"Hello, {name}!\")\n}\n" }));
+    f.will_structure(done("names"));
+    let t002 = run(r.path(), state.path(), "T002", f);
+    assert_eq!(
+        report(&t002).verdict,
+        Some(Verdict::Verified),
+        "{}",
+        t002.message()
+    );
+    // T003's section already passes — since T001, not T002.
+    let f = FakeProvider::new();
+    f.will_structure(author(&format!("{T001}{T002}")));
+    f.will_structure(done("nothing to do"));
+    let t003 = run(r.path(), state.path(), "T003", f);
+    let rep = report(&t003);
+    assert_eq!(
+        rep.verdict,
+        Some(Verdict::RegressionOnly),
+        "{} {:?}",
+        t003.message(),
+        rep.acceptance
+    );
+    assert_eq!(
+        rep.regression.as_ref().unwrap().text,
+        "already passing before the attempt — implemented by T001"
+    );
+}
+
+/// H7 (spec 102 review): a later task's author cannot insert lines among
+/// an earlier task's tests (an `#[ignore]` above them), nor skip any.
+#[test]
+fn a_section_may_only_be_appended_and_never_skips_a_test() {
+    let r = project();
+    let state = tempfile::tempdir().unwrap();
+    let f = FakeProvider::new();
+    f.will_structure(author(T001));
+    f.will_call_tool("c1", "write_file", json!({ "path": "src/lib.rs", "content": "pub fn greet(name: &str) -> String {\n    format!(\"Hello, {name}!\")\n}\n" }));
+    f.will_structure(done("greet"));
+    let first = run(r.path(), state.path(), "T001", f);
+    assert_eq!(
+        report(&first).verdict,
+        Some(Verdict::Verified),
+        "{}",
+        first.message()
+    );
+    // Every old line kept, in order — with an `#[ignore]` inserted among them.
+    let inserted = T001.replace("#[test]\n", "#[test]\n#[ignore]\n");
+    let f = FakeProvider::new();
+    f.will_structure(author(&format!("{inserted}{T002}")));
+    f.will_structure(done("nothing"));
+    let res = run(r.path(), state.path(), "T002", f);
+    assert_eq!(
+        report(&res).regression.as_ref().unwrap().text,
+        "its acceptance tests could not be used: changes existing lines of `tests/acceptance_us1.rs`"
+    );
+}
+
+#[test]
+fn an_appended_section_that_skips_a_test_is_refused() {
+    let added = "\n// T002\n#[test]\n#[ignore]\nfn t002() {}\n";
+    assert!(
+        speccoder_runtime::integrity::appended_section(T001, &format!("{T001}{added}")).is_some()
+    );
+    assert!(speccoder_runtime::integrity::has_skip_marker(added));
+    assert_eq!(
+        speccoder_runtime::integrity::appended_section(
+            T001,
+            &T001.replace("#[test]\n", "#[test]\n#[ignore]\n")
+        ),
+        None
+    );
+}

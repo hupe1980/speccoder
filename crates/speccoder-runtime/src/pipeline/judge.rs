@@ -135,17 +135,24 @@ pub(crate) fn judge_checks(
         let green = verify::rerun_once(run_all_acceptance(project, &all, runner, &counted), || {
             run_all_acceptance(project, &all, runner, &counted)
         });
-        // Green is evidence only when it collected what red did (FR-008).
+        // Green is evidence only when it collected what red did (FR-008):
+        // red's count, else what the files declare, and at least one; a
+        // green run whose count cannot be read is no evidence.
         let red_tests = a.report["red_tests"]
             .as_u64()
             .and_then(|n| usize::try_from(n).ok());
-        if let (Some(red), Some(seen)) = (red_tests, counted.get())
-            && let Some(r) = report.acceptance.as_mut()
+        let required = red_tests
+            .unwrap_or_else(|| declared(project, &a.report))
+            .max(1);
+        if let Some(r) = report.acceptance.as_mut() {
+            r["green_tests"] = serde_json::json!(counted.get());
+            r["green_needs"] = serde_json::json!(required);
+        }
+        if a.red
+            && green.status == CheckStatus::Passed
+            && counted.get().is_none_or(|seen| seen < required)
         {
-            r["green_tests"] = serde_json::json!(seen);
-            if a.red && green.status == CheckStatus::Passed && seen < red {
-                uncollected_at_green = true;
-            }
+            uncollected_at_green = true;
         }
         if let Some(r) = report.acceptance.as_mut() {
             r["green"] = serde_json::json!(green.status == CheckStatus::Passed);
@@ -181,6 +188,21 @@ pub(crate) fn judge_checks(
     current.comparison = Some(cmp);
     report.verification = Some(current);
     Ok(())
+}
+
+/// The tests the acceptance files declare by their toolchains' markers.
+fn declared(project: &Path, acceptance: &serde_json::Value) -> usize {
+    acceptance["files"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|f| f.as_str())
+        .filter_map(|f| {
+            let t = speccoder_core::collection::toolchain_of(f)?;
+            let text = std::fs::read_to_string(project.join(f)).ok()?;
+            Some(speccoder_core::collection::declared_tests(t, &text))
+        })
+        .sum()
 }
 
 /// The verdict reason when green collected fewer tests than red did.

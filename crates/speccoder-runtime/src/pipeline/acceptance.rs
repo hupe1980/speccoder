@@ -222,11 +222,17 @@ pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance 
             && std::fs::write(&full, old).is_ok()
         {
             let (without, wsum) = execute(a.project, &argv, a.runner);
-            let _ = std::fs::write(&full, new);
-            class = speccoder_core::verify::classify_red_added(
-                (&first, summary.as_ref()),
-                (&without, wsum.as_ref()),
-            );
+            // The section must be back before any evidence describes it.
+            class = if std::fs::write(&full, &new).is_err()
+                || std::fs::read_to_string(&full).ok().as_deref() != Some(new.as_str())
+            {
+                RedClass::Unclassified
+            } else {
+                speccoder_core::verify::classify_red_added(
+                    (&first, summary.as_ref()),
+                    (&without, wsum.as_ref()),
+                )
+            };
         }
     }
     if class.is_red() {
@@ -343,6 +349,7 @@ pub(crate) fn refusal_words(why: &str) -> &'static str {
         "exists" => "already exists",
         "not_collected" => "is not where the runner collects tests",
         "changes_existing" => "changes existing lines",
+        "skip_marker" => "adds a section that skips a test",
         _ => "is not a new test file",
     }
 }
@@ -417,13 +424,26 @@ pub(crate) fn validate_with(
         }
         match story {
             Some((path, old)) if path == rel => {
-                if content == old || !crate::integrity::only_additions(old, content) {
-                    refused.push(RefusedFile {
-                        message: format!("changes existing lines of `{rel}`"),
-                        path: rel,
-                        why: "changes_existing",
-                    });
-                    continue;
+                // Only a section at the end: never a line among the earlier
+                // tasks' tests, never a skip of any test (D-048).
+                match crate::integrity::appended_section(old, content) {
+                    None => {
+                        refused.push(RefusedFile {
+                            message: format!("changes existing lines of `{rel}`"),
+                            path: rel,
+                            why: "changes_existing",
+                        });
+                        continue;
+                    }
+                    Some(added) if crate::integrity::has_skip_marker(added) => {
+                        refused.push(RefusedFile {
+                            message: format!("`{rel}`: the added section skips a test"),
+                            path: rel,
+                            why: "skip_marker",
+                        });
+                        continue;
+                    }
+                    Some(_) => {}
                 }
             }
             _ if project.join(&rel).exists() => {
@@ -845,12 +865,19 @@ pub(crate) fn judge_held_out(
     let mut failed_ids: Vec<String> = Vec::new();
     for ((file, _), ran) in files.iter().zip(&runs) {
         // Green is evidence only when it collected what red did (FR-008).
+        // Green collects what red did — red's count, else what the file
+        // declares, at least one — and a count that cannot be read fails.
+        let declared = speccoder_core::collection::toolchain_of(&file.path).map_or(0, |t| {
+            files
+                .iter()
+                .find(|(f, _)| f.path == file.path)
+                .map_or(0, |(_, c)| speccoder_core::collection::declared_tests(t, c))
+        });
+        let required = file.red_tests.unwrap_or(declared).max(1);
         let passed = ran.result.as_ref().is_some_and(|(r, sum)| {
             r.status == CheckStatus::Passed
-                && file.red_tests.is_none_or(|red| {
-                    speccoder_core::verify::collected_count(r, sum.as_ref())
-                        .is_some_and(|green| green >= red)
-                })
+                && speccoder_core::verify::collected_count(r, sum.as_ref())
+                    .is_some_and(|green| green >= required)
         });
         if !passed {
             failed_ids.extend(file.scenarios.iter().cloned());

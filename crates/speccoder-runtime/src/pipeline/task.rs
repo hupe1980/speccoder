@@ -1731,17 +1731,28 @@ pub(crate) fn run_task(
                                 | speccoder_core::verify::Verdict::RegressionOnly
                         )
                     );
-                if let Some(unknown) = judge_collection(
-                    &project,
+                match judge_collection(
+                    (&project, &wt_root, &tmp),
                     &runner,
                     otherwise_passing,
                     &mut report,
                     &*live,
                     task,
                 ) {
-                    attempt_status = "collection_unknown".to_owned();
-                    report.verdict = None;
-                    report.reason = Some(unknown);
+                    Some(Collected::Unknown(why)) => {
+                        attempt_status = "collection_unknown".to_owned();
+                        report.verdict = None;
+                        report.reason = Some(why);
+                    }
+                    // A listing changed the tree: never committed, never retried.
+                    Some(Collected::Changed(finding)) => {
+                        report.integrity.push(finding.clone());
+                        report.verdict = Some(speccoder_core::verify::Verdict::Failed {
+                            reasons: vec![finding],
+                        });
+                        attempt_status = "integrity".to_owned();
+                    }
+                    None => {}
                 }
                 let checks_held = report.verification.as_ref().is_some_and(|v| v.passed);
                 stage_with_tail(
@@ -2441,7 +2452,6 @@ pub(crate) fn run_task(
     //     facts; already-passing tests are searched for the tick that made
     //     them pass (never changing the verdict, never a model call).
     if passed
-        && bug_fix.is_none()
         && matches!(
             report.verdict,
             Some(speccoder_core::verify::Verdict::RegressionOnly)
@@ -2450,8 +2460,10 @@ pub(crate) fn run_task(
         use speccoder_core::regression::{Regression, RegressionFacts, RegressionReason, decide};
         let facts = RegressionFacts {
             acceptance_on: run_config.acceptance,
+            // A bug's requirement is its story.
             story: acceptance_story
                 .clone()
+                .or_else(|| bug_fix.as_ref().map(|f| f.bug.requirement.clone()))
                 .or_else(|| parsed_task.as_ref().and_then(|t| t.story.clone())),
             scenarios: scenarios.len(),
             skip: acceptance.as_ref().and_then(|a| a.skip_cause.clone()),
@@ -2470,11 +2482,14 @@ pub(crate) fn run_task(
             }),
         };
         let mut reason = decide(&facts);
+        // A bug's reproductions passing already is the bug lane's own
+        // outcome (already satisfied): no tick to search for.
         if matches!(reason, RegressionReason::AlreadyPassing { .. })
+            && bug_fix.is_none()
             && let Some(a) = acceptance.as_ref()
             && let Some(argv) = a.argv.as_ref()
         {
-            let files: Vec<(String, String)> = a.report["files"]
+            let mut files: Vec<(String, String)> = a.report["files"]
                 .as_array()
                 .into_iter()
                 .flatten()
@@ -2489,16 +2504,67 @@ pub(crate) fn run_task(
                 .strip_prefix(&wt_root)
                 .map(|p| p.to_string_lossy().replace('\\', "/"))
                 .unwrap_or_default();
-            let found = super::bisect::search(&super::bisect::Search {
-                repo: &wt_root,
-                prefix: &prefix,
-                feature: &feature_name,
-                files: &files,
-                argv,
-                scratch: &s.plane_dir.join("tmp"),
-                sandbox: &sandbox_config,
-                timeout: std::time::Duration::from_secs(600),
-            });
+            // A section added to the story's file: only that section, with
+            // the file's imports, and only its tests run (FR-030, FR-014).
+            let mut command = Some(argv.clone());
+            if a.report["appended"] == true
+                && let Some(story) = a.report["story_file"].as_str()
+            {
+                let at = if prefix.is_empty() {
+                    story.to_owned()
+                } else {
+                    format!("{prefix}/{story}")
+                };
+                let old = crate::git::Git::at(&wt_root)
+                    .run(&["show", &format!("HEAD:{at}")])
+                    .map(|b| String::from_utf8_lossy(&b).into_owned())
+                    .unwrap_or_default();
+                command = None;
+                if let Some((_, content)) = files.iter_mut().find(|(f, _)| f == story)
+                    && let Some(added) = content.strip_prefix(old.as_str()).map(str::to_owned)
+                {
+                    command = super::bisect::section_command(argv, story, &added);
+                    let imports: String = old
+                        .lines()
+                        .filter(|l| {
+                            let t = l.trim_start();
+                            ["use ", "import ", "from ", "package ", "extern crate "]
+                                .iter()
+                                .any(|k| t.starts_with(k))
+                        })
+                        .map(|l| format!("{l}\n"))
+                        .collect();
+                    *content = format!("{imports}{added}");
+                }
+            }
+            let timeout = std::fs::read_to_string(project.join(crate::verify::config::FILE))
+                .ok()
+                .and_then(|t| crate::verify::config::parse(&t).ok())
+                .and_then(|cs| {
+                    cs.into_iter()
+                        .filter(|c| c.tier == crate::verify::config::Tier::Fast)
+                        .map(|c| c.timeout)
+                        .max()
+                })
+                .unwrap_or(std::time::Duration::from_secs(600));
+            let found = match &command {
+                Some(argv) => super::bisect::search(&super::bisect::Search {
+                    repo: &wt_root,
+                    prefix: &prefix,
+                    feature: &feature_name,
+                    task,
+                    files: &files,
+                    argv,
+                    scratch: &s.plane_dir.join("tmp"),
+                    sandbox: &sandbox_config,
+                    timeout,
+                }),
+                // No way to run only the section: no answer, never a guess.
+                None => super::bisect::Found {
+                    implemented_by: None,
+                    runs: 0,
+                },
+            };
             live.event(&progress::Event::RegressionBisected {
                 task: task.to_owned(),
                 runs: found.runs,
@@ -2833,14 +2899,25 @@ fn collection_code(
 /// (FR-001…FR-006): a file no test ran from fails the verdict (its reason
 /// first); for an otherwise passing attempt, a file speccoder cannot tell
 /// about returns the stop's message. Listings run only then.
+/// What the collection check came to beyond the verdict's reasons.
+enum Collected {
+    /// A file speccoder cannot tell about: the stop's message.
+    Unknown(String),
+    /// A listing changed the worktree: the integrity finding.
+    Changed(String),
+}
+
 fn judge_collection(
-    project: &Path,
+    dirs: (&Path, &Path, &Path),
     runner: &sandbox::Runner,
     otherwise_passing: bool,
     report: &mut speccoder_core::RunReport,
     live: &dyn progress::Progress,
     task: &str,
-) -> Option<String> {
+) -> Option<Collected> {
+    let (project, wt_root, tmp) = dirs;
+    // Listings run the project's code: the tree they leave must be the one judged.
+    let before = worktree::checkpoint(wt_root, tmp).ok();
     let checks = std::fs::read_to_string(project.join(crate::verify::config::FILE))
         .ok()
         .and_then(|t| crate::verify::config::parse(&t).ok())
@@ -2861,6 +2938,26 @@ fn judge_collection(
         runner,
         listings: otherwise_passing,
     })?;
+    if !c.listing.is_empty()
+        && let Some(before) = &before
+    {
+        let changed: Vec<String> = worktree::checkpoint(wt_root, tmp)
+            .and_then(|after| worktree::diff(wt_root, before, &after))
+            .map(|d| {
+                d.into_iter()
+                    .map(|c| c.path)
+                    .filter(|p| !speccoder_core::collection::is_build_or_dependency(p))
+                    .collect()
+            })
+            .unwrap_or_else(|e| vec![format!("(the tree could not be read: {})", e.0)]);
+        if !changed.is_empty() {
+            report.collection = Some(c);
+            return Some(Collected::Changed(format!(
+                "integrity: a test listing changed the worktree: {}",
+                changed.join(", ")
+            )));
+        }
+    }
     live.event(&progress::Event::CollectionChecked {
         task: task.to_owned(),
         files: c
@@ -2895,7 +2992,7 @@ fn judge_collection(
         report.verdict = Some(speccoder_core::verify::Verdict::Failed { reasons });
         return None;
     }
-    (otherwise_passing && !unknown.is_empty()).then(|| unknown.join("; "))
+    (otherwise_passing && !unknown.is_empty()).then(|| Collected::Unknown(unknown.join("; ")))
 }
 
 /// `note`, with what the check itself said last (its own reason) and, for

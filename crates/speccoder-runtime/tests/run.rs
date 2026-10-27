@@ -4157,3 +4157,118 @@ fn nothing_of_spec_102_adds_a_model_call_or_passes_a_failure() {
         res.message()
     );
 }
+
+/// M2 (spec 102 review): a listing runs the project's code; a tree it
+/// changed is never committed, and the attempt is not retried.
+#[test]
+fn a_listing_that_changes_the_tree_fails_the_attempt() {
+    let r = repo_with(
+        "[checks.listed]\nargv = [\"true\"]\nlist = [\"sh\", \"-c\", \"echo planted > src/planted.rs; ls tests/*.rs\"]\n[budget]\nmax_attempts = 2\n",
+        &[CARGO],
+    );
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    writes_test(&f, "c1", "tests/greet_name.rs");
+    let res = run(r.path(), state.path(), "T005", d);
+    let rep = report(&res);
+    assert!(
+        rep.integrity
+            .iter()
+            .any(|i| i.contains("a test listing changed the worktree: src/planted.rs")),
+        "{:?} {}",
+        rep.integrity,
+        res.message()
+    );
+    assert!(!rep.ticked && rep.earlier.is_empty());
+}
+
+/// H3 (spec 102 review): red that only failed to build has no count; a
+/// green that then collects nothing is still no evidence.
+#[test]
+fn a_green_run_that_collects_nothing_never_verifies() {
+    use std::os::unix::fs::PermissionsExt;
+    let r = repo_with(
+        "[acceptance]\nheld_out = false\nstrength = false\n[budget]\nmax_attempts = 1\n",
+        &[ACCEPTANCE_SPEC],
+    );
+    // The stand-in runner, made to collect nothing at green.
+    let zero = r.path().join("accept.sh");
+    fs::write(
+        &zero,
+        "#!/bin/sh\nif grep -q 'fn login' src/lib.rs; then\n  echo 'test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out'\nelse\n  echo 'error[E0425]: cannot find function `login` in this scope' >&2\n  echo 'error: could not compile `demo` (test \"acceptance\") due to 1 previous error' >&2\n  exit 101\nfi\n",
+    )
+    .unwrap();
+    fs::set_permissions(&zero, fs::Permissions::from_mode(0o755)).unwrap();
+    git(r.path(), &["add", "-A"]);
+    git(r.path(), &["commit", "-q", "-m", "zero"]);
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_structure(acceptance(
+        "tests/acceptance_login.txt",
+        &["./accept.sh", "--"],
+    ));
+    f.will_call_tool("c1", "edit_file", json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\npub fn login() {}" }));
+    f.will_structure(done("login"));
+    let res = run(r.path(), state.path(), "T005", d);
+    let rep = report(&res);
+    assert_eq!(
+        rep.acceptance.as_ref().map(|a| a["red_class"].clone()),
+        Some(json!("absent")),
+        "{:?} {} {}",
+        rep.acceptance,
+        res.message(),
+        f.asked().len()
+    );
+    assert!(
+        matches!(&rep.verdict, Some(Verdict::Failed { reasons }) if reasons[0] == "acceptance tests not collected at green"),
+        "{:?} {}",
+        rep.verdict,
+        res.message()
+    );
+}
+
+/// M7 (spec 102 review): accepting a task that stopped on
+/// TESTS-COLLECTION-UNKNOWN ticks the attempt's code, never the undone tree.
+#[test]
+fn accepting_a_collection_unknown_stop_ticks_the_attempt_s_code() {
+    let r = repo_with(
+        "[checks.listed]\nargv = [\"true\"]\nlist = [\"sleep\", \"5\"]\ntimeout_secs = 1\n",
+        &[CARGO],
+    );
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    writes_test(&f, "c1", "tests/greet_name.rs");
+    let res = run(r.path(), state.path(), "T005", d);
+    assert_eq!(
+        res.code().map(|c| c.name),
+        Some("TESTS-COLLECTION-UNKNOWN"),
+        "{}",
+        res.message()
+    );
+    let worktree = report(&res).worktree.clone();
+    assert!(
+        !Path::new(&worktree).join("tests/greet_name.rs").exists(),
+        "the attempt was undone"
+    );
+    let accepted = speccoder_runtime::controls::accept_in(
+        r.path(),
+        None,
+        "T005",
+        "I ran it myself",
+        state.path(),
+        false,
+    );
+    assert_eq!(
+        accepted.status(),
+        CommandStatus::Ok,
+        "{}",
+        accepted.message()
+    );
+    assert!(
+        accepted.message().contains("with its saved attempt"),
+        "{}",
+        accepted.message()
+    );
+    let shown = git_out(Path::new(&worktree), &["show", "HEAD:tests/greet_name.rs"]);
+    assert!(shown.contains("fn greets"), "{shown}");
+}
