@@ -197,3 +197,49 @@ fn a_journal_this_build_cannot_reproduce_is_reported_never_shown_as_working() {
         res.message()
     );
 }
+
+/// The recording's credential check reads the history, not the bundle: a
+/// key committed once and deleted after is invisible in the compressed
+/// pack and found in the history.
+#[test]
+fn the_credential_check_reads_the_history_not_the_compressed_bundle() {
+    let script =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../scripts/sample-credentials.sh");
+    let dir = tempfile::tempdir().unwrap();
+    let r = dir.path().join("p");
+    fs::create_dir_all(&r).unwrap();
+    git(&r, &["init", "-q"]);
+    fs::write(r.join("a.txt"), "clean\n").unwrap();
+    git(&r, &["add", "-A"]);
+    git(&r, &["commit", "-qm", "clean"]);
+    let journal = dir.path().join("journal.redb");
+    fs::write(&journal, b"no secrets").unwrap();
+    let check = || {
+        Command::new("bash")
+            .arg(&script)
+            .arg(&r)
+            .arg(&journal)
+            .status()
+            .unwrap()
+            .success()
+    };
+    assert!(check(), "a clean sample passes");
+    let key = format!("sk-ant-{}", "x".repeat(32));
+    fs::write(r.join("config.env"), format!("KEY={key}\n")).unwrap();
+    git(&r, &["add", "-A"]);
+    git(&r, &["commit", "-qm", "oops"]);
+    fs::remove_file(r.join("config.env")).unwrap();
+    git(&r, &["add", "-A"]);
+    git(&r, &["commit", "-qm", "removed"]);
+    let bundle = dir.path().join("s.bundle");
+    git(
+        &r,
+        &["bundle", "create", &bundle.display().to_string(), "--all"],
+    );
+    let raw = fs::read(&bundle).unwrap();
+    assert!(
+        !String::from_utf8_lossy(&raw).contains(&key),
+        "the pack is compressed: grep cannot see it"
+    );
+    assert!(!check(), "the history holds the key");
+}

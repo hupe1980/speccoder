@@ -64,7 +64,10 @@ expect = "reproduced"
 TOML
 size="$(du -sk "$dest" | cut -f1)"
 [ "$size" -le 2048 ] || { echo "record-sample: $dest is ${size} KiB (> 2 MiB)" >&2; exit 1; }
-if grep -aEq 'sk-(ant-)?[A-Za-z0-9_-]{20,}|Bearer [A-Za-z0-9._~+/-]{20,}|(OPENAI|ANTHROPIC)_API_KEY=\S' "$dest"/*; then
-  echo "record-sample: something shaped like a credential is in the sample" >&2; exit 1
+# Credentials, looked for where they are readable (the bundle is a
+# compressed pack): every revision, diff and note of the repository, the
+# journal and the manifest.
+if ! "$root/scripts/sample-credentials.sh" "$project" "$dest/journal.redb" "$dest/manifest.toml"; then
+  rm -rf "$dest"; exit 1
 fi
 echo "record-sample: ${#runs[@]} run(s) → $dest (${size} KiB); rebuild, then: cargo nextest run -p speccoder-runtime --test sample"
