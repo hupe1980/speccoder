@@ -131,6 +131,19 @@ pub fn save(
     let git = Git::at(dir);
     let tree = worktree::checkpoint(dir, tmp)?;
     let head = git.line(&["rev-parse", "--verify", "HEAD^{commit}"])?;
+    // A file whose change holds a value copied from the person's secret
+    // files is left out: a saved attempt is a ref anyone with the
+    // repository sees.
+    let (tree, left_out) = without_secrets(&git, tmp, &head, tree)?;
+    let reason = if left_out.is_empty() {
+        reason.to_owned()
+    } else {
+        format!(
+            "{reason} ({} left out: it held a value copied from your checkout)",
+            left_out.join(", ")
+        )
+    };
+    let reason = reason.as_str();
     let message = format!(
         "speccoder attempt: {task} {outcome}\n\n{reason}\n\nSpec-Task: {feature}/{task}\nOutcome: {outcome}\n{}{}{}",
         run.map(|r| format!("Run: {r}\n")).unwrap_or_default(),
@@ -164,6 +177,44 @@ pub fn save(
         reference,
         commit,
     })
+}
+
+/// `tree` without each file whose change from `head` adds a value
+/// [`crate::secrets`] masks, and those files.
+fn without_secrets(
+    git: &Git,
+    tmp: &Path,
+    head: &str,
+    tree: Checkpoint,
+) -> Result<(Checkpoint, Vec<String>), GitError> {
+    let changed = crate::git::nul_fields(&git.run(&[
+        "diff",
+        "--name-only",
+        "-z",
+        "--no-renames",
+        head,
+        &tree.0,
+    ])?);
+    let held: Vec<String> = changed
+        .into_iter()
+        .filter(|f| {
+            git.run(&["diff", "-U0", "--no-color", head, &tree.0, "--", f])
+                .is_ok_and(|p| crate::include::added_secret(&String::from_utf8_lossy(&p)).is_some())
+        })
+        .collect();
+    if held.is_empty() {
+        return Ok((tree, held));
+    }
+    let index = tmp.join(format!("attempt-index-{}", std::process::id()));
+    let _ = std::fs::create_dir_all(tmp);
+    git.run_with_index(&index, &["read-tree", &tree.0], None)?;
+    let mut rm = vec!["update-index", "--force-remove", "--"];
+    rm.extend(held.iter().map(String::as_str));
+    git.run_with_index(&index, &rm, None)?;
+    let out = git.run_with_index(&index, &["write-tree"], None);
+    let _ = std::fs::remove_file(&index);
+    let kept = String::from_utf8_lossy(&out?).trim().to_owned();
+    Ok((Checkpoint(kept), held))
 }
 
 /// Makes the worktree at `dir` equal to its HEAD commit's tree.
@@ -218,6 +269,62 @@ pub fn list(repo: &Path, feature: &str) -> Vec<Saved> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_file_holding_a_copied_value_is_left_out_of_a_saved_attempt() {
+        let dir = tempfile::tempdir().unwrap();
+        let r = dir.path();
+        let git = |args: &[&str]| {
+            assert!(
+                std::process::Command::new("git")
+                    .args([
+                        "-c",
+                        "user.name=t",
+                        "-c",
+                        "user.email=t@e",
+                        "-c",
+                        "commit.gpgsign=false"
+                    ])
+                    .args(args)
+                    .current_dir(r)
+                    .status()
+                    .unwrap()
+                    .success()
+            );
+        };
+        std::fs::write(r.join("a.txt"), "a\n").unwrap();
+        git(&["init", "-q"]);
+        git(&["add", "-A"]);
+        git(&["commit", "-qm", "init"]);
+        crate::secrets::register("SNAP_TOKEN", "attempt-snap-Vb3 value");
+        std::fs::write(r.join("a.txt"), "a\nb\n").unwrap();
+        std::fs::write(r.join("snap.txt"), "token: attempt-snap-Vb3 value\n").unwrap();
+        let tmp = tempfile::tempdir().unwrap();
+        let saved = save(
+            r,
+            tmp.path(),
+            "001-x",
+            "T001",
+            &Record {
+                run: None,
+                outcome: "failed",
+                reason: "red",
+                pending: None,
+                usage: None,
+            },
+        )
+        .unwrap();
+        let g = Git::at(r);
+        let files = g
+            .run(&["ls-tree", "-r", "--name-only", &saved.commit])
+            .unwrap();
+        assert_eq!(String::from_utf8_lossy(&files), "a.txt\n");
+        assert!(
+            saved.reason.contains("snap.txt left out"),
+            "{}",
+            saved.reason
+        );
+    }
 
     #[test]
     fn usage_trailers_round_trip_with_a_reported_cost() {
