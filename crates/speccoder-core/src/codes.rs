@@ -156,6 +156,29 @@ pub const CATALOG: &[Entry] = &[
         ]
     ),
     entry!(
+        "PREPARE-FAILED",
+        E,
+        S::ConfigError,
+        "the worktree's dependencies could not be installed",
+        "Before the baseline speccoder installs a Node or uv project's dependencies in the run's worktree with the toolchain's locked, offline install, sandboxed. It failed — a package the lockfile needs is not in the toolchain's cache, or no lockfile is committed — so no check could run and nothing was attempted. Never a failed verdict.",
+        [
+            "→ run the install once in your checkout to fill the cache (`npm install`, `uv sync`)",
+            "→ or allow the network for the install's exact online form: [sandbox] network_allow = [[\"npm\", \"ci\"]]",
+            "speccoder doctor"
+        ]
+    ),
+    entry!(
+        "LINK-CHANGED",
+        P,
+        S::NeedsHuman,
+        "the external agent changed a dependency folder linked from your checkout",
+        "With `[worktree] link`, a folder such as `node_modules` is your checkout's own, read-only to every sandboxed command. An `[executor]` agent works outside the sandbox, and its attempt changed one: a verdict would rest on dependencies the attempt changed in your checkout, so nothing was judged or ticked.",
+        [
+            "→ restore your checkout's install (`npm ci`, `uv sync`)",
+            "→ or remove the folder from [worktree] link, or run without an [executor]"
+        ]
+    ),
+    entry!(
         "FEATURE-GONE",
         E,
         S::SelectionNeeded,

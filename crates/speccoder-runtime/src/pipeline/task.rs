@@ -543,6 +543,13 @@ pub(crate) fn run_task(
                 .with_code("CONFIG-INVALID");
         }
     };
+    let worktree_config = match crate::prepare::parse(&config_text) {
+        Ok(c) => c,
+        Err(e) => {
+            return refuse(CommandStatus::ConfigError, format!("speccoder.toml: {e}"))
+                .with_code("CONFIG-INVALID");
+        }
+    };
     let check_argvs = verify::check_argvs(&config_root);
     let policy = tools::policy::Policy::new(&check_argvs, &run_config.allow)
         .with_prefixes(run_config.allow_prefix.clone())
@@ -631,7 +638,91 @@ pub(crate) fn run_task(
         });
         refuse(status, m)
     };
-    // 4. Baseline: no verdict without a judge.
+    // 4. Prepare: the worktree's dependency folders (Node, uv), linked
+    //    from the checkout or installed, once per lockfile. In place, the
+    //    checkout has its own.
+    let mut prepare_notes: Vec<String> = Vec::new();
+    let mut linked_dependencies = Vec::new();
+    let mut linked_folders: Vec<(std::path::PathBuf, crate::prepare::Toolchain)> = Vec::new();
+    let runner =
+        if options.session.is_none() && worktree_config.prepare && crate::prepare::needed(&project)
+        {
+            let began = std::time::Instant::now();
+            stage(
+                &*live,
+                task,
+                Stage::Prepare,
+                StageState::Started,
+                None,
+                None,
+            );
+            let prepared = crate::prepare::prepare(&crate::prepare::Prepare {
+                worktree: &wt_root,
+                project: &project,
+                checkout: Path::new(&s.snapshot.root),
+                config: &worktree_config,
+                runner: &runner,
+                state: Some(state),
+            });
+            match prepared {
+                Ok(None) => runner,
+                Ok(Some(p)) => {
+                    for n in &p.notes {
+                        live.event(&progress::Event::Notice { text: n.clone() });
+                    }
+                    prepare_notes.clone_from(&p.notes);
+                    stage(
+                        &*live,
+                        task,
+                        Stage::Prepare,
+                        if p.done.is_empty() {
+                            StageState::Skipped
+                        } else {
+                            StageState::Passed
+                        },
+                        Some(if p.done.is_empty() {
+                            "reused: the lockfiles are unchanged".to_owned()
+                        } else {
+                            p.done.join(", ")
+                        }),
+                        Some(began),
+                    );
+                    linked_dependencies = p.record.linked();
+                    for e in p
+                        .record
+                        .roots
+                        .iter()
+                        .filter(|e| e.mode == crate::prepare::Mode::Linked)
+                    {
+                        linked_folders.push((project.join(e.folder()), e.toolchain));
+                    }
+                    runner.with_env(p.record.env())
+                }
+                Err(f) => {
+                    stage(
+                        &*live,
+                        task,
+                        Stage::Prepare,
+                        StageState::Failed,
+                        Some(f.message.clone()),
+                        Some(began),
+                    );
+                    return fail(CommandStatus::ConfigError, f.message)
+                        .with_code("PREPARE-FAILED")
+                        .with_fix(f.fix);
+                }
+            }
+        } else {
+            runner
+        };
+    // As the model names them: relative to the worktree's root.
+    let linked_paths: Vec<String> = linked_folders
+        .iter()
+        .filter_map(|(f, _)| f.strip_prefix(&wt_root).ok())
+        .map(|p| p.display().to_string())
+        .collect();
+
+    // 4'. Baseline: no verdict without a judge.
     let began = std::time::Instant::now();
     stage(
         &*live,
@@ -665,6 +756,14 @@ pub(crate) fn run_task(
             .iter()
             .find_map(|c| broken(c).map(|w| (c, w)))
     {
+        // A write refused in a folder linked from the checkout says so.
+        let why = match crate::prepare::linked_note(
+            &format!("{}\n{}", c.stderr_tail, c.stdout_tail),
+            &linked_paths,
+        ) {
+            Some(note) => format!("{why} ({note}: remove it from [worktree] link)"),
+            None => why,
+        };
         stage(
             &*live,
             task,
@@ -771,7 +870,10 @@ pub(crate) fn run_task(
     // One plane for the whole task. Its tool server enforces denials; the
     // frozen-test approvals are the skill's, from its journaled input.
     let tools_server = match tools::WorkspaceTools::new(&wt_root, policy.clone()) {
-        Ok(t) => std::sync::Arc::new(t.with_runner(runner.clone())),
+        Ok(t) => std::sync::Arc::new(
+            t.with_runner(runner.clone())
+                .with_linked(linked_paths.clone()),
+        ),
         Err(e) => return fail(CommandStatus::Error, e.to_string()),
     };
     // Calls past their deadline are denied as expired before anything
@@ -835,6 +937,7 @@ pub(crate) fn run_task(
         })
         .chain(connected.notices.iter().cloned())
         .chain(sandbox_notice.clone())
+        .chain(prepare_notes.iter().cloned())
         .chain(resumed_from.as_ref().map(|(stage, last_call)| {
             format!(
                 "Resuming — {task} was interrupted during {}{}; finished calls will not repeat.",
@@ -1421,7 +1524,37 @@ pub(crate) fn run_task(
                 {
                     notices.push("held-out set withheld from the external agent, not sealed: it runs with your permissions; a copied held-out literal stops the tick".to_owned());
                 }
+                // The agent works outside the sandbox: a folder linked from
+                // the checkout it changed would make the verdict one about
+                // dependencies the attempt changed there.
+                let before: Vec<String> = linked_folders
+                    .iter()
+                    .map(|(folder, toolchain)| crate::prepare::fingerprint(folder, *toolchain))
+                    .collect();
                 let o = external::run(exec, &wt_root, &prompt, &allow, &tmp, withheld);
+                let changed: Vec<String> = linked_folders
+                    .iter()
+                    .zip(&before)
+                    .filter(|((folder, toolchain), before)| {
+                        crate::prepare::fingerprint(folder, *toolchain) != **before
+                    })
+                    .filter_map(|((folder, _), _)| {
+                        folder
+                            .strip_prefix(&project)
+                            .ok()
+                            .map(|p| p.display().to_string())
+                    })
+                    .collect();
+                if !changed.is_empty() {
+                    return fail(
+                        CommandStatus::NeedsHuman,
+                        format!(
+                            "the external agent changed {} — linked from your checkout ([worktree] link) — so nothing was judged or ticked",
+                            changed.join(", ")
+                        ),
+                    )
+                    .with_code("LINK-CHANGED");
+                }
                 (o.run_id, true, o.output)
             } else {
                 // The same key as an interrupted attempt resumes it.
@@ -1654,6 +1787,7 @@ pub(crate) fn run_task(
                 acceptance: acceptance.as_ref().map(|a| a.report.clone()),
                 set_aside: set_aside.clone(),
                 notices: notices.clone(),
+                linked_dependencies: linked_dependencies.clone(),
                 ..bare_report(&feature_name, task, &wt_path, &attempt_status)
             };
             if let Err(e) = record_inline_approvals(
@@ -2564,6 +2698,9 @@ pub(crate) fn run_task(
                     scratch: &s.plane_dir.join("tmp"),
                     sandbox: &sandbox_config,
                     timeout,
+                    worktree: &worktree_config,
+                    checkout: Path::new(&s.snapshot.root),
+                    state: Some(state),
                 }),
                 // No way to run only the section: no answer, never a guess.
                 None => super::bisect::Found {

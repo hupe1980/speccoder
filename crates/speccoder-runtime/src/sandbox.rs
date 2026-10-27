@@ -423,6 +423,9 @@ pub struct Sandboxed {
     pub network_allow: Vec<Vec<String>>,
     /// Prefixes (two elements or more) that get it.
     pub network_allow_prefix: Vec<Vec<String>>,
+    /// Variables every command gets: a worktree's linked `.venv` sets
+    /// `PYTHONPATH` (put before the command's own) and `UV_NO_SYNC`.
+    pub env: Vec<(String, String)>,
 }
 
 impl Sandboxed {
@@ -479,6 +482,17 @@ impl Sandboxed {
             .cloned()
             .collect();
         env.extend(["TMPDIR", "TMP", "TEMP"].map(|k| (k.to_owned(), tmp.clone())));
+        for (k, v) in &self.env {
+            let own = env
+                .iter()
+                .position(|(key, _)| key == k)
+                .map(|i| env.remove(i).1);
+            let value = match own {
+                Some(o) if k == "PYTHONPATH" && !o.is_empty() => format!("{v}:{o}"),
+                _ => v.clone(),
+            };
+            env.push((k.clone(), value));
+        }
         LocalRunner.run(&Invocation {
             argv,
             env,
@@ -559,6 +573,9 @@ pub fn runner(root: &Path, config: &Config) -> Result<(Runner, Option<String>), 
                     backend,
                     network_allow: config.network_allow.clone(),
                     network_allow_prefix: config.network_allow_prefix.clone(),
+                    // A worktree prepared with a linked `.venv`: its checks
+                    // import the worktree's code, wherever they start.
+                    env: crate::prepare::recorded_env(root),
                 }),
                 None,
             ))
@@ -622,6 +639,39 @@ impl Runner {
     #[must_use]
     pub fn is_sandboxed(&self) -> bool {
         matches!(self, Self::Sandboxed(_))
+    }
+
+    /// The same runner, its commands also given `env` (see
+    /// [`Sandboxed::env`]); a plain runner is unchanged — nothing is ever
+    /// linked into a worktree whose commands run unsandboxed.
+    #[must_use]
+    pub fn with_env(self, env: Vec<(String, String)>) -> Self {
+        match self {
+            Self::Sandboxed(mut s) => {
+                s.env = env;
+                Self::Sandboxed(s)
+            }
+            Self::Plain => Self::Plain,
+        }
+    }
+
+    /// The same runner, `dir` writable too.
+    #[must_use]
+    pub fn with_writable(self, dir: &Path) -> Self {
+        match self {
+            Self::Sandboxed(mut s) => {
+                s.profile.writable.push(canonical(dir));
+                Self::Sandboxed(s)
+            }
+            Self::Plain => Self::Plain,
+        }
+    }
+
+    /// Whether `argv` gets the network by `[sandbox] network_allow` (or a
+    /// prefix): never for a plain runner, which asks nobody.
+    #[must_use]
+    pub fn allows_network(&self, argv: &[String]) -> bool {
+        matches!(self, Self::Sandboxed(s) if s.network_for(argv) == Network::On)
     }
 
     /// Runs `inv`; `network` (a person's approval) widens the network.
@@ -1115,6 +1165,7 @@ mod tests {
             backend: Backend::Seatbelt,
             network_allow: c.network_allow.clone(),
             network_allow_prefix: c.network_allow_prefix.clone(),
+            env: Vec::new(),
         };
         let argv = |s: &str| s.split(' ').map(str::to_owned).collect::<Vec<_>>();
         assert_eq!(s.network_for(&argv("cargo fetch")), Network::On);

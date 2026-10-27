@@ -35,6 +35,17 @@ fn cache_env(cache: &Path) -> Vec<(String, String)> {
     ]
 }
 
+/// The cache `tool`'s steps filled, when there is one, and the variables
+/// that point the tool at it: where a worktree's offline install of a
+/// project `speccoder new` made finds its packages.
+pub(crate) fn filled_cache(state: &Path, tool: &str) -> Option<(PathBuf, Vec<(String, String)>)> {
+    let cache = cache_dir(state, tool);
+    cache.is_dir().then(|| {
+        let env = cache_env(&cache);
+        (cache, env)
+    })
+}
+
 /// A step's environment: `vars` without anything that looks like a
 /// credential (the rule checks' test — model keys, tokens, every `AWS_*`),
 /// then the cache redirections and the step's own variables.

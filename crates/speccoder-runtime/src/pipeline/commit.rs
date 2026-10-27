@@ -194,8 +194,8 @@ pub(crate) struct TickFacts<'a> {
 
 /// The commit message of a ticked task: subject, title, and the trailers
 /// `report` reads back (`Spec-Task`, `Verdict`, `Regression-Only`, `Red`, `Flaky`,
-/// `Scope-Outside`, `Checklists`, `Held-Out`, `Acceptance-Strength`,
-/// `Ruling`, `Run`, `Usage`, `Mutation`).
+/// `Scope-Outside`, `Checklists`, `Linked-Dependencies`, `Held-Out`,
+/// `Acceptance-Strength`, `Ruling`, `Run`, `Usage`, `Mutation`).
 pub(crate) fn tick_message(f: &TickFacts<'_>) -> String {
     let report = f.report;
     let verdict_word = report
@@ -245,6 +245,7 @@ pub(crate) fn tick_message(f: &TickFacts<'_>) -> String {
     if f.checklists_overridden {
         evidence.push_str("Checklists: overridden\n");
     }
+    evidence.push_str(&linked_trailers(&report.linked_dependencies));
     evidence.push_str(&f.extra);
     format!(
         "{}\n\n{}\n\nSpec-Task: {}/{}\nVerdict: {verdict_word}\n{evidence}Run: {}\n{}{}",
@@ -313,6 +314,20 @@ fn held_out_trailer(acceptance: Option<&serde_json::Value>) -> String {
 }
 
 /// `Flaky: <checks>` for checks that passed only when run again.
+/// One `Linked-Dependencies:` trailer per folder linked from the checkout:
+/// the checks ran against it, checked against this lockfile.
+pub(crate) fn linked_trailers(linked: &[speccoder_core::predicate::LinkedDependency]) -> String {
+    linked
+        .iter()
+        .map(|l| {
+            format!(
+                "Linked-Dependencies: {} ({} sha256:{})\n",
+                l.path, l.lockfile, l.sha256
+            )
+        })
+        .collect()
+}
+
 fn flaky_trailer(verification: Option<&speccoder_core::verify::VerifyReport>) -> String {
     let names: Vec<&str> = verification
         .into_iter()
@@ -375,6 +390,21 @@ mod tests {
             let (k, v) = l.split_once(':')?;
             (k == key).then(|| v.trim())
         })
+    }
+
+    #[test]
+    fn each_linked_folder_has_its_trailer_and_none_without() {
+        let linked = [speccoder_core::predicate::LinkedDependency {
+            path: "node_modules".to_owned(),
+            lockfile: "package-lock.json".to_owned(),
+            sha256: "ab12".to_owned(),
+        }];
+        let t = super::linked_trailers(&linked);
+        assert_eq!(
+            trailer(&t, "Linked-Dependencies"),
+            Some("node_modules (package-lock.json sha256:ab12)")
+        );
+        assert_eq!(super::linked_trailers(&[]), "");
     }
 
     #[test]

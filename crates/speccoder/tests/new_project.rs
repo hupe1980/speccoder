@@ -908,3 +908,81 @@ fn a_folder_name_that_reads_as_an_option_is_refused() {
     let (v, _) = m.json(&["new", "./-rf", "--stack", "rust", "--dry-run"]);
     assert_eq!(v["code"], "USAGE", "{v}");
 }
+
+/// With the real tools (`SPECCODER_REAL_TOOLS=1`, a machine with npm, uv
+/// and specify, and the network for the scaffold's own steps): a Node or uv
+/// project `speccoder new` made runs its first task without further setup.
+/// Its worktree is prepared from the cache the scaffold's steps filled —
+/// the person's own cache holds none of it — and the checks run there.
+#[test]
+fn with_the_real_tools_a_new_node_or_uv_project_needs_no_setup_for_its_first_task() {
+    if std::env::var_os("SPECCODER_REAL_TOOLS").is_none() {
+        eprintln!("set SPECCODER_REAL_TOOLS=1 to run against the real npm, uv and specify");
+        return;
+    }
+    use speccoder_runtime::{prepare, sandbox, verify};
+    for (stack, name) in [("node", "n"), ("python", "p")] {
+        let m = Machine::new();
+        let out = Command::new(env!("CARGO_BIN_EXE_speccoder"))
+            .args(["--json", "--format", "speckit", "new", name])
+            .args(["--idea", "a small library", "--stack", stack, "--yes"])
+            .current_dir(m.work.path())
+            .env("HOME", m.home.path())
+            .env("GIT_CONFIG_GLOBAL", m.home.path().join(".gitconfig"))
+            .env("SPECCODER_STATE_DIR", m.state.path())
+            .output()
+            .unwrap();
+        let v: Value = serde_json::from_slice(&out.stdout).unwrap();
+        assert_eq!(v["status"], "ok", "{stack}: {v}");
+        let checkout = m.target(name);
+        let wt = m.state.path().join(format!("wt-{name}"));
+        git(
+            &checkout,
+            &[
+                "worktree",
+                "add",
+                "-q",
+                "--detach",
+                &wt.display().to_string(),
+                "HEAD",
+            ],
+        );
+        let wt = fs::canonicalize(&wt).unwrap();
+        // A fresh machine: the person's cache is empty.
+        let empty = tempfile::tempdir().unwrap();
+        let e = empty.path().display();
+        fs::write(wt.join(".npmrc"), format!("cache={e}\n")).unwrap();
+        fs::write(wt.join("uv.toml"), format!("cache-dir = \"{e}\"\n")).unwrap();
+        let (runner, _) = sandbox::runner_at(&wt).unwrap();
+        let p = prepare::prepare(&prepare::Prepare {
+            worktree: &wt,
+            project: &wt,
+            checkout: &checkout,
+            config: &prepare::Config::default(),
+            runner: &runner,
+            state: Some(m.state.path()),
+        })
+        .unwrap_or_else(|f| panic!("{stack}: {f:?}"))
+        .unwrap();
+        assert_eq!(p.done.len(), 1, "{stack}: {:?}", p.done);
+        for f in [".npmrc", "uv.toml"] {
+            fs::remove_file(wt.join(f)).unwrap();
+        }
+        let report = verify::run_checks(
+            &wt,
+            Some(verify::config::Tier::Fast),
+            &runner.with_env(p.record.env()),
+        )
+        .unwrap();
+        for c in &report.checks {
+            let output = format!("{}\n{}", c.stdout_tail, c.stderr_tail);
+            assert!(
+                c.status == speccoder_core::verify::CheckStatus::Passed
+                    || speccoder_runtime::init::no_tests(&c.argv, c.exit_code, &output),
+                "{stack}: {} {:?}: {output}",
+                c.name,
+                c.status
+            );
+        }
+    }
+}

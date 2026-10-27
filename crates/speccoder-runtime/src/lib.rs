@@ -49,6 +49,7 @@ pub mod pipeline;
 pub mod plan_lint;
 pub mod planning_chain;
 pub mod pre_frozen;
+pub mod prepare;
 pub mod progress;
 pub mod quick;
 pub mod resume;

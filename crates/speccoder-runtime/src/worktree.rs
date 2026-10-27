@@ -130,6 +130,7 @@ pub fn scratch(checkout: &Path, under: &Path) -> Result<Scratch, GitError> {
 
 impl Drop for Scratch {
     fn drop(&mut self) {
+        crate::prepare::unlink(&self.path);
         let path = self.path.display().to_string();
         let git = Git::at(&self.repo);
         let _ = git.run(&["worktree", "remove", "--force", &path]);
@@ -335,6 +336,8 @@ pub fn remove_lane(repo_root: &Path, feature: &str, lane: &str) -> Result<(), Gi
     let branch = lane_branch(feature, lane);
     repo.run(&["worktree", "prune"])?;
     if let Some(existing) = worktree_for(&repo, &branch)? {
+        // Its links first, never what they point to.
+        crate::prepare::unlink(&existing);
         repo.run(&["worktree", "remove", "--force", &existing.to_string_lossy()])?;
     }
     if repo.succeeds(&[

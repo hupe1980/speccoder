@@ -158,6 +158,51 @@ fn predicate_schema_validates_every_statement_and_rejects_a_missing_field() {
     assert_eq!(all[0]["unit"]["feature"], FEATURE);
 }
 
+#[test]
+fn the_dependencies_a_tick_was_checked_against_are_shown() {
+    if !has("ssh-keygen") {
+        eprintln!("skipped: no ssh-keygen");
+        return;
+    }
+    let r = Repo::new(1);
+    let sha = "ab".repeat(32);
+    r.tick_with(
+        "T001",
+        "verified",
+        Sign::Trusted,
+        &[(
+            "linked_dependencies",
+            json!([{ "path": "node_modules", "lockfile": "package-lock.json", "sha256": sha }]),
+        )],
+    );
+    let (_, v) = fixture::check(&r, &["--base", "main"]);
+    let tick = &v["data"]["ticks"][0];
+    assert_eq!(
+        tick["linked_dependencies"][0]["path"], "node_modules",
+        "{v}"
+    );
+    assert_eq!(tick["linked_dependencies"][0]["sha256"], sha.as_str());
+    assert_eq!(tick["newer_fields"], json!([]), "a field this build knows");
+    crate_contract(&v);
+    let allowed = r.allowed.display().to_string();
+    let (_, out, _) = fixture::run(
+        r.path(),
+        &[
+            "attest",
+            "verify",
+            "--branch",
+            "--base",
+            "main",
+            "--allowed-signers",
+            &allowed,
+        ],
+    );
+    assert!(
+        out.contains("linked node_modules (package-lock.json sha256:abababababab)"),
+        "{out}"
+    );
+}
+
 /// A held-out set stored for `unit` under `key`, as the pipeline stores
 /// one; its manifest digest.
 fn store_set(state: &std::path::Path, root: &std::path::Path, key: &str, task: &str) -> String {

@@ -580,6 +580,17 @@ mod tests {
         );
         assert_eq!(
             row(
+                Stage::Prepare,
+                StageState::Passed,
+                Some("npm ci --offline (0.6s)"),
+                Some(640),
+                Normal
+            )
+            .as_deref(),
+            Some("  ✓ prepare npm ci --offline (0.6s)")
+        );
+        assert_eq!(
+            row(
                 Stage::Attempt,
                 StageState::Started,
                 Some("1/2 · sample 2/3"),

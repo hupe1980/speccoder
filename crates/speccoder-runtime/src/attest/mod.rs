@@ -511,6 +511,7 @@ fn predicate(
         collection: None,
         context: None,
         dependencies: None,
+        linked_dependencies: None,
         extra: std::collections::BTreeMap::new(),
     }
 }
@@ -569,6 +570,8 @@ pub fn record_tick(t: &Tick<'_>, report: &RunReport) -> Value {
         regression: report.regression.as_ref().map(|r| r.reason.clone()),
         context: report.context.as_ref().map(|c| json!(c)),
         collection: report.collection.clone(),
+        linked_dependencies: (!report.linked_dependencies.is_empty())
+            .then(|| report.linked_dependencies.clone()),
         ..predicate(t, tree, policy.clone(), time.clone())
     };
     named.push((

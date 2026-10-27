@@ -42,6 +42,13 @@ pub struct Search<'a> {
     pub sandbox: &'a sandbox::Config,
     /// The deadline of one run (the checks').
     pub timeout: std::time::Duration,
+    /// `[worktree]`: each scratch tree gets its dependency folders as the
+    /// feature's worktree does.
+    pub worktree: &'a crate::prepare::Config,
+    /// The project's directory in the person's checkout (what is linked).
+    pub checkout: &'a Path,
+    /// speccoder's state directory (the cache `speccoder new` filled).
+    pub state: Option<&'a Path>,
 }
 
 /// The search's answer and the runs it took.
@@ -209,9 +216,9 @@ fn probe_at(s: &Search<'_>, commit: &str) -> Probe {
     let probe = if !overlaid {
         Probe::Undetermined
     } else {
-        match sandbox::runner(&dir, s.sandbox) {
-            Err(_) => Probe::Undetermined,
-            Ok((runner, _)) => {
+        match sandbox::runner(&dir, s.sandbox).map(|(r, _)| prepared(s, &dir, &project, r)) {
+            Err(_) | Ok(None) => Probe::Undetermined,
+            Ok(Some(runner)) => {
                 let out = runner.run(&Invocation {
                     argv: s.argv.to_vec(),
                     cwd: project.clone(),
@@ -258,12 +265,41 @@ fn probe_at(s: &Search<'_>, commit: &str) -> Probe {
             }
         }
     };
+    // Its links first, never what they point to.
+    crate::prepare::unlink(&dir);
     {
         let _setup = super::lanes::LANE_SETUP.lock();
         let _ = git.run(&["worktree", "remove", "--force", path]);
     }
     drop(holder);
     probe
+}
+
+/// `runner` for a scratch tree prepared like the feature's worktree (its
+/// dependency folders linked or installed); `None` when that failed — then
+/// the run could say nothing.
+fn prepared(
+    s: &Search<'_>,
+    dir: &Path,
+    project: &Path,
+    runner: sandbox::Runner,
+) -> Option<sandbox::Runner> {
+    if !s.worktree.prepare || !crate::prepare::needed(project) {
+        return Some(runner);
+    }
+    let p = crate::prepare::prepare(&crate::prepare::Prepare {
+        worktree: dir,
+        project,
+        checkout: s.checkout,
+        config: s.worktree,
+        runner: &runner,
+        state: s.state,
+    })
+    .ok()?;
+    Some(match p {
+        Some(p) => runner.with_env(p.record.env()),
+        None => runner,
+    })
 }
 
 /// Searches the feature's ticks for the first one at which the acceptance
@@ -387,6 +423,7 @@ pub fn prune(repo: &Path, scratch: &Path) {
         .collect();
     for d in &leftover {
         let wt = d.join("wt");
+        crate::prepare::unlink(&wt);
         if let Some(p) = wt.to_str() {
             let _setup = super::lanes::LANE_SETUP.lock();
             let _ = Git::at(repo).run(&["worktree", "remove", "--force", p]);

@@ -528,6 +528,7 @@ fn outcome_of(
         stale_anchor: None,
         regression: None,
         newer_fields: Vec::new(),
+        linked_dependencies: Vec::new(),
         verification: None,
     };
     let unverifiable = |r: &mut TickReport, reason: Unverifiable, detail: Option<String>| {
@@ -609,6 +610,7 @@ fn outcome_of(
                     );
                 }
                 r.newer_fields = tv.newer_fields();
+                r.linked_dependencies = tv.linked_dependencies.clone().unwrap_or_default();
                 r.regression = tv
                     .regression
                     .as_ref()
@@ -663,6 +665,7 @@ fn without_commit(tick: &Tick, lost: Option<&String>) -> TickReport {
         stale_anchor: None,
         regression: None,
         newer_fields: Vec::new(),
+        linked_dependencies: Vec::new(),
         verification: None,
     }
 }

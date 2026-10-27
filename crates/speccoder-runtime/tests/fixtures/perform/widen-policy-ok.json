@@ -867,6 +867,40 @@
           "title": "Sandbox"
         },
         {
+          "about": "How a run's worktree gets the dependency folders git never holds (node_modules, .venv).",
+          "keys": [
+            {
+              "about": "auto installs Node and uv dependencies (locked, offline) before the baseline; off never",
+              "choices": [
+                "auto",
+                "off"
+              ],
+              "default": "auto",
+              "key": "prepare",
+              "kind": "choice",
+              "max": null,
+              "min": null,
+              "required": false,
+              "value": null
+            },
+            {
+              "about": "Folders linked from your checkout instead, read-only, while the lockfile matches, e.g. node_modules",
+              "choices": [],
+              "default": [],
+              "key": "link",
+              "kind": "string_list",
+              "max": null,
+              "min": null,
+              "required": false,
+              "value": null
+            }
+          ],
+          "name": "worktree",
+          "named": false,
+          "tables": [],
+          "title": "Worktree"
+        },
+        {
           "about": "Signed statements of every tick, as git notes.",
           "keys": [
             {

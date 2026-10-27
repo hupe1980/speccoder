@@ -97,6 +97,29 @@
         }
       ]
     },
+    "LinkedDependency": {
+      "description": "A dependency folder linked from the person's checkout into the\nworktree instead of installed there (revision 4): the checks ran\nagainst it, so the tick names it and the lockfile it was checked against.",
+      "properties": {
+        "lockfile": {
+          "description": "The lockfile it matched byte for byte, project-relative.",
+          "type": "string"
+        },
+        "path": {
+          "description": "The folder, project-relative (`node_modules`, `api/.venv`).",
+          "type": "string"
+        },
+        "sha256": {
+          "description": "sha256 of that lockfile.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "lockfile",
+        "sha256"
+      ],
+      "type": "object"
+    },
     "Mode": {
       "description": "Which units a check covers.",
       "oneOf": [
@@ -367,6 +390,13 @@
             "string",
             "null"
           ]
+        },
+        "linked_dependencies": {
+          "description": "The dependency folders the tick's checks ran against, linked from\nthe checkout (signed).",
+          "items": {
+            "$ref": "#/$defs/LinkedDependency"
+          },
+          "type": "array"
         },
         "newer_fields": {
           "description": "Predicate fields or revisions this verifier does not know (kept,\nnever deciding).",

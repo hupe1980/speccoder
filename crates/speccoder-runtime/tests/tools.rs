@@ -720,3 +720,57 @@ fn the_model_writes_no_review_record_and_nothing_of_the_state_directory() {
     assert_eq!(v["ok"], false, "{v}");
     assert!(!state.path().join("comments/x.json").exists());
 }
+
+// ── [worktree] link ─────────────────────────────────────────────────────────
+
+#[test]
+fn a_write_into_a_linked_folder_is_refused_with_the_setting() {
+    let w = worktree();
+    let checkout = tempfile::tempdir().unwrap();
+    fs::create_dir_all(checkout.path().join("node_modules/tiny")).unwrap();
+    fs::write(checkout.path().join("node_modules/tiny/index.js"), "x").unwrap();
+    std::os::unix::fs::symlink(
+        checkout.path().join("node_modules"),
+        w.path().join("node_modules"),
+    )
+    .unwrap();
+    let t = tools(w.path()).with_linked(vec!["node_modules".to_owned()]);
+    for (tool, args) in [
+        (
+            "write_file",
+            json!({"path": "node_modules/tiny/index.js", "content": "y"}),
+        ),
+        (
+            "edit_file",
+            json!({"path": "./node_modules/tiny/index.js", "old_string": "x", "new_string": "y"}),
+        ),
+        (
+            "write_file",
+            json!({"path": "node_modules", "content": "y"}),
+        ),
+    ] {
+        let v = call(&t, tool, args);
+        assert!(
+            err(&v).contains("linked from the checkout, read-only ([worktree] link)"),
+            "{v}"
+        );
+    }
+    // What the person decides on says so too.
+    let v = call(
+        &t,
+        "resolve",
+        json!({"tool": "write_file", "arguments": {"path": "node_modules/a.js"}}),
+    );
+    assert!(err(&v).contains("[worktree] link"), "{v}");
+    // A sibling of the same prefix is no linked folder.
+    let v = call(
+        &t,
+        "write_file",
+        json!({"path": "node_modules_notes.md", "content": "y"}),
+    );
+    assert_eq!(v["ok"], true, "{v}");
+    assert_eq!(
+        fs::read_to_string(checkout.path().join("node_modules/tiny/index.js")).unwrap(),
+        "x"
+    );
+}

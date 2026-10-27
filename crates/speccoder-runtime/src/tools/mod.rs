@@ -285,6 +285,8 @@ pub struct WorkspaceTools {
     runner: crate::sandbox::Runner,
     /// Variables every command gets (a hosted skill's current unit).
     env: Vec<(String, String)>,
+    /// Folders linked from the checkout (`[worktree] link`): read-only.
+    linked: Vec<String>,
 }
 
 /// A write that would take tests away, refused before it happens: a test
@@ -342,7 +344,28 @@ impl WorkspaceTools {
             policy,
             runner: crate::sandbox::Runner::Plain,
             env: Vec::new(),
+            linked: Vec::new(),
         })
+    }
+
+    /// The folders linked from the checkout, project-relative paths as the
+    /// model names them: writes into them are refused with the reason.
+    #[must_use]
+    pub fn with_linked(mut self, linked: Vec<String>) -> Self {
+        self.linked = linked;
+        self
+    }
+
+    /// The refusal of a write into a linked folder.
+    fn write_into_linked(&self, rel: &str) -> Option<Value> {
+        let asked = normalise(rel).ok()?;
+        let folder = self
+            .linked
+            .iter()
+            .find(|l| asked == **l || asked.starts_with(&format!("{l}/")))?;
+        Some(failure(format!(
+            "refused: `{rel}` is in `{folder}`, linked from the checkout, read-only ([worktree] link)"
+        )))
     }
 
     /// Commands also get `env` (the policy's own variables still win).
@@ -509,6 +532,9 @@ impl WorkspaceTools {
         match tool {
             "write_file" | "edit_file" => {
                 let asked = arguments["path"].as_str().unwrap_or_default();
+                if let Some(refused) = self.write_into_linked(asked) {
+                    return refused;
+                }
                 match (canonical_for_write(&self.root, asked), normalise(asked)) {
                     (Ok(canonical), Ok(asked)) => json!({
                         "ok": true,
@@ -619,6 +645,9 @@ impl WorkspaceTools {
     /// protected set — or when it is not the object a person's decision
     /// covered (resolved again now: it may have changed since).
     fn write_checked(&self, rel: &str, expect: Option<&Object>) -> Result<PathBuf, Value> {
+        if let Some(refused) = self.write_into_linked(rel) {
+            return Err(refused);
+        }
         let canonical = canonical_for_write(&self.root, rel).map_err(|e| failure(e.0))?;
         if let Some(class) = self.policy.write_protected(&canonical) {
             return Err(failure(format!(
@@ -775,6 +804,18 @@ impl WorkspaceTools {
         });
         if !drift.is_empty() {
             result["integrity"] = json!(drift);
+        }
+        if outcome.exit_code != Some(0)
+            && let Some(note) = crate::prepare::linked_note(
+                &format!(
+                    "{}\n{}",
+                    String::from_utf8_lossy(&outcome.stderr.kept),
+                    String::from_utf8_lossy(&outcome.stdout.kept)
+                ),
+                &self.linked,
+            )
+        {
+            result["note"] = json!(note);
         }
         result
     }

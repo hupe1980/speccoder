@@ -7,6 +7,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Stage {
+    /// The worktree's dependency folders installed or linked (Node, uv).
+    Prepare,
     /// The checks on the untouched worktree.
     Baseline,
     /// A bug's reproductions written and shown to fail by an assertion.
@@ -35,7 +37,8 @@ pub enum Stage {
 
 impl Stage {
     /// Every stage, in pipeline order.
-    pub const ALL: [Self; 12] = [
+    pub const ALL: [Self; 13] = [
+        Self::Prepare,
         Self::Baseline,
         Self::Reproduce,
         Self::Confirm,
@@ -51,7 +54,8 @@ impl Stage {
     ];
 
     /// The stages every task passes, in order: what a progress strip shows
-    /// (a bug task adds [`Stage::BUG`]).
+    /// (a bug task adds [`Stage::BUG`]; a worktree with dependency folders
+    /// adds [`Stage::Prepare`]).
     pub const TASK: [Self; 9] = [
         Self::Baseline,
         Self::Red,
@@ -71,6 +75,7 @@ impl Stage {
     #[must_use]
     pub const fn name(self) -> &'static str {
         match self {
+            Self::Prepare => "prepare",
             Self::Baseline => "baseline",
             Self::Reproduce => "reproduce",
             Self::Confirm => "confirm",
@@ -119,6 +124,7 @@ mod tests {
         assert_eq!(
             all,
             [
+                "prepare",
                 "baseline",
                 "reproduce",
                 "confirm",
@@ -136,6 +142,7 @@ mod tests {
         for s in Stage::BUG {
             assert!(!Stage::TASK.contains(&s));
         }
+        assert!(!Stage::TASK.contains(&Stage::Prepare));
         for s in Stage::ALL {
             assert_eq!(serde_json::to_value(s).unwrap_or_default(), s.name());
         }

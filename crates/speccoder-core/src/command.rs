@@ -1363,6 +1363,10 @@ pub struct RunReport {
     /// What reached the implementer, by digest (constitution VIII).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context: Option<crate::context::ContextManifest>,
+    /// The dependency folders linked from the checkout into the worktree
+    /// (`[worktree] link`), each with its lockfile's digest.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub linked_dependencies: Vec<crate::predicate::LinkedDependency>,
 }
 
 /// A failed attempt that was undone and retried.

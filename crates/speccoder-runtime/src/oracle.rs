@@ -616,6 +616,7 @@ struct Ctx {
     plane_dir: PathBuf,
     config: substrate::run_config::RunConfig,
     sandbox: sandbox::Config,
+    worktree: crate::prepare::Config,
     policy: tools::policy::Policy,
     model: Option<substrate::model_config::ModelConfig>,
 }
@@ -661,6 +662,13 @@ fn open(path: &Path, feature: Option<&str>, state: &Path) -> Result<Ctx, Box<Com
             &format!("speccoder.toml: {e}"),
         ))
     })?;
+    let worktree_config = crate::prepare::parse(&text).map_err(|e| {
+        Box::new(refuse(
+            CommandStatus::ConfigError,
+            "CONFIG-INVALID",
+            &format!("speccoder.toml: {e}"),
+        ))
+    })?;
     let format = crate::format::of(&snapshot);
     let policy =
         tools::policy::Policy::new(&crate::verify::check_argvs(&config_root), &config.allow)
@@ -676,6 +684,7 @@ fn open(path: &Path, feature: Option<&str>, state: &Path) -> Result<Ctx, Box<Com
         snapshot,
         config,
         sandbox,
+        worktree: worktree_config,
         policy,
         model,
     })
@@ -1209,6 +1218,28 @@ impl Bench {
                 ]),
             ));
         }
+        // Its dependency folders, as a run's worktree gets them.
+        let runner = if ctx.worktree.prepare && crate::prepare::needed(&project) {
+            match crate::prepare::prepare(&crate::prepare::Prepare {
+                worktree: &scratch.path,
+                project: &project,
+                checkout: &ctx.root,
+                config: &ctx.worktree,
+                runner: &runner,
+                state: None,
+            }) {
+                Ok(Some(p)) => runner.with_env(p.record.env()),
+                Ok(None) => runner,
+                Err(f) => {
+                    return Err(Box::new(
+                        refuse(CommandStatus::ConfigError, "PREPARE-FAILED", &f.message)
+                            .with_fix(f.fix),
+                    ));
+                }
+            }
+        } else {
+            runner
+        };
         Ok(Self {
             scratch,
             project,

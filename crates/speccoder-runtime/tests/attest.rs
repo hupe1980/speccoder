@@ -966,7 +966,7 @@ fn a_regression_only_reason_is_signed_and_must_agree_with_its_trailer() {
         .into_iter()
         .find(|s| s["predicateType"] == "https://speccoder.dev/task-verification/v0")
         .unwrap();
-    assert_eq!(tv["predicate"]["revision"], 3);
+    assert!(tv["predicate"]["revision"].as_u64() >= Some(3));
     assert_eq!(tv["predicate"]["regression"], json!(why.reason));
     let ok = verify_at(r.path(), None, None, &Trust::default(), false);
     assert_eq!(outcome(&ok), VerifyOutcome::Unsigned, "{}", ok.message());

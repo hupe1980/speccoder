@@ -552,6 +552,26 @@ pub const CATALOGUE: &[Section] = &[
         ],
     },
     Section {
+        name: "worktree",
+        title: "Worktree",
+        about: "How a run's worktree gets the dependency folders git never holds (node_modules, .venv).",
+        named: false,
+        keys: &[
+            k(
+                "prepare",
+                Kind::Choice(&["auto", "off"]),
+                Some("\"auto\""),
+                "auto installs Node and uv dependencies (locked, offline) before the baseline; off never",
+            ),
+            k(
+                "link",
+                Kind::StrList,
+                Some("[]"),
+                "Folders linked from your checkout instead, read-only, while the lockfile matches, e.g. node_modules",
+            ),
+        ],
+    },
+    Section {
         name: "attest",
         title: "Attestations",
         about: "Signed statements of every tick, as git notes.",
@@ -691,6 +711,7 @@ fn validate_but_model(text: &str) -> Result<(), String> {
     crate::verify::config::parse(text)?;
     crate::substrate::run_config::parse(text)?;
     crate::sandbox::parse(text)?;
+    crate::prepare::parse(text)?;
     crate::mcp::parse(text)?;
     crate::mutation::parse(text)?;
     crate::external::parse(text)?;

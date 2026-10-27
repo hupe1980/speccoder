@@ -15,7 +15,7 @@
 mod plan;
 mod run;
 mod stacks;
-mod steps;
+pub(crate) mod steps;
 pub mod undo;
 
 use std::path::{Component, Path, PathBuf};

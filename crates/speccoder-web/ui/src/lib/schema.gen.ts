@@ -2339,6 +2339,20 @@ export interface LastAttempt {
   run_id: string | null;
 }
 
+/**
+ * A dependency folder linked from the person's checkout into the
+ * worktree instead of installed there (revision 4): the checks ran
+ * against it, so the tick names it and the lockfile it was checked against.
+ */
+export interface LinkedDependency {
+  /** The lockfile it matched byte for byte, project-relative. */
+  lockfile: string;
+  /** The folder, project-relative (`node_modules`, `api/.venv`). */
+  path: string;
+  /** sha256 of that lockfile. */
+  sha256: string;
+}
+
 /** A listing speccoder ran because the earlier sources left a file undecided. */
 export interface ListingRun {
   /** The command. */
@@ -3643,6 +3657,11 @@ export interface RunReport {
   instructions?: InstructionFile[];
   /** Integrity findings of the attempt's diff (each also fails the verdict). */
   integrity: string[];
+  /**
+   * The dependency folders linked from the checkout into the worktree
+   * (`[worktree] link`), each with its lockfile's digest.
+   */
+  linked_dependencies?: LinkedDependency[];
   /** The model's own closing report — its claim, not the verdict. */
   model_report: unknown;
   /**
@@ -4486,7 +4505,7 @@ export interface StackPick {
 }
 
 /** A stage of a task, in pipeline order. */
-export type Stage = "baseline" | "reproduce" | "confirm" | "red" | "attempt" | "verify" | "unchanged" | "audit" | "mutation" | "strength" | "monitor" | "commit";
+export type Stage = "prepare" | "baseline" | "reproduce" | "confirm" | "red" | "attempt" | "verify" | "unchanged" | "audit" | "mutation" | "strength" | "monitor" | "commit";
 
 /** Where a stage is. */
 export type StageState = "started" | "passed" | "failed" | "skipped";
@@ -4775,6 +4794,11 @@ export interface TickReport {
   decider: string | null;
   /** More on the reason, in one line. */
   detail: string | null;
+  /**
+   * The dependency folders the tick's checks ran against, linked from
+   * the checkout (signed).
+   */
+  linked_dependencies?: LinkedDependency[];
   /**
    * Predicate fields or revisions this verifier does not know (kept,
    * never deciding).
