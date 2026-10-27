@@ -81,6 +81,22 @@ Every result that is not plainly `ok` names a code — `error[CODE]`, `stopped[C
 | [`PRESET-NOT-SPECKIT`](#preset-not-speckit) | error | 2 | presets are a Spec Kit mechanism |
 | [`PRESET-SPECKIT-MISSING`](#preset-speckit-missing) | error | 13 | the Spec Kit tool `specify` is missing or too old |
 | [`PRESET-FAILED`](#preset-failed) | error | 1 | the preset could not be added: `specify preset add` failed |
+| [`NEW-PLAN-CHANGED`](#new-plan-changed) | error | 2 | the plan changed since you saw it; nothing ran |
+| [`NEW-TARGET-NOT-EMPTY`](#new-target-not-empty) | error | 2 | the folder is not empty and not a git repository |
+| [`NEW-DIRTY`](#new-dirty) | error | 14 | the repository has uncommitted changes |
+| [`NEW-NESTED-REPOSITORY`](#new-nested-repository) | error | 14 | the folder is inside another repository |
+| [`NEW-ALREADY-PROJECT`](#new-already-project) | error | 2 | the folder already holds a spec project |
+| [`NEW-TOOL-MISSING`](#new-tool-missing) | error | 13 | a tool the plan needs is not installed |
+| [`NEW-STEP-FAILED`](#new-step-failed) | error | 1 | a step of the plan failed; later steps did not run |
+| [`NEW-NO-IDENTITY`](#new-no-identity) | error | 14 | git does not know who you are |
+| [`NEW-IN-PROGRESS`](#new-in-progress) | error | 2 | a new project is being created in this folder |
+| [`NEW-UNDO-REFUSED`](#new-undo-refused) | error | 14 | the project changed since speccoder created it; nothing was undone |
+| [`SAMPLE-DIVERGED`](#sample-diverged) | error | 22 | this build cannot reproduce the sample's recorded run |
+| [`SAMPLE-MISSING`](#sample-missing) | error | 15 | this build has no sample |
+| [`SIMILAR-FEATURE`](#similar-feature) | warning | 0 | an existing requirement is close to this description |
+| [`NEW-CONFIRM`](#new-confirm) | stop | 23 | the plan needs your confirmation; nothing ran |
+| [`THROUGH-QUESTIONS`](#through-questions) | stop | 23 | the spec has open questions; planning waits for your answers |
+| [`THROUGH-REVIEW`](#through-review) | stop | 23 | review the spec; planning waits for your approval |
 | [`NEEDS-HUMAN`](#needs-human) | stop | 23 | the run stopped for a person |
 | [`NEEDS-APPROVAL`](#needs-approval) | stop | 23 | a call waits for a person's decision; nothing ran |
 | [`BLOCKED`](#blocked) | stop | 23 | the model says the task cannot be done as written |
@@ -706,6 +722,142 @@ Spec Kit refused or failed to install the preset; its own output is shown. Nothi
 
 - `speccoder preset add`
 - `speccoder doctor`
+
+### NEW-PLAN-CHANGED
+
+The plan changed since you saw it; nothing ran.
+
+Creating a project runs exactly the plan you confirmed, bound to its digest: the commands, their order and the folder as it was seen. A tool's version or the folder's contents changed meanwhile, so the plan computed now differs and nothing was run. The result carries the new plan.
+
+- Review the new plan and confirm it again
+
+### NEW-TARGET-NOT-EMPTY
+
+The folder is not empty and not a git repository.
+
+A new project starts in an empty folder, or in a git repository at its top level with a clean tree. This folder holds files that are not under git, which the format's `--force` init could overwrite unseen.
+
+- Choose an empty folder
+- Or run `git init` there and commit what it holds first
+
+### NEW-DIRTY
+
+The repository has uncommitted changes.
+
+speccoder commits exactly what the plan's steps produced. With changes of yours in the tree, the two could not be told apart, so the folder must be clean first.
+
+- Commit or stash your changes, then try again
+
+### NEW-NESTED-REPOSITORY
+
+The folder is inside another repository.
+
+A project is created at a repository's top level. This folder lies inside another repository's worktree; a second repository inside it, or a project in its subfolder, would split one history.
+
+- Choose a folder outside it, or use the repository's top level
+
+### NEW-ALREADY-PROJECT
+
+The folder already holds a spec project.
+
+There is nothing to create: the folder is a project of a spec format already. Open it instead.
+
+- `speccoder ui`
+- `speccoder init`
+
+### NEW-TOOL-MISSING
+
+A tool the plan needs is not installed.
+
+The plan runs the ecosystems' own tools — the stack's scaffold and the spec format's init. One of them is not on the PATH; the message names it and how to install it.
+
+- Install the tool, or choose another stack or format
+- `speccoder doctor`
+
+### NEW-STEP-FAILED
+
+A step of the plan failed; later steps did not run.
+
+A command of the plan exited with an error, timed out or was denied by the sandbox. The steps before it are kept; running the same plan again resumes at this step.
+
+- Retry, or run the command yourself as shown
+
+### NEW-NO-IDENTITY
+
+Git does not know who you are.
+
+The new project's one commit is yours, made with your git identity; speccoder never invents one. `user.name` or `user.email` is not set.
+
+- Git config --global user.name "Your Name"
+- Git config --global user.email you@example.com
+
+### NEW-IN-PROGRESS
+
+A new project is being created in this folder.
+
+Another creation of a project in the same folder is running. Two at once would interleave their steps.
+
+- Wait for it to finish
+
+### NEW-UNDO-REFUSED
+
+The project changed since speccoder created it; nothing was undone.
+
+Undo moves a folder speccoder created to the Trash, or reverts speccoder's commit in an existing repository — only while nothing but that commit exists. Something changed since (the message lists what), or there is no Trash on this system; nothing was moved or deleted.
+
+- Undo it yourself; nothing was moved
+
+### SAMPLE-DIVERGED
+
+This build cannot reproduce the sample's recorded run.
+
+The sample is a recorded run replayed strictly. This build replayed it to a different result, so it is not shown as if it had worked: the board shows the sample's committed state only.
+
+- `speccoder doctor --bug-report`
+
+### SAMPLE-MISSING
+
+This build has no sample.
+
+The sample's recording is not part of this build: it is recorded with a real model by the maintainers (`just record-sample`) and bundled into release builds once it exists.
+
+- Install a release build that includes the sample
+- `speccoder new`
+
+### SIMILAR-FEATURE
+
+An existing requirement is close to this description.
+
+Before the spec is written, the description is compared with every feature's requirements by a deterministic text similarity. A close match may mean the change belongs in that feature; it is a hint and never stops the skill.
+
+- `speccoder feature similar "…"`
+- `speccoder review comments`
+
+### NEW-CONFIRM
+
+The plan needs your confirmation; nothing ran.
+
+`speccoder new` runs commands in a folder; it runs them only after you saw them. Without a terminal to ask at, it printed the plan and stopped.
+
+- Run the same command again with --yes
+
+### THROUGH-QUESTIONS
+
+The spec has open questions; planning waits for your answers.
+
+The format's skill wrote the spec and left questions it could not decide. Planning on a guess would plan the wrong thing, so the chain stops until each is answered.
+
+- `speccoder review`
+- `speccoder review answer Q1 "…"`
+
+### THROUGH-REVIEW
+
+Review the spec; planning waits for your approval.
+
+Plan through stops after the spec is written: its requirements are what every task will be judged by, so they are planned only once you approved them. No flag passes this stop.
+
+- `speccoder review`
+- `speccoder review approve`
 
 ### NEEDS-HUMAN
 

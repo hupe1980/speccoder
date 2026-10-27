@@ -37,7 +37,30 @@ pub mod next {
 pub mod review {
     /// The comment tray and the last revision turn.
     pub use crate::comments::list as comments;
-    pub use crate::review::report;
+    pub use crate::review::{readiness, report};
+}
+
+/// Planning a new feature: the rung a description suggests, the
+/// requirements it is close to (read-only, no model).
+pub mod planning {
+    pub use crate::planning_chain::{similar_command, similar_to, suggest};
+}
+
+/// A new project: its plan (read-only), the idea offered once.
+pub mod new_project {
+    pub use crate::new_project::{Creation, creation, first_feature, plan, undo_offer};
+}
+
+/// What a host outside a project shows.
+pub mod welcome {
+    pub use crate::welcome::{
+        Recent, RecentView, default_parent, folders, forget, remember, tilde, views,
+    };
+}
+
+/// The bundled sample.
+pub mod sample {
+    pub use crate::sample::{available, copy, home};
 }
 
 /// Needs You.
@@ -139,8 +162,8 @@ pub mod worktree {
 /// GitHub: sign-in, issues, the branch's pull request.
 pub mod github {
     pub use crate::github::{
-        Ctx, description, issue, issues, login_with_token, pr_for, reach, refused, repo, started,
-        status,
+        Ctx, RepoEntry, description, issue, issues, login_with_token, pr_for, reach, refused, repo,
+        repositories, started, status, valid_slug,
     };
 
     /// Signing in on a device.

@@ -337,6 +337,49 @@ fn runtime_has_no_speckit_literals_outside_the_adapter() {
     assert!(errors.is_empty(), "\n{}", errors.join("\n"));
 }
 
+/// The format tools' names, as a string starts with them: a new project's
+/// plan reaches the format's own init only through the adapter seam.
+fn format_commands(text: &str) -> Vec<usize> {
+    code_lines(text)
+        .filter(|(_, l)| {
+            ["\"specify", "\"openspec", "\"speckit-", "\"openspec-"]
+                .iter()
+                .any(|n| l.contains(n))
+        })
+        .map(|(i, _)| i)
+        .collect()
+}
+
+/// `text`'s lines before its tests, comments cut, numbered from 1.
+fn code_lines(text: &str) -> impl Iterator<Item = (usize, String)> + '_ {
+    text.lines()
+        .take_while(|l| !l.trim_start().starts_with("#[cfg(test)]"))
+        .enumerate()
+        .map(|(i, l)| (i + 1, l.split("//").next().unwrap_or_default().to_owned()))
+}
+
+#[test]
+fn a_new_projects_plan_names_no_format_tool_outside_the_adapter() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../speccoder-runtime/src/new_project");
+    let mut files = Vec::new();
+    rust_files(&dir, &mut files);
+    assert!(!files.is_empty());
+    let mut errors = Vec::new();
+    for f in &files {
+        for line in format_commands(&std::fs::read_to_string(f).unwrap()) {
+            errors.push(format!(
+                "layering: new_project/{}:{line} names a spec format's tool: it belongs to format/ (Adapter::init_steps)",
+                f.file_name().unwrap().to_string_lossy()
+            ));
+        }
+    }
+    assert!(errors.is_empty(), "\n{}", errors.join("\n"));
+    assert_eq!(
+        format_commands("let a = [\"specify\", \"init\"];\n// \"openspec\"\n"),
+        [1]
+    );
+}
+
 #[test]
 fn scan_finds_a_planted_literal() {
     let text = "// a comment about .specify/\nuse crate::format::speckit;\nfn f(a: A) {\n    let p = \".specify/memory\"; // tasks.md\n    let q = a.specify_dir;\n    let c = '\"';\n    speccoder_speckit::inspect(\"x \\\n tasks.md\");\n    let d = \"specs\";\n}\n#[cfg(test)]\nmod tests { const X: &str = \"tasks.md\"; }\n";
@@ -665,6 +708,9 @@ const DISPATCHERS: &[&str] = &[
     // The line CLI's own commands (`config set` on a prefix list,
     // `approvals batch`).
     "speccoder/src/main.rs",
+    // Plan through's one review question at a terminal: the approval is
+    // the review kind, performed as the person.
+    "speccoder/src/spec_through.rs",
 ];
 
 /// Where code names the dispatcher outside [`DISPATCHERS`].

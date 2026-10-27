@@ -1,0 +1,17 @@
+#!/bin/sh
+# A stand-in for cargo: `init` writes what `cargo init --lib` writes inside a repository.
+. "$(dirname "$0")/_log.sh"
+log cargo "$@"
+case "$1" in
+  --version) echo "cargo 1.91.0 (fake)" ;;
+  init)
+    misbehave cargo
+    name=x
+    while [ $# -gt 0 ]; do [ "$1" = --name ] && name="$2"; shift; done
+    printf '[package]\nname = "%s"\nversion = "0.1.0"\nedition = "2024"\n\n[dependencies]\n' "$name" > Cargo.toml
+    mkdir -p src
+    printf 'pub fn add(a: u64, b: u64) -> u64 {\n    a + b\n}\n\n#[cfg(test)]\nmod tests {\n    use super::*;\n\n    #[test]\n    fn it_works() {\n        assert_eq!(add(2, 2), 4);\n    }\n}\n' > src/lib.rs
+    printf '/target\n' > .gitignore
+    ;;
+  *) echo "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out" ;;
+esac

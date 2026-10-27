@@ -65,6 +65,34 @@ fn deltas_text(c: &speccoder_openspec::Change) -> String {
 }
 
 impl Adapter for OpenSpec {
+    fn init_steps(&self, choices: &crate::format::FormatInit) -> Vec<crate::format::InitStep> {
+        // `--tools claude`: the skills speccoder hosts live under
+        // `.claude/skills/`; without a tool OpenSpec asks, which no step can.
+        vec![crate::format::InitStep {
+            argv: [
+                "openspec",
+                "init",
+                "--tools",
+                "claude",
+                "--no-animation",
+                ".",
+            ]
+            .map(str::to_owned)
+            .to_vec(),
+            hosts: Vec::new(),
+            writes: "openspec/, .claude/skills/openspec-*/, .claude/commands/opsx/".to_owned(),
+            // OpenSpec keeps a settings file in the config directory: it
+            // goes to speccoder's private cache, not the person's.
+            env: vec![(
+                "XDG_CONFIG_HOME".to_owned(),
+                choices.cache.display().to_string(),
+            )],
+            marker: "openspec",
+            note: Some("keeps its settings in speccoder's cache, not ~/.config".to_owned()),
+            preset: false,
+        }]
+    }
+
     fn tool(&self) -> Option<(&'static str, &'static str)> {
         Some(("openspec", "npm install -g @fission-ai/openspec"))
     }

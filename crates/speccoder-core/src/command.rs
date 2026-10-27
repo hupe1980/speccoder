@@ -210,6 +210,16 @@ pub enum CommandData {
     Comments(Box<crate::oracle::CommentsView>),
     /// `preset add`: the speccoder Spec Kit preset, installed or offered.
     Preset(Box<PresetReport>),
+    /// `new`: a new project's plan, its steps and its commit.
+    NewProject(Box<crate::new_project::NewProjectReport>),
+    /// `sample`: the bundled sample, copied and replayed.
+    Sample(Box<SampleReport>),
+    /// `feature similar`: requirements close to a description.
+    Similar(Box<crate::similar::SimilarReport>),
+    /// `suggest`: the rung a description suggests.
+    RungSuggestion(Box<crate::ladder::RungSuggestion>),
+    /// `spec <skill> --through`: plan through, and where it stopped.
+    PlanningChain(Box<PlanningChainReport>),
 }
 
 /// What a prefix entry of `[commands] allow_prefix` or `[sandbox]
@@ -336,6 +346,9 @@ pub struct ReviewReport {
     /// read as "nothing decided" by a write.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    /// What the future oracle will be made of, counted now.
+    #[serde(default)]
+    pub readiness: Option<Readiness>,
 }
 
 /// A requirement changed in the checkout since the last commit of the
@@ -777,6 +790,11 @@ impl CommandData {
             Self::PolicyCoverage(_) => "policy_coverage",
             Self::Comments(_) => "comments",
             Self::Preset(_) => "preset",
+            Self::NewProject(_) => "new_project",
+            Self::Sample(_) => "sample",
+            Self::Similar(_) => "similar",
+            Self::RungSuggestion(_) => "rung_suggestion",
+            Self::PlanningChain(_) => "planning_chain",
         }
     }
 }
@@ -822,7 +840,157 @@ pub const PAYLOADS: &[&str] = &[
     "policy_coverage",
     "comments",
     "preset",
+    "new_project",
+    "sample",
+    "similar",
+    "rung_suggestion",
+    "planning_chain",
 ];
+
+/// What the future oracle of a unit will be made of, counted from its
+/// files as they are now: requirements, scenarios, open questions, and
+/// requirements no scenario covers (they cannot be tested).
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct Readiness {
+    /// Requirements the spec defines.
+    pub requirements: u32,
+    /// Scenarios over them.
+    pub scenarios: u32,
+    /// Open-question markers left in the unit's documents.
+    pub open_questions: u32,
+    /// Requirements without a scenario, by id: they cannot be tested.
+    pub untestable: Vec<String>,
+    /// The format defines requirement identifiers (else only questions count).
+    pub identifiers: bool,
+}
+
+/// One skill plan through ran.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct ChainStep {
+    /// The installed skill (`speckit-plan`).
+    pub skill: String,
+    /// Its result's status (`ok`, `error`, …).
+    pub status: CommandStatus,
+    /// Its message.
+    pub message: String,
+    /// Its agentplane run, when it ran.
+    pub run_id: Option<String>,
+}
+
+/// A plan check of the new task list (`PLAN-*`): a warning, never a stop.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct PlanCheck {
+    /// The check's code.
+    pub code: String,
+    /// The tasks it names.
+    pub tasks: Vec<String>,
+    /// What it found.
+    pub detail: String,
+}
+
+/// Where plan through stopped: only where a person decides, at a
+/// failure, or at the end.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ChainStop {
+    /// The spec leaves questions open: answer them first.
+    Questions {
+        /// Their ids (`Q1`, …).
+        questions: Vec<String>,
+    },
+    /// Review the spec: planning waits for the requirements' approval.
+    Review {
+        /// The requirements to approve, by id.
+        requirements: Vec<String>,
+    },
+    /// A skill failed or was refused; what ran before it is kept.
+    Failed {
+        /// The skill.
+        skill: String,
+        /// Its result's message.
+        message: String,
+        /// Its result's code.
+        code: Option<String>,
+    },
+    /// Done through the chosen step.
+    Done {
+        /// The plan checks of the task list, when one was written.
+        #[serde(default)]
+        plan_checks: Vec<PlanCheck>,
+    },
+}
+
+impl ChainStop {
+    /// Its name (`review`).
+    #[must_use]
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            Self::Questions { .. } => "questions",
+            Self::Review { .. } => "review",
+            Self::Failed { .. } => "failed",
+            Self::Done { .. } => "done",
+        }
+    }
+}
+
+/// Result of `speccoder spec <skill> --through <t>`: the skills it ran,
+/// where it stopped, and the unit's readiness. Plan through keeps no
+/// state of its own: the stop is read again from the unit's files.
+#[derive(Debug, Clone, PartialEq, Serialize, schemars::JsonSchema)]
+pub struct PlanningChainReport {
+    /// The unit (once the creating skill made it).
+    pub unit: Option<String>,
+    /// How far it was asked to go.
+    pub through: crate::actions::Through,
+    /// The skills it ran, in order.
+    pub ran: Vec<ChainStep>,
+    /// Where it stopped.
+    pub stop: ChainStop,
+    /// The unit's readiness now.
+    pub readiness: Option<Readiness>,
+    /// Requirements of other units close to the description (a hint).
+    pub similar: Vec<crate::similar::SimilarMatch>,
+    /// Where the description came from.
+    pub source: crate::actions::FeatureSource,
+    /// The skill a continuation runs next.
+    pub next_skill: Option<String>,
+}
+
+/// One recorded run of the sample, replayed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct SampleRun {
+    /// The agentplane run.
+    pub id: String,
+    /// `reproduced`, `diverged` or `not_replayable`.
+    pub result: String,
+    /// What differed, when it did not reproduce.
+    pub finding: Option<String>,
+}
+
+/// How the sample was recorded.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct SampleRecording {
+    /// The model it was recorded with.
+    pub model: String,
+    /// When (RFC 3339 date).
+    pub recorded_at: String,
+    /// The agentplane version that recorded it.
+    pub agentplane: String,
+}
+
+/// Result of `speccoder sample`: where the copy is and whether its
+/// recorded runs replay strictly with this build.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct SampleReport {
+    /// The copy, in speccoder's state directory.
+    pub path: String,
+    /// A fresh copy was made (else an existing one was reopened).
+    pub fresh: bool,
+    /// How it was recorded.
+    pub recorded: SampleRecording,
+    /// Each recorded run, replayed.
+    pub runs: Vec<SampleRun>,
+}
 
 /// Result of `speccoder preset add`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]

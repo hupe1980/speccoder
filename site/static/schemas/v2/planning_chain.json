@@ -1,0 +1,481 @@
+{
+  "$defs": {
+    "ChainStep": {
+      "description": "One skill plan through ran.",
+      "properties": {
+        "message": {
+          "description": "Its message.",
+          "type": "string"
+        },
+        "run_id": {
+          "description": "Its agentplane run, when it ran.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "skill": {
+          "description": "The installed skill (`speckit-plan`).",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/CommandStatus",
+          "description": "Its result's status (`ok`, `error`, …)."
+        }
+      },
+      "required": [
+        "skill",
+        "status",
+        "message",
+        "run_id"
+      ],
+      "type": "object"
+    },
+    "ChainStop": {
+      "description": "Where plan through stopped: only where a person decides, at a\nfailure, or at the end.",
+      "oneOf": [
+        {
+          "description": "The spec leaves questions open: answer them first.",
+          "properties": {
+            "kind": {
+              "const": "questions",
+              "type": "string"
+            },
+            "questions": {
+              "description": "Their ids (`Q1`, …).",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "kind",
+            "questions"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Review the spec: planning waits for the requirements' approval.",
+          "properties": {
+            "kind": {
+              "const": "review",
+              "type": "string"
+            },
+            "requirements": {
+              "description": "The requirements to approve, by id.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "kind",
+            "requirements"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A skill failed or was refused; what ran before it is kept.",
+          "properties": {
+            "code": {
+              "description": "Its result's code.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "const": "failed",
+              "type": "string"
+            },
+            "message": {
+              "description": "Its result's message.",
+              "type": "string"
+            },
+            "skill": {
+              "description": "The skill.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "skill",
+            "message",
+            "code"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Done through the chosen step.",
+          "properties": {
+            "kind": {
+              "const": "done",
+              "type": "string"
+            },
+            "plan_checks": {
+              "default": [],
+              "description": "The plan checks of the task list, when one was written.",
+              "items": {
+                "$ref": "#/$defs/PlanCheck"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "kind",
+            "plan_checks"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "CommandStatus": {
+      "description": "Outcome class of a command.",
+      "oneOf": [
+        {
+          "const": "ok",
+          "description": "The command succeeded.",
+          "type": "string"
+        },
+        {
+          "const": "usage_error",
+          "description": "The arguments were invalid.",
+          "type": "string"
+        },
+        {
+          "const": "error",
+          "description": "An unexpected internal failure.",
+          "type": "string"
+        },
+        {
+          "const": "not_a_project",
+          "description": "No Spec Kit project was found.",
+          "type": "string"
+        },
+        {
+          "const": "diagnostics_error",
+          "description": "The result contains error diagnostics.",
+          "type": "string"
+        },
+        {
+          "const": "selection_needed",
+          "description": "No feature could be selected.",
+          "type": "string"
+        },
+        {
+          "const": "config_error",
+          "description": "`speccoder.toml` is missing or invalid, or nothing applies.",
+          "type": "string"
+        },
+        {
+          "const": "verification_failed",
+          "description": "A check failed or a test regressed.",
+          "type": "string"
+        },
+        {
+          "const": "git_precondition",
+          "description": "A git precondition does not hold.",
+          "type": "string"
+        },
+        {
+          "const": "not_found",
+          "description": "No such task or run.",
+          "type": "string"
+        },
+        {
+          "const": "run_failed",
+          "description": "The model call or the run failed.",
+          "type": "string"
+        },
+        {
+          "const": "replay_diverged",
+          "description": "Strict replay did not reproduce the recorded run.",
+          "type": "string"
+        },
+        {
+          "const": "task_not_ready",
+          "description": "The task is done or blocked by open dependencies.",
+          "type": "string"
+        },
+        {
+          "const": "needs_human",
+          "description": "The attempt stopped for a person.",
+          "type": "string"
+        },
+        {
+          "const": "eval_failed",
+          "description": "An evaluation found a false completion or a cheat.",
+          "type": "string"
+        },
+        {
+          "const": "not_replayable",
+          "description": "The recorded run cannot be re-derived by this build.",
+          "type": "string"
+        },
+        {
+          "const": "attestation_failed",
+          "description": "An attestation is missing, unsigned where required, or does not hold.",
+          "type": "string"
+        }
+      ]
+    },
+    "FeatureSource": {
+      "description": "Where a new feature's description comes from. Later rungs add theirs\n(an Explore brief, a promoted quick change) when they are built.",
+      "oneOf": [
+        {
+          "description": "The person's own words.",
+          "properties": {
+            "kind": {
+              "const": "description",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A GitHub issue's description, verbatim.",
+          "properties": {
+            "kind": {
+              "const": "issue",
+              "type": "string"
+            },
+            "number": {
+              "description": "Its number.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "number"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "PlanCheck": {
+      "description": "A plan check of the new task list (`PLAN-*`): a warning, never a stop.",
+      "properties": {
+        "code": {
+          "description": "The check's code.",
+          "type": "string"
+        },
+        "detail": {
+          "description": "What it found.",
+          "type": "string"
+        },
+        "tasks": {
+          "description": "The tasks it names.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "code",
+        "tasks",
+        "detail"
+      ],
+      "type": "object"
+    },
+    "Readiness": {
+      "description": "What the future oracle of a unit will be made of, counted from its\nfiles as they are now: requirements, scenarios, open questions, and\nrequirements no scenario covers (they cannot be tested).",
+      "properties": {
+        "identifiers": {
+          "description": "The format defines requirement identifiers (else only questions count).",
+          "type": "boolean"
+        },
+        "open_questions": {
+          "description": "Open-question markers left in the unit's documents.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "requirements": {
+          "description": "Requirements the spec defines.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "scenarios": {
+          "description": "Scenarios over them.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "untestable": {
+          "description": "Requirements without a scenario, by id: they cannot be tested.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "requirements",
+        "scenarios",
+        "open_questions",
+        "untestable",
+        "identifiers"
+      ],
+      "type": "object"
+    },
+    "SimilarLevel": {
+      "description": "How close a match is.",
+      "oneOf": [
+        {
+          "const": "close",
+          "description": "At or above [`CLOSE`].",
+          "type": "string"
+        },
+        {
+          "const": "very_close",
+          "description": "At or above [`VERY_CLOSE`].",
+          "type": "string"
+        }
+      ]
+    },
+    "SimilarMatch": {
+      "description": "A requirement close to the description.",
+      "properties": {
+        "level": {
+          "$ref": "#/$defs/SimilarLevel",
+          "description": "`close` or `very_close`."
+        },
+        "requirement": {
+          "description": "The requirement's identifier (`FR-004`).",
+          "type": "string"
+        },
+        "score": {
+          "description": "Cosine in [0, 1], rounded to two places.",
+          "format": "double",
+          "type": "number"
+        },
+        "shared": {
+          "description": "The terms it shares with the description, the weightiest first.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "text": {
+          "description": "The requirement as written.",
+          "type": "string"
+        },
+        "unit": {
+          "description": "The unit (`003-reports`).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "unit",
+        "requirement",
+        "text",
+        "score",
+        "level",
+        "shared"
+      ],
+      "type": "object"
+    },
+    "Through": {
+      "description": "How far plan through goes.",
+      "oneOf": [
+        {
+          "const": "spec",
+          "description": "The spec only.",
+          "type": "string"
+        },
+        {
+          "const": "plan",
+          "description": "The spec and the plan.",
+          "type": "string"
+        },
+        {
+          "const": "tasks",
+          "description": "The spec, the plan and the tasks.",
+          "type": "string"
+        },
+        {
+          "const": "analyze",
+          "description": "Then the format's check of the planning files.",
+          "type": "string"
+        }
+      ]
+    }
+  },
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/planning_chain.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Result of `speccoder spec <skill> --through <t>`: the skills it ran,\nwhere it stopped, and the unit's readiness. Plan through keeps no\nstate of its own: the stop is read again from the unit's files.",
+  "properties": {
+    "next_skill": {
+      "description": "The skill a continuation runs next.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "ran": {
+      "description": "The skills it ran, in order.",
+      "items": {
+        "$ref": "#/$defs/ChainStep"
+      },
+      "type": "array"
+    },
+    "readiness": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Readiness"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "The unit's readiness now."
+    },
+    "similar": {
+      "description": "Requirements of other units close to the description (a hint).",
+      "items": {
+        "$ref": "#/$defs/SimilarMatch"
+      },
+      "type": "array"
+    },
+    "source": {
+      "$ref": "#/$defs/FeatureSource",
+      "description": "Where the description came from."
+    },
+    "stop": {
+      "$ref": "#/$defs/ChainStop",
+      "description": "Where it stopped."
+    },
+    "through": {
+      "$ref": "#/$defs/Through",
+      "description": "How far it was asked to go."
+    },
+    "unit": {
+      "description": "The unit (once the creating skill made it).",
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "unit",
+    "through",
+    "ran",
+    "stop",
+    "readiness",
+    "similar",
+    "source",
+    "next_skill"
+  ],
+  "title": "spec SKILL --through: the skills plan through ran, where it stopped, and the unit's readiness",
+  "type": "object"
+}

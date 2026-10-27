@@ -374,6 +374,80 @@ pub enum Body {
         /// The result envelope.
         result: CommandResult,
     },
+    /// Plan through stopped where a person decides, at a failure or at the end.
+    #[serde(rename = "planning.stopped")]
+    PlanningStopped {
+        /// The unit, once it exists.
+        unit: Option<String>,
+        /// `questions`, `review`, `failed`, `done`.
+        kind: String,
+        /// The skill a continuation runs next.
+        next_skill: Option<String>,
+    },
+    /// A step of a new project's plan began.
+    #[serde(rename = "scaffold.started")]
+    ScaffoldStarted {
+        /// The step (`git_init`, `scaffold.1`, `format_init`, …).
+        step: String,
+        /// Its command, exactly.
+        argv: Vec<String>,
+        /// `local` or `network`.
+        access: String,
+    },
+    /// A step of a new project's plan ended.
+    #[serde(rename = "scaffold.finished")]
+    ScaffoldFinished {
+        /// The step.
+        step: String,
+        /// `done`, `skipped`, `failed`.
+        state: String,
+        /// Its exit status, when it ran.
+        exit: Option<i32>,
+        /// How long it took.
+        duration_ms: u64,
+    },
+    /// A new project was created and committed.
+    #[serde(rename = "project.created")]
+    ProjectCreated {
+        /// The public projection.
+        #[serde(flatten)]
+        public: PublicProjectCreated,
+    },
+    /// A project speccoder created was undone.
+    #[serde(rename = "project.undone")]
+    ProjectUndone {
+        /// The public projection.
+        #[serde(flatten)]
+        public: PublicProjectUndone,
+    },
+}
+
+/// `project.created`, as published: no path, no idea text.
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct PublicProjectCreated {
+    /// SHA-256 of the folder's canonical path.
+    pub path_digest: String,
+    /// `new_folder` or `existing_repository`.
+    pub mode: String,
+    /// The stack.
+    pub stack: String,
+    /// The spec format.
+    pub format: String,
+    /// speccoder's commit.
+    pub commit: String,
+    /// Through what.
+    pub via: String,
+}
+
+/// `project.undone`, as published.
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct PublicProjectUndone {
+    /// SHA-256 of the folder's canonical path.
+    pub path_digest: String,
+    /// `trash` or `revert`.
+    pub kind: String,
+    /// Through what.
+    pub via: String,
 }
 
 /// One statement's class in a reproduce try.
@@ -899,6 +973,67 @@ pub fn body(event: &Event) -> Body {
         Event::Notice { text } => Body::Notice { text: clean(text) },
         Event::Bug { task, step } => bug_body(task, step),
         Event::Oracle { step } => oracle_body(step),
+        Event::PlanningStopped {
+            unit,
+            kind,
+            next_skill,
+        } => Body::PlanningStopped {
+            unit: unit.as_deref().map(clean),
+            kind: kind.clone(),
+            next_skill: next_skill.as_deref().map(clean),
+        },
+        Event::Project { step } => project_body(step),
+    }
+}
+
+/// The stream's body for a new project's step.
+fn project_body(step: &progress::ProjectEvent) -> Body {
+    use progress::ProjectEvent as P;
+    match step {
+        P::ScaffoldStarted { step, argv, access } => Body::ScaffoldStarted {
+            step: clean(step),
+            argv: cleaned(argv),
+            access: access.clone(),
+        },
+        P::ScaffoldFinished {
+            step,
+            state,
+            exit,
+            duration_ms,
+        } => Body::ScaffoldFinished {
+            step: clean(step),
+            state: state.clone(),
+            exit: *exit,
+            duration_ms: *duration_ms,
+        },
+        P::Created {
+            path_digest,
+            mode,
+            stack,
+            format,
+            commit,
+            via,
+        } => Body::ProjectCreated {
+            public: PublicProjectCreated {
+                path_digest: path_digest.clone(),
+                mode: mode.clone(),
+                stack: stack.clone(),
+                format: format.clone(),
+                commit: clean(commit),
+                via: via.clone(),
+            },
+        },
+        P::Undone {
+            path_digest,
+            how,
+            via,
+        } => Body::ProjectUndone {
+            public: PublicProjectUndone {
+                path_digest: path_digest.clone(),
+                kind: how.clone(),
+                via: via.clone(),
+            },
+        },
     }
 }
 

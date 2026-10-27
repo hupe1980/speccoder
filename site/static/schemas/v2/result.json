@@ -405,6 +405,31 @@
           "type": "string"
         },
         {
+          "const": "plan_through",
+          "description": "[`Runnable::PlanThrough`].",
+          "type": "string"
+        },
+        {
+          "const": "new_project",
+          "description": "[`Runnable::NewProject`].",
+          "type": "string"
+        },
+        {
+          "const": "undo_new_project",
+          "description": "[`Runnable::UndoNewProject`].",
+          "type": "string"
+        },
+        {
+          "const": "clone_repository",
+          "description": "[`Runnable::CloneRepository`].",
+          "type": "string"
+        },
+        {
+          "const": "open_sample",
+          "description": "[`Runnable::OpenSample`].",
+          "type": "string"
+        },
+        {
           "const": "command",
           "description": "No runnable: the person runs the command.",
           "type": "string"
@@ -1725,6 +1750,137 @@
       ],
       "type": "object"
     },
+    "ChainStep": {
+      "description": "One skill plan through ran.",
+      "properties": {
+        "message": {
+          "description": "Its message.",
+          "type": "string"
+        },
+        "run_id": {
+          "description": "Its agentplane run, when it ran.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "skill": {
+          "description": "The installed skill (`speckit-plan`).",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/CommandStatus",
+          "description": "Its result's status (`ok`, `error`, …)."
+        }
+      },
+      "required": [
+        "skill",
+        "status",
+        "message",
+        "run_id"
+      ],
+      "type": "object"
+    },
+    "ChainStop": {
+      "description": "Where plan through stopped: only where a person decides, at a\nfailure, or at the end.",
+      "oneOf": [
+        {
+          "description": "The spec leaves questions open: answer them first.",
+          "properties": {
+            "kind": {
+              "const": "questions",
+              "type": "string"
+            },
+            "questions": {
+              "description": "Their ids (`Q1`, …).",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "kind",
+            "questions"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Review the spec: planning waits for the requirements' approval.",
+          "properties": {
+            "kind": {
+              "const": "review",
+              "type": "string"
+            },
+            "requirements": {
+              "description": "The requirements to approve, by id.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "kind",
+            "requirements"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A skill failed or was refused; what ran before it is kept.",
+          "properties": {
+            "code": {
+              "description": "Its result's code.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "const": "failed",
+              "type": "string"
+            },
+            "message": {
+              "description": "Its result's message.",
+              "type": "string"
+            },
+            "skill": {
+              "description": "The skill.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "skill",
+            "message",
+            "code"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Done through the chosen step.",
+          "properties": {
+            "kind": {
+              "const": "done",
+              "type": "string"
+            },
+            "plan_checks": {
+              "default": [],
+              "description": "The plan checks of the task list, when one was written.",
+              "items": {
+                "$ref": "#/$defs/PlanCheck"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "kind",
+            "plan_checks"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "CheckResult": {
       "description": "One check run.",
       "properties": {
@@ -2166,6 +2322,26 @@
         {
           "$ref": "#/$defs/PresetReport",
           "description": "`preset add`: the speccoder Spec Kit preset, installed or offered."
+        },
+        {
+          "$ref": "#/$defs/NewProjectReport",
+          "description": "`new`: a new project's plan, its steps and its commit."
+        },
+        {
+          "$ref": "#/$defs/SampleReport",
+          "description": "`sample`: the bundled sample, copied and replayed."
+        },
+        {
+          "$ref": "#/$defs/SimilarReport",
+          "description": "`feature similar`: requirements close to a description."
+        },
+        {
+          "$ref": "#/$defs/RungSuggestion",
+          "description": "`suggest`: the rung a description suggests."
+        },
+        {
+          "$ref": "#/$defs/PlanningChainReport",
+          "description": "`spec <skill> --through`: plan through, and where it stopped."
         }
       ],
       "description": "Command-specific payload of a result."
@@ -4171,6 +4347,44 @@
       ],
       "type": "object"
     },
+    "ExtensionChoice": {
+      "description": "A Spec Kit extension the person chose.",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/ExtensionKind",
+          "description": "`bundled`, `path` or `url`."
+        },
+        "source": {
+          "description": "A bundled name, a local path or a URL, as given.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "kind"
+      ],
+      "type": "object"
+    },
+    "ExtensionKind": {
+      "description": "What an extension source is.",
+      "oneOf": [
+        {
+          "const": "bundled",
+          "description": "Bundled with the format's tool (`bug`).",
+          "type": "string"
+        },
+        {
+          "const": "path",
+          "description": "A local directory.",
+          "type": "string"
+        },
+        {
+          "const": "url",
+          "description": "Downloaded: a network step.",
+          "type": "string"
+        }
+      ]
+    },
     "FailedCheck": {
       "description": "One check that did not pass.",
       "properties": {
@@ -4408,6 +4622,44 @@
       ],
       "type": "object"
     },
+    "FeatureSource": {
+      "description": "Where a new feature's description comes from. Later rungs add theirs\n(an Explore brief, a promoted quick change) when they are built.",
+      "oneOf": [
+        {
+          "description": "The person's own words.",
+          "properties": {
+            "kind": {
+              "const": "description",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A GitHub issue's description, verbatim.",
+          "properties": {
+            "kind": {
+              "const": "issue",
+              "type": "string"
+            },
+            "number": {
+              "description": "Its number.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "number"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "FeaturesReport": {
       "description": "Result of `speccoder feature`.",
       "properties": {
@@ -4582,6 +4834,40 @@
         }
       ]
     },
+    "FormatOption": {
+      "description": "A spec format the plan can initialise, and its tool's state.",
+      "properties": {
+        "disabled": {
+          "description": "Why it cannot be chosen.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "description": "`speckit`, `openspec`.",
+          "type": "string"
+        },
+        "label": {
+          "description": "`Spec Kit`, `OpenSpec`.",
+          "type": "string"
+        },
+        "version": {
+          "description": "The tool's version when installed.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "version",
+        "disabled"
+      ],
+      "type": "object"
+    },
     "FullTier": {
       "description": "The `full` check tier at the end of a feature.",
       "properties": {
@@ -4643,6 +4929,24 @@
           "type": "string"
         }
       ]
+    },
+    "GitIdentity": {
+      "description": "The person's git identity.",
+      "properties": {
+        "email": {
+          "description": "`user.email`.",
+          "type": "string"
+        },
+        "name": {
+          "description": "`user.name`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "email"
+      ],
+      "type": "object"
     },
     "Handoff": {
       "description": "The hand-off of a stopped bug, composed by the engine from the journal\n(never written by a model).",
@@ -5546,6 +5850,113 @@
       ],
       "type": "object"
     },
+    "NewChoices": {
+      "description": "What the person chose; with the folder, everything the plan follows from.",
+      "properties": {
+        "extensions": {
+          "default": [],
+          "description": "Spec Kit extensions.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "format": {
+          "description": "The spec format (`speckit`, `openspec`); `None`: Spec Kit.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "idea": {
+          "description": "What they are building, verbatim (kept for the first feature).",
+          "type": "string"
+        },
+        "no_preset": {
+          "default": false,
+          "description": "Leave out the speccoder Spec Kit preset.",
+          "type": "boolean"
+        },
+        "stack": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Stack"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The stack; `None`: the suggestion."
+        }
+      },
+      "required": [
+        "idea",
+        "stack",
+        "format",
+        "extensions",
+        "no_preset"
+      ],
+      "type": "object"
+    },
+    "NewProjectReport": {
+      "description": "The `new_project` payload.",
+      "properties": {
+        "commit": {
+          "description": "speccoder's commit, once made.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dry_run": {
+          "description": "Nothing ran.",
+          "type": "boolean"
+        },
+        "first_feature": {
+          "description": "The project's first feature, prefilled from the idea.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "init": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/InitReport"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "`speccoder init`'s report, when it ran."
+        },
+        "plan": {
+          "$ref": "#/$defs/ProjectPlan",
+          "description": "The plan."
+        },
+        "results": {
+          "description": "Each step's outcome (empty on a dry run).",
+          "items": {
+            "$ref": "#/$defs/PlanStepResult"
+          },
+          "type": "array"
+        },
+        "undo": {
+          "$ref": "#/$defs/UndoOffer",
+          "description": "What Undo would do."
+        }
+      },
+      "required": [
+        "plan",
+        "results",
+        "init",
+        "commit",
+        "undo",
+        "dry_run",
+        "first_feature"
+      ],
+      "type": "object"
+    },
     "NextStep": {
       "description": "One step a person can take.",
       "properties": {
@@ -5663,6 +6074,51 @@
         "short",
         "describe",
         "lines"
+      ],
+      "type": "object"
+    },
+    "ObservedFolder": {
+      "description": "The folder and the tools as the plan saw them.",
+      "properties": {
+        "entries": {
+          "description": "Its entries' names, sorted.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "exists": {
+          "description": "The folder exists.",
+          "type": "boolean"
+        },
+        "head": {
+          "description": "`HEAD`, in a repository with a commit.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "porcelain": {
+          "description": "`git status --porcelain` lines.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "tools": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Each tool's version line, by name.",
+          "type": "object"
+        }
+      },
+      "required": [
+        "exists",
+        "entries",
+        "head",
+        "porcelain",
+        "tools"
       ],
       "type": "object"
     },
@@ -6460,6 +6916,292 @@
       ],
       "type": "object"
     },
+    "PlanCheck": {
+      "description": "A plan check of the new task list (`PLAN-*`): a warning, never a stop.",
+      "properties": {
+        "code": {
+          "description": "The check's code.",
+          "type": "string"
+        },
+        "detail": {
+          "description": "What it found.",
+          "type": "string"
+        },
+        "tasks": {
+          "description": "The tasks it names.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "code",
+        "tasks",
+        "detail"
+      ],
+      "type": "object"
+    },
+    "PlanFrom": {
+      "description": "What plan through starts from.",
+      "oneOf": [
+        {
+          "description": "A new unit from a description.",
+          "properties": {
+            "description": {
+              "description": "What it should do, verbatim.",
+              "type": "string"
+            },
+            "kind": {
+              "const": "create",
+              "type": "string"
+            },
+            "source": {
+              "$ref": "#/$defs/FeatureSource",
+              "description": "Where the description comes from."
+            }
+          },
+          "required": [
+            "kind",
+            "description",
+            "source"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The next skill after a stop, derived from the unit's files.",
+          "properties": {
+            "kind": {
+              "const": "continue",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "PlanRefusal": {
+      "description": "Why the plan cannot run, and the fix.",
+      "properties": {
+        "code": {
+          "description": "`NEW-TARGET-NOT-EMPTY`, …",
+          "type": "string"
+        },
+        "fix": {
+          "description": "What to do.",
+          "type": "string"
+        },
+        "message": {
+          "description": "What is wrong.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "fix"
+      ],
+      "type": "object"
+    },
+    "PlanStep": {
+      "description": "One command of the plan.",
+      "properties": {
+        "access": {
+          "$ref": "#/$defs/StepAccess",
+          "description": "Local, or network."
+        },
+        "argv": {
+          "description": "The command, exactly as it runs.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "cwd": {
+          "description": "Where it runs: always the target.",
+          "type": "string"
+        },
+        "hosts": {
+          "description": "The hosts a network step reaches.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "id": {
+          "description": "`git_init`, `scaffold.<n>`, `format_init`, `speccoder_init`, `commit`.",
+          "type": "string"
+        },
+        "limit_s": {
+          "description": "Its time limit, in seconds.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "note": {
+          "description": "A note the plan shows beside it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "writes": {
+          "description": "What it writes, in one line.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "argv",
+        "cwd",
+        "access",
+        "writes",
+        "limit_s"
+      ],
+      "type": "object"
+    },
+    "PlanStepResult": {
+      "description": "One step's outcome.",
+      "properties": {
+        "duration_ms": {
+          "description": "How long it took.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "exit": {
+          "description": "Its exit status, when it ran.",
+          "format": "int32",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "id": {
+          "description": "The step.",
+          "type": "string"
+        },
+        "output_tail": {
+          "description": "The last lines of its output (at most 20).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "state": {
+          "$ref": "#/$defs/PlanStepState",
+          "description": "What happened."
+        }
+      },
+      "required": [
+        "id",
+        "state",
+        "exit",
+        "duration_ms",
+        "output_tail"
+      ],
+      "type": "object"
+    },
+    "PlanStepState": {
+      "description": "A step's state in a run.",
+      "oneOf": [
+        {
+          "const": "waiting",
+          "description": "Not started.",
+          "type": "string"
+        },
+        {
+          "const": "running",
+          "description": "Running now.",
+          "type": "string"
+        },
+        {
+          "const": "done",
+          "description": "Finished.",
+          "type": "string"
+        },
+        {
+          "const": "skipped",
+          "description": "Its effect was already there (resume).",
+          "type": "string"
+        },
+        {
+          "const": "failed",
+          "description": "Failed; later steps did not run.",
+          "type": "string"
+        }
+      ]
+    },
+    "PlanningChainReport": {
+      "description": "Result of `speccoder spec <skill> --through <t>`: the skills it ran,\nwhere it stopped, and the unit's readiness. Plan through keeps no\nstate of its own: the stop is read again from the unit's files.",
+      "properties": {
+        "next_skill": {
+          "description": "The skill a continuation runs next.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ran": {
+          "description": "The skills it ran, in order.",
+          "items": {
+            "$ref": "#/$defs/ChainStep"
+          },
+          "type": "array"
+        },
+        "readiness": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Readiness"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The unit's readiness now."
+        },
+        "similar": {
+          "description": "Requirements of other units close to the description (a hint).",
+          "items": {
+            "$ref": "#/$defs/SimilarMatch"
+          },
+          "type": "array"
+        },
+        "source": {
+          "$ref": "#/$defs/FeatureSource",
+          "description": "Where the description came from."
+        },
+        "stop": {
+          "$ref": "#/$defs/ChainStop",
+          "description": "Where it stopped."
+        },
+        "through": {
+          "$ref": "#/$defs/Through",
+          "description": "How far it was asked to go."
+        },
+        "unit": {
+          "description": "The unit (once the creating skill made it).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "unit",
+        "through",
+        "ran",
+        "stop",
+        "readiness",
+        "similar",
+        "source",
+        "next_skill"
+      ],
+      "type": "object"
+    },
     "PolicyCoverage": {
       "description": "What a prefix entry of `[commands] allow_prefix` or `[sandbox]\nnetwork_allow_prefix` would newly allow: every distinct argv the\nproject's journal recorded that it covers and the current policy does\nnot allow. A prefix is saved only as the confirmation of this preview,\nand only when it is complete.",
       "properties": {
@@ -6686,6 +7428,130 @@
       ],
       "type": "object"
     },
+    "ProjectMode": {
+      "description": "Where the project is made.",
+      "oneOf": [
+        {
+          "const": "new_folder",
+          "description": "A folder that does not exist yet, or an empty one.",
+          "type": "string"
+        },
+        {
+          "const": "existing_repository",
+          "description": "A git repository at its top level with a clean tree and no spec project.",
+          "type": "string"
+        }
+      ]
+    },
+    "ProjectPlan": {
+      "description": "The plan.",
+      "properties": {
+        "digest": {
+          "description": "SHA-256 over all of the above.",
+          "type": "string"
+        },
+        "extensions": {
+          "description": "Spec Kit extensions.",
+          "items": {
+            "$ref": "#/$defs/ExtensionChoice"
+          },
+          "type": "array"
+        },
+        "format": {
+          "description": "The spec format (`speckit`, `openspec`).",
+          "type": "string"
+        },
+        "formats": {
+          "description": "Every format and whether its tool is installed.",
+          "items": {
+            "$ref": "#/$defs/FormatOption"
+          },
+          "type": "array"
+        },
+        "identity": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GitIdentity"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The person's git identity."
+        },
+        "mode": {
+          "$ref": "#/$defs/ProjectMode",
+          "description": "A new folder or an existing repository."
+        },
+        "name": {
+          "description": "The project's name (the folder's).",
+          "type": "string"
+        },
+        "observed": {
+          "$ref": "#/$defs/ObservedFolder",
+          "description": "The folder as seen."
+        },
+        "preset": {
+          "description": "Whether the speccoder Spec Kit preset is passed to the format's init.",
+          "type": "boolean"
+        },
+        "refusal": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PlanRefusal"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Why it cannot run (Create disabled)."
+        },
+        "sandbox": {
+          "$ref": "#/$defs/SandboxNote",
+          "description": "The OS sandbox."
+        },
+        "stack": {
+          "$ref": "#/$defs/StackPick",
+          "description": "The stack."
+        },
+        "stacks": {
+          "description": "Every stack and whether its tool is installed.",
+          "items": {
+            "$ref": "#/$defs/StackOption"
+          },
+          "type": "array"
+        },
+        "steps": {
+          "description": "The commands, in order.",
+          "items": {
+            "$ref": "#/$defs/PlanStep"
+          },
+          "type": "array"
+        },
+        "target": {
+          "description": "The folder, canonical and absolute.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "target",
+        "name",
+        "mode",
+        "stack",
+        "stacks",
+        "format",
+        "formats",
+        "extensions",
+        "preset",
+        "steps",
+        "sandbox",
+        "identity",
+        "refusal",
+        "observed",
+        "digest"
+      ],
+      "type": "object"
+    },
     "ProjectSnapshot": {
       "description": "Everything discovered about one Spec Kit project.",
       "properties": {
@@ -6790,6 +7656,48 @@
         "run_status",
         "proposal",
         "usage"
+      ],
+      "type": "object"
+    },
+    "Readiness": {
+      "description": "What the future oracle of a unit will be made of, counted from its\nfiles as they are now: requirements, scenarios, open questions, and\nrequirements no scenario covers (they cannot be tested).",
+      "properties": {
+        "identifiers": {
+          "description": "The format defines requirement identifiers (else only questions count).",
+          "type": "boolean"
+        },
+        "open_questions": {
+          "description": "Open-question markers left in the unit's documents.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "requirements": {
+          "description": "Requirements the spec defines.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "scenarios": {
+          "description": "Scenarios over them.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "untestable": {
+          "description": "Requirements without a scenario, by id: they cannot be tested.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "requirements",
+        "scenarios",
+        "open_questions",
+        "untestable",
+        "identifiers"
       ],
       "type": "object"
     },
@@ -7651,6 +8559,18 @@
           },
           "type": "array"
         },
+        "readiness": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Readiness"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "What the future oracle will be made of, counted now."
+        },
         "requirements": {
           "description": "One per requirement, in the spec's order.",
           "items": {
@@ -7710,7 +8630,8 @@
         "oracle",
         "tests_notice",
         "approval",
-        "sheet"
+        "sheet",
+        "readiness"
       ],
       "type": "object"
     },
@@ -8152,6 +9073,131 @@
         "monitor",
         "mutation",
         "samples"
+      ],
+      "type": "object"
+    },
+    "RungCue": {
+      "description": "What decided a suggestion: the rule and the words of the text that met\nit, verbatim.",
+      "properties": {
+        "matched": {
+          "description": "The words, as written.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "rule": {
+          "$ref": "#/$defs/RungCueRule",
+          "description": "The rule."
+        }
+      },
+      "required": [
+        "rule",
+        "matched"
+      ],
+      "type": "object"
+    },
+    "RungCueRule": {
+      "description": "The rule that decided a suggestion.",
+      "oneOf": [
+        {
+          "const": "question",
+          "description": "An interrogative first word or a trailing `?`.",
+          "type": "string"
+        },
+        {
+          "const": "wrong_result",
+          "description": "A word for a wrong result of existing behaviour.",
+          "type": "string"
+        },
+        {
+          "const": "several_capabilities",
+          "description": "Two or more capabilities joined.",
+          "type": "string"
+        },
+        {
+          "const": "long",
+          "description": "More than [`LONG_WORDS`] words.",
+          "type": "string"
+        },
+        {
+          "const": "default",
+          "description": "None of the above.",
+          "type": "string"
+        }
+      ]
+    },
+    "RungPick": {
+      "description": "A rung the composer can open for a description: a bug fix, a quick\nchange, a feature, or a question (`ask`); `none` only for an empty text.",
+      "oneOf": [
+        {
+          "const": "bug",
+          "description": "A wrong result of existing behaviour (`speccoder bug`).",
+          "type": "string"
+        },
+        {
+          "const": "quick",
+          "description": "One requirement, judged like a task (`speccoder do`).",
+          "type": "string"
+        },
+        {
+          "const": "feature",
+          "description": "A spec the format's skill writes (`speccoder spec specify`).",
+          "type": "string"
+        },
+        {
+          "const": "ask",
+          "description": "A question: a read-only answer.",
+          "type": "string"
+        },
+        {
+          "const": "none",
+          "description": "Nothing to suggest: the text is empty.",
+          "type": "string"
+        }
+      ]
+    },
+    "RungSuggestion": {
+      "description": "The composer's suggestion for a text (`rung_suggestion`): computed by\ncode from the text alone, shown with its reason, never applied without\nthe person's key or click.",
+      "properties": {
+        "alternatives": {
+          "description": "The other rungs, in the composer's order.",
+          "items": {
+            "$ref": "#/$defs/RungPick"
+          },
+          "type": "array"
+        },
+        "available": {
+          "description": "Whether this build has it (`false` for `ask` until the Ask panel).",
+          "type": "boolean"
+        },
+        "command": {
+          "description": "The command that takes the suggested rung (none for `ask` and `none`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cue": {
+          "$ref": "#/$defs/RungCue",
+          "description": "What decided it."
+        },
+        "reason": {
+          "description": "Why, in one sentence.",
+          "type": "string"
+        },
+        "rung": {
+          "$ref": "#/$defs/RungPick",
+          "description": "The suggested rung."
+        }
+      },
+      "required": [
+        "rung",
+        "available",
+        "cue",
+        "reason",
+        "alternatives",
+        "command"
       ],
       "type": "object"
     },
@@ -9004,8 +10050,214 @@
             "update"
           ],
           "type": "object"
+        },
+        {
+          "description": "Plan a new feature through the format's own skills — the creating\nskill, then toward the task list, then the check — stopping where a\nperson decides (`speccoder spec <skill> --through <t>`).",
+          "properties": {
+            "from": {
+              "$ref": "#/$defs/PlanFrom",
+              "description": "A new description, or the continuation after a stop."
+            },
+            "kind": {
+              "const": "plan_through",
+              "type": "string"
+            },
+            "through": {
+              "$ref": "#/$defs/Through",
+              "description": "How far."
+            }
+          },
+          "required": [
+            "kind",
+            "from",
+            "through"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Make `target` a project: the plan the person saw, bound to its digest\n(`speccoder new`).",
+          "properties": {
+            "choices": {
+              "$ref": "#/$defs/NewChoices",
+              "description": "What the person chose."
+            },
+            "kind": {
+              "const": "new_project",
+              "type": "string"
+            },
+            "plan_digest": {
+              "description": "The digest of the plan on screen.",
+              "type": "string"
+            },
+            "target": {
+              "description": "The folder, as the plan names it.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "target",
+            "choices",
+            "plan_digest"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Undo the project speccoder created at the dispatch's root\n(`speccoder new --undo`): to the Trash, or a revert of its commit.",
+          "properties": {
+            "commit": {
+              "description": "speccoder's commit, as recorded.",
+              "type": "string"
+            },
+            "kind": {
+              "const": "undo_new_project",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "commit"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Clone a repository of the person's through their `gh`.",
+          "properties": {
+            "kind": {
+              "const": "clone_repository",
+              "type": "string"
+            },
+            "repo": {
+              "description": "`owner/repo`.",
+              "type": "string"
+            },
+            "target": {
+              "description": "The destination folder.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "repo",
+            "target"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Copy the bundled sample into the state directory and replay its\nrecorded run strictly (`speccoder sample`).",
+          "properties": {
+            "fresh": {
+              "description": "Replace an existing copy.",
+              "type": "boolean"
+            },
+            "kind": {
+              "const": "open_sample",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "fresh"
+          ],
+          "type": "object"
         }
       ]
+    },
+    "SampleRecording": {
+      "description": "How the sample was recorded.",
+      "properties": {
+        "agentplane": {
+          "description": "The agentplane version that recorded it.",
+          "type": "string"
+        },
+        "model": {
+          "description": "The model it was recorded with.",
+          "type": "string"
+        },
+        "recorded_at": {
+          "description": "When (RFC 3339 date).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "model",
+        "recorded_at",
+        "agentplane"
+      ],
+      "type": "object"
+    },
+    "SampleReport": {
+      "description": "Result of `speccoder sample`: where the copy is and whether its\nrecorded runs replay strictly with this build.",
+      "properties": {
+        "fresh": {
+          "description": "A fresh copy was made (else an existing one was reopened).",
+          "type": "boolean"
+        },
+        "path": {
+          "description": "The copy, in speccoder's state directory.",
+          "type": "string"
+        },
+        "recorded": {
+          "$ref": "#/$defs/SampleRecording",
+          "description": "How it was recorded."
+        },
+        "runs": {
+          "description": "Each recorded run, replayed.",
+          "items": {
+            "$ref": "#/$defs/SampleRun"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "path",
+        "fresh",
+        "recorded",
+        "runs"
+      ],
+      "type": "object"
+    },
+    "SampleRun": {
+      "description": "One recorded run of the sample, replayed.",
+      "properties": {
+        "finding": {
+          "description": "What differed, when it did not reproduce.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "description": "The agentplane run.",
+          "type": "string"
+        },
+        "result": {
+          "description": "`reproduced`, `diverged` or `not_replayable`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "result",
+        "finding"
+      ],
+      "type": "object"
+    },
+    "SandboxNote": {
+      "description": "The OS sandbox the steps run in.",
+      "properties": {
+        "backend": {
+          "description": "`seatbelt`, `landlock`; `null`: the commands run without one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "backend"
+      ],
+      "type": "object"
     },
     "ScenarioRef": {
       "description": "A scenario a task's acceptance tests cite: `US1-2` (Spec Kit), or\n`capability: requirement / scenario` (OpenSpec), with the spec's words.",
@@ -9356,6 +10608,96 @@
       ],
       "type": "object"
     },
+    "SimilarLevel": {
+      "description": "How close a match is.",
+      "oneOf": [
+        {
+          "const": "close",
+          "description": "At or above [`CLOSE`].",
+          "type": "string"
+        },
+        {
+          "const": "very_close",
+          "description": "At or above [`VERY_CLOSE`].",
+          "type": "string"
+        }
+      ]
+    },
+    "SimilarMatch": {
+      "description": "A requirement close to the description.",
+      "properties": {
+        "level": {
+          "$ref": "#/$defs/SimilarLevel",
+          "description": "`close` or `very_close`."
+        },
+        "requirement": {
+          "description": "The requirement's identifier (`FR-004`).",
+          "type": "string"
+        },
+        "score": {
+          "description": "Cosine in [0, 1], rounded to two places.",
+          "format": "double",
+          "type": "number"
+        },
+        "shared": {
+          "description": "The terms it shares with the description, the weightiest first.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "text": {
+          "description": "The requirement as written.",
+          "type": "string"
+        },
+        "unit": {
+          "description": "The unit (`003-reports`).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "unit",
+        "requirement",
+        "text",
+        "score",
+        "level",
+        "shared"
+      ],
+      "type": "object"
+    },
+    "SimilarReport": {
+      "description": "The `similar` payload: what was compared and what is close.",
+      "properties": {
+        "compared": {
+          "description": "How many requirements it was compared with.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "limited": {
+          "description": "Whether the corpus was limited to the [`MAX_UNITS`] most recently\nchanged units.",
+          "type": "boolean"
+        },
+        "matches": {
+          "description": "The close ones, the closest first.",
+          "items": {
+            "$ref": "#/$defs/SimilarMatch"
+          },
+          "type": "array"
+        },
+        "query": {
+          "description": "The description, as given.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "query",
+        "compared",
+        "limited",
+        "matches"
+      ],
+      "type": "object"
+    },
     "SkillEntry": {
       "description": "One installed Agent Skill.",
       "properties": {
@@ -9699,6 +11041,93 @@
       ],
       "type": "object"
     },
+    "Stack": {
+      "description": "A stack the plan can scaffold, or none.",
+      "oneOf": [
+        {
+          "const": "rust",
+          "description": "Rust with cargo.",
+          "type": "string"
+        },
+        {
+          "const": "python",
+          "description": "Python with uv and pytest.",
+          "type": "string"
+        },
+        {
+          "const": "node",
+          "description": "TypeScript with npm and vitest.",
+          "type": "string"
+        },
+        {
+          "const": "go",
+          "description": "Go modules.",
+          "type": "string"
+        },
+        {
+          "const": "none",
+          "description": "No scaffold: the person adds code.",
+          "type": "string"
+        }
+      ]
+    },
+    "StackOption": {
+      "description": "A stack's tool on this machine.",
+      "properties": {
+        "disabled": {
+          "description": "Why it cannot be chosen (its tool is missing), with the install hint.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "$ref": "#/$defs/Stack",
+          "description": "The stack."
+        },
+        "label": {
+          "description": "How the sheet names it.",
+          "type": "string"
+        },
+        "version": {
+          "description": "The tool's version when installed.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "version",
+        "disabled"
+      ],
+      "type": "object"
+    },
+    "StackPick": {
+      "description": "How a stack was chosen.",
+      "properties": {
+        "detected": {
+          "description": "Found in an existing repository rather than chosen.",
+          "type": "boolean"
+        },
+        "id": {
+          "$ref": "#/$defs/Stack",
+          "description": "The stack."
+        },
+        "reason": {
+          "description": "Why it was suggested or detected.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "detected",
+        "reason"
+      ],
+      "type": "object"
+    },
     "State": {
       "description": "How far a measurement got.",
       "oneOf": [
@@ -9971,6 +11400,21 @@
         "stale"
       ],
       "type": "object"
+    },
+    "StepAccess": {
+      "description": "Whether a step stays on the machine.",
+      "oneOf": [
+        {
+          "const": "local",
+          "description": "No network.",
+          "type": "string"
+        },
+        {
+          "const": "network",
+          "description": "It reaches the hosts it names.",
+          "type": "string"
+        }
+      ]
     },
     "StepKind": {
       "description": "A step of the tour, in its order.",
@@ -10384,6 +11828,31 @@
         "outcome"
       ],
       "type": "object"
+    },
+    "Through": {
+      "description": "How far plan through goes.",
+      "oneOf": [
+        {
+          "const": "spec",
+          "description": "The spec only.",
+          "type": "string"
+        },
+        {
+          "const": "plan",
+          "description": "The spec and the plan.",
+          "type": "string"
+        },
+        {
+          "const": "tasks",
+          "description": "The spec, the plan and the tasks.",
+          "type": "string"
+        },
+        {
+          "const": "analyze",
+          "description": "Then the format's check of the planning files.",
+          "type": "string"
+        }
+      ]
     },
     "Tick": {
       "description": "A ticked task at the checked head.",
@@ -10814,6 +12283,31 @@
         "url",
         "port",
         "root"
+      ],
+      "type": "object"
+    },
+    "UndoOffer": {
+      "description": "What Undo would do.",
+      "properties": {
+        "available": {
+          "description": "It can be undone now.",
+          "type": "boolean"
+        },
+        "kind": {
+          "description": "`trash`, `revert` or `none`.",
+          "type": "string"
+        },
+        "reason": {
+          "description": "Why not, when not.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "available",
+        "kind"
       ],
       "type": "object"
     },

@@ -18,10 +18,13 @@ mod github;
 mod help;
 mod human;
 mod markdown;
+mod new;
 mod output;
 mod progress;
 mod prompt;
+mod sample;
 mod schema;
+mod spec_through;
 mod style;
 mod tui;
 #[cfg(test)]
@@ -1198,6 +1201,7 @@ fn main() {
                     comment,
                     no_comment,
                     assign,
+                    through,
                 }),
         } => {
             match speccoder_runtime::github::issue(
@@ -1225,17 +1229,28 @@ fn main() {
                                 progress,
                                 ..speccoder_runtime::RunOptions::default()
                             };
+                            // The New Feature flow: the issue's description
+                            // verbatim, its origin recorded once for the unit.
                             let name = format!("{}{skill}", planning.prefix);
-                            let made = speccoder_runtime::hosting::run(
+                            let made = spec_through::run(
                                 path,
                                 feature,
                                 &name,
-                                &speccoder_runtime::github::description(&found),
+                                &[speccoder_runtime::github::description(&found)],
+                                through.map_or(speccoder_core::actions::Through::Spec, Into::into),
+                                &speccoder_core::actions::FeatureSource::Issue {
+                                    number: found.number,
+                                },
+                                interactive(*no_prompt),
                                 &options,
+                            );
+                            let created = matches!(
+                                made.data(),
+                                Some(speccoder_core::CommandData::PlanningChain(r)) if r.unit.is_some()
                             );
                             // The feature exists: tell the issue, when the
                             // person wants that (it leaves the machine).
-                            let say = made.status() == speccoder_core::CommandStatus::Ok
+                            let say = created
                                 && !*no_comment
                                 && (*comment
                                     || (interactive(*no_prompt)
@@ -1267,11 +1282,50 @@ fn main() {
                 }
             }
         }
-        Command::Feature { query, clear } => match (query, clear) {
+        Command::Feature { query, clear, text } => match (query, clear) {
             (_, true) => speccoder_runtime::current::clear(path),
+            // `feature similar "…"`: read-only, no model.
+            (Some(q), false) if q == "similar" && !text.is_empty() => {
+                speccoder_runtime::planning_chain::similar_command(path, &text.join(" "))
+            }
             (Some(q), false) => speccoder_runtime::current::switch(path, q),
             (None, false) => speccoder_runtime::current::list(path, feature),
         },
+        Command::Suggest { text } => {
+            speccoder_runtime::planning_chain::suggest(path, &text.join(" "))
+        }
+        Command::Sample { fresh, yes } => sample::run(*fresh, *yes, interactive(false)),
+        Command::New {
+            path: target,
+            idea,
+            stack,
+            extension,
+            no_preset,
+            dry_run,
+            yes,
+            no_prompt,
+            undo,
+        } => {
+            let (progress, _attention) = live_progress(&cli, &notify, events.as_ref());
+            new::run(
+                &new::Args {
+                    path: target.as_deref(),
+                    project: path,
+                    idea: idea.as_deref(),
+                    stack: stack.map(Into::into),
+                    format: cli
+                        .format
+                        .map(|f| speccoder_core::spec::FormatKind::from(f).name()),
+                    extensions: extension,
+                    no_preset: *no_preset,
+                    dry_run: *dry_run,
+                    yes: *yes,
+                    undo: *undo,
+                    interactive: interactive(*no_prompt),
+                },
+                progress,
+            )
+        }
         Command::Workflow {
             action:
                 cli::WorkflowAction::Install {
@@ -1331,6 +1385,7 @@ fn main() {
             no_prompt,
             yes,
             allow_unverified,
+            through,
         } => match name.as_deref() {
             Some("archive") => archive(&cli, path, arguments, *yes, allow_unverified),
             None => speccoder_runtime::hosting::list(path),
@@ -1343,7 +1398,25 @@ fn main() {
                     progress,
                     ..speccoder_runtime::RunOptions::default()
                 };
-                speccoder_runtime::hosting::run(path, feature, name, &arguments.join(" "), &options)
+                match through {
+                    Some(t) => spec_through::run(
+                        path,
+                        feature,
+                        name,
+                        arguments,
+                        (*t).into(),
+                        &speccoder_core::actions::FeatureSource::Description,
+                        interactive(*no_prompt),
+                        &options,
+                    ),
+                    None => speccoder_runtime::hosting::run(
+                        path,
+                        feature,
+                        name,
+                        &arguments.join(" "),
+                        &options,
+                    ),
+                }
             }
         },
         Command::Init {
@@ -1954,6 +2027,12 @@ fn init(
         // untouched code, and why one fails (the full list follows after).
         for r in &prepared.report.ran {
             match (&r.reason, r.passed) {
+                _ if r.status == "no_tests" => {
+                    eprintln!(
+                        "  {:<10} no tests yet (neither passing nor failing)",
+                        r.name
+                    );
+                }
                 (_, true) => eprintln!("  {:<10} passes on the untouched code", r.name),
                 (Some(why), false) => {
                     eprintln!("  {:<10} FAILS on the untouched code: {why}", r.name)
@@ -1991,6 +2070,9 @@ fn command_name(command: Option<&Command>) -> &'static str {
         None => "report",
         Some(c) => match c {
             C::Init { .. } => "init",
+            C::New { .. } => "new",
+            C::Sample { .. } => "sample",
+            C::Suggest { .. } => "suggest",
             C::Doctor { .. } => "doctor",
             C::Fix { .. } => "fix",
             C::Spec { .. } => "spec",

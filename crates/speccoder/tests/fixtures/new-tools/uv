@@ -1,0 +1,18 @@
+#!/bin/sh
+# A stand-in for uv.
+. "$(dirname "$0")/_log.sh"
+log uv "$@"
+case "$1" in
+  --version) echo "uv 0.9.0 (fake)" ;;
+  init)
+    misbehave uv
+    name=x
+    while [ $# -gt 0 ]; do [ "$1" = --name ] && name="$2"; shift; done
+    printf '[project]\nname = "%s"\nversion = "0.1.0"\nrequires-python = ">=3.12"\ndependencies = []\n' "$name" > pyproject.toml
+    mkdir -p "src/$name"; : > "src/$name/__init__.py"
+    printf '3.12\n' > .python-version; : > README.md
+    ;;
+  add) printf '[dependency-groups]\ndev = ["pytest"]\n' >> pyproject.toml; printf 'version = 1\n' > uv.lock ;;
+  run) echo "no tests ran in 0.01s"; exit 5 ;;
+  *) ;;
+esac

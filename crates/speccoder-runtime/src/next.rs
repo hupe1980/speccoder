@@ -95,6 +95,17 @@ fn by_code(code: &str) -> Option<Vec<speccoder_core::next::NextStep>> {
         "GITHUB-FAILED" | "NO-REMOTE" => {
             vec![step("speccoder doctor", "check the rest of the setup")]
         }
+        // Outside a project: start one, or see what speccoder does first.
+        "NO-PROJECT" | "NO-REPOSITORY" => vec![
+            step(
+                "speccoder new \"<what you are building>\"",
+                "start a project here: the stack's and the spec format's own tools, then one commit",
+            ),
+            step(
+                "speccoder sample",
+                "a recorded run, replayed — no model, no key, no network",
+            ),
+        ],
         _ => return None,
     })
 }

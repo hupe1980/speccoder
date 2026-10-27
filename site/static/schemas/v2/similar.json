@@ -1,0 +1,95 @@
+{
+  "$defs": {
+    "SimilarLevel": {
+      "description": "How close a match is.",
+      "oneOf": [
+        {
+          "const": "close",
+          "description": "At or above [`CLOSE`].",
+          "type": "string"
+        },
+        {
+          "const": "very_close",
+          "description": "At or above [`VERY_CLOSE`].",
+          "type": "string"
+        }
+      ]
+    },
+    "SimilarMatch": {
+      "description": "A requirement close to the description.",
+      "properties": {
+        "level": {
+          "$ref": "#/$defs/SimilarLevel",
+          "description": "`close` or `very_close`."
+        },
+        "requirement": {
+          "description": "The requirement's identifier (`FR-004`).",
+          "type": "string"
+        },
+        "score": {
+          "description": "Cosine in [0, 1], rounded to two places.",
+          "format": "double",
+          "type": "number"
+        },
+        "shared": {
+          "description": "The terms it shares with the description, the weightiest first.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "text": {
+          "description": "The requirement as written.",
+          "type": "string"
+        },
+        "unit": {
+          "description": "The unit (`003-reports`).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "unit",
+        "requirement",
+        "text",
+        "score",
+        "level",
+        "shared"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/similar.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The `similar` payload: what was compared and what is close.",
+  "properties": {
+    "compared": {
+      "description": "How many requirements it was compared with.",
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "limited": {
+      "description": "Whether the corpus was limited to the [`MAX_UNITS`] most recently\nchanged units.",
+      "type": "boolean"
+    },
+    "matches": {
+      "description": "The close ones, the closest first.",
+      "items": {
+        "$ref": "#/$defs/SimilarMatch"
+      },
+      "type": "array"
+    },
+    "query": {
+      "description": "The description, as given.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "query",
+    "compared",
+    "limited",
+    "matches"
+  ],
+  "title": "feature similar: the requirements close to a description, and the terms they share",
+  "type": "object"
+}

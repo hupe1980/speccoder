@@ -98,7 +98,7 @@ export interface ActionId {
  * kind arrives with its `Runnable` variant (the *adding a kind* contract
  * of `speccoder_runtime::actions::perform`).
  */
-export type ActionKind = "skill" | "run_task" | "run_feature" | "converge" | "commit" | "approve" | "reject" | "accept" | "skip" | "nudge" | "rule" | "review" | "issue_comment" | "quick_change" | "keep_set_aside" | "drop_set_aside" | "fix_setup" | "feature" | "pull_request" | "bug_fix" | "bug_confirm" | "bug_run" | "bug_keep" | "allow_always" | "widen_policy" | "decide_batch" | "oracle_tests" | "approve_and_run" | "comment" | "comments_send" | "revision_undo" | "code_nudge" | "acceptance_at" | "preset_add" | "command";
+export type ActionKind = "skill" | "run_task" | "run_feature" | "converge" | "commit" | "approve" | "reject" | "accept" | "skip" | "nudge" | "rule" | "review" | "issue_comment" | "quick_change" | "keep_set_aside" | "drop_set_aside" | "fix_setup" | "feature" | "pull_request" | "bug_fix" | "bug_confirm" | "bug_run" | "bug_keep" | "allow_always" | "widen_policy" | "decide_batch" | "oracle_tests" | "approve_and_run" | "comment" | "comments_send" | "revision_undo" | "code_nudge" | "acceptance_at" | "preset_add" | "plan_through" | "new_project" | "undo_new_project" | "clone_repository" | "open_sample" | "command";
 
 /**
  * Result of `speccoder actions`: what a person can do now in the
@@ -549,6 +549,52 @@ export interface CandidateRefusal {
   paths: string[];
 }
 
+/** One skill plan through ran. */
+export interface ChainStep {
+  /** Its message. */
+  message: string;
+  /** Its agentplane run, when it ran. */
+  run_id: string | null;
+  /** The installed skill (`speckit-plan`). */
+  skill: string;
+  /** Its result's status (`ok`, `error`, …). */
+  status: CommandStatus;
+}
+
+/**
+ * Where plan through stopped: only where a person decides, at a
+ * failure, or at the end.
+ */
+export type ChainStop =
+  /** The spec leaves questions open: answer them first. */
+  | {
+    kind: "questions";
+    /** Their ids (`Q1`, …). */
+    questions: string[];
+  }
+  /** Review the spec: planning waits for the requirements' approval. */
+  | {
+    kind: "review";
+    /** The requirements to approve, by id. */
+    requirements: string[];
+  }
+  /** A skill failed or was refused; what ran before it is kept. */
+  | {
+    /** Its result's code. */
+    code: string | null;
+    kind: "failed";
+    /** Its result's message. */
+    message: string;
+    /** The skill. */
+    skill: string;
+  }
+  /** Done through the chosen step. */
+  | {
+    kind: "done";
+    /** The plan checks of the task list, when one was written. */
+    plan_checks: PlanCheck[];
+  };
+
 /** One check run. */
 export interface CheckResult {
   /** The command, as run. */
@@ -651,7 +697,7 @@ export interface CollectionRule {
 }
 
 /** Command-specific payload of a result. */
-export type CommandData = ProjectSnapshot | VerifyReport | WorktreeReport | ProposeReport | ReplayReport | RunReport | EvalReport | FeatureReport | ConvergeReport | StatusReport | ApprovalsReport | ControlReport | CostReport | PrReport | BenchReport | InitReport | SkillsReport | SkillRunReport | ChecklistStatus[] | ArchiveReport | InPlaceReport | AttestReport | ExplainReport | SchemaReport | DoctorReport | FeaturesReport | UiReport | ConfigReport | IssuesReport | InboxReport | ReviewReport | AuthReport | BranchReport | EvidenceTour | ActionsReport | BugReport | PolicyCoverage | CommentsView | PresetReport;
+export type CommandData = ProjectSnapshot | VerifyReport | WorktreeReport | ProposeReport | ReplayReport | RunReport | EvalReport | FeatureReport | ConvergeReport | StatusReport | ApprovalsReport | ControlReport | CostReport | PrReport | BenchReport | InitReport | SkillsReport | SkillRunReport | ChecklistStatus[] | ArchiveReport | InPlaceReport | AttestReport | ExplainReport | SchemaReport | DoctorReport | FeaturesReport | UiReport | ConfigReport | IssuesReport | InboxReport | ReviewReport | AuthReport | BranchReport | EvidenceTour | ActionsReport | BugReport | PolicyCoverage | CommentsView | PresetReport | NewProjectReport | SampleReport | SimilarReport | RungSuggestion | PlanningChainReport;
 
 /**
  * The envelope as it is serialised — the schema of [`CommandResult`]
@@ -1713,6 +1759,64 @@ export type EventLine = {
     /** The result envelope. */
     result: CommandResult;
     type: "result";
+  }
+  /** Plan through stopped where a person decides, at a failure or at the end. */
+  | {
+    /** `questions`, `review`, `failed`, `done`. */
+    kind: string;
+    /** The skill a continuation runs next. */
+    next_skill: string | null;
+    type: "planning.stopped";
+    /** The unit, once it exists. */
+    unit: string | null;
+  }
+  /** A step of a new project's plan began. */
+  | {
+    /** `local` or `network`. */
+    access: string;
+    /** Its command, exactly. */
+    argv: string[];
+    /** The step (`git_init`, `scaffold.1`, `format_init`, …). */
+    step: string;
+    type: "scaffold.started";
+  }
+  /** A step of a new project's plan ended. */
+  | {
+    /** How long it took. */
+    duration_ms: number;
+    /** Its exit status, when it ran. */
+    exit: number | null;
+    /** `done`, `skipped`, `failed`. */
+    state: string;
+    /** The step. */
+    step: string;
+    type: "scaffold.finished";
+  }
+  /** A new project was created and committed. */
+  | {
+    /** speccoder's commit. */
+    commit: string;
+    /** The spec format. */
+    format: string;
+    /** `new_folder` or `existing_repository`. */
+    mode: string;
+    /** SHA-256 of the folder's canonical path. */
+    path_digest: string;
+    /** The stack. */
+    stack: string;
+    type: "project.created";
+    /** Through what. */
+    via: string;
+  }
+  /** A project speccoder created was undone. */
+  | {
+    /** `trash` or `revert`. */
+    kind: string;
+    /** SHA-256 of the folder's canonical path. */
+    path_digest: string;
+    type: "project.undone";
+    /** Through what. */
+    via: string;
   });
 
 /** Result of `speccoder attest tour` and `/api/tour`: one task's tour. */
@@ -1747,6 +1851,17 @@ export interface ExplainReport {
   /** The code asked for, or every code with `--list`. */
   codes: CodeInfo[];
 }
+
+/** A Spec Kit extension the person chose. */
+export interface ExtensionChoice {
+  /** `bundled`, `path` or `url`. */
+  kind: ExtensionKind;
+  /** A bundled name, a local path or a URL, as given. */
+  source: string;
+}
+
+/** What an extension source is. */
+export type ExtensionKind = "bundled" | "path" | "url";
 
 /** One check that did not pass. */
 export interface FailedCheck {
@@ -1829,6 +1944,22 @@ export interface FeatureSnapshot {
   tasks: ParsedTasks | null;
 }
 
+/**
+ * Where a new feature's description comes from. Later rungs add theirs
+ * (an Explore brief, a promoted quick change) when they are built.
+ */
+export type FeatureSource =
+  /** The person's own words. */
+  | {
+    kind: "description";
+  }
+  /** A GitHub issue's description, verbatim. */
+  | {
+    kind: "issue";
+    /** Its number. */
+    number: number;
+  };
+
 /** Result of `speccoder feature`. */
 export interface FeaturesReport {
   /** What this call did: `listed`, `switched` or `cleared`. */
@@ -1880,6 +2011,18 @@ export type FinalState = "passed" | "failed" | "not_run";
 /** A spec-driven format. */
 export type FormatKind = "speckit" | "openspec" | "kiro";
 
+/** A spec format the plan can initialise, and its tool's state. */
+export interface FormatOption {
+  /** Why it cannot be chosen. */
+  disabled: string | null;
+  /** `speckit`, `openspec`. */
+  id: string;
+  /** `Spec Kit`, `OpenSpec`. */
+  label: string;
+  /** The tool's version when installed. */
+  version: string | null;
+}
+
 /** The `full` check tier at the end of a feature. */
 export interface FullTier {
   /** The checks that failed. */
@@ -1894,6 +2037,14 @@ export interface FullTier {
 
 /** The `min_strength` gate. */
 export type Gate = "off" | "met" | "regenerated_met" | "failed";
+
+/** The person's git identity. */
+export interface GitIdentity {
+  /** `user.email`. */
+  email: string;
+  /** `user.name`. */
+  name: string;
+}
 
 /**
  * The hand-off of a stopped bug, composed by the engine from the journal
@@ -2246,6 +2397,38 @@ export interface NearMiss {
   visible: Outcome;
 }
 
+/** What the person chose; with the folder, everything the plan follows from. */
+export interface NewChoices {
+  /** Spec Kit extensions. */
+  extensions: string[];
+  /** The spec format (`speckit`, `openspec`); `None`: Spec Kit. */
+  format: string | null;
+  /** What they are building, verbatim (kept for the first feature). */
+  idea: string;
+  /** Leave out the speccoder Spec Kit preset. */
+  no_preset: boolean;
+  /** The stack; `None`: the suggestion. */
+  stack: Stack | null;
+}
+
+/** The `new_project` payload. */
+export interface NewProjectReport {
+  /** speccoder's commit, once made. */
+  commit: string | null;
+  /** Nothing ran. */
+  dry_run: boolean;
+  /** The project's first feature, prefilled from the idea. */
+  first_feature: string | null;
+  /** `speccoder init`'s report, when it ran. */
+  init: InitReport | null;
+  /** The plan. */
+  plan: ProjectPlan;
+  /** Each step's outcome (empty on a dry run). */
+  results: PlanStepResult[];
+  /** What Undo would do. */
+  undo: UndoOffer;
+}
+
 /** One step a person can take. */
 export interface NextStep {
   /** A copy-pasteable command (`"…"` marks text the person writes). */
@@ -2286,6 +2469,20 @@ export interface ObjectView {
   lines: string[];
   /** The canonical path, `argv#<12 hex>` or `<tool>@<12 hex>`. */
   short: string;
+}
+
+/** The folder and the tools as the plan saw them. */
+export interface ObservedFolder {
+  /** Its entries' names, sorted. */
+  entries: string[];
+  /** The folder exists. */
+  exists: boolean;
+  /** `HEAD`, in a repository with a commit. */
+  head: string | null;
+  /** `git status --porcelain` lines. */
+  porcelain: string[];
+  /** Each tool's version line, by name. */
+  tools: Record<string, string>;
 }
 
 /**
@@ -2551,6 +2748,78 @@ export interface Phase {
   title: string;
 }
 
+/** A plan check of the new task list (`PLAN-*`): a warning, never a stop. */
+export interface PlanCheck {
+  /** The check's code. */
+  code: string;
+  /** What it found. */
+  detail: string;
+  /** The tasks it names. */
+  tasks: string[];
+}
+
+/** What plan through starts from. */
+export type PlanFrom =
+  /** A new unit from a description. */
+  | {
+    /** What it should do, verbatim. */
+    description: string;
+    kind: "create";
+    /** Where the description comes from. */
+    source: FeatureSource;
+  }
+  /** The next skill after a stop, derived from the unit's files. */
+  | {
+    kind: "continue";
+  };
+
+/** Why the plan cannot run, and the fix. */
+export interface PlanRefusal {
+  /** `NEW-TARGET-NOT-EMPTY`, … */
+  code: string;
+  /** What to do. */
+  fix: string;
+  /** What is wrong. */
+  message: string;
+}
+
+/** One command of the plan. */
+export interface PlanStep {
+  /** Local, or network. */
+  access: StepAccess;
+  /** The command, exactly as it runs. */
+  argv: string[];
+  /** Where it runs: always the target. */
+  cwd: string;
+  /** The hosts a network step reaches. */
+  hosts?: string[];
+  /** `git_init`, `scaffold.<n>`, `format_init`, `speccoder_init`, `commit`. */
+  id: string;
+  /** Its time limit, in seconds. */
+  limit_s: number;
+  /** A note the plan shows beside it. */
+  note?: string | null;
+  /** What it writes, in one line. */
+  writes: string;
+}
+
+/** One step's outcome. */
+export interface PlanStepResult {
+  /** How long it took. */
+  duration_ms: number;
+  /** Its exit status, when it ran. */
+  exit: number | null;
+  /** The step. */
+  id: string;
+  /** The last lines of its output (at most 20). */
+  output_tail: string[];
+  /** What happened. */
+  state: PlanStepState;
+}
+
+/** A step's state in a run. */
+export type PlanStepState = "waiting" | "running" | "done" | "skipped" | "failed";
+
 /** A task of the plan. */
 export interface PlannedTask {
   /** Task ID. */
@@ -2559,6 +2828,30 @@ export interface PlannedTask {
   state: string;
   /** Title. */
   title: string;
+}
+
+/**
+ * Result of `speccoder spec <skill> --through <t>`: the skills it ran,
+ * where it stopped, and the unit's readiness. Plan through keeps no
+ * state of its own: the stop is read again from the unit's files.
+ */
+export interface PlanningChainReport {
+  /** The skill a continuation runs next. */
+  next_skill: string | null;
+  /** The skills it ran, in order. */
+  ran: ChainStep[];
+  /** The unit's readiness now. */
+  readiness: Readiness | null;
+  /** Requirements of other units close to the description (a hint). */
+  similar: SimilarMatch[];
+  /** Where the description came from. */
+  source: FeatureSource;
+  /** Where it stopped. */
+  stop: ChainStop;
+  /** How far it was asked to go. */
+  through: Through;
+  /** The unit (once the creating skill made it). */
+  unit: string | null;
 }
 
 /**
@@ -2652,6 +2945,43 @@ export interface PresetState {
   bundled: string;
   /** The installed version, when installed. */
   installed: string | null;
+}
+
+/** Where the project is made. */
+export type ProjectMode = "new_folder" | "existing_repository";
+
+/** The plan. */
+export interface ProjectPlan {
+  /** SHA-256 over all of the above. */
+  digest: string;
+  /** Spec Kit extensions. */
+  extensions: ExtensionChoice[];
+  /** The spec format (`speckit`, `openspec`). */
+  format: string;
+  /** Every format and whether its tool is installed. */
+  formats: FormatOption[];
+  /** The person's git identity. */
+  identity: GitIdentity | null;
+  /** A new folder or an existing repository. */
+  mode: ProjectMode;
+  /** The project's name (the folder's). */
+  name: string;
+  /** The folder as seen. */
+  observed: ObservedFolder;
+  /** Whether the speccoder Spec Kit preset is passed to the format's init. */
+  preset: boolean;
+  /** Why it cannot run (Create disabled). */
+  refusal: PlanRefusal | null;
+  /** The OS sandbox. */
+  sandbox: SandboxNote;
+  /** The stack. */
+  stack: StackPick;
+  /** Every stack and whether its tool is installed. */
+  stacks: StackOption[];
+  /** The commands, in order. */
+  steps: PlanStep[];
+  /** The folder, canonical and absolute. */
+  target: string;
 }
 
 /** Everything discovered about one Spec Kit project. */
@@ -2789,6 +3119,50 @@ export interface PublicOracleLapsed {
   requirement: string;
   /** The unit. */
   unit: string;
+}
+
+/** `project.created`, as published: no path, no idea text. */
+export interface PublicProjectCreated {
+  /** speccoder's commit. */
+  commit: string;
+  /** The spec format. */
+  format: string;
+  /** `new_folder` or `existing_repository`. */
+  mode: string;
+  /** SHA-256 of the folder's canonical path. */
+  path_digest: string;
+  /** The stack. */
+  stack: string;
+  /** Through what. */
+  via: string;
+}
+
+/** `project.undone`, as published. */
+export interface PublicProjectUndone {
+  /** `trash` or `revert`. */
+  kind: string;
+  /** SHA-256 of the folder's canonical path. */
+  path_digest: string;
+  /** Through what. */
+  via: string;
+}
+
+/**
+ * What the future oracle of a unit will be made of, counted from its
+ * files as they are now: requirements, scenarios, open questions, and
+ * requirements no scenario covers (they cannot be tested).
+ */
+export interface Readiness {
+  /** The format defines requirement identifiers (else only questions count). */
+  identifiers: boolean;
+  /** Open-question markers left in the unit's documents. */
+  open_questions: number;
+  /** Requirements the spec defines. */
+  requirements: number;
+  /** Scenarios over them. */
+  scenarios: number;
+  /** Requirements without a scenario, by id: they cannot be tested. */
+  untestable: string[];
 }
 
 /** One of the two readings of an ambiguous scenario. */
@@ -3114,6 +3488,8 @@ export interface ReviewReport {
    * in reading order.
    */
   questions: OpenQuestion[];
+  /** What the future oracle will be made of, counted now. */
+  readiness: Readiness | null;
   /** One per requirement, in the spec's order. */
   requirements: ReviewItem[];
   /**
@@ -3298,6 +3674,46 @@ export interface RunReport {
   verification: VerifyReport | null;
   /** The worktree the attempt worked in. */
   worktree: string;
+}
+
+/**
+ * What decided a suggestion: the rule and the words of the text that met
+ * it, verbatim.
+ */
+export interface RungCue {
+  /** The words, as written. */
+  matched: string[];
+  /** The rule. */
+  rule: RungCueRule;
+}
+
+/** The rule that decided a suggestion. */
+export type RungCueRule = "question" | "wrong_result" | "several_capabilities" | "long" | "default";
+
+/**
+ * A rung the composer can open for a description: a bug fix, a quick
+ * change, a feature, or a question (`ask`); `none` only for an empty text.
+ */
+export type RungPick = "bug" | "quick" | "feature" | "ask" | "none";
+
+/**
+ * The composer's suggestion for a text (`rung_suggestion`): computed by
+ * code from the text alone, shown with its reason, never applied without
+ * the person's key or click.
+ */
+export interface RungSuggestion {
+  /** The other rungs, in the composer's order. */
+  alternatives: RungPick[];
+  /** Whether this build has it (`false` for `ask` until the Ask panel). */
+  available: boolean;
+  /** The command that takes the suggested rung (none for `ask` and `none`). */
+  command: string | null;
+  /** What decided it. */
+  cue: RungCue;
+  /** Why, in one sentence. */
+  reason: string;
+  /** The suggested rung. */
+  rung: RungPick;
 }
 
 /** How an interface runs an action itself. */
@@ -3623,7 +4039,99 @@ export type Runnable =
     kind: "preset_add";
     /** Replace an installed older version. */
     update: boolean;
+  }
+  /**
+   * Plan a new feature through the format's own skills — the creating
+   * skill, then toward the task list, then the check — stopping where a
+   * person decides (`speccoder spec <skill> --through <t>`).
+   */
+  | {
+    /** A new description, or the continuation after a stop. */
+    from: PlanFrom;
+    kind: "plan_through";
+    /** How far. */
+    through: Through;
+  }
+  /**
+   * Make `target` a project: the plan the person saw, bound to its digest
+   * (`speccoder new`).
+   */
+  | {
+    /** What the person chose. */
+    choices: NewChoices;
+    kind: "new_project";
+    /** The digest of the plan on screen. */
+    plan_digest: string;
+    /** The folder, as the plan names it. */
+    target: string;
+  }
+  /**
+   * Undo the project speccoder created at the dispatch's root
+   * (`speccoder new --undo`): to the Trash, or a revert of its commit.
+   */
+  | {
+    /** speccoder's commit, as recorded. */
+    commit: string;
+    kind: "undo_new_project";
+  }
+  /** Clone a repository of the person's through their `gh`. */
+  | {
+    kind: "clone_repository";
+    /** `owner/repo`. */
+    repo: string;
+    /** The destination folder. */
+    target: string;
+  }
+  /**
+   * Copy the bundled sample into the state directory and replay its
+   * recorded run strictly (`speccoder sample`).
+   */
+  | {
+    /** Replace an existing copy. */
+    fresh: boolean;
+    kind: "open_sample";
   };
+
+/** How the sample was recorded. */
+export interface SampleRecording {
+  /** The agentplane version that recorded it. */
+  agentplane: string;
+  /** The model it was recorded with. */
+  model: string;
+  /** When (RFC 3339 date). */
+  recorded_at: string;
+}
+
+/**
+ * Result of `speccoder sample`: where the copy is and whether its
+ * recorded runs replay strictly with this build.
+ */
+export interface SampleReport {
+  /** A fresh copy was made (else an existing one was reopened). */
+  fresh: boolean;
+  /** The copy, in speccoder's state directory. */
+  path: string;
+  /** How it was recorded. */
+  recorded: SampleRecording;
+  /** Each recorded run, replayed. */
+  runs: SampleRun[];
+}
+
+/** One recorded run of the sample, replayed. */
+export interface SampleRun {
+  /** What differed, when it did not reproduce. */
+  finding: string | null;
+  /** The agentplane run. */
+  id: string;
+  /** `reproduced`, `diverged` or `not_replayable`. */
+  result: string;
+}
+
+/** The OS sandbox the steps run in. */
+export interface SandboxNote {
+  /** `seatbelt`, `landlock`; `null`: the commands run without one. */
+  backend: string | null;
+}
 
 /**
  * A scenario a task's acceptance tests cite: `US1-2` (Spec Kit), or
@@ -3773,6 +4281,40 @@ export interface SignerView {
   principal?: string | null;
 }
 
+/** How close a match is. */
+export type SimilarLevel = "close" | "very_close";
+
+/** A requirement close to the description. */
+export interface SimilarMatch {
+  /** `close` or `very_close`. */
+  level: SimilarLevel;
+  /** The requirement's identifier (`FR-004`). */
+  requirement: string;
+  /** Cosine in [0, 1], rounded to two places. */
+  score: number;
+  /** The terms it shares with the description, the weightiest first. */
+  shared: string[];
+  /** The requirement as written. */
+  text: string;
+  /** The unit (`003-reports`). */
+  unit: string;
+}
+
+/** The `similar` payload: what was compared and what is close. */
+export interface SimilarReport {
+  /** How many requirements it was compared with. */
+  compared: number;
+  /**
+   * Whether the corpus was limited to the [`MAX_UNITS`] most recently
+   * changed units.
+   */
+  limited: boolean;
+  /** The close ones, the closest first. */
+  matches: SimilarMatch[];
+  /** The description, as given. */
+  query: string;
+}
+
 /** One installed Agent Skill. */
 export interface SkillEntry {
   /** What it does. */
@@ -3889,6 +4431,31 @@ export interface SpeckitMeta {
   version: string | null;
 }
 
+/** A stack the plan can scaffold, or none. */
+export type Stack = "rust" | "python" | "node" | "go" | "none";
+
+/** A stack's tool on this machine. */
+export interface StackOption {
+  /** Why it cannot be chosen (its tool is missing), with the install hint. */
+  disabled: string | null;
+  /** The stack. */
+  id: Stack;
+  /** How the sheet names it. */
+  label: string;
+  /** The tool's version when installed. */
+  version: string | null;
+}
+
+/** How a stack was chosen. */
+export interface StackPick {
+  /** Found in an existing repository rather than chosen. */
+  detected: boolean;
+  /** The stack. */
+  id: Stack;
+  /** Why it was suggested or detected. */
+  reason: string;
+}
+
 /** A stage of a task, in pipeline order. */
 export type Stage = "baseline" | "reproduce" | "confirm" | "red" | "attempt" | "verify" | "unchanged" | "audit" | "mutation" | "strength" | "monitor" | "commit";
 
@@ -4002,6 +4569,9 @@ export interface StatusTotals {
   /** Ticks speccoder committed without an attestation. */
   without_attestation: number;
 }
+
+/** Whether a step stays on the machine. */
+export type StepAccess = "local" | "network";
 
 /** A step of the tour, in its order. */
 export type StepKind = "requirement" | "frozen_tests" | "red" | "diff" | "green" | "strength";
@@ -4134,6 +4704,9 @@ export interface TestResult {
   /** What happened. */
   outcome: TestOutcome;
 }
+
+/** How far plan through goes. */
+export type Through = "spec" | "plan" | "tasks" | "analyze";
 
 /** A ticked task at the checked head. */
 export interface Tick {
@@ -4283,6 +4856,16 @@ export interface UiReport {
   root: string;
   /** The address to open, with this start's key in its fragment. */
   url: string;
+}
+
+/** What Undo would do. */
+export interface UndoOffer {
+  /** It can be undone now. */
+  available: boolean;
+  /** `trash`, `revert` or `none`. */
+  kind: string;
+  /** Why not, when not. */
+  reason?: string | null;
 }
 
 /** A scenario an author found untestable, and why. */

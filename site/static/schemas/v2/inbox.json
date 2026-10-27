@@ -276,6 +276,31 @@
           "type": "string"
         },
         {
+          "const": "plan_through",
+          "description": "[`Runnable::PlanThrough`].",
+          "type": "string"
+        },
+        {
+          "const": "new_project",
+          "description": "[`Runnable::NewProject`].",
+          "type": "string"
+        },
+        {
+          "const": "undo_new_project",
+          "description": "[`Runnable::UndoNewProject`].",
+          "type": "string"
+        },
+        {
+          "const": "clone_repository",
+          "description": "[`Runnable::CloneRepository`].",
+          "type": "string"
+        },
+        {
+          "const": "open_sample",
+          "description": "[`Runnable::OpenSample`].",
+          "type": "string"
+        },
+        {
           "const": "command",
           "description": "No runnable: the person runs the command.",
           "type": "string"
@@ -499,6 +524,44 @@
         }
       ]
     },
+    "FeatureSource": {
+      "description": "Where a new feature's description comes from. Later rungs add theirs\n(an Explore brief, a promoted quick change) when they are built.",
+      "oneOf": [
+        {
+          "description": "The person's own words.",
+          "properties": {
+            "kind": {
+              "const": "description",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A GitHub issue's description, verbatim.",
+          "properties": {
+            "kind": {
+              "const": "issue",
+              "type": "string"
+            },
+            "number": {
+              "description": "Its number.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "number"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "InboxItem": {
       "description": "One decision waiting for a person.",
       "properties": {
@@ -569,6 +632,54 @@
       ],
       "type": "object"
     },
+    "NewChoices": {
+      "description": "What the person chose; with the folder, everything the plan follows from.",
+      "properties": {
+        "extensions": {
+          "default": [],
+          "description": "Spec Kit extensions.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "format": {
+          "description": "The spec format (`speckit`, `openspec`); `None`: Spec Kit.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "idea": {
+          "description": "What they are building, verbatim (kept for the first feature).",
+          "type": "string"
+        },
+        "no_preset": {
+          "default": false,
+          "description": "Leave out the speccoder Spec Kit preset.",
+          "type": "boolean"
+        },
+        "stack": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Stack"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The stack; `None`: the suggestion."
+        }
+      },
+      "required": [
+        "idea",
+        "stack",
+        "format",
+        "extensions",
+        "no_preset"
+      ],
+      "type": "object"
+    },
     "OracleOp": {
       "description": "What a change to a requirement's tests does.",
       "oneOf": [
@@ -596,6 +707,47 @@
           "const": "reading",
           "description": "Say which reading of an ambiguous scenario is meant.",
           "type": "string"
+        }
+      ]
+    },
+    "PlanFrom": {
+      "description": "What plan through starts from.",
+      "oneOf": [
+        {
+          "description": "A new unit from a description.",
+          "properties": {
+            "description": {
+              "description": "What it should do, verbatim.",
+              "type": "string"
+            },
+            "kind": {
+              "const": "create",
+              "type": "string"
+            },
+            "source": {
+              "$ref": "#/$defs/FeatureSource",
+              "description": "Where the description comes from."
+            }
+          },
+          "required": [
+            "kind",
+            "description",
+            "source"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The next skill after a stop, derived from the unit's files.",
+          "properties": {
+            "kind": {
+              "const": "continue",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -1533,6 +1685,116 @@
             "update"
           ],
           "type": "object"
+        },
+        {
+          "description": "Plan a new feature through the format's own skills — the creating\nskill, then toward the task list, then the check — stopping where a\nperson decides (`speccoder spec <skill> --through <t>`).",
+          "properties": {
+            "from": {
+              "$ref": "#/$defs/PlanFrom",
+              "description": "A new description, or the continuation after a stop."
+            },
+            "kind": {
+              "const": "plan_through",
+              "type": "string"
+            },
+            "through": {
+              "$ref": "#/$defs/Through",
+              "description": "How far."
+            }
+          },
+          "required": [
+            "kind",
+            "from",
+            "through"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Make `target` a project: the plan the person saw, bound to its digest\n(`speccoder new`).",
+          "properties": {
+            "choices": {
+              "$ref": "#/$defs/NewChoices",
+              "description": "What the person chose."
+            },
+            "kind": {
+              "const": "new_project",
+              "type": "string"
+            },
+            "plan_digest": {
+              "description": "The digest of the plan on screen.",
+              "type": "string"
+            },
+            "target": {
+              "description": "The folder, as the plan names it.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "target",
+            "choices",
+            "plan_digest"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Undo the project speccoder created at the dispatch's root\n(`speccoder new --undo`): to the Trash, or a revert of its commit.",
+          "properties": {
+            "commit": {
+              "description": "speccoder's commit, as recorded.",
+              "type": "string"
+            },
+            "kind": {
+              "const": "undo_new_project",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "commit"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Clone a repository of the person's through their `gh`.",
+          "properties": {
+            "kind": {
+              "const": "clone_repository",
+              "type": "string"
+            },
+            "repo": {
+              "description": "`owner/repo`.",
+              "type": "string"
+            },
+            "target": {
+              "description": "The destination folder.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "repo",
+            "target"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Copy the bundled sample into the state directory and replay its\nrecorded run strictly (`speccoder sample`).",
+          "properties": {
+            "fresh": {
+              "description": "Replace an existing copy.",
+              "type": "boolean"
+            },
+            "kind": {
+              "const": "open_sample",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "fresh"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -1562,6 +1824,61 @@
         {
           "const": "other",
           "description": "Anything else.",
+          "type": "string"
+        }
+      ]
+    },
+    "Stack": {
+      "description": "A stack the plan can scaffold, or none.",
+      "oneOf": [
+        {
+          "const": "rust",
+          "description": "Rust with cargo.",
+          "type": "string"
+        },
+        {
+          "const": "python",
+          "description": "Python with uv and pytest.",
+          "type": "string"
+        },
+        {
+          "const": "node",
+          "description": "TypeScript with npm and vitest.",
+          "type": "string"
+        },
+        {
+          "const": "go",
+          "description": "Go modules.",
+          "type": "string"
+        },
+        {
+          "const": "none",
+          "description": "No scaffold: the person adds code.",
+          "type": "string"
+        }
+      ]
+    },
+    "Through": {
+      "description": "How far plan through goes.",
+      "oneOf": [
+        {
+          "const": "spec",
+          "description": "The spec only.",
+          "type": "string"
+        },
+        {
+          "const": "plan",
+          "description": "The spec and the plan.",
+          "type": "string"
+        },
+        {
+          "const": "tasks",
+          "description": "The spec, the plan and the tasks.",
+          "type": "string"
+        },
+        {
+          "const": "analyze",
+          "description": "Then the format's check of the planning files.",
           "type": "string"
         }
       ]

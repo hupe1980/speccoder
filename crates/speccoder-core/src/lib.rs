@@ -17,12 +17,14 @@ pub mod evidence;
 pub mod graph;
 pub mod inbox;
 pub mod ladder;
+pub mod new_project;
 pub mod next;
 pub mod oracle;
 pub mod predicate;
 pub mod regression;
 pub mod retry;
 pub mod scope;
+pub mod similar;
 pub mod snapshot;
 pub mod spec;
 pub mod stage;
@@ -49,4 +51,8 @@ pub use command::{
     SignerView, SkillEntry, SkillRunReport, SkillsReport, SpecVersion, StatusReport, StatusTotals,
     TaskCost, TaskStatus, TraceRow, UiReport, Unverified, Usage, VerifyOutcome, VerifyReason,
     WorktreeReport,
+};
+pub use command::{
+    ChainStep, ChainStop, PlanCheck, PlanningChainReport, Readiness, SampleRecording, SampleReport,
+    SampleRun,
 };

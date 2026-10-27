@@ -63,6 +63,8 @@ fn projection(name: &str) -> &'static str {
         "oracle.frozen" => "events/oracle.frozen",
         "oracle.lapsed" => "events/oracle.lapsed",
         "collection.checked" => "events/collection.checked",
+        "project.created" => "events/project.created",
+        "project.undone" => "events/project.undone",
         _ => "",
     }
 }
@@ -104,6 +106,17 @@ const fn describe(payload: &str) -> &'static str {
         b"actions" => "actions: what a person can do now, and the feature's journey",
         b"bug" => "bug: a bug, its triad, reproductions, confirmation and how far it got",
         b"preset" => "preset add: the speccoder Spec Kit preset, installed or offered",
+        b"new_project" => "new: a new project's plan, its steps, its commit and what Undo would do",
+        b"sample" => "sample: the bundled sample's copy and each recorded run, replayed strictly",
+        b"similar" => {
+            "feature similar: the requirements close to a description, and the terms they share"
+        }
+        b"rung_suggestion" => {
+            "suggest: the rung a description suggests and the cue that decided it"
+        }
+        b"planning_chain" => {
+            "spec SKILL --through: the skills plan through ran, where it stopped, and the unit's readiness"
+        }
         b"policy_coverage" => "config coverage: what a prefix entry would newly allow",
         b"comments" => "review comments: the comment tray and the last revision turn",
         b"branch_verify" => {
@@ -188,6 +201,13 @@ published! {
     "events/collection.checked", "PublicCollectionChecked" => crate::events::PublicCollectionChecked,
     "comments", "CommentsView" => core::oracle::CommentsView,
     "preset", "PresetReport" => core::PresetReport,
+    "events/project.created", "PublicProjectCreated" => crate::events::PublicProjectCreated,
+    "events/project.undone", "PublicProjectUndone" => crate::events::PublicProjectUndone,
+    "new_project", "NewProjectReport" => core::new_project::NewProjectReport,
+    "sample", "SampleReport" => core::SampleReport,
+    "similar", "SimilarReport" => core::similar::SimilarReport,
+    "rung_suggestion", "RungSuggestion" => core::ladder::RungSuggestion,
+    "planning_chain", "PlanningChainReport" => core::PlanningChainReport,
 }
 
 /// The predicate schema's name (`speccoder schema task-verification-v0`).

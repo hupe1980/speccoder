@@ -1,0 +1,11 @@
+#!/bin/sh
+# A stand-in for npm.
+. "$(dirname "$0")/_log.sh"
+log npm "$@"
+case "$1" in
+  --version) echo "11.0.0" ;;
+  init) misbehave npm; printf '{\n  "name": "%s",\n  "version": "1.0.0",\n  "scripts": {\n    "test": "echo none"\n  }\n}\n' "$(basename "$PWD")" > package.json ;;
+  install) printf '{"lockfileVersion": 3}\n' > package-lock.json; mkdir -p node_modules/vitest; printf '{}\n' > node_modules/vitest/package.json ;;
+  pkg) sed -e 's/"test": "echo none"/"test": "vitest run --passWithNoTests"/' package.json > package.json.new && mv package.json.new package.json ;;
+  *) echo "No test files found, exiting with code 0" ;;
+esac

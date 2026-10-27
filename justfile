@@ -121,6 +121,10 @@ cold-start:
 record-journals:
     scripts/record-journals.sh
 
+# Record the sample `speccoder sample` replays (needs a key, costs money, never CI).
+record-sample:
+    scripts/record-sample.sh
+
 # Check, test and rebuild the web interface (crates/speccoder-web/ui) into its committed bundle.
 ui:
     cd crates/speccoder-web/ui && npm ci && npm run check && npm test && npm run build

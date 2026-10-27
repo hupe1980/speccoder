@@ -697,7 +697,151 @@ pub const CATALOG: &[Entry] = &[
         "Spec Kit refused or failed to install the preset; its own output is shown. Nothing in `specs/` was changed.",
         ["speccoder preset add", "speccoder doctor"]
     ),
+    // ── a new project, the sample ─────────────────────────────────────
+    entry!(
+        "NEW-PLAN-CHANGED",
+        E,
+        S::UsageError,
+        "the plan changed since you saw it; nothing ran",
+        "Creating a project runs exactly the plan you confirmed, bound to its digest: the commands, their order and the folder as it was seen. A tool's version or the folder's contents changed meanwhile, so the plan computed now differs and nothing was run. The result carries the new plan.",
+        ["→ review the new plan and confirm it again"]
+    ),
+    entry!(
+        "NEW-TARGET-NOT-EMPTY",
+        E,
+        S::UsageError,
+        "the folder is not empty and not a git repository",
+        "A new project starts in an empty folder, or in a git repository at its top level with a clean tree. This folder holds files that are not under git, which the format's `--force` init could overwrite unseen.",
+        [
+            "→ choose an empty folder",
+            "→ or run `git init` there and commit what it holds first"
+        ]
+    ),
+    entry!(
+        "NEW-DIRTY",
+        E,
+        S::GitPrecondition,
+        "the repository has uncommitted changes",
+        "speccoder commits exactly what the plan's steps produced. With changes of yours in the tree, the two could not be told apart, so the folder must be clean first.",
+        ["→ commit or stash your changes, then try again"]
+    ),
+    entry!(
+        "NEW-NESTED-REPOSITORY",
+        E,
+        S::GitPrecondition,
+        "the folder is inside another repository",
+        "A project is created at a repository's top level. This folder lies inside another repository's worktree; a second repository inside it, or a project in its subfolder, would split one history.",
+        ["→ choose a folder outside it, or use the repository's top level"]
+    ),
+    entry!(
+        "NEW-ALREADY-PROJECT",
+        E,
+        S::UsageError,
+        "the folder already holds a spec project",
+        "There is nothing to create: the folder is a project of a spec format already. Open it instead.",
+        ["speccoder ui", "speccoder init"]
+    ),
+    entry!(
+        "NEW-TOOL-MISSING",
+        E,
+        S::ConfigError,
+        "a tool the plan needs is not installed",
+        "The plan runs the ecosystems' own tools — the stack's scaffold and the spec format's init. One of them is not on the PATH; the message names it and how to install it.",
+        [
+            "→ install the tool, or choose another stack or format",
+            "speccoder doctor"
+        ]
+    ),
+    entry!(
+        "NEW-STEP-FAILED",
+        E,
+        S::Error,
+        "a step of the plan failed; later steps did not run",
+        "A command of the plan exited with an error, timed out or was denied by the sandbox. The steps before it are kept; running the same plan again resumes at this step.",
+        ["→ retry, or run the command yourself as shown"]
+    ),
+    entry!(
+        "NEW-NO-IDENTITY",
+        E,
+        S::GitPrecondition,
+        "git does not know who you are",
+        "The new project's one commit is yours, made with your git identity; speccoder never invents one. `user.name` or `user.email` is not set.",
+        [
+            "→ git config --global user.name \"Your Name\"",
+            "→ git config --global user.email you@example.com"
+        ]
+    ),
+    entry!(
+        "NEW-IN-PROGRESS",
+        E,
+        S::UsageError,
+        "a new project is being created in this folder",
+        "Another creation of a project in the same folder is running. Two at once would interleave their steps.",
+        ["→ wait for it to finish"]
+    ),
+    entry!(
+        "NEW-UNDO-REFUSED",
+        E,
+        S::GitPrecondition,
+        "the project changed since speccoder created it; nothing was undone",
+        "Undo moves a folder speccoder created to the Trash, or reverts speccoder's commit in an existing repository — only while nothing but that commit exists. Something changed since (the message lists what), or there is no Trash on this system; nothing was moved or deleted.",
+        ["→ undo it yourself; nothing was moved"]
+    ),
+    entry!(
+        "SAMPLE-DIVERGED",
+        E,
+        S::ReplayDiverged,
+        "this build cannot reproduce the sample's recorded run",
+        "The sample is a recorded run replayed strictly. This build replayed it to a different result, so it is not shown as if it had worked: the board shows the sample's committed state only.",
+        ["speccoder doctor --bug-report"]
+    ),
+    entry!(
+        "SAMPLE-MISSING",
+        E,
+        S::NotFound,
+        "this build has no sample",
+        "The sample's recording is not part of this build: it is recorded with a real model by the maintainers (`just record-sample`) and bundled into release builds once it exists.",
+        [
+            "→ install a release build that includes the sample",
+            "speccoder new"
+        ]
+    ),
+    entry!(
+        "SIMILAR-FEATURE",
+        W,
+        S::Ok,
+        "an existing requirement is close to this description",
+        "Before the spec is written, the description is compared with every feature's requirements by a deterministic text similarity. A close match may mean the change belongs in that feature; it is a hint and never stops the skill.",
+        [
+            "speccoder feature similar \"…\"",
+            "speccoder review comments"
+        ]
+    ),
     // ── stops ─────────────────────────────────────────────────────────
+    entry!(
+        "NEW-CONFIRM",
+        P,
+        S::NeedsHuman,
+        "the plan needs your confirmation; nothing ran",
+        "`speccoder new` runs commands in a folder; it runs them only after you saw them. Without a terminal to ask at, it printed the plan and stopped.",
+        ["→ run the same command again with --yes"]
+    ),
+    entry!(
+        "THROUGH-QUESTIONS",
+        P,
+        S::NeedsHuman,
+        "the spec has open questions; planning waits for your answers",
+        "The format's skill wrote the spec and left questions it could not decide. Planning on a guess would plan the wrong thing, so the chain stops until each is answered.",
+        ["speccoder review", "speccoder review answer Q1 \"…\""]
+    ),
+    entry!(
+        "THROUGH-REVIEW",
+        P,
+        S::NeedsHuman,
+        "review the spec; planning waits for your approval",
+        "Plan through stops after the spec is written: its requirements are what every task will be judged by, so they are planned only once you approved them. No flag passes this stop.",
+        ["speccoder review", "speccoder review approve"]
+    ),
     entry!(
         "NEEDS-HUMAN",
         P,

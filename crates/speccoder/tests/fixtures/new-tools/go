@@ -1,0 +1,10 @@
+#!/bin/sh
+# A stand-in for go.
+. "$(dirname "$0")/_log.sh"
+log go "$@"
+case "$1" in
+  version) echo "go version go1.25.1 fake/arch" ;;
+  mod) misbehave go; printf 'module %s\n\ngo 1.25\n' "$3" > go.mod ;;
+  test) echo 'go: warning: "./..." matched no packages' ;;
+  *) ;;
+esac

@@ -245,8 +245,71 @@ pub fn lines(event: &Event, seconds: Option<u64>, verbosity: Verbosity) -> Vec<S
         }
         Event::Notice { text } if !quiet => vec![format!("» {text}")],
         Event::Bug { step, .. } => vec![format!("» {}", step.line())],
+        Event::Project { step } => project_lines(step, false),
+        Event::PlanningStopped {
+            kind, next_skill, ..
+        } if !quiet && kind != "done" => {
+            vec![format!(
+                "» plan through stopped: {kind}{}",
+                next_skill
+                    .as_deref()
+                    .map(|n| format!(" (next: {n})"))
+                    .unwrap_or_default()
+            )]
+        }
         // Running totals go to `speccoder report --live`; a line per turn is noise.
         _ => Vec::new(),
+    }
+}
+
+/// A new project's step as lines: `✓ cargo init … 0.4s`, or labelled
+/// words for a screen reader.
+fn project_lines(step: &speccoder_runtime::progress::ProjectEvent, reader: bool) -> Vec<String> {
+    use speccoder_runtime::progress::ProjectEvent as P;
+    match step {
+        P::ScaffoldStarted { argv, access, .. } if reader => {
+            vec![format!("step: {} — running ({access})", argv.join(" "))]
+        }
+        P::ScaffoldStarted { argv, access, .. } => vec![format!(
+            "◐ {}{}",
+            argv.join(" "),
+            if access == "network" {
+                "  ⇅ network"
+            } else {
+                ""
+            }
+        )],
+        P::ScaffoldFinished {
+            step,
+            state,
+            exit,
+            duration_ms,
+        } => {
+            #[allow(clippy::cast_precision_loss)] // display only
+            let secs = *duration_ms as f64 / 1000.0;
+            let how = match (state.as_str(), exit) {
+                ("failed", Some(e)) => format!("failed, exit {e}"),
+                (s, _) => s.to_owned(),
+            };
+            if reader {
+                vec![format!("step: {step} — {how}, {secs:.1}s")]
+            } else {
+                let mark = match state.as_str() {
+                    "done" => "✓",
+                    "skipped" => "=",
+                    _ => "✗",
+                };
+                vec![format!("{mark} {step} {how} {secs:.1}s")]
+            }
+        }
+        P::Created { commit, .. } => vec![format!(
+            "{}committed {commit}",
+            if reader { "project: " } else { "✓ " }
+        )],
+        P::Undone { how, .. } => vec![format!(
+            "{}undone ({how})",
+            if reader { "project: " } else { "» " }
+        )],
     }
 }
 
@@ -419,6 +482,18 @@ pub fn reader_lines(event: &Event, verbosity: Verbosity) -> Vec<String> {
         }
         Event::Notice { text } if !quiet => vec![format!("notice: {text}")],
         Event::Bug { step, .. } => vec![format!("bug: {}", step.line())],
+        Event::Project { step } => project_lines(step, true),
+        Event::PlanningStopped {
+            kind, next_skill, ..
+        } if !quiet && kind != "done" => {
+            vec![format!(
+                "planning: stopped, {kind}{}",
+                next_skill
+                    .as_deref()
+                    .map(|n| format!("; next {n}"))
+                    .unwrap_or_default()
+            )]
+        }
         _ => Vec::new(),
     }
 }

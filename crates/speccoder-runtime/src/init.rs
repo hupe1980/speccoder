@@ -643,6 +643,38 @@ pub fn init_with(
     )))
 }
 
+/// Whether a test check found no tests to run — an empty suite on a fresh
+/// scaffold (FR-027): pytest's exit 5, `go test` with only packages
+/// without test files, vitest, jest or nextest reporting nothing to run.
+/// Neither passing nor failing: *no tests yet*.
+#[must_use]
+pub fn no_tests(argv: &[String], exit: Option<i32>, output: &str) -> bool {
+    let has = |w: &str| argv.iter().any(|a| a == w || a.ends_with(&format!("/{w}")));
+    let lower = output.to_lowercase();
+    if has("pytest") {
+        return exit == Some(5);
+    }
+    if has("go") && argv.iter().any(|a| a == "test") {
+        let said: Vec<&str> = output
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+            .collect();
+        return exit == Some(0)
+            && !said.is_empty()
+            && said
+                .iter()
+                .all(|l| l.contains("no test files") || l.contains("matched no packages"));
+    }
+    if has("vitest") || has("jest") || argv.iter().any(|a| a == "test") && has("npm") {
+        return lower.contains("no test files found") || lower.contains("no tests found");
+    }
+    if has("nextest") {
+        return lower.contains("no tests to run");
+    }
+    false
+}
+
 /// Runs the fast-tier checks of the configuration `init` just wrote on the
 /// untouched code, confined like in a run.
 #[must_use]
@@ -662,10 +694,18 @@ pub fn verify_written(root: &Path) -> Vec<speccoder_core::InitRun> {
         .map(|c| speccoder_core::InitRun {
             name: c.name.clone(),
             passed: matches!(c.status, CheckStatus::Passed | CheckStatus::Skipped),
-            status: serde_json::to_value(c.status)
-                .ok()
-                .and_then(|v| v.as_str().map(str::to_owned))
-                .unwrap_or_default(),
+            status: if no_tests(
+                &c.argv,
+                c.exit_code,
+                &format!("{}\n{}", c.stdout_tail, c.stderr_tail),
+            ) {
+                "no_tests".to_owned()
+            } else {
+                serde_json::to_value(c.status)
+                    .ok()
+                    .and_then(|v| v.as_str().map(str::to_owned))
+                    .unwrap_or_default()
+            },
             duration_ms: c.duration_ms,
             reason: (!matches!(c.status, CheckStatus::Passed | CheckStatus::Skipped))
                 .then(|| {
@@ -764,7 +804,7 @@ pub fn prepare(
     let failed = report
         .ran
         .iter()
-        .filter(|r| !r.passed)
+        .filter(|r| !r.passed && r.status != "no_tests")
         .map(|r| r.name.clone())
         .collect();
     let mut to_commit: Vec<String> = report.wrote.clone();
@@ -1098,5 +1138,55 @@ mod tests {
             assert!(crate::substrate::model_config::parse(&text).is_ok_and(|m| m.is_some()));
             assert!(crate::substrate::run_config::parse(&text).is_ok());
         }
+    }
+
+    #[test]
+    fn an_empty_suite_on_a_fresh_scaffold_is_no_tests_yet() {
+        let argv = |a: &[&str]| a.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>();
+        assert!(no_tests(
+            &argv(&["uv", "run", "pytest"]),
+            Some(5),
+            "no tests ran"
+        ));
+        assert!(!no_tests(
+            &argv(&["uv", "run", "pytest"]),
+            Some(1),
+            "1 failed"
+        ));
+        assert!(no_tests(
+            &argv(&["go", "test", "./..."]),
+            Some(0),
+            "go: warning: \"./...\" matched no packages\n"
+        ));
+        assert!(no_tests(
+            &argv(&["go", "test", "./..."]),
+            Some(0),
+            "?   \tx\t[no test files]\n"
+        ));
+        assert!(!no_tests(
+            &argv(&["go", "test", "./..."]),
+            Some(0),
+            "ok  \tx\t0.1s\n"
+        ));
+        assert!(no_tests(
+            &argv(&["npm", "test"]),
+            Some(0),
+            "No test files found, exiting with code 0"
+        ));
+        assert!(no_tests(
+            &argv(&["npx", "vitest", "run"]),
+            Some(0),
+            "No test files found"
+        ));
+        assert!(no_tests(
+            &argv(&["cargo", "nextest", "run"]),
+            Some(4),
+            "error: no tests to run"
+        ));
+        assert!(!no_tests(
+            &argv(&["cargo", "test"]),
+            Some(0),
+            "test result: ok. 1 passed"
+        ));
     }
 }

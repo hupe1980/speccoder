@@ -426,6 +426,7 @@ fn report_of(u: &Unit, full: bool) -> ReviewReport {
         skills.iter().any(|s| s.name == full && s.refused.is_none())
     };
     let open: Vec<OpenQuestion> = questions(u).into_iter().map(|(q, _)| q).collect();
+    let readiness = readiness_of(u, open.len());
     let totals = totals(&items, open.len());
     let revision = (totals.changes_requested > 0).then(|| revision_request(&items));
     let changes = if full {
@@ -495,7 +496,46 @@ fn report_of(u: &Unit, full: bool) -> ReviewReport {
         approval: record.approval,
         sheet,
         error,
+        readiness: Some(readiness),
     }
+}
+
+/// The unit's readiness: its requirements, the scenarios over its
+/// stories (or the format's requirements), the open questions, and the
+/// stories or requirements no scenario covers — each counted from the
+/// files through the format adapter.
+fn readiness_of(u: &Unit, open_questions: usize) -> speccoder_core::Readiness {
+    let all = u
+        .snapshot
+        .as_ref()
+        .map(|s| u.format.oracle_requirements(s))
+        .unwrap_or_default();
+    let identifiers = u.format.requirements_file().is_some();
+    let count = |n: usize| u32::try_from(n).unwrap_or(u32::MAX);
+    speccoder_core::Readiness {
+        requirements: if identifiers {
+            count(u.requirements().len())
+        } else {
+            count(all.len())
+        },
+        scenarios: count(all.iter().map(|r| r.scenarios.len()).sum()),
+        open_questions: count(open_questions),
+        untestable: all
+            .iter()
+            .filter(|r| r.scenarios.is_empty())
+            .map(|r| r.key.clone())
+            .collect(),
+        identifiers,
+    }
+}
+
+/// The readiness of `feature` (default: the current one) now; `None` when
+/// there is no such unit.
+#[must_use]
+pub fn readiness(path: &Path, feature: Option<&str>) -> Option<speccoder_core::Readiness> {
+    let u = unit("review", path, feature).ok()?;
+    let open = questions(&u).len();
+    Some(readiness_of(&u, open))
 }
 
 /// The confirmed reproductions of the bugs recorded in bug unit `unit`,

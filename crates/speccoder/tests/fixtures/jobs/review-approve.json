@@ -32,6 +32,15 @@
       ],
       "oracle": [],
       "questions": [],
+      "readiness": {
+        "identifiers": true,
+        "open_questions": 0,
+        "requirements": 2,
+        "scenarios": 0,
+        "untestable": [
+          "US1"
+        ]
+      },
       "requirements": [
         {
           "at": 0,

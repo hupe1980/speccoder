@@ -1,0 +1,17 @@
+{
+  "head": "init",
+  "result": {
+    "code": "USAGE",
+    "command": "clone",
+    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#usage",
+    "exit_code": 2,
+    "fix": [
+      "speccoder clone --help"
+    ],
+    "message": "`not a repository` is not a repository: give it as owner/name",
+    "schema_version": 2,
+    "status": "usage_error"
+  },
+  "review": null,
+  "status": ""
+}
