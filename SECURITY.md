@@ -26,7 +26,7 @@ The full model — what each layer enforces, what it does not protect against, a
 
 ## Verifying a release
 
-Each release on GitHub lists `SHA256SUMS` and a build-provenance attestation per archive (`speccoder` and `speccoder-verify`), made by `.github/workflows/release.yml` from the tagged commit:
+Each release on GitHub lists `SHA256SUMS` and a build-provenance attestation per `speccoder` archive, made by `.github/workflows/release.yml` from the tagged commit:
 
 ```sh
 shasum -a 256 -c SHA256SUMS --ignore-missing

@@ -9,6 +9,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 ### Changed
 
 - **Built on agentplane 0.54.0.**
+- **One binary.** `speccoder-verify` is folded into `speccoder attest verify
+  --branch` (and `attest tour`/`attest badge`); the evidence Action downloads
+  `speccoder`. The check, its trust rules and its `branch_verify` payload are
+  unchanged; its exit status is speccoder's (`0` success, `26` failure, `15`
+  neutral). `--require-signed` defaults to on with `--branch`
+  (`--require-signed=false` accepts unsigned ticks, and says so).
 - **Watch a project while a run works on it.** `speccoder status`,
   `report --approvals`, `inbox`, `task show --account` and the app read the
   journal of a run in another process at once, instead of waiting and saying

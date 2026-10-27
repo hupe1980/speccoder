@@ -76,7 +76,7 @@ These fields are **optional and opaque** to a verifier: any JSON value, kept in 
 
 ## Parsing and evaluation
 
-A verifier applies, per ticked task (as [`speccoder-verify`](@/docs/verifier.md) does):
+A verifier applies, per ticked task (as [`speccoder attest verify --branch`](@/docs/verifier.md) does):
 
 1. **The task commit**: the latest commit reachable from the head with `Spec-Task: <unit>/<task>` and a non-empty `Verdict:`. None: `ticked_without_evidence` — unless a note on an unreachable commit names the task (`commit_unreachable`, after a squash or rebase merge).
 2. **The bundle**: every line a DSSE envelope with an in-toto Statement v1 about that commit (`malformed`, `mismatch`); no note is `missing`.

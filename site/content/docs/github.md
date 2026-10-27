@@ -61,7 +61,7 @@ speccoder pr --yes --base main  # without asking
 
 - Held-out sets of open tasks stay local (the dry run counts them); a set that changed since it judged is left out and named.
 - A rejected push of the held-out ref or of the notes is reported with the commands to reconcile (`git notes --ref=speccoder merge` for diverged notes); the pull request opens anyway.
-- The dry run says whether a workflow under `.github/workflows/` runs `speccoder-verify`, or links [how to add one](#evidence-check).
+- The dry run says whether a workflow under `.github/workflows/` runs the evidence check (the action, or `speccoder attest verify --branch`), or links [how to add one](#evidence-check).
 - Run `pr` again after more tasks are ticked: the open pull request is updated, never opened twice.
 - It opens in the repository `--remote` names, from a branch of that repository; not from a fork.
 
@@ -71,11 +71,11 @@ The description is the evidence: the totals and a table of every task (verdict, 
 
 ## Evidence check
 
-The description is the author's account; the **`speccoder / evidence`** check is the maintainer's. The [`speccoder-verify` action](https://github.com/hupe1980/speccoder/tree/main/packaging/speccoder-verify-action) runs [the verifier](@/docs/verifier.md) with the trust of your base branch and publishes a check run with the verdict bar, the requirement trace, an annotation on each tick that is not plainly verified, and every task's tour.
+The description is the author's account; the **`speccoder / evidence`** check is the maintainer's. The [evidence action](https://github.com/hupe1980/speccoder/tree/main/packaging/speccoder-verify-action) (`speccoder-verify-action`) downloads the `speccoder` release and runs [`speccoder attest verify --branch`](@/docs/verifier.md) with the trust of your base branch and publishes a check run with the verdict bar, the requirement trace, an annotation on each tick that is not plainly verified, and every task's tour.
 
-- It needs no model key and no speccoder, and builds and runs nothing from the pull request.
-- The verifier it downloads runs only if its build provenance (signed by speccoder's release workflow for that version) and its sha256 check out. Builds exist for Linux x64, Linux ARM64 and macOS ARM64 runners.
-- The verifier runs with no token in its environment.
+- It needs no model key and no speccoder install, and builds and runs nothing from the pull request.
+- The `speccoder` archive it downloads runs only if its build provenance (signed by speccoder's release workflow for that version) and its sha256 check out. Builds exist for Linux x64, Linux ARM64 and macOS ARM64 runners.
+- speccoder runs with no token in its environment.
 
 1. **Trust.** Commit the keys that may sign evidence to the default branch, in [ssh-keygen's allowed-signers format](https://man.openbsd.org/ssh-keygen#ALLOWED_SIGNERS):
 
@@ -104,7 +104,7 @@ The description is the author's account; the **`speccoder / evidence`** check is
      contents: read
      checks: write        # creates the check run
      pull-requests: read
-     attestations: read   # verifies the verifier's build provenance
+     attestations: read   # verifies speccoder's build provenance
    jobs:
      evidence:
        runs-on: ubuntu-latest
@@ -116,13 +116,13 @@ The description is the author's account; the **`speccoder / evidence`** check is
 
 3. **Forks**: the same with `on: pull_request_target` (the workflow and its inputs come from the base branch, with a write token). Never add a checkout of the head or any build to that workflow: it would run the fork's code with a write token. The action refuses to run if the head is checked out in the workspace.
 
-4. **Make it required.** In the branch's protection rule (or ruleset), require the status check `speccoder / evidence`, source **GitHub Actions**. GitHub counts a `neutral` required check as passing, so a pull request with nothing to check is published as `failure`, titled `neutral: no ticks checked`, unless you set `allow-neutral: true`. A verifier refusal (it cannot read the branch) fails the job even then.
+4. **Make it required.** In the branch's protection rule (or ruleset), require the status check `speccoder / evidence`, source **GitHub Actions**. GitHub counts a `neutral` required check as passing, so a pull request with nothing to check is published as `failure`, titled `neutral: no ticks checked`, unless you set `allow-neutral: true`. A refusal (the check cannot read the branch) fails the job even then.
 
 5. **Merge with merge commits** for verified features. A squash or rebase merge makes new commits: the attestations name the old ones, and on the default branch those ticks become `commit_unreachable`. Push the notes too (`speccoder pr` does; `git push origin refs/notes/speccoder` otherwise).
 
 | Input | Default | |
 |---|---|---|
-| `version` | the action's release (`0.2.0`) | the verifier to download (provenance and sha256 checked) |
+| `version` | the action's release (`0.2.0`) | the `speccoder` release to download (provenance and sha256 checked; the action at `@v0.2.0` downloads the `speccoder-verify` 0.2.0 archive, later ones `speccoder`) |
 | `allowed-signers` | `.github/speccoder/allowed_signers` | read from the trusted commit (above), never the checked one |
 | `certificate-identity`, `certificate-oidc-issuer` | — | Sigstore trust; installs `cosign` |
 | `require-signed` | `true` | unsigned ticks are unverifiable |
@@ -131,7 +131,7 @@ The description is the author's account; the **`speccoder / evidence`** check is
 | `mode` | `touched` on pull requests, `all` otherwise | which units are checked |
 | `check-name` | `speccoder / evidence` | the check run's name |
 | `badge-branch` | — | see [a badge](#a-badge) |
-| `token` | `github.token` | for the action's own git and API calls; never passed to the verifier |
+| `token` | `github.token` | for the action's own git and API calls; never passed to speccoder |
 
 Outputs: `conclusion`, `verified`, `regression-only`, `attested`, `stale`, `unverifiable`, `share`, `report` (the JSON report's path, payload `branch_verify`).
 
