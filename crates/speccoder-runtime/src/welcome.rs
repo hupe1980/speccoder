@@ -71,6 +71,19 @@ fn save(state: &Path, list: &[Recent]) {
     }
 }
 
+/// Whether a host started at `path` serves it right away: a spec project,
+/// or a git repository (the setup assistant takes over there). Anywhere
+/// else the host serves the welcome.
+#[must_use]
+pub fn is_project(path: &Path) -> bool {
+    crate::format::open(path, None).is_ok()
+        || crate::git::Git::at(path)
+            .toplevel()
+            .ok()
+            .flatten()
+            .is_some()
+}
+
 /// Records that the project at `root` was opened (or created) now.
 pub fn remember(state: &Path, root: &Path, name: &str, created: bool) {
     let path = std::fs::canonicalize(root)

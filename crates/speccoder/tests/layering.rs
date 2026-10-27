@@ -634,6 +634,15 @@ const WRITES_WITHOUT_A_KIND: &[(&str, &str)] = &[
     ("github_login", "signs in with a token"),
     ("github_device", "starts a device sign-in"),
     ("github_device_wait", "finishes a device sign-in"),
+    (
+        "open",
+        "binds a host started outside a project to a folder: the host's state, no project write",
+    ),
+    ("forget", "removes a recent project from speccoder's list"),
+    (
+        "first_feature",
+        "marks the new project's idea as offered once (speccoder's state)",
+    ),
 ];
 
 /// Handlers registered for a writing method, and whether each reaches the
@@ -643,10 +652,12 @@ fn writes(lib: &str) -> Vec<(String, bool)> {
     for line in lib.lines().filter(|l| l.contains(".route(")) {
         for method in ["post(", "put(", "delete(", "patch("] {
             for (k, _) in line.match_indices(method) {
-                let name: String = line[k + method.len()..]
+                // A handler of another module (`welcome::open`): its name.
+                let path: String = line[k + method.len()..]
                     .chars()
-                    .take_while(|c| c.is_alphanumeric() || *c == '_')
+                    .take_while(|c| c.is_alphanumeric() || *c == '_' || *c == ':')
                     .collect();
+                let name = path.rsplit("::").next().unwrap_or_default().to_owned();
                 handlers.insert(name);
             }
         }
@@ -674,7 +685,10 @@ fn every_web_route_that_writes_goes_through_the_dispatcher() {
         "jobs.rs maps a kind itself: it only calls service::actions::perform"
     );
     assert!(code_of(&jobs).contains("perform("), "jobs.rs: no perform");
-    let lib = std::fs::read_to_string(web.join("lib.rs")).unwrap();
+    // The routes are registered in lib.rs; a handler may live in a module
+    // beside it (`welcome.rs`).
+    let lib = std::fs::read_to_string(web.join("lib.rs")).unwrap()
+        + &std::fs::read_to_string(web.join("welcome.rs")).unwrap_or_default();
     let errors: Vec<String> = writes(&lib)
         .into_iter()
         .filter(|(h, perform)| !perform && !WRITES_WITHOUT_A_KIND.iter().any(|(x, _)| x == h))

@@ -204,7 +204,7 @@ pub fn open_from(asset: &Asset, state: &Path, fresh: bool) -> CommandResult {
         serde_json::json!({
             "version": env!("CARGO_PKG_VERSION"),
             "path": report.path,
-            "created_at": manifest.recorded_at,
+            "recorded": report.recorded,
             "runs": report.runs,
         })
         .to_string(),

@@ -796,6 +796,12 @@ pub fn valid_slug(slug: &str) -> bool {
 #[must_use]
 pub fn clone(_ctx: &Ctx, slug: &str, target: &Path) -> CommandResult {
     let refuse = |status, m: &str| CommandResult::new("clone", status, m);
+    // `~/x` as the person typed it.
+    let expanded = match (target.strip_prefix("~"), std::env::var_os("HOME")) {
+        (Ok(rest), Some(home)) => std::path::PathBuf::from(home).join(rest),
+        _ => target.to_path_buf(),
+    };
+    let target = expanded.as_path();
     if !valid_slug(slug) {
         return refuse(
             CommandStatus::UsageError,

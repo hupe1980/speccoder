@@ -6916,6 +6916,31 @@
       ],
       "type": "object"
     },
+    "Place": {
+      "description": "Where a requirement is written.",
+      "properties": {
+        "line": {
+          "description": "The line, 1-based.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "path": {
+          "description": "The document, project-relative.",
+          "type": "string"
+        },
+        "quote": {
+          "description": "That line, verbatim.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "line",
+        "quote"
+      ],
+      "type": "object"
+    },
     "PlanCheck": {
       "description": "A plan check of the new task list (`PLAN-*`): a warning, never a stop.",
       "properties": {
@@ -10626,6 +10651,17 @@
     "SimilarMatch": {
       "description": "A requirement close to the description.",
       "properties": {
+        "at": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Place"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Where it is written."
+        },
         "level": {
           "$ref": "#/$defs/SimilarLevel",
           "description": "`close` or `very_close`."
@@ -10661,7 +10697,8 @@
         "text",
         "score",
         "level",
-        "shared"
+        "shared",
+        "at"
       ],
       "type": "object"
     },

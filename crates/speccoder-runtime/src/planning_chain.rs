@@ -166,10 +166,20 @@ fn corpus(root: &Path) -> (Vec<Requirement>, bool) {
         if let Some(file) = adapter.requirements_file() {
             let text = std::fs::read_to_string(base.join(&dir).join(file)).unwrap_or_default();
             for (id, line) in adapter.requirements_in(&text) {
+                let at = text
+                    .lines()
+                    .position(|l| l == line || l.trim() == line.trim())
+                    .and_then(|i| u32::try_from(i + 1).ok())
+                    .map(|n| similar::Place {
+                        path: format!("{dir}/{file}"),
+                        line: n,
+                        quote: line.trim().to_owned(),
+                    });
                 out.push(Requirement {
                     unit: name.clone(),
                     text: requirement_text(&id, &line),
                     id,
+                    at,
                 });
             }
         } else if let Ok(o) = crate::format::open(root, Some(&name)) {
@@ -178,6 +188,7 @@ fn corpus(root: &Path) -> (Vec<Requirement>, bool) {
                     unit: name.clone(),
                     id: r.title.clone(),
                     text: format!("{} {}", r.title, r.text),
+                    at: None,
                 });
             }
         }

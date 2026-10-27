@@ -444,6 +444,19 @@ fn run_unguarded(
             ),
         ),
     };
+    // What this skill's run cost, kept for the next time it is offered
+    // (the New Feature sheet's cost line is read from these, never guessed).
+    crate::controls::record_skill_usage(
+        &s.plane_dir,
+        &skill.name,
+        [
+            tokens("input_tokens"),
+            tokens("output_tokens"),
+            tokens("cache_read_tokens"),
+            tokens("cache_write_tokens"),
+        ],
+        s.model.prices,
+    );
     live.event(&progress::Event::TaskFinished {
         task: skill.name.clone(),
         outcome: status,

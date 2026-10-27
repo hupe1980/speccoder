@@ -149,6 +149,34 @@ pub fn available_with(
         out.push(r);
     }
     let planning_next: Vec<String> = report.map(|r| r.planning.clone()).unwrap_or_default();
+    // Plan through: the rest of the chain in one action, from the files —
+    // offered after a stop as its continuation (no chain state is kept).
+    if let Some(first) = planning_next.first() {
+        let mut a = action(
+            "next",
+            "plan through to tasks",
+            "the format's own skills in order; it stops for open questions and your review",
+            format!("speccoder spec {first} --through tasks"),
+        );
+        a = a.with_run(Runnable::PlanThrough {
+            from: speccoder_core::actions::PlanFrom::Continue,
+            through: speccoder_core::actions::Through::Tasks,
+        });
+        let gate = crate::review::summary(path, feature).and_then(|r| {
+            if !r.questions.is_empty() {
+                Some(format!(
+                    "answer the {} open question{} first",
+                    r.questions.len(),
+                    if r.questions.len() == 1 { "" } else { "s" }
+                ))
+            } else {
+                (!r.requirements.is_empty() && !r.totals.complete())
+                    .then(|| "approve the spec's requirements first (Review)".to_owned())
+            }
+        });
+        a.blocked = gate;
+        out.push(a);
+    }
     for name in &planning_next {
         let why = match name.as_str() {
             "plan" => "write the plan from the spec",

@@ -13,6 +13,7 @@ fn req(unit: &str, id: &str, text: &str) -> Requirement {
         unit: unit.to_owned(),
         id: id.to_owned(),
         text: text.to_owned(),
+        at: None,
     }
 }
 

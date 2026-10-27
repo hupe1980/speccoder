@@ -1025,3 +1025,140 @@ mod tests {
         );
     }
 }
+
+/// The record of hosted skills' runs (one JSON line each): tokens and,
+/// when the model is priced, money.
+const SKILL_USAGE: &str = "skills.jsonl";
+
+/// Appends one hosted skill run's usage to the project's record.
+pub(crate) fn record_skill_usage(
+    plane: &Path,
+    skill: &str,
+    [input, output, cache_read, cache_write]: [u64; 4],
+    prices: Option<crate::substrate::model_config::Prices>,
+) {
+    use std::io::Write as _;
+    if input + output == 0 {
+        return;
+    }
+    let usd = crate::progress::usd(prices, input, output, cache_read, cache_write);
+    let line = serde_json::json!({
+        "skill": skill,
+        "input_tokens": input,
+        "output_tokens": output,
+        "usd": usd,
+    });
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(plane.join(SKILL_USAGE))
+    {
+        let _ = writeln!(f, "{line}");
+    }
+}
+
+/// What running `skills` once each cost before, from the project's record
+/// of hosted skill runs: per skill the median of its runs, summed. `None`
+/// when a skill has never run here — no estimate is made up.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct SkillCost {
+    /// Tokens (input and output), the medians summed.
+    pub tokens: u64,
+    /// USD, when every run was priced.
+    pub usd: Option<f64>,
+    /// The fewest runs any of the skills has on record.
+    pub runs: usize,
+}
+
+/// [`SkillCost`] of `skills` in the project at `root`, and the model.
+#[must_use]
+pub fn skill_cost(root: &Path, skills: &[String]) -> (Option<SkillCost>, Option<String>) {
+    let model = crate::verify::find_config(root)
+        .and_then(|d| std::fs::read_to_string(d.join(crate::verify::config::FILE)).ok())
+        .and_then(|t| crate::substrate::model_config::parse(&t).ok().flatten())
+        .map(|m| m.model);
+    let Some(state) = crate::worktree::state_dir() else {
+        return (None, model);
+    };
+    let plane = crate::worktree::project_state_dir(&state, root);
+    let text = std::fs::read_to_string(plane.join(SKILL_USAGE)).unwrap_or_default();
+    (cost_from(&text, skills), model)
+}
+
+/// [`SkillCost`] of `skills` from the record's lines.
+fn cost_from(text: &str, skills: &[String]) -> Option<SkillCost> {
+    let rows: Vec<serde_json::Value> = text
+        .lines()
+        .filter_map(|l| serde_json::from_str(l).ok())
+        .collect();
+    let median = |mut v: Vec<f64>| -> f64 {
+        v.sort_by(f64::total_cmp);
+        let n = v.len();
+        if n % 2 == 1 {
+            v[n / 2]
+        } else {
+            (v[n / 2 - 1] + v[n / 2]) / 2.0
+        }
+    };
+    let mut tokens = 0.0;
+    let mut usd = Some(0.0);
+    let mut runs = usize::MAX;
+    for skill in skills {
+        let mine: Vec<&serde_json::Value> = rows
+            .iter()
+            .filter(|r| r["skill"] == skill.as_str())
+            .collect();
+        if mine.is_empty() {
+            return None;
+        }
+        runs = runs.min(mine.len());
+        #[allow(clippy::cast_precision_loss)]
+        let t: Vec<f64> = mine
+            .iter()
+            .map(|r| {
+                (r["input_tokens"].as_u64().unwrap_or(0) + r["output_tokens"].as_u64().unwrap_or(0))
+                    as f64
+            })
+            .collect();
+        tokens += median(t);
+        let priced: Vec<f64> = mine.iter().filter_map(|r| r["usd"].as_f64()).collect();
+        usd = match usd {
+            Some(sum) if priced.len() == mine.len() => Some(sum + median(priced)),
+            _ => None,
+        };
+    }
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let cost = SkillCost {
+        tokens: tokens.round() as u64,
+        usd,
+        runs,
+    };
+    Some(cost)
+}
+
+#[cfg(test)]
+mod skill_cost_tests {
+    use super::*;
+
+    #[test]
+    fn the_cost_line_is_the_median_of_runs_on_record_or_nothing() {
+        let rows = [
+            r#"{"skill":"speckit-specify","input_tokens":100,"output_tokens":10,"usd":0.01}"#,
+            r#"{"skill":"speckit-specify","input_tokens":300,"output_tokens":30,"usd":0.03}"#,
+            r#"{"skill":"speckit-specify","input_tokens":200,"output_tokens":20,"usd":0.02}"#,
+            r#"{"skill":"speckit-plan","input_tokens":1000,"output_tokens":100,"usd":null}"#,
+        ]
+        .join("\n");
+        let one =
+            cost_from(&rows, &["speckit-specify".to_owned()]).unwrap_or_else(|| panic!("none"));
+        assert_eq!((one.tokens, one.runs), (220, 3));
+        assert!((one.usd.unwrap_or_default() - 0.02).abs() < 1e-9);
+        let two = cost_from(
+            &rows,
+            &["speckit-specify".to_owned(), "speckit-plan".to_owned()],
+        )
+        .unwrap_or_else(|| panic!("none"));
+        assert_eq!((two.tokens, two.runs, two.usd), (1320, 1, None));
+        assert_eq!(cost_from(&rows, &["speckit-tasks".to_owned()]), None);
+    }
+}

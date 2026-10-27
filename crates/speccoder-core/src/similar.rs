@@ -249,6 +249,20 @@ pub struct Requirement {
     pub id: String,
     /// The requirement as written.
     pub text: String,
+    /// Where it is written, for a comment anchored to it: the document
+    /// (project-relative), the line (1-based) and that line verbatim.
+    pub at: Option<Place>,
+}
+
+/// Where a requirement is written.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct Place {
+    /// The document, project-relative.
+    pub path: String,
+    /// The line, 1-based.
+    pub line: u32,
+    /// That line, verbatim.
+    pub quote: String,
 }
 
 /// How close a match is.
@@ -287,6 +301,8 @@ pub struct SimilarMatch {
     pub level: SimilarLevel,
     /// The terms it shares with the description, the weightiest first.
     pub shared: Vec<String>,
+    /// Where it is written.
+    pub at: Option<Place>,
 }
 
 /// The unit's number (`003-reports` → 3), for ordering ties.
@@ -382,6 +398,7 @@ pub fn matches(query: &str, corpus: &[Requirement]) -> Vec<SimilarMatch> {
                 SimilarLevel::Close
             },
             shared,
+            at: r.at.clone(),
         })
         .collect()
 }
