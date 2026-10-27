@@ -40,6 +40,15 @@ speccoder fix             # commit it in your checkout as `speccoder: setup`
 
 `fix` copies a lockfile only the worktree's checks wrote, adds build output to `.gitignore`, and commits exactly those files and the uncommitted configuration. Undo: `git reset --soft HEAD~1`. At a terminal `run` offers this itself.
 
+## Dependency folders
+
+A worktree holds only what is committed, and `node_modules/` or `.venv/` never are. Before the baseline, the step `prepare` gives each Node or uv project in the worktree its dependency folder, once per lockfile: the next task reuses it, and a branch that changes its lockfile is prepared again. Go and Rust need no step.
+
+- **Installed** (the default): the toolchain's locked install from its cache, offline and sandboxed — `npm ci --offline`, `pnpm install --frozen-lockfile --offline`, `yarn install --frozen-lockfile --offline` (Yarn 2+: `--immutable`), `bun install --frozen-lockfile`, `uv sync --locked --offline`. A package the cache lacks stops the task with `error[PREPARE-FAILED]`: run the install once in your checkout, or let its online form reach the network (`[sandbox] network_allow = [["npm", "ci"]]`). A project `speccoder new` made installs from the cache its own steps filled.
+- **Linked** (`[worktree] link = ["node_modules", ".venv"]`): a symlink to your checkout's folder, read-only to every command. Made only while the folder is git-ignored in your checkout, the worktree's lockfile is byte for byte yours, commands are sandboxed, and — for a `.venv` — the project's package imports from the worktree; checks then get the worktree's source root first on `PYTHONPATH`. Otherwise the folder is installed and the run says why. git never sees the link: speccoder adds `/node_modules` under `# speccoder: [worktree] link` to your repository's `.git/info/exclude`, its only write outside the worktree. Each tick names the links and their lockfiles' digests (`Linked-Dependencies:` and the [signed statement](@/docs/task-verification.md)).
+
+Lane and bisection worktrees are prepared the same way; in-place runs use your checkout's own folders; `[worktree] prepare = "off"` skips the step. `speccoder doctor` says for each linked folder whether a run would link it.
+
 ## Changes set aside
 
 Uncommitted changes found in a feature's worktree when a run starts (edits by hand, without an interrupted attempt) are saved under an attempt ref and set aside; the task starts from the branch tip. They wait in **Needs You** and on the task's card:
@@ -178,7 +187,7 @@ speccoder                 # at a terminal: the same dashboard, watching (leaving
 
 ## Watching a run
 
-Every task goes through the same stages, named the same everywhere: `baseline · red · attempt · verify · audit · mutation · strength · monitor · commit`. A stage that does not apply is shown only with `-v`. The [quickstart](@/docs/quickstart.md#5-run) shows the `--plain` lines. A run picked up after a kill starts with `Resuming — T004 was interrupted during attempt (run_command cargo test); finished calls will not repeat.`
+Every task goes through the same stages, named the same everywhere: `baseline · red · attempt · verify · audit · mutation · strength · monitor · commit`, after `prepare` where the worktree has [dependency folders](#dependency-folders). A stage that does not apply is shown only with `-v`. The [quickstart](@/docs/quickstart.md#5-run) shows the `--plain` lines. A run picked up after a kill starts with `Resuming — T004 was interrupted during attempt (run_command cargo test); finished calls will not repeat.`
 
 ### Look and accessibility
 

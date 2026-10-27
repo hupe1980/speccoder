@@ -13,6 +13,9 @@ Every failure names a [code](@/docs/codes.md) and the command that fixes it; `sp
 |---|---|
 | `error[SETUP-INCOMPLETE]` (14) | The worktree lacks setup your checkout never committed, or the checks leave a lockfile or build output there. At a terminal, `speccoder run` offers the fix and runs again on a yes; the web interface offers a button; else [`speccoder fix`](@/docs/running.md#when-the-setup-stops-a-run). |
 | `error[CHECK-BROKEN]` (13) before any model call | A check fails on the untouched worktree without running a test; the message quotes the check's own error. When the first task creates the project, run with `--allow-failing-baseline`. |
+| `error[PREPARE-FAILED]` (13) before the baseline | The worktree's locked, offline install failed. A package the toolchain's cache lacks: run `npm install` or `uv sync` once in your checkout, or allow the install's online form in `[sandbox] network_allow`. No lockfile committed: commit the one `npm install` or `uv lock` writes. `[worktree] prepare = "off"` when the checks need none of it. |
+| `stopped[LINK-CHANGED]` (23) | An `[executor]` agent changed a folder linked from your checkout (`[worktree] link`); nothing was judged. Restore your checkout's install (`npm ci`, `uv sync`), or remove the folder from `link`. |
+| A folder in `[worktree] link` is installed instead | The run and `speccoder doctor` say why: missing or not git-ignored in your checkout, the lockfile differs from yours, a Node workspace, or the `.venv`'s import probe found your checkout's code. |
 | `error[CONFIG-MISSING]` (13) | No `speccoder.toml`: run `speccoder init`. "The worktree has no speccoder.toml": commit it, since speccoder reads committed files. |
 | `error[CONFIG-INVALID]` (13), e.g. ``unknown section `[budgett]` `` | A typo or a wrong value in `speccoder.toml`; the message names the line and lists what is known. |
 | `error[UNCOMMITTED-INTENT]` (14) | Commit the feature's spec files, or run with `--in-place`. |

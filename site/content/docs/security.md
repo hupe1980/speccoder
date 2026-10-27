@@ -75,7 +75,7 @@ Every command speccoder starts for a task (checks, the model's commands, the for
 
 Inside, a command:
 
-- **writes** only to the worktree, a private temporary directory and the package caches builds need (`~/.cargo/registry`, `~/.cache`, `~/.npm`, `~/go/pkg/mod`, `~/Library/Caches`, …), plus `[sandbox] writable`; not to speccoder's state, `~/.cargo/bin` or your checkout;
+- **writes** only to the worktree, a private temporary directory and the package caches builds need (`~/.cargo/registry`, `~/.cache`, `~/.npm`, `~/go/pkg/mod`, `~/Library/Caches`, …), plus `[sandbox] writable`; not to speccoder's state, `~/.cargo/bin` or your checkout — a folder [linked from your checkout](@/docs/running.md#dependency-folders) is read-only, and a write refused there says so;
 - **cannot read** credentials: `~/.ssh`, `~/.aws`, `~/.azure`, `~/.gnupg`, `~/.netrc`, `~/.docker`, `~/.kube`, `~/.npmrc`, `~/.pypirc`, `~/.git-credentials`, `~/.password-store`, `~/.config/gh`, `~/.config/gcloud`, `~/.cargo/credentials`, keyrings and keychains;
 - **has no network** beyond loopback (`[sandbox] network = "loopback"`, the default), so local test servers work; on Linux loopback is blocked too;
 - **cannot connect to a Unix socket outside the writable paths** (the Docker daemon's, a database's, an agent's); a check that needs one lists its directory in `[sandbox] writable`;
@@ -113,7 +113,7 @@ speccoder runs on the [agentplane](https://crates.io/crates/agentplane) runtime,
 
 ## External agents
 
-With an [`[executor]`](@/docs/integrations.md#external-agents), another agent makes the attempt with its own tools, outside speccoder's sandbox and with your environment (it needs its own credentials). speccoder's policy cannot refuse its individual calls; its own permission system is the boundary. The worktree, the diff audit, the checks and the verdict still apply.
+With an [`[executor]`](@/docs/integrations.md#external-agents), another agent makes the attempt with its own tools, outside speccoder's sandbox and with your environment (it needs its own credentials). speccoder's policy cannot refuse its individual calls; its own permission system is the boundary. The worktree, the diff audit, the checks and the verdict still apply. It can write a folder linked from your checkout: speccoder compares the folder's install fingerprint (npm's `node_modules/.package-lock.json` and top-level entries, a `.venv`'s installed distributions and `.pth` files) before and after the attempt, and a change stops the task with `stopped[LINK-CHANGED]`, nothing judged.
 
 ## Checking someone else's evidence
 

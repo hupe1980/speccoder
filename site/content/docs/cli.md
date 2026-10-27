@@ -169,7 +169,7 @@ With `--events` stdout carries only JSON Lines; stderr stays quiet (an approval 
 | `session.started` | First line: version, command, `capabilities` (feature-detect on these, never on the version) |
 | `run.started` | A feature run begins, with its plan |
 | `task.started`, `task.resumed`, `task.finished` | A task's run begins, picks up a killed attempt, ends (outcome, run id, tokens) |
-| `stage.started`, `stage.finished` | `baseline`, `reproduce`, `confirm`, `red`, `attempt`, `verify`, `unchanged`, `audit`, `mutation`, `strength`, `monitor`, `commit` |
+| `stage.started`, `stage.finished` | `prepare`, `baseline`, `reproduce`, `confirm`, `red`, `attempt`, `verify`, `unchanged`, `audit`, `mutation`, `strength`, `monitor`, `commit` |
 | `tool_call` | A call the model made, with the policy's decision |
 | `approval.requested`, `approval.decided` | A call waits for a person; who decided, how, and the scope |
 | `usage` | Tokens so far (at most once a second per task) |

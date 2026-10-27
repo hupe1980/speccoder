@@ -14,8 +14,20 @@ adheres to [Semantic Versioning](https://semver.org/).
   the file. `init --provider bedrock [--region]` writes
   `global.anthropic.claude-sonnet-5-5`; `doctor` names the source. Known
   issue: a tool answer that is a list fails the attempt on Bedrock.
+- **A worktree gets its dependency folders.** Before the baseline, the
+  `prepare` step installs a Node or uv project's dependencies in the run's
+  worktree with the toolchain's locked, offline install, sandboxed, once
+  per lockfile (`PREPARE-FAILED` when it cannot). `[worktree] link =
+  ["node_modules", ".venv"]` links your checkout's folders instead —
+  read-only, only while the lockfile matches, a `.venv` only when the
+  worktree's package imports — named in each tick
+  (`Linked-Dependencies:`, statement revision 4); an `[executor]` that
+  changes one stops the task (`LINK-CHANGED`). `init` proposes `link` from
+  `.claude/settings.json`; `doctor` reports each folder.
 
 ### Fixed
+
+- A Node project stopped at the baseline in a run's worktree: `node_modules/` is never committed, so its test runner was not there. The worktree is now prepared first.
 
 - A uv project's checks ran `.venv/bin/python`, which a run's worktree never has (`.venv/` is not committed), so every task stopped at the baseline. `init` now writes `uv run --locked --offline python -m pytest …`; a check run through `uv run` (or `poetry run`, `uvx`, …) allows exactly itself, never the runner as a prefix.
 - An empty pytest suite (exit 5, a fresh scaffold) failed the baseline as a broken check, although `init` reads it as *no tests yet*; it now passes as no tests yet, as nextest's `--no-tests=warn` does.

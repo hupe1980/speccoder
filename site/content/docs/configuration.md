@@ -171,6 +171,17 @@ speccoder config set commands.allow_prefix npm run          # shows it, then: ty
 
 What the sandbox allows: [the OS sandbox](@/docs/security.md#the-os-sandbox).
 
+## `[worktree]`
+
+How a run's worktree gets the dependency folders git never holds; see [dependency folders](@/docs/running.md#dependency-folders).
+
+| Key | Default | Meaning |
+|---|---|---|
+| `prepare` | `"auto"` | `auto` installs a worktree's Node and uv dependencies (locked, offline) before the baseline; `off` never |
+| `link` | `[]` | Folders linked from your checkout instead, e.g. `["node_modules", ".venv"]`: relative, inside the project; read-only to commands, and used only while the lockfile matches |
+
+`speccoder init` proposes `link` with the ignored folders `.claude/settings.json` lists in `worktree.symlinkDirectories`.
+
 ## `[attest]`
 
 Signed [attestations](@/docs/attestations.md) of every tick. The signer is part of the judge configuration the statements' policy hash covers.
