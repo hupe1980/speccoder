@@ -13,6 +13,7 @@ keywords.workspace = true
 categories.workspace = true
 
 [dependencies]
+flate2 = "1"
 pulldown-cmark = { workspace = true, features = ["html"] }
 speccoder-core.workspace = true
 speccoder-speckit.workspace = true

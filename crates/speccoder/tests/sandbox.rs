@@ -104,6 +104,33 @@ fn writes_stay_in_the_workspace_and_its_temporary_directory() {
     assert!(!ok, "wrote into the home directory");
 }
 
+/// macOS's `mktemp` ignores `TMPDIR`: its default names in the per-user
+/// temporary directory work, and nothing else there is writable.
+#[cfg(target_os = "macos")]
+#[test]
+fn mktemp_works_and_the_rest_of_the_system_temp_stays_closed() {
+    let w = world();
+    let Some(s) = sandboxed(w.root.path(), w.home.path(), Network::Loopback) else {
+        return;
+    };
+    let (ok, out) = sh(
+        &s,
+        w.root.path(),
+        "f=$(mktemp) && echo x > \"$f\" && d=$(mktemp -d) && echo y > \"$d/inner\" && rm -rf \"$f\" \"$d\" && echo ok",
+    );
+    assert!(ok && out.contains("ok"), "{out}");
+    let other = std::env::temp_dir().join(format!("speccoder-escape-{}", std::process::id()));
+    let (ok, _) = sh(
+        &s,
+        w.root.path(),
+        &format!("echo x > '{}'", other.display()),
+    );
+    assert!(
+        !ok && !other.exists(),
+        "wrote another name in the system temp"
+    );
+}
+
 #[test]
 fn credentials_are_unreadable() {
     let w = world();

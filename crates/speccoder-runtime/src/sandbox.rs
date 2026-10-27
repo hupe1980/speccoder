@@ -319,6 +319,18 @@ fn quote(p: &Path) -> String {
     format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\""))
 }
 
+/// `text` as a literal in a Seatbelt (POSIX extended) regular expression.
+fn regex_escape(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for c in text.chars() {
+        if "\\^$.|?*+()[]{}\"".contains(c) {
+            out.push('\\');
+        }
+        out.push(c);
+    }
+    out
+}
+
 /// The Seatbelt profile for `p`. Later rules win.
 #[must_use]
 pub fn seatbelt(p: &Profile) -> String {
@@ -326,6 +338,15 @@ pub fn seatbelt(p: &Profile) -> String {
     out.push_str("(allow file-write*");
     for w in p.writable.iter().chain([&p.tmp]) {
         out.push_str(&format!(" (subpath {})", quote(w)));
+    }
+    // macOS's `mktemp` ignores `TMPDIR` and creates `tmp.XXXXXXXX` in the
+    // per-user temporary directory (the private one's parent): only those
+    // names, and what is inside them, are writable there.
+    if let Some(user_tmp) = p.tmp.parent() {
+        out.push_str(&format!(
+            " (regex #\"^{}/tmp\\.[A-Za-z0-9]+(/|$)\")",
+            regex_escape(&user_tmp.to_string_lossy())
+        ));
     }
     out.push_str(
         " (literal \"/dev/null\") (literal \"/dev/zero\") (literal \"/dev/tty\") (literal \"/dev/dtracehelper\") (regex #\"^/dev/fd/\") (regex #\"^/dev/ttys\"))\n",

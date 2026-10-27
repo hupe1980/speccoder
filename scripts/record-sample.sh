@@ -50,7 +50,7 @@ read -r provider model < <(sed -n '/^\[model\]/,/^\[/{s/^provider = "\(.*\)"/\1/
 rm -rf "$dest"
 mkdir -p "$dest"
 git bundle create "$dest/sample.bundle" --all
-cp "$journal" "$dest/journal.redb"
+gzip -9 -c "$journal" > "$dest/journal.redb.gz"
 ids="$(printf '"%s", ' "${runs[@]}")"
 cat > "$dest/manifest.toml" <<TOML
 case = "wordcount"
@@ -67,7 +67,7 @@ size="$(du -sk "$dest" | cut -f1)"
 # Credentials, looked for where they are readable (the bundle is a
 # compressed pack): every revision, diff and note of the repository, the
 # journal and the manifest.
-if ! "$root/scripts/sample-credentials.sh" "$project" "$dest/journal.redb" "$dest/manifest.toml"; then
+if ! "$root/scripts/sample-credentials.sh" "$project" "$journal" "$dest/manifest.toml"; then
   rm -rf "$dest"; exit 1
 fi
 echo "record-sample: ${#runs[@]} run(s) → $dest (${size} KiB); rebuild, then: cargo nextest run -p speccoder-runtime --test sample"

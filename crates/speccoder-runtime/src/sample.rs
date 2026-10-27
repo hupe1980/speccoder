@@ -64,17 +64,28 @@ fn bundled_asset() -> Option<Asset> {
             "/assets/sample/sample.bundle"
         ))
         .to_vec(),
-        journal: include_bytes!(concat!(
+        // The journal is mostly preallocated space: bundled compressed.
+        journal: gunzip(include_bytes!(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/assets/sample/journal.redb"
-        ))
-        .to_vec(),
+            "/assets/sample/journal.redb.gz"
+        )))?,
         manifest: include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/assets/sample/manifest.toml"
         ))
         .to_owned(),
     })
+}
+
+/// A gzip stream's contents; `None` when it is not one.
+#[cfg_attr(not(speccoder_sample), allow(dead_code))]
+fn gunzip(bytes: &[u8]) -> Option<Vec<u8>> {
+    use std::io::Read as _;
+    let mut out = Vec::new();
+    flate2::read::GzDecoder::new(bytes)
+        .read_to_end(&mut out)
+        .ok()?;
+    Some(out)
 }
 
 #[cfg(not(speccoder_sample))]
@@ -299,5 +310,21 @@ pub fn run_checks(state: &Path, root: &Path) -> CommandResult {
                 .with_data(CommandData::Verify(Box::new(report)))
         }
         Err(e) => CommandResult::new(COMMAND, CommandStatus::Error, &e),
+    }
+}
+
+#[cfg(test)]
+mod gzip_tests {
+    #[test]
+    fn a_compressed_journal_unpacks_and_anything_else_is_refused() {
+        use std::io::Write as _;
+        let mut gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::best());
+        gz.write_all(b"journal bytes").unwrap();
+        let packed = gz.finish().unwrap();
+        assert_eq!(
+            super::gunzip(&packed).as_deref(),
+            Some(&b"journal bytes"[..])
+        );
+        assert_eq!(super::gunzip(b"not gzip"), None);
     }
 }
