@@ -648,7 +648,7 @@
   },
   "$id": "https://hupe1980.github.io/speccoder/schemas/v2/branch_verify.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Result of `speccoder-verify check` / `speccoder attest verify --branch`.",
+  "description": "Result of `speccoder attest verify --branch` / `speccoder attest badge`.",
   "properties": {
     "accepted_unsigned": {
       "description": "Unsigned evidence was accepted (`--require-signed=false`).",
@@ -760,6 +760,6 @@
     "not_evaluated",
     "newer_fields"
   ],
-  "title": "attest verify --branch, speccoder-verify: every tick of a branch and what its evidence comes to",
+  "title": "attest verify --branch, attest badge: every tick of a branch and what its evidence comes to",
   "type": "object"
 }

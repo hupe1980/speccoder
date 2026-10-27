@@ -7,7 +7,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
-#[cfg(feature = "engine")]
 use speccoder_core::TaskStatus;
 use speccoder_core::{Drift, RequirementDrift};
 
@@ -21,7 +20,6 @@ use crate::tools::policy::Policy;
 /// path in the repository (`""` at the top, else ending in `/`). `false`, nothing marked:
 /// `HEAD` does not hold the feature's intent (it is not in git, or not on
 /// this branch), so git cannot say what the spec is now.
-#[cfg(feature = "engine")]
 pub(crate) fn mark(
     root: &Path,
     format: &dyn Adapter,

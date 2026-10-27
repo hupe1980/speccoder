@@ -337,7 +337,7 @@ pub enum Command {
         #[arg(long)]
         force: bool,
     },
-    /// Verify the signed evidence of the feature's ticks, or sign what is unsigned.
+    /// Verify signed evidence (the feature's ticks, or a branch's), tour it, badge it, or sign it.
     #[command(hide = true)]
     Attest {
         #[command(subcommand)]
@@ -552,9 +552,12 @@ pub enum TaskAction {
 pub enum AttestAction {
     /// Re-check every task's attestation against its commit, signatures
     /// against your trust (exit 26 when one does not hold).
+    #[command(
+        after_help = "With --branch: exit 0 every tick verifies, 26 one does not, 15 nothing to check (neutral), 1 the branch could not be read."
+    )]
     Verify {
         /// A commit or a range (`main..speccoder/001-x`); default: the
-        /// feature's task commits.
+        /// feature's task commits. With `--branch`: the head (default `HEAD`).
         rev: Option<String>,
         /// SSH allowed-signers file (default: git's gpg.ssh.allowedSignersFile).
         #[arg(long, value_name = "FILE")]
@@ -565,17 +568,21 @@ pub enum AttestAction {
         /// The Sigstore OIDC issuer to expect.
         #[arg(long)]
         certificate_oidc_issuer: Option<String>,
-        /// Fail on unsigned statements too.
-        #[arg(long)]
-        require_signed: bool,
-        /// Check every ticked task of the branch instead (what
-        /// `speccoder-verify` checks): `REV` is the head (default `HEAD`).
+        /// Fail on unsigned statements too (with `--branch` the default;
+        /// `--require-signed=false` accepts them, and says so).
+        #[arg(long, num_args = 0..=1, require_equals = true, default_missing_value = "true", value_name = "BOOL")]
+        require_signed: Option<bool>,
+        /// Check every ticked task of the branch instead, from git objects
+        /// only and with your trust only (what the evidence Action runs).
         #[arg(long)]
         branch: bool,
         /// With `--branch`: only the units touched since the merge base
-        /// with this revision.
+        /// with this revision (default: every unit).
         #[arg(long, value_name = "REV", requires = "branch")]
         base: Option<String>,
+        /// With `--branch`: every unit, whatever the base.
+        #[arg(long, requires = "branch")]
+        all: bool,
         /// With `--branch`: the allowed-signers file read from git at a
         /// revision, `<rev>:<path>` (the base's, never the head's).
         #[arg(
@@ -585,6 +592,57 @@ pub enum AttestAction {
             conflicts_with = "allowed_signers"
         )]
         allowed_signers_rev: Option<String>,
+        /// With `--branch`: `regression_only` and `attested` ticks fail too.
+        #[arg(long, requires = "branch")]
+        require_verified: bool,
+        /// With `--branch`: write the check as Markdown to this file.
+        #[arg(long, value_name = "FILE", requires = "branch")]
+        markdown: Option<PathBuf>,
+        /// With `--branch`: write the check-run request bodies
+        /// (`{create, updates}`) to this file.
+        #[arg(long, value_name = "FILE", requires = "branch")]
+        github_check: Option<PathBuf>,
+        /// With `--branch`: the check run's name.
+        #[arg(long, value_name = "NAME", requires = "branch")]
+        check_name: Option<String>,
+        /// With `--branch`: publish a neutral outcome as `neutral` (GitHub
+        /// counts it as passing); without it, as `failure`.
+        #[arg(long, requires = "branch")]
+        allow_neutral: bool,
+        /// With `--branch`: print workflow-command annotations and append
+        /// the check to `$GITHUB_STEP_SUMMARY` (where the check cannot be
+        /// published).
+        #[arg(long, requires = "branch")]
+        github_annotations: bool,
+    },
+    /// One ticked task's evidence, step by step, from git objects (payload
+    /// `evidence_tour`; `--feature` names the unit).
+    Tour {
+        /// The task ID.
+        task: String,
+        /// The commit to read (default `HEAD`).
+        rev: Option<String>,
+        /// With trust, a tour of evidence that does not verify stops at the
+        /// requirement; without, it shows what is recorded.
+        #[command(flatten)]
+        trust: AttestTrust,
+    },
+    /// The share of ticks with verifying evidence over every unit, as a
+    /// badge (an SVG and a shields.io endpoint).
+    Badge {
+        /// The commit to read (default `HEAD`).
+        rev: Option<String>,
+        #[command(flatten)]
+        trust: AttestTrust,
+        /// Unsigned evidence is unverifiable (`--require-signed=false` accepts it).
+        #[arg(long, require_equals = true, default_value_t = true, action = clap::ArgAction::Set, value_name = "BOOL")]
+        require_signed: bool,
+        /// Write the badge as SVG.
+        #[arg(long, value_name = "FILE")]
+        svg: Option<PathBuf>,
+        /// Write the shields.io endpoint JSON.
+        #[arg(long, value_name = "FILE")]
+        endpoint: Option<PathBuf>,
     },
     /// Sign the unsigned statements of the feature's task commits (for
     /// `[attest] sign_at = "later"`, or a key that was not set up).
@@ -592,6 +650,24 @@ pub enum AttestAction {
         /// A commit or a range; default: the feature's task commits.
         rev: Option<String>,
     },
+}
+
+/// The trust of `attest tour` and `attest badge`: the caller's only.
+#[derive(Debug, Clone, clap::Args)]
+pub struct AttestTrust {
+    /// An SSH allowed-signers file on this machine.
+    #[arg(long, value_name = "FILE", conflicts_with = "allowed_signers_rev")]
+    pub allowed_signers: Option<PathBuf>,
+    /// An allowed-signers file read from git at a revision, `<rev>:<path>`
+    /// (in CI: the base branch's, never the head's).
+    #[arg(long, value_name = "REV:PATH")]
+    pub allowed_signers_rev: Option<String>,
+    /// The Sigstore certificate identity to trust.
+    #[arg(long, requires = "certificate_oidc_issuer")]
+    pub certificate_identity: Option<String>,
+    /// The Sigstore OIDC issuer to trust.
+    #[arg(long, requires = "certificate_identity")]
+    pub certificate_oidc_issuer: Option<String>,
 }
 
 #[derive(Debug, Subcommand)]

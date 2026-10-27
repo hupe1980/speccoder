@@ -117,7 +117,7 @@ With an [`[executor]`](@/docs/integrations.md#external-agents), another agent ma
 
 ## Checking someone else's evidence
 
-[`speccoder-verify`](@/docs/verifier.md) is built to run on a pull request you do not trust: it executes nothing from the checked tree and takes trust only from you. The [action](@/docs/github.md#evidence-check) adds trust from a commit the checked one did not write and refuses to run with the head checked out under `pull_request_target`.
+[`speccoder attest verify --branch`](@/docs/verifier.md) is built to run on a pull request you do not trust: it executes nothing from the checked tree and takes trust only from you. The [action](@/docs/github.md#evidence-check) adds trust from a commit the checked one did not write and refuses to run with the head checked out under `pull_request_target`.
 
 ## What it does not protect against
 

@@ -195,10 +195,10 @@ pub enum CommandData {
     Review(Box<ReviewReport>),
     /// `auth`: who speccoder is on a GitHub host.
     Auth(Box<AuthReport>),
-    /// `speccoder-verify check` / `attest verify --branch`: every tick of
+    /// `attest verify --branch` / `attest badge`: every tick of
     /// a branch and what its evidence comes to.
     BranchVerify(Box<crate::verify_branch::BranchReport>),
-    /// `speccoder-verify tour` / `/api/tour`: one task's evidence tour.
+    /// `attest tour` / `/api/tour`: one task's evidence tour.
     EvidenceTour(Box<crate::tour::EvidenceTour>),
     /// `actions`: what can be done now.
     Actions(Box<ActionsReport>),
@@ -1947,7 +1947,7 @@ pub struct PrReport {
     /// Held-out sets of open tasks: they stay local.
     pub held_out_withheld: usize,
     /// `present`: a workflow under `.github/workflows/` runs
-    /// `speccoder-verify`; `absent`: none does.
+    /// `speccoder attest verify --branch`; `absent`: none does.
     pub evidence_check: String,
 }
 

@@ -1785,3 +1785,36 @@ pub fn comments(
     }
     out
 }
+
+/// `attest verify --branch` / `attest badge`: one line per tick, then the
+/// message (the title, or the badge).
+pub fn branch_verify(
+    out: &mut dyn Write,
+    report: &speccoder_core::verify_branch::BranchReport,
+    message: &str,
+) -> std::io::Result<()> {
+    use speccoder_core::verify_branch::TickOutcome;
+    for r in &report.ticks {
+        let what = match (r.outcome, r.verdict.as_deref(), r.reason) {
+            (TickOutcome::Evidenced, Some("regression_only"), _) => match &r.regression {
+                Some(why) => format!("regression_only — {why}"),
+                None => "regression_only".to_owned(),
+            },
+            (TickOutcome::Evidenced, Some(v), _) => v.to_owned(),
+            (TickOutcome::Stale, ..) => "stale".to_owned(),
+            (TickOutcome::Regressed, ..) => "regressed".to_owned(),
+            (_, _, Some(reason)) => format!("unverifiable: {}", reason.word()),
+            _ => "unverifiable".to_owned(),
+        };
+        let detail = r
+            .detail
+            .as_deref()
+            .map(|d| format!(" — {d}"))
+            .unwrap_or_default();
+        writeln!(out, "  {}/{}  {what}{detail}", r.tick.feature, r.tick.task)?;
+    }
+    for n in &report.not_evaluated {
+        writeln!(out, "  not evaluated: {n}")?;
+    }
+    writeln!(out, "{message}")
+}

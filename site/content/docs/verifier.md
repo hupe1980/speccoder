@@ -1,17 +1,17 @@
 +++
 title = "Proof in pull requests"
-description = "speccoder-verify checks every ticked task of a branch against its signed evidence, with the maintainer's trust: no model key, no network, nothing from the pull request executed. The speccoder / evidence check, the evidence tour and the badge."
+description = "speccoder attest verify --branch checks every ticked task of a branch against its signed evidence, with the maintainer's trust: no model key, no network, nothing from the pull request executed. The speccoder / evidence check, the evidence tour and the badge."
 weight = 96
 
 [extra]
 group = "Trust"
 +++
 
-**`speccoder-verify`** checks a branch's [attestations](@/docs/attestations.md) for a maintainer: no speccoder install, no model key, no trust in the contributor's machine. On GitHub, the [`speccoder-verify` action](@/docs/github.md#evidence-check) runs it on every push to a pull request and publishes the check **`speccoder / evidence`**.
+**`speccoder attest verify --branch`** checks a branch's [attestations](@/docs/attestations.md) for a maintainer: no model key, no network, no trust in the contributor's machine. On GitHub, the [evidence action](@/docs/github.md#evidence-check) (`packaging/speccoder-verify-action`) downloads the `speccoder` release, runs it on every push to a pull request and publishes the check **`speccoder / evidence`**.
 
 ## What it checks
 
-The verifier takes every unit (feature, change) whose task list or intent files differ between the head and the merge base with `--base`, **in full** (so a spec edit that stales an older tick is caught), and for every `[X]` there:
+The check takes every unit (feature, change) whose task list or intent files differ between the head and the merge base with `--base`, **in full** (so a spec edit that stales an older tick is caught), and for every `[X]` there:
 
 1. finds the latest commit reachable from the head that carries the task's verdict (`Spec-Task: <unit>/<task>` and `Verdict:`);
 2. checks that commit's attestation with the rules of [`speccoder attest verify`](@/docs/attestations.md#checking-them) (one implementation, so both agree);
@@ -29,14 +29,14 @@ Reasons for `unverifiable`: `ticked_without_evidence` (ticked by hand), `missing
 
 The branch's **conclusion** is `failure` when any tick fails, `success` when every tick carries verifying evidence, and `neutral` when there is nothing to check (no ticks in the touched units, or no spec project in a tree read whole); neutral is never success.
 
-A check that cannot read what it checks is an **error** (exit `1`, no check payload), never neutral, so `--allow-neutral` cannot pass it: a failing git command, a tree that cannot be written out whole (an unreadable blob, two paths equal but for letter case), an unreadable unit, or a head that drops the spec project its base (or the trust's revision) holds. Skipped tasks are listed, not counted. Regressions of earlier tasks by later ones are not evaluated, and the check says so.
+A check that cannot read what it checks is **refused** (a non-zero exit, no check payload), never neutral, so `--allow-neutral` cannot pass it: a failing git command, a tree that cannot be written out whole (an unreadable blob, two paths equal but for letter case), an unreadable unit, or a head that drops the spec project its base (or the trust's revision) holds. Skipped tasks are listed, not counted. Regressions of earlier tasks by later ones are not evaluated, and the check says so.
 
 ## Run it
 
-Install it from the release ([installation](@/docs/installation.md#the-verifier)) or with `cargo install speccoder-verify --locked`.
+It is part of `speccoder` ([installation](@/docs/installation.md)).
 
 ```sh
-speccoder-verify check --base origin/main \
+speccoder attest verify --branch --base origin/main \
   --allowed-signers-rev origin/main:.github/speccoder/allowed_signers
 ```
 
@@ -47,7 +47,7 @@ failure: 7 verified, 1 regression only, 1 attested, 1 stale, 2 unverifiable
   007-config/T014  stale — FR-004 changed since the tick: the verdict is for the earlier wording
 ```
 
-**Trust comes from you, never from the branch.** Without one of these, it refuses:
+**Trust comes from you, never from the branch.** Without one of these (or git's `gpg.ssh.allowedSignersFile` on your machine), it refuses:
 
 | Trust | Flag |
 |---|---|
@@ -58,12 +58,12 @@ failure: 7 verified, 1 regression only, 1 attested, 1 stale, 2 unverifiable
 - OpenPGP signatures are checked against the caller's keyring (`GNUPGHOME`): one good signature, by the key gpg validated, that the keyring trusts fully or ultimately, read from gpg's status lines by keyword (a user ID that says `TRUST_ULTIMATE` trusts nothing). Every such key is trusted, so keep the keyring to the project's signers and leave `auto-key-retrieve` off. The signer shown is the key's fingerprint.
 - Unsigned evidence is unverifiable unless you pass `--require-signed=false`; the report then says unsigned ticks were accepted.
 
-**It executes nothing from the checked tree.** It reads git objects only, never a working tree, and spawns only `git` and the signature tool a signature names, with an environment holding nothing but `PATH`, `HOME`, `GNUPGHOME`, `LANG`, `TMPDIR` and `GITHUB_STEP_SUMMARY`. It opens no socket: the model substrate, the HTTP client and the keychain are not in the binary ([a layering test](https://github.com/hupe1980/speccoder/blob/main/crates/speccoder/tests/layering.rs) enforces it).
+**It executes nothing from the checked tree.** It reads git objects only, never a working tree, and spawns only `git` and the signature tool a signature names (a [test](https://github.com/hupe1980/speccoder/blob/main/crates/speccoder/tests/branch_check.rs) runs it with nothing else on the `PATH`), with an environment holding nothing but `PATH`, `HOME`, `GNUPGHOME`, `LANG`, `TMPDIR` and `GITHUB_STEP_SUMMARY`: speccoder runs itself again with only those before it starts. It calls no model and no HTTP client.
 
 | Flag | |
 |---|---|
-| `--repo DIR` | the repository (default `.`) |
-| `--head REV` / `--base REV` | what is checked (default `HEAD`), and against what (without a base: every unit) |
+| `-C DIR` | the repository (default `.`) |
+| `[REV]` / `--base REV` | what is checked (default `HEAD`), and against what (without a base: every unit) |
 | `--all` | every unit, whatever the base |
 | `--require-verified` | `regression_only` and `attested` fail too |
 | `--require-signed=false` | accept unsigned evidence, and say so |
@@ -74,7 +74,7 @@ failure: 7 verified, 1 regression only, 1 attested, 1 stale, 2 unverifiable
 | `--allow-neutral` | publish a neutral outcome as `neutral` (else `failure`) |
 | `--github-annotations` | workflow-command annotations, and the check appended to `$GITHUB_STEP_SUMMARY` |
 
-Exit status of `check`: `0` success, `1` failure, a refusal or an error, `78` neutral. `tour` and `badge` exit `0` when they produced their output, `1` otherwise. `speccoder attest verify --branch [--base REV]` runs the same check from speccoder, with your own trust (also git's `gpg.ssh.allowedSignersFile`).
+Exit status of `attest verify --branch`: `0` success, `26` failure, `15` neutral, `2` a refusal (no trust, a bad flag), `1` an error. `attest tour` and `attest badge` exit `0` when they produced their output.
 
 ## The check on the pull request
 
@@ -103,14 +103,14 @@ Each tick reads as six steps, each labelled with its source: **signed** (a signe
 A step without evidence says so in the verdict's words (`REGRESSION ONLY — nothing task-specific was shown`, `ATTESTED — a person's word, not evidence`). An unverifiable tick shows only its requirement and the reason. The tour is in the check, in `speccoder pr`'s description, in the app's task inspector (**Tour**), and on its own:
 
 ```sh
-speccoder-verify tour --feature 007-config --task T012           # Markdown
-speccoder-verify tour --feature 007-config --task T012 --json    # payload evidence_tour
+speccoder attest tour T012 --feature 007-config           # Markdown
+speccoder attest tour T012 --feature 007-config --json    # payload evidence_tour
 ```
 
 ## The badge
 
 ```sh
-speccoder-verify badge --allowed-signers-rev main:.github/speccoder/allowed_signers \
+speccoder attest badge --allowed-signers-rev main:.github/speccoder/allowed_signers \
   --svg speccoder-evidence.svg --endpoint speccoder-evidence.json
 ```
 

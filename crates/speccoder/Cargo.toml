@@ -26,7 +26,7 @@ path = "src/main.rs"
 
 [dependencies]
 speccoder-core.workspace = true
-speccoder-runtime = { workspace = true, features = ["engine"] }
+speccoder-runtime.workspace = true
 speccoder-web.workspace = true
 clap.workspace = true
 clap_complete.workspace = true

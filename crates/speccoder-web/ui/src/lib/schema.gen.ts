@@ -344,7 +344,7 @@ export interface BenchReport {
   skipped: string[];
 }
 
-/** Result of `speccoder-verify check` / `speccoder attest verify --branch`. */
+/** Result of `speccoder attest verify --branch` / `speccoder attest badge`. */
 export interface BranchReport {
   /** Unsigned evidence was accepted (`--require-signed=false`). */
   accepted_unsigned: boolean;
@@ -895,6 +895,36 @@ export interface Confirmation {
 
 /** State of the project constitution. */
 export type ConstitutionState = "present" | "unfilled" | "absent";
+
+/** One part handed to a call. */
+export interface ContextEntry {
+  /** Their size. */
+  bytes: number;
+  /** Cut to a budget. */
+  cut: boolean;
+  /** What it is. */
+  kind: ContextKind;
+  /** A path, an id or a part pointer (`/bundle/plan`). */
+  reference: string;
+  /** Hex SHA-256 of the exact bytes given. */
+  sha256: string;
+  /**
+   * Where it came from: `person`, `worktree`, `speccoder://<producer>/<name>`,
+   * `github:<owner>/<repo>#<n>`.
+   */
+  source: string;
+}
+
+/** What a part is. A new kind is a new variant, never a free string. */
+export type ContextKind = "constitution" | "plan" | "story" | "task" | "rejection" | "retry_digest" | "issue" | "scenario" | "note" | "comment" | "test_layout";
+
+/** Every part of one call, sorted by kind and reference. */
+export interface ContextManifest {
+  /** Hex SHA-256 of [`ContextManifest::canonical`]. */
+  digest: string;
+  /** The parts. */
+  entries: ContextEntry[];
+}
 
 /** Result of `accept`, `skip` and `nudge`. */
 export interface ControlReport {
@@ -1683,7 +1713,7 @@ export type EventLine = {
     type: "result";
   });
 
-/** Result of `speccoder-verify tour` and `/api/tour`: one task's tour. */
+/** Result of `speccoder attest tour` and `/api/tour`: one task's tour. */
 export interface EvidenceTour {
   /** The task commit, when one carries the task's evidence. */
   commit: string | null;
@@ -2564,7 +2594,7 @@ export interface PrReport {
   commands: string[];
   /**
    * `present`: a workflow under `.github/workflows/` runs
-   * `speccoder-verify`; `absent`: none does.
+   * `speccoder attest verify --branch`; `absent`: none does.
    */
   evidence_check: string;
   /** Feature directory name. */
@@ -3178,6 +3208,8 @@ export interface RunReport {
   collection?: Collection | null;
   /** The commit on `speccoder/<feature>` holding the attempt and the tick. */
   commit: string | null;
+  /** What reached the implementer, by digest (constitution VIII). */
+  context?: ContextManifest | null;
   /** Earlier attempts at this task in this run, discarded and retried. */
   earlier: EarlierAttempt[];
   /** Feature directory name. */

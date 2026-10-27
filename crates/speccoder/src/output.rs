@@ -416,6 +416,14 @@ fn human_body(
         },
         (_, Some(CommandData::Cost(c))) => human::cost(&mut out, c, result.message()),
         (_, Some(CommandData::Attest(a))) => human::attest(&mut out, a, result.message()),
+        (_, Some(CommandData::BranchVerify(r))) => {
+            human::branch_verify(&mut out, r, result.message())
+        }
+        (_, Some(CommandData::EvidenceTour(t))) => {
+            // The verdict's words, after the task in the message.
+            let words = result.message().split_once(": ").map_or("", |(_, w)| w);
+            write!(out, "{}", t.markdown(words))
+        }
         (_, Some(CommandData::Approvals(a))) => human::approvals(&mut out, a, result.message()),
         (_, Some(CommandData::Report(r))) => human::status(&mut out, r, result.message()),
         (_, Some(CommandData::Converge(c))) => human::converge(&mut out, c, result.message()),

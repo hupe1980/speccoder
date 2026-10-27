@@ -884,6 +884,127 @@
       ],
       "type": "object"
     },
+    "ContextEntry": {
+      "description": "One part handed to a call.",
+      "properties": {
+        "bytes": {
+          "description": "Their size.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "cut": {
+          "description": "Cut to a budget.",
+          "type": "boolean"
+        },
+        "kind": {
+          "$ref": "#/$defs/ContextKind",
+          "description": "What it is."
+        },
+        "reference": {
+          "description": "A path, an id or a part pointer (`/bundle/plan`).",
+          "type": "string"
+        },
+        "sha256": {
+          "description": "Hex SHA-256 of the exact bytes given.",
+          "type": "string"
+        },
+        "source": {
+          "description": "Where it came from: `person`, `worktree`, `speccoder://<producer>/<name>`,\n`github:<owner>/<repo>#<n>`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "source",
+        "reference",
+        "sha256",
+        "bytes",
+        "cut"
+      ],
+      "type": "object"
+    },
+    "ContextKind": {
+      "description": "What a part is. A new kind is a new variant, never a free string.",
+      "oneOf": [
+        {
+          "const": "constitution",
+          "description": "The project's rules.",
+          "type": "string"
+        },
+        {
+          "const": "plan",
+          "description": "The unit's plan.",
+          "type": "string"
+        },
+        {
+          "const": "story",
+          "description": "The requirement's text (a bug's triad).",
+          "type": "string"
+        },
+        {
+          "const": "task",
+          "description": "The task.",
+          "type": "string"
+        },
+        {
+          "const": "rejection",
+          "description": "A person's rejection reason.",
+          "type": "string"
+        },
+        {
+          "const": "retry_digest",
+          "description": "The verifier's digest of an earlier attempt.",
+          "type": "string"
+        },
+        {
+          "const": "issue",
+          "description": "A GitHub issue's title and body (untrusted).",
+          "type": "string"
+        },
+        {
+          "const": "scenario",
+          "description": "A requirement's acceptance scenario.",
+          "type": "string"
+        },
+        {
+          "const": "note",
+          "description": "A person's note to an author call (*Ask Again*, a reading).",
+          "type": "string"
+        },
+        {
+          "const": "comment",
+          "description": "A person's review comment, with its anchor's quote.",
+          "type": "string"
+        },
+        {
+          "const": "test_layout",
+          "description": "The test layout speccoder detected from the checkout.",
+          "type": "string"
+        }
+      ]
+    },
+    "ContextManifest": {
+      "description": "Every part of one call, sorted by kind and reference.",
+      "properties": {
+        "digest": {
+          "description": "Hex SHA-256 of [`ContextManifest::canonical`].",
+          "type": "string"
+        },
+        "entries": {
+          "description": "The parts.",
+          "items": {
+            "$ref": "#/$defs/ContextEntry"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "entries",
+        "digest"
+      ],
+      "type": "object"
+    },
     "Counts": {
       "description": "Rejected of judged, for one source.",
       "properties": {
@@ -2734,6 +2855,17 @@
         "string",
         "null"
       ]
+    },
+    "context": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ContextManifest"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "What reached the implementer, by digest (constitution VIII)."
     },
     "earlier": {
       "description": "Earlier attempts at this task in this run, discarded and retried.",

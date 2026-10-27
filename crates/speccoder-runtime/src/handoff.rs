@@ -262,8 +262,9 @@ pub const EVIDENCE_CHECK_DOCS: &str =
 /// GitHub's cap on a pull request body, in characters.
 pub const BODY_LIMIT: usize = 65_536;
 
-/// The workflow under `.github/workflows/` that runs `speccoder-verify`,
-/// if one does (repository-relative).
+/// The workflow under `.github/workflows/` that runs the evidence check
+/// (the speccoder-verify action, or `attest verify --branch`), if one
+/// does (repository-relative).
 #[must_use]
 pub fn evidence_workflow(repo_root: &Path) -> Option<String> {
     let dir = repo_root.join(".github/workflows");
@@ -277,7 +278,7 @@ pub fn evidence_workflow(repo_root: &Path) -> Option<String> {
     files.sort();
     files.into_iter().find_map(|p| {
         let text = std::fs::read_to_string(&p).ok()?;
-        text.contains("speccoder-verify").then(|| {
+        (text.contains("speccoder-verify") || text.contains("attest verify --branch")).then(|| {
             format!(
                 ".github/workflows/{}",
                 p.file_name()
@@ -306,7 +307,7 @@ pub fn tours(tours: &[String], room: usize) -> String {
     }
     if shown < tours.len() {
         out.push_str(&format!(
-            "\n{} tour(s) not shown (GitHub's body limit) — `speccoder-verify tour --feature <unit> --task <id>`\n",
+            "\n{} tour(s) not shown (GitHub's body limit) — `speccoder attest tour <id> --feature <unit>`\n",
             tours.len() - shown
         ));
     }
@@ -504,7 +505,7 @@ pub fn pr(path: &Path, feature: Option<&str>, options: &PrOptions<'_>) -> Comman
             "dry run: nothing was pushed (confirm, or pass --yes, to push and open the draft)"
                 .to_owned();
         message.push_str(&match &evidence {
-            Some(w) => format!("\nevidence check: {w} runs speccoder-verify"),
+            Some(w) => format!("\nevidence check: {w} runs the evidence check"),
             None => format!("\nevidence check: none — see {EVIDENCE_CHECK_DOCS}"),
         });
         if !selection.tasks.is_empty() {

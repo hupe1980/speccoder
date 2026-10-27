@@ -43,23 +43,62 @@ fn no_state(command: &str) -> speccoder_core::CommandResult {
     .with_code("NO-STATE-DIR")
 }
 
-/// `speccoder attest verify --branch`: the branch verifier's check (the
-/// same function as `speccoder-verify check`), with this machine's trust —
-/// the flags, else git's `gpg.ssh.allowedSignersFile`.
-#[allow(clippy::too_many_arguments)] // the command's flags, one each
-fn attest_branch(
+/// The environment the branch checks' children (git, the signature tools)
+/// see: nothing else, so no token or configuration of the caller's reaches
+/// them.
+const KEPT_ENV: &[&str] = &[
+    "PATH",
+    "HOME",
+    "GNUPGHOME",
+    "LANG",
+    "TMPDIR",
+    "GITHUB_STEP_SUMMARY",
+];
+
+/// Set in the re-executed process whose environment is already scrubbed.
+const SCRUBBED: &str = "SPECCODER_ATTEST_SCRUBBED";
+
+/// `attest verify --branch`, `attest tour` and `attest badge` run again
+/// with only [`KEPT_ENV`], unless done already: the child's exit status,
+/// or `None` when re-running is not possible (then the work runs here, in
+/// the environment as it is).
+fn scrubbed(command: &Command) -> Option<i32> {
+    let reads_a_branch = matches!(
+        command,
+        Command::Attest {
+            action: cli::AttestAction::Verify { branch: true, .. }
+                | cli::AttestAction::Tour { .. }
+                | cli::AttestAction::Badge { .. },
+        }
+    );
+    if !reads_a_branch || std::env::var_os(SCRUBBED).is_some() {
+        return None;
+    }
+    let exe = std::env::current_exe().ok()?;
+    let status = std::process::Command::new(exe)
+        .args(std::env::args_os().skip(1))
+        .env_clear()
+        .envs(
+            KEPT_ENV
+                .iter()
+                .filter_map(|k| std::env::var_os(k).map(|v| (*k, v))),
+        )
+        .env(SCRUBBED, "1")
+        .status()
+        .ok()?;
+    Some(status.code().unwrap_or(1))
+}
+
+/// The trust of a branch check: the flags, else (`attest verify --branch`
+/// only) git's `gpg.ssh.allowedSignersFile`.
+fn branch_options(
     path: &std::path::Path,
     head: Option<&str>,
-    base: Option<&str>,
-    allowed_signers: Option<&std::path::Path>,
-    allowed_signers_rev: Option<&str>,
-    identity: Option<&str>,
-    issuer: Option<&str>,
-    require_signed: bool,
-) -> speccoder_core::CommandResult {
-    use speccoder_runtime::attest::branch::{AllowedSigners, Options, verify};
-    const COMMAND: &str = "attest verify --branch";
-    let configured = || {
+    trust: &cli::AttestTrust,
+    configured: bool,
+) -> Result<speccoder_runtime::attest::branch::Options, String> {
+    use speccoder_runtime::attest::branch::{AllowedSigners, Options};
+    let from_git = || {
         speccoder_runtime::git::Git::at(path)
             .line(&["config", "gpg.ssh.allowedSignersFile"])
             .ok()
@@ -69,30 +108,117 @@ fn attest_branch(
                 _ => std::path::PathBuf::from(p),
             })
     };
-    let allowed = match (allowed_signers, allowed_signers_rev) {
-        (Some(f), _) => Some(AllowedSigners::File(f.to_path_buf())),
-        (None, Some(spec)) => match AllowedSigners::parse_rev(spec) {
-            Ok(a) => Some(a),
-            Err(e) => {
-                return speccoder_core::CommandResult::new(
-                    COMMAND,
-                    speccoder_core::CommandStatus::UsageError,
-                    &e,
-                );
-            }
-        },
-        (None, None) => configured().map(AllowedSigners::File),
+    let allowed_signers = match (&trust.allowed_signers, &trust.allowed_signers_rev) {
+        (Some(f), _) => Some(AllowedSigners::File(f.clone())),
+        (None, Some(spec)) => Some(AllowedSigners::parse_rev(spec)?),
+        (None, None) if configured => from_git().map(AllowedSigners::File),
+        (None, None) => None,
     };
-    let opts = Options {
+    Ok(Options {
         head: head.unwrap_or("HEAD").to_owned(),
-        base: base.map(str::to_owned),
-        allowed_signers: allowed,
-        identity: identity.map(str::to_owned),
-        issuer: issuer.map(str::to_owned),
-        require_signed,
+        allowed_signers,
+        identity: trust.certificate_identity.clone(),
+        issuer: trust.certificate_oidc_issuer.clone(),
         ..Options::default()
+    })
+}
+
+/// `speccoder attest verify --branch`, `attest tour` and `attest badge`:
+/// every tick of a branch from git objects, with the caller's trust; the
+/// workflow-command lines to print before the result.
+fn attest_branch(
+    path: &std::path::Path,
+    feature: Option<&str>,
+    action: &cli::AttestAction,
+) -> (speccoder_core::CommandResult, Vec<String>) {
+    use speccoder_core::{CommandResult, CommandStatus};
+    use speccoder_runtime::attest::branch;
+    let usage = |command: &str, e: &str| {
+        (
+            CommandResult::new(command, CommandStatus::UsageError, e),
+            Vec::new(),
+        )
     };
-    verify(path, &opts, COMMAND)
+    match action {
+        cli::AttestAction::Verify {
+            rev,
+            allowed_signers,
+            certificate_identity,
+            certificate_oidc_issuer,
+            require_signed,
+            base,
+            all,
+            allowed_signers_rev,
+            require_verified,
+            markdown,
+            github_check,
+            check_name,
+            allow_neutral,
+            github_annotations,
+            ..
+        } => {
+            const COMMAND: &str = "attest verify --branch";
+            let trust = cli::AttestTrust {
+                allowed_signers: allowed_signers.clone(),
+                allowed_signers_rev: allowed_signers_rev.clone(),
+                certificate_identity: certificate_identity.clone(),
+                certificate_oidc_issuer: certificate_oidc_issuer.clone(),
+            };
+            let mut opts = match branch_options(path, rev.as_deref(), &trust, true) {
+                Ok(o) => o,
+                Err(e) => return usage(COMMAND, &e),
+            };
+            opts.base.clone_from(base);
+            opts.all = *all;
+            opts.require_signed = require_signed.unwrap_or(true);
+            opts.require_verified = *require_verified;
+            let out = branch::Outputs {
+                markdown: markdown.clone(),
+                github_check: github_check.clone(),
+                check_name: check_name.clone().unwrap_or_default(),
+                allow_neutral: *allow_neutral,
+                annotations: *github_annotations,
+            };
+            let published = branch::verify_and_publish(path, &opts, &out, COMMAND);
+            (published.result, published.workflow_commands)
+        }
+        cli::AttestAction::Tour { task, rev, trust } => {
+            const COMMAND: &str = "attest tour";
+            let Some(feature) = feature else {
+                return usage(
+                    COMMAND,
+                    "attest tour needs --feature: the unit the task is in",
+                );
+            };
+            match branch_options(path, rev.as_deref(), trust, false) {
+                Ok(opts) => (
+                    speccoder_runtime::tour::command(path, feature, task, &opts, COMMAND),
+                    Vec::new(),
+                ),
+                Err(e) => usage(COMMAND, &e),
+            }
+        }
+        cli::AttestAction::Badge {
+            rev,
+            trust,
+            require_signed,
+            svg,
+            endpoint,
+        } => {
+            const COMMAND: &str = "attest badge";
+            match branch_options(path, rev.as_deref(), trust, false) {
+                Ok(mut opts) => {
+                    opts.require_signed = *require_signed;
+                    (
+                        branch::badge(path, &opts, svg.as_deref(), endpoint.as_deref(), COMMAND),
+                        Vec::new(),
+                    )
+                }
+                Err(e) => usage(COMMAND, &e),
+            }
+        }
+        cli::AttestAction::Sign { .. } => usage("attest sign", "not a branch check"),
+    }
 }
 
 /// `speccoder spec archive [<change>] [--yes] [--allow-unverified TASK]…`:
@@ -609,6 +735,11 @@ fn main() {
         Ok(cli) => cli,
         Err(e) => usage_error(&args, &e),
     };
+    // A branch check: nothing of the caller's environment reaches git or
+    // the signature tools.
+    if let Some(code) = cli.command.as_ref().and_then(scrubbed) {
+        std::process::exit(code);
+    }
     let (settings, warnings) = speccoder_runtime::user_config::load();
     let machine = cli.json || cli.events;
     if !machine {
@@ -1160,26 +1291,16 @@ fn main() {
         } => speccoder_runtime::workflow::uninstall_overlay(path, overlay),
         Command::Attest {
             action:
-                cli::AttestAction::Verify {
-                    rev,
-                    allowed_signers,
-                    certificate_identity,
-                    certificate_oidc_issuer,
-                    require_signed,
-                    branch: true,
-                    base,
-                    allowed_signers_rev,
-                },
-        } => attest_branch(
-            path,
-            rev.as_deref(),
-            base.as_deref(),
-            allowed_signers.as_deref(),
-            allowed_signers_rev.as_deref(),
-            certificate_identity.as_deref(),
-            certificate_oidc_issuer.as_deref(),
-            *require_signed,
-        ),
+                action @ (cli::AttestAction::Verify { branch: true, .. }
+                | cli::AttestAction::Tour { .. }
+                | cli::AttestAction::Badge { .. }),
+        } => {
+            let (result, lines) = attest_branch(path, feature, action);
+            for line in lines {
+                println!("{line}");
+            }
+            result
+        }
         Command::Attest {
             action:
                 cli::AttestAction::Verify {
@@ -1199,7 +1320,7 @@ fn main() {
                 identity: certificate_identity.clone(),
                 issuer: certificate_oidc_issuer.clone(),
             },
-            *require_signed,
+            require_signed.unwrap_or(false),
         ),
         Command::Attest {
             action: cli::AttestAction::Sign { rev },

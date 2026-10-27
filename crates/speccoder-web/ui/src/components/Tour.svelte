@@ -60,7 +60,7 @@
   {#if tour.unverifiable}
     <p class="unverifiable">Unverifiable: {tour.unverifiable}. The steps after the requirement are not shown: nothing verifiable backs them.</p>
   {/if}
-  <p class="note">Read as recorded: <code>speccoder-verify</code> checks the signatures.</p>
+  <p class="note">Read as recorded: <code>speccoder attest verify --branch</code> checks the signatures.</p>
 {/if}
 
 <style>

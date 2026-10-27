@@ -60,17 +60,9 @@ shasum -a 256 -c SHA256SUMS --ignore-missing
 gh attestation verify speccoder-0.2.0-aarch64-apple-darwin.tar.gz --repo hupe1980/speccoder
 ```
 
-## The verifier
+## The branch check
 
-[`speccoder-verify`](@/docs/verifier.md) ships from the same release as `speccoder-verify-<version>-<target>.tar.gz` for `x86_64-unknown-linux-musl` and `aarch64-unknown-linux-musl` (statically linked: any Linux) and `aarch64-apple-darwin`, in the same `SHA256SUMS` and with the same provenance:
-
-```sh
-gh release download v0.2.0 --repo hupe1980/speccoder --pattern 'speccoder-verify-0.2.0-x86_64-unknown-linux-musl.tar.gz' --pattern SHA256SUMS
-gh attestation verify speccoder-verify-0.2.0-x86_64-unknown-linux-musl.tar.gz --repo hupe1980/speccoder
-shasum -a 256 -c SHA256SUMS --ignore-missing
-```
-
-Or `cargo binstall speccoder-verify` / `cargo install speccoder-verify --locked`; Homebrew and the installer install `speccoder` only. It needs `git`, and `ssh-keygen`, `gpg` or `cosign` for the signatures it meets; no model key. On GitHub, the [action](@/docs/github.md#evidence-check) does all of this.
+[`speccoder attest verify --branch`](@/docs/verifier.md) is part of `speccoder`: no second binary. It needs `git`, and `ssh-keygen`, `gpg` or `cosign` for the signatures it meets; no model key. On GitHub, the [evidence action](@/docs/github.md#evidence-check) downloads the `speccoder` archive for the runner and checks its provenance and sha256 before it runs it. (0.2.0 shipped a separate `speccoder-verify`; it is folded into `speccoder`.)
 
 ## API keys
 

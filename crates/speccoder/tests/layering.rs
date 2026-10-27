@@ -16,19 +16,6 @@ const OPENSPEC: &str = "speccoder-openspec";
 const RUNTIME: &str = "speccoder-runtime";
 const WEB: &str = "speccoder-web";
 const BIN: &str = "speccoder";
-const VERIFY: &str = "speccoder-verify";
-
-/// Crates the verifier must never reach, as it is built (`-p
-/// speccoder-verify`, the runtime without `engine`): no model, no network,
-/// no keychain (rule 7, FR-005).
-const VERIFY_DENY: &[&str] = &[
-    "agentplane",
-    "tokio",
-    "reqwest",
-    "hyper",
-    "keyring",
-    "rustls",
-];
 
 /// Crates the pure core must never reach, directly or transitively (rule 5).
 const CORE_DENY: &[&str] = &[
@@ -152,14 +139,12 @@ fn allowed_workspace_deps(krate: &str) -> &'static [&'static str] {
         // The web host serves the runtime's payloads; it reads no format.
         WEB => &[CORE, RUNTIME],
         BIN => &[CORE, SPECKIT, OPENSPEC, RUNTIME, WEB],
-        // The verifier is a thin binary over the read half of the runtime.
-        VERIFY => &[CORE, RUNTIME],
         _ => &[],
     }
 }
 
 fn violations(g: &Graph) -> Vec<String> {
-    let workspace = [CORE, SPECKIT, OPENSPEC, RUNTIME, WEB, BIN, VERIFY];
+    let workspace = [CORE, SPECKIT, OPENSPEC, RUNTIME, WEB, BIN];
     let mut errors = Vec::new();
 
     for (rule, krate) in [
@@ -169,7 +154,6 @@ fn violations(g: &Graph) -> Vec<String> {
         (3, RUNTIME),
         (4, WEB),
         (4, BIN),
-        (7, VERIFY),
     ] {
         let allowed = allowed_workspace_deps(krate);
         for dep in direct(g, krate) {
@@ -197,63 +181,6 @@ fn violations(g: &Graph) -> Vec<String> {
         }
     }
     errors
-}
-
-/// The verifier's normal dependencies as `cargo build -p speccoder-verify`
-/// resolves them: the workspace graph unifies the features every member
-/// asks for, so the runtime's `engine` would show there; this one does not.
-fn verify_closure() -> BTreeSet<String> {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let out = Command::new(env!("CARGO"))
-        .args([
-            "tree", "--locked", "-p", VERIFY, "-e", "normal", "--prefix", "none", "--format", "{p}",
-        ])
-        .current_dir(root)
-        .output()
-        .unwrap();
-    assert!(
-        out.status.success(),
-        "{}",
-        String::from_utf8_lossy(&out.stderr)
-    );
-    String::from_utf8_lossy(&out.stdout)
-        .lines()
-        .filter_map(|l| l.split_whitespace().next())
-        .filter(|name| *name != VERIFY)
-        .map(str::to_owned)
-        .collect()
-}
-
-/// Rule 7 over the verifier's closure.
-fn verify_violations(closure: &BTreeSet<String>) -> Vec<String> {
-    closure
-        .iter()
-        .filter(|d| VERIFY_DENY.contains(&d.as_str()))
-        .map(|d| {
-            format!(
-                "layering: {VERIFY} must not depend on {d} (rule 7: no model, no network; put the module or dependency behind the runtime's `engine` feature)"
-            )
-        })
-        .collect()
-}
-
-#[test]
-fn verifier_reaches_no_model_and_no_network() {
-    let errors = verify_violations(&verify_closure());
-    assert!(errors.is_empty(), "\n{}", errors.join("\n"));
-}
-
-#[test]
-fn rule_seven_rejects_an_engine_dependency() {
-    let mut closure = verify_closure();
-    closure.insert("tokio".to_owned());
-    closure.insert("agentplane".to_owned());
-    let errors = verify_violations(&closure).join("\n");
-    assert!(
-        errors.contains("speccoder-verify must not depend on tokio (rule 7"),
-        "{errors}"
-    );
-    assert!(errors.contains("`engine` feature"), "{errors}");
 }
 
 #[test]

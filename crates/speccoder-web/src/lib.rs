@@ -352,7 +352,7 @@ async fn evidence(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Jso
 }
 
 /// The task's evidence tour (payload `evidence_tour`, the same as
-/// `speccoder-verify tour --json`), read as recorded: the app shows what
+/// `speccoder attest tour --json`), read as recorded: the app shows what
 /// the signed statements and the commit say; a maintainer's verifier
 /// checks the signatures.
 async fn tour(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Json<Value> {

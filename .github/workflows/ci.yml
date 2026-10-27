@@ -72,7 +72,7 @@ jobs:
       # Mermaid, loaded only for a diagram, is most of it).
       - run: test "$(cat dist/* | gzip -9 | wc -c)" -lt 4194304
 
-  # Dogfood: the speccoder-verify action on this repository's own pull
+  # Dogfood: the evidence action on this repository's own pull
   # requests, from its path here. This repository commits no specs, so the
   # check is neutral (allowed): it proves the workflow token creates the
   # `speccoder / evidence` check run, not ticks. It runs once the action's
@@ -95,27 +95,31 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           version="$(sed -nE 's/^    default: "([^"]+)" # the release this action is cut with.*/\1/p' packaging/speccoder-verify-action/action.yml)"
-          if gh release view "v$version" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "::notice::speccoder-verify v$version is not released yet: the dogfood check starts with that release"
-          fi
+          case "$version" in
+            0.1.* | 0.2.0) echo "::notice::the action runs speccoder attest verify --branch, which v$version predates: the dogfood check starts with the next release" ;;
+            *)
+              if gh release view "v$version" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+                echo "exists=true" >> "$GITHUB_OUTPUT"
+              else
+                echo "::notice::speccoder v$version is not released yet: the dogfood check starts with that release"
+              fi
+              ;;
+          esac
       - if: steps.release.outputs.exists == 'true'
         uses: ./packaging/speccoder-verify-action
         with:
           allow-neutral: true
 
-  # The verifier's size and speed on a hosted runner (SC-003, SC-004): a
-  # feature of 50 signed ticks, the release-verify binary served as the
-  # action downloads it, timed end to end.
+  # The branch check's speed on a hosted runner (SC-003): a feature of 50
+  # signed ticks, the release binary served as the action downloads it,
+  # timed end to end.
   verifier-performance:
-    name: speccoder-verify checks 50 ticks in under 10 s
+    name: attest verify --branch checks 50 ticks in under 10 s
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: rustup toolchain install && rustup target add x86_64-unknown-linux-musl
-      - run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2
-      - run: cargo build --profile release-verify --locked -p speccoder-verify --target x86_64-unknown-linux-musl
-      - run: scripts/verify-performance.sh target/x86_64-unknown-linux-musl/release-verify/speccoder-verify
+      - run: cargo build --release --locked -p speccoder
+      - run: scripts/verify-performance.sh target/release/speccoder
 

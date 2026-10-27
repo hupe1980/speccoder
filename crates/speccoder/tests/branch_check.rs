@@ -1,10 +1,12 @@
-//! The verifier on fixture repositories: every kind of tick gets its
+//! `speccoder attest verify --branch` (and `attest tour`, `attest badge`)
+//! on fixture repositories: every kind of tick gets its
 //! outcome and reason, the branch its conclusion, from git objects and the
 //! caller's trust only — and each tick's verification equals
 //! `attest verify`'s for its commit (one implementation, FR-002).
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
+#[path = "branch_fixture/mod.rs"]
 mod support;
 
 use std::fs;
@@ -67,9 +69,9 @@ fn every_kind_of_tick_gets_its_outcome_and_the_branch_fails() {
     }
     let (r, _) = mixed();
     let (code, v) = check(&r, &["--base", "main"]);
-    assert_eq!(code, 1, "{v}");
+    assert_eq!(code, 26, "{v}");
     assert_eq!(v["payload"], "branch_verify");
-    assert_eq!(v["command"], "speccoder-verify check");
+    assert_eq!(v["command"], "attest verify --branch");
     let d = &v["data"];
     assert_eq!(d["conclusion"], "failure");
     assert_eq!(d["mode"], "touched");
@@ -156,7 +158,7 @@ fn only_verified_ticks_succeed_and_nothing_to_check_is_neutral() {
     }
     let r = Repo::new(3);
     let (code, v) = check(&r, &["--base", "main"]);
-    assert_eq!(code, 78, "{v}");
+    assert_eq!(code, 15, "{v}");
     assert_eq!(v["data"]["conclusion"], "neutral");
     r.tick("T001", "verified", Sign::Trusted);
     r.tick("T002", "regression_only", Sign::Trusted);
@@ -165,13 +167,13 @@ fn only_verified_ticks_succeed_and_nothing_to_check_is_neutral() {
     assert_eq!(v["data"]["conclusion"], "success");
     assert_eq!(v["status"], "ok");
     let (code, v) = check(&r, &["--base", "main", "--require-verified"]);
-    assert_eq!(code, 1);
+    assert_eq!(code, 26);
     assert_eq!(v["data"]["conclusion"], "failure");
 }
 
-/// A head the check cannot read, or one that drops the spec project its
-/// base holds, is an error (exit 1, no check payload): never `neutral`,
-/// which `--allow-neutral` would pass.
+/// A head the check cannot read (exit 1), or one that drops the spec
+/// project its base holds (a failure, exit 26), has no check payload:
+/// never `neutral`, which `--allow-neutral` would pass.
 #[test]
 fn a_head_that_cannot_be_read_is_an_error_never_neutral() {
     let r = Repo::new(2);
@@ -187,7 +189,8 @@ fn a_head_that_cannot_be_read_is_an_error_never_neutral() {
         let mut args = vec!["--base", "main"];
         args.extend_from_slice(extra);
         let (code, v) = check(&r, &args);
-        assert_eq!(code, 1, "{v}");
+        assert_eq!(code, 26, "{v}");
+        assert_eq!(v["status"], "attestation_failed", "{v}");
         assert!(v["data"].is_null(), "{v}");
         assert!(
             v["message"]
@@ -221,10 +224,10 @@ fn a_head_that_cannot_be_read_is_an_error_never_neutral() {
 fn no_trust_is_always_refused() {
     let r = Repo::new(1);
     for extra in [&[][..], &["--require-signed=false"][..]] {
-        let mut args = vec!["check"];
+        let mut args = support::CHECK.to_vec();
         args.extend_from_slice(extra);
         let (code, _, err) = run(r.path(), &args);
-        assert_eq!(code, 1);
+        assert_eq!(code, 2);
         assert!(
             err.contains("no trust configured: pass --allowed-signers or --certificate-identity/--certificate-oidc-issuer"),
             "{err}"
@@ -240,7 +243,7 @@ fn unsigned_ticks_pass_only_when_accepted_and_the_report_says_so() {
     let r = Repo::new(2);
     r.tick("T001", "verified", Sign::No);
     let (code, v) = check(&r, &[]);
-    assert_eq!(code, 1);
+    assert_eq!(code, 26);
     assert_eq!(outcomes(&v), [row("T001", "unverifiable", "unsigned")]);
     let (code, v) = check(&r, &["--require-signed=false"]);
     assert_eq!(code, 0, "{v}");
@@ -275,7 +278,9 @@ fn trust_is_read_from_the_base_revision_never_the_head() {
     let (code, out, err) = run(
         r.path(),
         &[
-            "check",
+            "attest",
+            "verify",
+            "--branch",
             "--json",
             "--base",
             "main",
@@ -289,9 +294,16 @@ fn trust_is_read_from_the_base_revision_never_the_head() {
     let head = format!("HEAD:{path}");
     let (code, out, _) = run(
         r.path(),
-        &["check", "--json", "--allowed-signers-rev", &head],
+        &[
+            "attest",
+            "verify",
+            "--branch",
+            "--json",
+            "--allowed-signers-rev",
+            &head,
+        ],
     );
-    assert_eq!(code, 1);
+    assert_eq!(code, 26);
     let v: Value = serde_json::from_str(out.trim()).unwrap();
     assert_eq!(
         outcomes(&v),
@@ -310,7 +322,7 @@ fn a_squash_merge_leaves_the_evidence_unreachable() {
     r.git(&["merge", "-q", "--squash", "feature"]);
     r.commit("squashed feature");
     let (code, v) = check(&r, &[]);
-    assert_eq!(code, 1);
+    assert_eq!(code, 26);
     assert_eq!(
         outcomes(&v),
         [row("T001", "unverifiable", "commit_unreachable")]
@@ -335,7 +347,7 @@ fn a_bug_claim_this_version_cannot_check_fails_the_branch() {
         "fix: empty title\n\nSpec-Task: {FEATURE}/bug:empty-title\nVerdict: verified\n"
     ));
     let (code, v) = check(&r, &["--base", "main"]);
-    assert_eq!(code, 1, "{v}");
+    assert_eq!(code, 26, "{v}");
     assert_eq!(v["data"]["conclusion"], "failure");
     assert!(
         v["data"]["not_evaluated"]
@@ -365,7 +377,7 @@ fn only_the_touched_units_are_checked() {
     assert_eq!(code, 0, "{v}");
     assert_eq!(v["data"]["features"], json!([FEATURE]));
     let (code, v) = check(&r, &["--base", "main", "--all"]);
-    assert_eq!(code, 1);
+    assert_eq!(code, 26);
     assert_eq!(v["data"]["features"], json!([FEATURE, "002-other"]));
 }
 
@@ -421,9 +433,11 @@ fn it_reads_no_working_tree_and_spawns_only_git_and_the_signature_tool() {
     let tools = tempfile::tempdir().unwrap();
     let bin = shims(tools.path(), &["git", "ssh-keygen"]);
     let allowed = r.allowed.display().to_string();
-    let out = std::process::Command::new(support::verifier())
+    let out = std::process::Command::new(support::speccoder())
         .args([
-            "check",
+            "attest",
+            "verify",
+            "--branch",
             "--json",
             "--base",
             "main",
@@ -463,7 +477,7 @@ fn the_check_payload_annotates_each_tick_that_is_not_plainly_verified() {
             &md_arg,
         ],
     );
-    assert_eq!(code, 1);
+    assert_eq!(code, 26);
     let body: Value = serde_json::from_str(&fs::read_to_string(&file).unwrap()).unwrap();
     let create = &body["create"];
     assert_eq!(create["name"], "speccoder / evidence");
@@ -504,7 +518,7 @@ fn the_tour_of_a_verified_tick_walks_its_six_steps_from_the_signed_statements() 
     r.tick("T002", "attested", Sign::Trusted);
     let (code, out, err) = run(
         r.path(),
-        &["tour", "--json", "--feature", FEATURE, "--task", "T001"],
+        &["attest", "tour", "T001", "--json", "--feature", FEATURE],
     );
     assert_eq!(code, 0, "{err}");
     let v: Value = serde_json::from_str(out.trim()).unwrap();
@@ -571,7 +585,7 @@ fn the_tour_of_a_verified_tick_walks_its_six_steps_from_the_signed_statements() 
     // An attested tick says what is missing, in the verdict's words.
     let (_, out, _) = run(
         r.path(),
-        &["tour", "--json", "--feature", FEATURE, "--task", "T002"],
+        &["attest", "tour", "T002", "--json", "--feature", FEATURE],
     );
     let v: Value = serde_json::from_str(out.trim()).unwrap();
     let red = &v["data"]["steps"][2];
@@ -583,7 +597,7 @@ fn the_tour_of_a_verified_tick_walks_its_six_steps_from_the_signed_statements() 
             .contains("a person's word, not evidence")
     );
     // In Markdown, collapsed.
-    let (_, md, _) = run(r.path(), &["tour", "--feature", FEATURE, "--task", "T001"]);
+    let (_, md, _) = run(r.path(), &["attest", "tour", "T001", "--feature", FEATURE]);
     assert!(md.starts_with("<details><summary><b>T001</b>"), "{md}");
     assert!(
         md.contains("3. **Red** · signed — failed: `tests/t001.rs` (assertion)"),
@@ -608,6 +622,7 @@ fn the_badge_is_the_share_of_evidenced_ticks() {
     let (code, out, err) = run(
         r.path(),
         &[
+            "attest",
             "badge",
             "--allowed-signers",
             &allowed,
@@ -635,9 +650,11 @@ fn the_fallback_prints_workflow_commands_and_appends_the_step_summary() {
     let (r, _) = mixed();
     let summary = r.path().join("summary.md");
     let allowed = r.allowed.display().to_string();
-    let out = std::process::Command::new(support::verifier())
+    let out = std::process::Command::new(support::speccoder())
         .args([
-            "check",
+            "attest",
+            "verify",
+            "--branch",
             "--base",
             "main",
             "--github-annotations",
@@ -648,7 +665,7 @@ fn the_fallback_prints_workflow_commands_and_appends_the_step_summary() {
         .env("GITHUB_STEP_SUMMARY", &summary)
         .output()
         .unwrap();
-    assert_eq!(out.status.code(), Some(1));
+    assert_eq!(out.status.code(), Some(26));
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(
         stdout.contains(&format!("::error file=specs/{FEATURE}/tasks.md,line=")),
@@ -674,7 +691,7 @@ fn a_task_line_hash_is_checked_against_the_head() {
     // Rewording the ticked line after the tick: its signed hash no longer holds.
     r.edit_task_line("T001", " now");
     let (code, v) = check(&r, &[]);
-    assert_eq!(code, 1);
+    assert_eq!(code, 26);
     assert_eq!(v["data"]["ticks"][0]["commit"], commit);
     assert!(
         v["data"]["ticks"][0]["detail"]
@@ -687,7 +704,7 @@ fn a_task_line_hash_is_checked_against_the_head() {
 /// SC-003, for `scripts/verify-performance.sh`: the given binary checks 50
 /// signed ticks within the budget left after its download.
 #[test]
-#[ignore = "run by scripts/verify-performance.sh with a release-verify binary"]
+#[ignore = "run by scripts/verify-performance.sh with a release binary"]
 fn fifty_signed_ticks_are_checked_within_the_budget() {
     let (Some(bin), Some(budget)) = (
         std::env::var_os("SPECCODER_VERIFY_PERF_BIN"),
@@ -705,7 +722,9 @@ fn fifty_signed_ticks_are_checked_within_the_budget() {
     let start = std::time::Instant::now();
     let out = std::process::Command::new(bin)
         .args([
-            "check",
+            "attest",
+            "verify",
+            "--branch",
             "--json",
             "--base",
             "main",
@@ -783,8 +802,15 @@ fn openpgp_signed_ticks_verify_against_the_keyring_and_a_tampered_one_does_not()
     let t1 = r.tick("T001", "verified", Sign::Configured);
     let allowed = r.allowed.display().to_string();
     let verify = || {
-        let out = std::process::Command::new(support::verifier())
-            .args(["check", "--json", "--allowed-signers", &allowed])
+        let out = std::process::Command::new(support::speccoder())
+            .args([
+                "attest",
+                "verify",
+                "--branch",
+                "--json",
+                "--allowed-signers",
+                &allowed,
+            ])
             .current_dir(r.path())
             .env("GNUPGHOME", home.path())
             .output()
@@ -797,6 +823,6 @@ fn openpgp_signed_ticks_verify_against_the_keyring_and_a_tampered_one_does_not()
     assert_eq!(v["data"]["ticks"][0]["signer"]["kind"], "openpgp");
     r.tamper(&t1, |p| p["tree"] = json!("0000"));
     let (code, v) = verify();
-    assert_eq!(code, Some(1));
+    assert_eq!(code, Some(26));
     assert_eq!(outcomes(&v), [row("T001", "unverifiable", "bad_signature")]);
 }

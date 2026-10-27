@@ -535,7 +535,6 @@ pub fn report(path: &Path, feature: Option<&str>) -> CommandResult {
         message.push_str("; speccoder has not worked on this feature yet");
     }
     // A bug task's outcome, from what speccoder keeps of the bug.
-    #[cfg(feature = "engine")]
     if let Some(state) = crate::worktree::state_dir() {
         let plane = crate::worktree::project_state_dir(&state, root);
         for t in &mut tasks {

@@ -1,4 +1,4 @@
-//! `speccoder-verify check` and `speccoder attest verify --branch`: every
+//! `speccoder attest verify --branch` (and `attest badge`): every
 //! ticked task of the units a branch touches, mapped to the commit that
 //! carries its evidence and checked with `attest verify`'s own rules
 //! ([`super::verify::object`]), plus what only a branch can show: a tick
@@ -143,7 +143,7 @@ pub struct Checked {
     pub prefix: String,
 }
 
-/// `speccoder-verify check` / `attest verify --branch` for the repository
+/// `attest verify --branch` for the repository
 /// containing `start`, as a command result named `command` (payload
 /// `branch_verify`).
 #[must_use]
@@ -1208,6 +1208,154 @@ fn run(
         repo: top,
         prefix,
     })
+}
+
+/// Where `attest verify --branch` writes the check besides its result.
+#[derive(Debug, Clone, Default)]
+pub struct Outputs {
+    /// The check as Markdown, to this file.
+    pub markdown: Option<PathBuf>,
+    /// The check-run request bodies (`{create, updates}`), to this file.
+    pub github_check: Option<PathBuf>,
+    /// The check run's name ([`super::check::NAME`] when empty).
+    pub check_name: String,
+    /// A neutral outcome is published as `neutral` (else `failure`).
+    pub allow_neutral: bool,
+    /// The workflow-command annotations, and the check appended to
+    /// `$GITHUB_STEP_SUMMARY` (where the check cannot be published).
+    pub annotations: bool,
+}
+
+/// A published check: the result and the workflow-command lines to print.
+#[derive(Debug)]
+pub struct Published {
+    /// The result (payload `branch_verify`, or a refusal).
+    pub result: CommandResult,
+    /// With [`Outputs::annotations`]: the lines for the job's log.
+    pub workflow_commands: Vec<String>,
+}
+
+/// [`verify`], and the check written where `out` asks. A file that cannot
+/// be written makes the result an error (the report stays its payload).
+#[must_use]
+pub fn verify_and_publish(start: &Path, opts: &Options, out: &Outputs, command: &str) -> Published {
+    let checked = match check(start, opts) {
+        Ok(c) => c,
+        Err(r) => {
+            return Published {
+                result: CommandResult::new(command, r.status, &r.message),
+                workflow_commands: Vec::new(),
+            };
+        }
+    };
+    // Tours only where they are shown: each reads its commit's tree.
+    let tours = if out.markdown.is_some() || out.github_check.is_some() || out.annotations {
+        crate::tour::markdown_all(&checked)
+    } else {
+        Vec::new()
+    };
+    let report = &checked.report;
+    let mut failed = Vec::new();
+    if let Some(path) = &out.markdown
+        && let Err(e) = write(path, &super::check::markdown(report, &tours))
+    {
+        failed.push(e);
+    }
+    if let Some(path) = &out.github_check {
+        let name = if out.check_name.is_empty() {
+            super::check::NAME
+        } else {
+            &out.check_name
+        };
+        let body = super::check::request(report, &tours, name, out.allow_neutral);
+        if let Err(e) = write(path, &format!("{body}\n")) {
+            failed.push(e);
+        }
+    }
+    let mut workflow_commands = Vec::new();
+    if out.annotations {
+        workflow_commands = super::check::workflow_commands(report);
+        if let Some(summary) = std::env::var_os("GITHUB_STEP_SUMMARY") {
+            use std::io::Write as _;
+            let appended = std::fs::OpenOptions::new()
+                .append(true)
+                .create(true)
+                .open(&summary)
+                .and_then(|mut f| writeln!(f, "{}", super::check::markdown(report, &tours)));
+            if let Err(e) = appended {
+                failed.push(format!("the step summary was not written: {e}"));
+            }
+        }
+    }
+    let result = result(command, checked.report);
+    let result = if failed.is_empty() {
+        result
+    } else {
+        failed_writes(command, result, &failed)
+    };
+    Published {
+        result,
+        workflow_commands,
+    }
+}
+
+/// `attest badge`: the share of ticks with verifying evidence over every
+/// unit, as an SVG and a shields.io endpoint. A measurement: `ok` whenever
+/// it was written, whatever the share.
+#[must_use]
+pub fn badge(
+    start: &Path,
+    opts: &Options,
+    svg: Option<&Path>,
+    endpoint: Option<&Path>,
+    command: &str,
+) -> CommandResult {
+    let opts = Options {
+        all: true,
+        ..opts.clone()
+    };
+    let checked = match check(start, &opts) {
+        Ok(c) => c,
+        Err(r) => return CommandResult::new(command, r.status, &r.message),
+    };
+    let badge = verify_branch::Badge::of(&checked.report);
+    let mut failed = Vec::new();
+    if let Some(path) = svg
+        && let Err(e) = write(path, &badge.svg())
+    {
+        failed.push(e);
+    }
+    if let Some(path) = endpoint {
+        let json = serde_json::to_string_pretty(&badge).unwrap_or_default();
+        if let Err(e) = write(path, &format!("{json}\n")) {
+            failed.push(e);
+        }
+    }
+    let result = CommandResult::new(
+        command,
+        CommandStatus::Ok,
+        &format!("evidence: {} ({})", badge.message, badge.color),
+    )
+    .with_data(CommandData::BranchVerify(Box::new(checked.report)));
+    if failed.is_empty() {
+        result
+    } else {
+        failed_writes(command, result, &failed)
+    }
+}
+
+fn write(path: &Path, text: &str) -> Result<(), String> {
+    std::fs::write(path, text).map_err(|e| format!("cannot write {}: {e}", path.display()))
+}
+
+/// `result` as an error naming the files that were not written.
+fn failed_writes(command: &str, result: CommandResult, failed: &[String]) -> CommandResult {
+    let message = format!("{}; {}", result.message(), failed.join("; "));
+    let shown = CommandResult::new(command, CommandStatus::Error, &message);
+    match result.data() {
+        Some(CommandData::BranchVerify(r)) => shown.with_data(CommandData::BranchVerify(r.clone())),
+        _ => shown,
+    }
 }
 
 #[cfg(test)]

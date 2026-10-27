@@ -23,7 +23,7 @@
       "type": "array"
     },
     "evidence_check": {
-      "description": "`present`: a workflow under `.github/workflows/` runs\n`speccoder-verify`; `absent`: none does.",
+      "description": "`present`: a workflow under `.github/workflows/` runs\n`speccoder attest verify --branch`; `absent`: none does.",
       "type": "string"
     },
     "feature": {
