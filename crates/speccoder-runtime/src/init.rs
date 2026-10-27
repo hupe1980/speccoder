@@ -644,7 +644,7 @@ pub fn init_with(
 }
 
 /// Whether a test check found no tests to run — an empty suite on a fresh
-/// scaffold (FR-027): pytest's exit 5, `go test` with only packages
+/// scaffold: pytest's exit 5, `go test` with only packages
 /// without test files, vitest, jest or nextest reporting nothing to run.
 /// Neither passing nor failing: *no tests yet*.
 #[must_use]

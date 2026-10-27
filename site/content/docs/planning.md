@@ -58,7 +58,7 @@ Before the creating skill runs, the description is compared with every feature's
 
 For `PLAN-BEHAVIOUR-EARLY`, `speccoder task acceptance-at <TASK> --story <US>` records that the story's acceptance tests are written at that task: its tick can then be verified on the story's scenarios. It is a decision in the state directory, not an edit of the spec, and `--revoke` takes it back. Re-planning is offered only while no task of the feature is ticked.
 
-The phase-based checks need Spec Kit's phases and story labels; OpenSpec and Kiro get only the first.
+The phase-based checks need Spec Kit's phases and story labels; OpenSpec gets only the first.
 
 ## The speccoder preset
 

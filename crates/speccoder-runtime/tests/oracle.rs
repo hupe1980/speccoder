@@ -979,7 +979,7 @@ fn us5_a_test_comment_asks_again_and_no_model_input_but_the_held_out_author_s_ho
         Some(state.path()),
     ));
     assert_eq!(v.tests[0].content, "checks pub fn login\n");
-    // FR-024: no input but the held-out author's own carries its material.
+    // No input but the held-out author's own carries its material.
     for a in f.asked() {
         let p = serde_json::to_string(&a.prompt).unwrap();
         if p.contains("HELD-OUT") {

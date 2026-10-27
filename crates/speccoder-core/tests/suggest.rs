@@ -1,5 +1,5 @@
 //! The composer's rung suggestion: deterministic, and right on a table of
-//! labelled texts (SC-005: at least 90 % of 40).
+//! labelled texts (at least 90 % of 40).
 
 // Test code: panicking on unexpected input is the failure report.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]

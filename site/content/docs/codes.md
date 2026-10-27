@@ -828,9 +828,9 @@ The sample is a recorded run replayed strictly. This build replayed it to a diff
 
 This build has no sample.
 
-The sample's recording is not part of this build: it is recorded with a real model by the maintainers (`just record-sample`) and bundled into release builds once it exists.
+The sample's recording is not part of this build: release builds bundle it; a build from source has it only when `crates/speccoder-runtime/assets/sample/` holds one (`just record-sample`).
 
-- Install a release build that includes the sample
+- Install a release build
 - `speccoder new`
 
 ### SIMILAR-FEATURE

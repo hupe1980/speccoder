@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Record the sample that `speccoder sample` and Try the Sample replay
-# (F-131): a new Rust project made by `speccoder new`, its first feature
-# written and planned by Spec Kit's own skills, approved and run on a real
-# model — then its history (git bundle), journal and manifest are written
-# to crates/speccoder-runtime/assets/sample/, where the build bundles them.
+# Record the sample that `speccoder sample` and Try the Sample replay: a
+# new Rust project made by `speccoder new`, its first feature planned from
+# scripts/sample/, approved and run on a real model — then its history
+# (git bundle), journal and manifest are written to
+# crates/speccoder-runtime/assets/sample/, where the build bundles them.
 # Needs a model key, `specify` and `cargo`; costs a few cents; never in CI.
 #
 #   set -a; . ./.env; set +a; just record-sample

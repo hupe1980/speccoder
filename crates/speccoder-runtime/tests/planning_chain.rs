@@ -1,4 +1,4 @@
-//! Plan through (F-132): one description, the format's own skills in
+//! Plan through: one description, the format's own skills in
 //! its order, stopping only where a person decides — with a scripted
 //! model (no recorded journal is committed yet; `just record-journals`
 //! adds real ones).

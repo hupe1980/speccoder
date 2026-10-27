@@ -258,7 +258,7 @@ pub fn input(
                 Tainted::with_label(json!(instructions), provenance::from(provenance::WORKTREE))
             },
         ),
-        // The test layout speccoder detected from the checkout (FR-027).
+        // The test layout speccoder detected from the checkout.
         (
             "test_layout",
             match test_layout {

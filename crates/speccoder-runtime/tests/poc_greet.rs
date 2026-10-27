@@ -202,7 +202,7 @@ fn the_poc_s_dead_test_files_fail_and_every_tick_says_why() {
         "{}",
         t005.message()
     );
-    // SC-001: the dead file failed the first attempt with Cargo's rule …
+    // The dead file failed the first attempt with Cargo's rule …
     assert_eq!(
         rep.earlier[0].verdict,
         Some(Verdict::Failed {
@@ -217,7 +217,7 @@ fn the_poc_s_dead_test_files_fail_and_every_tick_says_why() {
         Some(speccoder_core::collection::DecidedBy::Junit)
     );
     assert_eq!(c.files[0].tests, 1);
-    // SC-004: why — T003 implemented it, found by running the tests.
+    // Why — T003 implemented it, found by running the tests.
     assert_eq!(
         rep.regression.as_ref().unwrap().text,
         "already passing before the attempt — implemented by T003"

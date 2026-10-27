@@ -505,7 +505,7 @@ pub fn input(
             ),
         ),
     ];
-    // Where the tests go: speccoder's facts from the checkout (FR-027, FR-028).
+    // Where the tests go: speccoder's facts from the checkout.
     if let Some(p) = placement {
         parts.push(("test_layout", layout_part(Some(&p.layout))));
         parts.push((

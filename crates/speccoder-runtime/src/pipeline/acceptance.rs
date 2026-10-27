@@ -106,7 +106,7 @@ pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance 
         .unwrap_or_default();
     // Where the tests go: the story's file in the project's layout (one
     // file per story, grown by sections), a convergence task's own file,
-    // or no place the runner collects (FR-028, FR-033).
+    // or no place the runner collects.
     let placement = match placement(a) {
         Ok(p) => p,
         Err(()) => {
@@ -213,7 +213,7 @@ pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance 
     let red_tests = speccoder_core::verify::collected_count(&first, summary.as_ref());
     let mut class = classify_red(&first, summary.as_ref());
     // A section added to the story's file is red only by the tests it adds:
-    // the same command on the file without it (FR-030).
+    // the same command on the file without it.
     if let Some((path, old)) = story.filter(|(p, _)| written.iter().any(|w| w == p)) {
         let full = a.project.join(path);
         if let Ok(new) = std::fs::read_to_string(&full)
@@ -400,7 +400,7 @@ pub(crate) fn validate_answer(
 }
 
 /// [`validate_answer`] with the story's file: the one existing path an
-/// answer may write, and only by adding lines to `old` (D-048).
+/// answer may write, and only by adding lines to `old`.
 pub(crate) fn validate_with(
     answer: &serde_json::Value,
     project: &Path,
@@ -437,7 +437,7 @@ pub(crate) fn validate_with(
         match story {
             Some((path, old)) if path == rel => {
                 // Only a section at the end: never a line among the earlier
-                // tasks' tests, never a skip of any test (D-048).
+                // tasks' tests, never a skip of any test.
                 match crate::integrity::appended_section(old, content) {
                     None => {
                         refused.push(RefusedFile {
@@ -873,7 +873,7 @@ pub(crate) fn judge_held_out(
         .map_err(|e| ("tampered", e))?;
     let mut failed_ids: Vec<String> = Vec::new();
     for ((file, _), ran) in files.iter().zip(&runs) {
-        // Green is evidence only when it collected what red did (FR-008).
+        // Green is evidence only when it collected what red did.
         // Green collects what red did — red's count, else what the file
         // declares, at least one — and a count that cannot be read fails.
         let declared = speccoder_core::collection::toolchain_of(&file.path).map_or(0, |t| {

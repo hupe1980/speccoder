@@ -1,4 +1,4 @@
-//! A new project from one line of intent (F-130): the plan — the stack's
+//! A new project from one line of intent: the plan — the stack's
 //! own scaffold, the spec format's own init, `speccoder init --yes` and
 //! one commit as the person — computed read-only, shown, confirmed, and
 //! then run exactly as shown. speccoder writes none of the stack's or the
@@ -239,7 +239,7 @@ pub(crate) fn write_creation(state: &Path, c: &Creation) -> Result<(), String> {
 }
 
 /// The idea of a project speccoder created, offered once while it has no
-/// unit: the New Feature sheet opens prefilled with it (FR-028). Marks it
+/// unit: the New Feature sheet opens prefilled with it. Marks it
 /// offered.
 #[must_use]
 pub fn first_feature(state: &Path, root: &Path) -> Option<String> {

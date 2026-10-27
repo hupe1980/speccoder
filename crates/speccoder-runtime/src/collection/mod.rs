@@ -1,5 +1,5 @@
-//! Which of an attempt's changed test files the run actually collected
-//! (FR-001…FR-010): a test that never ran is evidence of nothing.
+//! Which of an attempt's changed test files the run actually collected:
+//! a test that never ran is evidence of nothing.
 //!
 //! Each test file the attempt added or changed — a test path by
 //! convention that defines tests by its toolchain's markers — is decided,
@@ -46,7 +46,7 @@ pub struct Input<'a> {
 
 /// The attempt's changed files that are judged: test paths by convention
 /// that define tests, not deleted, not build output or dependencies, not
-/// benchmarks or examples (FR-007).
+/// benchmarks or examples.
 #[must_use]
 pub fn judged_files(root: &Path, changes: &[(String, String)]) -> Vec<(String, Toolchain)> {
     let mut out: Vec<(String, Toolchain)> = changes
@@ -471,7 +471,7 @@ pub fn judge(input: &Input<'_>) -> Option<Collection> {
             ));
             continue;
         }
-        // A skip a listing cannot see: only a report can tell (FR-001).
+        // A skip a listing cannot see: only a report can tell.
         if runner::skips_unseen_by_listing(*toolchain, &source) {
             out.push(unknown(
                 path,
@@ -608,7 +608,7 @@ pub fn judge(input: &Input<'_>) -> Option<Collection> {
 
 /// Why the runner would never collect a new file at `path` with `content`,
 /// by the static rule alone (`None`: it may be collected, or the rule is
-/// not known statically). For placing new test files (FR-029, FR-031).
+/// not known statically). For placing new test files.
 #[must_use]
 pub fn statically_refused(root: &Path, path: &str, content: &str) -> Option<String> {
     let mut files = static_cfg::files(root);

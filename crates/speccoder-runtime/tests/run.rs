@@ -4125,7 +4125,7 @@ fn a_mostly_unverified_feature_is_diagnosed_once_until_it_is_handed_off() {
     assert!(inbox(r.path()).iter().all(|i| i.kind != "unverified"));
 }
 
-/// FR-048: collection, reasons, the bisection, the layout and the plan
+/// Collection, reasons, the bisection, the layout and the plan
 /// checks add no model call to judging and pass nothing that failed.
 #[test]
 fn nothing_of_spec_102_adds_a_model_call_or_passes_a_failure() {

@@ -135,7 +135,7 @@ pub(crate) fn judge_checks(
         let green = verify::rerun_once(run_all_acceptance(project, &all, runner, &counted), || {
             run_all_acceptance(project, &all, runner, &counted)
         });
-        // Green is evidence only when it collected what red did (FR-008):
+        // Green is evidence only when it collected what red did:
         // red's count, else what the files declare, and at least one; a
         // green run whose count cannot be read is no evidence.
         let red_tests = a.report["red_tests"]

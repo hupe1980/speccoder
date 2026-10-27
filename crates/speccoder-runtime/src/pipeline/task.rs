@@ -415,7 +415,7 @@ pub(crate) fn run_task(
             );
         }
     };
-    // A person's decision (FR-034): this Setup or Foundational task writes
+    // A person's decision: this Setup or Foundational task writes
     // a story's acceptance tests — its author gets the story's scenarios.
     let acceptance_story = native
         .is_none()
@@ -2505,7 +2505,7 @@ pub(crate) fn run_task(
                 .map(|p| p.to_string_lossy().replace('\\', "/"))
                 .unwrap_or_default();
             // A section added to the story's file: only that section, with
-            // the file's imports, and only its tests run (FR-030, FR-014).
+            // the file's imports, and only its tests run.
             let mut command = Some(argv.clone());
             if a.report["appended"] == true
                 && let Some(story) = a.report["story_file"].as_str()
@@ -2895,8 +2895,8 @@ fn collection_code(
     }
 }
 
-/// Judges the attempt's changed test files against what the run collected
-/// (FR-001…FR-006): a file no test ran from fails the verdict (its reason
+/// Judges the attempt's changed test files against what the run collected:
+/// a file no test ran from fails the verdict (its reason
 /// first); for an otherwise passing attempt, a file speccoder cannot tell
 /// about returns the stop's message. Listings run only then.
 /// What the collection check came to beyond the verdict's reasons.

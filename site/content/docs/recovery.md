@@ -39,13 +39,15 @@ A failed or stopped attempt is saved under `refs/speccoder/attempts/<feature>/<t
 
 ## An unreadable journal
 
-A journal this build cannot read (another format, or damage) is moved aside as `journal.<time>.unreadable.redb` and a fresh one is started; progress lives in git, so only replay of older runs is lost. While one speccoder process writes the journal (a run, a decision), others read it as it stands — `status`, `report --approvals`, `inbox`, `task show --account` and the app answer at once; a second writer is refused at once and touches nothing. A reader never creates, moves or repairs the journal, so it cannot read one that needs repair: a run killed before it closed the journal (Ctrl-C, a closed terminal, out of memory) leaves it so, and `status`, `inbox` and `report --approvals` say `unknown — the last run ended without closing its journal` until the next writer repairs it. Every writer repairs it on opening: the next run, and a decision (`task approve`, `task reject`, `--all`, a batch, Always Allow), so a killed run never blocks a person's decision. Whatever cannot be read leaves the waiting calls `unknown`, never none; a run that cannot read them does not start, and a decision lists the calls through the writer it decides with.
+A journal this build cannot read (another format, or damage) is moved aside as `journal.<time>.unreadable.redb` and a fresh one started; progress lives in git, so only replay of older runs is lost.
 
-## After upgrading from 0.2.0
+- **While a run writes the journal**, `status`, `report --approvals`, `inbox`, `task show --account` and the app read it at once; a second writer is refused at once.
+- **A run killed before it closed the journal** (Ctrl-C, a closed terminal) leaves it for the next writer — the next run, or any decision — to repair. Until then the listings say `unknown — the last run ended without closing its journal`.
+- Waiting calls that cannot be read show as `unknown`, never as none; a run that cannot read them does not start.
 
-The journal 0.2.0 wrote stays; its runs still list and show. A person's decision recorded under 0.2.0 does not read in this build (agentplane 0.54 records a decision as a verdict). The attempt that waited on it fails once with "this attempt waited on a decision recorded by speccoder 0.2.0 … run the task again", and is set aside; the next `speccoder run` starts the task afresh and asks again. `speccoder replay` of a run that read such a decision says so instead of reporting a divergence. Nothing needs deleting: ticks and attempt refs live in git.
+## A decision recorded by 0.2.0
 
-While both versions work on one project, a 0.2.0 process holds the journal alone, so a newer `status` or `inbox` shows its waiting calls as `unknown`. The other way round, a 0.2.0 run or decision waits up to 2 s for a newer read, which holds the journal only while it reads. Upgrade every speccoder that works on a project together.
+An attempt that waited on a decision speccoder 0.2.0 recorded fails once ("… run the task again") and is set aside; the next `speccoder run` asks again, and `speccoder replay` of such a run says so. Ticks and attempt refs live in git: nothing needs deleting. Upgrade every speccoder that works on a project together — a 0.2.0 process holds the journal alone, so a newer one shows its waiting calls as `unknown`.
 
 ## Replay
 

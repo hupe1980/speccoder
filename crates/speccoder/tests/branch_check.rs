@@ -2,7 +2,7 @@
 //! on fixture repositories: every kind of tick gets its
 //! outcome and reason, the branch its conclusion, from git objects and the
 //! caller's trust only — and each tick's verification equals
-//! `attest verify`'s for its commit (one implementation, FR-002).
+//! `attest verify`'s for its commit (one implementation).
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
@@ -701,7 +701,7 @@ fn a_task_line_hash_is_checked_against_the_head() {
     );
 }
 
-/// SC-003, for `scripts/verify-performance.sh`: the given binary checks 50
+/// The given binary checks 50
 /// signed ticks within the budget left after its download.
 #[test]
 #[ignore = "run by scripts/verify-performance.sh with a release binary"]

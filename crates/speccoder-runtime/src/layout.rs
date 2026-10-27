@@ -1,4 +1,4 @@
-//! The project's test layout, detected by code (FR-026): the runners of
+//! The project's test layout, detected by code: the runners of
 //! the checkout, each runner's collection rule as configured, where tests
 //! live today, the naming habit, and where speccoder puts a story's
 //! acceptance file. A fact handed to the implementer and every test author,
@@ -369,7 +369,7 @@ impl TestLayout {
     }
 
     /// The story file for `story` (`US1`) — for Go, in `package` (a
-    /// directory). `None`: no place the runner collects (FR-033).
+    /// directory). `None`: no place the runner collects.
     #[must_use]
     pub fn story_file(&self, story: &str, package: Option<&str>) -> Option<String> {
         let r = self.primary()?;

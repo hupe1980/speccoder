@@ -808,11 +808,8 @@ pub const CATALOG: &[Entry] = &[
         E,
         S::NotFound,
         "this build has no sample",
-        "The sample's recording is not part of this build: it is recorded with a real model by the maintainers (`just record-sample`) and bundled into release builds once it exists.",
-        [
-            "→ install a release build that includes the sample",
-            "speccoder new"
-        ]
+        "The sample's recording is not part of this build: release builds bundle it; a build from source has it only when `crates/speccoder-runtime/assets/sample/` holds one (`just record-sample`).",
+        ["→ install a release build", "speccoder new"]
     ),
     entry!(
         "SIMILAR-FEATURE",

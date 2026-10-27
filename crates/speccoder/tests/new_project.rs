@@ -1,4 +1,4 @@
-//! `speccoder new` (F-130) with stand-ins for the ecosystems' tools on
+//! `speccoder new` with stand-ins for the ecosystems' tools on
 //! the PATH (`tests/fixtures/new-tools/`): the plan, its order, the one
 //! commit as the person, the format's files written only by the format's
 //! tool, resuming, refusals, and Undo. A temporary HOME and state
@@ -267,7 +267,7 @@ fn a_rust_spec_kit_project_is_made_by_its_own_tools_and_committed_once_as_the_pe
         "{}",
         m.log("specify")
     );
-    // The format's files are exactly what its own init writes (SC-004).
+    // The format's files are exactly what its own init writes.
     let alone = tempfile::tempdir().unwrap();
     let preset = specify[11];
     let st = Command::new(tools().join("specify"))
@@ -682,7 +682,7 @@ fn an_existing_repository_gets_the_format_and_init_and_undo_reverts_only_speccod
 /// With the real tools (`SPECCODER_REAL_TOOLS=1`, a developer's machine
 /// with cargo, specify and openspec): the format's files of a project
 /// `speccoder new` made are byte for byte what the same init writes run by
-/// hand in an empty repository (SC-004).
+/// hand in an empty repository.
 #[test]
 fn with_the_real_tools_the_formats_files_are_the_formats_own() {
     if std::env::var_os("SPECCODER_REAL_TOOLS").is_none() {

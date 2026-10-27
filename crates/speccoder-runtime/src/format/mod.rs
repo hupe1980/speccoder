@@ -240,7 +240,7 @@ pub struct PlannedTask {
     pub done: bool,
 }
 
-/// A unit's plan structure: phases and stories (FR-037). Formats without
+/// A unit's plan structure: phases and stories. Formats without
 /// that structure have none.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct PlanStructure {

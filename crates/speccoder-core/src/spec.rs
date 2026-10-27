@@ -1,6 +1,6 @@
 //! The format-neutral view of spec-driven work: which format
 //! a project is written in, and the requirements and acceptance scenarios a
-//! unit of work states. Spec Kit, OpenSpec and Kiro adapters produce it;
+//! unit of work states. The Spec Kit and OpenSpec adapters produce it;
 //! the judge reads only it.
 
 use std::fmt;

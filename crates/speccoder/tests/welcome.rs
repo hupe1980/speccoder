@@ -1,4 +1,4 @@
-//! A host started outside a project (F-130): the welcome, project routes
+//! A host started outside a project: the welcome, project routes
 //! waiting for a project, and binding once — to a folder opened, a project
 //! created (the plan bound to its digest), a repository cloned.
 

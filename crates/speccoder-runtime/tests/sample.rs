@@ -1,4 +1,4 @@
-//! Try the sample (F-131): the bundled recording replays strictly with
+//! Try the sample: the bundled recording replays strictly with
 //! this build (when the build has it), and the mechanics — the copy in the
 //! state directory, strict replay per run, a divergence reported as one —
 //! on a sample made here from a scripted run. That sample is built for the

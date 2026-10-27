@@ -144,7 +144,7 @@ pub struct RegressionFacts {
     pub red_class: Option<RedClass>,
 }
 
-/// The reason, by precedence (FR-013, highest first): `acceptance_off`,
+/// The reason, by precedence (highest first): `acceptance_off`,
 /// `no_story`, `no_scenarios`, `author_failed`, `author_wrote_none`,
 /// `tests_not_collected`, `not_red`, `already_passing`. `already_passing`
 /// comes without `implemented_by`; the bisection fills it.
@@ -260,7 +260,7 @@ fn class_named(s: &str) -> Option<RedClass> {
     .find(|c| class_name(*c) == s)
 }
 
-/// The one sentence per reason, the same in every interface (FR-017): the
+/// The one sentence per reason, the same in every interface: the
 /// only place a reason is worded.
 #[must_use]
 pub fn wording(r: &RegressionReason) -> String {

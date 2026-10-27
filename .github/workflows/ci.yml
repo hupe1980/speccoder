@@ -110,7 +110,7 @@ jobs:
         with:
           allow-neutral: true
 
-  # The branch check's speed on a hosted runner (SC-003): a feature of 50
+  # The branch check's speed on a hosted runner: a feature of 50
   # signed ticks, the release binary served as the action downloads it,
   # timed end to end.
   verifier-performance:

@@ -1069,7 +1069,7 @@ mod tests {
         assert_eq!(untick(b"a [xy] b"), b"a [xy] b");
     }
 
-    /// SC-006: re-checking a 2,000-file, 20 MB protected set takes at
+    /// Re-checking a 2,000-file, 20 MB protected set takes at
     /// most a second (`cargo test --release -- --ignored`).
     #[test]
     #[ignore = "a timing check: run in release"]

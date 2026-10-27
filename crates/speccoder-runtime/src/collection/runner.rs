@@ -1,4 +1,4 @@
-//! The listing a check's own run implies (FR-002): built from the argv of
+//! The listing a check's own run implies: built from the argv of
 //! a fast check that runs the toolchain — its selectors, filters and
 //! packages kept — so a test counts only if a check the verdict rests on
 //! would run it. No check runs the toolchain: there is no listing, and the

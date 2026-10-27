@@ -1,4 +1,4 @@
-//! The `speccoder` Spec Kit preset (F-134): a tasks template that plans
+//! The `speccoder` Spec Kit preset: a tasks template that plans
 //! for evidence, bundled in the binary and installed through Spec Kit's own
 //! `specify preset add --dev` — on a person's confirmed command, never from
 //! the network. Spec 101's New Project passes [`extract`]'s directory to
@@ -37,7 +37,7 @@ pub fn dir(state: &Path) -> PathBuf {
 /// Writes the bundled preset to `<state>/presets/speccoder-<version>/`
 /// (idempotent: files already as bundled are kept) and returns that
 /// directory — what `specify preset add --dev` and `specify init --preset`
-/// are given (FR-044).
+/// are given.
 ///
 /// # Errors
 ///

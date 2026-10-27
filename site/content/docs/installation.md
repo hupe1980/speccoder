@@ -57,12 +57,12 @@ Every release lists `SHA256SUMS` and carries a [build-provenance attestation](ht
 
 ```sh
 shasum -a 256 -c SHA256SUMS --ignore-missing
-gh attestation verify speccoder-0.2.0-aarch64-apple-darwin.tar.gz --repo hupe1980/speccoder
+gh attestation verify speccoder-0.3.0-aarch64-apple-darwin.tar.gz --repo hupe1980/speccoder
 ```
 
 ## The branch check
 
-[`speccoder attest verify --branch`](@/docs/verifier.md) is part of `speccoder`: no second binary. It needs `git`, and `ssh-keygen`, `gpg` or `cosign` for the signatures it meets; no model key. On GitHub, the [evidence action](@/docs/github.md#evidence-check) downloads the `speccoder` archive for the runner and checks its provenance and sha256 before it runs it. (0.2.0 shipped a separate `speccoder-verify`; it is folded into `speccoder`.)
+[`speccoder attest verify --branch`](@/docs/verifier.md) is part of `speccoder`. It needs `git`, and `ssh-keygen`, `gpg` or `cosign` for the signatures it meets; no model key. On GitHub, the [evidence action](@/docs/github.md#evidence-check) downloads the `speccoder` archive for the runner and checks its provenance and sha256 before it runs it.
 
 ## API keys
 

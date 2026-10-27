@@ -84,7 +84,7 @@ pub fn plan_checks(
         .collect()
 }
 
-/// Whether the speccoder preset is active for the tasks template (FR-042).
+/// Whether the speccoder preset is active for the tasks template.
 fn preset_check(root: &Path) -> DoctorCheck {
     let state = crate::preset::state(root);
     let offer = |update: bool| speccoder_core::Remedy {
@@ -223,14 +223,14 @@ pub fn checks(
                     },
                 });
             }
-            // The speccoder preset, as Spec Kit reports it (FR-042).
+            // The speccoder preset, as Spec Kit reports it.
             if o.adapter.kind() == speccoder_core::spec::FormatKind::Speckit
                 && version("specify").is_some()
             {
                 out.push(preset_check(Path::new(&o.snapshot.root)));
             }
             out.extend(o.adapter.doctor_checks(Path::new(&o.snapshot.root), env));
-            // The plan checks of the selected feature (FR-035): warnings.
+            // The plan checks of the selected feature: warnings.
             if o.snapshot.feature.is_some() {
                 out.extend(plan_checks(
                     o.adapter,
@@ -238,7 +238,7 @@ pub fn checks(
                     Path::new(&o.snapshot.root),
                 ));
             }
-            // Where speccoder's acceptance tests would go (FR-033).
+            // Where speccoder's acceptance tests would go.
             let root = std::path::PathBuf::from(&o.snapshot.root);
             let layout = crate::layout::detect(&root, &crate::verify::check_argvs(&root));
             if let Some(r) = layout.primary().filter(|r| r.story_dir.is_none()) {

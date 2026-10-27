@@ -1,4 +1,4 @@
-//! Which tick made already-passing acceptance tests pass (FR-014): a fact
+//! Which tick made already-passing acceptance tests pass: a fact
 //! found by running the tests, never a guess from diffs.
 //!
 //! The feature branch's tick commits are searched by bisection — at most

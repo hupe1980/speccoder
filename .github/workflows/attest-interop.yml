@@ -25,7 +25,7 @@ jobs:
       - run: scripts/attest-interop.sh
 
   # Keyless Sigstore end to end: the job's own OIDC identity signs a tick's
-  # summary, cosign verifies it against that identity (F-061).
+  # summary, cosign verifies it against that identity.
   sigstore:
     runs-on: ubuntu-latest
     permissions:

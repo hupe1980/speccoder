@@ -26,14 +26,16 @@ New project md2csv in ~/Workspaces/md2csv (new folder)
 
    1  git init                                                              local
    2  cargo init --lib --name md2csv                                        local
-   3  specify init --here --force --non-interactive --integration claude …  local
-   4  speccoder init --yes                                                  local
-   5  git commit -m "new project: md2csv"   as Sam Doe <sam@example.com>    local
+   3  cp /dev/null src/lib.rs                                               local
+   4  cargo fmt --all                                                       local
+   5  specify init --here --force --non-interactive --integration claude …  local
+   6  speccoder init --yes                                                  local
+   7  git commit -m "new project: md2csv"   as Sam Doe <sam@example.com>    local
 ```
 
 | | |
 |---|---|
-| Stack | `--stack rust\|python\|node\|go\|none`; suggested from the idea and the toolchains installed. Python runs `uv init --package` and `uv add --dev pytest`, TypeScript `npm init -y`, `npm install --save-dev vitest` and sets `npm test` to `vitest run --passWithNoTests`, Go `go mod init` |
+| Stack | `--stack rust\|python\|node\|go\|none`; suggested from the idea and the toolchains installed. Rust runs `cargo init --lib` and empties `src/lib.rs` of cargo's placeholder, Python `uv init --package` and `uv add --dev pytest`, TypeScript `npm init -y`, `npm install --save-dev vitest` and sets `npm test` to `vitest run --passWithNoTests`, Go `go mod init` |
 | Spec format | `--format speckit` (default) or `--format openspec` (`openspec init --tools claude`, its settings kept in speccoder's cache, not `~/.config`). Spec Kit gets the [speccoder preset](@/docs/planning.md#the-speccoder-preset) (`--no-preset` leaves it out) and `--extension NAME\|PATH\|URL` |
 | Network | A step that needs the network says so, with the hosts it is expected to reach; the one question lists them. Such a step gets the full network: the hosts are not enforced |
 | Sandbox | Every step runs with stdin closed, a time limit and without the model keys, in the OS sandbox: writes only in the folder and speccoder's cache, `.git` read-only once it exists, no network unless the step is labelled network |

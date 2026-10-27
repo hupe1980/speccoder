@@ -1,4 +1,4 @@
-//! Try the sample (F-131): a small project and a run of it recorded with
+//! Try the sample: a small project and a run of it recorded with
 //! a real model, bundled into release builds, copied into speccoder's own
 //! state directory (never the person's workspace) and verified by strict
 //! replay — no model, no key, no network. A run this build cannot

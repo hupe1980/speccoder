@@ -1,4 +1,4 @@
-//! Checks of a plan before it runs (FR-035): where the task list will
+//! Checks of a plan before it runs: where the task list will
 //! produce no evidence. Deterministic, text-level, warnings only — they
 //! never block, delay or re-order a run, and never edit the plan.
 //!

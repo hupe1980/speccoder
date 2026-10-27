@@ -92,7 +92,11 @@ The `task` commands (`approve`, `reject`, `accept`, `skip`, `nudge`, `rule`, `re
 
 ## Where tests go
 
-speccoder detects the project's test layout — each runner's collection rule as configured, where tests live today, the naming habit, files nothing runs — and gives it to the implementer and every test author as a fact. Its own acceptance tests go to **one file per story** in that layout (`tests/acceptance_us1.rs`, `tests/test_acceptance_us1.py`, `src/acceptance-us1.test.ts`, `<package>/acceptance_us1_test.go`); a later task of the story adds its section at the end — a section that changes or inserts among the earlier tests, or skips a test, is refused — and is red only by what its section adds. Convergence tasks keep a file of their own. With no place the runner collects (Cargo's `autotests = false`, a `testpaths` that does not exist), no acceptance test is written and `speccoder doctor` names the setting.
+speccoder detects the project's test layout — each runner's collection rule, where tests live, the naming habit, files nothing runs — and gives it to the implementer and every test author.
+
+- Its acceptance tests go to **one file per story** (`tests/acceptance_us1.rs`, `tests/test_acceptance_us1.py`, `src/acceptance-us1.test.ts`, `<package>/acceptance_us1_test.go`), run by the command that runs only that file (`cargo test --test acceptance_us1`).
+- A later task of the story appends its section; changing, inserting among or skipping earlier tests is refused. Convergence tasks keep a file of their own.
+- With no place the runner collects (Cargo's `autotests = false`, a missing `testpaths`), no acceptance test is written and `speccoder doctor` names the setting.
 
 ## Retries
 

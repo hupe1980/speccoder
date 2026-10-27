@@ -139,7 +139,7 @@ fn a_project_that_is_not_spec_kit_is_refused() {
     );
 }
 
-/// SC-007: a plan written to the preset's template raises no plan check;
+/// A plan written to the preset's template raises no plan check;
 /// the POC's (Spec Kit's default template) raises three.
 #[test]
 fn a_plan_written_to_the_preset_raises_no_plan_check() {

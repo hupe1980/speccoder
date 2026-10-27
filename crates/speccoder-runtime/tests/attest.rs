@@ -646,7 +646,7 @@ fn decisions_are_attested_as_decisions() {
     );
 }
 
-/// SC-004: checking 50 signed ticks takes under five seconds. One real
+/// Checking 50 signed ticks takes under five seconds. One real
 /// signed tick, then 49 more commits doing the same task (same trailers,
 /// same tree), each with that evidence re-issued and signed for it.
 #[test]

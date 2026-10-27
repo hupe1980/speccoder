@@ -263,7 +263,7 @@ pub(crate) fn tick_message(f: &TickFacts<'_>) -> String {
 }
 
 /// The story files speccoder created on the feature's branch: the
-/// `Story-File:` trailers of its ticks (FR-029).
+/// `Story-File:` trailers of its ticks.
 pub(crate) fn story_files(repo: &std::path::Path, feature: &str) -> Vec<String> {
     let log = crate::git::Git::at(repo)
         .run(&[

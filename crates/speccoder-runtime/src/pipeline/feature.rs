@@ -329,7 +329,7 @@ pub fn run_feature_with(
                         .collect(),
                 });
                 // The plan checks, said once per run start; they never
-                // stop, delay or re-order it (FR-036).
+                // stop, delay or re-order it.
                 let warnings = crate::plan_lint::lints(format, &snap, &project).len();
                 if warnings > 0 {
                     p.event(&crate::progress::Event::Notice {

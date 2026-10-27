@@ -67,7 +67,11 @@ A file from which no test ran fails the verdict with the rule as the reason, and
 tests not collected: `tests/unit/greet_name.rs` — Cargo builds `tests/*.rs` and `tests/<dir>/main.rs` (and the modules they declare); this file is neither
 ```
 
-A file none of the three can decide stops the task (`TESTS-COLLECTION-UNKNOWN`): it is never ticked. That includes a file no fast check runs, a file with a skip a listing cannot see (`pytest.mark.skip`, `it.skip`, `t.Skip`), and one the static rule cannot settle (a report names its tests, or the checkout is too large to walk). Declare a JUnit report or a `list` command for the check, or `speccoder task accept` it — which puts the saved attempt back before ticking. Test helpers without tests, deleted files and build output are not judged. A JUnit report is read only when this run wrote it: a report left from before is removed first, one dated after the run is ignored, and a report tracked by git is never read. The evidence rows show a **Collection** row; the signed statement carries the files and what decided each.
+A file none of the three can decide stops the task, never ticked (`TESTS-COLLECTION-UNKNOWN`): one no fast check runs, one with a skip a listing cannot see (`pytest.mark.skip`, `it.skip`, `t.Skip`), or one the static rule cannot settle. Declare a JUnit report or a `list` command for the check, or `speccoder task accept` the task (it puts the saved attempt back before ticking).
+
+- Test helpers without tests, deleted files and build output are not judged.
+- A JUnit report counts only when this run wrote it: an older one is removed first, and one tracked by git is never read.
+- The evidence shows a **Collection** row; the signed statement carries the files and what decided each.
 
 Acceptance and held-out tests count at green only when the green run collected at least as many tests as the red run — or, when red reported no count (it did not build), as many as the files declare — and at least one. A green run whose count cannot be read is no evidence.
 

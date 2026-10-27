@@ -323,7 +323,7 @@ mod tests {
         }
     }
 
-    /// One wording source (SC-003): every interface says a regression-only
+    /// One wording source: every interface says a regression-only
     /// tick's reason in the same bytes — the report's Markdown, the plain
     /// report, `--json`, the evidence rows and the finish line.
     #[test]

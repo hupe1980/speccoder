@@ -149,13 +149,13 @@ impl Collection {
         self.files.iter().filter(|f| f.state == FileState::Unknown)
     }
 
-    /// The verdict reasons: one per file that never ran (FR-004).
+    /// The verdict reasons: one per file that never ran.
     #[must_use]
     pub fn reasons(&self) -> Vec<String> {
         self.not_collected().map(reason).collect()
     }
 
-    /// The retry lines: one per file that never ran (FR-005).
+    /// The retry lines: one per file that never ran.
     #[must_use]
     pub fn retry_lines(&self) -> Vec<String> {
         self.not_collected().map(retry_line).collect()
@@ -230,7 +230,7 @@ pub fn toolchain_of(path: &str) -> Option<Toolchain> {
     }
 }
 
-/// Directories nothing judges: build output and dependencies (FR-007).
+/// Directories nothing judges: build output and dependencies.
 #[must_use]
 pub fn is_build_or_dependency(path: &str) -> bool {
     path.split('/').any(|c| {
@@ -249,7 +249,7 @@ pub fn is_build_or_dependency(path: &str) -> bool {
 }
 
 /// Whether `source` defines at least one test by the toolchain's markers:
-/// a helper without test definitions is never judged (FR-007).
+/// a helper without test definitions is never judged.
 #[must_use]
 pub fn defines_tests(toolchain: Toolchain, source: &str) -> bool {
     match toolchain {

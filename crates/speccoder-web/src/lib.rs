@@ -27,7 +27,7 @@ mod bundle {
     include!(concat!(env!("OUT_DIR"), "/bundle.rs"));
 }
 
-/// The project a host serves: bound at most once (D-115, one host per
+/// The project a host serves: bound at most once (one host per
 /// project). A host started outside a project serves the welcome until
 /// the person creates, opens, clones or tries one.
 #[derive(Debug, Clone)]

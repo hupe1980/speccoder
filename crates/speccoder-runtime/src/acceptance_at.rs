@@ -1,5 +1,5 @@
 //! A person's decision that a story's acceptance tests are written at a
-//! Setup or Foundational task (FR-034): the fix for a plan that implements
+//! Setup or Foundational task: the fix for a plan that implements
 //! a story's behaviour before the story. Recorded in the state directory —
 //! never an edit of the spec (constitution I) — and changing no order or
 //! dependency (IV): only which task's acceptance author receives the
