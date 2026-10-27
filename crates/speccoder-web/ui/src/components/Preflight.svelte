@@ -13,7 +13,7 @@
 
   const badge: Record<string, string> = {
     "model key": "key", untracked: "tray", signing: "signature", sandbox: "shield", git: "branch", "spec tool": "terminal",
-    config: "doc", feature: "doc", project: "doc", state: "tray", instructions: "doc",
+    config: "doc", tests: "list", plan: "list", feature: "doc", project: "doc", state: "tray", instructions: "doc",
   };
   // A fix line is a command, sometimes followed by "(why)" or prose.
   const command = (f: string) => f.replace(/^→\s*/, "").replace(/\s+\(.*\)$/, "");

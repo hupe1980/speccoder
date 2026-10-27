@@ -203,6 +203,9 @@ pub fn code_path(p: &str) -> String {
 pub fn detail(cause: &SkipCause) -> String {
     match cause {
         SkipCause::NoFiles => "the test author wrote no file".to_owned(),
+        SkipCause::Refused { path, why } if why.starts_with("changes existing lines") => {
+            format!("{why} of {}", code_path(path))
+        }
         SkipCause::Refused { path, why } => format!("{} {why}", code_path(path)),
         SkipCause::CommandNotAllowed { argv } => {
             format!(

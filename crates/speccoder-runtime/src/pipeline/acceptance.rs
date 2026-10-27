@@ -689,6 +689,11 @@ pub(crate) fn prepare_held_out(
             discard(&rel, "path");
             continue;
         }
+        // A held-out test the runner would never collect judges nothing.
+        if crate::collection::statically_refused(a.project, &rel, content).is_some() {
+            discard(&rel, "not_collected");
+            continue;
+        }
         if cited.is_empty() || cited.iter().any(|c| !known.contains(c.as_str())) {
             discard(&rel, "unknown_scenario");
             continue;
@@ -756,7 +761,16 @@ pub(crate) fn prepare_held_out(
     let mut report = base;
     report["discarded"] = json!(discarded);
     if kept.is_empty() {
-        return absent("all_discarded", report);
+        let only_uncollected =
+            !discarded.is_empty() && discarded.iter().all(|d| d.reason == "not_collected");
+        return absent(
+            if only_uncollected {
+                "not_collected"
+            } else {
+                "all_discarded"
+            },
+            report,
+        );
     }
     let manifest = crate::held_out::Manifest {
         version: 1,

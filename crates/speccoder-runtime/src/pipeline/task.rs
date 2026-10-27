@@ -1328,7 +1328,8 @@ pub(crate) fn run_task(
                 },
                 digest.as_ref(),
                 attempt_instructions,
-                Some(&test_layout_text),
+                // No runner found: nothing to say (and nothing of the worktree's).
+                (!test_layout.runners.is_empty()).then_some(test_layout_text.as_str()),
             );
             let attempt_began = std::time::Instant::now();
             let attempt_detail = if run_config.best_of > 1 {

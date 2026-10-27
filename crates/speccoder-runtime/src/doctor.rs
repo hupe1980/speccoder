@@ -129,7 +129,20 @@ pub fn checks(
                     },
                 });
             }
-            std::path::PathBuf::from(&o.snapshot.root)
+            // Where speccoder's acceptance tests would go (FR-033).
+            let root = std::path::PathBuf::from(&o.snapshot.root);
+            let layout = crate::layout::detect(&root, &crate::verify::check_argvs(&root));
+            if let Some(r) = layout.primary().filter(|r| r.story_dir.is_none()) {
+                out.push(warned(
+                    "tests",
+                    format!(
+                        "no place the runner collects new test files, so no acceptance test is written: {}",
+                        r.unknown.join("; ")
+                    ),
+                    &["→ let the runner collect a tests directory (Cargo: drop `autotests = false`; pytest: a `testpaths` entry that exists)"],
+                ));
+            }
+            root
         }
         Err(r) => {
             let fix = speccoder_core::codes::lookup("NO-PROJECT")

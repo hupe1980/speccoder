@@ -278,6 +278,7 @@ pub fn held_out_schema() -> Value {
 /// visible tests (so the held-out ones differ) and whether this task
 /// completes its story.
 #[must_use]
+#[allow(clippy::too_many_arguments)]
 pub fn held_out_input(
     bundle: Value,
     files: &[String],
@@ -671,6 +672,9 @@ impl Skill for Acceptance {
                 }
                 if let Some(p) = input.get("placement") {
                     text.push_str(&placement_text(p));
+                } else if !(review || reproduce || reproduce_held_out || held_out || strengthen) {
+                    // No layout detected: the author names the files.
+                    text.push_str("\n\n# Where the tests go\n\nNEW files under the project's test directory — paths not in the project's file list — named after the task ID (for Rust: tests/acceptance_<task id>.rs), with the command that runs only them (for Rust: cargo test --test <name>).\n");
                 }
                 let scenarios = input["scenarios"].as_array().into_iter().flatten();
                 if scenarios.clone().next().is_some() {
