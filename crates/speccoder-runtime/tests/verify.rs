@@ -318,3 +318,31 @@ junit = "out/future.xml"
         check(r, "future").note
     );
 }
+
+#[test]
+fn an_empty_pytest_suite_is_no_tests_yet_and_another_failure_stays_one() {
+    // A stand-in `pytest` with pytest's exit codes: 5 is "no tests
+    // collected", 1 is a failing test.
+    let dir = project(
+        r#"
+[checks.empty]
+argv = ["bin/pytest", "5"]
+
+[checks.failing]
+argv = ["bin/pytest", "1"]
+"#,
+    );
+    fs::create_dir(dir.path().join("bin")).unwrap();
+    fs::write(dir.path().join("bin/pytest"), "#!/bin/sh\nexit \"$1\"\n").unwrap();
+    Command::new("chmod")
+        .args(["+x", "bin/pytest"])
+        .current_dir(dir.path())
+        .status()
+        .unwrap();
+    let r = verify(dir.path(), None, None, &LocalRunner);
+    let rep = report(&r);
+    let empty = check(rep, "empty");
+    assert_eq!(empty.status, CheckStatus::Passed);
+    assert_eq!(empty.note.as_deref(), Some("no tests yet"));
+    assert_eq!(check(rep, "failing").status, CheckStatus::Failed);
+}

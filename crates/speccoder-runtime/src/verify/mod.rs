@@ -207,6 +207,15 @@ fn run_check(
         CheckStatus::TimedOut
     } else if outcome.exit_code == Some(0) {
         CheckStatus::Passed
+    } else if crate::init::no_tests(
+        &check.argv,
+        outcome.exit_code,
+        &format!("{}\n{}", result.stdout_tail, result.stderr_tail),
+    ) {
+        // An empty suite (pytest's exit 5) is no tests yet, as `init` reads
+        // it — nothing to regress — like nextest's `--no-tests=warn`.
+        result.note = Some("no tests yet".to_owned());
+        CheckStatus::Passed
     } else {
         CheckStatus::Failed
     };

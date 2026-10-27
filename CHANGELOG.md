@@ -9,6 +9,7 @@ adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 
 - A uv project's checks ran `.venv/bin/python`, which a run's worktree never has (`.venv/` is not committed), so every task stopped at the baseline. `init` now writes `uv run --locked --offline python -m pytest …`; a check run through `uv run` (or `poetry run`, `uvx`, …) allows exactly itself, never the runner as a prefix.
+- An empty pytest suite (exit 5, a fresh scaffold) failed the baseline as a broken check, although `init` reads it as *no tests yet*; it now passes as no tests yet, as nextest's `--no-tests=warn` does.
 
 ## [0.3.0] - 2026-10-27
 
