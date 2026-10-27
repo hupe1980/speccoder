@@ -336,7 +336,7 @@ pub fn text(report: &BranchReport, tours: &[String]) -> (String, usize) {
     let omitted = tours.len() - shown;
     if omitted > 0 {
         out.push_str(&format!(
-            "\n{omitted} tour(s) not shown — run `speccoder-verify tour --feature <unit> --task <id>`\n"
+            "\n{omitted} tour(s) not shown — run `speccoder attest tour <id> --feature <unit>`\n"
         ));
     }
     (out, omitted)

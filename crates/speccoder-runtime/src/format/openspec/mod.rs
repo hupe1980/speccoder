@@ -3,7 +3,6 @@
 //! `tasks.md` is a chain. Parsing and preflight are the `speccoder-openspec`
 //! crate's; this adapter is the only runtime code that knows OpenSpec.
 
-#[cfg(feature = "engine")]
 pub mod archive;
 mod bug;
 pub mod cli;

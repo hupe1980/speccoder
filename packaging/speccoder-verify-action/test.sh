@@ -7,8 +7,8 @@
 # comes from the checked commit (a push: the commit before it, or the
 # default branch's tip; none: refused).
 #
-#   packaging/speccoder-verify-action/test.sh            # builds the verifier
-#   SPECCODER_VERIFY_BIN=path/to/speccoder-verify test.sh
+#   packaging/speccoder-verify-action/test.sh            # builds speccoder
+#   SPECCODER_VERIFY_BIN=path/to/speccoder test.sh
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 root="$(cd "$here/../.." && pwd)"
@@ -27,22 +27,22 @@ sum() { if command -v sha256sum >/dev/null; then sha256sum "$1"; else shasum -a 
 
 bin="${SPECCODER_VERIFY_BIN:-}"
 if [ -z "$bin" ]; then
-  cargo build --quiet --locked -p speccoder-verify --manifest-path "$root/Cargo.toml"
-  bin="$root/target/debug/speccoder-verify"
+  cargo build --quiet --locked -p speccoder --manifest-path "$root/Cargo.toml"
+  bin="${CARGO_TARGET_DIR:-$root/target}/debug/speccoder"
 fi
 
 # A release on disk, as release.yml lays it out.
 version=9.8.7
 case "$(uname -s) $(uname -m)" in
-  "Linux x86_64") target=x86_64-unknown-linux-musl ;;
-  "Linux aarch64" | "Linux arm64") target=aarch64-unknown-linux-musl ;;
+  "Linux x86_64") target=x86_64-unknown-linux-gnu ;;
+  "Linux aarch64" | "Linux arm64") target=aarch64-unknown-linux-gnu ;;
   "Darwin arm64") target=aarch64-apple-darwin ;;
   *) echo "action-test: skipped (no build for $(uname -s) $(uname -m))"; exit 0 ;;
 esac
-pkg="speccoder-verify-$version-$target"
+pkg="speccoder-$version-$target"
 release="$work/release/v$version"
 mkdir -p "$release" "$work/$pkg"
-cp "$bin" "$work/$pkg/speccoder-verify"
+cp "$bin" "$work/$pkg/speccoder"
 tar -czf "$release/$pkg.tar.gz" -C "$work" "$pkg"
 echo "$(sum "$release/$pkg.tar.gz")  $pkg.tar.gz" > "$release/SHA256SUMS"
 good="$work/good.tar.gz"
@@ -196,7 +196,7 @@ git -C "$origin" checkout -q main
 grep -q "checked out in the workspace" "$work/log" || fail "pull_request_target: no reason"
 
 # 6. Trust never comes from the checked commit itself. The branch adds a
-# key of its own to allowed_signers; whatever the event, the verifier is
+# key of its own to allowed_signers; whatever the event, the check is
 # given another commit's file.
 g checkout -q docs
 echo 'eve@example.com namespaces="in-toto" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEveEveEveEveEveEveEveEveEveEveEveEveEveEveEv' >> "$origin/.github/speccoder/allowed_signers"
@@ -241,5 +241,21 @@ set +e; run SV_ALLOW_NEUTRAL=true; code=$?; set -e
 event "$own" ""
 set +e; run SV_ALLOW_NEUTRAL=true; code=$?; set -e
 [ "$code" = 1 ] || fail "pull request without a base: exit $code, want 1"
+
+# 7. A release from before the check moved into speccoder (no
+# `attest verify --branch --github-check`): refused, nothing published.
+old=0.2.0
+opkg="speccoder-$old-$target"
+mkdir -p "$work/release/v$old" "$work/$opkg"
+printf '#!/bin/sh\necho "Usage: speccoder attest verify [REV]"\n' > "$work/$opkg/speccoder"
+chmod +x "$work/$opkg/speccoder"
+tar -czf "$work/release/v$old/$opkg.tar.gz" -C "$work" "$opkg"
+echo "$(sum "$work/release/v$old/$opkg.tar.gz")  $opkg.tar.gz" > "$work/release/v$old/SHA256SUMS"
+event "$ticked" "$main"
+before="$(posts | wc -l)"
+set +e; run SV_VERSION="$old"; code=$?; set -e
+[ "$code" = 1 ] || fail "an old release: exit $code, want 1"
+grep -q "has no \`attest verify --branch --github-check\`" "$work/log" || fail "an old release: no reason ($(cat "$work/log"))"
+[ "$(posts | wc -l)" = "$before" ] || fail "an old release still published a check"
 
 echo "action-test: ok"

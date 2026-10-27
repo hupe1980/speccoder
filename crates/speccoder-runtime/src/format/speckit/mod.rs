@@ -3,7 +3,6 @@
 //! `speccoder-speckit` crate's; this adapter is the only runtime code that
 //! knows Spec Kit's paths and words.
 
-#[cfg(feature = "engine")]
 pub mod bench;
 pub mod bug;
 pub mod extensions;

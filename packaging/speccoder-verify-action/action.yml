@@ -11,7 +11,7 @@ branding:
 
 inputs:
   version:
-    description: The speccoder-verify release to run (verified by build provenance and sha256 before it runs).
+    description: The speccoder release whose `attest verify --branch` runs (verified by build provenance and sha256 before it runs; later than 0.2.0).
     default: "0.2.0" # the release this action is cut with; scripts/release/bump.sh sets it
   allowed-signers:
     description: >-
@@ -49,12 +49,12 @@ inputs:
     description: On a push to the default branch only, commit the evidence badge to this orphan branch (needs contents write). Empty is off.
     default: ""
   token:
-    description: Used by the action's own git and curl steps only; never passed to the verifier.
+    description: Used by the action's own git and curl steps only; never passed to speccoder.
     default: ${{ github.token }}
 
 outputs:
   conclusion:
-    description: success, failure or neutral (the verifier's).
+    description: success, failure or neutral (the check's).
     value: ${{ steps.verify.outputs.conclusion }}
   verified:
     description: Ticks verified.

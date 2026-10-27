@@ -110,20 +110,15 @@ rm dirty.txt
 "$scripts/bump.sh" 0.2.0-rc.1 >/dev/null && g commit -qam rc2 && g tag v0.2.0-rc.1
 refuses "is a pre-release" "$scripts/publish.sh" speccoder-core
 
-# Formula: every checksum substituted, no placeholder left — the
-# verifier's archives beside speccoder's change nothing in it.
+# Formula: every checksum substituted, no placeholder left.
 cd "$work"
 for t in aarch64-apple-darwin aarch64-unknown-linux-gnu x86_64-unknown-linux-gnu; do
   printf '%064d  speccoder-0.1.0-%s.tar.gz\n' "${#t}" "$t"
 done > SHA256SUMS
-for t in aarch64-apple-darwin aarch64-unknown-linux-musl x86_64-unknown-linux-musl; do
-  printf '%064d  speccoder-verify-0.1.0-%s.tar.gz\n' "$((${#t} + 1))" "$t"
-done >> SHA256SUMS
 "$scripts/formula.sh" 0.1.0 SHA256SUMS > speccoder.rb || fail "formula"
 [ "$(grep -c 'sha256 "0\{40\}' speccoder.rb)" = 3 ] || fail "three checksums"
 grep -q 'version "0.1.0"' speccoder.rb || fail "formula version"
 ! grep -q '@' speccoder.rb || fail "placeholder left in the formula"
-grep -q 'speccoder-verify' speccoder.rb && fail "the formula names the verifier"
 head -n 2 SHA256SUMS > short
 refuses "no checksum for" "$scripts/formula.sh" 0.1.0 short
 

@@ -1,10 +1,9 @@
 //! Repositories with ticks of every kind, signed with a throw-away SSH key:
 //! the fixtures of the branch verifier. The statements are written the way
 //! `attest::record_tick` and `record_decision` write them, so the
-//! verifier's rules see what speccoder produces.
+//! branch check's rules see what speccoder produces.
 //!
-//! Shared with `crates/speccoder/tests` (`#[path]`), so `speccoder attest
-//! verify --branch` is checked on the same repositories.
+//! Shared by `branch_check.rs` and `verify_branch.rs`.
 
 #![allow(dead_code, clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
@@ -528,20 +527,14 @@ impl Repo {
     }
 }
 
-/// The verifier binary built for these tests, or (from another crate's
-/// tests) the one in the same target directory.
-pub fn verifier() -> PathBuf {
-    if let Some(p) = option_env!("CARGO_BIN_EXE_speccoder-verify") {
-        return PathBuf::from(p);
-    }
-    let exe = std::env::current_exe().unwrap();
-    let dir = exe.parent().and_then(Path::parent).unwrap();
-    dir.join(format!("speccoder-verify{}", std::env::consts::EXE_SUFFIX))
+/// The speccoder binary built for these tests.
+pub fn speccoder() -> PathBuf {
+    PathBuf::from(env!("CARGO_BIN_EXE_speccoder"))
 }
 
-/// Runs the verifier in `repo` with `args`; (exit code, stdout, stderr).
+/// Runs `speccoder` in `repo` with `args`; (exit code, stdout, stderr).
 pub fn run(repo: &Path, args: &[&str]) -> (i32, String, String) {
-    let out = Command::new(verifier())
+    let out = Command::new(speccoder())
         .args(args)
         .current_dir(repo)
         .output()
@@ -553,10 +546,15 @@ pub fn run(repo: &Path, args: &[&str]) -> (i32, String, String) {
     )
 }
 
-/// `check --json` with the trusted signers; (exit code, the envelope).
+/// `speccoder attest verify --branch` as the check runs it.
+pub const CHECK: &[&str] = &["attest", "verify", "--branch"];
+
+/// `attest verify --branch --json` with the trusted signers; (exit code,
+/// the envelope).
 pub fn check(r: &Repo, extra: &[&str]) -> (i32, Value) {
     let allowed = r.allowed.display().to_string();
-    let mut args = vec!["check", "--json", "--allowed-signers", &allowed];
+    let mut args = CHECK.to_vec();
+    args.extend(["--json", "--allowed-signers", &allowed]);
     args.extend_from_slice(extra);
     let (code, out, err) = run(r.path(), &args);
     let v: Value =

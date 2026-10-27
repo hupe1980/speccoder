@@ -87,7 +87,7 @@ When several apply, the worst is reported: `missing`, then `malformed`, `bad_sig
 | OpenPGP | Your GnuPG keyring: keys you trust fully or ultimately |
 | Sigstore | `--certificate-identity` and `--certificate-oidc-issuer`. `[attest.sigstore]` in the project only *suggests* them, in `speccoder pr`'s verify command |
 
-To check every `[X]` of a branch (ticks without evidence, reworded task lines, changed requirements, evidence a squash merge lost), use [`speccoder-verify`](@/docs/verifier.md) or `speccoder attest verify --branch [--base REV]`.
+To check every `[X]` of a branch (ticks without evidence, reworded task lines, changed requirements, evidence a squash merge lost), use [`speccoder attest verify --branch [--base REV]`](@/docs/verifier.md).
 
 ### Without speccoder
 

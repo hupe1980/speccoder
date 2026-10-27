@@ -105,9 +105,9 @@ const fn describe(payload: &str) -> &'static str {
         b"policy_coverage" => "config coverage: what a prefix entry would newly allow",
         b"comments" => "review comments: the comment tray and the last revision turn",
         b"branch_verify" => {
-            "attest verify --branch, speccoder-verify: every tick of a branch and what its evidence comes to"
+            "attest verify --branch, attest badge: every tick of a branch and what its evidence comes to"
         }
-        b"evidence_tour" => "speccoder-verify tour, /api/tour: one task's evidence, step by step",
+        b"evidence_tour" => "attest tour, /api/tour: one task's evidence, step by step",
         _ => "",
     }
 }

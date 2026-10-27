@@ -87,7 +87,7 @@ pub struct TourStep {
     pub facts: serde_json::Value,
 }
 
-/// Result of `speccoder-verify tour` and `/api/tour`: one task's tour.
+/// Result of `speccoder attest tour` and `/api/tour`: one task's tour.
 #[derive(Debug, Clone, PartialEq, Serialize, schemars::JsonSchema)]
 pub struct EvidenceTour {
     /// The unit.

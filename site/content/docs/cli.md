@@ -103,7 +103,9 @@ Every stop and finish ends with a `Next:` block of commands to copy (`next` in J
 | `speccoder approvals batch RUN approve\|reject --digest D [--call ID]… [--reason R] [--resume-asking]` | Decide the [calls waiting together](@/docs/approvals.md#the-asking-budget) |
 | `speccoder fix [--dry-run]` | Commit the setup that stops a run (`SETUP-INCOMPLETE`) in your checkout |
 | `speccoder attest verify [REV\|RANGE] [--allowed-signers FILE] [--certificate-identity I --certificate-oidc-issuer O] [--require-signed]` | [Check the attestations](@/docs/attestations.md#checking-them) (exit 26 when one fails) |
-| `speccoder attest verify --branch [REV] [--base B] [--allowed-signers-rev REV:PATH]` | Check a branch as [`speccoder-verify`](@/docs/verifier.md) does |
+| `speccoder attest verify --branch [REV] [--base B \| --all] [--allowed-signers-rev REV:PATH] [--require-signed=false] [--github-check FILE]` | [Check every tick of a branch](@/docs/verifier.md) from git objects, with your trust (exit 0 / 26 failure / 15 neutral) |
+| `speccoder attest tour TASK [REV] --feature F` | One tick's [evidence tour](@/docs/verifier.md#the-evidence-tour) (payload `evidence_tour`) |
+| `speccoder attest badge [REV] [--svg FILE] [--endpoint FILE]` | The [evidence badge](@/docs/verifier.md#the-badge) |
 | `speccoder attest sign [REV\|RANGE]` | Sign the statements left unsigned |
 | `speccoder verify [--tier fast\|full] [--against FILE]` | Run the configured checks; compare with a saved `--json` result |
 | `speccoder converge [--in-place]` | Assess a finished feature against its spec and append what remains |
@@ -120,10 +122,6 @@ Every stop and finish ends with a `Next:` block of commands to copy (`next` in J
 | `speccoder schema [NAME]` | The JSON Schema of an output (`result`, `event`, a payload); without a name, the list |
 | `speccoder completion bash\|zsh\|fish\|elvish\|powershell` | A shell completion script, e.g. `speccoder completion zsh > ~/.zfunc/_speccoder` |
 | `speccoder tui` | The dashboard |
-
-## speccoder-verify
-
-A separate binary with no model and no network: `check` (the default), `tour --feature F --task T`, `badge [--svg FILE] [--endpoint FILE]`; see [the verifier](@/docs/verifier.md).
 
 ## JSON output
 

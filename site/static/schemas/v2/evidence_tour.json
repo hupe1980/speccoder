@@ -90,7 +90,7 @@
   },
   "$id": "https://hupe1980.github.io/speccoder/schemas/v2/evidence_tour.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Result of `speccoder-verify tour` and `/api/tour`: one task's tour.",
+  "description": "Result of `speccoder attest tour` and `/api/tour`: one task's tour.",
   "properties": {
     "commit": {
       "description": "The task commit, when one carries the task's evidence.",
@@ -142,6 +142,6 @@
     "steps",
     "unverifiable"
   ],
-  "title": "speccoder-verify tour, /api/tour: one task's evidence, step by step",
+  "title": "attest tour, /api/tour: one task's evidence, step by step",
   "type": "object"
 }
