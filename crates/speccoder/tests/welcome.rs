@@ -237,6 +237,33 @@ fn new_project_runs_the_plan_on_screen_or_nothing_and_binds_to_the_project() {
     let digest = plan["plan"]["digest"].as_str().unwrap().to_owned();
     assert!(plan["plan"]["refusal"].is_null(), "{plan}");
     let choices = plan["choices"].clone();
+    // The sheet's plan is `speccoder new --dry-run`'s, for the same choices.
+    let out = Command::new(env!("CARGO_BIN_EXE_speccoder"))
+        .args(["--json", "new"])
+        .arg(&target)
+        .args(["--idea", "a CLI", "--stack", "go", "--dry-run"])
+        .env_clear()
+        .env(
+            "PATH",
+            format!(
+                "{}:{}",
+                tools().display(),
+                std::env::var("PATH").unwrap_or_default()
+            ),
+        )
+        .env("HOME", home.path())
+        .env("GIT_CONFIG_GLOBAL", home.path().join(".gitconfig"))
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env("SPECCODER_STATE_DIR", state.path())
+        .env("TMPDIR", std::env::temp_dir())
+        .output()
+        .unwrap();
+    let cli: Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(cli["data"]["plan"]["steps"], plan["plan"]["steps"]);
+    assert_eq!(
+        cli["data"]["plan"]["digest"], plan["plan"]["digest"],
+        "{cli}"
+    );
     // A digest that is not the plan on screen: nothing runs.
     let stale = h.run(&json!({ "kind": "new_project", "target": target.display().to_string(), "choices": choices, "plan_digest": "sha256:old" }));
     assert_eq!(stale["code"], "NEW-PLAN-CHANGED", "{stale}");
