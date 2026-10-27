@@ -445,8 +445,21 @@ fn run_unguarded(
                     .or_else(|| report
                         .pending
                         .as_ref()
-                        .map(|p| p["reason"].as_str().unwrap_or_default().to_owned()))
-                    .unwrap_or_default()
+                        .map(|p| p["reason"].as_str().unwrap_or_default().to_owned())
+                        .filter(|r| !r.is_empty()))
+                    // The skill's own closing words: its account, not a fact.
+                    .or_else(|| report
+                        .summary
+                        .clone()
+                        .filter(|r| !r.trim().is_empty())
+                        .map(|r| format!("the skill says: {r}")))
+                    .unwrap_or_else(|| format!(
+                        "the skill ended without saying why — run it again (speccoder spec {})",
+                        skill
+                            .name
+                            .strip_prefix(s.format.planning().prefix)
+                            .unwrap_or(&skill.name)
+                    ))
             ),
         ),
     };

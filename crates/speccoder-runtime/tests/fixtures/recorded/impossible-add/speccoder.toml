@@ -1,0 +1,15 @@
+[checks.test]
+argv = ["cargo", "test", "--quiet"]
+when_exists = "Cargo.toml"
+timeout_secs = 300
+
+# The model every case runs with. The key comes from the environment
+# (OPENAI_API_KEY / ANTHROPIC_API_KEY); load a .env with: set -a; . ./.env; set +a
+[model]
+provider = "openai"
+model = "gpt-5.4-mini"
+max_output_tokens = 4000
+
+[budget]
+max_turns = 16
+max_tool_calls = 30

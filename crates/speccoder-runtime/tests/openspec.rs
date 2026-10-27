@@ -608,3 +608,33 @@ fn openspecs_planning_skills_are_hosted_and_its_apply_is_refused() {
     }
     assert!(f.asked().is_empty());
 }
+
+#[test]
+fn a_skill_that_stops_incomplete_says_why() {
+    let r = repo("sample", NO_ACCEPTANCE);
+    let state = tempfile::tempdir().unwrap();
+    for (summary, says) in [
+        (
+            "the design needs a decision on the storage",
+            "the skill says: the design needs a decision on the storage",
+        ),
+        (
+            "",
+            "the skill ended without saying why — run it again (speccoder spec explore)",
+        ),
+    ] {
+        let (f, d) = fake();
+        f.will_structure(json!({ "summary": summary, "status": "incomplete", "files_written": [], "questions": [] }));
+        let res = speccoder_runtime::hosting::run_with(
+            r.path(),
+            "explore",
+            "storage",
+            state.path(),
+            Arc::clone(&d),
+            None,
+            &RunOptions::default(),
+        );
+        assert_eq!(res.status(), CommandStatus::NeedsHuman, "{}", res.message());
+        assert!(res.message().ends_with(says), "{}", res.message());
+    }
+}

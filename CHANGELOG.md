@@ -108,6 +108,7 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- A planning skill that stopped incomplete gave no reason; it now quotes the skill's own words, or says it gave none and how to run it again.
 - Flags after a description were read as part of it: `speccoder spec specify "…" --through tasks --no-prompt` ran plain `specify` with the flags in its description. Flags may now follow it; a description that starts with `-` goes after `--`.
 - **Reading a project no longer creates a journal.** `task show --account`
   and a strict replay on a project speccoder never ran created an empty
