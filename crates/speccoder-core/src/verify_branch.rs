@@ -1,5 +1,5 @@
 //! A branch's ticks and what their evidence comes to: the payload of
-//! `speccoder-verify check` and `speccoder attest verify --branch`
+//! `speccoder attest verify --branch` (and `attest badge`)
 //! (`branch_verify`), the rule that turns per-tick outcomes into the
 //! branch's conclusion, and the badge.
 //!
@@ -219,16 +219,6 @@ impl Conclusion {
         }
     }
 
-    /// The verifier's exit status: 0, 1, or 78 (neutral).
-    #[must_use]
-    pub const fn exit_code(self) -> u8 {
-        match self {
-            Self::Success => 0,
-            Self::Failure => 1,
-            Self::Neutral => 78,
-        }
-    }
-
     /// The rule (R7): any failing tick, or a claim this version cannot
     /// check, is failure; nothing to check is neutral; else success.
     #[must_use]
@@ -286,7 +276,7 @@ impl BranchTotals {
     }
 }
 
-/// Result of `speccoder-verify check` / `speccoder attest verify --branch`.
+/// Result of `speccoder attest verify --branch` / `speccoder attest badge`.
 #[derive(Debug, Clone, PartialEq, Serialize, schemars::JsonSchema)]
 pub struct BranchReport {
     /// The commit checked.

@@ -484,7 +484,7 @@ pub fn markdown_all(checked: &crate::attest::branch::Checked) -> Vec<String> {
         .collect()
 }
 
-/// `speccoder-verify tour` and `/api/tour`: the tour of `feature`'s
+/// `speccoder attest tour` and `/api/tour`: the tour of `feature`'s
 /// `task` at `head`, with the check's trust when given (the outcome then
 /// decides how far the tour goes), else from the statements as recorded.
 #[must_use]

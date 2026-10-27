@@ -1,5 +1,5 @@
-//! `speccoder attest verify --branch` on the verifier's fixtures: the same
-//! function as `speccoder-verify check`, the same outcomes; and every
+//! `speccoder attest verify --branch` on the branch fixtures: the same
+//! function as the library's `attest::branch::verify`, the same outcomes; and every
 //! statement the fixtures write validates against the published
 //! task-verification schema.
 
@@ -7,7 +7,7 @@
 
 #[path = "../../speccoder-runtime/tests/fake_github/mod.rs"]
 mod fake_github;
-#[path = "../../speccoder-verify/tests/support/mod.rs"]
+#[path = "branch_fixture/mod.rs"]
 mod fixture;
 
 use assert_cmd::Command;
@@ -34,7 +34,7 @@ fn speccoder(dir: &std::path::Path, args: &[&str]) -> (i32, Value) {
 }
 
 #[test]
-fn attest_verify_branch_is_the_verifiers_check() {
+fn attest_verify_branch_is_the_librarys_check() {
     if !has("ssh-keygen") {
         eprintln!("skipped: no ssh-keygen");
         return;
@@ -66,7 +66,6 @@ fn attest_verify_branch_is_the_verifiers_check() {
         allowed_signers: Some(speccoder_runtime::attest::branch::AllowedSigners::File(
             r.allowed.clone(),
         )),
-        require_signed: false,
         ..speccoder_runtime::attest::branch::Options::default()
     };
     let lib = speccoder_runtime::attest::branch::verify(r.path(), &opts, "x");

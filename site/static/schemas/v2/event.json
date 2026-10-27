@@ -1012,7 +1012,7 @@
       "type": "object"
     },
     "BranchReport": {
-      "description": "Result of `speccoder-verify check` / `speccoder attest verify --branch`.",
+      "description": "Result of `speccoder attest verify --branch` / `speccoder attest badge`.",
       "properties": {
         "accepted_unsigned": {
           "description": "Unsigned evidence was accepted (`--require-signed=false`).",
@@ -2085,11 +2085,11 @@
         },
         {
           "$ref": "#/$defs/BranchReport",
-          "description": "`speccoder-verify check` / `attest verify --branch`: every tick of\na branch and what its evidence comes to."
+          "description": "`attest verify --branch` / `attest badge`: every tick of\na branch and what its evidence comes to."
         },
         {
           "$ref": "#/$defs/EvidenceTour",
-          "description": "`speccoder-verify tour` / `/api/tour`: one task's evidence tour."
+          "description": "`attest tour` / `/api/tour`: one task's evidence tour."
         },
         {
           "$ref": "#/$defs/ActionsReport",
@@ -3977,7 +3977,7 @@
       "type": "object"
     },
     "EvidenceTour": {
-      "description": "Result of `speccoder-verify tour` and `/api/tour`: one task's tour.",
+      "description": "Result of `speccoder attest tour` and `/api/tour`: one task's tour.",
       "properties": {
         "commit": {
           "description": "The task commit, when one carries the task's evidence.",
@@ -6278,7 +6278,7 @@
           "type": "array"
         },
         "evidence_check": {
-          "description": "`present`: a workflow under `.github/workflows/` runs\n`speccoder-verify`; `absent`: none does.",
+          "description": "`present`: a workflow under `.github/workflows/` runs\n`speccoder attest verify --branch`; `absent`: none does.",
           "type": "string"
         },
         "feature": {

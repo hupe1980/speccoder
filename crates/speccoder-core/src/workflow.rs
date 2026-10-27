@@ -1,6 +1,6 @@
 //! GitHub Actions workflow commands (`::error file=…,line=…::…`): their
 //! escaping and the limits a step has, shared by `speccoder`'s report
-//! annotations and `speccoder-verify`'s fallback when it cannot publish
+//! annotations and `attest verify --branch`'s fallback when it cannot publish
 //! its check.
 
 /// Bytes a step summary may take (GitHub's cap is 1 MiB per step).

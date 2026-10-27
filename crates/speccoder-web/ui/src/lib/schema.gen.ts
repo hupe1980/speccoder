@@ -344,7 +344,7 @@ export interface BenchReport {
   skipped: string[];
 }
 
-/** Result of `speccoder-verify check` / `speccoder attest verify --branch`. */
+/** Result of `speccoder attest verify --branch` / `speccoder attest badge`. */
 export interface BranchReport {
   /** Unsigned evidence was accepted (`--require-signed=false`). */
   accepted_unsigned: boolean;
@@ -1632,7 +1632,7 @@ export type EventLine = {
     type: "result";
   });
 
-/** Result of `speccoder-verify tour` and `/api/tour`: one task's tour. */
+/** Result of `speccoder attest tour` and `/api/tour`: one task's tour. */
 export interface EvidenceTour {
   /** The task commit, when one carries the task's evidence. */
   commit: string | null;
@@ -2460,7 +2460,7 @@ export interface PrReport {
   commands: string[];
   /**
    * `present`: a workflow under `.github/workflows/` runs
-   * `speccoder-verify`; `absent`: none does.
+   * `speccoder attest verify --branch`; `absent`: none does.
    */
   evidence_check: string;
   /** Feature directory name. */

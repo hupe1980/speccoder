@@ -68,14 +68,3 @@ debug = "line-tables-only"
 
 [profile.dev.package."*"]
 debug = false
-
-# `speccoder-verify`'s release build: small over fast (it checks a few
-# signatures and reads git objects). A profile, because a package override
-# cannot set `lto`.
-[profile.release-verify]
-inherits = "release"
-opt-level = "z"
-lto = true
-strip = true
-codegen-units = 1
-panic = "abort"
