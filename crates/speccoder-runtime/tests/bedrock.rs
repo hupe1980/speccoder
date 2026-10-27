@@ -261,7 +261,7 @@ fn child(name: &str) -> bool {
 }
 
 #[test]
-fn an_expired_aws_login_session_names_the_renewal() {
+fn a_refused_aws_login_session_names_the_renewal() {
     if !has("cargo-nextest") {
         eprintln!("skipped: cargo-nextest is not installed");
         return;
@@ -274,7 +274,7 @@ fn an_expired_aws_login_session_names_the_renewal() {
     )
     .unwrap();
     in_child(
-        "expired_session_child",
+        "refused_session_child",
         &[
             ("AWS_PROFILE", Path::new("dev")),
             ("AWS_CONFIG_FILE", &config),
@@ -287,21 +287,22 @@ fn an_expired_aws_login_session_names_the_renewal() {
 }
 
 #[test]
-#[ignore = "run by an_expired_aws_login_session_names_the_renewal, in a process of its own"]
-fn expired_session_child() {
-    if !child("expired_session_child") {
+#[ignore = "run by a_refused_aws_login_session_names_the_renewal, in a process of its own"]
+fn refused_session_child() {
+    if !child("refused_session_child") {
         return;
     }
     let r = poc(CLAUDE);
     let state = tempfile::tempdir().unwrap();
     let f = FakeProvider::new();
-    // As agentplane 0.54 classifies Bedrock's expired credentials: the
-    // account's, by its code.
+    // Access denied, as agentplane's Bedrock driver reports it: refused,
+    // the account's by its code.
     f.will_fail(agentplane::model::ModelError::Refused {
         model: agentplane::model::ModelId::new("bedrock", CLAUDE),
-        detail: "ExpiredTokenException: The security token included in the request is expired"
-            .to_owned(),
-        code: Some("ExpiredTokenException".to_owned()),
+        detail:
+            "AccessDeniedException: You don't have access to the model with the specified model ID."
+                .to_owned(),
+        code: Some("AccessDeniedException".to_owned()),
     });
     let res = run(r.path(), state.path(), &f, None);
     assert_eq!(res.status(), CommandStatus::RunFailed, "{}", res.message());
@@ -349,13 +350,15 @@ fn a_model_the_region_does_not_offer_names_the_region_and_the_model() {
 }
 
 #[test]
-fn the_driver_opens_from_an_api_key_and_from_nothing_says_what_to_set() {
+fn the_driver_opens_from_an_api_key_and_from_nothing_it_can_see() {
     let aws = tempfile::tempdir().unwrap();
     let none = aws.path().join("none");
-    let files: [(&str, &Path); 3] = [
+    let files: [(&str, &Path); 4] = [
         ("AWS_PROFILE", Path::new("speccoder-test-no-such-profile")),
         ("AWS_CONFIG_FILE", &none),
         ("AWS_SHARED_CREDENTIALS_FILE", &none),
+        // No instance metadata is asked for here, nor anywhere else.
+        ("AWS_EC2_METADATA_DISABLED", Path::new("true")),
     ];
     in_child("driver_child", &files);
     let mut keyed = files.to_vec();
@@ -377,27 +380,21 @@ fn bedrock(model: &str) -> speccoder_runtime::substrate::model_config::ModelConf
 }
 
 #[test]
-#[ignore = "run by the_driver_opens_from_an_api_key_and_from_nothing_says_what_to_set"]
+#[ignore = "run by the_driver_opens_from_an_api_key_and_from_nothing_it_can_see"]
 fn driver_child() {
     if !child("driver_child") {
         return;
     }
-    use speccoder_runtime::substrate::model_config::{open_driver, refused};
-    let e = open_driver(&bedrock(CLAUDE)).err().unwrap();
-    assert_eq!(
-        e,
-        "AWS_BEARER_TOKEN_BEDROCK is not set and no AWS profile was found"
-    );
-    let r = refused("run", &e);
-    assert_eq!(r.code().map(|c| c.name), Some("KEY-MISSING"));
-    assert_eq!(
-        r.fix()[..2],
-        ["export AWS_BEARER_TOKEN_BEDROCK=…", "aws login"]
-    );
+    use speccoder_runtime::substrate::model_config::open_driver;
+    // Nothing speccoder can see offline: the driver still opens, since the
+    // AWS chain may find what it cannot (an instance role) — the first call
+    // decides. `doctor` is where the missing source is KEY-MISSING.
+    let (_, key) = open_driver(&bedrock(CLAUDE)).unwrap();
+    assert_eq!(key, None);
 }
 
 #[test]
-#[ignore = "run by the_driver_opens_from_an_api_key_and_from_nothing_says_what_to_set"]
+#[ignore = "run by the_driver_opens_from_an_api_key_and_from_nothing_it_can_see"]
 fn keyed_driver_child() {
     if !child("keyed_driver_child") {
         return;

@@ -201,13 +201,10 @@ pub fn open_driver(
 > {
     let variable = model.key_variable().to_owned();
     let key = if model.provider == "bedrock" {
-        // The AWS chain finds the credentials; an API key, when set, is
-        // still the secret to redact.
-        if crate::aws::detect_here().is_none() {
-            return Err(format!(
-                "{variable} is not set and no AWS profile was found"
-            ));
-        }
+        // The AWS chain finds the credentials, from sources speccoder cannot
+        // see offline too (an instance role): the first call decides, and
+        // `doctor` gives the advice. An API key, when set, is still the
+        // secret to redact.
         crate::aws::var(&variable)
     } else if variable.is_empty() {
         None

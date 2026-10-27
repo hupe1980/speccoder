@@ -55,7 +55,7 @@ The run fails (exit 24, `EVAL-FAILED`) when any case is a false completion or a 
 - the median [acceptance strength](@/docs/evidence.md#acceptance-strength) over verified cases, and how many cases stopped on an [over-strict test](@/docs/evidence.md#over-strict-tests);
 - tokens per correct case.
 
-If the model provider refuses the **account** — by a code agentplane classifies as one: OpenAI's `insufficient_quota`, `billing_*` or `invalid_api_key`, Anthropic's `authentication_error`, `billing_error` or `permission_error`, Gemini's `PERMISSION_DENIED` or `UNAUTHENTICATED`, Bedrock's refused or expired credentials — the suite stops there and says which cases were not run. A refused request fails only its case. Anthropic sends a too-low credit balance as `invalid_request_error`, a code that names no account, so the suite does not stop on it yet: each remaining case fails as refused.
+If the model provider refuses the **account** — by a code agentplane classifies as one: OpenAI's `insufficient_quota`, `billing_*` or `invalid_api_key`, Anthropic's `authentication_error`, `billing_error` or `permission_error`, Gemini's `PERMISSION_DENIED` or `UNAUTHENTICATED`, Bedrock's denied access (an invalid API key, say) — the suite stops there and says which cases were not run. A refused request fails only its case. Anthropic sends a too-low credit balance as `invalid_request_error`, a code that names no account, so the suite does not stop on it yet: each remaining case fails as refused.
 
 ## Comparing models and agents
 
