@@ -425,6 +425,19 @@ fn keyed_driver_child() {
         key.as_deref(),
     );
     assert_eq!(res.status(), CommandStatus::RunFailed, "{}", res.message());
+    // The connection failed: the driver took the prompt `to_parts` made
+    // and sent it. A prompt it could not shape is refused before sending
+    // ("system instruction must be a string or a list of text parts").
+    assert!(
+        res.message().contains("dispatch failure") && res.message().contains("tcp connect error"),
+        "{}",
+        res.message()
+    );
+    assert!(
+        !res.message().contains("refused the request"),
+        "{}",
+        res.message()
+    );
     assert!(
         !serde_json::to_string(&res)
             .unwrap()
