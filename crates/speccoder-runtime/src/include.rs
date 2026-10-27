@@ -163,10 +163,23 @@ pub fn copy(
             Err(why) => out.skipped.push(format!("{n}: {why}")),
         }
     }
+    // A copy no longer included goes (only one this made, the worktree's
+    // own file, never a tracked one): left, it would be neither recorded
+    // nor masked.
+    let old = load(worktree);
+    for f in old.files.iter().filter(|f| !out.files.contains(f)) {
+        if own_file(&root, Path::new(f))
+            && !Git::at(&root)
+                .run(&["ls-files", "-z", "--", f])
+                .is_ok_and(|o| !o.is_empty())
+        {
+            let _ = std::fs::remove_file(root.join(f));
+        }
+    }
     let record = Record {
         files: out.files.clone(),
     };
-    if record != load(worktree) {
+    if record != old {
         let path = record_path(worktree);
         let text = serde_json::to_string_pretty(&record).map_err(|e| e.to_string())?;
         if record.files.is_empty() {
@@ -177,6 +190,21 @@ pub fn copy(
     }
     register(worktree);
     Ok(out)
+}
+
+/// Whether `root/rel` is a regular file reached without a symlink.
+fn own_file(root: &Path, rel: &Path) -> bool {
+    let mut at = root.to_path_buf();
+    for c in rel.components() {
+        let std::path::Component::Normal(c) = c else {
+            return false;
+        };
+        at.push(c);
+        if std::fs::symlink_metadata(&at).map_or(true, |m| m.file_type().is_symlink()) {
+            return false;
+        }
+    }
+    std::fs::symlink_metadata(&at).is_ok_and(|m| m.is_file())
 }
 
 /// Copies `source` to `root/rel`, every directory on the way the
@@ -221,8 +249,9 @@ fn copy_one(root: &Path, rel: &Path, source: &Path) -> Result<bool, String> {
     Ok(true)
 }
 
-/// The values of the worktree's copied secret files (`.env*` and the rest
-/// the model may not read), as `(NAME, value)`, read from the copies.
+/// What the worktree's copied secret files (`.env*` and the rest the
+/// model may not read) give to mask, as `(NAME, value)`, read from the
+/// copies ([`crate::secrets::to_mask`]).
 #[must_use]
 pub fn values(worktree: &Path) -> Vec<(String, String)> {
     let protected = crate::tools::paths::Protected::default();
@@ -230,9 +259,12 @@ pub fn values(worktree: &Path) -> Vec<(String, String)> {
         .files
         .iter()
         .filter(|f| protected.is_secret(f))
-        .filter_map(|f| std::fs::read_to_string(worktree.join(f)).ok())
-        .flat_map(|t| crate::secrets::dotenv(&t))
-        .filter(|(_, v)| crate::secrets::worth_masking(v))
+        .filter_map(|f| {
+            let name = Path::new(f).file_name()?.to_string_lossy().into_owned();
+            let text = std::fs::read_to_string(worktree.join(f)).ok()?;
+            Some(crate::secrets::to_mask(&name, &text))
+        })
+        .flatten()
         .collect()
 }
 
@@ -428,6 +460,13 @@ mod tests {
                 .next()
                 .is_none()
         );
+        // No longer included: the copy goes.
+        let c = copy(&wt, &wt, &r, &[]).unwrap();
+        assert!(c.files.is_empty());
+        assert!(!wt.join(".env").exists());
+        assert!(load(&wt).files.is_empty());
+        assert!(r.join(".env").is_file(), "the checkout's stays");
+        copy(&wt, &wt, &r, &pats).unwrap();
         // A file the worktree tracks stays as committed.
         std::fs::write(wt.join(".gitignore"), "local/\n").unwrap();
         git(&wt, &["add", "-f", ".env", ".gitignore"]);

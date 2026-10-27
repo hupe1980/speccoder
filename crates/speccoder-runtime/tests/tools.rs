@@ -751,3 +751,26 @@ fn a_copied_secret_value_never_reaches_the_model_in_any_form() {
         "plain [redacted:DB_PASSWORD]\nencoded [redacted:DB_PASSWORD]\n"
     );
 }
+
+#[test]
+fn a_copied_value_at_a_cut_is_masked_before_it() {
+    let w = worktree();
+    let value = "cut-straddle-Hk2m value";
+    speccoder_runtime::secrets::register("CUT_SECRET", value);
+    // The value straddles the read cap and a search line's cap.
+    let pad = "x".repeat(speccoder_runtime::tools::READ_CAP - 5);
+    write(w.path(), "big.txt", &format!("{pad}{value}\n"));
+    let line = "y".repeat(speccoder_runtime::tools::LINE_CAP - 5);
+    write(w.path(), "line.txt", &format!("{line}{value}\n"));
+    let t = tools(w.path());
+    for v in [
+        call(&t, "read_file", json!({"path": "big.txt"})),
+        call(&t, "search_code", json!({"pattern": "yyyy"})),
+    ] {
+        assert!(
+            !v.to_string().contains("cut-s"),
+            "a prefix shown: {}",
+            &v.to_string()[v.to_string().len().saturating_sub(300)..]
+        );
+    }
+}

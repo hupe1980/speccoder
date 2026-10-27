@@ -110,14 +110,17 @@ impl CommandRunner for LocalRunner {
         };
         let pgid = i32::try_from(child.id()).ok().map(Pid::from_raw);
         let cap = inv.output_cap;
+        // A little past the cap: a value straddling it is masked whole
+        // before the cut.
+        let keep = cap.saturating_add(crate::secrets::longest());
         let out = child
             .stdout
             .take()
-            .map(|s| thread::spawn(move || capture(s, cap)));
+            .map(|s| thread::spawn(move || capture(s, keep)));
         let err = child
             .stderr
             .take()
-            .map(|s| thread::spawn(move || capture(s, cap)));
+            .map(|s| thread::spawn(move || capture(s, keep)));
 
         let mut timed_out = false;
         let status = loop {
@@ -142,7 +145,13 @@ impl CommandRunner for LocalRunner {
         // files is masked before anything reads it ([`crate::secrets`]).
         let join = |h: Option<thread::JoinHandle<Captured>>| {
             let mut c: Captured = h.and_then(|h| h.join().ok()).unwrap_or_default();
+            let cut = c.total > cap;
             c.kept = crate::secrets::mask_bytes(&c.kept);
+            c.kept.truncate(cap);
+            // Truncated only when the output was longer than the cap.
+            if !cut {
+                c.total = c.kept.len();
+            }
             c
         };
         Outcome {
@@ -260,5 +269,25 @@ mod tests {
                 "RUSTUP_HOME=/r"
             ]
         );
+    }
+
+    #[test]
+    fn a_value_straddling_the_cap_is_masked_before_the_cut() {
+        let value = "straddle-Pq7r-the-cut";
+        crate::secrets::register("STRADDLE", value);
+        let out = LocalRunner.run(&Invocation {
+            argv: vec![
+                "sh".to_owned(),
+                "-c".to_owned(),
+                format!("printf '%s' 0123456789{value}"),
+            ],
+            cwd: std::env::temp_dir(),
+            env: Vec::new(),
+            timeout: Duration::from_secs(10),
+            output_cap: 16,
+        });
+        let kept = String::from_utf8_lossy(&out.stdout.kept).into_owned();
+        assert_eq!(kept, "0123456789[redac");
+        assert!(out.stdout.truncated());
     }
 }

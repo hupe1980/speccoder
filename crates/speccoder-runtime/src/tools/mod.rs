@@ -421,10 +421,11 @@ impl WorkspaceTools {
         let lines: Vec<&str> = text.lines().collect();
         let start = a.start_line.unwrap_or(1).max(1);
         let end = a.end_line.unwrap_or(lines.len()).min(lines.len());
+        // Masked before any cut: a cut value would leave its start shown.
         let mut content = if start > end {
             String::new()
         } else {
-            lines[start - 1..end].join("\n")
+            crate::secrets::mask(&lines[start - 1..end].join("\n"))
         };
         let truncated = content.len() > READ_CAP;
         if truncated {
@@ -496,7 +497,8 @@ impl WorkspaceTools {
                 if re.is_match(line) {
                     total += 1;
                     if matches.len() < SEARCH_CAP {
-                        let shown: String = line.chars().take(LINE_CAP).collect();
+                        let shown: String =
+                            crate::secrets::mask(line).chars().take(LINE_CAP).collect();
                         matches.push(format!("{}:{}: {shown}", self.rel(&f), i + 1));
                     }
                 }
@@ -806,7 +808,7 @@ impl WorkspaceTools {
         }
         match Git::at(&self.root).run(&args) {
             Ok(out) => {
-                let mut diff = String::from_utf8_lossy(&out).into_owned();
+                let mut diff = crate::secrets::mask(&String::from_utf8_lossy(&out));
                 let truncated = diff.len() > READ_CAP;
                 if truncated {
                     let mut cut = READ_CAP;
