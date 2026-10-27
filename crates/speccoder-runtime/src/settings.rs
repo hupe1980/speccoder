@@ -567,7 +567,7 @@ pub const CATALOGUE: &[Section] = &[
                 "include",
                 Kind::StrList,
                 Some("[]"),
-                "Git-ignored files copied from your checkout, .gitignore patterns, e.g. .env (with .worktreeinclude's); secret values masked, never committed",
+                "Git-ignored files copied from your checkout, .gitignore patterns, e.g. .env (with .worktreeinclude's); never committed, secret-named values masked",
             ),
         ],
     },

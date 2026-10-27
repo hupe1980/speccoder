@@ -178,7 +178,7 @@ What a run's worktree gets that git never holds; see [dependency folders](@/docs
 | Key | Default | Meaning |
 |---|---|---|
 | `prepare` | `"auto"` | `auto` installs a worktree's Node and uv dependencies (locked, offline) before the baseline; `off` never |
-| `include` | `[]` | Git-ignored files copied from your checkout into each worktree, `.gitignore` patterns, e.g. `[".env"]`; joined with `.worktreeinclude`'s. Secret values masked, never committed |
+| `include` | `[]` | Git-ignored files copied from your checkout into each worktree, `.gitignore` patterns, e.g. `[".env"]`; joined with `.worktreeinclude`'s. Never committed; secret-named values masked ([copied files](@/docs/running.md#copied-files)) |
 
 `speccoder init` proposes `include` with your checkout's git-ignored `.env` files, or says that `.worktreeinclude` already names them.
 

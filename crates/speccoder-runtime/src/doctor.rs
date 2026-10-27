@@ -653,7 +653,9 @@ fn include_check(project: &Path, patterns: &[String]) -> Option<DoctorCheck> {
                 if masked == 0 {
                     String::new()
                 } else {
-                    format!(" (the values of {masked} secret file(s) masked, never committed)")
+                    format!(
+                        " ({masked} secret file(s): never committed, secret-named values masked)"
+                    )
                 }
             ),
         )
@@ -805,7 +807,7 @@ mod tests {
         assert_eq!(row.level, DoctorLevel::Pass);
         assert_eq!(
             row.detail,
-            "copied into each run's worktree: .env (the values of 1 secret file(s) masked, never committed)"
+            "copied into each run's worktree: .env (1 secret file(s): never committed, secret-named values masked)"
         );
         assert!(!row.detail.contains("abcdefgh123"));
         // `.worktreeinclude` too; a tracked file never.

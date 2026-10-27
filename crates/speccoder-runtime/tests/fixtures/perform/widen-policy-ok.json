@@ -884,7 +884,7 @@
               "value": null
             },
             {
-              "about": "Git-ignored files copied from your checkout, .gitignore patterns, e.g. .env (with .worktreeinclude's); secret values masked, never committed",
+              "about": "Git-ignored files copied from your checkout, .gitignore patterns, e.g. .env (with .worktreeinclude's); never committed, secret-named values masked",
               "choices": [],
               "default": [],
               "key": "include",

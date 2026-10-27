@@ -395,7 +395,7 @@ const INCLUDE_PROPOSED: &str = "# the git-ignored .env files here; to copy them,
 fn worktree_section(include: &[String], worktreeinclude: bool) -> String {
     if worktreeinclude {
         return "\n# A run's worktree gets the git-ignored files .worktreeinclude names copied from this\n\
-                # checkout (secret values masked, never committed); `include` adds patterns.\n\
+                # checkout (never committed, secret-named values masked); `include` adds patterns.\n\
                 # [worktree]\n# prepare = \"auto\"           # \"off\": never install Node or uv dependencies\n\
                 # include = [\".env\"]\n"
             .to_owned();
@@ -404,12 +404,12 @@ fn worktree_section(include: &[String], worktreeinclude: bool) -> String {
         return "\n# A run's worktree gets Node and uv dependencies by their locked, offline install\n\
                 # before the baseline. `include` copies git-ignored files from this checkout.\n\
                 # [worktree]\n# prepare = \"auto\"           # \"off\": never prepare\n\
-                # include = [\".env\"]          # secret values masked, never committed\n"
+                # include = [\".env\"]          # never committed, secret-named values masked\n"
             .to_owned();
     }
     format!(
         "\n# Git-ignored files a run's worktree gets copied from this checkout: their values are\n\
-         # masked in everything speccoder shows or sends, and never committed.\n\
+         # never committed, and secret-named values masked in what speccoder shows and journals.\n\
          {INCLUDE_PROPOSED}\n# [worktree]\n# include = [{}]\n",
         include
             .iter()

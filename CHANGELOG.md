@@ -22,9 +22,11 @@ adheres to [Semantic Versioning](https://semver.org/).
   (`PREPARE-FAILED` when it cannot; `[worktree] prepare = "off"` skips it).
 - **A worktree gets the git-ignored files its checks need.** `[worktree]
   include = [".env"]` and an existing `.worktreeinclude` copy git-ignored
-  files from your checkout into each worktree. A copied secret file's
-  values are masked as `[redacted:NAME]` (also base64, hex, URL-encoded) in
-  output, tool results and the journal; a commit never holds a copied
+  files from your checkout into each worktree. The values of secret-named
+  variables in a copied `.env`, and the lines of a copied key file, are
+  masked as `[redacted:NAME]` (also base64, hex, URL-encoded) in tool and
+  MCP results, command and check output and the journal (an `[executor]`'s
+  own reads excepted); a commit never holds a copied
   file, and a diff that adds a value stops the task (`SECRET-IN-DIFF`).
   `init` proposes `include` for ignored `.env` files; `doctor` names what
   would be copied.

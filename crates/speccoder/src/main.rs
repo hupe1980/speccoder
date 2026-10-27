@@ -2037,7 +2037,7 @@ fn init(
             || (interactive
                 && {
                     eprint!(
-                        "Copy {listed} from this checkout into each run's worktree? Their values are masked in everything speccoder shows or sends, and never committed. [y/N] "
+                        "Copy {listed} from this checkout into each run's worktree? Never committed; the values of secret-named variables are masked in what speccoder shows and journals. [y/N] "
                     );
                     let mut line = String::new();
                     let _ = std::io::stdin().read_line(&mut line);
