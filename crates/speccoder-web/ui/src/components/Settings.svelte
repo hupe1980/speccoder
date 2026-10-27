@@ -40,14 +40,32 @@
   const providerKey = $derived(report?.sections.find((s) => s.name === "model")?.keys.find((k) => k.key === "provider"));
   const bedrock = $derived(!!providerKey && effective("model.provider", providerKey) === "bedrock");
   const SERVER_KEYS = ["base_url", "api_key_env", "structured"];
+  const provider = $derived(providerKey ? String(effective("model.provider", providerKey) ?? "") : "");
+  /** A model key the chosen provider does not take. */
+  const inapplicable = (path: string, k: ConfigKey) =>
+    path === `model.${k.key}` && (bedrock ? SERVER_KEYS.includes(k.key) : k.key === "region");
+  // One still in the file stays, with its reset to remove it: Save refuses
+  // the file while it is there.
   const shown = (s: ConfigSection) =>
-    s.name !== "model" ? s.keys : s.keys.filter((k) => (bedrock ? !SERVER_KEYS.includes(k.key) : k.key !== "region"));
-  const required = (path: string, k: ConfigKey) => k.required || (bedrock && path === "model.region");
-  // Where Bedrock's credentials come from, as `doctor` names it.
+    s.name !== "model" ? s.keys : s.keys.filter((k) => !inapplicable(`model.${k.key}`, k) || current(`model.${k.key}`, k) !== undefined);
+  const required = (path: string, k: ConfigKey) => (k.required || (bedrock && path === "model.region")) && !inapplicable(path, k);
+  // Where Bedrock's credentials come from: as `doctor` names it when its row
+  // is about Bedrock (the saved file's provider), else as the setup preview
+  // finds it.
+  const keyRow = $derived(app.doctor.find((x) => x.check === "model key"));
+  const rowIsBedrock = $derived(!!keyRow && (keyRow.detail.startsWith("bedrock ") || keyRow.detail.startsWith("AWS_BEARER_TOKEN_BEDROCK")));
+  let previewSource = $state<string | null | undefined>(undefined);
+  $effect(() => {
+    if (!bedrock || rowIsBedrock || previewSource !== undefined) return;
+    previewSource = null;
+    void get<{ preview?: { bedrock?: { source: string | null } } }>("/api/setup")
+      .then((r) => (previewSource = r.preview?.bedrock?.source ?? null))
+      .catch(() => {});
+  });
   const source = $derived.by(() => {
-    const c = app.doctor.find((x) => x.check === "model key");
-    if (!bedrock || !c) return null;
-    return c.level === "fail" ? c.detail : (c.detail.split(" · ").pop() ?? c.detail);
+    if (!bedrock) return null;
+    if (keyRow && rowIsBedrock) return keyRow.level === "fail" ? keyRow.detail : (keyRow.detail.split(" · ").pop() ?? keyRow.detail);
+    return previewSource ?? null;
   });
 
   const names: Record<string, string> = {
@@ -276,12 +294,14 @@
     <div class="what">
       <span class="name">{label(k.key)}{#if required(path, k)}<span class="req">required</span>{/if}</span>
       <span class="about">{k.about}</span>
+      {#if inapplicable(path, k) && isSet}<span class="inapt">does not apply to {provider}: remove it</span>{/if}
       <span class="meta mono">{path}{#if k.default !== null && k.default !== undefined}{" · "}default {JSON.stringify(k.default)}{/if}</span>
     </div>
     <div class="ctl">
       {@render control(path, k)}
       {#if isSet && !required(path, k)}
-        <button class="reset" title="Use the default" aria-label="Reset {label(k.key)}" onclick={() => reset(path, k)}><Icon name="undo" size={12} weight={2} /></button>
+        {@const remove = inapplicable(path, k)}
+        <button class="reset" title={remove ? "Remove it" : "Use the default"} aria-label="{remove ? 'Remove' : 'Reset'} {label(k.key)}" onclick={() => reset(path, k)}><Icon name={remove ? "minus" : "undo"} size={12} weight={2} /></button>
       {/if}
     </div>
   </div>
@@ -400,6 +420,7 @@
   .name { font-weight: 550; display: flex; align-items: center; gap: 0.4rem; }
   .req { font-size: 0.68rem; font-weight: 600; color: var(--muted); background: var(--fill); padding: 0 0.4rem; border-radius: 999px; }
   .about { font-size: 0.84rem; color: var(--text-2); }
+  .inapt { font-size: 0.8rem; font-weight: 600; color: var(--danger, #ff3b30); }
   .meta { font-size: 0.72rem; color: var(--faint); }
   .ctl { display: flex; align-items: center; gap: 0.4rem; justify-content: flex-end; }
   .reset { width: 24px; height: 24px; border-radius: 50%; border: 0; background: none; color: var(--muted); cursor: pointer; display: grid; place-items: center; }
