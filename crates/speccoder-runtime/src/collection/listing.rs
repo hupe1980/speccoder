@@ -146,6 +146,23 @@ pub fn go_names(stdout: &str) -> Vec<String> {
         .collect()
 }
 
+/// `go test -list`: `importpath::Name` per test, the names grouped by the
+/// `ok <importpath>` line that follows them.
+#[must_use]
+pub fn go_ids(stdout: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut names: Vec<&str> = Vec::new();
+    for l in stdout.lines().map(str::trim) {
+        if let Some(rest) = l.strip_prefix("ok") {
+            let pkg = rest.split_whitespace().next().unwrap_or_default();
+            out.extend(names.drain(..).map(|n| format!("{pkg}::{n}")));
+        } else if !l.is_empty() && !l.starts_with('?') && !l.contains('\t') && !l.contains(' ') {
+            names.push(l);
+        }
+    }
+    out
+}
+
 /// A configured `list` command: one test id or file path per line.
 #[must_use]
 pub fn lines(stdout: &str, root: &Path) -> Vec<String> {
@@ -197,6 +214,10 @@ mod tests {
         assert_eq!(
             go_names("TestA\nExampleB\nok  \tex.com/m/g\t0.01s\n"),
             ["TestA", "ExampleB"]
+        );
+        assert_eq!(
+            go_ids("TestA\nok  \tex.com/m/g\t0.01s\nTestB\nok  \tex.com/m/h\t0.01s\n"),
+            ["ex.com/m/g::TestA", "ex.com/m/h::TestB"]
         );
     }
 }

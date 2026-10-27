@@ -10,6 +10,7 @@
 
 pub mod junit_map;
 pub mod listing;
+pub mod runner;
 pub mod static_cfg;
 
 use std::collections::BTreeMap;
@@ -95,6 +96,7 @@ enum ListKind {
     Vitest,
     Jest,
     Go,
+    LibtestIgnored,
     Custom,
 }
 
@@ -113,7 +115,7 @@ pub fn judge(input: &Input<'_>) -> Option<Collection> {
     if judged.is_empty() {
         return None;
     }
-    let files = static_cfg::files(input.root);
+    let (files, truncated) = static_cfg::walk(input.root);
     let argvs: Vec<Vec<String>> = input.checks.iter().map(|c| c.argv.clone()).collect();
     let timeout = input
         .checks
@@ -157,6 +159,33 @@ pub fn judge(input: &Input<'_>) -> Option<Collection> {
                 let reach = rust_reachable(&targets, &|p| read(p));
                 let rule = rust_rule(pkg);
                 let Some(places) = reach.get(path) else {
+                    // The rule cannot prove absence from an incomplete walk,
+                    // nor against a report that names this file's tests.
+                    let stem = path
+                        .rsplit('/')
+                        .next()
+                        .unwrap_or(path)
+                        .trim_end_matches(".rs");
+                    let named = input
+                        .results
+                        .iter()
+                        .filter(|r| runner::runs(*toolchain, &r.argv))
+                        .flat_map(|r| r.tests.iter().flatten())
+                        .any(|t| {
+                            t.id.contains(&format!("::{stem}::"))
+                                || t.id.starts_with(&format!("{}::{stem}::", pkg.name))
+                        });
+                    if truncated || named {
+                        out.push(unknown(
+                            path,
+                            if truncated {
+                                "the checkout has more files than speccoder reads, so its rule cannot prove the file is never built"
+                            } else {
+                                "Cargo's rule says nothing builds it, but the run's report names tests of that name"
+                            },
+                        ));
+                        continue;
+                    }
                     let tests =
                         speccoder_core::collection::join(&pkg.root, "tests").unwrap_or_default();
                     let why = if pkg.autotests && path.starts_with(&format!("{tests}/")) {
@@ -173,57 +202,60 @@ pub fn judge(input: &Input<'_>) -> Option<Collection> {
                     ));
                     continue;
                 };
-                let nextest = argvs.iter().any(|a| a.iter().any(|w| w == "nextest"));
-                let needs: Vec<(Need, Option<String>)> = if nextest {
-                    vec![(
-                        Need {
-                            argv: [
-                                "cargo",
-                                "nextest",
-                                "list",
-                                "--message-format",
-                                "json",
-                                "--workspace",
-                            ]
-                            .map(str::to_owned)
-                            .to_vec(),
-                            cwd: String::new(),
-                            kind: ListKind::Nextest,
-                        },
-                        None,
-                    )]
-                } else {
-                    places
-                        .iter()
-                        .filter_map(|(binary, _)| {
-                            targets.iter().find(|t| &t.binary_id == binary)?;
-                            let sel: Vec<String> =
-                                match binary.strip_prefix(&format!("{}::", pkg.name)) {
-                                    None => vec!["--lib".to_owned()],
-                                    Some(b) => match b.strip_prefix("bin/") {
-                                        Some(bin) => vec!["--bin".to_owned(), bin.to_owned()],
-                                        None => vec!["--test".to_owned(), b.to_owned()],
-                                    },
-                                };
-                            let mut argv = vec![
-                                "cargo".to_owned(),
-                                "test".to_owned(),
-                                "-p".to_owned(),
-                                pkg.name.clone(),
-                            ];
-                            argv.extend(sel);
-                            argv.extend(["--", "--list", "--format", "terse"].map(str::to_owned));
-                            Some((
+                // A listing as a check the verdict rests on runs it.
+                let virtual_root =
+                    files.contains("Cargo.toml") && !packages.iter().any(|p| p.root.is_empty());
+                let mut needs: Vec<(Need, Option<String>)> = Vec::new();
+                for c in input
+                    .checks
+                    .iter()
+                    .filter(|c| runner::runs(*toolchain, &c.argv))
+                {
+                    if let Some(argv) = runner::nextest_list(&c.argv) {
+                        needs.push((
+                            Need {
+                                argv,
+                                cwd: check_dir(c),
+                                kind: ListKind::Nextest,
+                            },
+                            None,
+                        ));
+                        continue;
+                    }
+                    let root_package =
+                        pkg.root.is_empty() || virtual_root || c.cwd.trim_matches('/') == pkg.root;
+                    for (binary, _) in places {
+                        let kind = match binary.strip_prefix(&format!("{}::", pkg.name)) {
+                            None => ("lib".to_owned(), String::new()),
+                            Some(b) => match b.strip_prefix("bin/") {
+                                Some(bin) => ("bin".to_owned(), bin.to_owned()),
+                                None => ("test".to_owned(), b.to_owned()),
+                            },
+                        };
+                        if !runner::cargo_runs(&c.argv, &pkg.name, root_package, &kind) {
+                            continue;
+                        }
+                        let (list, ignored) = runner::cargo_list(&c.argv, &pkg.name, &kind);
+                        needs.push((
+                            Need {
+                                argv: list,
+                                cwd: check_dir(c),
+                                kind: ListKind::Libtest,
+                            },
+                            Some(binary.clone()),
+                        ));
+                        if let Some(ig) = ignored {
+                            needs.push((
                                 Need {
-                                    argv,
-                                    cwd: String::new(),
-                                    kind: ListKind::Libtest,
+                                    argv: ig,
+                                    cwd: check_dir(c),
+                                    kind: ListKind::LibtestIgnored,
                                 },
                                 Some(binary.clone()),
-                            ))
-                        })
-                        .collect()
-                };
+                            ));
+                        }
+                    }
+                }
                 (Place::Rust(reach), rule, needs)
             }
             Toolchain::Python => {
@@ -248,21 +280,22 @@ pub fn judge(input: &Input<'_>) -> Option<Collection> {
                     ));
                     continue;
                 }
-                let mut argv = prefix(&argvs, "pytest")
-                    .unwrap_or_else(|| ["python3", "-m", "pytest"].map(str::to_owned).to_vec());
-                argv.extend(["--collect-only", "-q"].map(str::to_owned));
-                (
-                    Place::Python,
-                    rule.rule(),
-                    vec![(
-                        Need {
-                            argv,
-                            cwd: String::new(),
-                            kind: ListKind::Pytest,
-                        },
-                        None,
-                    )],
-                )
+                let needs = input
+                    .checks
+                    .iter()
+                    .filter(|c| runner::runs(*toolchain, &c.argv))
+                    .map(|c| {
+                        (
+                            Need {
+                                argv: runner::pytest_list(&c.argv),
+                                cwd: check_dir(c),
+                                kind: ListKind::Pytest,
+                            },
+                            None,
+                        )
+                    })
+                    .collect();
+                (Place::Python, rule.rule(), needs)
             }
             Toolchain::JavaScript => {
                 let Some(pkg) = static_cfg::js_owner(&js, path) else {
@@ -307,25 +340,26 @@ pub fn judge(input: &Input<'_>) -> Option<Collection> {
                             .to_owned(),
                     },
                 };
-                let (name, extra, kind) = match pkg.runner {
-                    JsRunner::Vitest => ("vitest", vec!["list", "--json"], ListKind::Vitest),
-                    JsRunner::Jest => ("jest", vec!["--listTests"], ListKind::Jest),
-                };
-                let mut argv =
-                    prefix(&argvs, name).unwrap_or_else(|| vec!["npx".to_owned(), name.to_owned()]);
-                argv.extend(extra.into_iter().map(str::to_owned));
-                (
-                    Place::Js(rel),
-                    rule,
-                    vec![(
-                        Need {
-                            argv,
-                            cwd: pkg.root.clone(),
-                            kind,
-                        },
-                        None,
-                    )],
-                )
+                let needs = input
+                    .checks
+                    .iter()
+                    .filter(|c| runner::runs(*toolchain, &c.argv))
+                    .filter_map(|c| {
+                        let (argv, kind) = match pkg.runner {
+                            JsRunner::Vitest => (runner::vitest_list(&c.argv)?, ListKind::Vitest),
+                            JsRunner::Jest => (runner::jest_list(&c.argv), ListKind::Jest),
+                        };
+                        Some((
+                            Need {
+                                argv,
+                                cwd: pkg.root.clone(),
+                                kind,
+                            },
+                            None,
+                        ))
+                    })
+                    .collect();
+                (Place::Js(rel), rule, needs)
             }
             Toolchain::Go => {
                 let Some(module) = go
@@ -365,30 +399,25 @@ pub fn judge(input: &Input<'_>) -> Option<Collection> {
                 } else {
                     format!("{}/{rel_dir}", module.path)
                 };
-                let mut argv = vec!["go".to_owned(), "test".to_owned()];
-                if !tags.is_empty() {
-                    argv.push(format!(
-                        "-tags={}",
-                        tags.iter().cloned().collect::<Vec<_>>().join(",")
-                    ));
-                }
-                argv.extend(["-list", "."].map(str::to_owned));
-                argv.push(if rel_dir.is_empty() {
-                    ".".to_owned()
-                } else {
-                    format!("./{rel_dir}")
-                });
+                let needs = input
+                    .checks
+                    .iter()
+                    .filter(|c| runner::runs(*toolchain, &c.argv))
+                    .map(|c| {
+                        (
+                            Need {
+                                argv: runner::go_list(&c.argv),
+                                cwd: module.root.clone(),
+                                kind: ListKind::Go,
+                            },
+                            None,
+                        )
+                    })
+                    .collect();
                 (
                     Place::Go(import, go_declared_tests(&source)),
                     go_rule(),
-                    vec![(
-                        Need {
-                            argv,
-                            cwd: module.root.clone(),
-                            kind: ListKind::Go,
-                        },
-                        None,
-                    )],
+                    needs,
                 )
             }
         };
@@ -396,7 +425,7 @@ pub fn judge(input: &Input<'_>) -> Option<Collection> {
         let reports: Vec<&CheckResult> = input
             .results
             .iter()
-            .filter(|r| r.tests.is_some() && runs(toolchain, &r.argv))
+            .filter(|r| r.tests.is_some() && runner::runs(*toolchain, &r.argv))
             .collect();
         if !reports.is_empty() {
             let ids: Vec<String> = reports
@@ -431,6 +460,25 @@ pub fn judge(input: &Input<'_>) -> Option<Collection> {
             )],
             None => needs,
         };
+        // No check the verdict rests on runs this toolchain: nothing to ask.
+        if needs.is_empty() {
+            out.push(unknown(
+                path,
+                &format!(
+                    "no fast check would run it: none runs these {} tests",
+                    toolchain.title()
+                ),
+            ));
+            continue;
+        }
+        // A skip a listing cannot see: only a report can tell (FR-001).
+        if runner::skips_unseen_by_listing(*toolchain, &source) {
+            out.push(unknown(
+                path,
+                "it may skip its tests, which a listing cannot tell; a JUnit report can",
+            ));
+            continue;
+        }
         pending.push(Pending {
             path: path.clone(),
             place,
@@ -444,6 +492,7 @@ pub fn judge(input: &Input<'_>) -> Option<Collection> {
         let mut cache: BTreeMap<Need, Result<String, String>> = BTreeMap::new();
         for p in &pending {
             let mut ids: Vec<String> = Vec::new();
+            let mut ignored: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
             let mut failed: Option<String> = None;
             for (need, binary) in &p.needs {
                 let got = cache.entry(need.clone()).or_insert_with(|| {
@@ -471,10 +520,16 @@ pub fn judge(input: &Input<'_>) -> Option<Collection> {
                                     })
                                     .collect(),
                             ),
+                            ListKind::LibtestIgnored => {
+                                ignored.extend(listing::libtest_names(stdout).into_iter().map(
+                                    |n| format!("{}::{n}", binary.as_deref().unwrap_or_default()),
+                                ));
+                                Some(Vec::new())
+                            }
                             ListKind::Pytest => Some(listing::pytest_ids(stdout)),
                             ListKind::Vitest => listing::vitest_files(stdout, &root),
                             ListKind::Jest => Some(listing::jest_files(stdout, &root)),
-                            ListKind::Go => Some(listing::go_names(stdout)),
+                            ListKind::Go => Some(listing::go_ids(stdout)),
                             ListKind::Custom => Some(listing::lines(stdout, input.root)),
                         };
                         match listed {
@@ -489,10 +544,7 @@ pub fn judge(input: &Input<'_>) -> Option<Collection> {
                     }
                 }
             }
-            if let Some(why) = failed {
-                out.push(unknown(&p.path, &why));
-                continue;
-            }
+            ids.retain(|id| !ignored.contains(id));
             let custom = p.needs.iter().any(|(n, _)| n.kind == ListKind::Custom);
             let mine = if custom {
                 junit_map::listed(&p.place, &p.path, &ids)
@@ -512,6 +564,11 @@ pub fn judge(input: &Input<'_>) -> Option<Collection> {
                 .map(|r| r.toolchain)
                 .or_else(|| toolchain_of(&p.path))
                 .unwrap_or(Toolchain::Rust);
+            // A listing that failed decides nothing it did not name.
+            if let (true, Some(why)) = (mine.is_empty(), failed.as_ref()) {
+                out.push(unknown(&p.path, why));
+                continue;
+            }
             out.push(match (mine.is_empty(), &p.rule) {
                 (false, _) => collected(&p.path, DecidedBy::Listing, &mine),
                 (true, Some(rule)) => not_collected(
@@ -620,27 +677,14 @@ fn unrecognised(
     }
 }
 
-/// Whether a check's argv runs `toolchain`'s tests.
-fn runs(toolchain: &Toolchain, argv: &[String]) -> bool {
-    let has = |w: &str| argv.iter().any(|a| a == w || a.ends_with(&format!("/{w}")));
-    match toolchain {
-        Toolchain::Rust => has("cargo") || has("cargo-nextest"),
-        Toolchain::Python => argv.iter().any(|a| a.contains("pytest")),
-        Toolchain::JavaScript => argv
-            .iter()
-            .any(|a| a.contains("vitest") || a.contains("jest")),
-        Toolchain::Go => has("go") || has("gotestsum"),
+/// A check's working directory, root-relative (`""` for the root).
+fn check_dir(c: &Check) -> String {
+    let d = c.cwd.trim_matches('/');
+    if d == "." {
+        String::new()
+    } else {
+        d.trim_start_matches("./").to_owned()
     }
-}
-
-/// The checks' argv up to and including the word naming `runner`.
-fn prefix(argvs: &[Vec<String>], runner: &str) -> Option<Vec<String>> {
-    argvs.iter().find_map(|a| {
-        let i = a
-            .iter()
-            .position(|w| w == runner || w.ends_with(&format!("/{runner}")))?;
-        Some(a[..=i].to_vec())
-    })
 }
 
 fn compiled_out_fixes(t: Toolchain) -> Vec<String> {

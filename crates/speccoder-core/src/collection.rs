@@ -254,16 +254,18 @@ pub fn is_build_or_dependency(path: &str) -> bool {
 pub fn defines_tests(toolchain: Toolchain, source: &str) -> bool {
     match toolchain {
         Toolchain::Rust => {
-            let code = strip_comments(source);
-            [
-                "#[test]",
-                "#[tokio::test",
-                "#[rstest",
-                "#[test_case",
-                "#[async_std::test",
-            ]
-            .iter()
-            .any(|m| code.contains(m))
+            let code: String = strip_comments(source).split_whitespace().collect();
+            // `#[test]`, and any `#[<crate>::test]` / `#[<crate>::test(…)]`
+            // attribute (tokio, async-std, test-log, sqlx, googletest, …).
+            code.contains("#[test]")
+                || ["#[rstest", "#[test_case", "#[quickcheck", "#[proptest"]
+                    .iter()
+                    .any(|m| code.contains(m))
+                || code.match_indices("#[").any(|(i, _)| {
+                    let end = code[i..].find(']').map_or(code.len(), |e| i + e + 1);
+                    let attr = &code[i..end];
+                    attr.contains("::test]") || attr.contains("::test(")
+                })
         }
         Toolchain::Python => source.lines().any(|l| {
             let t = l.trim_start();
@@ -294,6 +296,49 @@ pub fn defines_tests(toolchain: Toolchain, source: &str) -> bool {
             })
         }
         Toolchain::Go => !go_test_like(source).is_empty(),
+    }
+}
+
+/// How many tests `source` declares by the toolchain's markers (a lower
+/// bound for what a run of it must collect).
+#[must_use]
+pub fn declared_tests(toolchain: Toolchain, source: &str) -> usize {
+    let code = strip_comments(source);
+    match toolchain {
+        Toolchain::Rust => {
+            let flat: String = code.split_whitespace().collect();
+            flat.match_indices("#[")
+                .filter(|(i, _)| {
+                    let end = flat[*i..].find(']').map_or(flat.len(), |e| i + e + 1);
+                    let attr = &flat[*i..end];
+                    attr == "#[test]"
+                        || attr.contains("::test]")
+                        || attr.contains("::test(")
+                        || attr.starts_with("#[rstest")
+                        || attr.starts_with("#[test_case")
+                })
+                .count()
+        }
+        Toolchain::Python => code
+            .lines()
+            .map(str::trim_start)
+            .filter(|l| l.starts_with("def test") || l.starts_with("async def test"))
+            .count(),
+        Toolchain::JavaScript => ["it(", "test("]
+            .iter()
+            .map(|m| {
+                code.match_indices(m)
+                    .filter(|(i, _)| {
+                        *i == 0
+                            || !code[..*i]
+                                .chars()
+                                .next_back()
+                                .is_some_and(|c| c.is_alphanumeric() || c == '_' || c == '.')
+                    })
+                    .count()
+            })
+            .sum(),
+        Toolchain::Go => go_declared_tests(source).len(),
     }
 }
 
@@ -398,6 +443,8 @@ pub struct RustPackage {
     pub tests: Vec<(String, String)>,
     /// `[lib] path`, when set.
     pub lib: Option<String>,
+    /// `[[bin]]` targets with a `path`: name and path (package-relative).
+    pub bins: Vec<(String, String)>,
 }
 
 /// A compiled test binary and its crate root.
@@ -428,6 +475,15 @@ pub fn rust_targets(pkg: &RustPackage, files: &BTreeSet<String>) -> Vec<RustTarg
             binary_id: format!("{}::bin/{}", pkg.name, pkg.name),
             root_file: main,
         });
+    }
+    for (name, path) in &pkg.bins {
+        let root_file = at(path);
+        if files.contains(&root_file) && !out.iter().any(|t| t.root_file == root_file) {
+            out.push(RustTarget {
+                binary_id: format!("{}::bin/{name}", pkg.name),
+                root_file,
+            });
+        }
     }
     let bin_dir = at("src/bin");
     for f in files {
@@ -1539,6 +1595,15 @@ mod tests {
             Toolchain::Rust,
             "#[tokio::test]\nasync fn a() {}"
         ));
+        assert!(defines_tests(
+            Toolchain::Rust,
+            "#[test_log::test]\nfn a() {}"
+        ));
+        assert!(defines_tests(
+            Toolchain::Rust,
+            "#[sqlx::test(migrations = \"m\")]\nasync fn a() {}"
+        ));
+        assert!(defines_tests(Toolchain::Rust, "# [test]\nfn a() {}"));
         assert!(!defines_tests(
             Toolchain::Rust,
             "pub fn setup() {}\n// #[test]\n"

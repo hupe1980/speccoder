@@ -13,6 +13,16 @@ use speccoder_core::collection::{JsRule, JsRunner, PytestRule, RustPackage};
 /// output and dependency directories left out.
 #[must_use]
 pub fn files(root: &Path) -> BTreeSet<String> {
+    walk(root).0
+}
+
+/// The most files walked: beyond it the list is incomplete.
+const MAX_FILES: usize = 50_000;
+
+/// [`files`], and whether the walk stopped at its limit (the list is then
+/// incomplete: nothing can be proved missing from it).
+#[must_use]
+pub fn walk(root: &Path) -> (BTreeSet<String>, bool) {
     let mut out = BTreeSet::new();
     let walk = ignore::WalkBuilder::new(root)
         .hidden(false)
@@ -28,14 +38,22 @@ pub fn files(root: &Path) -> BTreeSet<String> {
             )
         })
         .build();
-    for e in walk.flatten().take(50_000) {
-        if e.file_type().is_some_and(|t| t.is_file())
+    let mut seen = 0usize;
+    let mut truncated = false;
+    for e in walk.flatten() {
+        seen += 1;
+        if seen > MAX_FILES {
+            truncated = true;
+            break;
+        }
+        // A symlinked file counts as the file it names.
+        if e.path().is_file()
             && let Ok(rel) = e.path().strip_prefix(root)
         {
             out.insert(rel.to_string_lossy().replace('\\', "/"));
         }
     }
-    out
+    (out, truncated)
 }
 
 fn read(root: &Path, rel: &str) -> Option<String> {
@@ -52,6 +70,13 @@ pub fn rust_packages(root: &Path, files: &BTreeSet<String>) -> Vec<RustPackage> 
             let table: toml::Table = toml::from_str(&read(root, f)?).ok()?;
             let package = table.get("package")?.as_table()?;
             let dir = f.trim_end_matches("Cargo.toml").trim_end_matches('/');
+            let at = |rel: &str| {
+                if dir.is_empty() {
+                    rel.to_owned()
+                } else {
+                    format!("{dir}/{rel}")
+                }
+            };
             Some(RustPackage {
                 root: dir.to_owned(),
                 name: package.get("name")?.as_str()?.to_owned(),
@@ -66,11 +91,31 @@ pub fn rust_packages(root: &Path, files: &BTreeSet<String>) -> Vec<RustPackage> 
                     .flatten()
                     .filter_map(|t| {
                         let name = t.get("name")?.as_str()?.to_owned();
-                        let path = t
-                            .get("path")
-                            .and_then(toml::Value::as_str)
-                            .map_or_else(|| format!("tests/{name}.rs"), str::to_owned);
+                        // Without `path`: `tests/<name>.rs`, else `tests/<name>/main.rs`.
+                        let path = t.get("path").and_then(toml::Value::as_str).map_or_else(
+                            || {
+                                let main = format!("tests/{name}/main.rs");
+                                if files.contains(&at(&main)) {
+                                    main
+                                } else {
+                                    format!("tests/{name}.rs")
+                                }
+                            },
+                            str::to_owned,
+                        );
                         Some((name, path))
+                    })
+                    .collect(),
+                bins: table
+                    .get("bin")
+                    .and_then(toml::Value::as_array)
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|b| {
+                        Some((
+                            b.get("name")?.as_str()?.to_owned(),
+                            b.get("path")?.as_str()?.to_owned(),
+                        ))
                     })
                     .collect(),
                 lib: table

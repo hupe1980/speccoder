@@ -621,3 +621,132 @@ fn an_unrecognised_project_is_unknown() {
     ];
     run(&[], &cases, &[check(&["make", "test"])], &[], true);
 }
+
+// ── review fixes ──────────────────────────────────────────────────────
+
+/// H1: a test counts only if a check the verdict rests on would run it.
+#[test]
+fn a_test_no_fast_check_runs_is_never_collected_by_a_listing() {
+    let base = [
+        (
+            "Cargo.toml",
+            "[package]\nname = \"g\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[workspace]\n",
+        ),
+        ("src/lib.rs", ""),
+    ];
+    let cases = [case(
+        "tests/greet.rs",
+        "#[test]\nfn greets() {}\n",
+        FileState::Unknown,
+        C,
+    )];
+    // The checks format and test the library only: tests/greet.rs is run by none.
+    run(
+        &base,
+        &cases,
+        &[
+            check(&["cargo", "fmt", "--check"]),
+            check(&["cargo", "test", "--lib"]),
+        ],
+        &[],
+        true,
+    );
+    // A check that runs nothing of Rust.
+    run(&base, &cases, &[check(&["make", "lint"])], &[], true);
+}
+
+/// H2: an ignored test is not collected, though libtest lists it.
+#[test]
+fn ignored_tests_do_not_count_through_a_listing() {
+    let base = [
+        (
+            "Cargo.toml",
+            "[package]\nname = \"ign\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[workspace]\n",
+        ),
+        ("src/lib.rs", ""),
+    ];
+    let cases = [
+        case(
+            "tests/ignored.rs",
+            "#[test]\n#[ignore]\nfn later() {}\n",
+            FileState::NotCollected,
+            Some(DecidedBy::Listing),
+        ),
+        case(
+            "tests/runs.rs",
+            "#[test]\nfn now() {}\n",
+            FileState::Collected,
+            Some(DecidedBy::Listing),
+        ),
+    ];
+    let mut c = check(&["cargo", "test", "--offline"]);
+    c.timeout = Duration::from_secs(300);
+    run(&base, &cases, &[c], &[], true);
+}
+
+/// H2: a skip a listing cannot see leaves the file to a report.
+#[test]
+fn a_skip_marker_a_listing_cannot_see_is_unknown() {
+    let base = [("pytest.ini", "[pytest]\n")];
+    let mut listed = check(&["python3", "-m", "pytest"]);
+    listed.list = Some(
+        ["sh", "-c", "echo tests/test_a.py::test_a"]
+            .map(str::to_owned)
+            .to_vec(),
+    );
+    let cases = [case(
+        "tests/test_a.py",
+        "import pytest\n\n@pytest.mark.skip\ndef test_a():\n    pass\n",
+        FileState::Unknown,
+        C,
+    )];
+    run(&base, &cases, &[listed], &[], true);
+}
+
+/// M3: `[[test]]` without a path names `tests/<name>/main.rs` when that
+/// exists; a report naming the file's tests overrides a "never built".
+#[test]
+fn the_static_rule_never_claims_never_ran_against_the_manifest_or_the_report() {
+    let base = [
+        (
+            "Cargo.toml",
+            "[package]\nname = \"g\"\nversion = \"0.1.0\"\nedition = \"2024\"\nautotests = false\n\n[[test]]\nname = \"unit\"\n",
+        ),
+        ("src/lib.rs", ""),
+        ("tests/unit/main.rs", "mod greet;\n"),
+    ];
+    let cases = [case(
+        "tests/unit/greet.rs",
+        "#[test]\nfn a() {}\n",
+        FileState::Collected,
+        Some(DecidedBy::Junit),
+    )];
+    run(
+        &base,
+        &cases,
+        &[check(NEXTEST)],
+        &[result(NEXTEST, &["g::unit::greet::a"])],
+        false,
+    );
+    // Unreachable by the rule, named by the report: unknown, never "never ran".
+    let base = [
+        (
+            "Cargo.toml",
+            "[package]\nname = \"g\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+        ),
+        ("src/lib.rs", ""),
+    ];
+    let cases = [case(
+        "tests/deep/odd.rs",
+        "#[test]\nfn a() {}\n",
+        FileState::Unknown,
+        C,
+    )];
+    run(
+        &base,
+        &cases,
+        &[check(NEXTEST)],
+        &[result(NEXTEST, &["g::odd::a"])],
+        false,
+    );
+}

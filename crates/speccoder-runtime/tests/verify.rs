@@ -127,7 +127,12 @@ fn stale_junit_reports_are_ignored() {
     let r = verify(dir.path(), None, None, &LocalRunner);
     let unit = check(report(&r), "unit");
     assert!(unit.tests.is_none());
-    assert!(unit.note.as_deref().unwrap().contains("predates this run"));
+    // Removed before the run (it was not the run's): no report was written.
+    assert!(
+        unit.note.as_deref().unwrap().contains("no test report"),
+        "{:?}",
+        unit.note
+    );
     assert!(
         !unit.is_evidence(),
         "a passing check without its report is no evidence"
@@ -267,4 +272,49 @@ fn output_is_capped_and_marked() {
     assert_eq!(out.stdout.kept.len(), 1000);
     assert_eq!(out.stdout.total, 5000);
     assert!(out.stdout.truncated());
+}
+
+/// M1 (spec 102 review): a report planted before the check — or dated after
+/// it ended — is never read as the run's.
+#[test]
+fn a_planted_or_future_dated_report_is_not_the_run_s() {
+    let dir = project(
+        r#"
+[checks.planted]
+argv = ["true"]
+junit = "out/planted.xml"
+
+[checks.future]
+argv = ["sh", "-c", "cp pass.xml out/future.xml && touch -t 209901010000 out/future.xml"]
+junit = "out/future.xml"
+"#,
+    );
+    fs::write(dir.path().join("out/planted.xml"), PASSING_JUNIT).unwrap();
+    // A future mtime would pass a lower bound alone.
+    assert!(
+        Command::new("touch")
+            .args(["-t", "209901010000"])
+            .arg(dir.path().join("out/planted.xml"))
+            .status()
+            .unwrap()
+            .success()
+    );
+    let r = verify(dir.path(), None, None, &LocalRunner);
+    let r = report(&r);
+    assert_eq!(
+        check(r, "planted").tests,
+        None,
+        "{:?}",
+        check(r, "planted").note
+    );
+    assert!(
+        !dir.path().join("out/planted.xml").exists(),
+        "removed before the check ran"
+    );
+    assert_eq!(
+        check(r, "future").tests,
+        None,
+        "{:?}",
+        check(r, "future").note
+    );
 }
