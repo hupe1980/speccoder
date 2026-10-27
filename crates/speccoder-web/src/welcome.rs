@@ -66,7 +66,16 @@ pub(crate) fn job_root(
     run: &Runnable,
     given: Option<&str>,
 ) -> Result<PathBuf, String> {
-    // Undo names the folder speccoder created, bound or not.
+    // A bound host serves one project: it undoes only that one.
+    if let (Some(bound), ActionKind::UndoNewProject, Some(g)) = (root.bound(), run.kind(), given)
+        && std::fs::canonicalize(g).ok().as_deref() != Some(bound.as_path())
+    {
+        return Err(format!(
+            "this host serves {}: undo another project in its own host",
+            bound.display()
+        ));
+    }
+    // Undo names the folder speccoder created.
     if run.kind() == ActionKind::UndoNewProject
         && let Some(g) = given
     {
@@ -113,6 +122,10 @@ pub(crate) fn bind_after(root: &Root, run: &Runnable, result: &CommandResult) ->
     };
     let project = std::fs::canonicalize(&project).ok()?;
     root.bind(&project).ok()?;
+    // The sample is speccoder's own copy, not one of the person's projects.
+    if run.kind() == ActionKind::OpenSample {
+        return Some(project);
+    }
     if let Some(state) = speccoder_runtime::service::worktree::state_dir() {
         let name = project
             .file_name()
@@ -365,5 +378,27 @@ pub(crate) fn sample_of(root: &Path) -> Option<Value> {
     }
     let home = speccoder_runtime::service::sample::home(&state);
     let text = std::fs::read_to_string(home.join("sample.json")).ok()?;
-    serde_json::from_str(&text).ok()
+    let mut v: Value = serde_json::from_str(&text).ok()?;
+    // Whether *Run the checks yourself* can run here, and why not.
+    v["checks_missing"] = json!(speccoder_runtime::service::sample::missing_tool(&root));
+    Some(v)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_bound_host_undoes_only_its_own_project() {
+        let mine = std::env::temp_dir();
+        let root = Root::new(&mine, true);
+        let run = Runnable::UndoNewProject {
+            commit: String::new(),
+        };
+        let other = mine.join("not-this-hosts-project");
+        let e = job_root(&root, &run, Some(&other.display().to_string()))
+            .err()
+            .unwrap_or_default();
+        assert!(e.contains("this host serves"), "{e}");
+    }
 }

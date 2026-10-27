@@ -143,7 +143,9 @@ pub fn views(state: &Path) -> Vec<RecentView> {
         .map(|r| {
             let p = PathBuf::from(&r.path);
             let exists = p.is_dir();
-            let undo = (exists && r.created && now().saturating_sub(r.opened_at) < day)
+            // A day from the creation, not from the last time it was opened.
+            let made_at = crate::new_project::creation(state, &p).map(|c| c.at);
+            let undo = (exists && made_at.is_some_and(|at| now().saturating_sub(at) < day))
                 .then(|| crate::new_project::undo_offer(state, &p))
                 .filter(|u| u.available);
             RecentView {
@@ -244,5 +246,57 @@ mod tests {
         assert!(r[0].created, "created stays");
         forget(state.path(), a.path());
         assert_eq!(recent(state.path()).len(), 1);
+    }
+
+    #[test]
+    fn undo_is_offered_a_day_from_the_creation_not_from_the_last_open() {
+        let run = |dir: &Path, args: &[&str]| {
+            let ok = std::process::Command::new("git")
+                .args([
+                    "-c",
+                    "user.name=t",
+                    "-c",
+                    "user.email=t@example.com",
+                    "-c",
+                    "commit.gpgsign=false",
+                ])
+                .args(args)
+                .current_dir(dir)
+                .status()
+                .is_ok_and(|s| s.success());
+            assert!(ok, "git {args:?}");
+        };
+        let state = tempfile::tempdir().unwrap_or_else(|e| panic!("{e}"));
+        let repo = tempfile::tempdir().unwrap_or_else(|e| panic!("{e}"));
+        let root = std::fs::canonicalize(repo.path()).unwrap_or_else(|e| panic!("{e}"));
+        run(&root, &["init", "-q"]);
+        std::fs::write(root.join("a"), "a\n").unwrap_or_else(|e| panic!("{e}"));
+        run(&root, &["add", "-A"]);
+        run(&root, &["commit", "-qm", "new project: x"]);
+        let head = crate::git::Git::at(&root).head().ok().flatten();
+        let record = crate::new_project::Creation {
+            path: root.display().to_string(),
+            mode: speccoder_core::new_project::ProjectMode::ExistingRepository,
+            commit: head,
+            plan_digest: String::new(),
+            name: "x".to_owned(),
+            idea: String::new(),
+            stack: speccoder_core::new_project::Stack::None,
+            format: "speckit".to_owned(),
+            by: None,
+            via: speccoder_core::actions::Via::Terminal,
+            at: now() - 2 * 24 * 60 * 60,
+            first_feature_offered: false,
+            undone_at: None,
+            before: crate::new_project::Before::default(),
+            left: None,
+            git: None,
+        };
+        crate::new_project::write_creation(state.path(), &record).unwrap_or_else(|e| panic!("{e}"));
+        // Opened again just now: still two days after it was made.
+        remember(state.path(), &root, "x", true);
+        let v = views(state.path());
+        assert_eq!(v.len(), 1);
+        assert!(v[0].undo.is_none(), "{:?}", v[0].undo);
     }
 }
