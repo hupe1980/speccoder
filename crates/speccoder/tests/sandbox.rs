@@ -40,7 +40,6 @@ fn sandboxed(root: &Path, home: &Path, network: Network) -> Option<Sandboxed> {
         backend,
         network_allow: Vec::new(),
         network_allow_prefix: Vec::new(),
-        env: Vec::new(),
     })
 }
 

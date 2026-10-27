@@ -554,7 +554,7 @@ pub const CATALOGUE: &[Section] = &[
     Section {
         name: "worktree",
         title: "Worktree",
-        about: "How a run's worktree gets the dependency folders git never holds (node_modules, .venv).",
+        about: "What a run's worktree gets that git never holds: dependency folders (node_modules, .venv) and git-ignored files such as .env.",
         named: false,
         keys: &[
             k(
@@ -564,10 +564,10 @@ pub const CATALOGUE: &[Section] = &[
                 "auto installs Node and uv dependencies (locked, offline) before the baseline; off never",
             ),
             k(
-                "link",
+                "include",
                 Kind::StrList,
                 Some("[]"),
-                "Folders linked from your checkout instead, read-only, while the lockfile matches, e.g. node_modules",
+                "Git-ignored files copied from your checkout, .gitignore patterns, e.g. .env (with .worktreeinclude's); secret values masked, never committed",
             ),
         ],
     },

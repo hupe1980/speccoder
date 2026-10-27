@@ -129,11 +129,14 @@ pub(crate) fn tokio_runtime() -> Result<tokio::runtime::Runtime, String> {
         .map_err(|e| format!("cannot start the async runtime: {e}"))
 }
 
-/// Replaces every occurrence of `secret` (never shown, never journaled by speccoder).
+/// Replaces every occurrence of `secret` (never shown, never journaled by
+/// speccoder), and every value copied from the person's secret files
+/// ([`crate::secrets`]).
 pub(crate) fn redact(text: &str, secret: Option<&str>) -> String {
+    let text = crate::secrets::mask(text);
     match secret {
         Some(s) if !s.is_empty() => text.replace(s, "[redacted]"),
-        _ => text.to_owned(),
+        _ => text,
     }
 }
 

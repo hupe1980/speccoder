@@ -314,7 +314,6 @@ impl Repo {
             collection: None,
             context: None,
             dependencies: None,
-            linked_dependencies: None,
             extra: std::collections::BTreeMap::new(),
         }
     }

@@ -138,8 +138,12 @@ impl CommandRunner for LocalRunner {
         if let Some(pgid) = pgid {
             let _ = killpg(pgid, Signal::SIGKILL);
         }
+        // What a command printed of a value copied from the person's secret
+        // files is masked before anything reads it ([`crate::secrets`]).
         let join = |h: Option<thread::JoinHandle<Captured>>| {
-            h.and_then(|h| h.join().ok()).unwrap_or_default()
+            let mut c: Captured = h.and_then(|h| h.join().ok()).unwrap_or_default();
+            c.kept = crate::secrets::mask_bytes(&c.kept);
+            c
         };
         Outcome {
             exit_code: if timed_out {

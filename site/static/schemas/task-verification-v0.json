@@ -239,29 +239,6 @@
       ],
       "description": "Which tick made already-passing acceptance tests pass."
     },
-    "LinkedDependency": {
-      "description": "A dependency folder linked from the person's checkout into the\nworktree instead of installed there (revision 4): the checks ran\nagainst it, so the tick names it and the lockfile it was checked against.",
-      "properties": {
-        "lockfile": {
-          "description": "The lockfile it matched byte for byte, project-relative.",
-          "type": "string"
-        },
-        "path": {
-          "description": "The folder, project-relative (`node_modules`, `api/.venv`).",
-          "type": "string"
-        },
-        "sha256": {
-          "description": "sha256 of that lockfile.",
-          "type": "string"
-        }
-      },
-      "required": [
-        "path",
-        "lockfile",
-        "sha256"
-      ],
-      "type": "object"
-    },
     "ListingRun": {
       "description": "A listing speccoder ran because the earlier sources left a file undecided.",
       "properties": {
@@ -683,16 +660,6 @@
     "integrity": {
       "description": "The diff audit's findings (`{ findings: [] }`)."
     },
-    "linked_dependencies": {
-      "description": "The dependency folders linked from the checkout, with their\nlockfiles' digests (revision 4); absent: none was linked.",
-      "items": {
-        "$ref": "#/$defs/LinkedDependency"
-      },
-      "type": [
-        "array",
-        "null"
-      ]
-    },
     "model": {
       "description": "The judging model: `{ provider, model }`, or `null`."
     },
@@ -789,6 +756,6 @@
     "policy_sha256",
     "time"
   ],
-  "title": "https://speccoder.dev/task-verification/v0 (revision 4)",
+  "title": "https://speccoder.dev/task-verification/v0 (revision 3)",
   "type": "object"
 }

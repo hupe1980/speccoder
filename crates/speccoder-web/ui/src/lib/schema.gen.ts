@@ -2221,21 +2221,20 @@ export interface InitReport {
   checks: InitCheck[];
   /** The commit holding `speccoder.toml`, when one was made. */
   committed: string | null;
-  /** The repository instructions found (`AGENTS.md`, `CLAUDE.md`). */
-  instructions: string[];
-  /** The model key: the variable and whether it is set. */
-  key: InitKey;
   /**
-   * The folders proposed for `[worktree] link`: those
-   * `.claude/settings.json` links into Claude Code's worktrees that the
-   * checkout ignores.
+   * The git-ignored files proposed for `[worktree] include` (the
+   * checkout's `.env` files): copied into each run's worktree.
    */
-  link?: string[];
+  include?: string[];
   /**
    * The proposal was written as the setting (confirmed, or `--yes`);
    * else it is commented.
    */
-  link_active: boolean;
+  include_active: boolean;
+  /** The repository instructions found (`AGENTS.md`, `CLAUDE.md`). */
+  instructions: string[];
+  /** The model key: the variable and whether it is set. */
+  key: InitKey;
   /** `provider/model`. */
   model: string;
   /** The configuration file. */
@@ -2244,6 +2243,8 @@ export interface InitReport {
   ran: InitRun[];
   /** The region written (Bedrock only). */
   region?: string | null;
+  /** The checkout has a `.worktreeinclude`, which runs read already. */
+  worktreeinclude: boolean;
   /** Files written, relative to the project root. */
   wrote: string[];
 }
@@ -2348,20 +2349,6 @@ export interface LastAttempt {
   reference: string;
   /** The agentplane run, when there was one. */
   run_id: string | null;
-}
-
-/**
- * A dependency folder linked from the person's checkout into the
- * worktree instead of installed there (revision 4): the checks ran
- * against it, so the tick names it and the lockfile it was checked against.
- */
-export interface LinkedDependency {
-  /** The lockfile it matched byte for byte, project-relative. */
-  lockfile: string;
-  /** The folder, project-relative (`node_modules`, `api/.venv`). */
-  path: string;
-  /** sha256 of that lockfile. */
-  sha256: string;
 }
 
 /** A listing speccoder ran because the earlier sources left a file undecided. */
@@ -3668,11 +3655,6 @@ export interface RunReport {
   instructions?: InstructionFile[];
   /** Integrity findings of the attempt's diff (each also fails the verdict). */
   integrity: string[];
-  /**
-   * The dependency folders linked from the checkout into the worktree
-   * (`[worktree] link`), each with its lockfile's digest.
-   */
-  linked_dependencies?: LinkedDependency[];
   /** The model's own closing report — its claim, not the verdict. */
   model_report: unknown;
   /**
@@ -4805,11 +4787,6 @@ export interface TickReport {
   decider: string | null;
   /** More on the reason, in one line. */
   detail: string | null;
-  /**
-   * The dependency folders the tick's checks ran against, linked from
-   * the checkout (signed).
-   */
-  linked_dependencies?: LinkedDependency[];
   /**
    * Predicate fields or revisions this verifier does not know (kept,
    * never deciding).

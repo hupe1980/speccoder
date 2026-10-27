@@ -44,10 +44,11 @@ pub struct Found {
     pub go: bool,
     /// A `Makefile` with a `test:` target exists.
     pub make_test: bool,
-    /// The folders `.claude/settings.json` links into Claude Code's
-    /// worktrees (`worktree.symlinkDirectories`) that the checkout ignores:
-    /// proposed for `[worktree] link`.
-    pub link: Vec<String>,
+    /// The checkout's git-ignored `.env` files: proposed for `[worktree]
+    /// include`.
+    pub include: Vec<String>,
+    /// A `.worktreeinclude` exists: runs read it already.
+    pub worktreeinclude: bool,
 }
 
 impl Found {
@@ -373,85 +374,69 @@ pub fn detect(root: &Path) -> Found {
         mypy: pyproject.contains("[tool.mypy") || exists("mypy.ini"),
         go: exists("go.mod"),
         make_test: makefile.lines().any(|l| l.starts_with("test:")),
-        link: claude_links(root),
+        include: env_files(root),
+        worktreeinclude: root.join(crate::include::FILE).is_file(),
     }
 }
 
-/// `.claude/settings.json`'s `worktree.symlinkDirectories` that `[worktree]
-/// link` accepts and the checkout ignores — linking anything else would
-/// put it in git's view or outside the project.
+/// The checkout's git-ignored `.env` files (`.env`, `.env.local`, at any
+/// depth): what checks often need and a worktree never has.
 #[must_use]
-pub fn claude_links(root: &Path) -> Vec<String> {
-    let settings = std::fs::read_to_string(root.join(".claude/settings.json"))
-        .ok()
-        .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok());
-    let Some(dirs) = settings
-        .as_ref()
-        .and_then(|s| s["worktree"]["symlinkDirectories"].as_array())
-    else {
-        return Vec::new();
-    };
-    let git = Git::at(root);
-    let mut out: Vec<String> = Vec::new();
-    for d in dirs.iter().filter_map(serde_json::Value::as_str) {
-        let toml = format!("[worktree]\nlink = [{}]\n", quote(d));
-        let Some(p) = crate::prepare::parse(&toml)
-            .ok()
-            .and_then(|c| c.link.into_iter().next())
-        else {
-            continue;
-        };
-        // As a folder: `node_modules/` matches one whether or not it exists yet.
-        if !out.contains(&p)
-            && git
-                .succeeds(&["check-ignore", "-q", "--", &format!("{p}/")])
-                .unwrap_or(false)
-        {
-            out.push(p);
-        }
-    }
-    out
+pub fn env_files(root: &Path) -> Vec<String> {
+    crate::include::matched(root, &[".env".to_owned(), ".env.*".to_owned()])
 }
 
-/// The comment over a `[worktree] link` proposal (what [`activate_link`] finds).
-const LINK_PROPOSED: &str =
-    "# from .claude/settings.json worktree.symlinkDirectories; to link them, uncomment:";
+/// The comment over an `[worktree] include` proposal (what
+/// [`activate_include`] finds).
+const INCLUDE_PROPOSED: &str = "# the git-ignored .env files here; to copy them, uncomment:";
 
-/// The `[worktree]` part of the file: the folders `link` is proposed with,
-/// commented, else both keys commented with their meaning.
-fn worktree_section(link: &[String]) -> String {
-    if link.is_empty() {
+/// The `[worktree]` part of the file: the files `include` is proposed
+/// with, commented; else both keys commented with their meaning.
+fn worktree_section(include: &[String], worktreeinclude: bool) -> String {
+    if worktreeinclude {
+        return "\n# A run's worktree gets the git-ignored files .worktreeinclude names copied from this\n\
+                # checkout (secret values masked, never committed); `include` adds patterns.\n\
+                # [worktree]\n# prepare = \"auto\"           # \"off\": never install Node or uv dependencies\n\
+                # include = [\".env\"]\n"
+            .to_owned();
+    }
+    if include.is_empty() {
         return "\n# A run's worktree gets Node and uv dependencies by their locked, offline install\n\
-                # before the baseline. `link` takes ignored folders from this checkout instead.\n\
+                # before the baseline. `include` copies git-ignored files from this checkout.\n\
                 # [worktree]\n# prepare = \"auto\"           # \"off\": never prepare\n\
-                # link = [\"node_modules\"]     # read-only to every command, while the lockfile matches\n"
+                # include = [\".env\"]          # secret values masked, never committed\n"
             .to_owned();
     }
     format!(
-        "\n# Dependency folders a run's worktree links from this checkout instead of installing:\n\
-         # read-only to every command, and only while the lockfile matches this checkout's.\n\
-         {LINK_PROPOSED}\n# [worktree]\n# link = [{}]\n",
-        link.iter().map(|l| quote(l)).collect::<Vec<_>>().join(", ")
+        "\n# Git-ignored files a run's worktree gets copied from this checkout: their values are\n\
+         # masked in everything speccoder shows or sends, and never committed.\n\
+         {INCLUDE_PROPOSED}\n# [worktree]\n# include = [{}]\n",
+        include
+            .iter()
+            .map(|l| quote(l))
+            .collect::<Vec<_>>()
+            .join(", ")
     )
 }
 
-/// Turns the commented `[worktree] link` proposal `init` wrote in `root`'s
-/// configuration into the setting (a person confirmed it, or `--yes`).
+/// Turns the commented `[worktree] include` proposal `init` wrote in
+/// `root`'s configuration into the setting (a person confirmed it, or
+/// `--yes`).
 ///
 /// # Errors
 ///
 /// No proposal in the file, or a file speccoder's parsers would refuse.
-pub fn activate_link(root: &Path) -> Result<(), String> {
+pub fn activate_include(root: &Path) -> Result<(), String> {
     let file = root.join(FILE);
     let text = std::fs::read_to_string(&file).map_err(|e| format!("{}: {e}", file.display()))?;
-    let from = format!("{LINK_PROPOSED}\n# [worktree]\n# link = ");
+    let from = format!("{INCLUDE_PROPOSED}\n# [worktree]\n# include = ");
     let Some(at) = text.find(&from) else {
-        return Err("no [worktree] link proposal in the configuration".to_owned());
+        return Err("no [worktree] include proposal in the configuration".to_owned());
     };
     let next = format!(
-        "{}{}\n[worktree]\nlink = {}",
+        "{}{}\n[worktree]\ninclude = {}",
         &text[..at],
-        "# from .claude/settings.json worktree.symlinkDirectories",
+        "# the git-ignored .env files here",
         &text[at + from.len()..]
     );
     crate::prepare::parse(&next)?;
@@ -684,7 +669,7 @@ pub fn init_with(
         .filter(|n| root.join(n).is_file())
         .map(|n| (*n).to_owned())
         .collect();
-    text.push_str(&worktree_section(&found.link));
+    text.push_str(&worktree_section(&found.include, found.worktreeinclude));
     if instructions == ["CLAUDE.md"] {
         text.push_str(
             "\n# The repository's instructions for agents, given to every attempt: CLAUDE.md\n# here, AGENTS.md wherever a directory has one.\n[context]\ninstructions = [\"AGENTS.md\", \"CLAUDE.md\"]\n",
@@ -831,8 +816,9 @@ pub fn init_with(
             key,
             region,
             committed: None,
-            link: found.link.clone(),
-            link_active: false,
+            include: found.include.clone(),
+            include_active: false,
+            worktreeinclude: found.worktreeinclude,
         },
     )))
 }
@@ -1184,8 +1170,8 @@ pub struct Preview {
     pub keys: Vec<(String, bool)>,
     /// Amazon Bedrock's credential source and region, as found here.
     pub bedrock: BedrockPreview,
-    /// The folders proposed for `[worktree] link` (from `.claude/settings.json`).
-    pub link: Vec<String>,
+    /// The git-ignored files proposed for `[worktree] include`.
+    pub include: Vec<String>,
 }
 
 /// Where Bedrock's credentials and region would come from: named, never a
@@ -1226,7 +1212,7 @@ pub fn preview(path: &Path) -> Preview {
             source: crate::aws::detect_here().map(|s| s.describe()),
             region: crate::aws::region_here().map(|(r, _)| r),
         },
-        link: found.link,
+        include: found.include,
     }
 }
 

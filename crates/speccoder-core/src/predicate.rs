@@ -20,9 +20,8 @@ pub const TYPE: &str = "https://speccoder.dev/task-verification/v0";
 /// The revision this build writes. 1: the fields before `revision`
 /// existed (a statement without it); 2: `revision`, `red` and the reserved
 /// fields of other specs; 3: `regression` (why a tick is regression-only)
-/// and `collection` (which changed test files the run collected); 4:
-/// `linked_dependencies` (folders linked from the checkout).
-pub const REVISION: u32 = 4;
+/// and `collection` (which changed test files the run collected).
+pub const REVISION: u32 = 3;
 
 /// The longest red-output excerpt a statement carries, in bytes.
 pub const RED_EXCERPT_MAX: usize = 2048;
@@ -96,19 +95,6 @@ pub struct Red {
     pub output_sha256: String,
     /// The excerpt was not clean (a local path, a credential): dropped.
     pub withheld: bool,
-}
-
-/// A dependency folder linked from the person's checkout into the
-/// worktree instead of installed there (revision 4): the checks ran
-/// against it, so the tick names it and the lockfile it was checked against.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
-pub struct LinkedDependency {
-    /// The folder, project-relative (`node_modules`, `api/.venv`).
-    pub path: String,
-    /// The lockfile it matched byte for byte, project-relative.
-    pub lockfile: String,
-    /// sha256 of that lockfile.
-    pub sha256: String,
 }
 
 /// The `task-verification` predicate, v0.
@@ -244,10 +230,6 @@ pub struct TaskVerificationV0 {
     /// registry checksums. Opaque here.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dependencies: Option<Value>,
-    /// The dependency folders linked from the checkout, with their
-    /// lockfiles' digests (revision 4); absent: none was linked.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub linked_dependencies: Option<Vec<LinkedDependency>>,
     /// Fields this build does not know (a newer revision): kept, so the
     /// signed bytes survive a round-trip, and never read for an outcome.
     #[serde(flatten)]

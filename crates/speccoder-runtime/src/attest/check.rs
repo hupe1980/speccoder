@@ -513,7 +513,6 @@ mod tests {
             }),
             regression: None,
             newer_fields: Vec::new(),
-            linked_dependencies: Vec::new(),
             verification: None,
         }
     }

@@ -322,30 +322,11 @@ fn green(statements: &[Value], tv: Option<&TaskVerificationV0>, verdict: Option<
                 .join(", ")
         ));
     }
-    // The dependency folders the checks ran against, linked from the checkout.
-    let linked = tv
-        .and_then(|tv| tv.linked_dependencies.clone())
-        .unwrap_or_default();
-    if !linked.is_empty() {
-        body.push_str(&format!(
-            "\nchecked against dependencies linked from the checkout (signed): {}",
-            linked
-                .iter()
-                .map(|l| format!(
-                    "`{}` ({} sha256:{})",
-                    l.path,
-                    l.lockfile,
-                    l.sha256.chars().take(12).collect::<String>()
-                ))
-                .collect::<Vec<_>>()
-                .join(", ")
-        ));
-    }
     step(
         StepKind::Green,
         Source::Signed,
         body,
-        json!({ "passed": passed, "failed": failed, "held_out": phase(statements, "held_out").map(|h| &h["result"]), "baseline_warnings": warned, "dependencies": deps, "linked_dependencies": (!linked.is_empty()).then_some(linked) }),
+        json!({ "passed": passed, "failed": failed, "held_out": phase(statements, "held_out").map(|h| &h["result"]), "baseline_warnings": warned, "dependencies": deps }),
     )
 }
 

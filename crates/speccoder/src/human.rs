@@ -1812,16 +1812,6 @@ pub fn branch_verify(
             .map(|d| format!(" — {d}"))
             .unwrap_or_default();
         writeln!(out, "  {}/{}  {what}{detail}", r.tick.feature, r.tick.task)?;
-        // The dependencies the checks ran against, linked from the checkout.
-        for l in &r.linked_dependencies {
-            writeln!(
-                out,
-                "      linked {} ({} sha256:{})",
-                l.path,
-                l.lockfile,
-                l.sha256.chars().take(12).collect::<String>()
-            )?;
-        }
     }
     for n in &report.not_evaluated {
         writeln!(out, "  not evaluated: {n}")?;

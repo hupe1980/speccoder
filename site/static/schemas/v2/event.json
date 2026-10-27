@@ -5458,6 +5458,18 @@
             "null"
           ]
         },
+        "include": {
+          "description": "The git-ignored files proposed for `[worktree] include` (the\ncheckout's `.env` files): copied into each run's worktree.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "include_active": {
+          "default": false,
+          "description": "The proposal was written as the setting (confirmed, or `--yes`);\nelse it is commented.",
+          "type": "boolean"
+        },
         "instructions": {
           "description": "The repository instructions found (`AGENTS.md`, `CLAUDE.md`).",
           "items": {
@@ -5468,18 +5480,6 @@
         "key": {
           "$ref": "#/$defs/InitKey",
           "description": "The model key: the variable and whether it is set."
-        },
-        "link": {
-          "description": "The folders proposed for `[worktree] link`: those\n`.claude/settings.json` links into Claude Code's worktrees that the\ncheckout ignores.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "link_active": {
-          "default": false,
-          "description": "The proposal was written as the setting (confirmed, or `--yes`);\nelse it is commented.",
-          "type": "boolean"
         },
         "model": {
           "description": "`provider/model`.",
@@ -5503,6 +5503,11 @@
             "null"
           ]
         },
+        "worktreeinclude": {
+          "default": false,
+          "description": "The checkout has a `.worktreeinclude`, which runs read already.",
+          "type": "boolean"
+        },
         "wrote": {
           "description": "Files written, relative to the project root.",
           "items": {
@@ -5520,7 +5525,8 @@
         "instructions",
         "key",
         "committed",
-        "link_active"
+        "include_active",
+        "worktreeinclude"
       ],
       "type": "object"
     },
@@ -5773,29 +5779,6 @@
         "reason",
         "run_id",
         "reference"
-      ],
-      "type": "object"
-    },
-    "LinkedDependency": {
-      "description": "A dependency folder linked from the person's checkout into the\nworktree instead of installed there (revision 4): the checks ran\nagainst it, so the tick names it and the lockfile it was checked against.",
-      "properties": {
-        "lockfile": {
-          "description": "The lockfile it matched byte for byte, project-relative.",
-          "type": "string"
-        },
-        "path": {
-          "description": "The folder, project-relative (`node_modules`, `api/.venv`).",
-          "type": "string"
-        },
-        "sha256": {
-          "description": "sha256 of that lockfile.",
-          "type": "string"
-        }
-      },
-      "required": [
-        "path",
-        "lockfile",
-        "sha256"
       ],
       "type": "object"
     },
@@ -9146,13 +9129,6 @@
           },
           "type": "array"
         },
-        "linked_dependencies": {
-          "description": "The dependency folders linked from the checkout into the worktree\n(`[worktree] link`), each with its lockfile's digest.",
-          "items": {
-            "$ref": "#/$defs/LinkedDependency"
-          },
-          "type": "array"
-        },
         "model_report": {
           "description": "The model's own closing report — its claim, not the verdict."
         },
@@ -12388,13 +12364,6 @@
             "string",
             "null"
           ]
-        },
-        "linked_dependencies": {
-          "description": "The dependency folders the tick's checks ran against, linked from\nthe checkout (signed).",
-          "items": {
-            "$ref": "#/$defs/LinkedDependency"
-          },
-          "type": "array"
         },
         "newer_fields": {
           "description": "Predicate fields or revisions this verifier does not know (kept,\nnever deciding).",

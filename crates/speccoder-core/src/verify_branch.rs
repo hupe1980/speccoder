@@ -162,10 +162,6 @@ pub struct TickReport {
     /// Predicate fields or revisions this verifier does not know (kept,
     /// never deciding).
     pub newer_fields: Vec<String>,
-    /// The dependency folders the tick's checks ran against, linked from
-    /// the checkout (signed).
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub linked_dependencies: Vec<crate::predicate::LinkedDependency>,
     /// `attest verify`'s object for the commit, unchanged.
     pub verification: Option<ObjectVerification>,
 }
@@ -460,7 +456,6 @@ mod tests {
             stale_anchor: None,
             regression: None,
             newer_fields: Vec::new(),
-            linked_dependencies: Vec::new(),
             verification: None,
         }
     }

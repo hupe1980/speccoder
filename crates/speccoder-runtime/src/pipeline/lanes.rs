@@ -273,9 +273,12 @@ pub(crate) fn merge_lane(
     format
         .tick(&tasks_file, task, &line_hash)
         .map_err(|e| e.to_string())?;
+    let excluded = crate::include::pathspecs(feature_wt);
     let mut add = ident.to_vec();
-    add.extend(["add", "-A"]);
+    add.extend(["add", "-A", "--", ":/"]);
+    add.extend(excluded.iter().map(String::as_str));
     g.run(&add).map_err(|e| e.0)?;
+    crate::include::check_staged(feature_wt)?;
     let mut c = ident.to_vec();
     c.extend(["commit", "-q", "--no-verify", "-C", commit]);
     g.run(&c).map_err(|e| e.0)?;

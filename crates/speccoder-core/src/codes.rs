@@ -168,14 +168,14 @@ pub const CATALOG: &[Entry] = &[
         ]
     ),
     entry!(
-        "LINK-CHANGED",
+        "SECRET-IN-DIFF",
         P,
         S::NeedsHuman,
-        "the external agent changed a dependency folder linked from your checkout",
-        "With `[worktree] link`, a folder such as `node_modules` is your checkout's own, read-only to every sandboxed command. An `[executor]` agent works outside the sandbox, and its attempt changed one: a verdict would rest on dependencies the attempt changed in your checkout, so nothing was judged or ticked.",
+        "the attempt's change holds a value copied from your secret files",
+        "`[worktree] include` (or `.worktreeinclude`) copied a git-ignored secret file such as `.env` from your checkout into the worktree. The attempt's diff adds one of its values to a file git would commit, so it was undone: nothing was judged, ticked or committed. The variable is named, its value never.",
         [
-            "→ restore your checkout's install (`npm ci`, `uv sync`)",
-            "→ or remove the folder from [worktree] link, or run without an [executor]"
+            "→ the code should read the variable from the environment or the file, never copy its value",
+            "→ run the task again; the attempt starts from the committed tree"
         ]
     ),
     entry!(

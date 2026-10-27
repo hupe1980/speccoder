@@ -1221,28 +1221,31 @@ impl Bench {
                 ]),
             ));
         }
-        // Its dependency folders, as a run's worktree gets them.
-        let runner = if ctx.worktree.prepare && crate::prepare::needed(&project) {
-            match crate::prepare::prepare(&crate::prepare::Prepare {
+        // Its copied files and dependency folders, as a run's worktree gets them.
+        crate::include::copy(&scratch.path, &project, &ctx.root, &ctx.worktree.include).map_err(
+            |e| {
+                Box::new(refuse(
+                    CommandStatus::ConfigError,
+                    "PREPARE-FAILED",
+                    &format!("the files [worktree] include names could not be copied: {e}"),
+                ))
+            },
+        )?;
+        if ctx.worktree.prepare && crate::prepare::needed(&project) {
+            crate::prepare::prepare(&crate::prepare::Prepare {
                 worktree: &scratch.path,
                 project: &project,
-                checkout: &ctx.root,
                 config: &ctx.worktree,
                 runner: &runner,
                 state: Some(&ctx.state),
-            }) {
-                Ok(Some(p)) => runner.with_env(p.record.env()),
-                Ok(None) => runner,
-                Err(f) => {
-                    return Err(Box::new(
-                        refuse(CommandStatus::ConfigError, "PREPARE-FAILED", &f.message)
-                            .with_fix(f.fix),
-                    ));
-                }
-            }
-        } else {
-            runner
-        };
+            })
+            .map_err(|f| {
+                Box::new(
+                    refuse(CommandStatus::ConfigError, "PREPARE-FAILED", &f.message)
+                        .with_fix(f.fix),
+                )
+            })?;
+        }
         Ok(Self {
             scratch,
             project,

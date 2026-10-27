@@ -229,7 +229,6 @@ pub(crate) fn bare_report(
         collection: None,
         regression: None,
         context: None,
-        linked_dependencies: Vec::new(),
     }
 }
 

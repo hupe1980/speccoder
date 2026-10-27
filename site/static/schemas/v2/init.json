@@ -113,6 +113,18 @@
         "null"
       ]
     },
+    "include": {
+      "description": "The git-ignored files proposed for `[worktree] include` (the\ncheckout's `.env` files): copied into each run's worktree.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "include_active": {
+      "default": false,
+      "description": "The proposal was written as the setting (confirmed, or `--yes`);\nelse it is commented.",
+      "type": "boolean"
+    },
     "instructions": {
       "description": "The repository instructions found (`AGENTS.md`, `CLAUDE.md`).",
       "items": {
@@ -123,18 +135,6 @@
     "key": {
       "$ref": "#/$defs/InitKey",
       "description": "The model key: the variable and whether it is set."
-    },
-    "link": {
-      "description": "The folders proposed for `[worktree] link`: those\n`.claude/settings.json` links into Claude Code's worktrees that the\ncheckout ignores.",
-      "items": {
-        "type": "string"
-      },
-      "type": "array"
-    },
-    "link_active": {
-      "default": false,
-      "description": "The proposal was written as the setting (confirmed, or `--yes`);\nelse it is commented.",
-      "type": "boolean"
     },
     "model": {
       "description": "`provider/model`.",
@@ -158,6 +158,11 @@
         "null"
       ]
     },
+    "worktreeinclude": {
+      "default": false,
+      "description": "The checkout has a `.worktreeinclude`, which runs read already.",
+      "type": "boolean"
+    },
     "wrote": {
       "description": "Files written, relative to the project root.",
       "items": {
@@ -175,7 +180,8 @@
     "instructions",
     "key",
     "committed",
-    "link_active"
+    "include_active",
+    "worktreeinclude"
   ],
   "title": "init: the configuration written",
   "type": "object"

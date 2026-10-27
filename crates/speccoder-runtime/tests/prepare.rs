@@ -1,8 +1,10 @@
-//! A run's worktree gets its dependency folders: installed with the
-//! toolchain's locked offline install, or linked from the checkout
-//! (`[worktree] link`). A shell script stands in for the agent (an
-//! `[executor]`), so no model call is made. Tests that install need the
-//! real `npm` or `uv` and are skipped, with a note, without them.
+//! A run's worktree gets its dependency folders by the toolchain's locked
+//! offline install, and the git-ignored files `[worktree] include` names
+//! copied from the checkout — their secret values masked and never
+//! committed. A shell script stands in for the agent (an `[executor]`), so
+//! no model call is made. Tests that install need the real `npm` or `uv`
+//! and are skipped, with a note, without them — except where
+//! `SPECCODER_REQUIRE_TOOLS` names the tool (CI).
 
 // Test code: panicking on unexpected input is the failure report.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
@@ -15,7 +17,7 @@ use std::sync::Arc;
 use agentplane::model::ModelProvider;
 use agentplane::model::fake::FakeProvider;
 use speccoder_core::{CommandData, CommandResult, CommandStatus, RunReport};
-use speccoder_runtime::prepare::{self, Mode, Prepare};
+use speccoder_runtime::prepare::{self, Prepare};
 use speccoder_runtime::progress::{Event, Progress};
 use speccoder_runtime::{RunOptions, run_with_options, sandbox};
 
@@ -62,20 +64,6 @@ fn have(tool: &str) -> bool {
     );
     if !ok {
         eprintln!("skipped: {tool} is not on PATH");
-    }
-    ok
-}
-
-/// The sandbox this machine has, or a note that it has none — a failure
-/// where `SPECCODER_REQUIRE_SANDBOX` is set (CI).
-fn sandboxed() -> bool {
-    let ok = sandbox::backend().is_ok();
-    assert!(
-        ok || std::env::var_os("SPECCODER_REQUIRE_SANDBOX").is_none(),
-        "no OS sandbox here, and SPECCODER_REQUIRE_SANDBOX requires one"
-    );
-    if !ok {
-        eprintln!("skipped: no OS sandbox here");
     }
     ok
 }
@@ -178,7 +166,7 @@ enum Node {
     /// `npm install --offline` of a packed local tarball: a real lockfile
     /// `npm ci --offline` installs from, no registry needed.
     Npm,
-    /// Written by hand: enough to link, nothing to install from.
+    /// Written by hand: nothing to install from.
     Handmade,
 }
 
@@ -297,7 +285,6 @@ fn a_node_worktree_is_installed_once_and_reused() {
     let wt = PathBuf::from(&report(&res).worktree);
     let own = fs::symlink_metadata(wt.join("node_modules")).unwrap();
     assert!(own.is_dir() && !own.file_type().is_symlink());
-    assert!(report(&res).linked_dependencies.is_empty());
 
     // The next task reuses it: nothing installed again.
     let (res, rec) = f.run("T006");
@@ -342,113 +329,6 @@ fn a_branch_that_changes_its_lockfile_is_prepared_again() {
     let (res, rec) = f.run("T006");
     assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
     assert_eq!(rec.prepare()[1].0, "skipped", "{:?}", rec.prepare());
-}
-
-#[test]
-fn a_linked_root_whose_lockfile_the_attempt_changes_is_installed_before_the_checks() {
-    if !have("npm") || !sandboxed() {
-        return;
-    }
-    let f = fixture(
-        "[worktree]\nlink = [\"node_modules\"]\n",
-        "printf '\\n' >> package-lock.json\necho done > done.txt\necho 'Did it.'",
-        Node::Npm,
-    );
-    let before = f.modules();
-    let (res, rec) = f.run("T005");
-    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
-    let prepared = rec.prepare();
-    assert_eq!(prepared[1].1, "linked node_modules", "{prepared:?}");
-    assert!(
-        prepared[2]
-            .1
-            .ends_with(": the attempt changed its lockfile"),
-        "{prepared:?}"
-    );
-    let rep = report(&res);
-    assert!(rep.linked_dependencies.is_empty());
-    let wt = PathBuf::from(&rep.worktree);
-    let own = fs::symlink_metadata(wt.join("node_modules")).unwrap();
-    assert!(own.is_dir() && !own.file_type().is_symlink());
-    let message = git(&wt, &["log", "-1", "--format=%B"]);
-    assert!(!message.contains("Linked-Dependencies"), "{message}");
-    let entry = &prepare::load(&wt).roots[0];
-    assert_eq!(entry.mode, Mode::Installed);
-    assert_eq!(
-        entry.why.as_deref(),
-        Some("the attempt changed its lockfile")
-    );
-    assert_eq!(f.modules(), before);
-}
-
-#[test]
-fn prepare_off_after_a_link_removes_it_and_its_variables() {
-    if !sandboxed() {
-        return;
-    }
-    let f = fixture(
-        "[worktree]\nlink = [\"node_modules\"]\n",
-        AGENT,
-        Node::Handmade,
-    );
-    let (res, _) = f.run("T005");
-    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
-    let wt = PathBuf::from(&report(&res).worktree);
-    assert!(prepare::record_path(&wt).is_file());
-    let config = f.path().join("speccoder.toml");
-    let text = fs::read_to_string(&config).unwrap();
-    fs::write(
-        &config,
-        text.replace("[worktree]\n", "[worktree]\nprepare = \"off\"\n"),
-    )
-    .unwrap();
-    git(f.path(), &["commit", "-qam", "prepare off"]);
-    let (res, rec) = f.run("T006");
-    assert!(rec.prepare().is_empty());
-    // The old link is not in force: the check that needs it fails.
-    assert_eq!(
-        res.code().map(|c| c.name),
-        Some("VERIFICATION-FAILED"),
-        "{}",
-        res.message()
-    );
-    assert!(fs::symlink_metadata(wt.join("node_modules")).is_err());
-    assert!(!prepare::record_path(&wt).exists());
-    assert!(report(&res).linked_dependencies.is_empty());
-}
-
-#[test]
-fn a_prepare_that_fails_after_linking_leaves_no_link() {
-    if !sandboxed() {
-        return;
-    }
-    let f = fixture("", AGENT, Node::Handmade);
-    // A second root whose install cannot succeed offline.
-    let api = f.path().join("api");
-    fs::create_dir_all(&api).unwrap();
-    fs::write(
-        api.join("package.json"),
-        "{\"name\": \"api\", \"version\": \"1.0.0\", \"dependencies\": {\"speccoder-never-cached\": \"1.0.0\"}}\n",
-    )
-    .unwrap();
-    let zeros = format!("sha512-{}==", "A".repeat(86));
-    fs::write(
-        api.join("package-lock.json"),
-        format!(
-            "{{\"name\": \"api\", \"version\": \"1.0.0\", \"lockfileVersion\": 3, \"requires\": true, \"packages\": {{\"\": {{\"name\": \"api\", \"version\": \"1.0.0\", \"dependencies\": {{\"speccoder-never-cached\": \"1.0.0\"}}}}, \"node_modules/speccoder-never-cached\": {{\"version\": \"1.0.0\", \"resolved\": \"https://registry.npmjs.org/speccoder-never-cached/-/speccoder-never-cached-1.0.0.tgz\", \"integrity\": \"{zeros}\"}}}}}}\n"
-        ),
-    )
-    .unwrap();
-    git(f.path(), &["add", "-A"]);
-    git(f.path(), &["commit", "-qm", "api"]);
-    let (wt, runner) = worktree(&f);
-    let before = f.modules();
-    let failed = prepare_in(&f, &wt, &runner, &["node_modules"]).unwrap_err();
-    assert!(failed.message.contains("in api"), "{}", failed.message);
-    // The root linked first is not left linked without a record.
-    assert!(fs::symlink_metadata(wt.join("node_modules")).is_err());
-    assert!(!prepare::record_path(&wt).exists());
-    assert_eq!(f.modules(), before);
 }
 
 #[test]
@@ -539,141 +419,6 @@ fn a_go_or_rust_project_has_no_prepare_step() {
     assert!(rec.prepare().is_empty());
 }
 
-#[test]
-fn a_linked_node_modules_is_the_checkouts_read_only_and_invisible_to_git() {
-    if !sandboxed() {
-        return;
-    }
-    let f = fixture(
-        "[worktree]\nlink = [\"node_modules\"]\n",
-        AGENT,
-        Node::Handmade,
-    );
-    let before = f.modules();
-    let status = git(f.path(), &["status", "--porcelain"]);
-    let (res, rec) = f.run("T005");
-    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
-    assert_eq!(rec.prepare().last().unwrap().1, "linked node_modules");
-    let rep = report(&res);
-    let wt = PathBuf::from(&rep.worktree);
-    let link = wt.join("node_modules");
-    assert!(
-        fs::symlink_metadata(&link)
-            .unwrap()
-            .file_type()
-            .is_symlink()
-    );
-    assert_eq!(
-        fs::canonicalize(&link).unwrap(),
-        fs::canonicalize(f.path().join("node_modules")).unwrap()
-    );
-    // Evidence: the report, the trailer.
-    let sha = prepare::sha256_file(&f.path().join("package-lock.json")).unwrap();
-    assert_eq!(rep.linked_dependencies.len(), 1);
-    assert_eq!(rep.linked_dependencies[0].path, "node_modules");
-    assert_eq!(rep.linked_dependencies[0].lockfile, "package-lock.json");
-    assert_eq!(rep.linked_dependencies[0].sha256, sha);
-    let message = git(&wt, &["log", "-1", "--format=%B"]);
-    assert!(
-        message.contains(&format!(
-            "Linked-Dependencies: node_modules (package-lock.json sha256:{sha})"
-        )),
-        "{message}"
-    );
-    // The signed statement carries it too.
-    let head = git(&wt, &["rev-parse", "HEAD"]);
-    let note = speccoder_runtime::attest::notes::read(&wt, head.trim()).unwrap_or_default();
-    let statement = note
-        .lines()
-        .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
-        .filter_map(|e| {
-            use base64::Engine as _;
-            base64::engine::general_purpose::STANDARD
-                .decode(e["payload"].as_str()?)
-                .ok()
-        })
-        .filter_map(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
-        .find(|s| s["predicateType"] == "https://speccoder.dev/task-verification/v0")
-        .unwrap_or_else(|| panic!("no task-verification statement: {note}"));
-    assert_eq!(
-        statement["predicate"]["linked_dependencies"],
-        serde_json::json!([{ "path": "node_modules", "lockfile": "package-lock.json", "sha256": sha }])
-    );
-    assert_eq!(statement["predicate"]["revision"], 4);
-    // git in the worktree never sees the link, and no tick commit holds it.
-    assert_eq!(git(&wt, &["status", "--porcelain"]), "");
-    assert_eq!(git(&wt, &["ls-files", "node_modules"]), "");
-    let exclude = fs::read_to_string(f.path().join(".git/info/exclude")).unwrap();
-    assert!(
-        exclude.contains("# speccoder: [worktree] link\n/node_modules\n"),
-        "{exclude}"
-    );
-    // A sandboxed command cannot write through it.
-    let (runner, _) = sandbox::runner_at(&wt).unwrap();
-    let out = sandbox::Runner::run_with(
-        &runner,
-        &speccoder_runtime::verify::process::Invocation {
-            argv: [
-                "sh",
-                "-c",
-                "mkdir node_modules/left-pad && echo x > node_modules/tiny/index.js",
-            ]
-            .map(str::to_owned)
-            .to_vec(),
-            cwd: wt.clone(),
-            env: speccoder_runtime::verify::process::scrubbed_env(std::env::vars()),
-            timeout: std::time::Duration::from_secs(30),
-            output_cap: 64 * 1024,
-        },
-        false,
-    );
-    assert_ne!(out.exit_code, Some(0));
-    let said = String::from_utf8_lossy(&out.stderr.kept).into_owned();
-    assert_eq!(
-        prepare::linked_note(&said, &["node_modules".to_owned()]).as_deref(),
-        Some("`node_modules` is linked from the checkout, read-only ([worktree] link)"),
-        "{said}"
-    );
-    // The checkout: unchanged, its status too.
-    assert_eq!(f.modules(), before);
-    assert_eq!(git(f.path(), &["status", "--porcelain"]), status);
-
-    // The next task reuses the link.
-    let (res, rec) = f.run("T006");
-    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
-    assert_eq!(rec.prepare().last().unwrap().0, "skipped");
-
-    // Removing the worktree removes the link first; the checkout's folder stays.
-    prepare::unlink(&wt);
-    assert!(fs::symlink_metadata(&link).is_err());
-    git(f.path(), &["worktree", "remove", &wt.display().to_string()]);
-    assert_eq!(f.modules(), before);
-}
-
-#[test]
-fn an_executor_that_changes_a_linked_folder_stops_the_task() {
-    if !sandboxed() {
-        return;
-    }
-    // Outside the sandbox the agent can write through the link.
-    let f = fixture(
-        "[worktree]\nlink = [\"node_modules\"]\n",
-        "echo '{\"changed\": true}' > node_modules/.package-lock.json\necho done > done.txt\necho 'Did it.'",
-        Node::Handmade,
-    );
-    let (res, _) = f.run("T005");
-    assert_eq!(res.status(), CommandStatus::NeedsHuman, "{}", res.message());
-    assert_eq!(res.code().map(|c| c.name), Some("LINK-CHANGED"));
-    assert!(res.message().contains("node_modules"), "{}", res.message());
-    let tasks = fs::read_to_string(f.path().join("specs/001-graph/tasks.md")).unwrap();
-    assert!(tasks.contains("- [ ] T005"));
-    let wt_tasks = git(
-        f.path(),
-        &["show", "speccoder/001-graph:specs/001-graph/tasks.md"],
-    );
-    assert!(wt_tasks.contains("- [ ] T005"), "nothing ticked");
-}
-
 /// A worktree of the fixture's `HEAD` and a sandboxed runner in it, for
 /// preparing by hand.
 fn worktree(f: &Fixture) -> (PathBuf, sandbox::Runner) {
@@ -696,154 +441,16 @@ fn worktree(f: &Fixture) -> (PathBuf, sandbox::Runner) {
 }
 
 fn prepare_in(
-    f: &Fixture,
     wt: &Path,
     runner: &sandbox::Runner,
-    link: &[&str],
 ) -> Result<Option<prepare::Prepared>, prepare::Failure> {
-    let config = prepare::Config {
-        prepare: true,
-        link: link.iter().map(|s| (*s).to_owned()).collect(),
-        link_with_executor: false,
-    };
     prepare::prepare(&Prepare {
         worktree: wt,
         project: wt,
-        checkout: f.path(),
-        config: &config,
+        config: &prepare::Config::default(),
         runner,
         state: None,
     })
-}
-
-#[test]
-fn a_lockfile_that_differs_is_installed_with_the_reason() {
-    if !have("npm") || !sandboxed() {
-        return;
-    }
-    let f = fixture("", AGENT, Node::Npm);
-    let (wt, runner) = worktree(&f);
-    // The checkout's dependencies moved on, uncommitted.
-    let lock = f.path().join("package-lock.json");
-    fs::write(&lock, format!("{}\n", fs::read_to_string(&lock).unwrap())).unwrap();
-    let p = prepare_in(&f, &wt, &runner, &["node_modules"])
-        .unwrap()
-        .unwrap();
-    assert_eq!(p.record.roots[0].mode, Mode::Installed);
-    assert!(p.done[0].starts_with("npm ci --offline"), "{:?}", p.done);
-    assert_eq!(
-        p.notes,
-        [
-            "node_modules not linked: package-lock.json differs from your checkout's; installed in the worktree instead"
-        ]
-    );
-    assert!(p.record.linked().is_empty());
-    assert!(
-        !fs::symlink_metadata(wt.join("node_modules"))
-            .unwrap()
-            .file_type()
-            .is_symlink()
-    );
-}
-
-#[test]
-fn a_folder_the_checkout_does_not_ignore_or_lacks_is_never_linked() {
-    if !sandboxed() {
-        return;
-    }
-    let f = fixture("", AGENT, Node::Handmade);
-    fs::write(f.path().join(".gitignore"), "").unwrap();
-    git(f.path(), &["commit", "-qam", "nothing ignored"]);
-    let (wt, runner) = worktree(&f);
-    let root = prepare::roots(&wt).remove(0);
-    assert_eq!(
-        prepare::link_state(f.path(), &root, None).unwrap_err(),
-        "not git-ignored in your checkout"
-    );
-    fs::rename(f.path().join("node_modules"), f.path().join("elsewhere")).unwrap();
-    assert_eq!(
-        prepare::link_state(f.path(), &root, None).unwrap_err(),
-        "missing in your checkout"
-    );
-    // Preparing falls back to an install (none possible here: no npm cache
-    // holds the handmade lockfile), so the link is never made.
-    let _ = prepare_in(&f, &wt, &runner, &["node_modules"]);
-    assert!(
-        fs::symlink_metadata(wt.join("node_modules")).map_or(true, |m| !m.file_type().is_symlink())
-    );
-    assert!(
-        !fs::read_to_string(f.path().join(".git/info/exclude"))
-            .unwrap_or_default()
-            .contains("speccoder")
-    );
-}
-
-#[test]
-fn a_link_resolving_outside_the_checkout_or_unsandboxed_is_refused() {
-    let f = fixture("", AGENT, Node::Handmade);
-    let outside = tempfile::tempdir().unwrap();
-    fs::rename(f.path().join("node_modules"), outside.path().join("nm")).unwrap();
-    std::os::unix::fs::symlink(outside.path().join("nm"), f.path().join("node_modules")).unwrap();
-    let root = prepare::roots(f.path()).remove(0);
-    assert_eq!(
-        prepare::link_state(f.path(), &root, None).unwrap_err(),
-        format!(
-            "it resolves outside your checkout: your checkout's node_modules is itself a link (to {}), as in a Claude Code worktree — link from the checkout that holds the folder, or let the run install it",
-            fs::canonicalize(outside.path().join("nm"))
-                .unwrap()
-                .display()
-        )
-    );
-    let (wt, _) = worktree(&f);
-    // Unsandboxed, a link would be writable: refused before anything else,
-    // so the run installs instead — here it cannot (no cache holds the
-    // handmade lockfile), and with npm it would say why it did not link.
-    fs::remove_file(f.path().join("node_modules")).unwrap();
-    fs::rename(outside.path().join("nm"), f.path().join("node_modules")).unwrap();
-    match prepare_in(&f, &wt, &sandbox::Runner::Plain, &["node_modules"]) {
-        Ok(p) => {
-            let notes = p.map(|p| p.notes).unwrap_or_default();
-            assert_eq!(
-                notes,
-                [
-                    "node_modules not linked: commands run unsandboxed here, so a linked folder would be writable; installed in the worktree instead"
-                ]
-            );
-        }
-        Err(f) => assert!(
-            f.message
-                .contains("`npm ci --offline` failed in the worktree"),
-            "the install was tried instead: {}",
-            f.message
-        ),
-    }
-    assert!(
-        fs::symlink_metadata(wt.join("node_modules")).map_or(true, |m| !m.file_type().is_symlink())
-    );
-}
-
-#[test]
-fn linking_a_large_folder_takes_under_a_second() {
-    if !sandboxed() {
-        return;
-    }
-    let f = fixture("", AGENT, Node::Handmade);
-    for i in 0..200 {
-        let d = f.path().join(format!("node_modules/p{i}"));
-        fs::create_dir_all(&d).unwrap();
-        for j in 0..100 {
-            fs::write(d.join(format!("f{j}.js")), "x").unwrap();
-        }
-    }
-    let (wt, runner) = worktree(&f);
-    let began = std::time::Instant::now();
-    let p = prepare_in(&f, &wt, &runner, &["node_modules"])
-        .unwrap()
-        .unwrap();
-    let took = began.elapsed();
-    assert_eq!(p.done, ["linked node_modules"]);
-    eprintln!("linked a node_modules of 20 000 files in {took:?}");
-    assert!(took < std::time::Duration::from_secs(1), "{took:?}");
 }
 
 /// A uv project with a `src/` package and no dependencies (nothing to
@@ -900,107 +507,147 @@ fn uv_fixture(packaged: bool) -> Option<Fixture> {
 fn a_uv_worktree_is_synced_once_and_its_checks_import_it() {
     let Some(f) = uv_fixture(true) else { return };
     let (wt, runner) = worktree(&f);
-    let p = prepare_in(&f, &wt, &runner, &[]).unwrap().unwrap();
+    let p = prepare_in(&wt, &runner).unwrap().unwrap();
     assert!(
         p.done[0].starts_with("uv sync --locked --offline"),
         "{:?}",
         p.done
     );
     assert!(wt.join(".venv/bin/python").exists());
-    let again = prepare_in(&f, &wt, &runner, &[]).unwrap().unwrap();
+    let again = prepare_in(&wt, &runner).unwrap().unwrap();
     assert!(again.done.is_empty(), "{:?}", again.done);
 }
 
-#[test]
-fn a_linked_venv_is_used_only_when_the_worktrees_package_imports() {
-    let Some(f) = uv_fixture(true) else { return };
-    if !sandboxed() {
-        return;
+// ── [worktree] include ──────────────────────────────────────────────────────
+
+/// A value of the checkout's `.env`, long enough to be masked.
+const TOKEN: &str = "tok-Zx81-secret-value";
+
+/// The check prints the copied `.env` and its token's base64, and passes
+/// only where the file was copied.
+const ENV_CHECK: &str = "[checks.env]\nargv = [\"sh\", \"-c\", \"cat .env; grep API_TOKEN .env | cut -d= -f2 | tr -d '\\\\n' | base64; test -f .env\"]\n";
+
+/// A checkout with no dependencies and a git-ignored `.env`, copied by
+/// `[worktree] include`.
+fn env_fixture(script: &str) -> Fixture {
+    let f = fixture("[worktree]\ninclude = [\".env\"]\n", script, Node::Handmade);
+    let r = f.path();
+    for p in ["package.json", "package-lock.json"] {
+        git(r, &["rm", "-q", p]);
     }
-    let (wt, runner) = worktree(&f);
-    let p = prepare_in(&f, &wt, &runner, &[".venv"]).unwrap().unwrap();
-    assert_eq!(p.done, ["linked .venv"], "{:?}", p.notes);
-    let src = wt.join("src").display().to_string();
-    assert_eq!(p.record.roots[0].pythonpath.as_deref(), Some(src.as_str()));
-    assert_eq!(
-        p.record.env(),
-        [
-            ("PYTHONPATH".to_owned(), src.clone()),
-            ("UV_NO_SYNC".to_owned(), "1".to_owned())
-        ]
-    );
-    // Every command in the worktree gets it, and imports the worktree's code.
-    let (runner, _) = sandbox::runner_at(&wt).unwrap();
-    let out = sandbox::Runner::run_with(
-        &runner,
-        &speccoder_runtime::verify::process::Invocation {
-            argv: [
-                "uv",
-                "run",
-                "--locked",
-                "--offline",
-                "python",
-                "-c",
-                "import greet; print(greet.__file__)",
-            ]
-            .map(str::to_owned)
-            .to_vec(),
-            cwd: wt.clone(),
-            env: speccoder_runtime::verify::process::scrubbed_env(std::env::vars()),
-            timeout: std::time::Duration::from_secs(60),
-            output_cap: 64 * 1024,
-        },
-        false,
-    );
-    let printed = String::from_utf8_lossy(&out.stdout.kept).trim().to_owned();
-    assert_eq!(
-        out.exit_code,
-        Some(0),
-        "{}",
-        String::from_utf8_lossy(&out.stderr.kept)
-    );
-    assert!(
-        fs::canonicalize(&printed).unwrap().starts_with(&wt),
-        "{printed}"
-    );
-    prepare::unlink(&wt);
-    assert!(fs::symlink_metadata(wt.join(".venv")).is_err());
+    let _ = fs::remove_dir_all(r.join("node_modules"));
+    let toml = fs::read_to_string(r.join("speccoder.toml"))
+        .unwrap()
+        .replace(CHECK, ENV_CHECK);
+    fs::write(r.join("speccoder.toml"), toml).unwrap();
+    fs::write(r.join(".gitignore"), "node_modules/\n.env\n").unwrap();
+    git(r, &["add", "-A"]);
+    git(r, &["commit", "-qm", "env"]);
+    fs::write(r.join(".env"), format!("API_TOKEN={TOKEN}\nDEBUG=true\n")).unwrap();
+    f
+}
+
+fn base64_of(s: &str) -> String {
+    use base64::Engine as _;
+    base64::engine::general_purpose::STANDARD.encode(s)
+}
+
+/// Every file under `dir` but those under `except`, with its content.
+fn files_under(dir: &Path, except: &Path) -> Vec<(PathBuf, Vec<u8>)> {
+    let mut out = Vec::new();
+    let except = fs::canonicalize(except).unwrap();
+    let mut stack = vec![fs::canonicalize(dir).unwrap()];
+    while let Some(d) = stack.pop() {
+        for e in fs::read_dir(&d).into_iter().flatten().flatten() {
+            let p = e.path();
+            if p.starts_with(&except) {
+                continue;
+            }
+            match fs::symlink_metadata(&p) {
+                Ok(m) if m.is_dir() => stack.push(p),
+                Ok(m) if m.is_file() => out.push((p.clone(), fs::read(&p).unwrap_or_default())),
+                _ => {}
+            }
+        }
+    }
+    out
 }
 
 #[test]
-fn a_venv_that_would_import_the_checkouts_code_is_never_linked() {
-    let Some(f) = uv_fixture(false) else { return };
-    if !sandboxed() {
-        return;
+fn a_copied_env_value_is_masked_in_every_output_and_never_committed() {
+    let f = env_fixture("cat .env\necho done > done.txt\necho 'Did it.'");
+    let (res, _) = f.run("T005");
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let rep = report(&res);
+    let wt = PathBuf::from(&rep.worktree);
+    // Copied: the check that needs it passed.
+    assert!(fs::read_to_string(wt.join(".env")).unwrap().contains(TOKEN));
+    let shown = format!("{}\n{}", res.message(), serde_json::to_string(rep).unwrap());
+    assert!(
+        shown.contains("[redacted:API_TOKEN]"),
+        "the check's output is shown: {shown}"
+    );
+    for form in [TOKEN.to_owned(), base64_of(TOKEN)] {
+        assert!(!shown.contains(&form), "{form} in {shown}");
+        // Nothing speccoder keeps — journal, reports, records — holds it.
+        let wts = wt.parent().unwrap().to_path_buf();
+        for (p, bytes) in files_under(f.state.path(), &wts) {
+            assert!(
+                !String::from_utf8_lossy(&bytes).contains(&form),
+                "{form} in {}",
+                p.display()
+            );
+        }
     }
-    // The checkout's .venv imports `greet` from the checkout (as an
-    // editable install does); the worktree's own copy is gone.
-    let lib = f.path().join(".venv/lib");
-    let site = fs::read_dir(&lib)
-        .unwrap()
-        .flatten()
-        .next()
-        .map(|py| py.path().join("site-packages"))
-        .unwrap();
-    let pth = site.join("_greet.pth");
-    let points = format!("{}\n", f.path().join("src").display());
-    fs::write(&pth, &points).unwrap();
-    let (wt, runner) = worktree(&f);
-    fs::remove_dir_all(wt.join("src/greet")).unwrap();
-    let p = prepare_in(&f, &wt, &runner, &[".venv"]).unwrap().unwrap();
-    assert_eq!(p.record.roots[0].mode, Mode::Installed);
-    assert!(
-        p.notes[0].starts_with(".venv not linked: `import greet` resolves outside the worktree"),
-        "{:?}",
-        p.notes
-    );
-    assert!(p.record.env().is_empty());
-    assert!(
-        !fs::symlink_metadata(wt.join(".venv"))
-            .unwrap()
-            .file_type()
-            .is_symlink()
-    );
-    // The checkout's own .venv: untouched.
-    assert_eq!(fs::read_to_string(&pth).unwrap(), points);
+    // Never in the tick's commit.
+    assert_eq!(git(&wt, &["ls-files", ".env"]), "");
+    assert!(!git(&wt, &["log", "--all", "-p"]).contains(TOKEN));
+}
+
+#[test]
+fn a_copied_file_stays_out_of_the_commit_whatever_the_ignore_rules_say() {
+    // The attempt un-ignores it: still never staged.
+    let f = env_fixture("printf '!.env\\n' >> .gitignore\necho done > done.txt\necho 'Did it.'");
+    let (res, _) = f.run("T005");
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let wt = PathBuf::from(&report(&res).worktree);
+    assert!(git(&wt, &["show", "HEAD:.gitignore"]).contains("!.env"));
+    assert_eq!(git(&wt, &["ls-files", ".env"]), "");
+    assert!(!git(&wt, &["log", "--all", "-p"]).contains(TOKEN));
+}
+
+#[test]
+fn an_attempt_that_writes_a_copied_value_into_the_code_is_refused() {
+    for leak in [
+        "grep API_TOKEN .env | cut -d= -f2 > leaked.txt".to_owned(),
+        format!("echo 'const t = \"{}\";' > leaked.js", base64_of(TOKEN)),
+    ] {
+        let f = env_fixture(&format!("{leak}\necho done > done.txt\necho 'Did it.'"));
+        let (res, _) = f.run("T005");
+        assert_eq!(
+            res.code().map(|c| c.name),
+            Some("SECRET-IN-DIFF"),
+            "{}",
+            res.message()
+        );
+        assert!(res.message().contains("API_TOKEN"), "{}", res.message());
+        assert!(!res.message().contains(TOKEN));
+        let wt = PathBuf::from(
+            git(f.path(), &["worktree", "list", "--porcelain"])
+                .lines()
+                .filter_map(|l| l.strip_prefix("worktree "))
+                .nth(1)
+                .unwrap(),
+        );
+        assert!(
+            !wt.join("leaked.txt").exists() && !wt.join("leaked.js").exists(),
+            "undone"
+        );
+        assert!(!git(f.path(), &["log", "--all", "-p"]).contains(TOKEN));
+        let tasks = git(
+            f.path(),
+            &["show", "speccoder/001-graph:specs/001-graph/tasks.md"],
+        );
+        assert!(tasks.contains("- [ ] T005"), "nothing ticked");
+    }
 }

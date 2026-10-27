@@ -638,15 +638,45 @@ pub(crate) fn run_task(
         });
         refuse(status, m)
     };
-    // 4. Prepare: the worktree's dependency folders (Node, uv), linked
-    //    from the checkout or installed, once per lockfile. In place, the
-    //    checkout has its own.
+    // 4. Prepare: the git-ignored files `[worktree] include` names copied
+    //    from the checkout, and the worktree's dependency folders (Node,
+    //    uv) installed, once per lockfile. In place, the checkout has its own.
     let mut prepare_notes: Vec<String> = Vec::new();
-    let mut linked_dependencies = Vec::new();
-    let mut linked_folders: Vec<(std::path::PathBuf, crate::prepare::Toolchain)> = Vec::new();
+    if options.session.is_none() {
+        match crate::include::copy(
+            &wt_root,
+            &project,
+            Path::new(&s.snapshot.root),
+            &worktree_config.include,
+        ) {
+            Ok(c) => {
+                if !c.now.is_empty() {
+                    prepare_notes.push(format!(
+                        "copied from your checkout ([worktree] include): {}",
+                        c.now.join(", ")
+                    ));
+                }
+                prepare_notes.extend(
+                    c.skipped
+                        .iter()
+                        .map(|n| format!("not copied ([worktree] include): {n}")),
+                );
+                for n in &prepare_notes {
+                    live.event(&progress::Event::Notice { text: n.clone() });
+                }
+            }
+            Err(e) => {
+                return fail(
+                    CommandStatus::ConfigError,
+                    format!("the files [worktree] include names could not be copied: {e}"),
+                )
+                .with_code("PREPARE-FAILED");
+            }
+        }
+    }
     let prepares =
         options.session.is_none() && worktree_config.prepare && crate::prepare::needed(&project);
-    let runner = if prepares {
+    if prepares {
         let began = std::time::Instant::now();
         stage(
             &*live,
@@ -659,18 +689,13 @@ pub(crate) fn run_task(
         let prepared = crate::prepare::prepare(&crate::prepare::Prepare {
             worktree: &wt_root,
             project: &project,
-            checkout: Path::new(&s.snapshot.root),
             config: &worktree_config,
             runner: &runner,
             state: Some(state),
         });
         match prepared {
-            Ok(None) => runner,
+            Ok(None) => {}
             Ok(Some(p)) => {
-                for n in &p.notes {
-                    live.event(&progress::Event::Notice { text: n.clone() });
-                }
-                prepare_notes.clone_from(&p.notes);
                 stage(
                     &*live,
                     task,
@@ -687,16 +712,6 @@ pub(crate) fn run_task(
                     }),
                     Some(began),
                 );
-                linked_dependencies = p.record.linked();
-                for e in p
-                    .record
-                    .roots
-                    .iter()
-                    .filter(|e| e.mode == crate::prepare::Mode::Linked)
-                {
-                    linked_folders.push((project.join(e.folder()), e.toolchain));
-                }
-                runner.with_env(p.record.env())
             }
             Err(f) => {
                 stage(
@@ -712,20 +727,10 @@ pub(crate) fn run_task(
                     .with_fix(f.fix);
             }
         }
-    } else {
-        // Nothing to prepare (any more): what an earlier run linked goes,
-        // and with it the variables its record gave every command.
-        if options.session.is_none() {
-            crate::prepare::unlink(&wt_root);
-        }
-        runner.with_env(Vec::new())
-    };
-    // As the model names them: relative to the worktree's root.
-    let linked_paths: Vec<String> = linked_folders
-        .iter()
-        .filter_map(|(f, _)| f.strip_prefix(&wt_root).ok())
-        .map(|p| p.display().to_string())
-        .collect();
+    } else if options.session.is_none() {
+        // Nothing to prepare (any more): the next prepare starts over.
+        crate::prepare::forget(&wt_root);
+    }
 
     // 4'. Baseline: no verdict without a judge.
     let began = std::time::Instant::now();
@@ -761,14 +766,6 @@ pub(crate) fn run_task(
             .iter()
             .find_map(|c| broken(c).map(|w| (c, w)))
     {
-        // A write refused in a folder linked from the checkout says so.
-        let why = match crate::prepare::linked_note(
-            &format!("{}\n{}", c.stderr_tail, c.stdout_tail),
-            &linked_paths,
-        ) {
-            Some(note) => format!("{why} ({note}: remove it from [worktree] link)"),
-            None => why,
-        };
         stage(
             &*live,
             task,
@@ -875,10 +872,7 @@ pub(crate) fn run_task(
     // One plane for the whole task. Its tool server enforces denials; the
     // frozen-test approvals are the skill's, from its journaled input.
     let tools_server = match tools::WorkspaceTools::new(&wt_root, policy.clone()) {
-        Ok(t) => std::sync::Arc::new(
-            t.with_runner(runner.clone())
-                .with_linked(linked_paths.clone()),
-        ),
+        Ok(t) => std::sync::Arc::new(t.with_runner(runner.clone())),
         Err(e) => return fail(CommandStatus::Error, e.to_string()),
     };
     // Calls past their deadline are denied as expired before anything
@@ -1529,37 +1523,7 @@ pub(crate) fn run_task(
                 {
                     notices.push("held-out set withheld from the external agent, not sealed: it runs with your permissions; a copied held-out literal stops the tick".to_owned());
                 }
-                // The agent works outside the sandbox: a folder linked from
-                // the checkout it changed would make the verdict one about
-                // dependencies the attempt changed there.
-                let before: Vec<String> = linked_folders
-                    .iter()
-                    .map(|(folder, toolchain)| crate::prepare::fingerprint(folder, *toolchain))
-                    .collect();
                 let o = external::run(exec, &wt_root, &prompt, &allow, &tmp, withheld);
-                let changed: Vec<String> = linked_folders
-                    .iter()
-                    .zip(&before)
-                    .filter(|((folder, toolchain), before)| {
-                        crate::prepare::fingerprint(folder, *toolchain) != **before
-                    })
-                    .filter_map(|((folder, _), _)| {
-                        folder
-                            .strip_prefix(&project)
-                            .ok()
-                            .map(|p| p.display().to_string())
-                    })
-                    .collect();
-                if !changed.is_empty() {
-                    return fail(
-                        CommandStatus::NeedsHuman,
-                        format!(
-                            "the external agent changed {} — linked from your checkout ([worktree] link) — so nothing was judged or ticked",
-                            changed.join(", ")
-                        ),
-                    )
-                    .with_code("LINK-CHANGED");
-                }
                 (o.run_id, true, o.output)
             } else {
                 // The same key as an interrupted attempt resumes it.
@@ -1739,7 +1703,6 @@ pub(crate) fn run_task(
                 match crate::prepare::recheck(&crate::prepare::Prepare {
                     worktree: &wt_root,
                     project: &project,
-                    checkout: Path::new(&s.snapshot.root),
                     config: &worktree_config,
                     runner: &runner,
                     state: Some(state),
@@ -1757,14 +1720,6 @@ pub(crate) fn run_task(
                             )),
                             Some(began),
                         );
-                        let record = crate::prepare::load(&wt_root);
-                        linked_dependencies = record.linked();
-                        linked_folders = record
-                            .roots
-                            .iter()
-                            .filter(|e| e.mode == crate::prepare::Mode::Linked)
-                            .map(|e| (project.join(e.folder()), e.toolchain))
-                            .collect();
                     }
                     Err(f) => {
                         stage(
@@ -1797,12 +1752,25 @@ pub(crate) fn run_task(
                 *asked = n;
             }
             let approved_writes = approved_writes(&task_grants, &output["tool_calls"]);
+            let patch = worktree::patch(&wt_root, &before, &after).unwrap_or_default();
+            // A value copied from the person's secret files, written into a
+            // file git would commit: undone, never judged — named, never shown.
+            if let Some(name) = crate::include::added_secret(&patch) {
+                let _ = worktree::restore(&wt_root, &tmp, &before);
+                return fail(
+                    CommandStatus::NeedsHuman,
+                    format!(
+                        "the attempt's change adds the value of {name}, copied from your checkout ([worktree] include): undone, nothing judged or committed"
+                    ),
+                )
+                .with_code("SECRET-IN-DIFF");
+            }
             let findings = attempt_findings(&Audited {
                 wt_root: &wt_root,
                 policy: &policy,
                 judged_before: &judged_before,
                 raw_changes: &raw_changes,
-                patch: &worktree::patch(&wt_root, &before, &after).unwrap_or_default(),
+                patch: &patch,
                 frozen: &frozen,
                 frozen_additions: run_config.frozen_additions,
                 approved_writes: &approved_writes,
@@ -1842,7 +1810,6 @@ pub(crate) fn run_task(
                 acceptance: acceptance.as_ref().map(|a| a.report.clone()),
                 set_aside: set_aside.clone(),
                 notices: notices.clone(),
-                linked_dependencies: linked_dependencies.clone(),
                 ..bare_report(&feature_name, task, &wt_path, &attempt_status)
             };
             if let Err(e) = record_inline_approvals(

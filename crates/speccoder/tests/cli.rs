@@ -662,16 +662,11 @@ fn make_project() -> tempfile::TempDir {
 }
 
 #[test]
-fn init_yes_links_what_claude_code_links_and_json_alone_proposes_it() {
+fn init_yes_includes_the_ignored_env_and_json_alone_proposes_it() {
     for (yes, active) in [(false, false), (true, true)] {
         let dir = make_project();
-        std::fs::write(dir.path().join(".gitignore"), "node_modules/\n").unwrap();
-        std::fs::create_dir_all(dir.path().join(".claude")).unwrap();
-        std::fs::write(
-            dir.path().join(".claude/settings.json"),
-            r#"{ "worktree": { "symlinkDirectories": ["node_modules"] } }"#,
-        )
-        .unwrap();
+        std::fs::write(dir.path().join(".gitignore"), ".env\n").unwrap();
+        std::fs::write(dir.path().join(".env"), "TOKEN=abcdefgh1\n").unwrap();
         let mut c = speccoder();
         c.args(["--json", "init", "--no-verify", "-C"])
             .arg(dir.path());
@@ -680,18 +675,15 @@ fn init_yes_links_what_claude_code_links_and_json_alone_proposes_it() {
         }
         let v = support::result(&c.output().unwrap().stdout);
         assert_eq!(v["status"], "ok", "{v}");
-        assert_eq!(
-            v["data"]["link"],
-            serde_json::json!(["node_modules"]),
-            "{v}"
-        );
-        assert_eq!(v["data"]["link_active"], active, "{v}");
+        assert_eq!(v["data"]["include"], serde_json::json!([".env"]), "{v}");
+        assert_eq!(v["data"]["include_active"], active, "{v}");
         let text = std::fs::read_to_string(dir.path().join("speccoder.toml")).unwrap();
         assert_eq!(
-            text.contains("\n[worktree]\nlink = [\"node_modules\"]\n"),
+            text.contains("\n[worktree]\ninclude = [\".env\"]\n"),
             active,
             "{text}"
         );
+        assert!(!text.contains("abcdefgh1"));
     }
 }
 

@@ -867,7 +867,7 @@
           "title": "Sandbox"
         },
         {
-          "about": "How a run's worktree gets the dependency folders git never holds (node_modules, .venv).",
+          "about": "What a run's worktree gets that git never holds: dependency folders (node_modules, .venv) and git-ignored files such as .env.",
           "keys": [
             {
               "about": "auto installs Node and uv dependencies (locked, offline) before the baseline; off never",
@@ -884,10 +884,10 @@
               "value": null
             },
             {
-              "about": "Folders linked from your checkout instead, read-only, while the lockfile matches, e.g. node_modules",
+              "about": "Git-ignored files copied from your checkout, .gitignore patterns, e.g. .env (with .worktreeinclude's); secret values masked, never committed",
               "choices": [],
               "default": [],
-              "key": "link",
+              "key": "include",
               "kind": "string_list",
               "max": null,
               "min": null,

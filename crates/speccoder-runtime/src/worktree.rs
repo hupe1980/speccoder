@@ -130,7 +130,9 @@ pub fn scratch(checkout: &Path, under: &Path) -> Result<Scratch, GitError> {
 
 impl Drop for Scratch {
     fn drop(&mut self) {
-        crate::prepare::unlink(&self.path);
+        // Its records, kept beside it.
+        crate::prepare::forget(&self.path);
+        crate::include::forget(&self.path);
         let path = self.path.display().to_string();
         let git = Git::at(&self.repo);
         let _ = git.run(&["worktree", "remove", "--force", &path]);
@@ -336,8 +338,9 @@ pub fn remove_lane(repo_root: &Path, feature: &str, lane: &str) -> Result<(), Gi
     let branch = lane_branch(feature, lane);
     repo.run(&["worktree", "prune"])?;
     if let Some(existing) = worktree_for(&repo, &branch)? {
-        // Its links first, never what they point to.
-        crate::prepare::unlink(&existing);
+        // Its records, kept beside it.
+        crate::prepare::forget(&existing);
+        crate::include::forget(&existing);
         repo.run(&["worktree", "remove", "--force", &existing.to_string_lossy()])?;
     }
     if repo.succeeds(&[
@@ -665,7 +668,15 @@ pub fn checkpoint(dir: &Path, tmp: &Path) -> Result<Checkpoint, GitError> {
     } else {
         git.run_with_index(&index.0, &["read-tree", "--empty"], None)?;
     }
-    git.run_with_index(&index.0, &["add", "-A", "--", ":/"], None)?;
+    // Never a file copied from the checkout ([worktree] include): a
+    // checkpoint can become a commit (a saved attempt, `keep`).
+    let excluded = git
+        .toplevel()?
+        .map(|top| crate::include::pathspecs(&top))
+        .unwrap_or_default();
+    let mut add = vec!["add", "-A", "--", ":/"];
+    add.extend(excluded.iter().map(String::as_str));
+    git.run_with_index(&index.0, &add, None)?;
     let tree = git.run_with_index(&index.0, &["write-tree"], None)?;
     Ok(Checkpoint(String::from_utf8_lossy(&tree).trim().to_owned()))
 }

@@ -1363,10 +1363,6 @@ pub struct RunReport {
     /// What reached the implementer, by digest (constitution VIII).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context: Option<crate::context::ContextManifest>,
-    /// The dependency folders linked from the checkout into the worktree
-    /// (`[worktree] link`), each with its lockfile's digest.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub linked_dependencies: Vec<crate::predicate::LinkedDependency>,
 }
 
 /// A failed attempt that was undone and retried.
@@ -1499,15 +1495,17 @@ pub struct InitReport {
     pub region: Option<String>,
     /// The commit holding `speccoder.toml`, when one was made.
     pub committed: Option<String>,
-    /// The folders proposed for `[worktree] link`: those
-    /// `.claude/settings.json` links into Claude Code's worktrees that the
-    /// checkout ignores.
+    /// The git-ignored files proposed for `[worktree] include` (the
+    /// checkout's `.env` files): copied into each run's worktree.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub link: Vec<String>,
+    pub include: Vec<String>,
     /// The proposal was written as the setting (confirmed, or `--yes`);
     /// else it is commented.
     #[serde(default)]
-    pub link_active: bool,
+    pub include_active: bool,
+    /// The checkout has a `.worktreeinclude`, which runs read already.
+    #[serde(default)]
+    pub worktreeinclude: bool,
 }
 
 /// One check `init` ran on the untouched code.

@@ -155,14 +155,14 @@ describe("Settings › Model", () => {
 });
 
 describe("Settings › Worktree", () => {
-  it("changes how a run's worktree gets its dependencies like any other setting", async () => {
+  it("changes what a run's worktree gets like any other setting", async () => {
     const report: ConfigReport = {
       committed: true, diff: null, error: null, exists: true, file: "speccoder.toml", valid: true,
       sections: [{
-        name: "worktree", title: "Worktree", about: "How a run's worktree gets the dependency folders git never holds", named: false, tables: [],
+        name: "worktree", title: "Worktree", about: "What a run's worktree gets that git never holds", named: false, tables: [],
         keys: [
           key("prepare", "choice", null, { choices: ["auto", "off"], default: "auto" }),
-          key("link", "string_list", null, { default: [] }),
+          key("include", "string_list", null, { default: [] }),
         ],
       }],
     };
@@ -172,13 +172,13 @@ describe("Settings › Worktree", () => {
     const nav = [...document.querySelectorAll<HTMLButtonElement>("nav button")].find((b) => b.textContent?.includes("Worktree"))!;
     nav.click();
     flushSync();
-    expect(names()).toEqual(["Prepare", "Link"]);
+    expect(names()).toEqual(["Prepare", "Include"]);
     document.querySelector<HTMLButtonElement>('[role="radiogroup"][aria-label="Prepare"] button:nth-child(2)')!.click();
     flushSync();
     [...document.querySelectorAll<HTMLButtonElement>("button.add")].pop()!.click();
     flushSync();
-    const field = rowOf("Link")!.querySelector<HTMLInputElement>("input")!;
-    field.value = "node_modules";
+    const field = rowOf("Include")!.querySelector<HTMLInputElement>("input")!;
+    field.value = ".env";
     field.dispatchEvent(new Event("change", { bubbles: true }));
     flushSync();
     [...document.querySelectorAll<HTMLButtonElement>("button.primary")].find((b) => b.textContent === "Save")!.click();
@@ -186,7 +186,7 @@ describe("Settings › Worktree", () => {
     expect(host.post).toHaveBeenCalledWith("/api/config", {
       changes: [
         { key: "worktree.prepare", value: "off" },
-        { key: "worktree.link", value: ["node_modules"] },
+        { key: "worktree.include", value: [".env"] },
       ],
     });
     expect(await violations()).toEqual([]);

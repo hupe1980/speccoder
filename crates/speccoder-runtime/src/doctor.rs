@@ -426,29 +426,16 @@ pub fn checks(
             &["→ prefer a container or VM without your credentials"],
         ),
     });
-    // `[worktree] link`: each folder, linked now or why not — nothing made.
+    // `[worktree] include` and `.worktreeinclude`: what a run's worktree
+    // gets copied — names only, nothing copied.
     let worktree = text
         .as_deref()
         .and_then(|t| crate::prepare::parse(t).ok())
         .unwrap_or_default();
-    if let Some(dir) = crate::verify::find_config(path).filter(|_| worktree.prepare) {
-        // A run's worktree holds the current feature's branch when there is one.
-        let branch = opened
-            .as_ref()
-            .ok()
-            .and_then(|o| o.snapshot.feature.as_ref())
-            .map(|f| format!("speccoder/{}", f.feature.name))
-            .filter(|b| {
-                Git::at(&dir)
-                    .succeeds(&["rev-parse", "--verify", "-q", &format!("refs/heads/{b}")])
-                    .unwrap_or(false)
-            });
-        out.extend(link_checks(
-            &dir,
-            &worktree.link,
-            crate::sandbox::backend().is_ok() && sandbox.mode != crate::sandbox::Mode::Off,
-            branch.as_deref(),
-        ));
+    if let Some(dir) = crate::verify::find_config(path)
+        && let Some(row) = include_check(&dir, &worktree.include)
+    {
+        out.push(row);
     }
     // The state directory.
     out.push(match crate::worktree::state_dir() {
@@ -641,57 +628,36 @@ pub fn run(path: &Path, feature: Option<&str>, look: Option<&str>) -> CommandRes
     result.with_data(CommandData::Doctor(Box::new(report)))
 }
 
-/// A `worktree link` row per folder `[worktree] link` names: whether a
-/// run's worktree would link it now (its lockfile is the one committed on
-/// `branch`, the current feature's, else on `HEAD`), or why it would
-/// install it instead.
-fn link_checks(
-    project: &Path,
-    link: &[String],
-    sandboxed: bool,
-    branch: Option<&str>,
-) -> Vec<DoctorCheck> {
-    let roots = crate::prepare::roots(project);
-    link.iter()
-        .map(|folder| {
-            let name = "worktree link";
-            let instead = |why: &str| {
-                warned(
-                    name,
-                    format!("{folder}: not linked — {why}; a run installs it instead"),
-                    &[],
-                )
-            };
-            let Some(root) = roots.iter().find(|r| r.folder() == *folder) else {
-                return instead("no committed lockfile beside it names it");
-            };
-            if !sandboxed {
-                return instead("commands run unsandboxed, so it would be writable");
-            }
-            let committed = branch.map(|b| {
-                Git::at(project)
-                    .run(&["show", &format!("{b}:./{}", root.lockfile)])
-                    .map(|t| crate::integrity::sha256_hex(&t))
-                    .unwrap_or_default()
-            });
-            match crate::prepare::link_state(project, root, committed.as_deref()) {
-                Ok(_) if root.toolchain == crate::prepare::Toolchain::Uv => check(
-                    name,
-                    DoctorLevel::Pass,
-                    format!(
-                        "{folder}: linked ({} matches) once the import probe shows the package resolves in the worktree",
-                        root.lockfile
-                    ),
-                ),
-                Ok(_) => check(
-                    name,
-                    DoctorLevel::Pass,
-                    format!("{folder}: linked ({} matches)", root.lockfile),
-                ),
-                Err(why) => instead(&why),
-            }
-        })
-        .collect()
+/// The `worktree include` row: the git-ignored files a run's worktree gets
+/// copied from this checkout, by name; none when nothing names any.
+fn include_check(project: &Path, patterns: &[String]) -> Option<DoctorCheck> {
+    if patterns.is_empty() && !project.join(crate::include::FILE).is_file() {
+        return None;
+    }
+    let files = crate::include::matched(project, patterns);
+    let protected = crate::tools::paths::Protected::default();
+    let masked = files.iter().filter(|f| protected.is_secret(f)).count();
+    Some(if files.is_empty() {
+        warned(
+            "worktree include",
+            "nothing to copy: no git-ignored file matches [worktree] include or .worktreeinclude",
+            &[],
+        )
+    } else {
+        check(
+            "worktree include",
+            DoctorLevel::Pass,
+            format!(
+                "copied into each run's worktree: {}{}",
+                files.join(", "),
+                if masked == 0 {
+                    String::new()
+                } else {
+                    format!(" (the values of {masked} secret file(s) masked, never committed)")
+                }
+            ),
+        )
+    })
 }
 
 /// Untracked configuration a worktree will not have: speccoder works on
@@ -805,7 +771,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn each_linked_folder_says_whether_a_run_would_link_it_and_makes_nothing() {
+    fn the_files_a_worktree_gets_copied_are_named_and_nothing_is_copied() {
         let dir = tempfile::tempdir().unwrap();
         let r = dir.path();
         let git = |args: &[&str]| {
@@ -826,58 +792,28 @@ mod tests {
                     .success()
             );
         };
-        std::fs::write(r.join(".gitignore"), "node_modules/\n").unwrap();
-        std::fs::write(r.join("package.json"), "{}").unwrap();
-        std::fs::write(r.join("package-lock.json"), "{}").unwrap();
-        std::fs::create_dir_all(r.join("node_modules/tiny")).unwrap();
+        std::fs::write(r.join(".gitignore"), ".env\n*.local\n").unwrap();
+        std::fs::write(r.join("app.local"), "x").unwrap();
+        std::fs::write(r.join("tracked.local"), "x").unwrap();
         git(&["init", "-q"]);
         git(&["add", "-A"]);
+        git(&["add", "-f", "tracked.local"]);
         git(&["commit", "-qm", "init"]);
-        let link = ["node_modules".to_owned(), ".venv".to_owned()];
-        let rows = |sandboxed| -> Vec<(DoctorLevel, String)> {
-            link_checks(r, &link, sandboxed, None)
-                .into_iter()
-                .map(|c| (c.level, c.detail))
-                .collect()
-        };
+        std::fs::write(r.join(".env"), "TOKEN=abcdefgh123\n").unwrap();
+        assert!(include_check(r, &[]).is_none());
+        let row = include_check(r, &[".env".to_owned()]).unwrap();
+        assert_eq!(row.level, DoctorLevel::Pass);
         assert_eq!(
-            rows(true),
-            [
-                (
-                    DoctorLevel::Pass,
-                    "node_modules: linked (package-lock.json matches)".to_owned()
-                ),
-                (
-                    DoctorLevel::Warn,
-                    ".venv: not linked — no committed lockfile beside it names it; a run installs it instead".to_owned()
-                ),
-            ]
+            row.detail,
+            "copied into each run's worktree: .env (the values of 1 secret file(s) masked, never committed)"
         );
-        assert!(rows(false)[0].1.contains("commands run unsandboxed"));
-        // The current feature's branch moved its lockfile on: a run's
-        // worktree holds that one, not HEAD's.
-        git(&["branch", "-q", "speccoder/001-x"]);
-        git(&["checkout", "-q", "speccoder/001-x"]);
-        std::fs::write(r.join("package-lock.json"), "{\"next\": 1}").unwrap();
-        git(&["commit", "-qam", "lock"]);
-        git(&["checkout", "-q", "-"]);
-        let on = |branch| link_checks(r, &link, true, branch)[0].detail.clone();
-        assert!(on(None).contains("linked"), "{}", on(None));
-        assert!(
-            on(Some("speccoder/001-x")).contains("package-lock.json differs from your checkout's"),
-            "{}",
-            on(Some("speccoder/001-x"))
-        );
-        std::fs::write(r.join("package-lock.json"), "{\"changed\": 1}").unwrap();
-        assert!(
-            rows(true)[0]
-                .1
-                .contains("package-lock.json differs from your checkout's")
-        );
-        std::fs::remove_dir_all(r.join("node_modules")).unwrap();
-        assert!(rows(true)[0].1.contains("missing in your checkout"));
-        let exclude = std::fs::read_to_string(r.join(".git/info/exclude")).unwrap_or_default();
-        assert!(!exclude.contains("speccoder"), "doctor writes nothing");
+        assert!(!row.detail.contains("abcdefgh123"));
+        // `.worktreeinclude` too; a tracked file never.
+        std::fs::write(r.join(".worktreeinclude"), "*.local\n").unwrap();
+        let row = include_check(r, &[]).unwrap();
+        assert_eq!(row.detail, "copied into each run's worktree: app.local");
+        let row = include_check(r, &["nothing-here".to_owned()]).unwrap();
+        assert_eq!(row.detail, "copied into each run's worktree: app.local");
     }
 
     #[test]

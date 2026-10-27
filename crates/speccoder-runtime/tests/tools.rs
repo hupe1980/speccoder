@@ -721,56 +721,33 @@ fn the_model_writes_no_review_record_and_nothing_of_the_state_directory() {
     assert!(!state.path().join("comments/x.json").exists());
 }
 
-// ── [worktree] link ─────────────────────────────────────────────────────────
+// ── [worktree] include ──────────────────────────────────────────────────────
 
 #[test]
-fn a_write_into_a_linked_folder_is_refused_with_the_setting() {
+fn a_copied_secret_value_never_reaches_the_model_in_any_form() {
+    use base64::Engine as _;
     let w = worktree();
-    let checkout = tempfile::tempdir().unwrap();
-    fs::create_dir_all(checkout.path().join("node_modules/tiny")).unwrap();
-    fs::write(checkout.path().join("node_modules/tiny/index.js"), "x").unwrap();
-    std::os::unix::fs::symlink(
-        checkout.path().join("node_modules"),
-        w.path().join("node_modules"),
-    )
-    .unwrap();
-    let t = tools(w.path()).with_linked(vec!["node_modules".to_owned()]);
-    for (tool, args) in [
-        (
-            "write_file",
-            json!({"path": "node_modules/tiny/index.js", "content": "y"}),
-        ),
-        (
-            "edit_file",
-            json!({"path": "./node_modules/tiny/index.js", "old_string": "x", "new_string": "y"}),
-        ),
-        (
-            "write_file",
-            json!({"path": "node_modules", "content": "y"}),
-        ),
+    let value = "tools-mask-Tz42 secret";
+    speccoder_runtime::secrets::register("DB_PASSWORD", value);
+    let b64 = base64::engine::general_purpose::STANDARD.encode(value);
+    write(
+        w.path(),
+        "notes.txt",
+        &format!("plain {value}\nencoded {b64}\n"),
+    );
+    let t = tools(w.path());
+    // What a command prints, and what the file tools return.
+    for v in [
+        call(&t, "run_command", json!({"argv": ["cat", "notes.txt"]})),
+        call(&t, "read_file", json!({"path": "notes.txt"})),
+        call(&t, "search_code", json!({"pattern": "Tz42"})),
     ] {
-        let v = call(&t, tool, args);
-        assert!(
-            err(&v).contains("linked from the checkout, read-only ([worktree] link)"),
-            "{v}"
-        );
+        let shown = v.to_string();
+        assert!(!shown.contains(value) && !shown.contains(&b64), "{shown}");
     }
-    // What the person decides on says so too.
-    let v = call(
-        &t,
-        "resolve",
-        json!({"tool": "write_file", "arguments": {"path": "node_modules/a.js"}}),
-    );
-    assert!(err(&v).contains("[worktree] link"), "{v}");
-    // A sibling of the same prefix is no linked folder.
-    let v = call(
-        &t,
-        "write_file",
-        json!({"path": "node_modules_notes.md", "content": "y"}),
-    );
-    assert_eq!(v["ok"], true, "{v}");
+    let v = call(&t, "run_command", json!({"argv": ["cat", "notes.txt"]}));
     assert_eq!(
-        fs::read_to_string(checkout.path().join("node_modules/tiny/index.js")).unwrap(),
-        "x"
+        v["stdout"],
+        "plain [redacted:DB_PASSWORD]\nencoded [redacted:DB_PASSWORD]\n"
     );
 }

@@ -1509,29 +1509,6 @@
       ],
       "type": "object"
     },
-    "LinkedDependency": {
-      "description": "A dependency folder linked from the person's checkout into the\nworktree instead of installed there (revision 4): the checks ran\nagainst it, so the tick names it and the lockfile it was checked against.",
-      "properties": {
-        "lockfile": {
-          "description": "The lockfile it matched byte for byte, project-relative.",
-          "type": "string"
-        },
-        "path": {
-          "description": "The folder, project-relative (`node_modules`, `api/.venv`).",
-          "type": "string"
-        },
-        "sha256": {
-          "description": "sha256 of that lockfile.",
-          "type": "string"
-        }
-      },
-      "required": [
-        "path",
-        "lockfile",
-        "sha256"
-      ],
-      "type": "object"
-    },
     "ListingRun": {
       "description": "A listing speccoder ran because the earlier sources left a file undecided.",
       "properties": {
@@ -2912,13 +2889,6 @@
       "description": "Integrity findings of the attempt's diff (each also fails the verdict).",
       "items": {
         "type": "string"
-      },
-      "type": "array"
-    },
-    "linked_dependencies": {
-      "description": "The dependency folders linked from the checkout into the worktree\n(`[worktree] link`), each with its lockfile's digest.",
-      "items": {
-        "$ref": "#/$defs/LinkedDependency"
       },
       "type": "array"
     },

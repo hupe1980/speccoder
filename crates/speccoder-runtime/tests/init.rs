@@ -284,50 +284,67 @@ fn git_init(dir: &std::path::Path) {
 }
 
 #[test]
-fn claude_codes_linked_folders_are_proposed_for_worktree_link() {
+fn ignored_env_files_are_proposed_for_worktree_include() {
     let dir = tempfile::tempdir().unwrap();
     let r = dir.path();
     git_init(r);
-    fs::write(r.join(".gitignore"), "node_modules/\n.venv/\n").unwrap();
-    fs::create_dir_all(r.join(".claude")).unwrap();
-    // Ignored ones only; nothing outside the project, nothing tracked.
-    fs::write(
-        r.join(".claude/settings.json"),
-        r#"{ "worktree": { "symlinkDirectories": ["node_modules", ".venv/", "dist", "../shared", ".git"] } }"#,
-    )
-    .unwrap();
-    assert_eq!(detect(r).link, ["node_modules", ".venv"]);
+    fs::write(r.join(".gitignore"), ".env\n.env.*\n").unwrap();
+    fs::write(r.join(".env"), "TOKEN=abcdefgh1\n").unwrap();
+    fs::create_dir_all(r.join("api")).unwrap();
+    fs::write(r.join("api/.env.local"), "X=1\n").unwrap();
+    assert_eq!(detect(r).include, [".env", "api/.env.local"]);
     let res = init_with(r, None, None, None, false, None, &no_keys);
     assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
     let Some(CommandData::Init(i)) = res.data() else {
         panic!()
     };
-    assert_eq!(i.link, ["node_modules", ".venv"]);
-    assert!(!i.link_active);
+    assert_eq!(i.include, [".env", "api/.env.local"]);
+    assert!(!i.include_active && !i.worktreeinclude);
     let text = fs::read_to_string(r.join("speccoder.toml")).unwrap();
     assert!(
-        text.contains("# [worktree]\n# link = [\"node_modules\", \".venv\"]\n"),
+        text.contains("# [worktree]\n# include = [\".env\", \"api/.env.local\"]\n"),
         "{text}"
     );
     // Written commented: not in force until confirmed.
     assert!(
         speccoder_runtime::prepare::parse(&text)
             .unwrap()
-            .link
+            .include
             .is_empty()
     );
-    speccoder_runtime::init::activate_link(r).unwrap();
+    speccoder_runtime::init::activate_include(r).unwrap();
     let text = fs::read_to_string(r.join("speccoder.toml")).unwrap();
     assert_eq!(
-        speccoder_runtime::prepare::parse(&text).unwrap().link,
-        ["node_modules", ".venv"]
+        speccoder_runtime::prepare::parse(&text).unwrap().include,
+        [".env", "api/.env.local"]
     );
     assert!(speccoder_runtime::settings::validate(&text).is_ok());
-    assert!(speccoder_runtime::init::activate_link(r).is_err(), "once");
+    assert!(
+        speccoder_runtime::init::activate_include(r).is_err(),
+        "once"
+    );
 }
 
 #[test]
-fn without_claude_codes_setting_worktree_is_explained_commented() {
+fn a_worktreeinclude_is_named_and_nothing_is_proposed() {
+    let dir = tempfile::tempdir().unwrap();
+    let r = dir.path();
+    git_init(r);
+    fs::write(r.join(".gitignore"), ".env\n").unwrap();
+    fs::write(r.join(".env"), "TOKEN=abcdefgh1\n").unwrap();
+    fs::write(r.join(".worktreeinclude"), ".env\n").unwrap();
+    let res = init_with(r, None, None, None, false, None, &no_keys);
+    let Some(CommandData::Init(i)) = res.data() else {
+        panic!()
+    };
+    assert!(i.worktreeinclude);
+    let text = fs::read_to_string(r.join("speccoder.toml")).unwrap();
+    assert!(text.contains("names copied from this"), "{text}");
+    assert!(speccoder_runtime::init::activate_include(r).is_err());
+}
+
+#[test]
+fn without_env_files_worktree_is_explained_commented() {
     let dir = tempfile::tempdir().unwrap();
     git_init(dir.path());
     let res = init_with(dir.path(), None, None, None, false, None, &no_keys);
@@ -337,10 +354,10 @@ fn without_claude_codes_setting_worktree_is_explained_commented() {
         text.contains("# [worktree]\n# prepare = \"auto\""),
         "{text}"
     );
-    assert!(text.contains("\n# link = [\"node_modules\"]"), "{text}");
+    assert!(text.contains("\n# include = [\".env\"]"), "{text}");
     assert_eq!(
         speccoder_runtime::prepare::parse(&text).unwrap(),
         speccoder_runtime::prepare::Config::default()
     );
-    assert!(speccoder_runtime::init::activate_link(dir.path()).is_err());
+    assert!(speccoder_runtime::init::activate_include(dir.path()).is_err());
 }

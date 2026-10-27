@@ -957,7 +957,6 @@ fn with_the_real_tools_a_new_node_or_uv_project_needs_no_setup_for_its_first_tas
         let p = prepare::prepare(&prepare::Prepare {
             worktree: &wt,
             project: &wt,
-            checkout: &checkout,
             config: &prepare::Config::default(),
             runner: &runner,
             state: Some(m.state.path()),
@@ -968,12 +967,7 @@ fn with_the_real_tools_a_new_node_or_uv_project_needs_no_setup_for_its_first_tas
         for f in [".npmrc", "uv.toml"] {
             fs::remove_file(wt.join(f)).unwrap();
         }
-        let report = verify::run_checks(
-            &wt,
-            Some(verify::config::Tier::Fast),
-            &runner.with_env(p.record.env()),
-        )
-        .unwrap();
+        let report = verify::run_checks(&wt, Some(verify::config::Tier::Fast), &runner).unwrap();
         for c in &report.checks {
             let output = format!("{}\n{}", c.stdout_tail, c.stderr_tail);
             assert!(
