@@ -470,8 +470,16 @@ fn bedrock_runs_a_task_for_real() {
     let (driver, key) = speccoder_runtime::substrate::model_config::open_driver(&model).unwrap();
     let res = run_with(r.path(), None, "T001", state.path(), driver, key.as_deref());
     let rep = report(&res);
-    assert!(rep.verdict.is_some(), "{}", res.message());
+    // What the model chose is its own: a verdict, or a call it stopped to
+    // ask about. What this checks is that Bedrock answered.
+    assert!(
+        rep.verdict.is_some() || res.message().contains("needs approval"),
+        "{:?}: {}",
+        res.code().map(|c| c.name),
+        res.message()
+    );
     let usage = rep.usage.as_ref().expect("usage");
+    eprintln!("usage: {usage}");
     assert!(usage["input_tokens"].as_u64().unwrap_or(0) > 0, "{usage}");
 }
 
