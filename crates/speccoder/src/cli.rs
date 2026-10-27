@@ -25,6 +25,57 @@ impl From<SpecFormat> for speccoder_core::spec::FormatKind {
     }
 }
 
+/// `--stack` of `speccoder new`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum StackArg {
+    /// Rust with cargo.
+    Rust,
+    /// Python with uv and pytest.
+    Python,
+    /// TypeScript with npm and vitest.
+    Node,
+    /// Go modules.
+    Go,
+    /// No scaffold: you add code.
+    None,
+}
+
+impl From<StackArg> for speccoder_core::new_project::Stack {
+    fn from(s: StackArg) -> Self {
+        match s {
+            StackArg::Rust => Self::Rust,
+            StackArg::Python => Self::Python,
+            StackArg::Node => Self::Node,
+            StackArg::Go => Self::Go,
+            StackArg::None => Self::None,
+        }
+    }
+}
+
+/// `--through`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum ThroughArg {
+    /// The spec only.
+    Spec,
+    /// The spec and the plan.
+    Plan,
+    /// The spec, the plan and the tasks.
+    Tasks,
+    /// Then the format's check of the planning files.
+    Analyze,
+}
+
+impl From<ThroughArg> for speccoder_core::actions::Through {
+    fn from(t: ThroughArg) -> Self {
+        match t {
+            ThroughArg::Spec => Self::Spec,
+            ThroughArg::Plan => Self::Plan,
+            ThroughArg::Tasks => Self::Tasks,
+            ThroughArg::Analyze => Self::Analyze,
+        }
+    }
+}
+
 /// `--color`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum ColorArg {
@@ -130,6 +181,51 @@ pub enum Command {
         /// Ask nothing (and so commit nothing: the fix line says what to commit).
         #[arg(long)]
         yes: bool,
+    },
+    /// Start a project from one line of intent: the stack's and the spec format's own tools, then `init`, one commit.
+    New {
+        /// The folder (default: a folder named after the idea, else here).
+        path: Option<PathBuf>,
+        /// What you are building, in a line (also the first feature's description).
+        #[arg(long)]
+        idea: Option<String>,
+        /// The stack's scaffold (default: suggested from the idea and the installed tools).
+        #[arg(long, value_enum)]
+        stack: Option<StackArg>,
+        /// A Spec Kit extension: a bundled name, a local path or a URL (repeatable).
+        #[arg(long, value_name = "NAME|PATH|URL")]
+        extension: Vec<String>,
+        /// Leave out the speccoder Spec Kit preset (tasks that plan for evidence).
+        #[arg(long)]
+        no_preset: bool,
+        /// Print the plan and its digest; change nothing.
+        #[arg(long, conflicts_with = "undo")]
+        dry_run: bool,
+        /// Run the plan without asking.
+        #[arg(long)]
+        yes: bool,
+        /// Never ask: without --yes, print the plan and stop.
+        #[arg(long)]
+        no_prompt: bool,
+        /// Undo the project speccoder created here: to the Trash, or revert its commit.
+        #[arg(long)]
+        undo: bool,
+    },
+    /// Try the sample: a recorded run, replayed strictly — no model, no key, no network.
+    Sample {
+        /// Replace an existing copy of the sample (your changes to it are discarded).
+        #[arg(long)]
+        fresh: bool,
+        /// With --fresh: replace it without asking.
+        #[arg(long)]
+        yes: bool,
+    },
+    /// Which rung a description suggests — bug fix, quick change, feature or a question — and why.
+    #[command(hide = true)]
+    Suggest {
+        /// The description.
+        #[arg(required = true, trailing_var_arg = true)]
+        text: Vec<String>,
     },
     /// Fix what in the project's setup stops a run: commit it in your checkout.
     #[command(hide = true)]
@@ -240,8 +336,12 @@ pub enum Command {
     },
     /// Which feature commands work on: list them, or make one current (`feature 2`, `feature greet`).
     Feature {
-        /// A name, a number (`2` is `002-…`), or a part of the name only one feature has.
+        /// A name, a number (`2` is `002-…`), or a part of the name only one feature has;
+        /// `similar "…"`: the requirements close to a description.
         query: Option<String>,
+        /// With `similar`: the description.
+        #[arg(trailing_var_arg = true, hide = true)]
+        text: Vec<String>,
         /// Forget the current feature.
         #[arg(long, conflicts_with = "query")]
         clear: bool,
@@ -262,6 +362,9 @@ pub enum Command {
         /// archive: a task ticked without a speccoder verdict that you accept, by ID.
         #[arg(long, value_name = "TASK")]
         allow_unverified: Vec<String>,
+        /// Plan on through the format's own skills (spec, plan, tasks, analyze), stopping where you decide.
+        #[arg(long, value_enum, value_name = "STEP")]
+        through: Option<ThroughArg>,
     },
     /// Work through the feature's ready tasks, or one (`--task T005`); resumes where it stopped.
     Run {
@@ -899,6 +1002,9 @@ pub enum IssueAction {
         /// Also assign the issue to you.
         #[arg(long)]
         assign: bool,
+        /// Plan on through the format's own skills (spec, plan, tasks, analyze), stopping where you decide.
+        #[arg(long, value_enum, value_name = "STEP")]
+        through: Option<ThroughArg>,
     },
     /// Comment on an issue that the current feature is being specified from it (once per feature).
     Comment {

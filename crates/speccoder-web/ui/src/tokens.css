@@ -246,3 +246,48 @@ kbd {
 
 /* View changes cross-fade (View Transitions where supported). */
 ::view-transition-old(root), ::view-transition-new(root) { animation-duration: 180ms; animation-timing-function: var(--ease); }
+
+/* The doors into speccoder — composer, New Feature, New Project, Clone —
+   share the sheets' look: glass over a scrim, a header badge, fields,
+   the primary button last. Every state says itself with a glyph and a word. */
+.d-scrim { position: fixed; inset: 0; background: var(--scrim); display: grid; place-items: center; z-index: 22; backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); padding: 1rem; }
+.d-sheet { width: min(680px, 100%); max-height: calc(100vh - 2rem); overflow: auto; border-radius: var(--radius-xl); background: var(--glass-strong); box-shadow: var(--shadow-lg), var(--glass-edge); padding: 1.4rem 1.5rem 1.2rem; display: grid; gap: 0.95rem; animation: d-sheet 360ms var(--spring); }
+.d-sheet.wide { width: min(760px, 100%); }
+@keyframes d-sheet { from { transform: scale(0.96) translateY(8px); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .d-sheet { animation: none; } }
+.d-head { display: flex; gap: 0.9rem; align-items: flex-start; }
+.d-badge { width: 44px; height: 44px; border-radius: 12px; flex: none; display: grid; place-items: center; color: #fff; background: linear-gradient(180deg, #3b9bff, #0060df); }
+.d-badge.violet { background: linear-gradient(180deg, #bf5af2, #8944ab); }
+.d-badge.green { background: linear-gradient(180deg, #34c759, #248a3d); }
+.d-head h2 { margin: 0; font: 650 1.25rem/1.25 var(--display); letter-spacing: -0.016em; }
+.d-head p { margin: 0.3rem 0 0; color: var(--text-2); font-size: 0.9rem; }
+.d-field { display: grid; gap: 0.4rem; }
+.d-field > .d-label, .d-field > label > .d-label { font-weight: 600; font-size: 0.88rem; }
+.d-sheet textarea, .d-sheet input[type="text"], .d-sheet input:not([type]), .d-sheet select { padding: 0.5rem 0.7rem; border-radius: 9px; border: 0.5px solid var(--separator); background: var(--surface); color: var(--text); font: inherit; }
+.d-sheet textarea { resize: vertical; line-height: 1.5; font-size: 1rem; width: 100%; box-sizing: border-box; }
+.d-sheet textarea:focus, .d-sheet input:focus, .d-sheet select:focus { outline: none; box-shadow: 0 0 0 3.5px var(--focus); }
+.d-sheet [aria-invalid="true"] { box-shadow: 0 0 0 2px var(--danger-fill); }
+.d-row { display: flex; justify-content: flex-end; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+.d-row .d-hint { margin-right: auto; font-size: 0.76rem; color: var(--muted); }
+.d-grid { display: grid; grid-template-columns: 7.5rem 1fr; gap: 0.45rem 0.8rem; align-items: baseline; font-size: 0.9rem; }
+.d-grid > dt { color: var(--muted); font-weight: 600; font-size: 0.84rem; }
+.d-grid > dd { margin: 0; min-width: 0; }
+.d-radios { display: flex; flex-wrap: wrap; gap: 0.35rem 0.9rem; }
+.d-radios label { display: inline-flex; align-items: center; gap: 0.35rem; cursor: pointer; }
+.d-radios label.off { opacity: 0.5; cursor: default; }
+.d-note { font-size: 0.8rem; color: var(--muted); }
+.d-error { color: var(--danger); font-size: 0.84rem; }
+.d-warn { display: grid; gap: 0.2rem; padding: 0.55rem 0.7rem; border-radius: 10px; background: var(--fill); font-size: 0.86rem; }
+.d-warn.attention { background: var(--attention-bg); color: var(--attention); }
+.d-mono { font: 0.82rem/1.5 var(--mono); background: var(--fill); border-radius: 8px; padding: 0.55rem 0.7rem; white-space: pre-wrap; word-break: break-all; }
+.d-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; border-radius: 10px; overflow: hidden; background: var(--separator); }
+.d-steps > li { display: grid; grid-template-columns: 1.4rem 1.6rem 1fr auto; gap: 0.5rem; align-items: baseline; padding: 0.42rem 0.6rem; background: var(--surface); font-size: 0.84rem; }
+.d-steps .n { color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+.d-steps code { font: 0.8rem/1.45 var(--mono); word-break: break-all; }
+.d-steps .badge-net { color: var(--attention); font-weight: 600; white-space: nowrap; }
+.d-steps .badge-local { color: var(--muted); white-space: nowrap; }
+.d-steps .st-failed { color: var(--danger); }
+.d-steps .st-done { color: var(--verified); }
+.d-steps details { grid-column: 3 / -1; }
+.d-steps pre { margin: 0.3rem 0 0; font: 0.76rem/1.45 var(--mono); white-space: pre-wrap; color: var(--text-2); }
+@media (max-width: 640px) { .d-sheet { width: 100%; padding: 1.1rem 1rem; } .d-grid { grid-template-columns: 1fr; } }

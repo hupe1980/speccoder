@@ -149,6 +149,34 @@ pub fn available_with(
         out.push(r);
     }
     let planning_next: Vec<String> = report.map(|r| r.planning.clone()).unwrap_or_default();
+    // Plan through: the rest of the chain in one action, from the files —
+    // offered after a stop as its continuation (no chain state is kept).
+    if let Some(first) = planning_next.first() {
+        let mut a = action(
+            "next",
+            "plan through to tasks",
+            "the format's own skills in order; it stops for open questions and your review",
+            format!("speccoder spec {first} --through tasks"),
+        );
+        a = a.with_run(Runnable::PlanThrough {
+            from: speccoder_core::actions::PlanFrom::Continue,
+            through: speccoder_core::actions::Through::Tasks,
+        });
+        let gate = crate::review::summary(path, feature).and_then(|r| {
+            if !r.questions.is_empty() {
+                Some(format!(
+                    "answer the {} open question{} first",
+                    r.questions.len(),
+                    if r.questions.len() == 1 { "" } else { "s" }
+                ))
+            } else {
+                (!r.requirements.is_empty() && !r.totals.complete())
+                    .then(|| "approve the spec's requirements first (Review)".to_owned())
+            }
+        });
+        a.blocked = gate;
+        out.push(a);
+    }
     for name in &planning_next {
         let why = match name.as_str() {
             "plan" => "write the plan from the spec",
@@ -480,13 +508,22 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::RevisionUndo
             | K::CodeNudge
             | K::AcceptanceAt
-            | K::PresetAdd => Offer::Take,
+            | K::PresetAdd
+            | K::PlanThrough
+            | K::NewProject
+            | K::UndoNewProject
+            | K::CloneRepository
+            | K::OpenSample
+            | K::SampleChecks => Offer::Take,
             K::Command => Offer::Refuse,
         },
         // Decisions belong to their own prompt; what leaves the machine
         // or asks for words is the person's own command there.
         Interface::CliFollow => match kind {
-            K::Skill | K::RunTask | K::RunFeature | K::Converge | K::Commit => Offer::Take,
+            // Plan through's continuation is the `Next:` step after a stop.
+            K::Skill | K::RunTask | K::RunFeature | K::Converge | K::Commit | K::PlanThrough => {
+                Offer::Take
+            }
             K::Approve
             | K::Reject
             | K::Accept
@@ -516,6 +553,11 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::CodeNudge
             | K::AcceptanceAt
             | K::PresetAdd
+            | K::NewProject
+            | K::UndoNewProject
+            | K::CloneRepository
+            | K::OpenSample
+            | K::SampleChecks
             | K::Command => Offer::Refuse,
         },
         // Its keys decide the queue's calls and switch the feature; `n`
@@ -551,6 +593,12 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::CodeNudge
             | K::AcceptanceAt
             | K::PresetAdd
+            | K::PlanThrough
+            | K::NewProject
+            | K::UndoNewProject
+            | K::CloneRepository
+            | K::OpenSample
+            | K::SampleChecks
             | K::Command => Offer::Refuse,
         },
         Interface::CliRemedy | Interface::AcpRemedy => match kind {
@@ -588,6 +636,12 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::CodeNudge
             | K::AcceptanceAt
             | K::PresetAdd
+            | K::PlanThrough
+            | K::NewProject
+            | K::UndoNewProject
+            | K::CloneRepository
+            | K::OpenSample
+            | K::SampleChecks
             | K::Command => Offer::Refuse,
         },
     }
@@ -872,6 +926,59 @@ pub fn perform_in(
         Runnable::CodeNudge { task, comments } => {
             crate::comments::code_nudge(root, feature, task, comments, state)
         }
+        // The format's own skills, in its order; the stops are read from
+        // the unit's files, so nothing of the chain is kept here.
+        Runnable::PlanThrough {
+            from:
+                speccoder_core::actions::PlanFrom::Create {
+                    description,
+                    source,
+                },
+            through,
+        } => {
+            let description = if description.trim().is_empty() {
+                text.unwrap_or_default()
+            } else {
+                description.as_str()
+            };
+            plan_through(root, description, source, *through, options)
+        }
+        Runnable::PlanThrough {
+            from: speccoder_core::actions::PlanFrom::Continue,
+            through,
+        } => crate::planning_chain::resume(root, feature, *through, options),
+        // The plan the person confirmed, recomputed and compared first.
+        Runnable::NewProject {
+            target,
+            choices,
+            plan_digest,
+        } => match state {
+            Some(s) => crate::new_project::perform(
+                Path::new(target),
+                choices,
+                plan_digest,
+                via,
+                s,
+                options,
+            ),
+            None => no_state(),
+        },
+        Runnable::UndoNewProject { commit } => match state {
+            Some(s) => crate::new_project::undo(root, commit, via, s, options),
+            None => no_state(),
+        },
+        // The interface has confirmed it names github.com.
+        Runnable::CloneRepository { repo, target } => {
+            crate::github::clone(&crate::github::Ctx::from_env(), repo, Path::new(target))
+        }
+        Runnable::OpenSample { fresh } => match state {
+            Some(s) => crate::sample::open(s, *fresh),
+            None => no_state(),
+        },
+        Runnable::SampleChecks => match state {
+            Some(s) => crate::sample::run_checks(s, root),
+            None => no_state(),
+        },
         // The interface has confirmed it (the action's `confirm`): push
         // and open.
         Runnable::PullRequest => crate::handoff::pr(
@@ -926,6 +1033,16 @@ fn skill(
     options: &RunOptions,
 ) -> CommandResult {
     crate::hosting::run(root, feature, name, input.unwrap_or(carried), options)
+}
+
+fn plan_through(
+    root: &Path,
+    description: &str,
+    source: &speccoder_core::actions::FeatureSource,
+    through: speccoder_core::actions::Through,
+    options: &RunOptions,
+) -> CommandResult {
+    crate::planning_chain::start(root, description, source, through, options)
 }
 
 fn run_task(root: &Path, feature: Option<&str>, task: &str, options: &RunOptions) -> CommandResult {
@@ -1003,10 +1120,11 @@ mod tests {
             }
         }
         // The web host runs every runnable kind; the terminal the steps
-        // it offers; the remedies only the setup's fix.
+        // it offers (plan through's continuation among them); the remedies
+        // only the setup's fix.
         let runnable = Runnable::examples().len();
         // The dashboard also decides Always Allow and batches.
-        assert_eq!(taken, runnable + 5 + 5 + 2);
+        assert_eq!(taken, runnable + 6 + 5 + 2);
         assert_eq!(
             offered(Interface::CliFollow, ActionKind::PullRequest),
             Offer::Refuse

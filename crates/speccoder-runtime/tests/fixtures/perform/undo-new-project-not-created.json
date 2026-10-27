@@ -1,0 +1,17 @@
+{
+  "head": "init",
+  "result": {
+    "code": "NEW-UNDO-REFUSED",
+    "command": "new",
+    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#new-undo-refused",
+    "exit_code": 14,
+    "fix": [
+      "→ undo it yourself; nothing was moved"
+    ],
+    "message": "speccoder did not create <root>; nothing was moved",
+    "schema_version": 2,
+    "status": "git_precondition"
+  },
+  "review": null,
+  "status": ""
+}

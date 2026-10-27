@@ -1,0 +1,18 @@
+#!/bin/sh
+# A stand-in for OpenSpec: `init` writes the project and, as OpenSpec
+# 1.15.0 does, a settings file in the config directory.
+. "$(dirname "$0")/_log.sh"
+log openspec "$@"
+case "$1" in
+  --version) echo "1.15.0" ;;
+  init)
+    misbehave openspec
+    mkdir -p openspec/specs openspec/changes/archive .claude/skills/openspec-propose
+    printf 'schema: spec-driven\n' > openspec/config.yaml
+    : > openspec/specs/.gitkeep; : > openspec/changes/archive/.gitkeep
+    printf -- '---\nname: openspec-propose\ndescription: propose.\n---\n\n$ARGUMENTS\n' > .claude/skills/openspec-propose/SKILL.md
+    mkdir -p "${XDG_CONFIG_HOME:-$HOME/.config}/openspec"
+    printf '{}\n' > "${XDG_CONFIG_HOME:-$HOME/.config}/openspec/config.json"
+    ;;
+  *) ;;
+esac

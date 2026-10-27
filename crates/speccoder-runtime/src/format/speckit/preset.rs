@@ -27,6 +27,13 @@ pub fn version() -> &'static str {
     env!("CARGO_PKG_VERSION")
 }
 
+/// Where [`extract`] puts the bundled preset: `<state>/presets/speccoder-<version>/`
+/// (read-only: a plan names it before anything is written).
+#[must_use]
+pub fn dir(state: &Path) -> PathBuf {
+    state.join("presets").join(format!("{ID}-{}", version()))
+}
+
 /// Writes the bundled preset to `<state>/presets/speccoder-<version>/`
 /// (idempotent: files already as bundled are kept) and returns that
 /// directory — what `specify preset add --dev` and `specify init --preset`
@@ -36,7 +43,7 @@ pub fn version() -> &'static str {
 ///
 /// The directory cannot be written.
 pub fn extract(state: &Path) -> Result<PathBuf, String> {
-    let dir = state.join("presets").join(format!("{ID}-{}", version()));
+    let dir = dir(state);
     let files = [
         ("preset.yml", MANIFEST.replace("{version}", version())),
         ("templates/tasks-template.md", TEMPLATE.to_owned()),

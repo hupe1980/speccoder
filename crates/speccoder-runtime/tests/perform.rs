@@ -141,6 +141,29 @@ fn reject(t: &str) -> Runnable {
 /// call's id and digest, as listed (unchanged when none is listed, or when
 /// it names a digest of its own).
 fn shown(root: &Path, state: Option<&Path>, run: &Runnable) -> Runnable {
+    // A folder the case names under the project (`ROOT/…`), as the
+    // interface would name it.
+    let under = |t: &str| t.replacen("ROOT", &root.display().to_string(), 1);
+    match run {
+        Runnable::NewProject {
+            target,
+            choices,
+            plan_digest,
+        } => {
+            return Runnable::NewProject {
+                target: under(target),
+                choices: choices.clone(),
+                plan_digest: plan_digest.clone(),
+            };
+        }
+        Runnable::CloneRepository { repo, target } => {
+            return Runnable::CloneRepository {
+                repo: repo.clone(),
+                target: under(target),
+            };
+        }
+        _ => {}
+    }
     let (Runnable::Approve { task, digest, .. } | Runnable::Reject { task, digest, .. }) = run
     else {
         return run.clone();
@@ -182,6 +205,62 @@ fn cases() -> Vec<Case> {
         c
     };
     vec![
+        // Plan through's continuation waits for the open question: refused
+        // from the files alone, before any model is opened.
+        case(
+            "plan-through-continue-questions",
+            Runnable::PlanThrough {
+                from: speccoder_core::actions::PlanFrom::Continue,
+                through: speccoder_core::actions::Through::Tasks,
+            },
+            None,
+        ),
+        case(
+            "plan-through-create-empty",
+            Runnable::PlanThrough {
+                from: speccoder_core::actions::PlanFrom::Create {
+                    description: "   ".to_owned(),
+                    source: speccoder_core::actions::FeatureSource::Description,
+                },
+                through: speccoder_core::actions::Through::Spec,
+            },
+            None,
+        ),
+        // A folder inside the project's repository is refused by the plan.
+        case(
+            "new-project-nested",
+            Runnable::NewProject {
+                target: "ROOT/sub/app".to_owned(),
+                choices: speccoder_core::new_project::NewChoices {
+                    idea: "a tool".to_owned(),
+                    stack: Some(speccoder_core::new_project::Stack::None),
+                    ..speccoder_core::new_project::NewChoices::default()
+                },
+                plan_digest: "sha256:0".to_owned(),
+            },
+            None,
+        ),
+        case(
+            "undo-new-project-not-created",
+            Runnable::UndoNewProject {
+                commit: "1a2b3c4".to_owned(),
+            },
+            None,
+        ),
+        case(
+            "clone-repository-not-a-slug",
+            Runnable::CloneRepository {
+                repo: "not a repository".to_owned(),
+                target: "ROOT/clone".to_owned(),
+            },
+            None,
+        ),
+        case("sample-checks-not-the-sample", Runnable::SampleChecks, None),
+        no_state(case(
+            "open-sample-no-state",
+            Runnable::OpenSample { fresh: false },
+            None,
+        )),
         // The open question blocks Approve and Run before anything is recorded.
         case(
             "approve-and-run-question",
@@ -572,6 +651,11 @@ impl Norm {
         for (p, name) in &self.paths {
             s = s.replace(p.as_str(), name);
         }
+        // This build's version, where a path names it (the extracted preset).
+        let s = s.replace(
+            &format!("speccoder-{}", env!("CARGO_PKG_VERSION")),
+            "speccoder-<version>",
+        );
         hex(&s)
     }
 
@@ -589,6 +673,15 @@ impl Norm {
                             }
                             // A commit's day: the day the test runs.
                             Value::String(d) if k == "date" && d.len() == 10 => json!("<date>"),
+                            // What this machine has installed and how it
+                            // sandboxes: a new project's plan names them.
+                            _ if matches!(
+                                k.as_str(),
+                                "version" | "tools" | "backend" | "disabled"
+                            ) =>
+                            {
+                                json!("<machine>")
+                            }
                             x => self.value(x),
                         };
                         (k.clone(), x)

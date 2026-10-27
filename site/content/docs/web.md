@@ -31,7 +31,7 @@ Six views, in the toolbar and on `1`–`6`:
 
 The **journey** (Spec → Plan → Tasks → Commit → Run → Review) sits above a feature's views, with one button for the next step (`n`); a step whose file was never written is struck through. **Before you run** lists what `speccoder doctor` warns about, each with its fix; when a failure would stop the run, the button reads **Run Anyway**.
 
-A project without `speccoder.toml` opens in the **setup assistant**: what was found, the model and its key, the proposed checks, then **Set Up** (what `speccoder init` does), **Commit**, and your first feature.
+A project without `speccoder.toml` opens in the **setup assistant**: what was found, the model and its key, the proposed checks, then **Set Up** (what `speccoder init` does), **Commit**, and your first feature. A repository that is not yet a spec project gets **Make it a project**: the [New Project sheet](#new-project) for that folder.
 
 ### Needs You
 
@@ -107,6 +107,30 @@ A run that stops on uncommitted setup shows a card with the fix, its command and
 
 Opened by **Report a Bug…** (⇧⌘B, `⇧B`), a bug's row in Needs You, or **Fix as Bug** on an issue. It takes the [triad](@/docs/bugs.md#the-triad) (one line per expected behaviour; **Record** needs one) and optionally the issue, your own failing test or a fix to judge; then **Record** or **Record and Reproduce**. The stage strip (Record → Reproduce → Confirm → Unchanged → Fix → Ship) follows the host's state, so a reload resumes; reproductions are confirmed with **Confirm and Fix** or **Reject with Reason**.
 
+## Welcome
+
+`speccoder ui` started outside a project — in a folder that is neither a spec project nor a git repository — shows **Welcome to speccoder**: **New Project** (`N`; ⌘N in the window), **Open Project…** (⌘O), **Clone from GitHub…**, **Try the Sample** (in a build that has it) and the recent projects. A recent project whose folder is gone shows *Folder not found* and **Forget**; one speccoder created in the last day offers **Undo** while nothing else happened there.
+
+The host serves one project, bound once: to the folder you open, or the project you create, clone or try; the page then reloads into it. In a tab, **Open Project…** takes a path with folder suggestions under your home; in the window, File ▸ Open Project… opens the system's folder picker, and the path never passes through the page. A host already serving a project opens another in a window of its own (`speccoder ui -C <path>`). **Clone** lists your repositories through your GitHub sign-in and clones with your git — and your git's credentials, so a private repository needs a credential helper — after one confirmation naming github.com, into an absolute path outside any repository.
+
+### New Project
+
+The sheet asks *What are you building?* first and fills in the rest: where (beside the last project speccoder created, else `~/Workspaces`, else your home; editable), the stack (suggested from the idea and the toolchains installed — one whose tool is missing is disabled with its install hint), the spec format and Spec Kit's preset and extensions. Below, *This will run* lists every command of the plan in order, each *local* or *full network* with the hosts it is expected to reach (not enforced), and whether the commands run sandboxed — the same plan `speccoder new --dry-run` prints ([start a project](@/docs/quickstart.md#start-a-project)). A refusal replaces the list with its code and fix, and **Create** stays disabled.
+
+**Create** (⌘⏎) runs exactly the plan shown; a plan that changed meanwhile is shown again instead. Network steps are confirmed once, inline, naming the hosts they are expected to reach; they get full network access. As the steps run each row shows its state as a glyph and a word and its duration; a failed one shows its exit status and last lines, with **Retry**, **Copy command** and **Undo**. Done, the card shows the checks on the untouched code and the commit, and **Write the first feature**: the New Feature sheet with your idea. A host that was started outside a project switches to the new one, whose first view opens that sheet once.
+
+### Try the sample
+
+A small project and a run of it recorded with a real model, copied into speccoder's state directory and replayed strictly: no model is called, no key or network is needed. A banner names the recording (its date and model); **Play** (`Space`) opens each judged task's evidence in turn, at a readable pace (→ one step, `End` to the end); the model's words are labelled as its account. A recording this build cannot reproduce is said so in the banner, and nothing is played. Tasks play in the order the recording ran them. At the end: **Start your own**, **Run the checks yourself** (the sample's own checks, offline in its copy; disabled with the install hint when cargo is missing), **Close the sample**. The sample is not added to your recent projects.
+
+## New… and New Feature
+
+**New…** (⌘N in the window, `N` in a tab, the toolbar's **+**) opens the composer: one field — *Describe a change, a bug, a feature, or a question* — and the rungs beside it: **Bug fix**, **Quick change**, **Feature**, **Just ask**. The host suggests one from the words alone — a wrong result of existing behaviour, a question, two or more capabilities or a long description, else a quick change — and says why; ⏎ takes it, ↑ ↓ move, ⌃⏎ bug fix, ⌥⏎ quick change, ⇧⏎ feature, ⌘⏎ ask. Taking a rung opens its own sheet with your text; the footer shows the command (`speccoder bug "…"`, `speccoder do "…"`, `speccoder spec specify "…"`). *Just ask* arrives with the Ask panel; a question selects no rung.
+
+The **New Feature** sheet opens from the composer, the **+** beside the features in the sidebar, the Overview, the palette, File ▸ New Feature…, **Start Feature** on a GitHub issue (the issue's description, *Start from: issue #42*, its origin recorded for the new unit) and the setup assistant. It shows the description, *Plan it* (*spec only*, *spec → plan → tasks*, *… → analyze* where the format has a check), the skills that will run, the folder they write, what these skills cost in your earlier runs (or *cost: unknown until it runs*), and the exact command. A requirement of another feature close to the description is shown with **Extend 003 instead**, which makes that feature current and drafts your description as a comment on its requirement — sent by you, as one revision of the spec. **Start** (⌘⏎) runs [plan through](@/docs/planning.md#plan-through); it is disabled without a model key or while a job runs, and says so.
+
+Spec & Plan then follows the new unit as its skill writes it. Above the document a **readiness strip** counts what its oracle will be made of — requirements, scenarios, open questions, requirements no scenario covers (*can't be tested*) — each a link; changes are announced politely. Where plan through stopped, a card says what you decide: **Approve and plan** (⌘⏎; the requirements shown are approved on that wording — changed meanwhile, the card says *The spec changed — review again*), **Retry this step**, or **Commit the planning files** and **Review the tests** when done.
+
 ## Settings
 
 The gear (`,`) opens `speccoder.toml` as a page: each key with its default and meaning, checks and MCP servers as tables. **Save** writes the file only when it parses, keeping its comments, then offers **Commit** for `speccoder.toml` alone. Prefix lists are saved separately, from their coverage preview (**Preview…**, **Save Prefix**, **Coverage**; see [prefix lists](@/docs/configuration.md#prefix-lists)).
@@ -121,13 +145,16 @@ A call that needs a person opens as a sheet with what the [inline prompt](@/docs
 |---|---|
 | `1` … `6` (⌘1 … ⌘6 in the window) | The views |
 | `n` | The next step |
+| `N` (⌘N in the window) | New…: the composer (in the welcome: New Project) |
 | `q` / `⇧B` | A quick change / report a bug |
+| ⌘⏎ | A sheet's primary button: Start, Create, Approve and plan |
+| `?` | Every key |
 | `,` | Settings |
 | ⌘K / Ctrl+K | The palette: every action, filtered as you type |
 | ⇧⌘T / ⇧⌘↵ | Write Tests / send the comments |
 | `Esc` | Close the task |
 
-In `speccoder ui --window`, the menus (speccoder, File, Edit, View, Run, Review, Window, Help) offer the same actions as the buttons, saying why when one cannot run now, with these shortcuts: New Feature ⌘N, Quick Change ⇧⌘N, Report a Bug ⇧⌘B, Settings ⌘,, Toggle Sidebar ⌥⌘S, Toggle Status Bar ⌥⌘B, Actions ⌘K, Run the Feature ⌘R, Run the Selected Task ⇧⌘R, Show the Selected Task's Evidence ⌘I, Stop ⌘., Needs You ⇧⌘I, Review the Spec ⌥⌘R, Write Tests ⇧⌘T, Send Comments ⇧⌘↵. **Help** opens the documentation, the quickstart, the app's page, the error codes and a new issue in your browser.
+In `speccoder ui --window`, the menus (speccoder, File, Edit, View, Run, Review, Window, Help) offer the same actions as the buttons — File has New…, New Feature…, Quick Change…, Report a Bug…, Start from a GitHub Issue…, New Project…, Open Project… and Try the Sample — saying why when one cannot run now, with these shortcuts: New… ⌘N, Open Project… ⌘O, Quick Change ⇧⌘N, Report a Bug ⇧⌘B, Settings ⌘,, Toggle Sidebar ⌥⌘S, Toggle Status Bar ⌥⌘B, Actions ⌘K, Run the Feature ⌘R, Run the Selected Task ⇧⌘R, Show the Selected Task's Evidence ⌘I, Stop ⌘., Needs You ⇧⌘I, Review the Spec ⌥⌘R, Write Tests ⇧⌘T, Send Comments ⇧⌘↵. **Help** opens the documentation, the quickstart, the app's page, the error codes and a new issue in your browser.
 
 An action that leaves your machine (a push, a pull request, an issue comment) first shows what it would do and waits for your yes. The page follows the system's light or dark, increased-contrast and reduced-motion settings. The address follows what you look at (`?view=code&mode=files&file=src/lib.rs&line=42`, `?task=T003`), so reload, Back and bookmarks work while the host runs.
 

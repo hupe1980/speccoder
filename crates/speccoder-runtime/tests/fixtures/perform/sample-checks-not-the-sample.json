@@ -1,0 +1,17 @@
+{
+  "head": "init",
+  "result": {
+    "code": "USAGE",
+    "command": "sample",
+    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#usage",
+    "exit_code": 2,
+    "fix": [
+      "speccoder sample --help"
+    ],
+    "message": "these are the sample's checks: run them in its copy (speccoder sample)",
+    "schema_version": 2,
+    "status": "usage_error"
+  },
+  "review": null,
+  "status": ""
+}

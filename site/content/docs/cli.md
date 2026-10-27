@@ -30,6 +30,9 @@ Every stop and finish ends with a `Next:` block of commands to copy (`next` in J
 
 | Command | What it does |
 |---|---|
+| `speccoder new [PATH] [--idea I] [--stack rust\|python\|node\|go\|none] [--format speckit\|openspec] [--extension X]… [--no-preset] [--dry-run] [--yes] [--no-prompt]` | [Start a project](@/docs/quickstart.md#start-a-project): the plan of the stack's and the format's own commands, `speccoder init --yes`, one commit as you. `--dry-run` prints the plan and its digest; without `--yes` it asks once (no terminal: `NEW-CONFIRM`). Payload `new_project` |
+| `speccoder new --undo [PATH] [--yes]` | Undo a project speccoder created: the folder to the Trash, or a revert of its commit in an existing repository — only while nothing else happened there (`NEW-UNDO-REFUSED`) |
+| `speccoder sample [--fresh] [--yes]` | Copy the bundled sample into speccoder's state directory and replay its recorded run strictly, no model (payload `sample`; `SAMPLE-DIVERGED`, `SAMPLE-MISSING`) |
 | `speccoder init [--provider anthropic\|openai] [--model M] [--force] [--no-verify] [--yes]` | Write `speccoder.toml` with the detected checks, run them on the untouched code, offer the commit. `--force` replaces the file; `--yes` asks nothing and commits nothing |
 | `speccoder doctor [--bug-report]` | Check git, the project, the configuration, the key, the sandbox, the state directory, signing, GitHub and the look; changes nothing. `--bug-report`: a redacted Markdown bundle for an issue |
 | `speccoder config` | Every key of `speccoder.toml` with its value or default ([configuration](@/docs/configuration.md#changing-it)) |
@@ -45,6 +48,8 @@ Every stop and finish ends with a `Next:` block of commands to copy (`next` in J
 |---|---|
 | `speccoder feature [QUERY] [--clear]` | List the features, or make one [current](@/docs/planning.md#the-current-feature) by name, number or a unique part; `--clear` forgets it |
 | `speccoder spec [SKILL] [ARGS…] [--no-prompt]` | List the planning skills, or run one (`specify`, `plan`, `tasks`, …; OpenSpec: `propose`, …) |
+| `speccoder spec SKILL [ARGS…] --through spec\|plan\|tasks\|analyze` | [Plan through](@/docs/planning.md#plan-through): the format's skills in order from SKILL (the creating skill with a description, or `plan`/`tasks`/`analyze` to continue), stopping for open questions (`THROUGH-QUESTIONS`) and your review (`THROUGH-REVIEW`). Payload `planning_chain` |
+| `speccoder feature similar TEXT…` | The requirements close to a description, with the terms they share (payload `similar`); no model |
 | `speccoder spec archive [CHANGE] [--yes] [--allow-unverified TASK]…` | [Archive](@/docs/openspec.md#archiving) an OpenSpec change |
 | `speccoder review` | Every requirement and its review state ([review](@/docs/planning.md#review-the-spec)) |
 | `speccoder review approve [ID…] [--comment C]` | Approve requirements on their current wording; none named: every unapproved one |
@@ -56,7 +61,7 @@ Every stop and finish ends with a `Next:` block of commands to copy (`next` in J
 | `speccoder review tests REQ [--write \| --reject P --reason R \| --again P --comment C \| --edit P --from F \| --reading A\|B SCENARIO]` | [Write and shape a requirement's tests](@/docs/planning.md#review-the-tests) |
 | `speccoder review comments [add TEXT \| delete ID \| keep ID \| send \| undo]` | [Comments](@/docs/planning.md#comments), sent as one revision |
 | `speccoder issue [list]` | The repository's open GitHub issues |
-| `speccoder issue start N [--no-prompt] [--comment \| --no-comment] [--assign]` | Specify a feature from an issue |
+| `speccoder issue start N [--through T] [--no-prompt] [--comment \| --no-comment] [--assign]` | Specify a feature from an issue: its description verbatim, the unit's origin recorded once |
 | `speccoder issue comment N [--assign]` | Tell the issue the current feature is specified from it |
 
 ## Work
@@ -99,6 +104,7 @@ Every stop and finish ends with a `Next:` block of commands to copy (`next` in J
 
 | Command | What it does |
 |---|---|
+| `speccoder suggest TEXT…` | The rung a description suggests — bug fix, quick change, feature or a question — and the cue that decided it (payload `rung_suggestion`); no model |
 | `speccoder preset add [--yes]` | Install or update the [speccoder Spec Kit preset](@/docs/planning.md#the-speccoder-preset) with `specify preset add --dev` |
 | `speccoder actions [--task T]` | What you can do now, as every interface offers it: each action's command, why it is blocked, what it asks for (payload `actions`) |
 | `speccoder approvals` | Calls waiting for a person, and the decisions made |

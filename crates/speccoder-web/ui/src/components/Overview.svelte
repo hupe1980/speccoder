@@ -61,7 +61,12 @@
   </header>
 
   {#if features.length === 0}
-    <div class="empty"><Icon name="doc" size={28} /><p><strong>No features yet</strong></p><p class="muted">Write the first spec: <code>speccoder spec specify "…"</code></p></div>
+    <div class="empty">
+      <Icon name="doc" size={28} />
+      <p><strong>No {app.project?.unit ?? "feature"}s yet</strong></p>
+      <button class="btn primary" onclick={() => (app.newFeature = {})}><Icon name="sparkle" size={13} /> New {app.project?.unit ?? "feature"}</button>
+      <p class="muted">The spec tool's own skill writes the spec from your description; you review it before anything is planned.</p>
+    </div>
   {:else}
     <div class="cards">
       {#each features as f (f.name)}

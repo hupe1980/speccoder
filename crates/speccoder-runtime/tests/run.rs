@@ -2125,6 +2125,8 @@ fn a_run_reports_its_steps_live_and_status_reads_them() {
             Event::Oracle { .. } => "oracle".to_owned(),
             Event::CollectionChecked { .. } => "collection".to_owned(),
             Event::RegressionBisected { .. } => "bisected".to_owned(),
+            Event::PlanningStopped { .. } => "planning".to_owned(),
+            Event::Project { .. } => "project".to_owned(),
         })
         .filter(|k| k != "usage")
         .collect();

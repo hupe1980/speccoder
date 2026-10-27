@@ -1,0 +1,768 @@
+{
+  "$defs": {
+    "ExtensionChoice": {
+      "description": "A Spec Kit extension the person chose.",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/ExtensionKind",
+          "description": "`bundled`, `path` or `url`."
+        },
+        "source": {
+          "description": "A bundled name, a local path or a URL, as given.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "kind"
+      ],
+      "type": "object"
+    },
+    "ExtensionKind": {
+      "description": "What an extension source is.",
+      "oneOf": [
+        {
+          "const": "bundled",
+          "description": "Bundled with the format's tool (`bug`).",
+          "type": "string"
+        },
+        {
+          "const": "path",
+          "description": "A local directory.",
+          "type": "string"
+        },
+        {
+          "const": "url",
+          "description": "Downloaded: a network step.",
+          "type": "string"
+        }
+      ]
+    },
+    "FormatOption": {
+      "description": "A spec format the plan can initialise, and its tool's state.",
+      "properties": {
+        "disabled": {
+          "description": "Why it cannot be chosen.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "description": "`speckit`, `openspec`.",
+          "type": "string"
+        },
+        "label": {
+          "description": "`Spec Kit`, `OpenSpec`.",
+          "type": "string"
+        },
+        "version": {
+          "description": "The tool's version when installed.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "version",
+        "disabled"
+      ],
+      "type": "object"
+    },
+    "GitIdentity": {
+      "description": "The person's git identity.",
+      "properties": {
+        "email": {
+          "description": "`user.email`.",
+          "type": "string"
+        },
+        "name": {
+          "description": "`user.name`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "email"
+      ],
+      "type": "object"
+    },
+    "InitCheck": {
+      "description": "One detected check.",
+      "properties": {
+        "argv": {
+          "description": "The command.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "name": {
+          "description": "`[checks.<name>]`.",
+          "type": "string"
+        },
+        "tier": {
+          "description": "`fast` or `full`.",
+          "type": "string"
+        },
+        "why": {
+          "description": "Why it was proposed.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "argv",
+        "tier",
+        "why"
+      ],
+      "type": "object"
+    },
+    "InitKey": {
+      "description": "The model key `init` looked for.",
+      "properties": {
+        "set": {
+          "description": "Set in this environment.",
+          "type": "boolean"
+        },
+        "variable": {
+          "description": "`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "variable",
+        "set"
+      ],
+      "type": "object"
+    },
+    "InitReport": {
+      "description": "Result of `speccoder init`.",
+      "properties": {
+        "checks": {
+          "description": "The checks it declares.",
+          "items": {
+            "$ref": "#/$defs/InitCheck"
+          },
+          "type": "array"
+        },
+        "committed": {
+          "description": "The commit holding `speccoder.toml`, when one was made.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "instructions": {
+          "description": "The repository instructions found (`AGENTS.md`, `CLAUDE.md`).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "key": {
+          "$ref": "#/$defs/InitKey",
+          "description": "The model key: the variable and whether it is set."
+        },
+        "model": {
+          "description": "`provider/model`.",
+          "type": "string"
+        },
+        "path": {
+          "description": "The configuration file.",
+          "type": "string"
+        },
+        "ran": {
+          "description": "The checks run on the untouched code (empty: not run).",
+          "items": {
+            "$ref": "#/$defs/InitRun"
+          },
+          "type": "array"
+        },
+        "wrote": {
+          "description": "Files written, relative to the project root.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "path",
+        "checks",
+        "model",
+        "wrote",
+        "ran",
+        "instructions",
+        "key",
+        "committed"
+      ],
+      "type": "object"
+    },
+    "InitRun": {
+      "description": "One check `init` ran on the untouched code.",
+      "properties": {
+        "duration_ms": {
+          "description": "How long it took.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "name": {
+          "description": "`[checks.<name>]`.",
+          "type": "string"
+        },
+        "passed": {
+          "description": "Passed on the untouched code.",
+          "type": "boolean"
+        },
+        "reason": {
+          "description": "Why it did not pass: the last line of its output that says something\n(`No module named pytest`), or the runner's note.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "description": "`passed`, `failed`, `timed_out`, `skipped`, `error`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "passed",
+        "status",
+        "duration_ms",
+        "reason"
+      ],
+      "type": "object"
+    },
+    "ObservedFolder": {
+      "description": "The folder and the tools as the plan saw them.",
+      "properties": {
+        "entries": {
+          "description": "Its entries' names, sorted.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "exists": {
+          "description": "The folder exists.",
+          "type": "boolean"
+        },
+        "head": {
+          "description": "`HEAD`, in a repository with a commit.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "porcelain": {
+          "description": "`git status --porcelain` lines.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "tools": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Each tool's version line, by name.",
+          "type": "object"
+        }
+      },
+      "required": [
+        "exists",
+        "entries",
+        "head",
+        "porcelain",
+        "tools"
+      ],
+      "type": "object"
+    },
+    "PlanRefusal": {
+      "description": "Why the plan cannot run, and the fix.",
+      "properties": {
+        "code": {
+          "description": "`NEW-TARGET-NOT-EMPTY`, …",
+          "type": "string"
+        },
+        "fix": {
+          "description": "What to do.",
+          "type": "string"
+        },
+        "message": {
+          "description": "What is wrong.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "fix"
+      ],
+      "type": "object"
+    },
+    "PlanStep": {
+      "description": "One command of the plan.",
+      "properties": {
+        "access": {
+          "$ref": "#/$defs/StepAccess",
+          "description": "Local, or network."
+        },
+        "argv": {
+          "description": "The command, exactly as it runs.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "cwd": {
+          "description": "Where it runs: always the target.",
+          "type": "string"
+        },
+        "hosts": {
+          "description": "The hosts a network step is expected to reach: shown, not enforced —\nthe step gets the full network.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "id": {
+          "description": "`git_init`, `scaffold.<n>`, `format_init`, `speccoder_init`, `commit`.",
+          "type": "string"
+        },
+        "limit_s": {
+          "description": "Its time limit, in seconds.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "note": {
+          "description": "A note the plan shows beside it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "writes": {
+          "description": "What it writes, in one line.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "argv",
+        "cwd",
+        "access",
+        "writes",
+        "limit_s"
+      ],
+      "type": "object"
+    },
+    "PlanStepResult": {
+      "description": "One step's outcome.",
+      "properties": {
+        "duration_ms": {
+          "description": "How long it took.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "exit": {
+          "description": "Its exit status, when it ran.",
+          "format": "int32",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "id": {
+          "description": "The step.",
+          "type": "string"
+        },
+        "output_tail": {
+          "description": "The last lines of its output (at most 20).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "state": {
+          "$ref": "#/$defs/PlanStepState",
+          "description": "What happened."
+        }
+      },
+      "required": [
+        "id",
+        "state",
+        "exit",
+        "duration_ms",
+        "output_tail"
+      ],
+      "type": "object"
+    },
+    "PlanStepState": {
+      "description": "A step's state in a run.",
+      "oneOf": [
+        {
+          "const": "waiting",
+          "description": "Not started.",
+          "type": "string"
+        },
+        {
+          "const": "running",
+          "description": "Running now.",
+          "type": "string"
+        },
+        {
+          "const": "done",
+          "description": "Finished.",
+          "type": "string"
+        },
+        {
+          "const": "skipped",
+          "description": "Its effect was already there (resume).",
+          "type": "string"
+        },
+        {
+          "const": "failed",
+          "description": "Failed; later steps did not run.",
+          "type": "string"
+        }
+      ]
+    },
+    "ProjectMode": {
+      "description": "Where the project is made.",
+      "oneOf": [
+        {
+          "const": "new_folder",
+          "description": "A folder that does not exist yet, or an empty one.",
+          "type": "string"
+        },
+        {
+          "const": "existing_repository",
+          "description": "A git repository at its top level with a clean tree and no spec project.",
+          "type": "string"
+        }
+      ]
+    },
+    "ProjectPlan": {
+      "description": "The plan.",
+      "properties": {
+        "digest": {
+          "description": "SHA-256 over all of the above.",
+          "type": "string"
+        },
+        "extensions": {
+          "description": "Spec Kit extensions.",
+          "items": {
+            "$ref": "#/$defs/ExtensionChoice"
+          },
+          "type": "array"
+        },
+        "format": {
+          "description": "The spec format (`speckit`, `openspec`).",
+          "type": "string"
+        },
+        "formats": {
+          "description": "Every format and whether its tool is installed.",
+          "items": {
+            "$ref": "#/$defs/FormatOption"
+          },
+          "type": "array"
+        },
+        "identity": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GitIdentity"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The person's git identity."
+        },
+        "mode": {
+          "$ref": "#/$defs/ProjectMode",
+          "description": "A new folder or an existing repository."
+        },
+        "name": {
+          "description": "The project's name (the folder's).",
+          "type": "string"
+        },
+        "observed": {
+          "$ref": "#/$defs/ObservedFolder",
+          "description": "The folder as seen."
+        },
+        "preset": {
+          "description": "Whether the speccoder Spec Kit preset is passed to the format's init.",
+          "type": "boolean"
+        },
+        "refusal": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PlanRefusal"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Why it cannot run (Create disabled)."
+        },
+        "sandbox": {
+          "$ref": "#/$defs/SandboxNote",
+          "description": "The OS sandbox."
+        },
+        "stack": {
+          "$ref": "#/$defs/StackPick",
+          "description": "The stack."
+        },
+        "stacks": {
+          "description": "Every stack and whether its tool is installed.",
+          "items": {
+            "$ref": "#/$defs/StackOption"
+          },
+          "type": "array"
+        },
+        "steps": {
+          "description": "The commands, in order.",
+          "items": {
+            "$ref": "#/$defs/PlanStep"
+          },
+          "type": "array"
+        },
+        "target": {
+          "description": "The folder, canonical and absolute.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "target",
+        "name",
+        "mode",
+        "stack",
+        "stacks",
+        "format",
+        "formats",
+        "extensions",
+        "preset",
+        "steps",
+        "sandbox",
+        "identity",
+        "refusal",
+        "observed",
+        "digest"
+      ],
+      "type": "object"
+    },
+    "SandboxNote": {
+      "description": "The OS sandbox the steps run in.",
+      "properties": {
+        "backend": {
+          "description": "`seatbelt`, `landlock`; `null`: the commands run without one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "backend"
+      ],
+      "type": "object"
+    },
+    "Stack": {
+      "description": "A stack the plan can scaffold, or none.",
+      "oneOf": [
+        {
+          "const": "rust",
+          "description": "Rust with cargo.",
+          "type": "string"
+        },
+        {
+          "const": "python",
+          "description": "Python with uv and pytest.",
+          "type": "string"
+        },
+        {
+          "const": "node",
+          "description": "TypeScript with npm and vitest.",
+          "type": "string"
+        },
+        {
+          "const": "go",
+          "description": "Go modules.",
+          "type": "string"
+        },
+        {
+          "const": "none",
+          "description": "No scaffold: the person adds code.",
+          "type": "string"
+        }
+      ]
+    },
+    "StackOption": {
+      "description": "A stack's tool on this machine.",
+      "properties": {
+        "disabled": {
+          "description": "Why it cannot be chosen (its tool is missing), with the install hint.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "$ref": "#/$defs/Stack",
+          "description": "The stack."
+        },
+        "label": {
+          "description": "How the sheet names it.",
+          "type": "string"
+        },
+        "version": {
+          "description": "The tool's version when installed.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "version",
+        "disabled"
+      ],
+      "type": "object"
+    },
+    "StackPick": {
+      "description": "How a stack was chosen.",
+      "properties": {
+        "detected": {
+          "description": "Found in an existing repository rather than chosen.",
+          "type": "boolean"
+        },
+        "id": {
+          "$ref": "#/$defs/Stack",
+          "description": "The stack."
+        },
+        "reason": {
+          "description": "Why it was suggested or detected.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "detected",
+        "reason"
+      ],
+      "type": "object"
+    },
+    "StepAccess": {
+      "description": "Whether a step stays on the machine.",
+      "oneOf": [
+        {
+          "const": "local",
+          "description": "No network.",
+          "type": "string"
+        },
+        {
+          "const": "network",
+          "description": "It gets the full network (the hosts it names are expected, not enforced).",
+          "type": "string"
+        }
+      ]
+    },
+    "UndoOffer": {
+      "description": "What Undo would do.",
+      "properties": {
+        "available": {
+          "description": "It can be undone now.",
+          "type": "boolean"
+        },
+        "kind": {
+          "description": "`trash`, `revert` or `none`.",
+          "type": "string"
+        },
+        "reason": {
+          "description": "Why not, when not.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "available",
+        "kind"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/new_project.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The `new_project` payload.",
+  "properties": {
+    "commit": {
+      "description": "speccoder's commit, once made.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "dry_run": {
+      "description": "Nothing ran.",
+      "type": "boolean"
+    },
+    "first_feature": {
+      "description": "The project's first feature, prefilled from the idea.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "init": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/InitReport"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "`speccoder init`'s report, when it ran."
+    },
+    "plan": {
+      "$ref": "#/$defs/ProjectPlan",
+      "description": "The plan."
+    },
+    "results": {
+      "description": "Each step's outcome (empty on a dry run).",
+      "items": {
+        "$ref": "#/$defs/PlanStepResult"
+      },
+      "type": "array"
+    },
+    "undo": {
+      "$ref": "#/$defs/UndoOffer",
+      "description": "What Undo would do."
+    }
+  },
+  "required": [
+    "plan",
+    "results",
+    "init",
+    "commit",
+    "undo",
+    "dry_run",
+    "first_feature"
+  ],
+  "title": "new: a new project's plan, its steps, its commit and what Undo would do",
+  "type": "object"
+}

@@ -174,6 +174,40 @@ impl OracleRequirement {
     }
 }
 
+/// What a new project asks of the format's own init (spec 101).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FormatInit {
+    /// Extensions the person chose (Spec Kit).
+    pub extensions: Vec<speccoder_core::new_project::ExtensionChoice>,
+    /// Install the format's evidence preset with the init where it has one
+    /// (Spec Kit: the bundled `speccoder` preset).
+    pub preset: bool,
+    /// speccoder's state directory (where a bundled preset is extracted).
+    pub state: PathBuf,
+    /// speccoder's private cache for this tool: where its settings go
+    /// instead of the person's config directory.
+    pub cache: PathBuf,
+}
+
+/// One command of the format's own init, as a new project's plan runs it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InitStep {
+    /// The command, exactly.
+    pub argv: Vec<String>,
+    /// The hosts it reaches; empty: local.
+    pub hosts: Vec<String>,
+    /// What it writes, in one line.
+    pub writes: String,
+    /// Variables it runs with beside the person's.
+    pub env: Vec<(String, String)>,
+    /// Its effect, for resuming: done when this path exists in the folder.
+    pub marker: &'static str,
+    /// A note the plan shows beside it.
+    pub note: Option<String>,
+    /// It installs the format's evidence preset.
+    pub preset: bool,
+}
+
 /// What kind of phase a task sits in, as the format's structure says.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PhaseKind {
@@ -306,6 +340,23 @@ pub trait Adapter: Send + Sync + std::fmt::Debug {
     /// `doctor` (`None`: the format has none).
     fn tool(&self) -> Option<(&'static str, &'static str)> {
         None
+    }
+
+    /// The commands of the format's own init that make a folder a project
+    /// of it (spec 101's New Project); empty: speccoder cannot initialise
+    /// this format, the person does ([`Messages::make_project`]).
+    fn init_steps(&self, _choices: &FormatInit) -> Vec<InitStep> {
+        Vec::new()
+    }
+
+    /// Writes what [`Adapter::init_steps`] names in speccoder's state
+    /// before they run (Spec Kit: the bundled preset, extracted).
+    ///
+    /// # Errors
+    ///
+    /// The state directory cannot be written.
+    fn prepare_init(&self, _choices: &FormatInit) -> Result<(), String> {
+        Ok(())
     }
 
     /// The unit's document that defines its requirements (`spec.md` in

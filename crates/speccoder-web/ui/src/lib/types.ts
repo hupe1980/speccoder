@@ -49,6 +49,24 @@ export type {
   ReviewReport as Review,
   StatusReport as Report,
   TaskStatus as Task,
+  ChainStop,
+  FormatOption,
+  NewChoices,
+  NewProjectReport,
+  PlanCheck,
+  PlanStep,
+  PlanStepResult,
+  PlanStepState,
+  PlanningChainReport,
+  ProjectPlan,
+  Readiness,
+  RungPick,
+  RungSuggestion,
+  SampleReport,
+  SimilarMatch,
+  SimilarReport,
+  StackOption,
+  Through,
 } from "./schema.gen";
 
 /** A route's envelope, its `data` as the route sends it. */
@@ -61,6 +79,43 @@ export interface Project {
   unit: string;
   version: string;
   features: { current: string | null; reason_text: string; features: FeatureEntry[] } | null;
+  /** The format's planning chain, by installed skill name. */
+  planning?: { creates: string | null; toward: string[]; checks: string | null; revises: string | null };
+  /** The sample, when this host serves its copy. */
+  sample?: SampleInfo | null;
+}
+
+/** The sample's copy: how it was recorded and whether each run reproduced. */
+export interface SampleInfo {
+  path: string;
+  recorded?: { model: string; recorded_at: string; agentplane: string };
+  runs: { id: string; result: string; finding?: string | null }[];
+  /** The tool the sample's checks need that is missing here, with its hint. */
+  checks_missing?: string | null;
+}
+
+/** A recent project, as the welcome shows it. */
+export interface RecentProject {
+  path: string;
+  name: string;
+  opened_at: number;
+  created: boolean;
+  shown: string;
+  exists: boolean;
+  undo: { available: boolean; kind: string; reason?: string | null } | null;
+}
+
+/** The welcome of a host started outside a project. */
+export interface WelcomeView {
+  bound: string | null;
+  start: string;
+  start_shown: string;
+  parent: string;
+  parent_shown: string;
+  recents: RecentProject[];
+  sample: boolean;
+  sample_copy: boolean;
+  version: string;
 }
 
 export interface Row {

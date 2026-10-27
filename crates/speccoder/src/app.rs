@@ -11,17 +11,21 @@
 pub fn run(
     url: &str,
     events: Option<speccoder_web::Events>,
-    root: std::path::PathBuf,
+    root: speccoder_web::Root,
 ) -> Result<(), String> {
     use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
     let page: tauri::Url = url.parse().map_err(|e| format!("{url}: {e}"))?;
     let port = page.port();
+    let picking = root.clone();
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .menu(menu)
-        .on_menu_event(|app, event| {
+        .on_menu_event(move |app, event| {
             let id = event.id().0.as_str();
             if let Some(url) = HELP.iter().find(|(i, ..)| *i == id).map(|(_, _, u)| *u) {
                 crate::open_in_browser(url);
+            } else if id == "file.open" {
+                open_project(app, &picking);
             } else if COMMANDS.contains(&id)
                 && let Some(w) = app.get_webview_window("main")
             {
@@ -57,7 +61,7 @@ pub fn run(
                 });
             }
             if let Some(w) = app.get_webview_window("main") {
-                let root = root.clone();
+                let root = root.get();
                 // Counting reads every feature's report: off the main thread.
                 std::thread::spawn(move || badge(&w, &root));
             }
@@ -70,7 +74,7 @@ pub fn run(
                                 let Some(w) = handle.get_webview_window("main") else {
                                     break;
                                 };
-                                follow(&w, &line, &root);
+                                follow(&w, &line, &root.get());
                             }
                             // Fell behind: skip what was missed, keep following.
                             Err(speccoder_web::RecvError::Lagged(_)) => {}
@@ -83,6 +87,59 @@ pub fn run(
         })
         .run(tauri::generate_context!())
         .map_err(|e| e.to_string())
+}
+
+/// File ▸ Open Project…: the system's folder picker, in this process. A
+/// window whose host serves no project yet binds it to the folder and
+/// reloads (the path never transits the page); one that serves a project
+/// opens the folder in a window of its own — one host per project.
+fn open_project(app: &tauri::AppHandle, root: &speccoder_web::Root) {
+    use tauri::Manager;
+    use tauri_plugin_dialog::DialogExt;
+    let handle = app.clone();
+    let root = root.clone();
+    app.dialog().file().pick_folder(move |picked| {
+        let Some(path) = picked.and_then(|p| p.into_path().ok()) else {
+            return;
+        };
+        let Some(w) = handle.get_webview_window("main") else {
+            return;
+        };
+        if root.bound().is_none() {
+            if root.bind(&path).is_ok() {
+                if let Some(state) = speccoder_runtime::service::worktree::state_dir() {
+                    let name = path
+                        .file_name()
+                        .map(|n| n.to_string_lossy().into_owned())
+                        .unwrap_or_default();
+                    speccoder_runtime::service::welcome::remember(&state, &path, &name, false);
+                }
+                let _ = w.eval("location.reload()");
+            }
+            return;
+        }
+        // Another project: its own window, its own host.
+        let started = std::env::current_exe().ok().and_then(|exe| {
+            std::process::Command::new(exe)
+                .args(["ui", "--window", "-C"])
+                .arg(&path)
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .spawn()
+                .ok()
+        });
+        if started.is_none() {
+            let text = serde_json::to_string(&format!(
+                "Open it with `speccoder ui -C {}`",
+                path.display()
+            ))
+            .unwrap_or_default();
+            let _ = w.eval(format!(
+                "window.dispatchEvent(new CustomEvent('speccoder:toast',{{detail:{text}}}))"
+            ));
+        }
+    });
 }
 
 /// What one host event means for the window.
@@ -101,6 +158,11 @@ fn follow(w: &tauri::WebviewWindow, line: &str, root: &std::path::Path) {
         }
         Some("started") => {
             let _ = w.set_title("speccoder — running");
+        }
+        // Bound to the project a job made, cloned or opened: the page
+        // reloads into it.
+        Some("bound") => {
+            let _ = w.eval("location.reload()");
         }
         Some("done") => {
             let ok = event["result"]["status"] == "ok";
@@ -132,6 +194,9 @@ fn badge(w: &tauri::WebviewWindow, root: &std::path::Path) {
 const COMMANDS: &[&str] = &[
     "app.settings",
     "file.new",
+    "file.new_feature",
+    "file.new_project",
+    "file.sample",
     "file.quick",
     "file.bug",
     "file.issues",
@@ -238,10 +303,15 @@ fn menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> 
         "File",
         true,
         &[
-            &item("file.new", "New Feature…", Some("CmdOrCtrl+N"))?,
+            &item("file.new", "New…", Some("CmdOrCtrl+N"))?,
+            &item("file.new_feature", "New Feature…", None)?,
             &item("file.quick", "Quick Change…", Some("Shift+CmdOrCtrl+N"))?,
             &item("file.bug", "Report a Bug…", Some("Shift+CmdOrCtrl+B"))?,
             &item("file.issues", "Start from a GitHub Issue…", None)?,
+            &sep()?,
+            &item("file.new_project", "New Project…", None)?,
+            &item("file.open", "Open Project…", Some("CmdOrCtrl+O"))?,
+            &item("file.sample", "Try the Sample", None)?,
             &sep()?,
             &item("file.commit", "Commit the Planning Files", None)?,
             &sep()?,

@@ -37,7 +37,31 @@ pub mod next {
 pub mod review {
     /// The comment tray and the last revision turn.
     pub use crate::comments::list as comments;
-    pub use crate::review::report;
+    pub use crate::review::{readiness, report};
+}
+
+/// Planning a new feature: the rung a description suggests, the
+/// requirements it is close to (read-only, no model).
+pub mod planning {
+    pub use crate::planning_chain::{similar_command, similar_to, suggest};
+}
+
+/// A new project: its plan (read-only), the idea offered once.
+pub mod new_project {
+    pub use crate::new_project::{Creation, creation, first_feature, plan, undo_offer};
+    pub use speccoder_core::new_project::{NewChoices, Stack, slug};
+}
+
+/// What a host outside a project shows.
+pub mod welcome {
+    pub use crate::welcome::{
+        Recent, RecentView, default_parent, folders, forget, is_project, remember, tilde, views,
+    };
+}
+
+/// The bundled sample.
+pub mod sample {
+    pub use crate::sample::{available, copy, home, missing_tool};
 }
 
 /// Needs You.
@@ -108,7 +132,7 @@ pub mod settings {
 
 /// Tokens and money.
 pub mod controls {
-    pub use crate::controls::cost;
+    pub use crate::controls::{SkillCost, cost, skill_cost};
 }
 
 /// The code view: the branch's change, its files.
@@ -139,8 +163,8 @@ pub mod worktree {
 /// GitHub: sign-in, issues, the branch's pull request.
 pub mod github {
     pub use crate::github::{
-        Ctx, description, issue, issues, login_with_token, pr_for, reach, refused, repo, started,
-        status,
+        Ctx, RepoEntry, description, issue, issues, login_with_token, pr_for, reach, refused, repo,
+        repositories, started, status, valid_slug,
     };
 
     /// Signing in on a device.
@@ -170,6 +194,39 @@ pub fn format_words(root: &Path) -> FormatWords {
     FormatWords {
         name: format.wording().name,
         unit: format.messages().unit,
+    }
+}
+
+/// The format's planning chain, by installed skill name, for the New
+/// Feature sheet: what creates a unit, what leads to the task list, what
+/// checks it and what revises a written spec.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct PlanningWords {
+    /// The creating skill (`speckit-specify`).
+    pub creates: Option<String>,
+    /// The skills toward the task list after it (`speckit-plan`, `speckit-tasks`).
+    pub toward: Vec<String>,
+    /// The checking skill (`speckit-analyze`).
+    pub checks: Option<String>,
+    /// The revising skill (`speckit-clarify`).
+    pub revises: Option<String>,
+}
+
+/// [`PlanningWords`] of the project at `root`.
+#[must_use]
+pub fn planning_words(root: &Path) -> PlanningWords {
+    let p = crate::format::at(root).planning();
+    let full = |s: &str| format!("{}{s}", p.prefix);
+    let creates = p.creates.first().map(|c| full(c));
+    PlanningWords {
+        toward: (p.toward_tasks)(false)
+            .iter()
+            .map(|s| full(s))
+            .filter(|s| Some(s) != creates.as_ref())
+            .collect(),
+        creates,
+        checks: p.checks.map(full),
+        revises: p.revises.map(full),
     }
 }
 

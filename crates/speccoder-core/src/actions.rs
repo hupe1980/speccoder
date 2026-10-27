@@ -259,6 +259,114 @@ pub enum Runnable {
         /// Replace an installed older version.
         update: bool,
     },
+    /// Plan a new feature through the format's own skills — the creating
+    /// skill, then toward the task list, then the check — stopping where a
+    /// person decides (`speccoder spec <skill> --through <t>`).
+    PlanThrough {
+        /// A new description, or the continuation after a stop.
+        from: PlanFrom,
+        /// How far.
+        through: Through,
+    },
+    /// Make `target` a project: the plan the person saw, bound to its digest
+    /// (`speccoder new`).
+    NewProject {
+        /// The folder, as the plan names it.
+        target: String,
+        /// What the person chose.
+        choices: crate::new_project::NewChoices,
+        /// The digest of the plan on screen.
+        plan_digest: String,
+    },
+    /// Undo the project speccoder created at the dispatch's root
+    /// (`speccoder new --undo`): to the Trash, or a revert of its commit.
+    UndoNewProject {
+        /// speccoder's commit, as recorded.
+        commit: String,
+    },
+    /// Clone a repository of the person's with their git (their credentials).
+    CloneRepository {
+        /// `owner/repo`.
+        repo: String,
+        /// The destination folder.
+        target: String,
+    },
+    /// Copy the bundled sample into the state directory and replay its
+    /// recorded run strictly (`speccoder sample`).
+    OpenSample {
+        /// Replace an existing copy.
+        fresh: bool,
+    },
+    /// Run the sample's own checks, offline, in its copy (the sample's
+    /// end card, *Run the checks yourself*).
+    SampleChecks,
+}
+
+/// How far plan through goes.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, schemars::JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum Through {
+    /// The spec only.
+    Spec,
+    /// The spec and the plan.
+    Plan,
+    /// The spec, the plan and the tasks.
+    Tasks,
+    /// Then the format's check of the planning files.
+    Analyze,
+}
+
+impl Through {
+    /// Every value, in order.
+    pub const ALL: [Self; 4] = [Self::Spec, Self::Plan, Self::Tasks, Self::Analyze];
+
+    /// Its name (`tasks`).
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Spec => "spec",
+            Self::Plan => "plan",
+            Self::Tasks => "tasks",
+            Self::Analyze => "analyze",
+        }
+    }
+
+    /// The value named `s`.
+    #[must_use]
+    pub fn parse(s: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|t| t.as_str() == s)
+    }
+}
+
+/// Where a new feature's description comes from. Later rungs add theirs
+/// (an Explore brief, a promoted quick change) when they are built.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum FeatureSource {
+    /// The person's own words.
+    Description,
+    /// A GitHub issue's description, verbatim.
+    Issue {
+        /// Its number.
+        number: u64,
+    },
+}
+
+/// What plan through starts from.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum PlanFrom {
+    /// A new unit from a description.
+    Create {
+        /// What it should do, verbatim.
+        description: String,
+        /// Where the description comes from.
+        source: FeatureSource,
+    },
+    /// The next skill after a stop, derived from the unit's files.
+    Continue,
 }
 
 /// What a comment action does.
@@ -411,6 +519,18 @@ pub enum ActionKind {
     AcceptanceAt,
     /// [`Runnable::PresetAdd`].
     PresetAdd,
+    /// [`Runnable::PlanThrough`].
+    PlanThrough,
+    /// [`Runnable::NewProject`].
+    NewProject,
+    /// [`Runnable::UndoNewProject`].
+    UndoNewProject,
+    /// [`Runnable::CloneRepository`].
+    CloneRepository,
+    /// [`Runnable::OpenSample`].
+    OpenSample,
+    /// [`Runnable::SampleChecks`].
+    SampleChecks,
     /// No runnable: the person runs the command.
     Command,
 }
@@ -452,6 +572,12 @@ impl ActionKind {
         Self::CodeNudge,
         Self::AcceptanceAt,
         Self::PresetAdd,
+        Self::PlanThrough,
+        Self::NewProject,
+        Self::UndoNewProject,
+        Self::CloneRepository,
+        Self::OpenSample,
+        Self::SampleChecks,
         Self::Command,
     ];
 
@@ -493,6 +619,12 @@ impl ActionKind {
             Self::CodeNudge => "code_nudge",
             Self::AcceptanceAt => "acceptance_at",
             Self::PresetAdd => "preset_add",
+            Self::PlanThrough => "plan_through",
+            Self::NewProject => "new_project",
+            Self::UndoNewProject => "undo_new_project",
+            Self::CloneRepository => "clone_repository",
+            Self::OpenSample => "open_sample",
+            Self::SampleChecks => "sample_checks",
             Self::Command => "command",
         }
     }
@@ -618,6 +750,30 @@ impl ActionKind {
                 revoke: false,
             },
             Self::PresetAdd => Runnable::PresetAdd { update: false },
+            Self::PlanThrough => Runnable::PlanThrough {
+                from: PlanFrom::Create {
+                    description: "Users can export a report as CSV".to_owned(),
+                    source: FeatureSource::Description,
+                },
+                through: Through::Tasks,
+            },
+            Self::NewProject => Runnable::NewProject {
+                target: "/tmp/md2csv".to_owned(),
+                choices: crate::new_project::NewChoices {
+                    idea: "a CLI that turns Markdown tables into CSV".to_owned(),
+                    ..crate::new_project::NewChoices::default()
+                },
+                plan_digest: "sha256:0".to_owned(),
+            },
+            Self::UndoNewProject => Runnable::UndoNewProject {
+                commit: "1a2b3c4".to_owned(),
+            },
+            Self::CloneRepository => Runnable::CloneRepository {
+                repo: "octo/hello".to_owned(),
+                target: "/tmp/hello".to_owned(),
+            },
+            Self::OpenSample => Runnable::OpenSample { fresh: false },
+            Self::SampleChecks => Runnable::SampleChecks,
             Self::Command => return None,
         })
     }
@@ -668,6 +824,12 @@ impl Runnable {
             Self::CodeNudge { .. } => ActionKind::CodeNudge,
             Self::AcceptanceAt { .. } => ActionKind::AcceptanceAt,
             Self::PresetAdd { .. } => ActionKind::PresetAdd,
+            Self::PlanThrough { .. } => ActionKind::PlanThrough,
+            Self::NewProject { .. } => ActionKind::NewProject,
+            Self::UndoNewProject { .. } => ActionKind::UndoNewProject,
+            Self::CloneRepository { .. } => ActionKind::CloneRepository,
+            Self::OpenSample { .. } => ActionKind::OpenSample,
+            Self::SampleChecks => ActionKind::SampleChecks,
         }
     }
 }
@@ -734,7 +896,16 @@ pub fn identity(run: Option<&Runnable>, command: &str) -> ActionId {
             Some(id) => format!("{verdict}:{id}"),
             None => verdict.clone(),
         }),
+        Runnable::PlanThrough { from, through } => Some(match from {
+            PlanFrom::Create { .. } => format!("create:{}", through.as_str()),
+            PlanFrom::Continue => format!("continue:{}", through.as_str()),
+        }),
+        Runnable::NewProject { target, .. } => Some(target.clone()),
+        Runnable::UndoNewProject { commit } => Some(commit.clone()),
+        Runnable::CloneRepository { repo, .. } => Some(repo.clone()),
         Runnable::Converge
+        | Runnable::OpenSample { .. }
+        | Runnable::SampleChecks
         | Runnable::Commit { .. }
         | Runnable::QuickChange { .. }
         | Runnable::FixSetup

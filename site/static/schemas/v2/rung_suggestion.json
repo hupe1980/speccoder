@@ -1,0 +1,130 @@
+{
+  "$defs": {
+    "RungCue": {
+      "description": "What decided a suggestion: the rule and the words of the text that met\nit, verbatim.",
+      "properties": {
+        "matched": {
+          "description": "The words, as written.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "rule": {
+          "$ref": "#/$defs/RungCueRule",
+          "description": "The rule."
+        }
+      },
+      "required": [
+        "rule",
+        "matched"
+      ],
+      "type": "object"
+    },
+    "RungCueRule": {
+      "description": "The rule that decided a suggestion.",
+      "oneOf": [
+        {
+          "const": "question",
+          "description": "An interrogative first word or a trailing `?`.",
+          "type": "string"
+        },
+        {
+          "const": "wrong_result",
+          "description": "A word for a wrong result of existing behaviour.",
+          "type": "string"
+        },
+        {
+          "const": "several_capabilities",
+          "description": "Two or more capabilities joined.",
+          "type": "string"
+        },
+        {
+          "const": "long",
+          "description": "More than [`LONG_WORDS`] words.",
+          "type": "string"
+        },
+        {
+          "const": "default",
+          "description": "None of the above.",
+          "type": "string"
+        }
+      ]
+    },
+    "RungPick": {
+      "description": "A rung the composer can open for a description: a bug fix, a quick\nchange, a feature, or a question (`ask`); `none` only for an empty text.",
+      "oneOf": [
+        {
+          "const": "bug",
+          "description": "A wrong result of existing behaviour (`speccoder bug`).",
+          "type": "string"
+        },
+        {
+          "const": "quick",
+          "description": "One requirement, judged like a task (`speccoder do`).",
+          "type": "string"
+        },
+        {
+          "const": "feature",
+          "description": "A spec the format's skill writes (`speccoder spec specify`).",
+          "type": "string"
+        },
+        {
+          "const": "ask",
+          "description": "A question: a read-only answer.",
+          "type": "string"
+        },
+        {
+          "const": "none",
+          "description": "Nothing to suggest: the text is empty.",
+          "type": "string"
+        }
+      ]
+    }
+  },
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/rung_suggestion.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The composer's suggestion for a text (`rung_suggestion`): computed by\ncode from the text alone, shown with its reason, never applied without\nthe person's key or click.",
+  "properties": {
+    "alternatives": {
+      "description": "The other rungs, in the composer's order.",
+      "items": {
+        "$ref": "#/$defs/RungPick"
+      },
+      "type": "array"
+    },
+    "available": {
+      "description": "Whether this build has it (`false` for `ask` until the Ask panel).",
+      "type": "boolean"
+    },
+    "command": {
+      "description": "The command that takes the suggested rung (none for `ask` and `none`).",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "cue": {
+      "$ref": "#/$defs/RungCue",
+      "description": "What decided it."
+    },
+    "reason": {
+      "description": "Why, in one sentence.",
+      "type": "string"
+    },
+    "rung": {
+      "$ref": "#/$defs/RungPick",
+      "description": "The suggested rung."
+    }
+  },
+  "required": [
+    "rung",
+    "available",
+    "cue",
+    "reason",
+    "alternatives",
+    "command"
+  ],
+  "title": "suggest: the rung a description suggests and the cue that decided it",
+  "type": "object"
+}

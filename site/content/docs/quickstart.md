@@ -9,6 +9,45 @@ group = "Start"
 
 From a git repository to a pull request whose every tick carries its evidence. Each command prints what to do next.
 
+## Start a project
+
+No folder yet, or one with code but no spec project: `speccoder new` makes it a project speccoder can judge, with the ecosystems' own commands.
+
+```sh
+speccoder new md2csv --idea "a CLI that turns Markdown tables into CSV" --dry-run   # the plan; nothing runs
+speccoder new md2csv --idea "a CLI that turns Markdown tables into CSV"             # asks once, then runs it
+```
+
+```text
+New project md2csv in ~/Workspaces/md2csv (new folder)
+  stack   Rust (cargo) — "CLI" and cargo 1.91.0 is installed
+  specs   Spec Kit 1.2.3 with the speccoder preset
+  sandbox seatbelt (writes: this folder and speccoder's cache)
+
+   1  git init                                                              local
+   2  cargo init --lib --name md2csv                                        local
+   3  specify init --here --force --non-interactive --integration claude …  local
+   4  speccoder init --yes                                                  local
+   5  git commit -m "new project: md2csv"   as Sam Doe <sam@example.com>    local
+```
+
+| | |
+|---|---|
+| Stack | `--stack rust\|python\|node\|go\|none`; suggested from the idea and the toolchains installed. Python runs `uv init --package` and `uv add --dev pytest`, TypeScript `npm init -y`, `npm install --save-dev vitest` and sets `npm test` to `vitest run --passWithNoTests`, Go `go mod init` |
+| Spec format | `--format speckit` (default) or `--format openspec` (`openspec init --tools claude`, its settings kept in speccoder's cache, not `~/.config`). Spec Kit gets the [speccoder preset](@/docs/planning.md#the-speccoder-preset) (`--no-preset` leaves it out) and `--extension NAME\|PATH\|URL` |
+| Network | A step that needs the network says so, with the hosts it is expected to reach; the one question lists them. Such a step gets the full network: the hosts are not enforced |
+| Sandbox | Every step runs with stdin closed, a time limit and without the model keys, in the OS sandbox: writes only in the folder and speccoder's cache, `.git` read-only once it exists, no network unless the step is labelled network |
+| Existing repository | At its top level, with a clean tree: no `git init` and no scaffold; the format's init, `speccoder init --yes`, one commit of exactly what they wrote |
+| The commit | One, as you (your git identity; refused without one), `new project: <name>`, holding exactly what the steps produced |
+
+speccoder writes none of the stack's or the format's files itself; `speccoder.toml` is written by `init`. The plan is bound to a digest over its commands and the folder as seen: a plan that changed before it ran is refused (`NEW-PLAN-CHANGED`). A step that fails stops the run; running the same command again resumes at it — only while the folder is exactly as the run left it, else every refusal applies again. A step may not change `.git` or, in an existing repository, your tracked files; the commit takes only what the steps made. Without a terminal, `speccoder new` prints the plan and stops (`NEW-CONFIRM`) until `--yes`.
+
+`speccoder new --undo` moves a folder speccoder created to the Trash — only while nothing but its commit exists there — or, in an existing repository, reverts speccoder's commit (files that were ignored before it ran don't count). It never trashes a folder speccoder did not make. A new project's first checks run on the untouched code; an empty test suite reads *no tests yet*.
+
+`speccoder sample` copies a recorded run of a small project into speccoder's state directory and replays it strictly — no model, no key, no network — then `speccoder ui -C <its path>` plays it back. A build without the recording answers `SAMPLE-MISSING`.
+
+In the app, a host started outside a project shows **Welcome to speccoder**: New Project, Open Project…, Clone from GitHub…, Try the Sample and the recent projects ([the app](@/docs/web.md#welcome)).
+
 ## 1. Make it a Spec Kit project
 
 ```sh
@@ -48,13 +87,11 @@ The key is read from the environment only. For a local model (Ollama, vLLM, LM S
 From an idea, or from a [GitHub issue](@/docs/github.md#a-feature-from-an-issue):
 
 ```sh
-speccoder spec specify "A function slugify(text) that turns titles into URL slugs"
-#   or: speccoder issue start 42
-speccoder spec plan
-speccoder spec tasks
+speccoder spec specify "A function slugify(text) that turns titles into URL slugs" --through tasks
+#   or: speccoder issue start 42 --through tasks
 ```
 
-After each step speccoder offers the next one and to commit exactly what was written. Read the spec before you go on: the result is judged against it. To sign it off requirement by requirement, use [`speccoder review`](@/docs/planning.md#review-the-spec).
+`--through tasks` runs Spec Kit's `specify`, then — once you approved the spec's requirements — `plan` and `tasks`, stopping for open questions and your review ([plan through](@/docs/planning.md#plan-through)). Without it, each skill runs on its own (`speccoder spec plan`, `speccoder spec tasks`). After each step speccoder offers the next one and to commit exactly what was written. Read the spec before you go on: the result is judged against it. To sign it off requirement by requirement, use [`speccoder review`](@/docs/planning.md#review-the-spec).
 
 ## 5. Run
 

@@ -35,11 +35,10 @@
         app.toast({ tone: "error", text: `Issue #${n} could not be read`, detail: r.error ?? "no skill creates a feature here" });
         return;
       }
-      const action = offer(
-        { kind: "skill", name: r.skill, arguments: r.description },
-        { group: "plan", label: `specify a feature from issue #${n}`, why: "the format's skill that creates a feature, with the issue as the description", command: `speccoder issue start ${n}` },
-      );
-      await app.perform(action);
+      // The New Feature sheet, prefilled with the issue's description and
+      // naming it as the source: Start records the unit's origin.
+      const title = gh?.issues?.issues.find((i) => i.number === n)?.title ?? `#${n}`;
+      app.newFeature = { text: r.description, source: { kind: "issue", number: n, title }, through: "tasks" };
     } finally {
       starting = null;
     }

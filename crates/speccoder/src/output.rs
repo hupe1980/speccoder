@@ -220,6 +220,9 @@ fn human_body(
                     .ran
                     .iter()
                     .map(|r| {
+                        if r.status == "no_tests" {
+                            return format!("{} no tests yet", r.name);
+                        }
                         let g = if r.passed {
                             Glyph::Verified
                         } else {
@@ -235,7 +238,7 @@ fn human_body(
                     .collect();
                 writeln!(out, "On the untouched code  {}", shown.join(" · "))?;
                 // Why a check fails before any change: the line that says it.
-                for r in i.ran.iter().filter(|r| !r.passed) {
+                for r in i.ran.iter().filter(|r| !r.passed && r.status != "no_tests") {
                     if let Some(why) = &r.reason {
                         writeln!(
                             out,
@@ -443,6 +446,15 @@ fn human_body(
         (_, Some(CommandData::Worktree(w))) => human::worktree_refused(&mut err, w),
         (CommandStatus::SelectionNeeded, Some(CommandData::Inspect(s))) => {
             human::selection_needed(&mut err, s)
+        }
+        (_, Some(CommandData::NewProject(r))) => crate::new::render(&mut out, &mut err, r, result),
+        (_, Some(CommandData::Sample(r))) => crate::sample::render(&mut out, r, result),
+        (_, Some(CommandData::PlanningChain(r))) => {
+            crate::spec_through::render(&mut out, r, result)
+        }
+        (_, Some(CommandData::Similar(r))) => crate::spec_through::render_similar(&mut out, r),
+        (_, Some(CommandData::RungSuggestion(r))) => {
+            crate::spec_through::render_suggestion(&mut out, r)
         }
         (CommandStatus::Ok, None) => writeln!(&mut *out, "{}", result.message()),
         // The code block says it (`error[CODE]: message`).

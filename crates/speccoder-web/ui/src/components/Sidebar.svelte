@@ -9,9 +9,12 @@
 </script>
 
 <aside class="glass" aria-label="{cap(unit)}s">
-  <h2 class="section-title">{cap(unit)}s <span class="count">{features.length}</span></h2>
+  <h2 class="section-title">
+    <span>{cap(unit)}s <span class="count">{features.length}</span></span>
+    <button class="add" aria-label="New {unit}" title="New {unit}" onclick={() => (app.newFeature = {})}>+</button>
+  </h2>
   {#if features.length === 0}
-    <p class="none">No {unit}s yet. The next step writes the first one.</p>
+    <p class="none">No {unit}s yet. <button class="link" onclick={() => (app.newFeature = {})}>Write the first one</button>.</p>
   {/if}
   <ul>
     {#each features as f (f.name)}
@@ -51,6 +54,10 @@
   }
   .section-title { padding: 0 0.5rem; display: flex; justify-content: space-between; }
   .count { font-weight: 500; color: var(--faint); font-variant-numeric: tabular-nums; }
+  .add { width: 20px; height: 20px; border: 0; border-radius: 6px; background: none; color: var(--muted); cursor: pointer; font: 600 1rem/1 var(--font); }
+  .add:hover { background: var(--fill); color: var(--text); }
+  .add:focus-visible, .link:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--focus); }
+  .link { border: 0; background: none; padding: 0; color: var(--accent-ink); cursor: pointer; font: inherit; }
   .none { padding: 0 0.6rem; font-size: 0.86rem; color: var(--muted); }
   ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; }
   li button {

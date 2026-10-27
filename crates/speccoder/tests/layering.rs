@@ -337,6 +337,49 @@ fn runtime_has_no_speckit_literals_outside_the_adapter() {
     assert!(errors.is_empty(), "\n{}", errors.join("\n"));
 }
 
+/// The format tools' names, as a string starts with them: a new project's
+/// plan reaches the format's own init only through the adapter seam.
+fn format_commands(text: &str) -> Vec<usize> {
+    code_lines(text)
+        .filter(|(_, l)| {
+            ["\"specify", "\"openspec", "\"speckit-", "\"openspec-"]
+                .iter()
+                .any(|n| l.contains(n))
+        })
+        .map(|(i, _)| i)
+        .collect()
+}
+
+/// `text`'s lines before its tests, comments cut, numbered from 1.
+fn code_lines(text: &str) -> impl Iterator<Item = (usize, String)> + '_ {
+    text.lines()
+        .take_while(|l| !l.trim_start().starts_with("#[cfg(test)]"))
+        .enumerate()
+        .map(|(i, l)| (i + 1, l.split("//").next().unwrap_or_default().to_owned()))
+}
+
+#[test]
+fn a_new_projects_plan_names_no_format_tool_outside_the_adapter() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../speccoder-runtime/src/new_project");
+    let mut files = Vec::new();
+    rust_files(&dir, &mut files);
+    assert!(!files.is_empty());
+    let mut errors = Vec::new();
+    for f in &files {
+        for line in format_commands(&std::fs::read_to_string(f).unwrap()) {
+            errors.push(format!(
+                "layering: new_project/{}:{line} names a spec format's tool: it belongs to format/ (Adapter::init_steps)",
+                f.file_name().unwrap().to_string_lossy()
+            ));
+        }
+    }
+    assert!(errors.is_empty(), "\n{}", errors.join("\n"));
+    assert_eq!(
+        format_commands("let a = [\"specify\", \"init\"];\n// \"openspec\"\n"),
+        [1]
+    );
+}
+
 #[test]
 fn scan_finds_a_planted_literal() {
     let text = "// a comment about .specify/\nuse crate::format::speckit;\nfn f(a: A) {\n    let p = \".specify/memory\"; // tasks.md\n    let q = a.specify_dir;\n    let c = '\"';\n    speccoder_speckit::inspect(\"x \\\n tasks.md\");\n    let d = \"specs\";\n}\n#[cfg(test)]\nmod tests { const X: &str = \"tasks.md\"; }\n";
@@ -591,6 +634,15 @@ const WRITES_WITHOUT_A_KIND: &[(&str, &str)] = &[
     ("github_login", "signs in with a token"),
     ("github_device", "starts a device sign-in"),
     ("github_device_wait", "finishes a device sign-in"),
+    (
+        "open",
+        "binds a host started outside a project to a folder: the host's state, no project write",
+    ),
+    ("forget", "removes a recent project from speccoder's list"),
+    (
+        "first_feature",
+        "marks the new project's idea as offered once (speccoder's state)",
+    ),
 ];
 
 /// Handlers registered for a writing method, and whether each reaches the
@@ -600,10 +652,12 @@ fn writes(lib: &str) -> Vec<(String, bool)> {
     for line in lib.lines().filter(|l| l.contains(".route(")) {
         for method in ["post(", "put(", "delete(", "patch("] {
             for (k, _) in line.match_indices(method) {
-                let name: String = line[k + method.len()..]
+                // A handler of another module (`welcome::open`): its name.
+                let path: String = line[k + method.len()..]
                     .chars()
-                    .take_while(|c| c.is_alphanumeric() || *c == '_')
+                    .take_while(|c| c.is_alphanumeric() || *c == '_' || *c == ':')
                     .collect();
+                let name = path.rsplit("::").next().unwrap_or_default().to_owned();
                 handlers.insert(name);
             }
         }
@@ -631,7 +685,10 @@ fn every_web_route_that_writes_goes_through_the_dispatcher() {
         "jobs.rs maps a kind itself: it only calls service::actions::perform"
     );
     assert!(code_of(&jobs).contains("perform("), "jobs.rs: no perform");
-    let lib = std::fs::read_to_string(web.join("lib.rs")).unwrap();
+    // The routes are registered in lib.rs; a handler may live in a module
+    // beside it (`welcome.rs`).
+    let lib = std::fs::read_to_string(web.join("lib.rs")).unwrap()
+        + &std::fs::read_to_string(web.join("welcome.rs")).unwrap_or_default();
     let errors: Vec<String> = writes(&lib)
         .into_iter()
         .filter(|(h, perform)| !perform && !WRITES_WITHOUT_A_KIND.iter().any(|(x, _)| x == h))
@@ -665,6 +722,9 @@ const DISPATCHERS: &[&str] = &[
     // The line CLI's own commands (`config set` on a prefix list,
     // `approvals batch`).
     "speccoder/src/main.rs",
+    // Plan through's one review question at a terminal: the approval is
+    // the review kind, performed as the person.
+    "speccoder/src/spec_through.rs",
 ];
 
 /// Where code names the dispatcher outside [`DISPATCHERS`].

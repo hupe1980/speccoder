@@ -1,0 +1,17 @@
+{
+  "head": "init",
+  "result": {
+    "code": "USAGE",
+    "command": "job",
+    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#usage",
+    "exit_code": 2,
+    "fix": [
+      "speccoder job --help"
+    ],
+    "message": "a description is needed",
+    "schema_version": 2,
+    "status": "usage_error"
+  },
+  "review": null,
+  "status": ""
+}

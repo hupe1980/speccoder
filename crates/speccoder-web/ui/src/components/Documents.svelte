@@ -7,6 +7,8 @@
   import { diagrams } from "../lib/mermaid";
   import { outline, type Section } from "../lib/outline";
   import ReviewCards from "./ReviewCards.svelte";
+  import Readiness from "./Readiness.svelte";
+  import ChainStop from "./ChainStop.svelte";
   import CommentTray from "./CommentTray.svelte";
   import { comments } from "../lib/comments.svelte";
   import { get, q } from "../lib/api";
@@ -174,6 +176,18 @@
 
 <svelte:window onkeydown={key} />
 
+{#if app.job?.running && app.following}
+  <div class="writing" role="status" aria-live="polite">
+    <span class="spin" aria-hidden="true"></span>
+    writing… {app.task?.id ?? "the spec"}{#if app.stages.length} · {app.stages.at(-1)?.stage}{/if}
+    <span class="muted">— questions it asks appear here; closing this view never stops it</span>
+  </div>
+{/if}
+{#if app.chain && !app.job?.running && (!app.chain.unit || app.chain.unit === app.feature)}
+  <ChainStop chain={app.chain} />
+{/if}
+{#if docs.length > 0}<Readiness />{/if}
+
 {#if docs.length === 0}
   <div class="empty muted">Nothing written yet.</div>
 {:else}
@@ -233,6 +247,10 @@
 {/if}
 
 <style>
+  .writing { display: flex; align-items: center; gap: 0.5rem; padding: 0.55rem 0.8rem; margin-bottom: 0.75rem; border-radius: 10px; background: var(--running-bg); font-size: 0.88rem; }
+  .writing .spin { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--fill-2); border-top-color: var(--running); animation: spin 800ms linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .writing .spin { animation: none; } }
   .docs { display: grid; grid-template-columns: 15rem minmax(0, 1fr); gap: 2rem; max-width: 1240px; margin: 0 auto; }
   /* Sticky beside the page: a grid item stretches to its row and so never
      sticks; aligned to the start, it stays in view while the page scrolls. */

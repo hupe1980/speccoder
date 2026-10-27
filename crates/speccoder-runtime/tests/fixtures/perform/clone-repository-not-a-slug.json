@@ -1,0 +1,17 @@
+{
+  "head": "init",
+  "result": {
+    "code": "NEW-NESTED-REPOSITORY",
+    "command": "clone",
+    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#new-nested-repository",
+    "exit_code": 14,
+    "fix": [
+      "→ choose a folder outside it"
+    ],
+    "message": "<root>/clone is inside the repository <root>",
+    "schema_version": 2,
+    "status": "git_precondition"
+  },
+  "review": null,
+  "status": ""
+}

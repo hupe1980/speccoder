@@ -1,0 +1,26 @@
+#!/bin/sh
+# A stand-in for Spec Kit's `specify`: `init --here` writes a small
+# version of what specify 1.2.3 writes, and installs a `--preset <dir>`.
+. "$(dirname "$0")/_log.sh"
+log specify "$@"
+case "$1" in
+  --version) echo "specify 1.2.3" ;;
+  init)
+    misbehave specify
+    preset=""
+    while [ $# -gt 0 ]; do [ "$1" = --preset ] && preset="$2"; shift; done
+    mkdir -p .specify/memory .specify/templates .specify/scripts/bash .claude/skills/speckit-specify .claude/skills/speckit-plan .claude/skills/speckit-tasks
+    printf '# Constitution\n' > .specify/memory/constitution.md
+    printf '# Tasks template\n' > .specify/templates/tasks-template.md
+    printf '{"ai": "claude"}\n' > .specify/init-options.json
+    printf '#!/bin/sh\n' > .specify/scripts/bash/common.sh
+    for s in specify plan tasks; do
+      printf -- '---\nname: speckit-%s\ndescription: %s.\n---\n\n$ARGUMENTS\n' "$s" "$s" > ".claude/skills/speckit-$s/SKILL.md"
+    done
+    if [ -n "$preset" ]; then
+      mkdir -p .specify/presets/speccoder
+      cp -R "$preset/." .specify/presets/speccoder/
+    fi
+    ;;
+  *) ;;
+esac

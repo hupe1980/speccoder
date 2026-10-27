@@ -9,7 +9,10 @@ use crate::cli::Cli;
 
 /// The daily commands, by group, in the order shown.
 pub const GROUPS: &[(&str, &[&str])] = &[
-    ("Start", &["init", "doctor", "config", "auth"]),
+    (
+        "Start",
+        &["new", "sample", "init", "doctor", "config", "auth"],
+    ),
     ("Plan", &["feature", "spec", "review", "issue"]),
     ("Work", &["run", "do", "bug", "task"]),
     ("Review", &["inbox", "report", "ui", "pr"]),
@@ -17,6 +20,7 @@ pub const GROUPS: &[(&str, &[&str])] = &[
 
 /// The commands `help advanced` lists.
 pub const ADVANCED: &[&str] = &[
+    "suggest",
     "preset",
     "actions",
     "approvals",
@@ -62,7 +66,7 @@ pub fn template() -> String {
         groups.push_str(&format!("{title}\n{}", listing(&cmd, names)));
     }
     format!(
-        "{{about-with-newline}}\n{{usage-heading}} {{usage}}\n\n{groups}\nOptions:\n{{options}}\n\nMore: speccoder help advanced · speccoder help <command> · bare `speccoder`: the dashboard\n"
+        "{{about-with-newline}}\n{{usage-heading}} {{usage}}\n\n{groups}Options:\n{{options}}\nMore: speccoder help advanced · speccoder help <command> · bare `speccoder`: the dashboard\n"
     )
 }
 

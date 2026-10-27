@@ -92,6 +92,59 @@ impl Adapter for SpecKit {
         })
     }
 
+    fn init_steps(&self, choices: &crate::format::FormatInit) -> Vec<crate::format::InitStep> {
+        use speccoder_core::new_project::ExtensionKind;
+        let script = if cfg!(windows) { "ps" } else { "sh" };
+        let mut argv: Vec<String> = [
+            "specify",
+            "init",
+            "--here",
+            "--force",
+            "--non-interactive",
+            "--integration",
+            "claude",
+            "--script",
+            script,
+            "--ignore-agent-tools",
+        ]
+        .map(str::to_owned)
+        .to_vec();
+        if choices.preset {
+            argv.push("--preset".to_owned());
+            argv.push(preset::dir(&choices.state).display().to_string());
+        }
+        for e in &choices.extensions {
+            argv.push("--extension".to_owned());
+            argv.push(e.source.clone());
+        }
+        let hosts: Vec<String> = choices.extensions.iter().filter_map(|e| e.host()).collect();
+        if choices
+            .extensions
+            .iter()
+            .any(|e| e.kind == ExtensionKind::Url)
+        {
+            argv.push("--trust-extension-urls".to_owned());
+        }
+        vec![crate::format::InitStep {
+            argv,
+            hosts,
+            writes: ".specify/, .claude/skills/speckit-*/".to_owned(),
+            env: Vec::new(),
+            marker: ".specify",
+            note: choices
+                .preset
+                .then(|| "with the speccoder preset: tasks that plan for evidence".to_owned()),
+            preset: choices.preset,
+        }]
+    }
+
+    fn prepare_init(&self, choices: &crate::format::FormatInit) -> Result<(), String> {
+        if choices.preset {
+            preset::extract(&choices.state)?;
+        }
+        Ok(())
+    }
+
     fn tool(&self) -> Option<(&'static str, &'static str)> {
         Some((
             "specify",

@@ -618,6 +618,48 @@
       ],
       "type": "object"
     },
+    "Readiness": {
+      "description": "What the future oracle of a unit will be made of, counted from its\nfiles as they are now: requirements, scenarios, open questions, and\nrequirements no scenario covers (they cannot be tested).",
+      "properties": {
+        "identifiers": {
+          "description": "The format defines requirement identifiers (else only questions count).",
+          "type": "boolean"
+        },
+        "open_questions": {
+          "description": "Open-question markers left in the unit's documents.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "requirements": {
+          "description": "Requirements the spec defines.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "scenarios": {
+          "description": "Scenarios over them.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "untestable": {
+          "description": "Requirements without a scenario, by id: they cannot be tested.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "requirements",
+        "scenarios",
+        "open_questions",
+        "untestable",
+        "identifiers"
+      ],
+      "type": "object"
+    },
     "Reading": {
       "description": "One of the two readings of an ambiguous scenario.",
       "oneOf": [
@@ -1085,6 +1127,18 @@
       },
       "type": "array"
     },
+    "readiness": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Readiness"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "What the future oracle will be made of, counted now."
+    },
     "requirements": {
       "description": "One per requirement, in the spec's order.",
       "items": {
@@ -1144,7 +1198,8 @@
     "oracle",
     "tests_notice",
     "approval",
-    "sheet"
+    "sheet",
+    "readiness"
   ],
   "title": "review: the spec's requirements and the person's decision on each",
   "type": "object"

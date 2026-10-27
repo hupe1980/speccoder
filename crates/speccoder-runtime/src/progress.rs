@@ -225,6 +225,72 @@ pub enum Event {
         /// What happened.
         step: OracleEvent,
     },
+    /// Plan through stopped (`planning.stopped`).
+    PlanningStopped {
+        /// The unit, once it exists.
+        unit: Option<String>,
+        /// `questions`, `review`, `failed`, `done`.
+        kind: String,
+        /// The skill a continuation runs next.
+        next_skill: Option<String>,
+    },
+    /// A new project's step, its creation or its undo (`scaffold.*`,
+    /// `project.*`): step ids, argv, states, digests — never the idea,
+    /// never the folder's path.
+    Project {
+        /// What happened.
+        step: ProjectEvent,
+    },
+}
+
+/// A new project's step, its creation or its undo.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "event", rename_all = "snake_case")]
+pub enum ProjectEvent {
+    /// A step began (progress).
+    ScaffoldStarted {
+        /// The step (`git_init`, `scaffold.1`, …).
+        step: String,
+        /// Its command.
+        argv: Vec<String>,
+        /// `local` or `network`.
+        access: String,
+    },
+    /// A step ended (progress).
+    ScaffoldFinished {
+        /// The step.
+        step: String,
+        /// `done`, `skipped`, `failed`.
+        state: String,
+        /// Its exit status, when it ran.
+        exit: Option<i32>,
+        /// How long it took.
+        duration_ms: u64,
+    },
+    /// The project was created and committed (domain).
+    Created {
+        /// SHA-256 of the folder's canonical path.
+        path_digest: String,
+        /// `new_folder` or `existing_repository`.
+        mode: String,
+        /// The stack.
+        stack: String,
+        /// The spec format.
+        format: String,
+        /// speccoder's commit.
+        commit: String,
+        /// Through what.
+        via: String,
+    },
+    /// The project speccoder created was undone (domain).
+    Undone {
+        /// SHA-256 of the folder's canonical path.
+        path_digest: String,
+        /// `trash` or `revert`.
+        how: String,
+        /// Through what.
+        via: String,
+    },
 }
 
 /// One judged file of [`Event::CollectionChecked`].
@@ -684,7 +750,9 @@ impl Progress for Live {
                 | Event::Bug { .. }
                 | Event::Oracle { .. }
                 | Event::CollectionChecked { .. }
-                | Event::RegressionBisected { .. } => {}
+                | Event::RegressionBisected { .. }
+                | Event::PlanningStopped { .. }
+                | Event::Project { .. } => {}
             }
             s.updated_at = now();
             self.write(&s);

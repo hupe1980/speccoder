@@ -37,6 +37,7 @@ regex = "1"
 similar = "2"
 schemars = "1"
 unicode-width = "0.2"
+unicode-normalization = "0.1"
 clap_complete = "4.6"
 jsonschema = { version = "0.60", default-features = false }
 tokio = { version = "1", features = ["rt", "process", "time"] }

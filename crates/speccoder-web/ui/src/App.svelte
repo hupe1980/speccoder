@@ -1,7 +1,7 @@
 <script lang="ts">
   import { flushSync } from "svelte";
   import { app } from "./lib/app.svelte";
-  import { byKind } from "./lib/actions";
+  import { byKind, offer } from "./lib/actions";
   import Sidebar from "./components/Sidebar.svelte";
   import Hero from "./components/Hero.svelte";
   import Board from "./components/Board.svelte";
@@ -25,6 +25,14 @@
   import Setup from "./components/Setup.svelte";
   import ConfirmSheet from "./components/ConfirmSheet.svelte";
   import RemedyCard from "./components/RemedyCard.svelte";
+  import Composer from "./components/Composer.svelte";
+  import NewFeature from "./components/NewFeature.svelte";
+  import NewProject from "./components/NewProject.svelte";
+  import Welcome from "./components/Welcome.svelte";
+  import Clone from "./components/Clone.svelte";
+  import SamplePlayback from "./components/SamplePlayback.svelte";
+  import Keys from "./components/Keys.svelte";
+  import { typing as inField } from "./lib/start";
 
   let theme = $state<string>(localStorage.getItem("speccoder-theme") ?? "auto");
   $effect(() => {
@@ -66,7 +74,18 @@
       e.preventDefault();
       return command(e.key === "Enter" ? "review.send" : "review.tests");
     }
-    if (typing || app.waiting || app.input || app.palette) return;
+    // A sheet, the palette or a decision has the keys while it is open.
+    const sheet = app.composer || app.newFeature || app.newProject || app.clone || app.quick || app.bugSheet || app.confirming || app.keys;
+    if (typing || inField(e.target) || app.waiting || app.input || app.palette || sheet) return;
+    if (e.key === "?") app.keys = true;
+    // `N` (Shift+N): the composer; a browser keeps ⌘N for itself.
+    if (e.key === "N" && e.shiftKey && !e.metaKey && !e.ctrlKey) {
+      e.preventDefault();
+      if (app.welcome) app.newProject = {};
+      else app.composer = {};
+      return;
+    }
+    if (app.welcome) return;
     if (e.key === ",") go("settings");
     if (e.key === "q") app.quick = true;
     if (e.key === "B" && e.shiftKey) app.bugSheet = {};
@@ -89,7 +108,18 @@
       case "view.statusbar": app.statusbar = !app.statusbar; return;
       case "view.actions": app.palette = true; return;
       case "theme.light": case "theme.dark": case "theme.auto": theme = id.slice(6); return;
-      case "file.new": return run(find((a) => a.run?.kind === "skill" && !!a.input), "No skill writes a new feature here — set up the spec tool first");
+      case "file.new":
+        if (app.welcome) app.newProject = {};
+        else app.composer = {};
+        return;
+      case "file.new_feature":
+        if (app.welcome) return void (app.newProject = {});
+        app.newFeature = {};
+        return;
+      case "file.new_project": app.newProject = {}; return;
+      case "file.sample":
+        if (app.welcome?.sample) return void app.run(offer({ kind: "open_sample", fresh: false }, { group: "work", label: "try the sample", why: "", command: "speccoder sample" }));
+        return app.toast({ tone: "warn", text: app.welcome ? "This build has no sample" : "Try the Sample opens in a host started outside a project", detail: app.welcome ? "SAMPLE-MISSING" : "speccoder sample, then speccoder ui -C <its path>" });
       case "file.issues": {
         go("overview");
         // The issues panel: in view and focused, so the list is where the keys are.
@@ -194,7 +224,7 @@
 
 <svelte:window onkeydown={keydown} />
 
-<div class="shell" class:nosidebar={!app.sidebar} class:nostatus={!app.statusbar}>
+<div class="shell" class:nosidebar={!app.sidebar || !!app.welcome} class:nostatus={!app.statusbar || !!app.welcome}>
   <header class="toolbar glass">
     <div class="brand">
       <svg viewBox="0 0 64 64" width="24" height="24" aria-hidden="true">
@@ -208,7 +238,7 @@
       </div>
     </div>
 
-    <div class="segmented" class:none={at < 0} role="tablist" aria-label="Views" bind:this={bar} style="--x:{thumb.x}px; --w:{thumb.w}px">
+    <div class="segmented" class:none={at < 0} class:hide={!!app.welcome} role="tablist" aria-label="Views" bind:this={bar} style="--x:{thumb.x}px; --w:{thumb.w}px">
       <span class="thumb" aria-hidden="true"></span>
       {#each views as x, i (x.v)}
         <button bind:this={tabs[i]} role="tab" aria-selected={app.view === x.v} class:on={app.view === x.v} onclick={() => go(x.v)} title="{x.label} ({x.key})" aria-label={x.label}>
@@ -218,6 +248,9 @@
     </div>
 
     <div class="right">
+      {#if !app.welcome}
+        <button class="btn icon ghost" title="New… — a change, a bug, a feature (N)" aria-label="New…" onclick={() => (app.composer = {})}><Icon name="plus" size={17} /></button>
+      {/if}
       <button class="search" onclick={() => (app.palette = true)} aria-label="Actions">
         <Icon name="search" size={15} /><span>Actions</span><kbd>⌘K</kbd>
       </button>
@@ -233,12 +266,15 @@
     </div>
   </header>
 
-  {#if app.sidebar}<Sidebar />{/if}
+  {#if app.sidebar && !app.welcome}<Sidebar />{/if}
 
   <main>
     {#if app.loading}
       <div class="loading" aria-busy="true"><span class="spinner"></span></div>
+    {:else if app.welcome}
+      <Welcome />
     {:else}
+      {#if app.project?.sample}<SamplePlayback sample={app.project.sample} />{/if}
       {#if app.view === "setup" || needsSetup}<Setup />{:else if app.view === "inbox"}<Inbox />{:else if app.view === "overview"}<Overview />{:else if app.view === "settings"}<Settings />{:else}<Hero compact={app.view !== "board"} />{/if}
       {#if report && !needsSetup && app.view !== "setup" && app.view !== "overview" && app.view !== "inbox" && app.view !== "settings"}
         {#if app.view === "board"}<Board />{/if}
@@ -250,7 +286,7 @@
   </main>
 
   {#if app.selected}<Drawer />{/if}
-  {#if app.statusbar}<StatusBar />{/if}
+  {#if app.statusbar && !app.welcome}<StatusBar />{/if}
 </div>
 
 <Island />
@@ -262,6 +298,11 @@
 {#if app.context}<ContextMenu />{/if}
 {#if app.quick}<QuickSheet />{/if}
 {#if app.bugSheet}<BugSheet />{/if}
+{#if app.composer}<Composer />{/if}
+{#if app.newFeature}<NewFeature />{/if}
+{#if app.newProject}<NewProject />{/if}
+{#if app.clone}<Clone />{/if}
+{#if app.keys}<Keys />{/if}
 <Toasts />
 
 <style>
@@ -302,6 +343,7 @@
   :global(:root[data-theme="dark"]) .thumb { background: #636366; }
   @media (prefers-color-scheme: dark) { :global(:root:not([data-theme="light"])) .thumb { background: #636366; } }
   .segmented.none .thumb { opacity: 0; }
+  .segmented.hide { visibility: hidden; }
   .segmented button {
     position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem;
     height: 28px; padding: 0 0.95rem; border: 0; background: none; border-radius: 8px; cursor: pointer;

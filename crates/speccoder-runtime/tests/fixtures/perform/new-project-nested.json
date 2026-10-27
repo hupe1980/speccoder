@@ -1,0 +1,168 @@
+{
+  "head": "init",
+  "result": {
+    "code": "NEW-NESTED-REPOSITORY",
+    "command": "new",
+    "data": {
+      "commit": null,
+      "dry_run": false,
+      "first_feature": null,
+      "init": null,
+      "plan": {
+        "digest": "sha256:<hex>",
+        "extensions": [],
+        "format": "speckit",
+        "formats": [
+          {
+            "disabled": "<machine>",
+            "id": "speckit",
+            "label": "Spec Kit",
+            "version": "<machine>"
+          },
+          {
+            "disabled": "<machine>",
+            "id": "openspec",
+            "label": "OpenSpec",
+            "version": "<machine>"
+          }
+        ],
+        "identity": {
+          "email": "d@example.com",
+          "name": "Dana Example"
+        },
+        "mode": "new_folder",
+        "name": "app",
+        "observed": {
+          "entries": [],
+          "exists": false,
+          "head": null,
+          "porcelain": [],
+          "tools": "<machine>"
+        },
+        "preset": true,
+        "refusal": {
+          "code": "NEW-NESTED-REPOSITORY",
+          "fix": "→ choose a folder outside it, or use <root> itself",
+          "message": "<root>/sub/app is inside the repository <root>"
+        },
+        "sandbox": {
+          "backend": "<machine>"
+        },
+        "stack": {
+          "detected": false,
+          "id": "none",
+          "reason": "chosen"
+        },
+        "stacks": [
+          {
+            "disabled": "<machine>",
+            "id": "rust",
+            "label": "Rust (cargo)",
+            "version": "<machine>"
+          },
+          {
+            "disabled": "<machine>",
+            "id": "python",
+            "label": "Python (uv)",
+            "version": "<machine>"
+          },
+          {
+            "disabled": "<machine>",
+            "id": "node",
+            "label": "TypeScript (npm + vitest)",
+            "version": "<machine>"
+          },
+          {
+            "disabled": "<machine>",
+            "id": "go",
+            "label": "Go",
+            "version": "<machine>"
+          },
+          {
+            "disabled": "<machine>",
+            "id": "none",
+            "label": "I'll add code myself",
+            "version": "<machine>"
+          }
+        ],
+        "steps": [
+          {
+            "access": "local",
+            "argv": [
+              "git",
+              "init"
+            ],
+            "cwd": "<root>/sub/app",
+            "id": "git_init",
+            "limit_s": 120,
+            "writes": ".git/"
+          },
+          {
+            "access": "local",
+            "argv": [
+              "specify",
+              "init",
+              "--here",
+              "--force",
+              "--non-interactive",
+              "--integration",
+              "claude",
+              "--script",
+              "sh",
+              "--ignore-agent-tools",
+              "--preset",
+              "<state>/presets/speccoder-<version>"
+            ],
+            "cwd": "<root>/sub/app",
+            "id": "format_init",
+            "limit_s": 120,
+            "note": "with the speccoder preset: tasks that plan for evidence",
+            "writes": ".specify/, .claude/skills/speckit-*/"
+          },
+          {
+            "access": "local",
+            "argv": [
+              "speccoder",
+              "init",
+              "--yes"
+            ],
+            "cwd": "<root>/sub/app",
+            "id": "speccoder_init",
+            "limit_s": 120,
+            "writes": "speccoder.toml (its checks run on the untouched code)"
+          },
+          {
+            "access": "local",
+            "argv": [
+              "git",
+              "commit",
+              "-m",
+              "new project: app"
+            ],
+            "cwd": "<root>/sub/app",
+            "id": "commit",
+            "limit_s": 120,
+            "writes": "one commit as Dana Example <d@example.com>"
+          }
+        ],
+        "target": "<root>/sub/app"
+      },
+      "results": [],
+      "undo": {
+        "available": false,
+        "kind": "none"
+      }
+    },
+    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#new-nested-repository",
+    "exit_code": 14,
+    "fix": [
+      "→ choose a folder outside it, or use <root> itself"
+    ],
+    "message": "<root>/sub/app is inside the repository <root>",
+    "payload": "new_project",
+    "schema_version": 2,
+    "status": "git_precondition"
+  },
+  "review": null,
+  "status": ""
+}

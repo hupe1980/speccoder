@@ -47,7 +47,7 @@ pub struct JobView {
 /// The host's jobs and the page's event stream.
 #[derive(Debug)]
 pub struct Hub {
-    root: PathBuf,
+    root: crate::Root,
     events: broadcast::Sender<String>,
     next: AtomicU64,
     job: Mutex<Option<JobView>>,
@@ -56,12 +56,12 @@ pub struct Hub {
 }
 
 impl Hub {
-    /// A hub for the project at `root`.
+    /// A hub for the project `root` is (or will be, once bound).
     #[must_use]
-    pub fn new(root: &Path) -> Arc<Self> {
+    pub fn new(root: crate::Root) -> Arc<Self> {
         let (events, _) = broadcast::channel(1024);
         Arc::new(Self {
-            root: root.to_path_buf(),
+            root,
             events,
             next: AtomicU64::new(1),
             job: Mutex::new(None),
@@ -125,7 +125,7 @@ impl Hub {
         if let Some(c) = self.cancel.lock().ok().and_then(|c| c.clone()) {
             c.store(true, Ordering::SeqCst);
         }
-        let who = Who::local_in(&self.root, Via::Web);
+        let who = Who::local_in(&self.root.get(), Via::Web);
         if let Some(w) = self.waiting.lock().ok().and_then(|mut w| w.take()) {
             let _ = w.reply.send(match w.event["type"].as_str() {
                 Some("question") => Reply::Text(None),
@@ -169,7 +169,8 @@ impl Hub {
         Ok(out)
     }
 
-    /// Starts `run` (with `input` for actions that take one) for `feature`;
+    /// Starts `run` (with `input` for actions that take one) for `feature`,
+    /// in `root` (the bound project's, or a folder of a host not bound yet);
     /// `Err` when a job is already working.
     pub fn start(
         self: &Arc<Self>,
@@ -177,6 +178,7 @@ impl Hub {
         input: Option<String>,
         feature: Option<String>,
         command: String,
+        root: PathBuf,
     ) -> Result<u64, String> {
         let id = self.next.fetch_add(1, Ordering::SeqCst);
         {
@@ -203,11 +205,11 @@ impl Hub {
         std::thread::spawn(move || {
             let peer: Arc<Peer> = Arc::new(Peer {
                 hub: Arc::clone(&hub),
-                who: Who::local_in(&hub.root, Via::Web),
+                who: Who::local_in(&root, Via::Web),
             });
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 execute(
-                    &hub.root,
+                    &root,
                     feature.as_deref(),
                     &run,
                     input.as_deref(),
@@ -219,6 +221,11 @@ impl Hub {
                 CommandResult::new("job", CommandStatus::Error, "the job stopped unexpectedly")
             });
             let result = speccoder_runtime::service::next::attach(result, feature.as_deref());
+            // A host started outside a project binds to the one this job
+            // made, cloned or opened: once, then the page reloads into it.
+            if let Some(bound) = crate::welcome::bind_after(&hub.root, &run, &result) {
+                hub.send(&json!({ "type": "bound", "root": bound.display().to_string() }));
+            }
             let value = serde_json::to_value(&result).unwrap_or(Value::Null);
             if let Ok(mut job) = hub.job.lock()
                 && let Some(j) = job.as_mut()
