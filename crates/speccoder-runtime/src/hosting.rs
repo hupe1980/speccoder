@@ -434,10 +434,22 @@ fn run_unguarded(
             format!(
                 "{} stopped ({other}): {}",
                 skill.name,
+                // A call nobody could ask about: named, with how to let it run.
                 report
-                    .reason
-                    .clone()
-                    .filter(|r| !r.is_empty())
+                    .pending
+                    .as_ref()
+                    .filter(|p| p.is_object())
+                    .map(|p| tools::policy::unasked(
+                        p,
+                        &format!(
+                            "run it again with prompts (`speccoder spec {}` without `--no-prompt`) and approve it when asked",
+                            skill
+                                .name
+                                .strip_prefix(s.format.planning().prefix)
+                                .unwrap_or(&skill.name)
+                        ),
+                    ))
+                    .or_else(|| report.reason.clone().filter(|r| !r.is_empty()))
                     .or_else(|| {
                         (!report.questions.is_empty())
                             .then(|| format!("open questions: {}", report.questions.join(" | ")))

@@ -17,7 +17,7 @@ Every failure names a [code](@/docs/codes.md) and the command that fixes it; `sp
 | `error[CONFIG-INVALID]` (13), e.g. ``unknown section `[budgett]` `` | A typo or a wrong value in `speccoder.toml`; the message names the line and lists what is known. |
 | `error[UNCOMMITTED-INTENT]` (14) | Commit the feature's spec files, or run with `--in-place`. |
 | `error[KEY-MISSING]` (13) | Export the variable the message names in this shell, e.g. `set -a; . ./.env; set +a`. |
-| Every attempt stops for the same command | `[commands] allow` matches exact commands: add the command there, or a prefix to `[commands] allow_prefix` after `speccoder config coverage` ([prefix lists](@/docs/configuration.md#prefix-lists)). |
+| Every attempt stops for the same command | The stop names the command and its exact `[commands] allow` entry. `[commands] allow` matches exact commands: add the command there, or a prefix to `[commands] allow_prefix` after `speccoder config coverage` ([prefix lists](@/docs/configuration.md#prefix-lists)). |
 | `… is not an allowed command` (acceptance skipped) | The acceptance tests' command must be allowed: add it to `[commands] allow`. |
 | The baseline fails on a project without tests | For nextest add `--no-tests=warn`, as `init` does. |
 | A build cannot download dependencies | The sandbox has no network. Fetch first (`cargo fetch`, `npm ci`, `uv sync`) or add the fetch command to `[sandbox] network_allow`. |

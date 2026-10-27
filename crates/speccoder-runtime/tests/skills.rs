@@ -238,6 +238,40 @@ fn without_a_terminal_questions_go_unanswered_and_source_writes_stop() {
     assert!(k.changes.is_empty());
 }
 
+/// A hosted skill that stops for a command nobody could be asked about
+/// names it and how to let it run: its exact `[commands] allow` entry, or
+/// a run with prompts.
+#[test]
+fn a_refused_command_in_a_hosted_skill_is_named_with_its_fix() {
+    let r = repo();
+    let state = tempfile::tempdir().unwrap();
+    let f = FakeProvider::new();
+    let d: Arc<dyn ModelProvider> = f.clone();
+    f.will_call_tool(
+        "c",
+        "run_command",
+        json!({ "argv": ["cargo", "add", "serde json"] }),
+    );
+    let res = run_with(
+        r.path(),
+        "demo-specify",
+        "Add a login page",
+        state.path(),
+        d,
+        None,
+        &RunOptions::default(),
+    );
+    assert_eq!(res.status(), CommandStatus::NeedsHuman, "{}", res.message());
+    assert_eq!(report(&res).status, "needs_approval");
+    let m = res.message();
+    assert!(m.contains("`cargo add 'serde json'` needs approval"), "{m}");
+    assert!(
+        m.contains("`[commands] allow = [[\"cargo\", \"add\", \"serde json\"]]`"),
+        "{m}"
+    );
+    assert!(m.contains("without `--no-prompt`"), "{m}");
+}
+
 // ── extension hooks ─────────────────────────────────────────────────
 
 const HOOK_SKILL: &str = "---\nname: \"speckit-audit-record\"\ndescription: \"Record that implementation starts.\"\n---\n\nWrite .specify/memory/audit.md saying implementation started.\n";

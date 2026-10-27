@@ -90,6 +90,40 @@ pub enum Object {
 /// What an executable that cannot be found is recorded as.
 pub const NOT_FOUND: &str = "not found";
 
+/// Why a command no rule allows needs a person.
+pub const NOT_ALLOWED: &str = "not a configured check or allowed command";
+
+/// A call that stopped for a person nobody could ask then, in a person's
+/// words: the call (a command's argv as typed), why, and how to let it run
+/// — for a command no rule allows, its exact `[commands] allow` entry;
+/// `decide` says how else (e.g. ``approve it: `speccoder task approve T001` ``).
+#[must_use]
+pub fn unasked(pending: &Value, decide: &str) -> String {
+    let tool = pending["tool"].as_str().unwrap_or_default();
+    let reason = pending["reason"].as_str().unwrap_or_default();
+    let arguments = &pending["arguments"];
+    if tool == "run_command" {
+        let argv = argv_of(arguments);
+        let shown = crate::approvals::present::shell_quote(&argv);
+        if reason == NOT_ALLOWED {
+            let entry = argv
+                .iter()
+                .map(|a| serde_json::to_string(a).unwrap_or_default())
+                .collect::<Vec<_>>()
+                .join(", ");
+            return format!(
+                "`{shown}` needs approval: it is {NOT_ALLOWED} — allow exactly it in speccoder.toml (`[commands] allow = [[{entry}]]`), or {decide}"
+            );
+        }
+        return format!("`{shown}` needs approval: {reason} — {decide}");
+    }
+    let object = arguments["path"]
+        .as_str()
+        .map(|p| format!(" `{p}`"))
+        .unwrap_or_default();
+    format!("`{tool}`{object} needs approval: {reason} — {decide}")
+}
+
 impl PartialEq for Object {
     /// A path is the file it reaches (any spelling); a command and a tool
     /// are every field.
@@ -885,7 +919,7 @@ impl Policy {
         {
             return Decision::Allow;
         }
-        Decision::Approval("not a configured check or allowed command".to_owned())
+        Decision::Approval(NOT_ALLOWED.to_owned())
     }
 }
 
@@ -917,6 +951,40 @@ mod tests {
             &[],
         )
         .with_prefixes(vec![argv("cargo fmt"), argv("cargo check")])
+    }
+
+    #[test]
+    fn an_unasked_call_is_named_with_how_to_let_it_run() {
+        let decide = "run with prompts";
+        let refused = policy().classify("run_command", &json!({"argv": ["npm", "i"]}), None);
+        let Decision::Approval(reason) = refused else {
+            panic!("{refused:?}")
+        };
+        let m = unasked(
+            &json!({"tool": "run_command", "arguments": {"argv": ["make", "it's"]}, "reason": reason}),
+            decide,
+        );
+        assert_eq!(
+            m,
+            "`make 'it'\\''s'` needs approval: it is not a configured check or allowed command — allow exactly it in speccoder.toml (`[commands] allow = [[\"make\", \"it's\"]]`), or run with prompts"
+        );
+        // No allow entry lets a shell run: only a person can.
+        let m = unasked(
+            &json!({"tool": "run_command", "arguments": {"argv": ["sh", "-c", "x"]}, "reason": "`sh` runs arbitrary commands"}),
+            decide,
+        );
+        assert_eq!(
+            m,
+            "`sh -c x` needs approval: `sh` runs arbitrary commands — run with prompts"
+        );
+        let m = unasked(
+            &json!({"tool": "write_file", "arguments": {"path": "Cargo.toml"}, "reason": "`Cargo.toml` is a dependency manifest"}),
+            decide,
+        );
+        assert_eq!(
+            m,
+            "`write_file` `Cargo.toml` needs approval: `Cargo.toml` is a dependency manifest — run with prompts"
+        );
     }
 
     fn path(canonical: &str, asked: &str) -> Object {

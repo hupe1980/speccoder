@@ -1,6 +1,7 @@
 //! How a task run ends: its scope finding, what a failed attempt is saved
 //! as, the command's status and message, and the progress event.
 
+use serde_json::Value;
 use speccoder_core::scope::ScopeFinding;
 use speccoder_core::verify::Verdict;
 use speccoder_core::{CommandStatus, RunReport};
@@ -99,6 +100,20 @@ pub(crate) fn status_and_message(
             format!("verdict: failed — {}", reasons.join("; ")),
         ),
         (Some(v), _) => (CommandStatus::Ok, format!("verdict: {}", verdict_word(v))),
+        // A call nobody could ask about: named, with how to let it run.
+        (None, "needs_approval") if report.pending.as_ref().is_some_and(Value::is_object) => (
+            CommandStatus::NeedsHuman,
+            format!(
+                "attempt needs_approval: {}",
+                crate::tools::policy::unasked(
+                    report.pending.as_ref().unwrap_or(&Value::Null),
+                    &format!(
+                        "approve it (`speccoder task approve {}`), or run with prompts (without `--no-prompt`) to be asked",
+                        report.task
+                    ),
+                )
+            ),
+        ),
         (
             None,
             "blocked" | "needs_approval" | "budget_exhausted" | "denied" | "interrupted"

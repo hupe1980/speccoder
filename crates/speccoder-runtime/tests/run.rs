@@ -339,6 +339,17 @@ fn a_call_needing_approval_stops_the_attempt_unexecuted() {
     let rep = report(&res);
     assert_eq!(rep.attempt_status, "needs_approval");
     assert_eq!(rep.pending.as_ref().unwrap()["tool"], "run_command");
+    // The stop names the command and how to let it run.
+    assert!(
+        res.message()
+            .contains("`touch approved-only` needs approval")
+            && res
+                .message()
+                .contains("`[commands] allow = [[\"touch\", \"approved-only\"]]`")
+            && res.message().contains("`speccoder task approve T005`"),
+        "{}",
+        res.message()
+    );
     assert!(
         !Path::new(&rep.worktree).join("approved-only").exists(),
         "nothing was executed"
