@@ -1,16 +1,16 @@
 {
   "head": "init",
   "result": {
-    "code": "USAGE",
+    "code": "NEW-NESTED-REPOSITORY",
     "command": "clone",
-    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#usage",
-    "exit_code": 2,
+    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#new-nested-repository",
+    "exit_code": 14,
     "fix": [
-      "speccoder clone --help"
+      "→ choose a folder outside it"
     ],
-    "message": "`not a repository` is not a repository: give it as owner/name",
+    "message": "<root>/clone is inside the repository <root>",
     "schema_version": 2,
-    "status": "usage_error"
+    "status": "git_precondition"
   },
   "review": null,
   "status": ""

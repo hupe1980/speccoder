@@ -802,6 +802,35 @@ pub fn clone(_ctx: &Ctx, slug: &str, target: &Path) -> CommandResult {
         _ => target.to_path_buf(),
     };
     let target = expanded.as_path();
+    if !target.is_absolute() {
+        return refuse(
+            CommandStatus::UsageError,
+            &format!(
+                "give the destination as an absolute path or ~/…, not {}",
+                target.display()
+            ),
+        )
+        .with_code("USAGE");
+    }
+    // Never inside another repository's worktree.
+    let mut probe = target.to_path_buf();
+    while !probe.is_dir() {
+        if !probe.pop() {
+            break;
+        }
+    }
+    if let Ok(Some(top)) = crate::git::Git::at(&probe).toplevel() {
+        return refuse(
+            CommandStatus::GitPrecondition,
+            &format!(
+                "{} is inside the repository {}",
+                target.display(),
+                top.display()
+            ),
+        )
+        .with_code("NEW-NESTED-REPOSITORY")
+        .with_fix(vec!["→ choose a folder outside it".to_owned()]);
+    }
     if !valid_slug(slug) {
         return refuse(
             CommandStatus::UsageError,
@@ -829,9 +858,10 @@ pub fn clone(_ctx: &Ctx, slug: &str, target: &Path) -> CommandResult {
             &format!("cannot create {}: {e}", parent.display()),
         );
     }
+    // Tests point it elsewhere; a release build clones from github.com only.
     let base = std::env::var("SPECCODER_GIT_BASE")
         .ok()
-        .filter(|b| !b.trim().is_empty())
+        .filter(|b| cfg!(debug_assertions) && !b.trim().is_empty())
         .unwrap_or_else(|| "https://github.com".to_owned());
     let url = format!("{}/{slug}.git", base.trim_end_matches('/'));
     let dest = target.display().to_string();
@@ -845,8 +875,27 @@ pub fn clone(_ctx: &Ctx, slug: &str, target: &Path) -> CommandResult {
             command: format!("speccoder init -C {dest}"),
             why: "set speccoder up there".to_owned(),
         }]),
-        Err(e) => refuse(CommandStatus::Error, &format!("git clone failed: {}", e.0))
-            .with_code("GITHUB-FAILED"),
+        // The clone is git's, with the person's git credentials — not
+        // speccoder's sign-in, which only lists the repositories.
+        Err(e) => {
+            let auth = [
+                "Authentication failed",
+                "could not read Username",
+                "terminal prompts disabled",
+                "Repository not found",
+            ]
+            .iter()
+            .any(|m| e.0.contains(m));
+            let why = if auth {
+                format!(
+                    "git could not sign in to clone {slug}: a private repository needs your git credentials (a credential helper, or an SSH remote) — speccoder's sign-in only lists repositories: {}",
+                    e.0
+                )
+            } else {
+                format!("git clone failed: {}", e.0)
+            };
+            refuse(CommandStatus::Error, &why).with_code("GITHUB-FAILED")
+        }
     }
 }
 
