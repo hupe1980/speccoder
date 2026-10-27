@@ -8,11 +8,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- **Amazon Bedrock as a model provider.** `[model] provider = "bedrock"`
+- **Amazon Bedrock as a model provider (preview).** `[model] provider = "bedrock"`
   with a `region`; credentials from AWS — a Bedrock API key
   (`AWS_BEARER_TOKEN_BEDROCK`) or an `aws login`/SSO profile — never from
   the file. `init --provider bedrock [--region]` writes
-  `global.anthropic.claude-sonnet-5-5`; `doctor` names the source.
+  `global.anthropic.claude-sonnet-5-5`; `doctor` names the source. Known
+  issue: a tool answer that is a list fails the attempt on Bedrock.
 
 ### Fixed
 

@@ -35,7 +35,7 @@ Coding agents are good at writing code and too good at declaring victory. specco
 - 🚦 **Every call governed.** Each tool call is allowed, sent to you, or denied before it runs. An approval covers exactly what you saw — that file, that command, that tool — and ends with the run. Every decision records who made it.
 - 💾 **Durable and replayable.** Every model and tool call is journaled. A killed run resumes without repeating finished calls; a recorded run replays offline.
 - 🧾 **Proof a maintainer can check.** Every tick leaves signed in-toto statements in git. `speccoder attest verify --branch` (no model, no network) checks each `[X]` against them, and its GitHub Action posts the result as the `speccoder / evidence` check ([proof in pull requests](https://hupe1980.github.io/speccoder/docs/verifier/)).
-- 🤖 **Your model, or your agent.** Anthropic, OpenAI, Amazon Bedrock, any OpenAI-compatible server (Ollama, vLLM, …), or Claude Code and Codex making the attempts under speccoder's judgement.
+- 🤖 **Your model, or your agent.** Anthropic, OpenAI, Amazon Bedrock (preview), any OpenAI-compatible server (Ollama, vLLM, …), or Claude Code and Codex making the attempts under speccoder's judgement.
 
 ## 🚀 Quickstart
 
