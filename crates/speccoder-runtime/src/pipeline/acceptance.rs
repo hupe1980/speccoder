@@ -181,10 +181,8 @@ pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance 
         .flatten()
         .filter_map(|v| v.as_str().map(str::to_owned))
         .collect();
-    if a.policy
-        .classify("run_command", &json!({ "argv": argv }), None)
-        != tools::policy::Decision::Allow
-    {
+    let paths: Vec<&str> = planned.iter().map(|(p, _)| p.as_str()).collect();
+    if !test_command_allowed(a.policy, a.layout, &argv, &paths) {
         return skipped_by(
             format!("`{}` is not an allowed command", argv.join(" ")),
             Some(SkipCause::CommandNotAllowed {
@@ -373,6 +371,20 @@ pub(crate) struct RefusedFile {
     pub(crate) why: &'static str,
     /// What a person is told.
     pub(crate) message: String,
+}
+
+/// Whether the author's `argv` may run: the policy allows it, or it is
+/// the layout's command that runs only one of `files` (what the prompt
+/// names).
+pub(crate) fn test_command_allowed(
+    policy: &tools::policy::Policy,
+    layout: Option<&crate::layout::TestLayout>,
+    argv: &[String],
+    files: &[&str],
+) -> bool {
+    layout.is_some_and(|l| l.runs_only(argv, files))
+        || policy.classify("run_command", &serde_json::json!({ "argv": argv }), None)
+            == tools::policy::Decision::Allow
 }
 
 /// The acceptance author's files, checked (the one validation run time and
@@ -723,10 +735,7 @@ pub(crate) fn prepare_held_out(
             discard(&rel, "composition");
             continue;
         }
-        if a.policy
-            .classify("run_command", &json!({ "argv": argv }), None)
-            != tools::policy::Decision::Allow
-        {
+        if !test_command_allowed(a.policy, a.layout, &argv, &[rel.as_str()]) {
             discard(&rel, "command");
             continue;
         }
@@ -993,10 +1002,11 @@ pub(crate) fn strengthen(
         .flatten()
         .filter_map(|v| v.as_str().map(str::to_owned))
         .collect();
-    if a.policy
-        .classify("run_command", &json!({ "argv": argv }), None)
-        != tools::policy::Decision::Allow
-    {
+    let paths: Vec<&str> = planned
+        .iter()
+        .map(|(p, _): &(String, String)| p.as_str())
+        .collect();
+    if !test_command_allowed(a.policy, a.layout, &argv, &paths) {
         return Err(format!("`{}` is not an allowed command", argv.join(" ")));
     }
     let write = || -> Result<(), String> {

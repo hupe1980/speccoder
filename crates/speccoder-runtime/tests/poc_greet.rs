@@ -56,7 +56,9 @@ fn git(dir: &Path, args: &[&str]) -> String {
     String::from_utf8_lossy(&out.stdout).into_owned()
 }
 
-const CONFIG: &str = "[model]\nprovider = \"openai\"\nmodel = \"gpt-5.4-mini\"\n\n[checks.test]\nargv = [\"cargo\", \"nextest\", \"run\", \"--profile\", \"speccoder\", \"--no-tests=warn\"]\njunit = \"target/nextest/speccoder/junit.xml\"\n\n[commands]\nallow_prefix = [[\"cargo\", \"test\"]]\n\n[acceptance]\nheld_out = false\n";
+// `[commands]` as `speccoder init` writes it: exact argvs, so the author's
+// `cargo test --test <file>` runs because the layout names it, not by a prefix.
+const CONFIG: &str = "[model]\nprovider = \"openai\"\nmodel = \"gpt-5.4-mini\"\n\n[checks.test]\nargv = [\"cargo\", \"nextest\", \"run\", \"--profile\", \"speccoder\", \"--no-tests=warn\"]\njunit = \"target/nextest/speccoder/junit.xml\"\n\n[commands]\nallow = [[\"cargo\", \"test\"], [\"cargo\", \"check\"], [\"cargo\", \"build\"]]\n\n[acceptance]\nheld_out = false\n";
 
 /// The POC at its planning commit, as a committed repository.
 fn poc() -> tempfile::TempDir {

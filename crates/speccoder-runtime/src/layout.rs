@@ -396,6 +396,17 @@ impl TestLayout {
         })
     }
 
+    /// Whether `argv` is the command that runs only one of `files` — the
+    /// one the author's prompt names, which an exact `[commands] allow`
+    /// (`cargo test`) would otherwise refuse.
+    #[must_use]
+    pub fn runs_only(&self, argv: &[String], files: &[&str]) -> bool {
+        files.iter().any(|f| {
+            self.command_for(f)
+                .is_some_and(|c| c.split_whitespace().eq(argv.iter().map(String::as_str)))
+        })
+    }
+
     /// The part a model reads (contracts/prompts.md).
     #[must_use]
     pub fn text(&self) -> String {
@@ -489,6 +500,11 @@ mod tests {
             l.command_for("tests/acceptance_us1.rs").as_deref(),
             Some("cargo test --test acceptance_us1")
         );
+        let argv = |s: &str| s.split(' ').map(str::to_owned).collect::<Vec<_>>();
+        let file = ["tests/acceptance_us1.rs"];
+        assert!(l.runs_only(&argv("cargo test --test acceptance_us1"), &file));
+        assert!(!l.runs_only(&argv("cargo test --test acceptance_us2"), &file));
+        assert!(!l.runs_only(&argv("cargo test"), &file));
         let text = l.text();
         assert!(text.contains("Rule: Cargo builds `tests/*.rs`"), "{text}");
         assert!(

@@ -107,7 +107,7 @@ adheres to [Semantic Versioning](https://semver.org/).
   as refused.
 
 ### Fixed
-
+- An acceptance author's `cargo test --test <file>` — the command its prompt names — was refused under the exact `[commands] allow` that `speccoder init` writes, so every task ticked regression-only; the command that runs only the file being written is allowed.
 - `speccoder new --stack rust` left cargo's placeholder `add` and its test, which the first task found frozen and could not replace; the library starts empty and formatted.
 - `just record-sample` accepted a recording in which nothing was verified; it now fails unless the run ticked at least one task `verified` (in its payload and its tick's trailers), and every stop — planning's `--through tasks` included — quotes the result's own message, code and fix.
 - A planning skill or attempt that stopped for a call nobody could be asked about (`--no-prompt`) said only "needs_approval: not a configured check or allowed command". It now names the call — a command as typed — and how to let it run: its exact `[commands] allow` entry, `task approve`, or a run with prompts.

@@ -1301,6 +1301,7 @@ fn keep(
         .flatten()
         .filter_map(|v| v.as_str().map(str::to_owned))
         .collect();
+    let layout = crate::layout::detect(&bench.project, &crate::verify::check_argvs(&ctx.root));
     let mut kept = Vec::new();
     for f in valid {
         let mut discard = |why: &str| {
@@ -1335,10 +1336,12 @@ fn keep(
             continue;
         }
         if argv.is_empty()
-            || ctx
-                .policy
-                .classify("run_command", &json!({ "argv": argv }), None)
-                != tools::policy::Decision::Allow
+            || !crate::pipeline::test_command_allowed(
+                &ctx.policy,
+                Some(&layout),
+                &argv,
+                &[f.path.as_str()],
+            )
         {
             discard("command_not_allowed");
             continue;

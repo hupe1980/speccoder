@@ -173,6 +173,8 @@ fn a_rust_spec_kit_project_is_made_by_its_own_tools_and_committed_once_as_the_pe
         [
             "git_init",
             "scaffold.1",
+            "scaffold.2",
+            "scaffold.3",
             "format_init",
             "speccoder_init",
             "commit"
@@ -183,7 +185,7 @@ fn a_rust_spec_kit_project_is_made_by_its_own_tools_and_committed_once_as_the_pe
         steps[1]["argv"],
         serde_json::json!(["cargo", "init", "--lib", "--name", "md2csv"])
     );
-    let specify: Vec<&str> = steps[2]["argv"]
+    let specify: Vec<&str> = steps[4]["argv"]
         .as_array()
         .unwrap()
         .iter()
@@ -223,6 +225,8 @@ fn a_rust_spec_kit_project_is_made_by_its_own_tools_and_committed_once_as_the_pe
         [
             "git_init=done",
             "scaffold.1=done",
+            "scaffold.2=done",
+            "scaffold.3=done",
             "format_init=done",
             "speccoder_init=done",
             "commit=done"
@@ -441,12 +445,14 @@ fn a_failed_step_stops_the_run_and_running_again_resumes_at_it() {
         [
             "git_init=done",
             "scaffold.1=done",
+            "scaffold.2=done",
+            "scaffold.3=done",
             "format_init=failed",
             "speccoder_init=waiting",
             "commit=waiting"
         ]
     );
-    let tail = failed["data"]["results"][2]["output_tail"].to_string();
+    let tail = failed["data"]["results"][4]["output_tail"].to_string();
     assert!(tail.contains("failing as asked"), "{tail}");
     assert!(
         failed["fix"].to_string().contains("specify init"),
@@ -468,6 +474,8 @@ fn a_failed_step_stops_the_run_and_running_again_resumes_at_it() {
         [
             "git_init=skipped",
             "scaffold.1=skipped",
+            "scaffold.2=done",
+            "scaffold.3=done",
             "format_init=done",
             "speccoder_init=done",
             "commit=done"
