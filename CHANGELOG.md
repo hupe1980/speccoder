@@ -6,146 +6,93 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-27
+
 ### Added
 
 - **Start a project from one line of intent.** `speccoder new` (and **New
   Project** in the app) plans `git init`, the stack's own scaffold (cargo,
-  uv + pytest, npm + vitest, go), the spec format's own init (Spec Kit with
-  the speccoder preset, or OpenSpec), `speccoder init --yes` and one commit
-  as you — every command shown, network steps named with the hosts they
-  are expected to reach (they get full network access; the hosts are not
-  enforced), run sandboxed with `.git` read-only once it exists, bound to
-  the plan's digest, resumable only while the folder is as the run left it;
-  the commit takes only what the steps made; `--undo` moves an untouched
-  folder speccoder made to the Trash or reverts speccoder's commit. An empty suite on a fresh
-  scaffold reads *no tests yet*.
+  uv + pytest, npm + vitest, go), the format's own init (Spec Kit with the
+  speccoder preset, or OpenSpec), `speccoder init --yes` and one commit as
+  you. Every command is shown, network steps name the hosts they reach, and
+  each runs sandboxed. The run is bound to the plan's digest and resumable;
+  `--undo` moves an untouched folder to the Trash or reverts the commit.
 - **Plan through**: `speccoder spec specify "…" --through tasks` (and
   `issue start N --through tasks`) runs the format's own skills in order,
-  stopping only for open questions and your approval of the spec; a
-  continuation picks up from the files. `feature similar` and the New
-  Feature sheet's hint find a requirement the description duplicates.
-- **The composer and New Feature.** ⌘N (`N` in a tab) suggests the rung —
-  bug fix, quick change, feature — from the words, with its reason; the
-  New Feature sheet shows the skills that will run, what they write and
-  what they cost before; Spec & Plan follows the spec as it is written,
-  with a readiness strip and the stop's one decision.
-- **A welcome outside a project** — New Project, Open Project…, Clone from
-  GitHub…, Try the Sample, recent projects — binding the host once.
-  `speccoder sample` replays a recorded run strictly, without a key; this
-  build has no recording yet (`SAMPLE-MISSING`).
-- **A test file the runner never collected fails the verdict.** After every
-  attempt, each test file it added or changed is checked against what the
-  fast checks collected — the toolchain's rule (Cargo, pytest, vitest/jest,
-  Go), the check's fresh JUnit report, then a listing built from that
-  check's own command (or its new `list` command); ignored and skipped
-  tests never count. A file nothing ran fails with the rule as the reason,
-  and the retry is told where tests run (`TESTS-NOT-COLLECTED`); one
-  speccoder cannot tell about stops the task, never ticked
-  (`TESTS-COLLECTION-UNKNOWN`), and `task accept` then ticks the saved
-  attempt's code. Acceptance tests count at green only when they collected
-  what red did, what the files declare when red had no count, and at least
-  one.
-- **Every regression-only tick says why**: no story, no scenarios,
-  acceptance off, the author's tests unusable or absent, none collected,
-  not red first, or already passing — with the task whose tick implemented
-  it, found by running the tests (a section's tests, for an appended
-  section) on the feature's earlier ticks, or "could not be determined". In the
-  `Regression-Only:` trailer, the signed statement, status, report, the
-  board, the TUI and ACP; older ticks read "not recorded". A feature whose
-  ticks are mostly regression-only gets one *Little Was Verified* item in
-  Needs You.
+  stopping only for open questions and your approval of the spec.
+  `feature similar` finds a requirement a description duplicates.
+- **The composer and New Feature.** ⌘N suggests the rung — bug fix, quick
+  change, feature — from the words, with its reason; the New Feature sheet
+  shows the skills that will run, what they write and what they cost.
+- **A welcome outside a project**: New Project, Open Project…, Clone from
+  GitHub…, Try the Sample, recent projects. `speccoder sample` replays a
+  recorded run strictly, without a model key.
+- **A test file the runner never collected fails the verdict**
+  (`TESTS-NOT-COLLECTED`), decided from the toolchain's rule (Cargo, pytest,
+  vitest/jest, Go), the check's JUnit report, or a listing from the check's
+  own command (or its `list` command). When speccoder cannot tell, the task
+  stops, never ticked (`TESTS-COLLECTION-UNKNOWN`).
+- **Every regression-only tick says why** — no story, no scenarios,
+  acceptance off, no usable tests, none collected, not red first, or already
+  passing (naming the task that implemented it) — in the trailer, the signed
+  statement, status, report, the board, the TUI and ACP. A feature with
+  mostly regression-only ticks gets one *Little Was Verified* item.
 - **Tests go where the runner finds them.** speccoder detects the test
-  layout and gives it to the implementer and every test author; its own
-  acceptance tests go to one file per story, a later task's section only
-  ever appended.
+  layout and gives it to the implementer and the test authors; its own
+  acceptance tests go to one file per story.
 - **Plan checks before the run** (`doctor --feature`, *Before you run*):
-  tests named where the runner won't collect them, a story's behaviour
-  planned in Setup or Foundational, tasks that only write tests — warnings
-  with fixes, never a stop. `speccoder task acceptance-at T --story US`
-  writes a story's acceptance tests at that task.
+  tests named where the runner won't collect them, a story's behaviour in
+  Setup or Foundational, tasks that only write tests. `speccoder task
+  acceptance-at T --story US` writes a story's acceptance tests at that task.
 - **`speccoder preset add`**: a bundled Spec Kit preset whose tasks template
-  plans for evidence, installed by Spec Kit's own `specify preset add` on a
-  confirmed command.
+  plans for evidence, installed by `specify preset add`. Spec Kit's scripts
+  get the installed `specify`'s Python (`SPECKIT_PYTHON_EXECUTABLE`), which
+  has PyYAML; `doctor` warns when there is none.
 
 ### Changed
 
 - **Built on agentplane 0.54.0.**
-- **One binary.** `speccoder-verify` is folded into `speccoder attest verify
-  --branch` (and `attest tour`/`attest badge`); the evidence Action downloads
-  `speccoder`. The check, its trust rules and its `branch_verify` payload are
-  unchanged; its exit status is speccoder's (`0` success, `26` failure, `15`
-  neutral). `--require-signed` defaults to on with `--branch`
-  (`--require-signed=false` accepts unsigned ticks, and says so).
-- **Watch a project while a run works on it.** `speccoder status`,
-  `report --approvals`, `inbox`, `task show --account` and the app read the
-  journal of a run in another process at once, instead of waiting and saying
-  another speccoder is working. Only a second writer — another run, or a
-  decision on a waiting call — is refused while the run holds the journal,
-  and at once. A read never creates, moves or writes the journal; a call past
-  its deadline is not listed as waiting, `status` included. A run killed
-  before it closed the journal (Ctrl-C, a closed terminal) leaves it for the
-  next writer to repair: the listings say so (`unknown — the last run ended
-  without closing its journal`), while the next run and every decision open
-  it through their writer, which repairs it. A run's check for another
-  task's waiting call, and the withdrawal of a set-aside attempt's calls,
-  refuse rather than proceed when the calls cannot be read. A decision
-  lists and decides through one writer, after denying the calls past their
-  deadline; when `--all` or a batch fails part way, the calls decided before
-  the failure are named as decided.
-- **OpenAI's words beside its calls are shown.** With the Responses API, the
-  model's commentary appears as what it said — live, in waiting calls and in
-  `task show --account` — as Anthropic's words already did.
-- **`speccoder eval` stops on a refused account by the provider's code**,
-  as recorded in the journal, not by words in the message: the codes
-  agentplane 0.54 classifies as the account's — OpenAI's
-  `insufficient_quota`, `billing_*` and `invalid_api_key`; Anthropic's
-  `authentication_error`, `billing_error` and `permission_error`; Gemini's
-  and Bedrock's refused or expired credentials. A refused request no longer
-  stops the suite because its message mentions "credit" or "quota". Not
-  yet recognised: Anthropic's "credit balance is too low", which it sends as
-  `invalid_request_error` — the suite goes on and each remaining case fails
-  as refused.
+- **One binary.** `speccoder-verify` is now `speccoder attest verify
+  --branch` (with `attest tour` and `attest badge`); the evidence Action
+  downloads `speccoder`. The check and its payload are unchanged; exit codes
+  are speccoder's (`0`, `26` failure, `15` neutral). `--require-signed` is
+  on by default with `--branch`.
+- **Watch a project while a run works on it.** `status`, `report
+  --approvals`, `inbox`, `task show --account` and the app read a running
+  journal at once instead of waiting. Only a second writer is refused, at
+  once. A run killed before closing its journal leaves it for the next
+  writer to repair; the listings say so.
+- **OpenAI's words beside its calls are shown** (Responses API), live, in
+  waiting calls and in `task show --account`.
+- **`speccoder eval` stops on a refused account by the provider's error
+  code**, not by words in the message. Not yet recognised: Anthropic's
+  "credit balance is too low" (`invalid_request_error`).
 
 ### Fixed
-- An acceptance author's `cargo test --test <file>` — the command its prompt names — was refused under the exact `[commands] allow` that `speccoder init` writes, so every task ticked regression-only; the command that runs only the file being written is allowed.
-- `speccoder new --stack rust` left cargo's placeholder `add` and its test, which the first task found frozen and could not replace; the library starts empty and formatted.
-- `just record-sample` accepted a recording in which nothing was verified; it now fails unless the run ticked at least one task `verified` (in its payload and its tick's trailers), and every stop — planning's `--through tasks` included — quotes the result's own message, code and fix.
-- A planning skill or attempt that stopped for a call nobody could be asked about (`--no-prompt`) said only "needs_approval: not a configured check or allowed command". It now names the call — a command as typed — and how to let it run: its exact `[commands] allow` entry, `task approve`, or a run with prompts.
-- *Approve and Run* (`review approve --run`) and `run` on a feature without a task said "feature done: every task is ticked". Now neither is done: `NO-TASKS` (exit 16) says *no tasks yet* and names `speccoder spec tasks`; Approve and Run approves nothing. `report` says the same for a task list without a task (not "0/0 done"), the journey keeps *tasks* as the step now, and a terminal title says *stopped*, not *done*, for a run that stopped.
-- With a Spec Kit preset installed (as `speccoder new` and `preset add` install speccoder's), `spec tasks` failed when the system `python3` lacked PyYAML ("Template 'tasks-template' was not found"). Commands of a Spec Kit project now get the installed `specify`'s own interpreter as `SPECKIT_PYTHON_EXECUTABLE` when it imports PyYAML (a value you set is kept); `doctor` and `preset add` warn, with the fix, when no such Python is found.
-- On macOS, `mktemp` failed inside the sandbox (it ignores `TMPDIR`), so Spec Kit's own scripts — and with them `spec plan` — could fail; its default names in the per-user temporary directory are writable now, nothing else there.
-- A planning skill that stopped incomplete gave no reason; it now quotes the skill's own words, or says it gave none and how to run it again.
-- Flags after a description were read as part of it: `speccoder spec specify "…" --through tasks --no-prompt` ran plain `specify` with the flags in its description. Flags may now follow it; a description that starts with `-` goes after `--`.
-- **Reading a project no longer creates a journal.** `task show --account`
-  and a strict replay on a project speccoder never ran created an empty
-  journal in the state directory, and `doctor` created the state directory
-  itself; now only a run or a decision creates them. `doctor` still fails a
-  state directory that cannot be made, because its path or a parent is a
-  file.
-- The test suite no longer writes to your real state directory
-  (`~/.local/state/speccoder`). Under nextest (`just test`, CI) every test
-  process runs with a fresh state directory of its own, removed when it
-  ends, and git's background maintenance off; under plain `cargo test` the
-  tests name throwaway directories themselves (the binaries they spawn get
-  one per test process under `target/tmp`).
+
+- A call that could not be asked about (`--no-prompt`) said only "not a
+  configured check or allowed command"; it now names the command and how to
+  allow it.
+- `review approve --run` and `run` on a feature without tasks said "feature
+  done"; now `NO-TASKS` (exit 16) names `speccoder spec tasks`.
+- On macOS, `mktemp` failed inside the sandbox, so Spec Kit's scripts could
+  fail.
+- A planning skill that stopped incomplete gave no reason; it now quotes the
+  skill.
+- Flags after a description were read as part of it; a description starting
+  with `-` goes after `--`.
+- Reading a project (`task show --account`, a replay, `doctor`) no longer
+  creates a journal or the state directory.
+- The test suite no longer writes to your real state directory.
 
 ### Upgrading
 
-- A project journal written by 0.2.0 still opens, and its runs still list
-  and show (`report --approvals`, `inbox`, `task show --account`,
-  `config coverage`). A person's decision recorded under 0.2.0 does not read
-  in this build (agentplane 0.54 records a decision as a verdict): the
-  attempt that waited on it fails once, saying so ("a decision recorded by
-  speccoder 0.2.0 … run the task again"), and is set aside; the next
-  `speccoder run` starts it afresh and asks again. `speccoder replay` of a
-  run that read such a decision says the same instead of a divergence.
-  Ticks and attempt refs in git are untouched; nothing needs deleting.
-- While a 0.2.0 process holds a journal, a newer one reads its waiting calls
-  as `unknown`.
-  The other way round, a 0.2.0 run or decision waits up to 2 s for a newer
-  speccoder's read, which holds the journal only while it reads; it stops
-  with "another speccoder is working" only if reads keep it held longer than
-  that. Upgrade every speccoder that works on a project together.
+- A 0.2.0 journal still opens and its runs still list and show. A decision
+  recorded under 0.2.0 does not read in this build: the attempt that waited
+  on it fails once, saying so, and the next `speccoder run` asks again.
+  Ticks and attempt refs in git are untouched.
+- Upgrade every speccoder that works on a project together: a 0.2.0
+  process holds the journal alone.
 
 ## [0.2.0] - 2026-10-26
 
@@ -336,7 +283,8 @@ cannot produce or edit.
 
 - Name reservation placeholder for `speccoder` on crates.io.
 
-[Unreleased]: https://github.com/hupe1980/speccoder/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/hupe1980/speccoder/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/hupe1980/speccoder/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/hupe1980/speccoder/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/hupe1980/speccoder/compare/v0.0.1...v0.1.0
 [0.0.1]: https://github.com/hupe1980/speccoder/releases/tag/v0.0.1
