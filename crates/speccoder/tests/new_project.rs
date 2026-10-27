@@ -764,3 +764,126 @@ fn with_the_real_tools_the_formats_files_are_the_formats_own() {
         assert!(differ.is_empty(), "{format}: these differ: {differ:?}");
     }
 }
+
+#[test]
+fn a_step_cannot_plant_a_git_driver_for_speccoders_own_commit() {
+    let m = Machine::new();
+    let escape = m.home.path().join("escaped-by-filter");
+    let out = m
+        .cmd(&[
+            "--json", "new", "pwn", "--idea", "x", "--stack", "rust", "--yes",
+        ])
+        .env("FAKE_GITCONFIG", &escape)
+        .output()
+        .unwrap();
+    let v: Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert!(
+        !escape.exists(),
+        "speccoder's git ran a driver a step planted: {v}"
+    );
+    // Where the sandbox could not keep `.git` read-only, the change is caught.
+    let config = fs::read_to_string(m.target("pwn").join(".git/config")).unwrap_or_default();
+    if config.contains("pwn") {
+        assert_eq!(v["code"], "NEW-STEP-FAILED", "{v}");
+    }
+}
+
+#[test]
+fn a_resume_never_takes_files_the_person_put_there() {
+    let m = Machine::new();
+    let failed = m
+        .cmd(&[
+            "--json", "new", "p3", "--idea", "x", "--stack", "rust", "--yes",
+        ])
+        .env("FAKE_FAIL", "cargo")
+        .output()
+        .unwrap();
+    let v: Value = serde_json::from_slice(&failed.stdout).unwrap();
+    assert_eq!(v["code"], "NEW-STEP-FAILED", "{v}");
+    // The folder is replaced by one of the person's.
+    let root = m.target("p3");
+    fs::remove_dir_all(&root).unwrap();
+    fs::create_dir_all(&root).unwrap();
+    fs::write(root.join("thesis.txt"), "mine\n").unwrap();
+    let (again, _) = m.json(&["new", "p3", "--idea", "x", "--stack", "rust", "--yes"]);
+    assert_eq!(again["code"], "NEW-TARGET-NOT-EMPTY", "{again}");
+    // A partly created folder that gained a file of the person's.
+    let m = Machine::new();
+    let _ = m
+        .cmd(&[
+            "--json", "new", "p4", "--idea", "x", "--stack", "rust", "--yes",
+        ])
+        .env("FAKE_FAIL", "specify")
+        .output()
+        .unwrap();
+    fs::write(m.target("p4").join("notes.md"), "mine\n").unwrap();
+    let (again, _) = m.json(&["new", "p4", "--idea", "x", "--stack", "rust", "--yes"]);
+    assert_ne!(again["status"], "ok", "{again}");
+    assert!(
+        !git(
+            &m.target("p4"),
+            &["log", "--all", "--name-only", "--format="]
+        )
+        .contains("notes.md")
+    );
+}
+
+#[test]
+fn undo_in_an_existing_repository_ignores_what_was_ignored_before() {
+    let m = Machine::new();
+    let repo = m.target("withenv");
+    fs::create_dir_all(repo.join(".idea")).unwrap();
+    fs::write(repo.join(".gitignore"), ".env\n.idea/\n").unwrap();
+    fs::write(repo.join(".env"), "SECRET=1\n").unwrap();
+    fs::write(repo.join(".idea/ws.xml"), "<x/>\n").unwrap();
+    fs::write(repo.join("README.md"), "mine\n").unwrap();
+    git(&repo, &["init", "-q"]);
+    git(&repo, &["config", "user.name", "Priya"]);
+    git(&repo, &["config", "user.email", "p@example.com"]);
+    git(&repo, &["config", "commit.gpgsign", "false"]);
+    git(&repo, &["add", "-A"]);
+    git(&repo, &["commit", "-qm", "mine"]);
+    let (made, code) = m.json(&["new", "withenv", "--stack", "none", "--yes"]);
+    assert_eq!(code, 0, "{made}");
+    assert_eq!(made["data"]["undo"]["available"], true, "{made}");
+    // And the success line never says a check passes and has no tests.
+    assert!(
+        !made["message"].as_str().unwrap().contains("pass"),
+        "{made}"
+    );
+}
+
+#[test]
+fn the_formats_init_may_not_change_the_persons_tracked_files() {
+    let m = Machine::new();
+    let repo = m.target("mine");
+    fs::create_dir_all(repo.join(".claude/skills/speckit-specify")).unwrap();
+    fs::write(
+        repo.join(".claude/skills/speckit-specify/SKILL.md"),
+        "my own skill\n",
+    )
+    .unwrap();
+    git(&repo, &["init", "-q"]);
+    git(&repo, &["config", "user.name", "Priya"]);
+    git(&repo, &["config", "user.email", "p@example.com"]);
+    git(&repo, &["config", "commit.gpgsign", "false"]);
+    git(&repo, &["add", "-A"]);
+    git(&repo, &["commit", "-qm", "mine"]);
+    let (v, _) = m.json(&["new", "mine", "--stack", "none", "--yes"]);
+    assert_eq!(v["code"], "NEW-STEP-FAILED", "{v}");
+    assert!(
+        v["message"]
+            .as_str()
+            .unwrap()
+            .contains(".claude/skills/speckit-specify/SKILL.md"),
+        "{v}"
+    );
+    assert_eq!(git(&repo, &["log", "--format=%s"]).trim(), "mine");
+}
+
+#[test]
+fn a_folder_name_that_reads_as_an_option_is_refused() {
+    let m = Machine::new();
+    let (v, _) = m.json(&["new", "./-rf", "--stack", "rust", "--dry-run"]);
+    assert_eq!(v["code"], "USAGE", "{v}");
+}

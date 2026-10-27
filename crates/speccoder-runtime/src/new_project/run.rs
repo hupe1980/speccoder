@@ -10,8 +10,9 @@ use speccoder_core::new_project::{
 use speccoder_core::{CommandData, CommandResult, CommandStatus};
 
 use super::{
-    COMMAND, Creation, Kind, Spec, format_kind, now, path_digest, plan_with, record_dir,
-    refused_result, report, shown, steps, undo_offer, unfinished, write_creation,
+    Before, COMMAND, Creation, Kind, Spec, entries_of, format_kind, git_digest, ignored, now,
+    path_digest, plan_with, record_dir, refused_result, report, shown, snapshot, steps, undo_offer,
+    write_creation,
 };
 use crate::RunOptions;
 use crate::git::Git;
@@ -66,8 +67,8 @@ fn already(target: &Path, spec: &Spec) -> bool {
 
 /// The paths the steps produced: every path `git status` lists (the
 /// tools' own ignore files respected), build output and dependencies left
-/// out.
-fn produced(target: &Path) -> Result<Vec<String>, String> {
+/// out, and nothing that was in the folder before the first step.
+fn produced(target: &Path, before: &Before) -> Result<Vec<String>, String> {
     let out = Git::at(target)
         .run(&["status", "--porcelain", "--untracked-files=all", "-z"])
         .map_err(|e| e.0)?;
@@ -80,7 +81,10 @@ fn produced(target: &Path) -> Result<Vec<String>, String> {
         if code.starts_with('R') || code.starts_with('C') {
             let _ = it.next();
         }
-        if !speccoder_core::collection::is_build_or_dependency(path) {
+        let top = path.split('/').next().unwrap_or(path);
+        if !speccoder_core::collection::is_build_or_dependency(path)
+            && !before.entries.iter().any(|e| e == top || e == path)
+        {
             paths.push(path.to_owned());
         }
     }
@@ -118,7 +122,7 @@ pub fn perform(
     state: &Path,
     options: &RunOptions,
 ) -> CommandResult {
-    let (plan, specs) = plan_with(target, choices, state, true);
+    let (plan, specs, resumed) = plan_with(target, choices, state, true);
     if plan.refusal.is_some() {
         return refused_result(plan, Vec::new());
     }
@@ -165,7 +169,8 @@ pub fn perform(
             &format!("cannot create {}: {e}", shown(&root)),
         );
     }
-    let mut record = unfinished(state, &root).unwrap_or(Creation {
+    let existed = entries_of(&root);
+    let fresh_record = || Creation {
         path: plan.target.clone(),
         mode: plan.mode,
         commit: None,
@@ -179,7 +184,20 @@ pub fn perform(
         at: now(),
         first_feature_offered: false,
         undone_at: None,
-    });
+        before: Before {
+            made: existed.iter().all(|e| e == ".DS_Store"),
+            ignored: if plan.mode == ProjectMode::ExistingRepository {
+                ignored(&root)
+            } else {
+                Vec::new()
+            },
+            entries: existed.clone(),
+        },
+        left: Some(snapshot(&root)),
+        git: git_digest(&root),
+    };
+    // Resumed only as the plan said: the folder exactly as it was left.
+    let mut record = resumed.unwrap_or_else(fresh_record);
     record.plan_digest.clone_from(&plan.digest);
     if let Err(e) = write_creation(state, &record) {
         return CommandResult::new(COMMAND, CommandStatus::Error, &e);
@@ -223,17 +241,45 @@ pub fn perform(
                 duration_ms: 0,
                 output_tail: vec!["already done".to_owned()],
             },
-            Kind::Command => steps::run(
-                &root,
-                state,
-                &steps::Run {
-                    id: &spec.step.id,
-                    argv: &spec.step.argv,
-                    access: spec.step.access,
-                    limit_s: spec.step.limit_s,
-                    env: &spec.env,
-                },
-            ),
+            Kind::Command => {
+                let repo = git_digest(&root);
+                let mut r = steps::run(
+                    &root,
+                    state,
+                    &steps::Run {
+                        id: &spec.step.id,
+                        argv: &spec.step.argv,
+                        access: spec.step.access,
+                        limit_s: spec.step.limit_s,
+                        env: &spec.env,
+                    },
+                );
+                // `git init` made the repository: from here on, its own
+                // files are speccoder's to keep as they are.
+                if spec.step.id == "git_init" && r.state == PlanStepState::Done {
+                    record.git = git_digest(&root);
+                } else if repo.is_some() && git_digest(&root) != repo {
+                    r.state = PlanStepState::Failed;
+                    r.output_tail.push("the step changed the repository's own files (.git): speccoder stops before its commit — run the step yourself to see what it does".to_owned());
+                }
+                // An existing repository: the person's tracked files stay theirs.
+                if plan.mode == ProjectMode::ExistingRepository && r.state == PlanStepState::Done {
+                    let changed: Vec<String> = snapshot(&root)
+                        .porcelain
+                        .into_iter()
+                        .filter(|l| !l.starts_with("??"))
+                        .map(|l| l.get(3..).unwrap_or_default().to_owned())
+                        .collect();
+                    if !changed.is_empty() {
+                        r.state = PlanStepState::Failed;
+                        r.output_tail.push(format!(
+                            "it changed files of yours: {} — speccoder commits none of them; restore them (git restore) and add the format yourself",
+                            changed.join(", ")
+                        ));
+                    }
+                }
+                r
+            }
             Kind::Init => match crate::init::prepare(&root, None, None, false, false) {
                 Ok(p) => {
                     let lines = p
@@ -259,9 +305,18 @@ pub fn perform(
                     output_tail: vec![r.message().to_owned()],
                 },
             },
+            Kind::Commit if record.git.is_some() && git_digest(&root) != record.git => {
+                PlanStepResult {
+                    id: spec.step.id.clone(),
+                    state: PlanStepState::Failed,
+                    exit: None,
+                    duration_ms: 0,
+                    output_tail: vec!["the repository's own files (.git) changed since speccoder made or found them: nothing is committed".to_owned()],
+                }
+            }
             Kind::Commit => {
                 let subject = spec.step.argv.last().cloned().unwrap_or_default();
-                match produced(&root).and_then(|paths| commit(&root, &paths, &subject)) {
+                match produced(&root, &record.before).and_then(|paths| commit(&root, &paths, &subject)) {
                     Ok(id) => {
                         made = Some(id.clone());
                         PlanStepResult {
@@ -310,6 +365,9 @@ pub fn perform(
     }
     let mut out = report(plan.clone(), results, false);
     out.init = init_report;
+    // How this run leaves the folder: what a resume must find.
+    record.left = Some(snapshot(&root));
+    let kept = write_creation(state, &record);
     if let Some(failed) = out
         .results
         .iter()
@@ -325,10 +383,23 @@ pub fn perform(
             .find(|s| s.step.id == failed.id)
             .map(|s| s.step.argv.join(" "))
             .unwrap_or_default();
-        let how = failed
-            .exit
-            .map_or_else(|| "failed".to_owned(), |e| format!("exited {e}"));
-        let message = format!("step {n} `{argv}` {how}; later steps did not run");
+        let how = match failed.exit {
+            Some(0) => "was stopped".to_owned(),
+            Some(e) => format!("exited {e}"),
+            None => "failed".to_owned(),
+        };
+        let mut message = format!("step {n} `{argv}` {how}; later steps did not run");
+        if let Some(why) = failed
+            .output_tail
+            .iter()
+            .rev()
+            .find(|l| l.contains("speccoder"))
+        {
+            message = format!("{message}: {why}");
+        }
+        if let Err(e) = &kept {
+            message = format!("{message}; the record to resume from could not be written ({e})");
+        }
         out.undo = undo_offer(state, &root);
         return CommandResult::new(COMMAND, CommandStatus::Error, &message)
             .with_code("NEW-STEP-FAILED")
@@ -347,7 +418,7 @@ pub fn perform(
         .unwrap_or_else(|_| commit_id.clone());
     record.commit = Some(full);
     record.at = now();
-    let _ = write_creation(state, &record);
+    let recorded = write_creation(state, &record);
     crate::welcome::remember(state, &root, &plan.name, true);
     event(crate::progress::ProjectEvent::Created {
         path_digest: path_digest(&root),
@@ -371,7 +442,7 @@ pub fn perform(
             let passing: Vec<&str> = i
                 .ran
                 .iter()
-                .filter(|r| r.passed)
+                .filter(|r| r.passed && r.status != "no_tests")
                 .map(|r| r.name.as_str())
                 .collect();
             let empty: Vec<&str> = i
@@ -407,7 +478,12 @@ pub fn perform(
             parts.join("; ")
         }
     });
-    let message = format!("{} is ready — {checks}; committed {commit_id}", plan.name);
+    let mut message = format!("{} is ready — {checks}; committed {commit_id}", plan.name);
+    if let Err(e) = recorded {
+        message = format!(
+            "{message}; but its creation record could not be written ({e}): Undo is not offered"
+        );
+    }
     let create = format_kind(&plan.format)
         .and_then(crate::format::adapter)
         .and_then(|a| a.planning().creates.first().copied());

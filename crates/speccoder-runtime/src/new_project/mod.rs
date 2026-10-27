@@ -28,7 +28,7 @@ use speccoder_core::new_project::{
 };
 use speccoder_core::{CommandData, CommandResult, CommandStatus};
 
-pub(crate) use plan::{Kind, Spec, format_kind, plan_with, unfinished};
+pub(crate) use plan::{Kind, Spec, format_kind, plan_with};
 pub use run::perform;
 pub use undo::{undo, undo_offer};
 
@@ -66,6 +66,132 @@ pub struct Creation {
     /// When it was undone.
     #[serde(default)]
     pub undone_at: Option<u64>,
+    /// The folder before the first step: what speccoder neither made nor
+    /// may commit or move.
+    #[serde(default)]
+    pub before: Before,
+    /// The folder as the last run left it: a run that resumes needs it
+    /// unchanged.
+    #[serde(default)]
+    pub left: Option<Snapshot>,
+    /// The repository's own files (`.git`, but its objects and index) as
+    /// speccoder made or found them: a step that changes them stops the run.
+    #[serde(default)]
+    pub git: Option<String>,
+}
+
+/// The folder before speccoder's first step.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct Before {
+    /// It did not exist, or held nothing (`.DS_Store` aside): speccoder made it.
+    pub made: bool,
+    /// Its entries.
+    pub entries: Vec<String>,
+    /// The paths git ignored then (an existing repository).
+    pub ignored: Vec<String>,
+}
+
+/// The folder at one moment.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct Snapshot {
+    /// Its entries.
+    pub entries: Vec<String>,
+    /// `git status --porcelain` there.
+    pub porcelain: Vec<String>,
+}
+
+/// The folder's entries, sorted.
+pub(crate) fn entries_of(dir: &Path) -> Vec<String> {
+    let mut v: Vec<String> = std::fs::read_dir(dir)
+        .map(|d| {
+            d.flatten()
+                .map(|e| e.file_name().to_string_lossy().into_owned())
+                .collect()
+        })
+        .unwrap_or_default();
+    v.sort();
+    v
+}
+
+/// The folder now.
+pub(crate) fn snapshot(dir: &Path) -> Snapshot {
+    Snapshot {
+        entries: entries_of(dir),
+        // Only the folder's own repository: never a parent's.
+        porcelain: if dir.join(".git").exists() {
+            // Untrimmed: a status line starts with a space (` M path`).
+            crate::git::Git::at(dir)
+                .run(&["status", "--porcelain", "--untracked-files=all"])
+                .map(|b| {
+                    String::from_utf8_lossy(&b)
+                        .lines()
+                        .filter(|l| !l.is_empty())
+                        .map(str::to_owned)
+                        .collect()
+                })
+                .unwrap_or_default()
+        } else {
+            Vec::new()
+        },
+    }
+}
+
+/// The paths git ignores in `dir` now.
+pub(crate) fn ignored(dir: &Path) -> Vec<String> {
+    crate::git::Git::at(dir)
+        .line(&[
+            "status",
+            "--porcelain",
+            "--ignored",
+            "--untracked-files=all",
+        ])
+        .map(|l| {
+            l.lines()
+                .filter_map(|x| x.strip_prefix("!! ").map(str::to_owned))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// SHA-256 over `.git`'s files but its objects, index and logs — its
+/// configuration, attributes, refs: what decides what speccoder's own git
+/// runs. `None` without a repository.
+pub(crate) fn git_digest(dir: &Path) -> Option<String> {
+    fn walk(base: &Path, p: &Path, out: &mut Vec<(String, Vec<u8>)>) {
+        let Ok(rd) = std::fs::read_dir(p) else {
+            return;
+        };
+        for e in rd.flatten() {
+            let path = e.path();
+            let rel = path
+                .strip_prefix(base)
+                .map(|r| r.display().to_string())
+                .unwrap_or_default();
+            if matches!(rel.as_str(), "objects" | "index" | "logs" | "index.lock") {
+                continue;
+            }
+            if path.is_dir() {
+                walk(base, &path, out);
+            } else {
+                out.push((rel, std::fs::read(&path).unwrap_or_default()));
+            }
+        }
+    }
+    let git = dir.join(".git");
+    if !git.is_dir() {
+        return None;
+    }
+    let mut files = Vec::new();
+    walk(&git, &git, &mut files);
+    files.sort();
+    let mut all = Vec::new();
+    for (p, b) in files {
+        all.extend_from_slice(p.as_bytes());
+        all.push(0);
+        all.extend_from_slice(sha(&b).as_bytes());
+        all.push(0);
+    }
+    Some(sha(&all))
 }
 
 fn now() -> u64 {
@@ -102,7 +228,7 @@ pub fn creation(state: &Path, target: &Path) -> Option<Creation> {
     serde_json::from_str(&text).ok()
 }
 
-fn write_creation(state: &Path, c: &Creation) -> Result<(), String> {
+pub(crate) fn write_creation(state: &Path, c: &Creation) -> Result<(), String> {
     let dir = record_dir(state, Path::new(&c.path));
     std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let text = serde_json::to_string_pretty(c).map_err(|e| e.to_string())?;

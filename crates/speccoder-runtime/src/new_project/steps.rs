@@ -97,6 +97,16 @@ pub(crate) fn run(target: &Path, state: &Path, step: &Run<'_>) -> PlanStepResult
         Ok((r, _)) => r,
         Err(e) => return failed(e),
     };
+    // Once the repository exists, its own files are read-only to a step: a
+    // driver planted in `.git/config` would run in speccoder's commit,
+    // outside the sandbox. (Where the OS cannot carve it, the run compares
+    // `.git` before and after the step instead.)
+    let git = target.join(".git");
+    let runner = if git.is_dir() {
+        runner.carve(&[git], &[]).0
+    } else {
+        runner
+    };
     let inv = Invocation {
         argv: step.argv.to_vec(),
         cwd: target.to_path_buf(),

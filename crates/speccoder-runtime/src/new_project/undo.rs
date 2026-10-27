@@ -32,17 +32,27 @@ fn changes(root: &Path, c: &Creation) -> Result<Vec<String>, String> {
             head.map_or_else(|| "unborn".to_owned(), |h| h.chars().take(7).collect())
         ));
     }
-    let porcelain = g
-        .line(&[
+    // Untrimmed: a status line starts with a space (` M path`).
+    let porcelain = String::from_utf8_lossy(
+        &g.run(&[
             "status",
             "--porcelain",
             "--untracked-files=all",
             "--ignored",
         ])
-        .map_err(|e| e.0)?;
+        .map_err(|e| e.0)?,
+    )
+    .into_owned();
     for line in porcelain.lines() {
         let path = line.get(3..).unwrap_or_default();
-        if line.starts_with("!!") && build_output(path) {
+        // Build output, and what git ignored before speccoder ran, is no change.
+        if line.starts_with("!!")
+            && (build_output(path)
+                || c.before
+                    .ignored
+                    .iter()
+                    .any(|i| i == path || path.starts_with(i.as_str())))
+        {
             continue;
         }
         out.push(path.to_owned());
@@ -81,6 +91,10 @@ pub fn undo_offer(state: &Path, root: &Path) -> UndoOffer {
         return none("speccoder has not committed it yet");
     }
     let kind = match c.mode {
+        // Only a folder speccoder made goes to the Trash.
+        ProjectMode::NewFolder if !c.before.made => {
+            return none("speccoder did not make this folder: remove what it added yourself");
+        }
         ProjectMode::NewFolder => "trash",
         ProjectMode::ExistingRepository => "revert",
     };
@@ -172,6 +186,12 @@ pub fn undo_with(
         Err(e) => return refused(&e),
     }
     let (how, message) = match c.mode {
+        ProjectMode::NewFolder if !c.before.made => {
+            return refused(&format!(
+                "speccoder did not make {}: it moves to the Trash only a folder it made; nothing was moved",
+                shown(&root)
+            ));
+        }
         ProjectMode::NewFolder => match trash(&root) {
             Ok(()) => ("trash", format!("moved {} to the Trash", shown(&root))),
             Err(e) => {

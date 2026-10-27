@@ -41,6 +41,26 @@ pub(crate) fn unfinished(state: &Path, target: &Path) -> Option<Creation> {
     (c.commit.is_none() && c.undone_at.is_none()).then_some(c)
 }
 
+/// The unfinished creation of `target` a run may resume: only while the
+/// folder is exactly as the last run left it (its entries, its git status,
+/// its repository's own files) and lies in no other repository. Anything
+/// else — a file of the person's, a folder made anew, a changed `.git` —
+/// and the plan starts over, with every refusal.
+pub(crate) fn resumable(
+    state: &Path,
+    target: &Path,
+    observed: &ObservedFolder,
+    top: Option<&Path>,
+) -> Option<Creation> {
+    let c = unfinished(state, target)?;
+    let left = c.left.as_ref()?;
+    let here = top.is_none_or(|t| t == target);
+    let same = left.entries == observed.entries
+        && left.porcelain == observed.porcelain
+        && c.git == super::git_digest(target);
+    (here && same).then_some(c)
+}
+
 /// The git configuration value `key` as git in `dir` sees it.
 fn git_config(dir: &Path, key: &str) -> Option<String> {
     Git::at(dir)
@@ -56,7 +76,7 @@ pub(crate) fn plan_with(
     choices: &NewChoices,
     state: &Path,
     fresh: bool,
-) -> (ProjectPlan, Vec<Spec>) {
+) -> (ProjectPlan, Vec<Spec>, Option<Creation>) {
     let target = resolve(path);
     let (target, mut refused) = match target {
         Ok(t) => (t, None),
@@ -70,6 +90,14 @@ pub(crate) fn plan_with(
         exists: target.is_dir(),
         ..ObservedFolder::default()
     };
+    // The name goes into the scaffold's argv (`cargo init --name`): never an option.
+    if name.starts_with('-') && refused.is_none() {
+        refused = Some(refusal(
+            "USAGE",
+            &format!("a project's folder may not start with `-`: {name}"),
+            "→ choose another name",
+        ));
+    }
     if target.exists() && !target.is_dir() && refused.is_none() {
         refused = Some(refusal(
             "NEW-TARGET-NOT-EMPTY",
@@ -103,12 +131,9 @@ pub(crate) fn plan_with(
     let at_top = top.as_deref() == Some(target.as_path());
     if at_top {
         observed.head = Git::at(&target).head().ok().flatten();
-        observed.porcelain = Git::at(&target)
-            .line(&["status", "--porcelain", "--untracked-files=all"])
-            .map(|l| l.lines().map(str::to_owned).collect())
-            .unwrap_or_default();
+        observed.porcelain = super::snapshot(&target).porcelain;
     }
-    let resuming = unfinished(state, &target);
+    let resuming = resumable(state, &target, &observed, top.as_deref());
     let meaningful = observed.entries.iter().any(|e| e != ".DS_Store");
     let mode = match &resuming {
         Some(c) => c.mode,
@@ -471,5 +496,5 @@ pub(crate) fn plan_with(
         digest: String::new(),
     };
     plan.digest = digest(&plan);
-    (plan, specs)
+    (plan, specs, resuming)
 }
