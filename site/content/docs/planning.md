@@ -27,6 +27,24 @@ A planning skill works **in your checkout**, since the spec belongs on your bran
 
 Results are left **uncommitted**, and speccoder [offers the commit](#the-next-step-taken). A clarifying question is asked at the terminal; with `--no-prompt` it stays in the spec as `[NEEDS CLARIFICATION]`.
 
+## Plan checks
+
+`speccoder doctor --feature <F>` and the web's *Before you run* read the task list for where it will produce no evidence. Each is a warning with its tasks and its fix; none blocks, delays or re-orders a run, and a run says once that they exist (`plan: 3 warnings — speccoder doctor --feature …`).
+
+| Code | Finds |
+|---|---|
+| `PLAN-TESTS-UNCOLLECTED` | Test paths a task names that the runner won't collect (and no task creates the file that would declare them); test files in the tree nothing runs |
+| `PLAN-BEHAVIOUR-EARLY` | A Setup or Foundational task that names, in code, a symbol a story is about: if it implements it, the story's tasks tick regression-only |
+| `PLAN-TEST-ONLY-TASKS` | Story tasks that only write tests, beside the task that implements the story |
+
+For `PLAN-BEHAVIOUR-EARLY`, `speccoder task acceptance-at <TASK> --story <US>` records that the story's acceptance tests are written at that task: its tick can then be verified on the story's scenarios. It is a decision in the state directory, not an edit of the spec, and `--revoke` takes it back. Re-planning is offered only while no task of the feature is ticked.
+
+The phase-based checks need Spec Kit's phases and story labels; OpenSpec and Kiro get only the first.
+
+## The speccoder preset
+
+`speccoder preset add` installs speccoder's Spec Kit preset with Spec Kit's own `specify preset add --dev <dir> --priority 10` (Spec Kit 1.2.0 or newer), after showing the command and asking; `--yes` skips the question. The preset is bundled in speccoder — nothing is downloaded — and replaces only the tasks template: a story's behaviour stays inside its story, no task only writes tests, and test paths are ones the runner collects. Later task lists follow it; nothing in `specs/` changes. `speccoder doctor` says whether it is active, and offers an update when this speccoder bundles a newer one.
+
 Not hosted: `speckit-implement` and `speckit-converge` (use `speccoder run` and `speccoder converge`, which record evidence) and `speckit-taskstoissues` (`speccoder issue start N` goes the other way, see [GitHub](@/docs/github.md#a-feature-from-an-issue)).
 
 ## Review the spec

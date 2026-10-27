@@ -4111,3 +4111,49 @@ fn a_mostly_unverified_feature_is_diagnosed_once_until_it_is_handed_off() {
     );
     assert!(inbox(r.path()).iter().all(|i| i.kind != "unverified"));
 }
+
+/// FR-048: collection, reasons, the bisection, the layout and the plan
+/// checks add no model call to judging and pass nothing that failed.
+#[test]
+fn nothing_of_spec_102_adds_a_model_call_or_passes_a_failure() {
+    // A verified task: the author's call and the attempt's turns, no more.
+    let r = repo_with(
+        "[acceptance]\nheld_out = false\nstrength = false\n",
+        &[ACCEPTANCE_SPEC],
+    );
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_structure(acceptance("tests/acceptance_login.txt", GREP_LOGIN));
+    f.will_call_tool("c1", "edit_file", json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\npub fn login() {}" }));
+    f.will_structure(done("login"));
+    let res = run(r.path(), state.path(), "T005", d);
+    assert_eq!(
+        report(&res).verdict,
+        Some(Verdict::Verified),
+        "{}",
+        res.message()
+    );
+    let calls: Vec<String> = f
+        .asked()
+        .iter()
+        .map(|a| {
+            serde_json::to_string(&a.prompt)
+                .unwrap()
+                .chars()
+                .take(160)
+                .collect()
+        })
+        .collect();
+    assert_eq!(f.asked().len(), 3, "author + two attempt turns: {calls:#?}");
+    // A failing attempt stays failed.
+    let r = repo("[budget]\nmax_attempts = 1\n");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    break_lib(&f, "b1");
+    let res = run(r.path(), state.path(), "T005", d);
+    assert!(
+        matches!(report(&res).verdict, Some(Verdict::Failed { .. })),
+        "{}",
+        res.message()
+    );
+}
