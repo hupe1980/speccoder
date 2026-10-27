@@ -47,6 +47,10 @@ pub(crate) struct PreparedAcceptance {
     /// failed) — not "the spec has no examples": the task stops for a person.
     #[serde(default)]
     pub(crate) generation_failed: Option<String>,
+    /// Why no acceptance test was kept, typed: what a regression-only
+    /// reason is decided from (`report["skipped"]` is its display).
+    #[serde(default)]
+    pub(crate) skip_cause: Option<speccoder_core::regression::SkipCause>,
 }
 
 pub(crate) const MANIFESTS: &[&str] = &[
@@ -59,7 +63,8 @@ pub(crate) const MANIFESTS: &[&str] = &[
 
 pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance {
     use serde_json::json;
-    let skipped = |why: String, report: serde_json::Value| {
+    use speccoder_core::regression::SkipCause;
+    let skipped_by = |why: String, cause: Option<SkipCause>, report: serde_json::Value| {
         let mut report = report;
         report["skipped"] = json!(why);
         PreparedAcceptance {
@@ -70,11 +75,12 @@ pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance 
             red_class: None,
             held_out: None,
             generation_failed: None,
+            skip_cause: cause,
         }
     };
     let failed = |why: String, report: serde_json::Value| PreparedAcceptance {
         generation_failed: Some(why.clone()),
-        ..skipped(why, report)
+        ..skipped_by(why, None, report)
     };
 
     let files: Vec<String> = worktree::checkpoint(a.worktree, a.tmp)
@@ -124,7 +130,14 @@ pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance 
     let mut written = Vec::new();
     let (valid, refused) = validate_answer(&answer, a.project, a.policy, a.scenarios);
     if let Some(r) = refused.first() {
-        return skipped(r.message.clone(), base);
+        return skipped_by(
+            r.message.clone(),
+            Some(SkipCause::Refused {
+                path: r.path.clone(),
+                why: refusal_words(r.why).to_owned(),
+            }),
+            base,
+        );
     }
     // Each test and the scenarios it cites, of those the spec has.
     let tests: Vec<serde_json::Value> = valid
@@ -133,7 +146,11 @@ pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance 
         .collect();
     let planned: Vec<(String, String)> = valid.into_iter().map(|f| (f.path, f.content)).collect();
     if planned.is_empty() {
-        return skipped("no acceptance tests were generated".to_owned(), base);
+        return skipped_by(
+            "no acceptance tests were generated".to_owned(),
+            Some(SkipCause::NoFiles),
+            base,
+        );
     }
     let argv: Vec<String> = answer["argv"]
         .as_array()
@@ -145,8 +162,11 @@ pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance 
         .classify("run_command", &json!({ "argv": argv }), None)
         != tools::policy::Decision::Allow
     {
-        return skipped(
+        return skipped_by(
             format!("`{}` is not an allowed command", argv.join(" ")),
+            Some(SkipCause::CommandNotAllowed {
+                argv: argv.join(" "),
+            }),
             base,
         );
     }
@@ -156,7 +176,11 @@ pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance 
             let _ = std::fs::create_dir_all(parent);
         }
         if let Err(e) = std::fs::write(&full, content) {
-            return skipped(format!("`{rel}`: {e}"), base);
+            return skipped_by(
+                format!("`{rel}`: {e}"),
+                Some(SkipCause::WriteFailed { path: rel.clone() }),
+                base,
+            );
         }
         written.push(rel.clone());
     }
@@ -209,6 +233,17 @@ pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance 
         red_class: Some(class),
         held_out: None,
         generation_failed: None,
+        skip_cause: None,
+    }
+}
+
+/// speccoder's words for a refusal's kind (a regression-only reason's detail).
+pub(crate) fn refusal_words(why: &str) -> &'static str {
+    match why {
+        "exists" => "already exists",
+        "not_collected" => "is not where the runner collects tests",
+        "changes_existing" => "changes existing lines",
+        _ => "is not a new test file",
     }
 }
 
@@ -1184,6 +1219,7 @@ pub(crate) fn reuse_pre_frozen(
         red_class: Some(class),
         held_out: held_sha,
         generation_failed: None,
+        skip_cause: None,
     })
 }
 
@@ -1233,5 +1269,6 @@ fn not_red_frozen(
         red_class: Some(class),
         held_out: None,
         generation_failed: None,
+        skip_cause: None,
     }
 }

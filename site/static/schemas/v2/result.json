@@ -4788,6 +4788,17 @@
         "title": {
           "description": "What to decide, in a line.",
           "type": "string"
+        },
+        "unverified": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Unverified"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "`unverified`: the feature's ticks and why each regression-only one is."
         }
       },
       "required": [
@@ -6608,6 +6619,46 @@
       "required": [
         "given",
         "expect"
+      ],
+      "type": "object"
+    },
+    "ReasonCount": {
+      "description": "How many regression-only ticks had one reason, and which.",
+      "properties": {
+        "implemented_by": {
+          "description": "`already_passing`: the tasks that made the tests pass.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "n": {
+          "description": "How many ticks.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "reason": {
+          "description": "The reason (`no_story`, `already_passing`, …, `unrecorded`).",
+          "type": "string"
+        },
+        "tasks": {
+          "description": "Their tasks.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "text": {
+          "description": "speccoder's words for the group (`7 had no user story`).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "reason",
+        "n",
+        "tasks",
+        "text"
       ],
       "type": "object"
     },
@@ -10203,6 +10254,13 @@
           ],
           "description": "For `unverifiable`."
         },
+        "regression": {
+          "description": "A regression-only tick: why, in speccoder's wording (signed).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "signer": {
           "anyOf": [
             {
@@ -10560,6 +10618,36 @@
           "type": "string"
         }
       ]
+    },
+    "Unverified": {
+      "description": "A feature whose ticks are mostly regression-only, counted by reason.",
+      "properties": {
+        "counts": {
+          "description": "The reasons, the most frequent first.",
+          "items": {
+            "$ref": "#/$defs/ReasonCount"
+          },
+          "type": "array"
+        },
+        "regression_only": {
+          "description": "Of them, regression-only.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "ticks": {
+          "description": "Ticks speccoder judged (`verified` and `regression_only`).",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "ticks",
+        "regression_only",
+        "counts"
+      ],
+      "type": "object"
     },
     "Usage": {
       "description": "Token counts, and USD when prices are configured.",

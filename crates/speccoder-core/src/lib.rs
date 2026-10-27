@@ -43,9 +43,9 @@ pub use command::{
     FeaturesReport, FullTier, HeldOutGap, HeldOutOracle, InPlaceReport, InboxItem, InboxReport,
     InitCheck, InitKey, InitReport, InitRun, InstructionFile, IssueEntry, IssuesReport,
     LastAttempt, MonitorScore, ObjectVerification, ObjectView, OpenQuestion, OperatorView,
-    PAYLOADS, PendingCall, PolicyCoverage, PrReport, ProposeReport, RefusedPath, Remedy,
-    ReplayReport, RequirementDrift, ReviewChange, ReviewItem, ReviewReport, ReviewTotals,
+    PAYLOADS, PendingCall, PolicyCoverage, PrReport, ProposeReport, ReasonCount, RefusedPath,
+    Remedy, ReplayReport, RequirementDrift, ReviewChange, ReviewItem, ReviewReport, ReviewTotals,
     RunReport, SCHEMA_VERSION, SchemaName, SchemaReport, SetAside, SignerView, SkillEntry,
     SkillRunReport, SkillsReport, SpecVersion, StatusReport, StatusTotals, TaskCost, TaskStatus,
-    TraceRow, UiReport, Usage, VerifyOutcome, VerifyReason, WorktreeReport,
+    TraceRow, UiReport, Unverified, Usage, VerifyOutcome, VerifyReason, WorktreeReport,
 };

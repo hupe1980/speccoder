@@ -1533,6 +1533,7 @@ fn held_out(
         red_class: Some(RedClass::Assertion),
         held_out: None,
         generation_failed: None,
+        skip_cause: None,
     };
     let task = format!("req-{}", req.key);
     let store = crate::held_out::sealed_dir(&ctx.plane_dir, &ctx.feature, &req.key);

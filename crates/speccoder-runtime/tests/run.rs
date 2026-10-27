@@ -3926,3 +3926,188 @@ fn a_test_file_speccoder_cannot_tell_about_stops_for_a_person() {
     assert!(!rep.ticked && rep.saved_attempt.is_some());
     assert!(rep.earlier.is_empty(), "never retried");
 }
+
+// ── every regression-only tick says why (spec 102, US2) ──────────────
+
+fn last_message(worktree: &str) -> String {
+    let out = Command::new("git")
+        .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
+        .args(["log", "-1", "--format=%B"])
+        .current_dir(worktree)
+        .output()
+        .unwrap();
+    String::from_utf8_lossy(&out.stdout).into_owned()
+}
+
+#[test]
+fn a_story_without_scenarios_ticks_with_its_reason_in_the_trailer() {
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_structure(done("nothing to test"));
+    let res = run(r.path(), state.path(), "T005", d);
+    let rep = report(&res);
+    assert_eq!(
+        rep.verdict,
+        Some(Verdict::RegressionOnly),
+        "{}",
+        res.message()
+    );
+    let why = rep.regression.as_ref().unwrap();
+    assert_eq!(why.text, "its story US1 states no acceptance scenario");
+    assert!(last_message(&rep.worktree).contains("Regression-Only: no_scenarios story=US1\n"));
+    // Read back from the commit: status says the same.
+    let status = speccoder_runtime::status::report(r.path(), None);
+    let Some(CommandData::Report(s)) = status.data() else {
+        panic!("{}", status.message())
+    };
+    let t = s.tasks.iter().find(|t| t.id == "T005").unwrap();
+    assert_eq!(
+        t.regression.as_ref().map(|r| r.text.as_str()),
+        Some(why.text.as_str())
+    );
+}
+
+#[test]
+fn acceptance_off_is_the_reason_whatever_else_holds() {
+    let r = repo_with("[acceptance]\ngenerate = false\n", &[ACCEPTANCE_SPEC]);
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_structure(done("done"));
+    let res = run(r.path(), state.path(), "T005", d);
+    let rep = report(&res);
+    assert_eq!(
+        rep.regression.as_ref().map(|r| r.reason.name()),
+        Some("acceptance_off"),
+        "{}",
+        res.message()
+    );
+    assert!(last_message(&rep.worktree).contains("Regression-Only: acceptance_off\n"));
+}
+
+#[test]
+fn already_passing_tests_name_the_tick_that_made_them_pass() {
+    let r = repo_with("[acceptance]\nheld_out = false\n", &[ACCEPTANCE_SPEC]);
+    let state = tempfile::tempdir().unwrap();
+    // T005 implements login, red then green.
+    let (f, d) = fake();
+    f.will_structure(acceptance("tests/acceptance_login.txt", GREP_LOGIN));
+    f.will_call_tool("c1", "edit_file", json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\npub fn login() {}" }));
+    f.will_structure(done("login"));
+    let first = run(r.path(), state.path(), "T005", d);
+    assert_eq!(
+        report(&first).verdict,
+        Some(Verdict::Verified),
+        "{}",
+        first.message()
+    );
+    let t005 = report(&first).commit.clone().unwrap();
+    // T006's acceptance tests already pass: T005 did it.
+    let (f, d) = fake();
+    f.will_structure(acceptance("tests/acceptance_session.txt", GREP_LOGIN));
+    f.will_structure(done("nothing left"));
+    let second = run(r.path(), state.path(), "T006", d);
+    let rep = report(&second);
+    assert_eq!(
+        rep.verdict,
+        Some(Verdict::RegressionOnly),
+        "{}",
+        second.message()
+    );
+    let why = rep.regression.as_ref().unwrap();
+    assert_eq!(
+        why.text,
+        "already passing before the attempt — implemented by T005"
+    );
+    let short: String = t005.chars().take(7).collect();
+    assert!(
+        last_message(&rep.worktree).contains(&format!(
+            "Regression-Only: already_passing implemented_by=T005 commit={short}\n"
+        )),
+        "{}",
+        last_message(&rep.worktree)
+    );
+}
+
+#[test]
+fn tests_that_passed_before_any_tick_passed_before_the_feature() {
+    let r = repo_with("[acceptance]\nheld_out = false\n", &[ACCEPTANCE_SPEC]);
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_structure(acceptance(
+        "tests/acceptance_ok.txt",
+        &["./accept.sh", "--", "fn ok"],
+    ));
+    f.will_structure(done("nothing to do"));
+    let res = run(r.path(), state.path(), "T005", d);
+    let rep = report(&res);
+    assert_eq!(
+        rep.regression.as_ref().map(|r| r.text.as_str()),
+        Some("already passing before this feature"),
+        "{}",
+        res.message()
+    );
+    assert!(
+        last_message(&rep.worktree)
+            .contains("Regression-Only: already_passing before_feature=true\n")
+    );
+}
+
+#[test]
+fn a_mostly_unverified_feature_is_diagnosed_once_until_it_is_handed_off() {
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    for task in ["T005", "T006", "T007"] {
+        let (f, d) = fake();
+        f.will_structure(done("nothing to test"));
+        let res = run(r.path(), state.path(), task, d);
+        assert_eq!(
+            report(&res).verdict,
+            Some(Verdict::RegressionOnly),
+            "{}",
+            res.message()
+        );
+    }
+    let inbox =
+        |r: &Path| match speccoder_runtime::inbox::inbox_with(r, None, Some(state.path())).data() {
+            Some(CommandData::Inbox(i)) => i.items.clone(),
+            other => panic!("{other:?}"),
+        };
+    let items = inbox(r.path());
+    let u: Vec<_> = items.iter().filter(|i| i.kind == "unverified").collect();
+    assert_eq!(u.len(), 1, "{items:?}");
+    assert_eq!(u[0].group, "ready_to_review");
+    assert_eq!(
+        u[0].title,
+        "Little was verified in `001-graph`: 3 of 3 ticks are regression-only"
+    );
+    let counts = &u[0].unverified.as_ref().unwrap().counts;
+    assert_eq!(counts[0].text, "3 had a story with no acceptance scenario");
+    assert_eq!(counts[0].tasks, ["T005", "T006", "T007"]);
+    let commands: Vec<&str> = u[0].actions.iter().map(|a| a.command.as_str()).collect();
+    assert!(
+        commands.iter().any(|c| c.starts_with("speccoder converge")),
+        "{commands:?}"
+    );
+    assert!(
+        commands.iter().all(|c| !c.contains("spec tasks")),
+        "never re-plans: {commands:?}"
+    );
+    // Pushed (handed off): the diagnosis is gone.
+    let worktree = report(&run(r.path(), state.path(), "T008", {
+        let (f, d) = fake();
+        f.will_structure(done("x"));
+        d
+    }))
+    .worktree
+    .clone();
+    git(
+        Path::new(&worktree),
+        &[
+            "update-ref",
+            "refs/remotes/origin/speccoder/001-graph",
+            "HEAD",
+        ],
+    );
+    assert!(inbox(r.path()).iter().all(|i| i.kind != "unverified"));
+}

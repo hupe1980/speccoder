@@ -482,6 +482,36 @@ pub struct InboxItem {
     /// The decisions, the one that moves the work forward first; each runs
     /// in the item's feature.
     pub actions: Vec<crate::actions::Action>,
+    /// `unverified`: the feature's ticks and why each regression-only one is.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unverified: Option<Unverified>,
+}
+
+/// A feature whose ticks are mostly regression-only, counted by reason.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct Unverified {
+    /// Ticks speccoder judged (`verified` and `regression_only`).
+    pub ticks: usize,
+    /// Of them, regression-only.
+    pub regression_only: usize,
+    /// The reasons, the most frequent first.
+    pub counts: Vec<ReasonCount>,
+}
+
+/// How many regression-only ticks had one reason, and which.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct ReasonCount {
+    /// The reason (`no_story`, `already_passing`, …, `unrecorded`).
+    pub reason: String,
+    /// How many ticks.
+    pub n: usize,
+    /// Their tasks.
+    pub tasks: Vec<String>,
+    /// `already_passing`: the tasks that made the tests pass.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub implemented_by: Vec<String>,
+    /// speccoder's words for the group (`7 had no user story`).
+    pub text: String,
 }
 
 /// Result of `speccoder issue`: the repository's open GitHub issues, read

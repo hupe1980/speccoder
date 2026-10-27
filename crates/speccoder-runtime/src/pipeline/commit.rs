@@ -193,7 +193,7 @@ pub(crate) struct TickFacts<'a> {
 }
 
 /// The commit message of a ticked task: subject, title, and the trailers
-/// `report` reads back (`Spec-Task`, `Verdict`, `Red`, `Flaky`,
+/// `report` reads back (`Spec-Task`, `Verdict`, `Regression-Only`, `Red`, `Flaky`,
 /// `Scope-Outside`, `Checklists`, `Held-Out`, `Acceptance-Strength`,
 /// `Ruling`, `Run`, `Usage`, `Mutation`).
 pub(crate) fn tick_message(f: &TickFacts<'_>) -> String {
@@ -216,10 +216,19 @@ pub(crate) fn tick_message(f: &TickFacts<'_>) -> String {
             .and_then(|a| a.get("held_out"))
             .and_then(|h| h.get("usage")),
     );
-    let mut evidence = f
-        .red
-        .map(|c| format!("Red: {}\n", super::acceptance::class_word(c)))
-        .unwrap_or_default();
+    let mut evidence = match (&report.regression, verdict_word.as_str()) {
+        (Some(r), "regression_only") => format!(
+            "{}: {}\n",
+            speccoder_core::regression::TRAILER,
+            speccoder_core::regression::trailer(&r.reason)
+        ),
+        _ => String::new(),
+    };
+    evidence.push_str(
+        &f.red
+            .map(|c| format!("Red: {}\n", super::acceptance::class_word(c)))
+            .unwrap_or_default(),
+    );
     evidence.push_str(&held_out_trailer(report.acceptance.as_ref()));
     evidence.push_str(&flaky_trailer(report.verification.as_ref()));
     evidence.push_str(&scope_trailer(report.scope.as_ref()));

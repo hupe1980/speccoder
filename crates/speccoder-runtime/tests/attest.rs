@@ -949,3 +949,54 @@ fn notes_writer_child() {
         .unwrap();
     }
 }
+
+#[test]
+fn a_regression_only_reason_is_signed_and_must_agree_with_its_trailer() {
+    let r = repo(None);
+    let state = tempfile::tempdir().unwrap();
+    let res = passes(r.path(), state.path());
+    let rep = report(&res);
+    let commit = rep.commit.clone().unwrap();
+    let why = rep
+        .regression
+        .as_ref()
+        .expect("a regression-only tick says why");
+    let original = note(r.path(), &commit);
+    let tv = statements(&original)
+        .into_iter()
+        .find(|s| s["predicateType"] == "https://speccoder.dev/task-verification/v0")
+        .unwrap();
+    assert_eq!(tv["predicate"]["revision"], 3);
+    assert_eq!(tv["predicate"]["regression"], json!(why.reason));
+    let ok = verify_at(r.path(), None, None, &Trust::default(), false);
+    assert_eq!(outcome(&ok), VerifyOutcome::Unsigned, "{}", ok.message());
+
+    // The statement claims another reason than the commit's trailer.
+    let edited: String = original
+        .lines()
+        .map(|l| {
+            let mut e: Value = serde_json::from_str(l).unwrap();
+            let mut s: Value =
+                serde_json::from_slice(&STANDARD.decode(e["payload"].as_str().unwrap()).unwrap())
+                    .unwrap();
+            if s["predicateType"] == "https://speccoder.dev/task-verification/v0" {
+                s["predicate"]["regression"] = json!({ "reason": "no_story" });
+                e["payload"] = json!(STANDARD.encode(serde_json::to_vec(&s).unwrap()));
+            }
+            format!("{e}\n")
+        })
+        .collect();
+    set_note(r.path(), &commit, &edited);
+    let checked = verify_at(r.path(), None, None, &Trust::default(), false);
+    let Some(CommandData::Attest(a)) = checked.data() else {
+        panic!("{}", checked.message())
+    };
+    assert!(
+        a.objects[0]
+            .reasons
+            .iter()
+            .any(|r| r.field.as_deref() == Some("Regression-Only")),
+        "{:?}",
+        a.objects
+    );
+}

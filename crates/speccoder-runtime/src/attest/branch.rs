@@ -526,6 +526,7 @@ fn outcome_of(
         decider: None,
         stale: Vec::new(),
         stale_anchor: None,
+        regression: None,
         newer_fields: Vec::new(),
         verification: None,
     };
@@ -608,6 +609,10 @@ fn outcome_of(
                     );
                 }
                 r.newer_fields = tv.newer_fields();
+                r.regression = tv
+                    .regression
+                    .as_ref()
+                    .map(speccoder_core::regression::wording);
                 r.decider = tv.decider.map(|d| d.by);
             }
             Some(Err(e)) => unverifiable(
@@ -656,6 +661,7 @@ fn without_commit(tick: &Tick, lost: Option<&String>) -> TickReport {
         decider: None,
         stale: Vec::new(),
         stale_anchor: None,
+        regression: None,
         newer_fields: Vec::new(),
         verification: None,
     }

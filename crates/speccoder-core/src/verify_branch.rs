@@ -156,6 +156,9 @@ pub struct TickReport {
     pub stale: Vec<RequirementDrift>,
     /// For `stale`: the first changed requirement's line at the head.
     pub stale_anchor: Option<Anchor>,
+    /// A regression-only tick: why, in speccoder's wording (signed).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub regression: Option<String>,
     /// Predicate fields or revisions this verifier does not know (kept,
     /// never deciding).
     pub newer_fields: Vec<String>,
@@ -461,6 +464,7 @@ mod tests {
             decider: None,
             stale: Vec::new(),
             stale_anchor: None,
+            regression: None,
             newer_fields: Vec::new(),
             verification: None,
         }

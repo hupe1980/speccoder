@@ -1991,6 +1991,8 @@ export interface InboxItem {
   task: string | null;
   /** What to decide, in a line. */
   title: string;
+  /** `unverified`: the feature's ticks and why each regression-only one is. */
+  unverified?: Unverified | null;
 }
 
 /**
@@ -2742,6 +2744,20 @@ export interface ReadingText {
   expect: string;
   /** The situation. */
   given: string;
+}
+
+/** How many regression-only ticks had one reason, and which. */
+export interface ReasonCount {
+  /** `already_passing`: the tasks that made the tests pass. */
+  implemented_by?: string[];
+  /** How many ticks. */
+  n: number;
+  /** The reason (`no_story`, `already_passing`, …, `unrecorded`). */
+  reason: string;
+  /** Their tasks. */
+  tasks: string[];
+  /** speccoder's words for the group (`7 had no user story`). */
+  text: string;
 }
 
 /**
@@ -4083,6 +4099,8 @@ export interface TickReport {
   outcome: TickOutcome;
   /** For `unverifiable`. */
   reason: Unverifiable | null;
+  /** A regression-only tick: why, in speccoder's wording (signed). */
+  regression?: string | null;
   /** Who signed. */
   signer: SignerView | null;
   /** For `stale`: the cited requirements that changed since the tick. */
@@ -4194,6 +4212,16 @@ export interface Untestable {
 
 /** Why a tick's evidence does not verify. */
 export type Unverifiable = "ticked_without_evidence" | "missing" | "malformed" | "bad_signature" | "mismatch" | "untrusted_signer" | "unsigned" | "commit_unreachable" | "tool_missing";
+
+/** A feature whose ticks are mostly regression-only, counted by reason. */
+export interface Unverified {
+  /** The reasons, the most frequent first. */
+  counts: ReasonCount[];
+  /** Of them, regression-only. */
+  regression_only: number;
+  /** Ticks speccoder judged (`verified` and `regression_only`). */
+  ticks: number;
+}
 
 /** Token counts, and USD when prices are configured. */
 export interface Usage {

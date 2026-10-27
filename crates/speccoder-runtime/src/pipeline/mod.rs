@@ -11,6 +11,7 @@ use crate::commands::*;
 use crate::{approvals, progress, substrate, verify, worktree};
 
 pub mod acceptance;
+pub mod bisect;
 pub mod bug;
 pub mod commit;
 pub mod feature;

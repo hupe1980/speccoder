@@ -1474,6 +1474,7 @@ pub fn inbox(r: &speccoder_core::InboxReport, look: &crate::style::Look) -> Vec<
             "unknown" | "approval" | "ruling" | "gaming" | "stale" | "aside" => Glyph::Attention,
             "stuck" => Glyph::Failed,
             "handoff" => Glyph::Verified,
+            "unverified" => Glyph::of_state("regression_only"),
             _ => Glyph::Ready,
         };
         let place = match &i.task {
@@ -1487,7 +1488,12 @@ pub fn inbox(r: &speccoder_core::InboxReport, look: &crate::style::Look) -> Vec<
             look.paint(Token::Muted, &place),
             i.title
         ));
-        if !i.detail.is_empty() {
+        if let Some(u) = &i.unverified {
+            // One line per reason, its tasks after it.
+            for c in &u.counts {
+                out.push(format!("            {} · {}", c.text, c.tasks.join(" ")));
+            }
+        } else if !i.detail.is_empty() {
             out.push(format!("            {}", shorten(&i.detail, 100)));
         }
         if let Some((first, rest)) = i.actions.split_first() {

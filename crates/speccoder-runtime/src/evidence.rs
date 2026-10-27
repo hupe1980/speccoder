@@ -473,6 +473,50 @@ mod tests {
     }
 
     #[test]
+    fn a_regression_only_tick_says_why_and_its_collection_is_a_row() {
+        let statements = vec![
+            phase_stmt("green", "PASSED", &["a"], &[]),
+            json!({ "predicateType": "https://speccoder.dev/task-verification/v0", "predicate": {
+                "revision": 3,
+                "regression": { "reason": "already_passing", "implemented_by": { "task": "T003", "commit": "d433d77" } },
+                "collection": { "files": [
+                    { "path": "tests/greet.rs", "state": "collected", "decided_by": "junit", "tests": 2, "test_ids": ["greet::greet::a", "greet::greet::b"] },
+                    { "path": "tests/unit/x.rs", "state": "not_collected", "decided_by": "static", "tests": 0, "test_ids": [],
+                      "rule": { "toolchain": "rust", "text": "Cargo builds `tests/*.rs` and `tests/<dir>/main.rs` (and the modules they declare)", "source": "Cargo.toml (default)" } }
+                ] } } }),
+        ];
+        let rows = rows(&task("regression_only"), &statements, None);
+        let row = |label: &str| rows.iter().find(|r| r.label == label).cloned().unwrap();
+        assert_eq!(
+            row("Acceptance").text,
+            "none red first — already passing before the attempt — implemented by T003"
+        );
+        let c = row("Collection");
+        assert_eq!(c.mark, "failed");
+        assert_eq!(
+            c.text,
+            "1 test file collected (2 tests) · 1 never ran: `tests/unit/x.rs` — Cargo builds `tests/*.rs` and `tests/<dir>/main.rs` (and the modules they declare)"
+        );
+        // Revision 3 with nothing changed; revision 2 records nothing.
+        assert_eq!(
+            collection_row(None, true).map(|r| r.text),
+            Some("no test files changed".to_owned())
+        );
+        assert_eq!(collection_row(None, false), None);
+        // A legacy tick: the trailer said nothing — unrecorded, never a guess.
+        let mut legacy = task("regression_only");
+        legacy.regression = Some(speccoder_core::regression::Regression::of(
+            speccoder_core::regression::RegressionReason::Unrecorded,
+        ));
+        let rows = super::rows(&legacy, &[phase_stmt("green", "PASSED", &["a"], &[])], None);
+        assert!(
+            rows[0]
+                .text
+                .ends_with("why was not recorded (ticked by an earlier speccoder)")
+        );
+    }
+
+    #[test]
     fn banners_never_blur() {
         assert_eq!(banner("verified").1, "VERIFIED");
         assert!(

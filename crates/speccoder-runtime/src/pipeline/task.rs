@@ -185,6 +185,8 @@ pub(crate) fn run_task(
     };
     let project = std::path::PathBuf::from(&project_dir);
     let wt_root = std::path::PathBuf::from(&wt_path);
+    // Scratch worktrees a crashed bisection left behind go first.
+    super::bisect::prune(&wt_root, &s.plane_dir.join("tmp"));
     let tmp = plane_dir.join("tmp");
 
     // 2a. A task waiting for a person holds the worktree with its attempt:
@@ -2358,6 +2360,82 @@ pub(crate) fn run_task(
         report.attempt_status.clone_from(&attempt_status);
     }
     let passed = verdict_passed && !suspected && in_place_stop.is_none();
+    // 8a. Why a regression-only tick is one: decided by code from the run's
+    //     facts; already-passing tests are searched for the tick that made
+    //     them pass (never changing the verdict, never a model call).
+    if passed
+        && bug_fix.is_none()
+        && matches!(
+            report.verdict,
+            Some(speccoder_core::verify::Verdict::RegressionOnly)
+        )
+    {
+        use speccoder_core::regression::{Regression, RegressionFacts, RegressionReason, decide};
+        let facts = RegressionFacts {
+            acceptance_on: run_config.acceptance,
+            story: parsed_task.as_ref().and_then(|t| t.story.clone()),
+            scenarios: scenarios.len(),
+            skip: acceptance.as_ref().and_then(|a| a.skip_cause.clone()),
+            // Red first but green only on a re-run: the evidence was flaky.
+            red_class: acceptance.as_ref().and_then(|a| {
+                if a.red
+                    && report
+                        .acceptance
+                        .as_ref()
+                        .is_some_and(|r| r["green_flaky"] == true)
+                {
+                    Some(speccoder_core::verify::RedClass::Flaky)
+                } else {
+                    a.red_class
+                }
+            }),
+        };
+        let mut reason = decide(&facts);
+        if matches!(reason, RegressionReason::AlreadyPassing { .. })
+            && let Some(a) = acceptance.as_ref()
+            && let Some(argv) = a.argv.as_ref()
+        {
+            let files: Vec<(String, String)> = a.report["files"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|f| f.as_str())
+                .filter_map(|f| {
+                    std::fs::read_to_string(project.join(f))
+                        .ok()
+                        .map(|c| (f.to_owned(), c))
+                })
+                .collect();
+            let prefix = project
+                .strip_prefix(&wt_root)
+                .map(|p| p.to_string_lossy().replace('\\', "/"))
+                .unwrap_or_default();
+            let found = super::bisect::search(&super::bisect::Search {
+                repo: &wt_root,
+                prefix: &prefix,
+                feature: &feature_name,
+                files: &files,
+                argv,
+                scratch: &s.plane_dir.join("tmp"),
+                sandbox: &sandbox_config,
+                timeout: std::time::Duration::from_secs(600),
+            });
+            live.event(&progress::Event::RegressionBisected {
+                task: task.to_owned(),
+                runs: found.runs,
+                result: found.implemented_by.as_ref().map(|i| match i {
+                    speccoder_core::regression::ImplementedBy::Task { task, .. } => task.clone(),
+                    speccoder_core::regression::ImplementedBy::BeforeFeature { .. } => {
+                        "before_feature".to_owned()
+                    }
+                }),
+            });
+            reason = RegressionReason::AlreadyPassing {
+                implemented_by: found.implemented_by,
+            };
+        }
+        report.regression = Some(Regression::of(reason));
+    }
     if passed && let (Some(t), Some(file)) = (&parsed_task, &tasks_file) {
         let began = std::time::Instant::now();
         stage(&*live, task, Stage::Commit, StageState::Started, None, None);

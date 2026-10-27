@@ -37,8 +37,13 @@ pub fn attach(result: CommandResult, feature: Option<&str>) -> CommandResult {
             .filter(|e| e.status == result.status())
             .or_else(|| speccoder_core::codes::default_for(result.status()));
         if let Some(entry) = named {
-            let fix =
+            let mut fix =
                 speccoder_core::codes::fixes(entry, result.command(), task.as_deref(), feature);
+            if entry.name == "REGRESSION-ONLY"
+                && let Some(why) = regression_fix(&result, feature)
+            {
+                fix = why;
+            }
             result = result.with_code(entry.name).with_fix(fix);
         }
     }
@@ -131,6 +136,36 @@ fn outcome_task(outcome: &Outcome) -> Option<String> {
         Outcome::RunFailed { task } => task.clone(),
         _ => None,
     }
+}
+
+/// The fix for why a tick was regression-only (the last such tick's reason).
+fn regression_fix(result: &CommandResult, feature: Option<&str>) -> Option<Vec<String>> {
+    use speccoder_core::regression::RegressionReason as R;
+    let reason = match result.data() {
+        Some(CommandData::Run(r)) => r.regression.clone(),
+        Some(CommandData::Feature(f)) => f.attempts.iter().rev().find_map(|a| a.regression.clone()),
+        _ => None,
+    }?
+    .reason;
+    let f = feature.map_or_else(String::new, |f| format!(" --feature {f}"));
+    let checks = format!("speccoder doctor{f}");
+    let converge = format!("speccoder converge{f}");
+    Some(match reason {
+        R::AcceptanceOff => vec!["→ set [acceptance] generate = true in speccoder.toml".to_owned()],
+        R::NoScenarios { story } => vec![
+            format!("→ add an acceptance scenario to {story}, then converge"),
+            converge,
+        ],
+        R::AlreadyPassing { .. } | R::NoStory => vec![
+            format!("{checks}  (the plan checks: behaviour planned before its story)"),
+            converge,
+        ],
+        R::AuthorWroteNone
+        | R::AuthorFailed { .. }
+        | R::NotRed { .. }
+        | R::TestsNotCollected
+        | R::Unrecorded => vec![checks, converge],
+    })
 }
 
 /// An `ok` run that ticked a task on the regression checks alone.
