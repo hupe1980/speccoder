@@ -8,7 +8,7 @@
 //! The plan is bound to a digest over its commands and the folder as it
 //! was seen; [`perform`] recomputes it and refuses a plan that changed.
 //! A run that stopped resumes: each step's effect is detected, never
-//! repeated. Undo ([`undo`]) moves a folder speccoder created to the
+//! repeated. Undo ([`undo()`]) moves a folder speccoder created to the
 //! Trash, or reverts speccoder's commit in an existing repository — only
 //! while nothing else happened there.
 

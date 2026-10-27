@@ -22,6 +22,7 @@
   let invalid = $state(false);
   let starting = $state(false);
   let matches = $state<SimilarMatch[]>([]);
+  let limited = $state(false);
   let cost = $state<{ cost: { tokens: number; usd: number | null; runs: number } | null; model: string | null } | null>(null);
 
   const planning = $derived(app.project?.planning);
@@ -56,6 +57,7 @@
     try {
       const r = await get<Reply<SimilarReport>>(`/api/similar${q({ text: t })}`);
       matches = r.data?.matches ?? [];
+      limited = !!r.data?.limited;
     } catch {
       matches = [];
     }
@@ -185,6 +187,7 @@
             <span><button class="btn small tinted" onclick={() => extend(m)}>{planning?.revises ? `Extend ${m.unit.split("-")[0]} instead` : `Open ${m.unit.split("-")[0]}`}</button></span>
           </div>
         {/each}
+        {#if limited}<span class="d-note">compared with the 2 000 most recently changed {unit}s</span>{/if}
       </div>
     {:else}
       <div class="sr-only" role="status" aria-live="polite"></div>

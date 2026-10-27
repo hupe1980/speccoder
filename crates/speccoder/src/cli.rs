@@ -184,7 +184,7 @@ pub enum Command {
     },
     /// Start a project from one line of intent: the stack's and the spec format's own tools, then `init`, one commit.
     New {
-        /// The folder (default: ./<from the idea>, else here).
+        /// The folder (default: a folder named after the idea, else here).
         path: Option<PathBuf>,
         /// What you are building, in a line (also the first feature's description).
         #[arg(long)]

@@ -38,9 +38,9 @@ let s: ReturnType<typeof mount> | null = null;
 const field = () => document.querySelector<HTMLTextAreaElement>("textarea")!;
 const match = { unit: "003-reports", requirement: "FR-004", text: "Users can export a report as PDF.", score: 0.48, level: "close", shared: ["export", "report"], at: { path: "specs/003-reports/spec.md", line: 14, quote: "- **FR-004**: Users can export a report as PDF." } };
 
-function routes(matches: unknown[] = []) {
+function routes(matches: unknown[] = [], limited = false) {
   host.get.mockImplementation(async (path: string) => {
-    if (path.startsWith("/api/similar")) return { status: "ok", data: { query: "", compared: 4, limited: false, matches } };
+    if (path.startsWith("/api/similar")) return { status: "ok", data: { query: "", compared: 4, limited, matches } };
     if (path.startsWith("/api/skill-cost")) return { cost: null, model: "gpt-5.4-mini" };
     throw new Error(path);
   });
@@ -173,6 +173,13 @@ describe("NewFeature", () => {
     expect(host.app.run.mock.calls[1]![1]).toBe("Users can export a report as CSV");
     // Nothing else ran: no creating skill, no revision sent.
     expect(host.app.perform).not.toHaveBeenCalled();
+  });
+
+  it("says when the comparison was limited to the most recent features", async () => {
+    routes([match], true);
+    open({ text: "Users can export a report as CSV" });
+    await wait();
+    expect(document.body.textContent).toContain("compared with the 2 000 most recently changed features");
   });
 
   it("shows no hint when nothing is close", async () => {
