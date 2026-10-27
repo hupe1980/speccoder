@@ -1730,7 +1730,34 @@ pub(crate) fn run_task(
                             Some(f.message.clone()),
                             Some(began),
                         );
-                        return fail(CommandStatus::ConfigError, f.message)
+                        // The attempt is saved and undone like any failed
+                        // one: the next run starts from the lockfile that
+                        // installs.
+                        let reason = redact(&f.message, secret);
+                        let saved = attempts::save(
+                            &wt_root,
+                            &tmp,
+                            &feature_name,
+                            task,
+                            &attempts::Record {
+                                run: (!run_id.is_empty()).then_some(run_id.as_str()),
+                                outcome: "prepare_failed",
+                                reason: &reason,
+                                pending: None,
+                                usage: output.get("usage"),
+                            },
+                        )
+                        .and_then(|saved| {
+                            worktree::restore(&wt_root, &tmp, &before).map(|_| saved)
+                        });
+                        let message = match saved {
+                            Ok(saved) => format!(
+                                "{} — the attempt is saved as {} and undone",
+                                f.message, saved.reference
+                            ),
+                            Err(e) => format!("{} — saving the attempt failed: {}", f.message, e.0),
+                        };
+                        return fail(CommandStatus::ConfigError, message)
                             .with_code("PREPARE-FAILED")
                             .with_fix(f.fix);
                     }

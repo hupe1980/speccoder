@@ -332,6 +332,50 @@ fn a_branch_that_changes_its_lockfile_is_prepared_again() {
 }
 
 #[test]
+fn an_attempt_whose_lockfile_cannot_install_is_saved_and_undone() {
+    if !have("npm") {
+        return;
+    }
+    let zeros = format!("sha512-{}==", "A".repeat(86));
+    let lock = format!(
+        "{{\"name\": \"fixture\", \"version\": \"1.0.0\", \"lockfileVersion\": 3, \"requires\": true, \"packages\": {{\"\": {{\"name\": \"fixture\", \"version\": \"1.0.0\", \"dependencies\": {{\"speccoder-never-cached\": \"1.0.0\"}}}}, \"node_modules/speccoder-never-cached\": {{\"version\": \"1.0.0\", \"resolved\": \"https://registry.npmjs.org/speccoder-never-cached/-/speccoder-never-cached-1.0.0.tgz\", \"integrity\": \"{zeros}\"}}}}}}"
+    );
+    let f = fixture(
+        "",
+        &format!(
+            "cat > package-lock.json <<'EOF'\n{lock}\nEOF\necho done > done.txt\necho 'Did it.'"
+        ),
+        Node::Npm,
+    );
+    let (res, _) = f.run("T005");
+    assert_eq!(
+        res.code().map(|c| c.name),
+        Some("PREPARE-FAILED"),
+        "{}",
+        res.message()
+    );
+    assert!(
+        res.message()
+            .contains("is saved as refs/speccoder/attempts/"),
+        "{}",
+        res.message()
+    );
+    // Undone: the worktree's lockfile is the committed one again.
+    let wt = PathBuf::from(
+        git(f.path(), &["worktree", "list", "--porcelain"])
+            .lines()
+            .filter_map(|l| l.strip_prefix("worktree "))
+            .nth(1)
+            .unwrap(),
+    );
+    assert_eq!(
+        fs::read_to_string(wt.join("package-lock.json")).unwrap(),
+        git(&wt, &["show", "HEAD:package-lock.json"])
+    );
+    assert!(!wt.join("done.txt").exists());
+}
+
+#[test]
 fn a_package_missing_from_the_cache_stops_with_the_fix() {
     if !have("npm") {
         return;
