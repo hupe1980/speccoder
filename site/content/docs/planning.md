@@ -27,6 +27,25 @@ A planning skill works **in your checkout**, since the spec belongs on your bran
 
 Results are left **uncommitted**, and speccoder [offers the commit](#the-next-step-taken). A clarifying question is asked at the terminal; with `--no-prompt` it stays in the spec as `[NEEDS CLARIFICATION]`.
 
+## Plan through
+
+```sh
+speccoder spec specify "Users can export a report as CSV" --through tasks
+```
+
+`--through spec|plan|tasks|analyze` runs the format's own skills in its order — Spec Kit: `specify`, `plan`, `tasks`, then `analyze`; OpenSpec: `propose` — each unchanged, as `speccoder spec` runs it. It stops only where you decide:
+
+| Stop | When | Goes on with |
+|---|---|---|
+| `THROUGH-QUESTIONS` | The spec leaves open questions | `speccoder review answer Q1 "…"`, then the review |
+| `THROUGH-REVIEW` | After the spec, before anything is planned | Your approval of the requirements (`speccoder review approve`); at a terminal it asks *Approve FR-001 … FR-004 and plan? [y/N]* |
+| failed | A skill failed or was refused | The same command again: it runs from that skill |
+| done | The chosen step is written | The commit of the planning files; the [plan checks](#plan-checks) of the new task list are shown |
+
+Questions a skill asks while it writes are answered in place. No flag passes the review stop — `--yes` never does — and nothing is committed. Plan through keeps no state of its own: where it stopped is read from the unit's files and the review record, so `speccoder spec plan --through tasks` continues after a stop, and every `Next:` line says so. `--through` is taken only by the format's chain (its creating, planning and checking skills).
+
+Before the creating skill runs, the description is compared with every feature's requirements by a deterministic text similarity (no model). A close match prints `warning[SIMILAR-FEATURE]` and the skill still runs; extending that feature instead is a comment on its spec, sent as one [revision](#comments). `speccoder feature similar "…"` shows the matches alone.
+
 ## Plan checks
 
 `speccoder doctor --feature <F>` and the web's *Before you run* read the task list for where it will produce no evidence. Each is a warning with its tasks and its fix; none blocks, delays or re-orders a run, and a run says once that they exist (`plan: 3 warnings — speccoder doctor --feature …`).

@@ -8,6 +8,28 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Start a project from one line of intent.** `speccoder new` (and **New
+  Project** in the app) plans `git init`, the stack's own scaffold (cargo,
+  uv + pytest, npm + vitest, go), the spec format's own init (Spec Kit with
+  the speccoder preset, or OpenSpec), `speccoder init --yes` and one commit
+  as you — every command shown, network steps named, run sandboxed, bound
+  to the plan's digest, resumable; `--undo` moves an untouched new folder to
+  the Trash or reverts speccoder's commit. An empty suite on a fresh
+  scaffold reads *no tests yet*.
+- **Plan through**: `speccoder spec specify "…" --through tasks` (and
+  `issue start N --through tasks`) runs the format's own skills in order,
+  stopping only for open questions and your approval of the spec; a
+  continuation picks up from the files. `feature similar` and the New
+  Feature sheet's hint find a requirement the description duplicates.
+- **The composer and New Feature.** ⌘N (`N` in a tab) suggests the rung —
+  bug fix, quick change, feature — from the words, with its reason; the
+  New Feature sheet shows the skills that will run, what they write and
+  what they cost before; Spec & Plan follows the spec as it is written,
+  with a readiness strip and the stop's one decision.
+- **A welcome outside a project** — New Project, Open Project…, Clone from
+  GitHub…, Try the Sample, recent projects — binding the host once.
+  `speccoder sample` replays a recorded run strictly, without a key; this
+  build has no recording yet (`SAMPLE-MISSING`).
 - **A test file the runner never collected fails the verdict.** After every
   attempt, each test file it added or changed is checked against what the
   fast checks collected — the toolchain's rule (Cargo, pytest, vitest/jest,

@@ -39,7 +39,7 @@ Coding agents are good at writing code and too good at declaring victory. specco
 
 ## 🚀 Quickstart
 
-You need git, a Spec Kit project (Spec Kit 0.13 to 1.2) or an OpenSpec project (1.0 or newer), and a model.
+You need git, a Spec Kit project (Spec Kit 0.13 to 1.2) or an OpenSpec project (1.0 or newer), and a model. No project yet: `speccoder new md2csv --idea "a CLI that turns Markdown tables into CSV"` makes one with the stack's and the spec tool's own commands, shown before they run (or **New Project** in `speccoder ui`); `speccoder sample` replays a recorded run, no key needed.
 
 ```sh
 brew install hupe1980/tap/speccoder
@@ -85,7 +85,7 @@ Then, as you need them:
 - 👀 **Watch and decide.** At a terminal, `run` is a live dashboard that asks approvals with one key; [the app](#-the-app) shows the same work. The model's reasoning and words appear beside its calls — its account, never evidence.
 - ⚙️ **Automate.** Every command takes `--json` or `--events`, both with [published schemas](https://hupe1980.github.io/speccoder/docs/cli/#json-output); every failure names a [code](https://hupe1980.github.io/speccoder/docs/codes/) and the command that fixes it.
 - 🐙 **Work from GitHub.** `speccoder auth login` once; `speccoder issue start 42` specifies a feature from an issue, `speccoder pr` opens a draft whose description is the evidence. No `gh` needed.
-- 📝 **Plan with your spec tool.** `speccoder spec specify "…"`, then `plan` and `tasks`, runs Spec Kit's own skills (OpenSpec: `propose`).
+- 📝 **Plan with your spec tool.** `speccoder spec specify "…" --through tasks` runs Spec Kit's own skills in order — `specify`, then `plan` and `tasks` once you approved the spec — stopping for open questions and your review (OpenSpec: `propose`).
 
 ## 📸 The app
 
