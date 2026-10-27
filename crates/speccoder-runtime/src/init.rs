@@ -666,11 +666,15 @@ pub fn no_tests(argv: &[String], exit: Option<i32>, output: &str) -> bool {
                 .iter()
                 .all(|l| l.contains("no test files") || l.contains("matched no packages"));
     }
+    // Only a run that ended as an empty suite ends: a failure that also
+    // says "no tests" somewhere stays a failure.
     if has("vitest") || has("jest") || argv.iter().any(|a| a == "test") && has("npm") {
-        return lower.contains("no test files found") || lower.contains("no tests found");
+        return exit == Some(0)
+            && (lower.contains("no test files found") || lower.contains("no tests found"));
     }
     if has("nextest") {
-        return lower.contains("no tests to run");
+        // nextest's own exit status for "no tests to run".
+        return exit == Some(4) && lower.contains("no tests to run");
     }
     false
 }
