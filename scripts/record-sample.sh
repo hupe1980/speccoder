@@ -23,8 +23,6 @@ export SPECCODER_STATE_DIR="$work/state"
 cd "$root"
 cargo build --quiet -p speccoder
 bin="$root/target/debug/speccoder"
-# Precise enough that the spec leaves no open question: the recording runs
-# unattended, and a question honestly stops it.
 idea="A Rust library with one function, word_count(text: &str) -> usize, that counts the words of a text: a word is a run of letters or digits; punctuation and whitespace separate words and are never counted; an empty text or one with only punctuation has 0 words."
 project="$work/wordcount"
 # A result's own words: its message, a failed skill's message, its code and
@@ -36,13 +34,13 @@ said() {
 
 "$bin" new "$project" --idea "$idea" --stack rust --yes
 cd "$project"
-"$bin" --json spec specify "$idea" --through spec --no-prompt > "$work/spec.json" || true
-unit="$(jq -r '.data.unit // empty' "$work/spec.json" 2>/dev/null || true)"
-[ -n "$unit" ] || { echo "record-sample: specify made no unit: $(said "$work/spec.json")" >&2; exit 1; }
-"$bin" review approve --feature "$unit"
-"$bin" --json spec plan --through tasks --no-prompt --feature "$unit" > "$work/plan.json" || true
-[ "$(jq -r '.data.stop.kind // empty' "$work/plan.json" 2>/dev/null)" = "done" ] || {
-  echo "record-sample: planning stopped: $(said "$work/plan.json")" >&2; exit 1; }
+# The planning is fixed (scripts/sample/): the model's planning skills vary
+# run to run, and a question or an unapproved command honestly stops an
+# unattended recording. What is recorded live is the run.
+unit="001-word-count"
+mkdir -p "specs/$unit"
+cp "$root/scripts/sample/$unit/"*.md "specs/$unit/"
+printf '{"feature_directory":"specs/%s"}\n' "$unit" > .specify/feature.json
 git add -- "specs/$unit"
 git commit -q -m "plan $unit"
 "$bin" --json review approve --run autopilot --feature "$unit" > "$work/run.json" || true

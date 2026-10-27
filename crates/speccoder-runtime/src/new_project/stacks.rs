@@ -28,13 +28,26 @@ fn words(w: &[&str]) -> Vec<String> {
 /// its default version control (it does not init a second repository).
 pub(crate) fn recipe(stack: Stack, name: &str) -> Vec<Recipe> {
     match stack {
-        Stack::Rust => vec![Recipe {
-            argv: words(&["cargo", "init", "--lib", "--name", name]),
-            hosts: Vec::new(),
-            writes: "Cargo.toml, src/lib.rs, .gitignore",
-            marker: "Cargo.toml",
-            note: None,
-        }],
+        Stack::Rust => vec![
+            Recipe {
+                argv: words(&["cargo", "init", "--lib", "--name", name]),
+                hosts: Vec::new(),
+                writes: "Cargo.toml, src/lib.rs, .gitignore",
+                marker: "Cargo.toml",
+                note: None,
+            },
+            // Cargo's library template is a placeholder `add` with its test;
+            // the first task would find that test frozen and could not
+            // replace `add`. An empty library builds, and its tests start at
+            // none.
+            Recipe {
+                argv: words(&["cp", "/dev/null", "src/lib.rs"]),
+                hosts: Vec::new(),
+                writes: "src/lib.rs (emptied of cargo's placeholder `add` and its test)",
+                marker: "",
+                note: None,
+            },
+        ],
         Stack::Python => vec![
             Recipe {
                 argv: words(&["uv", "init", "--package", "--vcs", "none", "--name", name]),
@@ -203,7 +216,14 @@ mod tests {
     fn every_stack_scaffolds_with_its_own_tool() {
         for stack in Stack::ALL {
             for r in recipe(stack, "md2csv") {
-                assert_eq!(Some(r.argv[0].as_str()), stack.tool(), "{stack:?}");
+                // The stack's own tool — or, for Rust, emptying cargo's
+                // placeholder library.
+                let placeholder = r.argv == ["cp", "/dev/null", "src/lib.rs"];
+                assert!(
+                    placeholder || Some(r.argv[0].as_str()) == stack.tool(),
+                    "{stack:?}: {:?}",
+                    r.argv
+                );
                 assert_eq!(
                     r.hosts.is_empty(),
                     !r.argv.contains(&"add".to_owned()) && !r.argv.contains(&"install".to_owned())
