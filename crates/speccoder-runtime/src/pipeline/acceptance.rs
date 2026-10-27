@@ -21,6 +21,12 @@ pub(crate) struct AcceptanceSetup<'a> {
     /// The repository's instructions (test conventions live there too).
     pub(crate) instructions: &'a [crate::instructions::Instruction],
     pub(crate) runner: &'a sandbox::Runner,
+    /// The project's test layout: where acceptance files go (`None`: the
+    /// author places them by the old naming rule).
+    pub(crate) layout: Option<&'a crate::layout::TestLayout>,
+    /// The story files speccoder created on this branch (`Story-File:`
+    /// trailers): the only existing files an author may add a section to.
+    pub(crate) story_files: &'a [String],
 }
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
@@ -98,12 +104,26 @@ pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance 
         })
         .map(|t| t.chars().take(8192).collect::<String>())
         .unwrap_or_default();
+    // Where the tests go: the story's file in the project's layout (one
+    // file per story, grown by sections), a convergence task's own file,
+    // or no place the runner collects (FR-028, FR-033).
+    let placement = match placement(a) {
+        Ok(p) => p,
+        Err(()) => {
+            return skipped_by(
+                "no place the runner collects".to_owned(),
+                Some(SkipCause::NoPlace),
+                json!({}),
+            );
+        }
+    };
     let input = substrate::acceptance::input(
         a.bundle.clone(),
         a.scenarios,
         &files,
         &manifest,
         a.instructions,
+        placement.as_ref(),
     );
     let outcome = a.rt.block_on(a.plane.acceptance(a.feature, a.task, input));
     let outcome = match outcome {
@@ -128,7 +148,10 @@ pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance 
 
     // Validate: new test files only, a command the policy allows.
     let mut written = Vec::new();
-    let (valid, refused) = validate_answer(&answer, a.project, a.policy, a.scenarios);
+    let story = placement
+        .as_ref()
+        .and_then(|p| p.existing.as_deref().map(|old| (p.path.as_str(), old)));
+    let (valid, refused) = validate_with(&answer, a.project, a.policy, a.scenarios, story);
     if let Some(r) = refused.first() {
         return skipped_by(
             r.message.clone(),
@@ -191,6 +214,21 @@ pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance 
     let (first, summary) = execute(a.project, &argv, a.runner);
     let red_tests = speccoder_core::verify::collected_count(&first, summary.as_ref());
     let mut class = classify_red(&first, summary.as_ref());
+    // A section added to the story's file is red only by the tests it adds:
+    // the same command on the file without it (FR-030).
+    if let Some((path, old)) = story.filter(|(p, _)| written.iter().any(|w| w == p)) {
+        let full = a.project.join(path);
+        if let Ok(new) = std::fs::read_to_string(&full)
+            && std::fs::write(&full, old).is_ok()
+        {
+            let (without, wsum) = execute(a.project, &argv, a.runner);
+            let _ = std::fs::write(&full, new);
+            class = speccoder_core::verify::classify_red_added(
+                (&first, summary.as_ref()),
+                (&without, wsum.as_ref()),
+            );
+        }
+    }
     if class.is_red() {
         let (second, summary) = execute(a.project, &argv, a.runner);
         if !classify_red(&second, summary.as_ref()).is_red() {
@@ -200,6 +238,10 @@ pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance 
     let red = class.is_red();
     let mut report = base;
     report["files"] = json!(written);
+    if let Some(p) = placement.as_ref().filter(|p| p.story.is_some()) {
+        report["story_file"] = json!(p.path);
+        report["appended"] = json!(p.existing.is_some());
+    }
     report["tests"] = json!(tests);
     report["argv"] = json!(argv);
     report["red"] = json!(red);
@@ -235,6 +277,64 @@ pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance 
         generation_failed: None,
         skip_cause: None,
     }
+}
+
+/// Where the visible author writes, from the layout: `Ok(None)` when no
+/// runner speccoder knows was found (the author names the files), `Err`
+/// when the layout offers no place the runner collects.
+fn placement(a: &AcceptanceSetup<'_>) -> Result<Option<substrate::acceptance::Placement>, ()> {
+    let Some(layout) = a.layout.filter(|l| !l.runners.is_empty()) else {
+        return Ok(None);
+    };
+    let task = a.task.to_owned();
+    let story = a.bundle["task"]["story"]
+        .as_str()
+        .filter(|s| !s.is_empty())
+        .map(str::to_owned);
+    // Go: the package the task names, else the module's root.
+    let package =
+        speccoder_core::scope::named_paths(a.bundle["task"]["title"].as_str().unwrap_or_default())
+            .into_iter()
+            .find(|p| p.ends_with(".go") || !p.contains('.'))
+            .map(|p| {
+                if p.ends_with(".go") {
+                    p.rsplit_once('/')
+                        .map_or(String::new(), |(d, _)| d.to_owned())
+                } else {
+                    p.trim_end_matches('/').to_owned()
+                }
+            });
+    let per_task =
+        |layout: &crate::layout::TestLayout| layout.story_file(&task, package.as_deref());
+    let (path, story, existing) = match story.as_ref() {
+        Some(st) => {
+            let Some(path) = layout.story_file(st, package.as_deref()) else {
+                return Err(());
+            };
+            let exists = a.project.join(&path).exists();
+            if !exists {
+                (path, story.clone(), None)
+            } else if a.story_files.contains(&path) {
+                let old = std::fs::read_to_string(a.project.join(&path)).unwrap_or_default();
+                (path, story.clone(), Some(old))
+            } else {
+                // A file of the person's at that path: this task's own file.
+                (per_task(layout).ok_or(())?, None, None)
+            }
+        }
+        None => (per_task(layout).ok_or(())?, None, None),
+    };
+    let comment = if path.ends_with(".py") { "#" } else { "//" }.to_owned();
+    Ok(Some(substrate::acceptance::Placement {
+        command: layout.command_for(&path).unwrap_or_default(),
+        path,
+        existing,
+        task,
+        story,
+        scenarios: a.scenarios.iter().map(|s| s.id.clone()).collect(),
+        comment,
+        layout: layout.text(),
+    }))
 }
 
 /// speccoder's words for a refusal's kind (a regression-only reason's detail).
@@ -277,6 +377,18 @@ pub(crate) fn validate_answer(
     policy: &tools::policy::Policy,
     scenarios: &[speccoder_core::spec::ScenarioRef],
 ) -> (Vec<ValidFile>, Vec<RefusedFile>) {
+    validate_with(answer, project, policy, scenarios, None)
+}
+
+/// [`validate_answer`] with the story's file: the one existing path an
+/// answer may write, and only by adding lines to `old` (D-048).
+pub(crate) fn validate_with(
+    answer: &serde_json::Value,
+    project: &Path,
+    policy: &tools::policy::Policy,
+    scenarios: &[speccoder_core::spec::ScenarioRef],
+    story: Option<(&str, &str)>,
+) -> (Vec<ValidFile>, Vec<RefusedFile>) {
     let protected = policy.protected();
     let mut valid = Vec::new();
     let mut refused = Vec::new();
@@ -303,13 +415,36 @@ pub(crate) fn validate_answer(
             });
             continue;
         }
-        if project.join(&rel).exists() {
-            refused.push(RefusedFile {
-                message: format!("`{rel}` already exists"),
-                path: rel,
-                why: "exists",
-            });
-            continue;
+        match story {
+            Some((path, old)) if path == rel => {
+                if content == old || !crate::integrity::only_additions(old, content) {
+                    refused.push(RefusedFile {
+                        message: format!("changes existing lines of `{rel}`"),
+                        path: rel,
+                        why: "changes_existing",
+                    });
+                    continue;
+                }
+            }
+            _ if project.join(&rel).exists() => {
+                refused.push(RefusedFile {
+                    message: format!("`{rel}` already exists"),
+                    path: rel,
+                    why: "exists",
+                });
+                continue;
+            }
+            _ => {
+                // A new file the runner would never collect is no evidence.
+                if crate::collection::statically_refused(project, &rel, content).is_some() {
+                    refused.push(RefusedFile {
+                        message: format!("`{rel}` is not where the runner collects tests"),
+                        path: rel,
+                        why: "not_collected",
+                    });
+                    continue;
+                }
+            }
         }
         let cited: Vec<String> = f["scenarios"]
             .as_array()
@@ -489,6 +624,7 @@ pub(crate) fn prepare_held_out(
         &visible_files,
         composition,
         a.instructions,
+        a.layout.map(crate::layout::TestLayout::text).as_deref(),
     );
     let outcome = match a.rt.block_on(a.plane.acceptance(a.feature, a.task, input)) {
         Ok(o) => o,

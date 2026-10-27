@@ -573,6 +573,7 @@ pub fn record_tick(t: &Tick<'_>, report: &RunReport) -> Value {
             Some(v)
         }),
         regression: report.regression.as_ref().map(|r| r.reason.clone()),
+        context: report.context.as_ref().map(|c| json!(c)),
         collection: report.collection.clone(),
         ..predicate(t, tree, policy.clone(), time.clone())
     };

@@ -126,7 +126,7 @@ fn every_crash_point_of_an_attempt_resumes_honestly() {
         .block_on(plane.attempt_keyed(
             "001-login",
             "T001",
-            input(bundle(), &settings, None, &[]),
+            input(bundle(), &settings, None, &[], None),
             "k1",
         ))
         .unwrap();

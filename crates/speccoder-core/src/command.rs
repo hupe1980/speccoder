@@ -1159,6 +1159,9 @@ pub struct RunReport {
     /// Why a regression-only verdict is one (set with that verdict only).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub regression: Option<crate::regression::Regression>,
+    /// What reached the implementer, by digest (constitution VIII).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context: Option<crate::context::ContextManifest>,
 }
 
 /// A failed attempt that was undone and retried.

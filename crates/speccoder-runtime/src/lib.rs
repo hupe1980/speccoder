@@ -59,6 +59,7 @@ pub mod init;
 pub mod instructions;
 pub mod integrity;
 pub mod ladder;
+pub mod layout;
 #[cfg(feature = "engine")]
 pub mod mcp;
 #[cfg(feature = "engine")]

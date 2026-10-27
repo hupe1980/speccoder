@@ -883,6 +883,11 @@ pub(crate) fn run_task(
                 .map(|d| (d, c))
         })
     });
+    // The test layout, detected from the checkout: a fact for the
+    // implementer and every test author, never a judge input.
+    let test_layout = crate::layout::detect(&project, &check_argvs);
+    let test_layout_text = test_layout.text();
+    let story_files = super::commit::story_files(&wt_root, &feature_name);
     let scenarios = match &bug_fix {
         Some(f) => super::bug::scenarios(&f.bug),
         None => format.scenarios(&snap, task),
@@ -1039,6 +1044,8 @@ pub(crate) fn run_task(
             scenarios: &scenarios,
             instructions: &instructions,
             runner: &runner,
+            layout: Some(&test_layout),
+            story_files: &story_files,
         }))
     } else {
         None
@@ -1091,6 +1098,8 @@ pub(crate) fn run_task(
                     scenarios: &scenarios,
                     instructions: &instructions,
                     runner: &runner,
+                    layout: Some(&test_layout),
+                    story_files: &story_files,
                 },
                 a,
                 &scenarios,
@@ -1319,6 +1328,7 @@ pub(crate) fn run_task(
                 },
                 digest.as_ref(),
                 attempt_instructions,
+                Some(&test_layout_text),
             );
             let attempt_began = std::time::Instant::now();
             let attempt_detail = if run_config.best_of > 1 {
@@ -2032,6 +2042,42 @@ pub(crate) fn run_task(
         }
     };
     report.usage = usage;
+    // What reached the implementer, by digest: the bundle's parts and the
+    // test layout (constitution VIII).
+    {
+        use speccoder_core::context::ContextKind as K;
+        let part = |k: &str| {
+            bundle_value[k]
+                .as_str()
+                .unwrap_or_default()
+                .as_bytes()
+                .to_vec()
+        };
+        let mut m = crate::context::Manifest::new();
+        m.push(
+            K::Constitution,
+            "worktree",
+            "/bundle/constitution",
+            &part("constitution"),
+        )
+        .push(K::Plan, "worktree", "/bundle/plan", &part("plan"))
+        .push(K::Story, "worktree", "/bundle/story", &part("story"))
+        .push(
+            K::Task,
+            "worktree",
+            "/bundle/task",
+            serde_json::to_string(&bundle_value["task"])
+                .unwrap_or_default()
+                .as_bytes(),
+        )
+        .push(
+            K::TestLayout,
+            "worktree",
+            "/test_layout",
+            test_layout_text.as_bytes(),
+        );
+        report.context = Some(m.finish());
+    }
     // Scope: what the attempt changed beyond the paths its task names.
     report.scope = parsed_task.as_ref().map(|t| scope_of(&report, &t.title));
 
@@ -2185,6 +2231,8 @@ pub(crate) fn run_task(
                 scenarios: &scenarios,
                 instructions: &instructions,
                 runner: &runner,
+                layout: Some(&test_layout),
+                story_files: &story_files,
             };
             let weak = crate::strength::weak(a);
             match strengthen(&setup, &visible_tests, weak, &before, fin) {

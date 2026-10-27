@@ -213,6 +213,7 @@ pub(crate) fn bare_report(
         bug: None,
         collection: None,
         regression: None,
+        context: None,
     }
 }
 

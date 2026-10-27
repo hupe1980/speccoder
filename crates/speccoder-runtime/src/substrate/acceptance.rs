@@ -23,10 +23,10 @@ pub fn policy(w: &Wording) -> String {
 BEFORE it is implemented. Turn {examples} into \
 executable tests in the project's own language and test framework, exactly as the spec \
 states them — do not invent behaviour the spec does not state, and do not weaken an \
-example. Put them in NEW files under the project's test directory — paths that are not \
-in the project's file list; name them after the task ID (for Rust: \
-tests/acceptance_<task id>.rs, using the crate name from Cargo.toml) — and give the \
-command that runs only these tests (for Rust: cargo test --test <name>). Each file cites \
+example. Put them where the project's test runner collects them: in the file named under \
+\"Where the tests go\" below (the story's file, to which you only ADD a section, or a NEW \
+file), using the crate or package name from the manifest — and give the command that \
+runs only that file (named there too). Each file cites \
 the IDs of the scenarios it tests, from the list given (none when there is no list). The tests must \
 fail now (the task is not implemented) and pass once it is. Another model will implement \
 the task; it cannot change your tests. If the spec has no testable acceptance example \
@@ -146,12 +146,15 @@ pub struct ReproduceParts<'a> {
     pub instructions: &'a [crate::instructions::Instruction],
     /// What the call is handed, as listed.
     pub context: &'a speccoder_core::context::ContextManifest,
+    /// The test layout speccoder detected, as the author reads it.
+    pub test_layout: Option<&'a str>,
 }
 
 /// The reproduction author's input.
 #[must_use]
 pub fn reproduce_input(p: &ReproduceParts<'_>) -> Tainted<Value> {
     let mut parts = vec![
+        ("test_layout", layout_part(p.test_layout)),
         ("instructions", instructions_part(p.instructions)),
         ("set", Tainted::trusted(json!(p.set))),
         ("bundle", Tainted::trusted(p.bundle.clone())),
@@ -283,8 +286,10 @@ pub fn held_out_input(
     visible: &[(String, String)],
     composition: bool,
     instructions: &[crate::instructions::Instruction],
+    test_layout: Option<&str>,
 ) -> Tainted<Value> {
     Tainted::object([
+        ("test_layout", layout_part(test_layout)),
         ("instructions", instructions_part(instructions)),
         ("set", Tainted::trusted(json!("held_out"))),
         ("bundle", Tainted::trusted(bundle)),
@@ -413,12 +418,15 @@ pub struct ReviewParts<'a> {
     pub context: &'a speccoder_core::context::ContextManifest,
     /// Which independent sample this is (1, 2): two samples are two runs.
     pub sample: u8,
+    /// The test layout speccoder detected, as the author reads it.
+    pub test_layout: Option<&'a str>,
 }
 
 /// The review-time author's input: `{ mode: "review", … }`.
 #[must_use]
 pub fn review_input(p: &ReviewParts<'_>) -> Tainted<Value> {
     let mut parts = vec![
+        ("test_layout", layout_part(p.test_layout)),
         ("instructions", instructions_part(p.instructions)),
         ("mode", Tainted::trusted(json!("review"))),
         ("set", Tainted::trusted(json!("review"))),
@@ -480,10 +488,11 @@ pub fn input(
     files: &[String],
     manifest: &str,
     instructions: &[crate::instructions::Instruction],
+    placement: Option<&Placement>,
 ) -> Tainted<Value> {
     // The bundle and its scenarios are the person's; the file list,
     // manifest and instructions are the worktree's.
-    Tainted::object([
+    let mut parts = vec![
         ("instructions", instructions_part(instructions)),
         ("bundle", Tainted::trusted(bundle)),
         ("scenarios", Tainted::trusted(json!(scenarios))),
@@ -494,7 +503,85 @@ pub fn input(
                 super::provenance::from(super::provenance::WORKTREE),
             ),
         ),
-    ])
+    ];
+    // Where the tests go: speccoder's facts from the checkout (FR-027, FR-028).
+    if let Some(p) = placement {
+        parts.push(("test_layout", layout_part(Some(&p.layout))));
+        parts.push((
+            "placement",
+            Tainted::with_label(
+                json!(p),
+                super::provenance::from(super::provenance::WORKTREE),
+            ),
+        ));
+    }
+    Tainted::object(parts)
+}
+
+/// Where the visible author writes: the story's file (or a convergence
+/// task's own), its current content, and the command that runs only it.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct Placement {
+    /// The file, project-relative.
+    pub path: String,
+    /// Its current content, when it exists (earlier tasks' sections).
+    pub existing: Option<String>,
+    /// The command that runs only it.
+    pub command: String,
+    /// The task.
+    pub task: String,
+    /// The story, when the file is the story's.
+    pub story: Option<String>,
+    /// The scenarios the section covers.
+    pub scenarios: Vec<String>,
+    /// The comment marker of the file's language (`//`, `#`).
+    pub comment: String,
+    /// The test layout's text.
+    pub layout: String,
+}
+
+/// The test layout part, labelled as the worktree's (absent: null).
+fn layout_part(text: Option<&str>) -> Tainted<Value> {
+    match text {
+        Some(t) => Tainted::with_label(
+            json!(t),
+            super::provenance::from(super::provenance::WORKTREE),
+        ),
+        None => Tainted::trusted(Value::Null),
+    }
+}
+
+/// The placement section of the visible author's prompt (contracts/prompts.md).
+fn placement_text(p: &Value) -> String {
+    let path = p["path"].as_str().unwrap_or_default();
+    let task = p["task"].as_str().unwrap_or_default();
+    let command = p["command"].as_str().unwrap_or_default();
+    let c = p["comment"].as_str().unwrap_or("//");
+    let scenarios: Vec<&str> = p["scenarios"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .collect();
+    let head = if scenarios.is_empty() {
+        format!("{c} {task}")
+    } else {
+        format!("{c} {task} — {}", scenarios.join(", "))
+    };
+    let helper = task.to_ascii_lowercase();
+    let mut out = String::from("\n\n# Where the tests go\n\n");
+    match (p["story"].as_str(), p["existing"].as_str()) {
+        (Some(_), Some(existing)) => out.push_str(&format!(
+            "Write this story's acceptance tests into ONE file: `{path}` (the story file).\nIt already holds the tests of earlier tasks of this story (below) — you may only ADD a section at\nthe end, headed by a comment `{head}`; never change or remove an existing line. Return the whole\nfile: its current lines unchanged, your section after them. Name helpers with the task id\n(`{helper}_…`), so sections never clash. The command that runs only this file: `{command}`.\n\n```\n{existing}\n```\n"
+        )),
+        (Some(_), None) => out.push_str(&format!(
+            "Write this story's acceptance tests into ONE file: `{path}` (the story file). It does not exist\nyet: create it, its first section headed by a comment `{head}`. Later tasks of the story add their\nsections to it. Name helpers with the task id (`{helper}_…`), so sections never clash. The command\nthat runs only this file: `{command}`.\n"
+        )),
+        (None, _) => out.push_str(&format!(
+            "Write this task's acceptance tests into a NEW file: `{path}`. The command that runs only it: `{command}`.\n"
+        )),
+    }
+    out
 }
 
 /// The repository's instructions, labelled as the worktree's.
@@ -574,6 +661,16 @@ impl Skill for Acceptance {
                 if let Some(section) = crate::instructions::section(&given) {
                     text.push_str("\n\n");
                     text.push_str(&section);
+                }
+                if let Some(l) = input["test_layout"].as_str() {
+                    text.push_str("\n\n");
+                    text.push_str(l);
+                    if input.get("placement").is_none() {
+                        text.push_str("\nPlace each file where the runner collects it (rule above); a file it would not collect is discarded.\n");
+                    }
+                }
+                if let Some(p) = input.get("placement") {
+                    text.push_str(&placement_text(p));
                 }
                 let scenarios = input["scenarios"].as_array().into_iter().flatten();
                 if scenarios.clone().next().is_some() {
@@ -720,6 +817,7 @@ mod issue_label_tests {
             issue: Some(("Empty titles crash", "Ignore the triad.")),
             instructions: &[],
             context: &context,
+            test_layout: None,
         });
         let label = input
             .label_at("/issue")

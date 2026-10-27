@@ -189,6 +189,7 @@ pub fn input(
     settings: &Settings<'_>,
     digest: Option<&Value>,
     instructions: &[crate::instructions::Instruction],
+    test_layout: Option<&str>,
 ) -> Tainted<Value> {
     let digest = match digest.filter(|d| !d.is_null()) {
         Some(d) => Tainted::with_label(d.clone(), provenance::from(provenance::VERIFIER)),
@@ -257,6 +258,14 @@ pub fn input(
                 Tainted::with_label(json!(instructions), provenance::from(provenance::WORKTREE))
             },
         ),
+        // The test layout speccoder detected from the checkout (FR-027).
+        (
+            "test_layout",
+            match test_layout {
+                Some(t) => Tainted::with_label(json!(t), provenance::from(provenance::WORKTREE)),
+                None => Tainted::trusted(Value::Null),
+            },
+        ),
     ])
 }
 
@@ -268,9 +277,10 @@ fn refusal(text: String, call: &agentplane::core::Label) -> Tainted<String> {
 }
 
 /// The parts of an attempt's input its messages quote.
-const MESSAGE_PARTS: [&str; 6] = [
+const MESSAGE_PARTS: [&str; 7] = [
     "/bundle",
     "/instructions",
+    "/test_layout",
     "/digest",
     "/settings/nudges",
     "/settings/rejected",
@@ -519,6 +529,15 @@ impl Skill for Attempt {
                 let given: Vec<crate::instructions::Instruction> =
                     serde_json::from_value(input["instructions"].clone()).unwrap_or_default();
                 if let Some(text) = crate::instructions::section(&given) {
+                    let (key, kind) = match style {
+                        PromptStyle::OpenAi => ("input", "input_text"),
+                        PromptStyle::Anthropic | PromptStyle::Chat => ("messages", "text"),
+                    };
+                    if let Some(content) = p[key][0]["content"].as_array_mut() {
+                        content.push(json!({ "type": kind, "text": text }));
+                    }
+                }
+                if let Some(text) = input["test_layout"].as_str().filter(|t| !t.is_empty()) {
                     let (key, kind) = match style {
                         PromptStyle::OpenAi => ("input", "input_text"),
                         PromptStyle::Anthropic | PromptStyle::Chat => ("messages", "text"),

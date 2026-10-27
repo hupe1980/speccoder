@@ -549,6 +549,49 @@ pub fn judge(input: &Input<'_>) -> Option<Collection> {
     })
 }
 
+/// Why the runner would never collect a new file at `path` with `content`,
+/// by the static rule alone (`None`: it may be collected, or the rule is
+/// not known statically). For placing new test files (FR-029, FR-031).
+#[must_use]
+pub fn statically_refused(root: &Path, path: &str, content: &str) -> Option<String> {
+    let mut files = static_cfg::files(root);
+    files.insert(path.to_owned());
+    let read = |p: &str| {
+        if p == path {
+            Some(content.to_owned())
+        } else {
+            std::fs::read_to_string(root.join(p)).ok()
+        }
+    };
+    match toolchain_of(path)? {
+        Toolchain::Rust => {
+            let packages = static_cfg::rust_packages(root, &files);
+            let pkg = static_cfg::owner(&packages, path)?;
+            let reach = rust_reachable(&rust_targets(pkg, &files), &read);
+            (!reach.contains_key(path)).then(|| rust_rule(pkg).text)
+        }
+        Toolchain::Python => {
+            let rule = static_cfg::pytest_rule(root);
+            rule.breaks(path).map(|_| rule.rule().text)
+        }
+        Toolchain::JavaScript => {
+            let js = static_cfg::js_packages(root, &files, &[]);
+            let pkg = static_cfg::js_owner(&js, path)?;
+            let r = pkg.rule.as_ref().ok()?;
+            let rel = if pkg.root.is_empty() {
+                path.to_owned()
+            } else {
+                path.trim_start_matches(&format!("{}/", pkg.root))
+                    .to_owned()
+            };
+            r.breaks(&rel).map(|_| r.rule().text)
+        }
+        Toolchain::Go => {
+            go_breaks(path, content, &std::collections::BTreeSet::new()).map(|_| go_rule().text)
+        }
+    }
+}
+
 /// A file whose runner speccoder does not recognise: the check's own
 /// `list` decides it when there is one, else it is unknown.
 fn unrecognised(
