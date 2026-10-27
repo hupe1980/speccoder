@@ -301,7 +301,6 @@ pub fn rows(task: &TaskStatus, statements: &[Value], run: Option<&RunReport>) ->
 /// # Errors
 ///
 /// No project or state directory, or the journal cannot be read.
-#[cfg(feature = "engine")]
 pub fn account_of(
     path: &std::path::Path,
     run: &str,

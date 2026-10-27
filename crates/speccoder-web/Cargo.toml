@@ -16,7 +16,7 @@ include = ["/src", "/build.rs", "/ui/dist/*.html", "/ui/dist/*.js", "/ui/dist/*.
 
 [dependencies]
 speccoder-core.workspace = true
-speccoder-runtime = { workspace = true, features = ["engine"] }
+speccoder-runtime.workspace = true
 axum = { version = "0.8", default-features = false, features = ["json", "tokio", "http1", "query"] }
 tokio = { version = "1", features = ["rt-multi-thread", "net", "macros", "sync", "time", "signal"] }
 tokio-stream = { version = "0.1", features = ["sync"] }
