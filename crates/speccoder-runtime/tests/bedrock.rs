@@ -488,9 +488,18 @@ fn bedrock_runs_a_task_for_real() {
         res.code().map(|c| c.name),
         res.message()
     );
-    let usage = rep.usage.as_ref().expect("usage");
-    eprintln!("usage: {usage}");
-    assert!(usage["input_tokens"].as_u64().unwrap_or(0) > 0, "{usage}");
+    // A finished attempt reports its tokens; one stopped to ask reports
+    // them when it finishes, and has its run in the journal now.
+    if rep.verdict.is_some() {
+        let usage = rep
+            .usage
+            .as_ref()
+            .expect("a finished attempt reports its usage");
+        eprintln!("usage: {usage}");
+        assert!(usage["input_tokens"].as_u64().unwrap_or(0) > 0, "{usage}");
+    } else {
+        assert!(!rep.run_id.is_empty(), "{}", res.message());
+    }
 }
 
 #[test]
