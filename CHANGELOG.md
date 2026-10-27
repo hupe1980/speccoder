@@ -12,9 +12,12 @@ adheres to [Semantic Versioning](https://semver.org/).
   Project** in the app) plans `git init`, the stack's own scaffold (cargo,
   uv + pytest, npm + vitest, go), the spec format's own init (Spec Kit with
   the speccoder preset, or OpenSpec), `speccoder init --yes` and one commit
-  as you — every command shown, network steps named, run sandboxed, bound
-  to the plan's digest, resumable; `--undo` moves an untouched new folder to
-  the Trash or reverts speccoder's commit. An empty suite on a fresh
+  as you — every command shown, network steps named with the hosts they
+  are expected to reach (they get full network access; the hosts are not
+  enforced), run sandboxed with `.git` read-only once it exists, bound to
+  the plan's digest, resumable only while the folder is as the run left it;
+  the commit takes only what the steps made; `--undo` moves an untouched
+  folder speccoder made to the Trash or reverts speccoder's commit. An empty suite on a fresh
   scaffold reads *no tests yet*.
 - **Plan through**: `speccoder spec specify "…" --through tasks` (and
   `issue start N --through tasks`) runs the format's own skills in order,

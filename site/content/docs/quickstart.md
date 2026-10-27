@@ -35,14 +35,14 @@ New project md2csv in ~/Workspaces/md2csv (new folder)
 |---|---|
 | Stack | `--stack rust\|python\|node\|go\|none`; suggested from the idea and the toolchains installed. Python runs `uv init --package` and `uv add --dev pytest`, TypeScript `npm init -y`, `npm install --save-dev vitest` and sets `npm test` to `vitest run --passWithNoTests`, Go `go mod init` |
 | Spec format | `--format speckit` (default) or `--format openspec` (`openspec init --tools claude`, its settings kept in speccoder's cache, not `~/.config`). Spec Kit gets the [speccoder preset](@/docs/planning.md#the-speccoder-preset) (`--no-preset` leaves it out) and `--extension NAME\|PATH\|URL` |
-| Network | A step that reaches the network says so and names its hosts; the one question lists them |
-| Sandbox | Every step runs with stdin closed, a time limit and without the model keys, in the OS sandbox: writes only in the folder and speccoder's cache, the network only for a step labelled network |
+| Network | A step that needs the network says so, with the hosts it is expected to reach; the one question lists them. Such a step gets the full network: the hosts are not enforced |
+| Sandbox | Every step runs with stdin closed, a time limit and without the model keys, in the OS sandbox: writes only in the folder and speccoder's cache, `.git` read-only once it exists, no network unless the step is labelled network |
 | Existing repository | At its top level, with a clean tree: no `git init` and no scaffold; the format's init, `speccoder init --yes`, one commit of exactly what they wrote |
 | The commit | One, as you (your git identity; refused without one), `new project: <name>`, holding exactly what the steps produced |
 
-speccoder writes none of the stack's or the format's files itself; `speccoder.toml` is written by `init`. The plan is bound to a digest over its commands and the folder as seen: a plan that changed before it ran is refused (`NEW-PLAN-CHANGED`). A step that fails stops the run; running the same command again resumes at it. Without a terminal, `speccoder new` prints the plan and stops (`NEW-CONFIRM`) until `--yes`.
+speccoder writes none of the stack's or the format's files itself; `speccoder.toml` is written by `init`. The plan is bound to a digest over its commands and the folder as seen: a plan that changed before it ran is refused (`NEW-PLAN-CHANGED`). A step that fails stops the run; running the same command again resumes at it — only while the folder is exactly as the run left it, else every refusal applies again. A step may not change `.git` or, in an existing repository, your tracked files; the commit takes only what the steps made. Without a terminal, `speccoder new` prints the plan and stops (`NEW-CONFIRM`) until `--yes`.
 
-`speccoder new --undo` moves a folder speccoder created to the Trash — only while nothing but its commit exists there — or, in an existing repository, reverts speccoder's commit. A new project's first checks run on the untouched code; an empty test suite reads *no tests yet*.
+`speccoder new --undo` moves a folder speccoder created to the Trash — only while nothing but its commit exists there — or, in an existing repository, reverts speccoder's commit (files that were ignored before it ran don't count). It never trashes a folder speccoder did not make. A new project's first checks run on the untouched code; an empty test suite reads *no tests yet*.
 
 `speccoder sample` copies a recorded run of a small project into speccoder's state directory and replays it strictly — no model, no key, no network — then `speccoder ui -C <its path>` plays it back. A build without the recording answers `SAMPLE-MISSING`.
 
