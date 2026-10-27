@@ -1,6 +1,6 @@
 //! Running one step of a new project's plan: exactly its argv, in the
 //! folder, with stdin closed, a time limit, the person's environment
-//! without speccoder's own secrets, tool caches in speccoder's private
+//! without anything that looks like a credential, tool caches in speccoder's private
 //! cache, and — where the OS offers one — in the sandbox with writes
 //! confined to the folder and that cache, and the network only for a step
 //! the plan labels as reaching it.
@@ -11,16 +11,7 @@ use std::time::Duration;
 use speccoder_core::new_project::{PlanStepResult, PlanStepState, StepAccess};
 
 use crate::sandbox::{self, Network};
-use crate::verify::process::Invocation;
-
-/// Variables a step never sees: the model keys and GitHub tokens.
-pub(crate) const SECRETS: &[&str] = &[
-    "ANTHROPIC_API_KEY",
-    "OPENAI_API_KEY",
-    "GH_TOKEN",
-    "GITHUB_TOKEN",
-    "SPECCODER_GITHUB_TOKEN",
-];
+use crate::verify::process::{self, Invocation};
 
 /// The lines of output a failed step shows.
 const TAIL: usize = 20;
@@ -42,6 +33,27 @@ fn cache_env(cache: &Path) -> Vec<(String, String)> {
         ("GOCACHE".to_owned(), c("gobuild")),
         ("GOTELEMETRY".to_owned(), "off".to_owned()),
     ]
+}
+
+/// A step's environment: `vars` without anything that looks like a
+/// credential (the rule checks' test — model keys, tokens, every `AWS_*`),
+/// then the cache redirections and the step's own variables.
+fn step_env(
+    vars: impl IntoIterator<Item = (String, String)>,
+    cache: &Path,
+    own: &[(String, String)],
+) -> Vec<(String, String)> {
+    let mut env: Vec<(String, String)> = vars
+        .into_iter()
+        .filter(|(k, _)| !process::is_secret(k))
+        .collect();
+    let mut extra = cache_env(cache);
+    extra.extend(own.iter().cloned());
+    for (k, v) in extra {
+        env.retain(|(key, _)| *key != k);
+        env.push((k, v));
+    }
+    env
 }
 
 /// One step to run.
@@ -79,15 +91,7 @@ pub(crate) fn run(target: &Path, state: &Path, step: &Run<'_>) -> PlanStepResult
     if let Err(e) = std::fs::create_dir_all(&cache) {
         return failed(format!("speccoder's cache {}: {e}", cache.display()));
     }
-    let mut env: Vec<(String, String)> = std::env::vars()
-        .filter(|(k, _)| !SECRETS.contains(&k.as_str()))
-        .collect();
-    let mut extra = cache_env(&cache);
-    extra.extend(step.env.iter().cloned());
-    for (k, v) in extra {
-        env.retain(|(key, _)| *key != k);
-        env.push((k, v));
-    }
+    let env = step_env(std::env::vars(), &cache, step.env);
     let config = sandbox::Config {
         network: Network::Off,
         writable: vec![cache.display().to_string()],
@@ -156,5 +160,36 @@ mod tests {
         assert_eq!(t.len(), 20);
         assert_eq!(t.first().map(String::as_str), Some("line 11"));
         assert_eq!(t.last().map(String::as_str), Some("line 30"));
+    }
+
+    #[test]
+    fn a_step_never_sees_a_credential() {
+        let vars = [
+            ("PATH", "/bin"),
+            ("HOME", "/h"),
+            ("AWS_BEARER_TOKEN_BEDROCK", "b"),
+            ("AWS_PROFILE", "p"),
+            ("AWS_SECRET_ACCESS_KEY", "s"),
+            ("ANTHROPIC_API_KEY", "k"),
+            ("GITHUB_TOKEN", "t"),
+            ("NPM_TOKEN", "t"),
+        ]
+        .map(|(k, v)| (k.to_owned(), v.to_owned()));
+        let own = [("FOO".to_owned(), "1".to_owned())];
+        let env = step_env(vars, Path::new("/c"), &own);
+        let keys: Vec<&str> = env.iter().map(|(k, _)| k.as_str()).collect();
+        for k in [
+            "AWS_BEARER_TOKEN_BEDROCK",
+            "AWS_PROFILE",
+            "AWS_SECRET_ACCESS_KEY",
+            "ANTHROPIC_API_KEY",
+            "GITHUB_TOKEN",
+            "NPM_TOKEN",
+        ] {
+            assert!(!keys.contains(&k), "{k} reached the step");
+        }
+        for k in ["PATH", "HOME", "FOO", "UV_CACHE_DIR"] {
+            assert!(keys.contains(&k), "{k} is missing");
+        }
     }
 }
