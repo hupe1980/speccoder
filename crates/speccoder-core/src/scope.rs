@@ -29,6 +29,31 @@ pub fn quoted_paths(text: &str) -> Vec<String> {
     paths_in(text, false)
 }
 
+/// Top directories of a machine, not of a repository.
+const SYSTEM_ROOTS: &[&str] = &[
+    "tmp",
+    "dev",
+    "usr",
+    "etc",
+    "var",
+    "bin",
+    "sbin",
+    "opt",
+    "home",
+    "Users",
+    "proc",
+    "sys",
+    "private",
+    "root",
+    "lib",
+    "Library",
+    "System",
+    "Applications",
+    "Volumes",
+    "mnt",
+    "srv",
+];
+
 fn paths_in(text: &str, bare: bool) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     let mut push = |raw: &str| {
@@ -36,10 +61,14 @@ fn paths_in(text: &str, bare: bool) -> Vec<String> {
             .trim_matches(|c: char| matches!(c, '(' | ')' | '"' | '\'' | '[' | ']' | '<' | '>'))
             .trim_end_matches(['.', ',', ';', ':', '!', '?']);
         let t = t.strip_prefix("./").unwrap_or(t);
-        // `/specs/001-x/plan.md`: Spec Kit writes repository paths from the root.
+        // `/specs/001-x/plan.md`: Spec Kit writes repository paths from the
+        // root; `/tmp/…` or `/dev/null` is the machine's, never named.
         let t = t
             .strip_prefix('/')
-            .filter(|r| !r.starts_with('/'))
+            .filter(|r| {
+                !r.starts_with('/')
+                    && !SYSTEM_ROOTS.contains(&r.split('/').next().unwrap_or_default())
+            })
             .unwrap_or(t);
         if looks_like_path(t) && !out.iter().any(|p| p == t) {
             out.push(t.to_owned());
@@ -136,6 +165,7 @@ mod tests {
             named_paths("Scaffold `/specs/001-x/contracts/` from /specs/001-x/plan.md"),
             ["specs/001-x/contracts/", "specs/001-x/plan.md"]
         );
+        assert!(named_paths("Write the log to /tmp/run.log, not `/dev/null`").is_empty());
         assert!(named_paths("Bump to v1.2 and say hi").is_empty());
         assert!(named_paths("See https://example.com/x for details").is_empty());
     }

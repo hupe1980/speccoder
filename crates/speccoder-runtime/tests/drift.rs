@@ -212,6 +212,14 @@ fn what_does_not_speak_for_the_feature_is_no_drift() {
     let (rep, message) = report(r.path());
     let t4 = rep.tasks.iter().find(|t| t.id == "T004").unwrap();
     assert!(t4.drift.is_none(), "{:?} {message}", t4.drift);
+    // A design document a planning task wrote later.
+    fs::create_dir_all(r.path().join("specs/001-graph/contracts")).unwrap();
+    fs::write(r.path().join("specs/001-graph/contracts/cli.md"), "# CLI\n").unwrap();
+    git(r.path(), &["add", "specs/001-graph/contracts"]);
+    git(r.path(), &["commit", "-q", "-m", "contracts"]);
+    let (rep, message) = report(r.path());
+    let t4 = rep.tasks.iter().find(|t| t.id == "T004").unwrap();
+    assert!(t4.drift.is_none(), "{:?} {message}", t4.drift);
 }
 
 #[test]

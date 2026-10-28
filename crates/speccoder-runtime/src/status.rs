@@ -437,7 +437,7 @@ pub fn report(path: &Path, feature: Option<&str>) -> CommandResult {
         );
         t.lane = speccoder_core::lane::classify(
             &p.title,
-            p.yours,
+            open && p.yours,
             open && t
                 .last_attempt
                 .as_ref()

@@ -417,7 +417,21 @@ pub fn accept_in(
         in_place,
         ..crate::RunOptions::default()
     };
-    crate::pipeline::in_session("accept", path, feature, state, &options, |o| {
+    accept_in_session(path, feature, task, reason, state, &options)
+}
+
+/// [`accept_in`] within `options`' in-place session, when a run holds one
+/// (an answer at its stop), or one of its own when it asks for in place.
+#[must_use]
+pub fn accept_in_session(
+    path: &Path,
+    feature: Option<&str>,
+    task: &str,
+    reason: &str,
+    state: &Path,
+    options: &crate::RunOptions,
+) -> CommandResult {
+    crate::pipeline::in_session("accept", path, feature, state, options, |o| {
         accept_task(path, feature, task, reason, state, o)
     })
 }

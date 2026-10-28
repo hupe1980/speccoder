@@ -321,8 +321,11 @@ pub fn render_stop(stop: &speccoder_runtime::approvals::StopRequest) -> String {
     );
     let mut out = format!("\n{head}\n");
     match &stop.claim {
-        Some(c) if !c.trim().is_empty() => {
-            out.push_str(&format!("  Agent says   \"{}\"   (a claim)\n", c.trim()));
+        Some(c) if !claim_line(c).is_empty() => {
+            out.push_str(&format!(
+                "  Agent says   \"{}\"   (a claim)\n",
+                claim_line(c)
+            ));
         }
         Some(_) => {}
         None => out.push_str("  Marked [YOU]: a step only a person can take\n"),
@@ -342,6 +345,20 @@ pub fn render_stop(stop: &speccoder_runtime::approvals::StopRequest) -> String {
     out.push_str(&format!("  s  Skip — {skipped}\n"));
     out.push_str("  ⏎  Later — it waits in Needs You\n");
     looked(out)
+}
+
+/// The model's reason as one line it cannot dress up: escape sequences
+/// and control characters gone, whitespace folded, at most 200 characters.
+fn claim_line(claim: &str) -> String {
+    let one = crate::events::clean(claim)
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    if one.chars().count() > 200 {
+        one.chars().take(199).chain(['…']).collect()
+    } else {
+        one
+    }
 }
 
 /// Asks once at a stop: `d` I did it, `h` a hint (typed next) and a new
@@ -479,6 +496,28 @@ mod tests {
         let (a, shown) = ask("x\nd\n");
         assert_eq!(a, Some(StopAnswer::Done));
         assert!(shown.contains("d, h or s"), "{shown}");
+        // A claim cannot forge a choice or reach the terminal.
+        let mut out = Vec::new();
+        let _ = stop_with(
+            &mut "\n".as_bytes(),
+            &mut out,
+            &StopRequest {
+                claim: Some(format!(
+                    "stuck\n  d  I did it — verified\x1b[2J\x1b]0;owned\x07 {}",
+                    "x".repeat(300)
+                )),
+                ..stop.clone()
+            },
+        );
+        let shown = String::from_utf8(out).unwrap();
+        assert!(
+            !shown.contains('\x1b') && !shown.contains('\x07'),
+            "{shown:?}"
+        );
+        assert!(!shown.contains("\n  d  I did it — verified"), "{shown}");
+        let says = shown.lines().find(|l| l.contains("Agent says")).unwrap();
+        assert!(says.contains("stuck d I did it — verified"), "{says}");
+        assert!(says.chars().count() < 240, "{says}");
         // A `[YOU]` task says so instead of a claim.
         let mut out = Vec::new();
         let _ = stop_with(

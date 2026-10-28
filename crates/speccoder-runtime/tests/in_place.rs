@@ -764,3 +764,55 @@ fn a_refused_run_keeps_the_waiting_attempt_resumable() {
     assert_eq!(f.asked().len(), 1, "the attempt started afresh");
     assert_eq!(report(&resumed).run_id, report(&first).run_id);
 }
+
+#[derive(Debug)]
+struct SaysDone;
+
+impl speccoder_runtime::approvals::Approver for SaysDone {
+    fn ask(
+        &self,
+        _: &speccoder_runtime::approvals::Presentation,
+    ) -> speccoder_runtime::approvals::Answer {
+        panic!("no call needs approval here")
+    }
+
+    fn at_stop(
+        &self,
+        _: &speccoder_runtime::approvals::StopRequest,
+    ) -> Option<speccoder_runtime::approvals::StopAnswer> {
+        Some(speccoder_runtime::approvals::StopAnswer::Done)
+    }
+}
+
+#[test]
+fn i_did_it_at_an_in_place_stop_ticks_the_checkout() {
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_call_tool(
+        "c1",
+        "report_blocked",
+        json!({ "reason": "needs a GitHub repository" }),
+    );
+    let options = RunOptions {
+        max_tasks: Some(1),
+        approver: Some(Arc::new(SaysDone)),
+        ..in_place()
+    };
+    let res = speccoder_runtime::run_feature_with(r.path(), None, state.path(), &d, None, &options);
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    assert!(
+        tasks(r.path()).contains("- [X] T005"),
+        "{}",
+        tasks(r.path())
+    );
+    assert_eq!(git(r.path(), &["symbolic-ref", "--short", "HEAD"]), "main");
+    let message = git(
+        r.path(),
+        &["log", "-1", "--format=%B", "speccoder/001-graph"],
+    );
+    assert!(
+        message.contains("Verdict: attested") && message.contains("Mode: in-place"),
+        "{message}"
+    );
+}

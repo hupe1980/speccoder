@@ -116,10 +116,13 @@ pub(crate) fn at(
     Some(out)
 }
 
-/// The intent files at `rev` that speak for the feature (its own
-/// documents and the format's shared ones, such as a constitution; not the
-/// task list, not other units, not the current-unit pointer), each with its
-/// blob, by project-relative path.
+/// A unit's plan, by the formats' names (Spec Kit, OpenSpec).
+const PLANS: &[&str] = &["plan.md", "design.md"];
+
+/// The intent files at `rev` that speak for the feature (its judged files
+/// and plan, and the format's shared ones, such as a constitution; not the
+/// task list or other design documents, not other units, not the
+/// current-unit pointer), each with its blob, by project-relative path.
 fn intent_now(
     git: &Git,
     format: &dyn Adapter,
@@ -146,8 +149,11 @@ fn intent_now(
             let (meta, path) = entry.split_once('\t')?;
             let blob = meta.split(' ').nth(2)?;
             let path = path.strip_prefix(prefix)?;
-            let speaks = if path.starts_with(&unit) {
-                path.rsplit('/').next() != Some(tasks_file)
+            // The unit's judged files and its plan speak for its ticks;
+            // the other design documents (a planning task's work) and the
+            // task list do not.
+            let speaks = if let Some(rel) = path.strip_prefix(&unit) {
+                rel != tasks_file && ((rules.judged)(rel) || PLANS.contains(&rel))
             } else {
                 units.as_deref().is_none_or(|u| !path.starts_with(u))
                     && (rules.authoring_path)(path)

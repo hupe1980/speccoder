@@ -13,7 +13,7 @@ const host = vi.hoisted(() => ({
 vi.mock("../lib/app.svelte", () => ({ app: host.app }));
 
 import StopCard from "./StopCard.svelte";
-import { stopOffers } from "../lib/actions";
+import { stopOf, stopOffers } from "../lib/actions";
 
 let shown: ReturnType<typeof mount> | null = null;
 afterEach(() => {
@@ -60,5 +60,26 @@ describe("StopCard", () => {
     flushSync();
     expect(document.body.textContent).toContain("a step only a person can take");
     expect(document.body.textContent).not.toContain("a claim");
+  });
+});
+
+describe("stopOffers and stopOf", () => {
+  const t = (id: string, over: object = {}) => ({ id, title: id, phase: "P", state: "ready", attestation: null, blocked_by: [], commit: null, run_id: null, last_attempt: null, note: null, ...over }) as never;
+
+  it("names what stays blocked and says why a retry cannot start now", () => {
+    const tasks = [t("T019"), t("T020", { blocked_by: ["T019"] }), t("T021", { blocked_by: ["T020"] })];
+    const [, hint, skip] = stopOffers("T019", tasks, "commit the planning files first");
+    expect(skip!.why).toBe("runs pass it by; T020, T021 stay blocked");
+    expect(hint!.blocked).toBe("commit the planning files first");
+    shown = mount(StopCard, { target: document.body, props: { task: "T019", claim: null, actions: stopOffers("T019", tasks, "commit the planning files first") } });
+    flushSync();
+    expect(button("Hint & Retry").disabled).toBe(true);
+  });
+
+  it("is a stop only while the task is yours and its attempt stopped honestly", () => {
+    expect(stopOf(t("T1", { lane: "yours" }))).toEqual({ claim: null });
+    expect(stopOf(t("T1", { lane: "yours", last_attempt: { outcome: "blocked", reason: "needs a repo", run_id: null, reference: "r" } }))).toEqual({ claim: "needs a repo" });
+    expect(stopOf(t("T1", { lane: "yours", last_attempt: { outcome: "verification_failed", reason: "x", run_id: null, reference: "r" } }))).toBeNull();
+    expect(stopOf(t("T1", {}))).toBeNull();
   });
 });

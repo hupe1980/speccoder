@@ -894,6 +894,7 @@ fn main() {
                     task,
                     note,
                     no_prompt,
+                    in_place,
                 },
         } => {
             let approver: Option<std::sync::Arc<dyn speccoder_runtime::approvals::Approver>> =
@@ -910,6 +911,7 @@ fn main() {
                     options: speccoder_runtime::RunOptions {
                         approver,
                         progress,
+                        in_place: *in_place,
                         ..speccoder_runtime::RunOptions::default()
                     },
                 },
@@ -917,7 +919,12 @@ fn main() {
             if let Some(a) = &attention {
                 a.finish(&result);
             }
-            speccoder_runtime::next::attach(result, feature)
+            let result = speccoder_runtime::next::attach(result, feature);
+            if *in_place {
+                speccoder_runtime::next::in_place(result)
+            } else {
+                result
+            }
         }
         Command::Task { action } => task_action(action, path, feature),
         Command::Ui {
@@ -2246,13 +2253,21 @@ fn task_action(
             ),
             None => no_state("task accept"),
         },
-        T::Done { task, reason } => {
+        T::Done {
+            task,
+            reason,
+            in_place,
+        } => {
             let run = speccoder_core::actions::Runnable::Done { task: task.clone() };
             speccoder_runtime::actions::perform(
                 path,
                 feature,
                 speccoder_runtime::actions::Dispatch {
                     input: reason.as_deref(),
+                    options: speccoder_runtime::RunOptions {
+                        in_place: *in_place,
+                        ..speccoder_runtime::RunOptions::default()
+                    },
                     ..speccoder_runtime::actions::Dispatch::new(
                         &run,
                         speccoder_core::actions::Via::Terminal,
@@ -2261,13 +2276,22 @@ fn task_action(
             )
         }
         // `main` runs it with the live progress; here, the same without.
-        T::Hint { task, note, .. } => {
+        T::Hint {
+            task,
+            note,
+            in_place,
+            ..
+        } => {
             let run = speccoder_core::actions::Runnable::Hint { task: task.clone() };
             speccoder_runtime::actions::perform(
                 path,
                 feature,
                 speccoder_runtime::actions::Dispatch {
                     input: Some(note),
+                    options: speccoder_runtime::RunOptions {
+                        in_place: *in_place,
+                        ..speccoder_runtime::RunOptions::default()
+                    },
                     ..speccoder_runtime::actions::Dispatch::new(
                         &run,
                         speccoder_core::actions::Via::Terminal,

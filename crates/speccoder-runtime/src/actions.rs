@@ -776,14 +776,15 @@ pub fn perform_in(
             (_, None) => no_state(),
         },
         // I did it: the person's word, in the words they gave or these.
+        // In place when the dispatch is (an answer at an in-place run's stop).
         Runnable::Done { task } => match state {
-            Some(s) => crate::controls::accept_in(
+            Some(s) => crate::controls::accept_in_session(
                 root,
                 feature,
                 task,
                 text.unwrap_or(DONE_REASON),
                 s,
-                false,
+                options,
             ),
             None => no_state(),
         },
@@ -1058,20 +1059,21 @@ pub fn allow_always_inline(
 
 /// The person's answer at a stop, given inline at their terminal, taken
 /// through [`perform`] with the interface it was answered through: I did
-/// it (`Done`), the hint (`Nudge`: the run then attempts the task again,
-/// with its own model) or skip (`Skip`).
+/// it (`Done`, in the run's in-place session when it has one), the hint
+/// (`Nudge`: the run then attempts the task again, with its own model) or
+/// skip (`Skip`).
 #[must_use]
 pub fn answered_at_stop(
     root: &Path,
     feature: Option<&str>,
     task: &str,
     answer: &crate::approvals::StopAnswer,
-    via: Via,
+    (via, run): (Via, &RunOptions),
     state: &Path,
 ) -> CommandResult {
     use crate::approvals::StopAnswer;
     let task = task.to_owned();
-    let (run, input) = match answer {
+    let (what, input) = match answer {
         StopAnswer::Done => (Runnable::Done { task }, None),
         StopAnswer::Hint(note) => (Runnable::Nudge { task }, Some(note.as_str())),
         StopAnswer::Skip(why) => (Runnable::Skip { task }, Some(why.as_str())),
@@ -1081,7 +1083,12 @@ pub fn answered_at_stop(
         feature,
         Dispatch {
             input,
-            ..Dispatch::new(&run, via)
+            options: RunOptions {
+                in_place: run.in_place,
+                session: run.session.clone(),
+                ..RunOptions::default()
+            },
+            ..Dispatch::new(&what, via)
         },
         Some(state),
     )

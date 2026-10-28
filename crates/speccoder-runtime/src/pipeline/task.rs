@@ -658,7 +658,7 @@ pub(crate) fn run_task(
         live.event(&progress::Event::Notice {
             text: format!(
                 "📐 planning · writes {}",
-                speccoder_core::lane::task_paths(&t.title).join(", ")
+                speccoder_core::lane::task_paths(&t.title, &unit_dir).join(", ")
             ),
         });
     }
@@ -1955,8 +1955,9 @@ pub(crate) fn run_task(
                     );
                     return fail(CommandStatus::ConfigError, format!("verification: {e}"));
                 }
-                // 7''. A planning task that wrote no document of its unit
-                //      did nothing: a failed attempt, retried like any.
+                // 7''. A planning task writes documents of its unit only:
+                //      one that changed anything else, or wrote nothing
+                //      there, fails — never a planning tick.
                 if let Some(dir) = planning.as_ref().filter(|_| {
                     matches!(
                         report.verdict,
@@ -1965,14 +1966,28 @@ pub(crate) fn run_task(
                                 | speccoder_core::verify::Verdict::RegressionOnly
                         )
                     )
-                }) && !report
-                    .changes
-                    .iter()
-                    .any(|(p, kind)| kind != "deleted" && p.starts_with(&format!("{dir}/")))
-                {
-                    report.verdict = Some(speccoder_core::verify::Verdict::Failed {
-                        reasons: vec![format!("wrote no planning file under {dir}/")],
-                    });
+                }) {
+                    let inside = format!("{dir}/");
+                    let outside: Vec<&str> = report
+                        .changes
+                        .iter()
+                        .filter(|(p, _)| !p.starts_with(&inside))
+                        .map(|(p, _)| p.as_str())
+                        .collect();
+                    let reason = if !outside.is_empty() {
+                        Some(format!(
+                            "a planning task changed code: {}",
+                            outside.join(", ")
+                        ))
+                    } else if !report.changes.iter().any(|(_, kind)| kind != "deleted") {
+                        Some(format!("wrote no planning file under {inside}"))
+                    } else {
+                        None
+                    };
+                    if let Some(r) = reason {
+                        report.verdict =
+                            Some(speccoder_core::verify::Verdict::Failed { reasons: vec![r] });
+                    }
                 }
                 // 7'. A test file the attempt wrote that the run never
                 //     collected is evidence of nothing: it fails the verdict;

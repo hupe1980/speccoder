@@ -2,7 +2,7 @@
 // never by its wording, and what the page knows per kind. The one place the
 // page writes an action itself (`offer`); everything else is the host's.
 
-import type { Action, ActionKind, Runnable, SkillRole } from "./types";
+import type { Action, ActionKind, Runnable, SkillRole, Task } from "./types";
 
 /** What the page knows about a kind: the verb a button says, its icon, and
  *  whether taking it holds the project's worktree (one run per project).
@@ -92,12 +92,40 @@ export function offer(run: Runnable | null, shown: { group: string; label: strin
   return { ...shown, run, blocked: null, input: shown.input ?? null, confirm: shown.confirm ?? null };
 }
 
+/** The open tasks that wait on `id`, directly or through another. */
+export function dependents(tasks: Task[], id: string): string[] {
+  const waiting = new Set([id]);
+  for (let grew = true; grew; ) {
+    grew = false;
+    for (const t of tasks) {
+      if (!waiting.has(t.id) && t.blocked_by.some((b) => waiting.has(b))) {
+        waiting.add(t.id);
+        grew = true;
+      }
+    }
+  }
+  return tasks.filter((t) => t.id !== id && waiting.has(t.id)).map((t) => t.id);
+}
+
 /** I did it, Hint & retry, Skip: the three ways on from a task that needs
- *  the person, as the host's Needs You item words them. */
-export function stopOffers(task: string): Offer[] {
+ *  the person, as the host's Needs You item words them. `blocked`: why a
+ *  new attempt cannot start now (planning files to commit, a waiting call). */
+export function stopOffers(task: string, tasks: Task[] = [], blocked: string | null = null): Offer[] {
+  const waiting = dependents(tasks, task);
+  const skipWhy = waiting.length
+    ? `runs pass it by; ${waiting.join(", ")} ${waiting.length === 1 ? "stays" : "stay"} blocked`
+    : "runs pass it by; what depends on it stays blocked";
   return [
     offer({ kind: "done", task }, { group: "task", label: `I did it: ${task}`, why: "tick it on your word (attested, never shown as verified)", command: `speccoder task done ${task}` }),
-    offer({ kind: "hint", task }, { group: "task", label: `hint & retry ${task}`, why: "a note the agent reads, then a new attempt now", command: `speccoder task hint ${task} "…"`, input: "The hint" }),
-    offer({ kind: "skip", task }, { group: "task", label: `skip ${task}`, why: "runs pass it by; what depends on it stays blocked", command: `speccoder task skip ${task} --reason "…"`, input: "Why it is skipped" }),
+    { ...offer({ kind: "hint", task }, { group: "task", label: `hint & retry ${task}`, why: "a note the agent reads, then a new attempt now", command: `speccoder task hint ${task} "…"`, input: "The hint" }), blocked },
+    offer({ kind: "skip", task }, { group: "task", label: `skip ${task}`, why: skipWhy, command: `speccoder task skip ${task} --reason "…"`, input: "Why it is skipped" }),
   ];
+}
+
+/** A task that needs the person now — open and yours, its last attempt
+ *  (if any) an honest stop — with the agent's reason; `null` otherwise. */
+export function stopOf(t: Task): { claim: string | null } | null {
+  if (t.lane !== "yours") return null;
+  if (!t.last_attempt) return { claim: null };
+  return t.last_attempt.outcome === "blocked" ? { claim: t.last_attempt.reason } : null;
 }

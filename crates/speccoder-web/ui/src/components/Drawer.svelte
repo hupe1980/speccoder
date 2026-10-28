@@ -6,7 +6,7 @@
   const evidenceOf = latest();
   const patchOf = latest();
   import { phaseLabel, symbol, word } from "../lib/marks";
-  import { KINDS, key, offer, ofTask, stopOffers } from "../lib/actions";
+  import { KINDS, key, offer, ofTask, stopOf, stopOffers } from "../lib/actions";
   import type { AccountTurn, Row, Task } from "../lib/types";
   import Account from "./Account.svelte";
   import Diff from "./Diff.svelte";
@@ -120,9 +120,9 @@
       <span><strong>{verdictTitle}</strong>{#if verdictWords}<span class="words">{verdictWords}</span>{/if}</span>
     </div>
     {#if drift}<Drift {drift} />{/if}
-    {#if data.task.lane === "yours" && app.selected}
+    {#if stopOf(data.task) && app.selected}
       <!-- A step only the person can take: the three ways on, in place. -->
-      <StopCard task={app.selected} claim={data.task.last_attempt?.outcome === "blocked" ? data.task.last_attempt.reason : null} actions={stopOffers(app.selected)} />
+      <StopCard task={app.selected} claim={stopOf(data.task)?.claim ?? null} actions={stopOffers(app.selected, app.report?.data?.tasks ?? [], app.report?.data?.uncommitted?.length ? "commit the planning files first" : app.approvals[0] ? `${app.approvals[0].task} waits for your decision and holds the worktree: decide it first` : null)} />
     {/if}
     {#if aside && app.selected}
       {@const id = app.selected}

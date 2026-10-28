@@ -36,7 +36,7 @@
     {/if}
     <div class="row">
       {#if done}<button class="btn small primary" disabled={!!app.job?.running} title={`${done.why}\n$ ${done.command}`} onclick={() => done && app.perform(done)}><Icon name="check" size={11} weight={2.4} /> I Did It</button>{/if}
-      {#if hint}<button class="btn small tinted" aria-expanded={hinting} disabled={!!app.job?.running} title={`${hint.why}\n$ ${hint.command}`} onclick={() => (hinting = !hinting)}><Icon name="sparkle" size={11} weight={2.2} /> Hint &amp; Retry</button>{/if}
+      {#if hint}<button class="btn small tinted" aria-expanded={hinting} disabled={!!hint.blocked || !!app.job?.running} title={`${hint.blocked ?? hint.why}\n$ ${hint.command}`} onclick={() => (hinting = !hinting)}><Icon name="sparkle" size={11} weight={2.2} /> Hint &amp; Retry</button>{/if}
       {#if skip}<button class="btn small ghost" disabled={!!app.job?.running} title={`${skip.why}\n$ ${skip.command}`} onclick={() => skip && app.perform(skip)}>Skip…</button>{/if}
     </div>
     {#if hinting}

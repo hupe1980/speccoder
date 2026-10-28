@@ -286,6 +286,18 @@ impl Protected {
         matches!(self.write_class(rel), Some(Class::Judge | Class::Intent))
     }
 
+    /// Whether a normalised path is a design document of the intent: an
+    /// intent path that is no judge input, agent context file, manifest,
+    /// credential or hidden file — what a planning task may write.
+    #[must_use]
+    pub fn is_design_doc(&self, rel: &str) -> bool {
+        self.write_class(rel) == Some(Class::Intent)
+            && !self.judge.is_match(rel)
+            && !self.context.is_match(rel)
+            && !self.is_manifest(rel)
+            && !rel.split('/').any(|s| s.starts_with('.'))
+    }
+
     /// Whether writing this path changes dependencies (needs approval).
     #[must_use]
     pub fn is_manifest(&self, rel: &str) -> bool {

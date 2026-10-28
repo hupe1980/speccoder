@@ -222,6 +222,9 @@ pub fn run_feature_with(
     };
     // `[YOU]` tasks the person gave a hint for: attempted after all.
     let mut hinted: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    // Tasks that are yours and nobody answered for: passed by like a
+    // skipped one, listed at the end with their three actions.
+    let mut passed: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
     // Tasks that must run on their own after a parallel group did not merge.
     let mut one_at_a_time: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
     let mut parallel_off = false;
@@ -363,11 +366,30 @@ pub fn run_feature_with(
         }
         // Skipped tasks are passed by; what depends on them stays blocked.
         let skipped = controls::skipped(&project, feature_name.as_deref().unwrap_or_default());
-        let Some(next) = schedule
-            .tasks
-            .iter()
-            .find(|t| t.state == TaskState::Ready && !skipped.contains_key(&t.id))
-        else {
+        // A task that is yours — marked `[YOU]`, or its last attempt stopped
+        // `BLOCKED` — is not attempted: the person is asked, or it is passed
+        // by until they answer (`run --task` and `task hint` attempt it).
+        let parsed: Vec<&speccoder_core::snapshot::Task> = snap
+            .feature
+            .as_ref()
+            .and_then(|f| f.tasks.as_ref())
+            .map(|t| t.tasks.iter().collect())
+            .unwrap_or_default();
+        let saved = crate::attempts::list(&project, &w.feature);
+        let stopped = |id: &str| {
+            saved
+                .iter()
+                .find(|a| a.task == id && !controls::is_set_aside(a))
+                .filter(|a| a.outcome == "blocked")
+                .map(|a| a.reason.clone())
+        };
+        let yours = |id: &str| {
+            !hinted.contains(id)
+                && (parsed.iter().any(|t| t.id == id && t.yours) || stopped(id).is_some())
+        };
+        let Some(next) = schedule.tasks.iter().find(|t| {
+            t.state == TaskState::Ready && !skipped.contains_key(&t.id) && !passed.contains(&t.id)
+        }) else {
             let open: Vec<String> = schedule
                 .tasks
                 .iter()
@@ -446,6 +468,31 @@ pub fn run_feature_with(
                     CommandStatus::Ok,
                     "feature done: every task is ticked".to_owned(),
                 )
+            } else if let Some(first) = passed.iter().next() {
+                // What waits is the person's: named, with its three actions.
+                let fix = speccoder_core::codes::lookup("TASK-YOURS")
+                    .map(|e| {
+                        speccoder_core::codes::fixes(e, "run", Some(first), feature_name.as_deref())
+                    })
+                    .unwrap_or_default();
+                let mine: Vec<String> = passed.iter().cloned().collect();
+                let message = match mine.as_slice() {
+                    [one] => format!(
+                        "{one} is yours — {}: a step only a person can take",
+                        parsed
+                            .iter()
+                            .find(|t| t.id == *one)
+                            .map(|t| t.title.as_str())
+                            .unwrap_or_default()
+                    ),
+                    many => format!(
+                        "{} are yours: steps only a person can take",
+                        many.join(", ")
+                    ),
+                };
+                finish(feature_name, attempts, CommandStatus::NeedsHuman, message)
+                    .with_code("TASK-YOURS")
+                    .with_fix(fix)
             } else {
                 finish(
                     feature_name,
@@ -455,65 +502,39 @@ pub fn run_feature_with(
                 )
             };
         };
-        // A `[YOU]` task is not attempted: the person is asked, or it waits
-        // with its three actions.
-        let parsed: Vec<&speccoder_core::snapshot::Task> = snap
-            .feature
-            .as_ref()
-            .and_then(|f| f.tasks.as_ref())
-            .map(|t| t.tasks.iter().collect())
-            .unwrap_or_default();
-        let yours = |id: &str| !hinted.contains(id) && parsed.iter().any(|t| t.id == id && t.yours);
-        if yours(&next.id) {
-            let id = next.id.clone();
-            let title = parsed
+        let title_of = |id: &str| {
+            parsed
                 .iter()
                 .find(|t| t.id == id)
                 .map(|t| t.title.clone())
-                .unwrap_or_default();
+                .unwrap_or_default()
+        };
+        if yours(&next.id) {
+            let id = next.id.clone();
             let stop = crate::approvals::StopRequest {
                 task: format!("{}/{id}", w.feature),
-                title: title.clone(),
-                claim: None,
+                title: title_of(&id),
+                claim: stopped(&id),
                 dependents: speccoder_core::graph::dependents(&schedule, &id),
             };
-            match ask_at_stop(path, feature_name.as_deref(), state, options, &stop) {
-                Some((answer, done)) if done.status() == CommandStatus::Ok => {
-                    if matches!(answer, crate::approvals::StopAnswer::Hint(_)) {
-                        hinted.insert(id);
-                    }
-                    continue;
-                }
-                Some((_, failed)) => {
-                    return finish(
-                        feature_name,
-                        attempts,
-                        failed.status(),
-                        format!("{id}: {}", failed.message()),
-                    )
-                    .caused_by(&failed);
-                }
-                None => {
-                    let fix = speccoder_core::codes::lookup("TASK-YOURS")
-                        .map(|e| {
-                            speccoder_core::codes::fixes(
-                                e,
-                                "run",
-                                Some(&id),
-                                feature_name.as_deref(),
-                            )
-                        })
-                        .unwrap_or_default();
-                    return finish(
-                        feature_name,
-                        attempts,
-                        CommandStatus::NeedsHuman,
-                        format!("{id} is yours — {title}: a step only a person can take"),
-                    )
-                    .with_code("TASK-YOURS")
-                    .with_fix(fix);
-                }
+            if let Some(failed) = settle_stop(
+                path,
+                feature_name.as_deref(),
+                state,
+                options,
+                &stop,
+                &mut hinted,
+                &mut passed,
+            ) {
+                return finish(
+                    feature_name,
+                    attempts,
+                    failed.status(),
+                    format!("{id}: {}", failed.message()),
+                )
+                .caused_by(&failed);
             }
+            continue;
         }
         // ready [P] tasks run at once, each in its own lane.
         let parallel_ids: std::collections::BTreeSet<String> = snap
@@ -549,7 +570,38 @@ pub fn run_feature_with(
             one_at_a_time.extend(outcome.one_at_a_time);
             parallel_off |= outcome.reverted;
             if let Some((task, status, message)) = outcome.stop {
-                return finish(feature_name, attempts, status, format!("{task}: {message}"));
+                // An honest stop in a lane is asked about like any other.
+                let claim = attempts
+                    .iter()
+                    .rev()
+                    .find(|a| a.task == task && a.attempt_status == "blocked")
+                    .map(|a| a.reason.clone().unwrap_or_default());
+                let Some(claim) = claim else {
+                    return finish(feature_name, attempts, status, format!("{task}: {message}"));
+                };
+                let stop = crate::approvals::StopRequest {
+                    task: format!("{}/{task}", w.feature),
+                    title: title_of(&task),
+                    claim: Some(claim),
+                    dependents: speccoder_core::graph::dependents(&schedule, &task),
+                };
+                if let Some(failed) = settle_stop(
+                    path,
+                    feature_name.as_deref(),
+                    state,
+                    options,
+                    &stop,
+                    &mut hinted,
+                    &mut passed,
+                ) {
+                    return finish(
+                        feature_name,
+                        attempts,
+                        failed.status(),
+                        format!("{task}: {}", failed.message()),
+                    )
+                    .caused_by(&failed);
+                }
             }
             continue;
         }
@@ -568,7 +620,7 @@ pub fn run_feature_with(
             attempts.push((**r).clone());
         }
         // An honest stop: the person is asked in place — I did it, a hint
-        // and a new attempt, or skip — and the run goes on.
+        // and a new attempt, or skip — or it is passed by; the run goes on.
         let claim = match res.data() {
             Some(CommandData::Run(r)) if r.attempt_status == "blocked" => {
                 Some(r.reason.clone().unwrap_or_default())
@@ -578,32 +630,28 @@ pub fn run_feature_with(
         if let Some(claim) = claim.filter(|_| res.status() != CommandStatus::Ok) {
             let stop = crate::approvals::StopRequest {
                 task: format!("{}/{task}", w.feature),
-                title: parsed
-                    .iter()
-                    .find(|t| t.id == task)
-                    .map(|t| t.title.clone())
-                    .unwrap_or_default(),
+                title: title_of(&task),
                 claim: Some(claim),
                 dependents: speccoder_core::graph::dependents(&schedule, &task),
             };
-            match ask_at_stop(path, feature_name.as_deref(), state, options, &stop) {
-                Some((answer, done)) if done.status() == CommandStatus::Ok => {
-                    if matches!(answer, crate::approvals::StopAnswer::Hint(_)) {
-                        hinted.insert(task);
-                    }
-                    continue;
-                }
-                Some((_, failed)) => {
-                    return finish(
-                        feature_name,
-                        attempts,
-                        failed.status(),
-                        format!("{task}: {}", failed.message()),
-                    )
-                    .caused_by(&failed);
-                }
-                None => {}
+            if let Some(failed) = settle_stop(
+                path,
+                feature_name.as_deref(),
+                state,
+                options,
+                &stop,
+                &mut hinted,
+                &mut passed,
+            ) {
+                return finish(
+                    feature_name,
+                    attempts,
+                    failed.status(),
+                    format!("{task}: {}", failed.message()),
+                )
+                .caused_by(&failed);
             }
+            continue;
         }
         if res.status() != CommandStatus::Ok {
             return finish(
@@ -623,6 +671,39 @@ pub fn run_feature_with(
     )
 }
 
+/// A task that needs the person, settled: asked ([`ask_at_stop`]) — after
+/// a hint the run attempts it again — or, unanswered, passed by. `Some`:
+/// taking the answer failed, and the run ends with that.
+fn settle_stop(
+    path: &Path,
+    feature: Option<&str>,
+    state: &Path,
+    options: &RunOptions,
+    stop: &crate::approvals::StopRequest,
+    hinted: &mut std::collections::BTreeSet<String>,
+    passed: &mut std::collections::BTreeSet<String>,
+) -> Option<CommandResult> {
+    let id = stop
+        .task
+        .rsplit('/')
+        .next()
+        .unwrap_or(&stop.task)
+        .to_owned();
+    match ask_at_stop(path, feature, state, options, stop) {
+        Some((answer, done)) if done.status() == CommandStatus::Ok => {
+            if matches!(answer, crate::approvals::StopAnswer::Hint(_)) {
+                hinted.insert(id);
+            }
+            None
+        }
+        Some((_, failed)) => Some(failed),
+        None => {
+            passed.insert(id);
+            None
+        }
+    }
+}
+
 /// Asks the person at a task that needs them — at a terminal, never in a
 /// lane — and takes the answer — I did it, a hint, skip — through the one
 /// dispatcher ([`crate::actions::answered_at_stop`]); after a hint the run
@@ -640,8 +721,14 @@ fn ask_at_stop(
         .filter(|_| options.lane.is_none())?;
     let answer = approver.at_stop(stop)?;
     let task = stop.task.rsplit('/').next().unwrap_or(&stop.task);
-    let done =
-        crate::actions::answered_at_stop(path, feature, task, &answer, approver.via(), state);
+    let done = crate::actions::answered_at_stop(
+        path,
+        feature,
+        task,
+        &answer,
+        (approver.via(), options),
+        state,
+    );
     Some((answer, done))
 }
 

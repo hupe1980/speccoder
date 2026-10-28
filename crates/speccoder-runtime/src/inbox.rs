@@ -441,7 +441,9 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
         // A step only a person can take — a `[YOU]` task that is ready, or
         // an honest stop: the agent's reason as its claim, and three ways on.
         if t.lane == speccoder_core::lane::Lane::Yours
-            && (t.state == "ready" || t.last_attempt.is_some())
+            && t.last_attempt
+                .as_ref()
+                .map_or(t.state == "ready", |a| a.outcome == "blocked")
         {
             let (title, detail) = match &t.last_attempt {
                 Some(a) => (
@@ -456,7 +458,12 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
                 Some(&t.id),
                 title,
                 detail,
-                yours_actions(t, &dependents(&r.tasks, &t.id), &flag),
+                yours_actions(
+                    t,
+                    &dependents(&r.tasks, &t.id),
+                    retry_blocked(r, &waiting),
+                    &flag,
+                ),
             ));
             continue;
         }
@@ -484,14 +491,7 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
             again = again.with_run(Runnable::Run {
                 task: Some(t.id.clone()),
             });
-            again.blocked = if !r.uncommitted.is_empty() {
-                Some("commit the planning files first".to_owned())
-            } else {
-                // A waiting call's attempt holds the worktree.
-                waiting.first().map(|w| {
-                    format!("{w} waits for your decision and holds the worktree: decide it first")
-                })
-            };
+            again.blocked = retry_blocked(r, &waiting);
             actions.push(again);
         }
         actions.extend([nudge(t, &flag), skip(t, &flag), accept(t, &flag)]);
@@ -1261,6 +1261,18 @@ fn bug_item(
     })
 }
 
+/// Why a new attempt cannot start now: planning files a run cannot read
+/// yet, or a waiting call's attempt that holds the worktree.
+fn retry_blocked(r: &StatusReport, waiting: &[&str]) -> Option<String> {
+    if !r.uncommitted.is_empty() {
+        Some("commit the planning files first".to_owned())
+    } else {
+        waiting
+            .first()
+            .map(|w| format!("{w} waits for your decision and holds the worktree: decide it first"))
+    }
+}
+
 /// The open tasks that wait on `id`, directly or through another.
 fn dependents(tasks: &[speccoder_core::TaskStatus], id: &str) -> Vec<String> {
     let mut waiting: Vec<&str> = vec![id];
@@ -1288,6 +1300,7 @@ fn dependents(tasks: &[speccoder_core::TaskStatus], id: &str) -> Vec<String> {
 fn yours_actions(
     t: &speccoder_core::TaskStatus,
     waiting: &[String],
+    retry: Option<String>,
     flag: &dyn Fn(String) -> String,
 ) -> Vec<Action> {
     let mut done = action(
@@ -1305,6 +1318,7 @@ fn yours_actions(
     );
     hint = hint.with_run(Runnable::Hint { task: t.id.clone() });
     hint.input = Some("The hint".to_owned());
+    hint.blocked = retry;
     let mut skip = skip(t, flag);
     if !waiting.is_empty() {
         let stay = if waiting.len() == 1 { "stays" } else { "stay" };

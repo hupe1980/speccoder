@@ -582,7 +582,8 @@ impl Policy {
     }
 
     /// Whether `rel` (resolved, worktree-relative) is a planning task's
-    /// to write: inside its unit's directory and not judged.
+    /// to write: a design document inside its unit's directory
+    /// ([`Protected::is_design_doc`]), not judged by the format.
     #[must_use]
     pub fn is_planning_write(&self, rel: &str) -> bool {
         let Some(dir) = &self.planning else {
@@ -594,7 +595,7 @@ impl Policy {
                 !r.is_empty()
                     && !r.split('/').any(|s| s == ".." || s == ".")
                     && !(self.protected.rules().judged)(r.trim_end_matches('/'))
-                    && !self.protected.is_secret(rel)
+                    && self.protected.is_design_doc(rel)
                     && !self.protected.is_review(rel)
             })
     }
@@ -1438,6 +1439,18 @@ mod tests {
             ".specify/memory/constitution.md",
             "specs/002-y/contracts/cli.md",
             "specs/001-x/.env",
+            // Inside the unit, but no design document: git, judge inputs,
+            // agent configuration and context, manifests, hidden files.
+            "specs/001-x/.git/config",
+            "specs/001-x/speccoder.toml",
+            "specs/001-x/vitest.config.ts",
+            "specs/001-x/.mcp.json",
+            "specs/001-x/.claude/settings.json",
+            "specs/001-x/AGENTS.md",
+            "specs/001-x/CLAUDE.md",
+            "specs/001-x/package.json",
+            "specs/001-x/Cargo.toml",
+            "specs/001-x/.hidden.md",
         ] {
             assert!(matches!(w(judged), Decision::Deny(_)), "{judged}");
             assert!(!p.is_planning_write(judged), "{judged}");

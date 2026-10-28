@@ -50,16 +50,15 @@ impl Lane {
     }
 }
 
-/// The lane a task's named paths give it — its backticked paths when it
-/// has any (prose such as `input/output` is no path), else every path it
-/// names: `planning` when there is at least one and every one lies inside
+/// The lane a task's named paths give it ([`task_paths`]): `planning`
+/// when there is at least one and every one lies inside
 /// `unit_dir` (repository- or project-relative, a leading `/` read as the
 /// root) and none is a judged file — `judged` is asked with the path
 /// relative to `unit_dir`, without a trailing `/`; else `code`.
 #[must_use]
 pub fn by_paths(title: &str, unit_dir: &str, judged: &dyn Fn(&str) -> bool) -> Lane {
     let dir = unit_dir.trim_matches('/');
-    let paths = task_paths(title);
+    let paths = task_paths(title, dir);
     let inside = |p: &str| {
         let p = p.trim_end_matches('/');
         let rel = if p == dir {
@@ -76,16 +75,28 @@ pub fn by_paths(title: &str, unit_dir: &str, judged: &dyn Fn(&str) -> bool) -> L
     }
 }
 
-/// The paths a task's lane is read from: its backticked paths when it has
-/// any, else every path it names.
+/// The paths a task's lane is read from: every backticked path, and every
+/// bare one that reads as a path rather than prose — a file with an
+/// extension, a directory written with its `/`, or a path in `unit_dir`
+/// (`input/output` is none of them).
 #[must_use]
-pub fn task_paths(title: &str) -> Vec<String> {
+pub fn task_paths(title: &str, unit_dir: &str) -> Vec<String> {
+    let dir = unit_dir.trim_matches('/');
     let quoted = crate::scope::quoted_paths(title);
-    if quoted.is_empty() {
-        crate::scope::named_paths(title)
-    } else {
-        quoted
-    }
+    let bare = crate::scope::named_paths(title)
+        .into_iter()
+        .filter(|p| !quoted.contains(p))
+        .filter(|p| {
+            let file = p.rsplit('/').next().unwrap_or(p);
+            p.ends_with('/')
+                || file
+                    .rsplit_once('.')
+                    .is_some_and(|(stem, _)| !stem.is_empty())
+                || (!dir.is_empty() && (p == dir || p.starts_with(&format!("{dir}/"))))
+        });
+    let mut out = quoted.clone();
+    out.extend(bare);
+    out
 }
 
 /// A task's lane: `yours` for a `[YOU]` label or after an honest
@@ -227,6 +238,35 @@ mod tests {
             Lane::Code
         );
         assert_eq!(by_paths("Write specs/001-x/a.md", "", &judged), Lane::Code);
+    }
+
+    #[test]
+    fn a_task_naming_code_beside_a_design_doc_is_code() {
+        for line in [
+            "Implement the parser in src/parse.rs per `specs/001-x/contracts/parser.md`",
+            "Write tests in tests/cli.rs for `specs/001-x/quickstart.md`",
+        ] {
+            assert_eq!(by_paths(line, DIR, &judged), Lane::Code, "{line}");
+        }
+        // It names no code path: read as planning, and an attempt that
+        // changes code anyway fails its verdict (the run's own check).
+        assert_eq!(
+            by_paths(
+                "Implement the CLI described in `specs/001-x/contracts/cli.md`",
+                DIR,
+                &judged
+            ),
+            Lane::Planning
+        );
+        // Prose with a slash is no path; a bare path in the unit is one.
+        assert_eq!(
+            task_paths("Scaffold `specs/001-x/contracts/` for input/output", DIR),
+            ["specs/001-x/contracts/"]
+        );
+        assert_eq!(
+            by_paths("Write specs/001-x/research", DIR, &judged),
+            Lane::Planning
+        );
     }
 
     #[test]

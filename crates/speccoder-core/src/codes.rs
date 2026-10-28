@@ -646,7 +646,7 @@ pub const CATALOG: &[Entry] = &[
         W,
         S::Ok,
         "ticked on the regression checks alone, nothing task-specific was shown",
-        "The checks still pass, but no acceptance test showed this task's behaviour. It is ticked `regression_only`, never `verified`, with one recorded reason: `no_story` (no user story to derive a test from), `no_scenarios` (its story states no acceptance scenario), `acceptance_off` (`[acceptance] generate = false`), `author_wrote_none` (the test author wrote no test), `author_failed` (its tests could not be used), `already_passing` (they passed before the attempt — with the task that implemented it), `not_red` (they did not fail on an assertion first) `tests_not_collected` (the command collected no test) or `planning_work` (a planning task: design documents, not code).",
+        "The checks still pass, but no acceptance test showed this task's behaviour. It is ticked `regression_only`, never `verified`, with one recorded reason: `no_story` (no user story to derive a test from), `no_scenarios` (its story states no acceptance scenario), `acceptance_off` (`[acceptance] generate = false`), `author_wrote_none` (the test author wrote no test), `author_failed` (its tests could not be used), `already_passing` (they passed before the attempt — with the task that implemented it), `not_red` (they did not fail on an assertion first), `tests_not_collected` (the command collected no test) or `planning_work` (a planning task: design documents, not code).",
         [
             "→ add an acceptance example to the task's story, then converge",
             "speccoder converge --feature {feature}"

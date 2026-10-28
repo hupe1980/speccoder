@@ -621,6 +621,9 @@ pub enum TaskAction {
         /// Why it is done (default: "I did it").
         #[arg(long)]
         reason: Option<String>,
+        /// In this checkout on `speccoder/<feature>`, as `run --in-place`.
+        #[arg(long)]
+        in_place: bool,
     },
     /// Hint & retry: a note for the task, then a new attempt of it now.
     Hint {
@@ -631,6 +634,9 @@ pub enum TaskAction {
         /// Never ask; a call needing approval stops the attempt.
         #[arg(long)]
         no_prompt: bool,
+        /// In this checkout on `speccoder/<feature>`, as `run --in-place`.
+        #[arg(long)]
+        in_place: bool,
     },
     /// Skip the task: runs pass it by, and what depends on it stays blocked.
     Skip {
