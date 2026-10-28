@@ -298,6 +298,103 @@ impl Approver for Terminal {
         let mut err = std::io::stderr().lock();
         confirm_with(&mut input, &mut err, request)
     }
+
+    fn at_stop(
+        &self,
+        stop: &speccoder_runtime::approvals::StopRequest,
+    ) -> Option<speccoder_runtime::approvals::StopAnswer> {
+        let stdin = std::io::stdin();
+        let mut input = stdin.lock();
+        let mut err = std::io::stderr().lock();
+        stop_with(&mut input, &mut err, stop)
+    }
+}
+
+/// What the person is shown at a task that needs them: the task, the
+/// agent's reason as its claim, and one key per way on.
+#[must_use]
+pub fn render_stop(stop: &speccoder_runtime::approvals::StopRequest) -> String {
+    let look = crate::style::err();
+    let head = look.paint(
+        crate::style::Token::Attention,
+        &format!("🙋 {} needs you — {}", stop.task, stop.title),
+    );
+    let mut out = format!("\n{head}\n");
+    match &stop.claim {
+        Some(c) if !c.trim().is_empty() => {
+            out.push_str(&format!("  Agent says   \"{}\"   (a claim)\n", c.trim()));
+        }
+        Some(_) => {}
+        None => out.push_str("  Marked [YOU]: a step only a person can take\n"),
+    }
+    let skipped = if stop.dependents.is_empty() {
+        "nothing waits on it".to_owned()
+    } else {
+        let stay = if stop.dependents.len() == 1 {
+            "stays"
+        } else {
+            "stay"
+        };
+        format!("{} {stay} blocked", stop.dependents.join(", "))
+    };
+    out.push_str("  d  I did it — tick it on your word (attested)\n");
+    out.push_str("  h  Hint & retry — a note, then a new attempt now\n");
+    out.push_str(&format!("  s  Skip — {skipped}\n"));
+    out.push_str("  ⏎  Later — it waits in Needs You\n");
+    looked(out)
+}
+
+/// Asks once at a stop: `d` I did it, `h` a hint (typed next) and a new
+/// attempt, `s` skip (its reason typed next); Enter, `q` or end of input
+/// leaves it waiting. An empty hint or reason asks for the key again.
+pub fn stop_with(
+    input: &mut dyn BufRead,
+    out: &mut dyn Write,
+    stop: &speccoder_runtime::approvals::StopRequest,
+) -> Option<speccoder_runtime::approvals::StopAnswer> {
+    use speccoder_runtime::approvals::StopAnswer;
+    let mut read = |out: &mut dyn Write, prompt: &str| -> Option<String> {
+        let _ = write!(out, "{prompt}");
+        let _ = out.flush();
+        let mut line = String::new();
+        match input.read_line(&mut line) {
+            Ok(0) | Err(_) => None,
+            Ok(_) => Some(line.trim().to_owned()),
+        }
+    };
+    let _ = write!(out, "{}", render_stop(stop));
+    loop {
+        let key = read(out, "  d · h · s · ⏎ later  > ")?;
+        // `h the repository is octo/x`: the hint on the same line.
+        let (head, rest) = key.split_once(char::is_whitespace).unwrap_or((&key, ""));
+        match head.to_lowercase().as_str() {
+            "" | "q" | "later" => return None,
+            "d" | "done" => return Some(StopAnswer::Done),
+            "h" | "hint" => {
+                let note = if rest.trim().is_empty() {
+                    read(out, "  Hint (the agent reads it): ")?
+                } else {
+                    rest.trim().to_owned()
+                };
+                if !note.is_empty() {
+                    return Some(StopAnswer::Hint(note));
+                }
+            }
+            "s" | "skip" => {
+                let why = if rest.trim().is_empty() {
+                    read(out, "  Why skip it (recorded): ")?
+                } else {
+                    rest.trim().to_owned()
+                };
+                if !why.is_empty() {
+                    return Some(StopAnswer::Skip(why));
+                }
+            }
+            _ => {
+                let _ = writeln!(out, "  d, h or s — or Enter to leave it waiting");
+            }
+        }
+    }
 }
 
 /// Asks the person once about a bug's reproductions: `y` confirms them
@@ -335,6 +432,70 @@ pub fn confirm_with(
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn a_stop_is_one_key_each_and_enter_leaves_it_waiting() {
+        use speccoder_runtime::approvals::{StopAnswer, StopRequest};
+        let stop = StopRequest {
+            task: "001-x/T019".to_owned(),
+            title: "Create the GitHub repository".to_owned(),
+            claim: Some("needs a GitHub repository".to_owned()),
+            dependents: vec!["T020".to_owned(), "T021".to_owned()],
+        };
+        let ask = |typed: &str| {
+            let mut out = Vec::new();
+            let a = stop_with(&mut typed.as_bytes(), &mut out, &stop);
+            (a, String::from_utf8(out).unwrap())
+        };
+        let (a, shown) = ask("d\n");
+        assert_eq!(a, Some(StopAnswer::Done));
+        assert!(
+            shown.contains("001-x/T019 needs you — Create the GitHub repository")
+                && shown.contains("\"needs a GitHub repository\"   (a claim)")
+                && shown.contains("s  Skip — T020, T021 stay blocked"),
+            "{shown}"
+        );
+        // The hint typed next, or on the same line; an empty one asks again.
+        assert_eq!(
+            ask("h\nthe repository is octo/md2csv\n").0,
+            Some(StopAnswer::Hint("the repository is octo/md2csv".to_owned()))
+        );
+        assert_eq!(
+            ask("h use the token\n").0,
+            Some(StopAnswer::Hint("use the token".to_owned()))
+        );
+        assert_eq!(
+            ask("h\n\nd\n").0,
+            Some(StopAnswer::Done),
+            "an empty hint asks for the key again"
+        );
+        assert_eq!(
+            ask("s\nnot this release\n").0,
+            Some(StopAnswer::Skip("not this release".to_owned()))
+        );
+        assert_eq!(ask("\n").0, None);
+        assert_eq!(ask("q\n").0, None);
+        assert_eq!(ask("").0, None);
+        let (a, shown) = ask("x\nd\n");
+        assert_eq!(a, Some(StopAnswer::Done));
+        assert!(shown.contains("d, h or s"), "{shown}");
+        // A `[YOU]` task says so instead of a claim.
+        let mut out = Vec::new();
+        let _ = stop_with(
+            &mut "\n".as_bytes(),
+            &mut out,
+            &StopRequest {
+                claim: None,
+                dependents: Vec::new(),
+                ..stop.clone()
+            },
+        );
+        let shown = String::from_utf8(out).unwrap();
+        assert!(
+            shown.contains("Marked [YOU]") && shown.contains("nothing waits on it"),
+            "{shown}"
+        );
+    }
 
     #[test]
     fn a_bug_confirmation_is_yes_no_with_a_reason_or_later() {

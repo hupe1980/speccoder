@@ -12,6 +12,7 @@ use crate::style::{Look, Theme};
 
 fn task(id: &str, state: &str) -> TaskStatus {
     TaskStatus {
+        lane: speccoder_core::lane::Lane::default(),
         id: id.to_owned(),
         title: format!("title of {id}"),
         phase: "Phase 2".to_owned(),

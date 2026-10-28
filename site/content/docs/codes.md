@@ -103,6 +103,7 @@ Every result that is not plainly `ok` names a code — `error[CODE]`, `stopped[C
 | [`NEEDS-HUMAN`](#needs-human) | stop | 23 | the run stopped for a person |
 | [`NEEDS-APPROVAL`](#needs-approval) | stop | 23 | a call waits for a person's decision; nothing ran |
 | [`BLOCKED`](#blocked) | stop | 23 | the model says the task cannot be done as written |
+| [`TASK-YOURS`](#task-yours) | stop | 23 | the next task is a step only a person can take |
 | [`BUDGET-EXHAUSTED`](#budget-exhausted) | stop | 23 | the attempt ran out of turns, calls or tokens |
 | [`NOT-DEMONSTRATED`](#not-demonstrated) | stop | 23 | the evidence the task needs could not be produced |
 | [`TESTS-COLLECTION-UNKNOWN`](#tests-collection-unknown) | stop | 23 | speccoder cannot tell whether the runner ran a test file |
@@ -909,9 +910,20 @@ The model asked for something the policy does not allow on its own — a depende
 
 The model says the task cannot be done as written.
 
-The model used its honest exit: something in the spec or the code stops it. Its reason is a claim, shown as "Model says".
+The model used its honest exit: something in the spec or the code stops it — often a step only a person can take. Its reason is a claim, shown as "Model says". The task is yours now: say you did it, give a hint and retry, or skip it.
 
-- `speccoder task nudge <task> --note "…"`
+- `speccoder task done <task>`
+- `speccoder task hint <task> "…"`
+- `speccoder task skip <task> --reason "…"`
+
+### TASK-YOURS
+
+The next task is a step only a person can take.
+
+Its line carries `[YOU]`: the run does not attempt it. Do it, then say so; or give a hint and let the agent try; or skip it.
+
+- `speccoder task done <task>`
+- `speccoder task hint <task> "…"`
 - `speccoder task skip <task> --reason "…"`
 
 ### BUDGET-EXHAUSTED

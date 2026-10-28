@@ -887,6 +887,38 @@ fn main() {
                 result
             }
         }
+        // Hint & retry: the note, then an attempt shown like `run --task`.
+        Command::Task {
+            action:
+                cli::TaskAction::Hint {
+                    task,
+                    note,
+                    no_prompt,
+                },
+        } => {
+            let approver: Option<std::sync::Arc<dyn speccoder_runtime::approvals::Approver>> =
+                interactive(*no_prompt).then(|| std::sync::Arc::new(prompt::Terminal) as _);
+            let (progress, attention) = live_progress(&cli, &notify, events.as_ref());
+            let run = speccoder_core::actions::Runnable::Hint { task: task.clone() };
+            let result = speccoder_runtime::actions::perform(
+                path,
+                feature,
+                speccoder_runtime::actions::Dispatch {
+                    run: &run,
+                    input: Some(note),
+                    via: speccoder_core::actions::Via::Terminal,
+                    options: speccoder_runtime::RunOptions {
+                        approver,
+                        progress,
+                        ..speccoder_runtime::RunOptions::default()
+                    },
+                },
+            );
+            if let Some(a) = &attention {
+                a.finish(&result);
+            }
+            speccoder_runtime::next::attach(result, feature)
+        }
         Command::Task { action } => task_action(action, path, feature),
         Command::Ui {
             port,
@@ -2122,6 +2154,8 @@ fn command_name(command: Option<&Command>) -> &'static str {
                 cli::TaskAction::Approve { .. } => "task approve",
                 cli::TaskAction::Reject { .. } => "task reject",
                 cli::TaskAction::Accept { .. } => "task accept",
+                cli::TaskAction::Done { .. } => "task done",
+                cli::TaskAction::Hint { .. } => "task hint",
                 cli::TaskAction::Skip { .. } => "task skip",
                 cli::TaskAction::Nudge { .. } => "task nudge",
                 cli::TaskAction::Rule { .. } => "task rule",
@@ -2212,6 +2246,35 @@ fn task_action(
             ),
             None => no_state("task accept"),
         },
+        T::Done { task, reason } => {
+            let run = speccoder_core::actions::Runnable::Done { task: task.clone() };
+            speccoder_runtime::actions::perform(
+                path,
+                feature,
+                speccoder_runtime::actions::Dispatch {
+                    input: reason.as_deref(),
+                    ..speccoder_runtime::actions::Dispatch::new(
+                        &run,
+                        speccoder_core::actions::Via::Terminal,
+                    )
+                },
+            )
+        }
+        // `main` runs it with the live progress; here, the same without.
+        T::Hint { task, note, .. } => {
+            let run = speccoder_core::actions::Runnable::Hint { task: task.clone() };
+            speccoder_runtime::actions::perform(
+                path,
+                feature,
+                speccoder_runtime::actions::Dispatch {
+                    input: Some(note),
+                    ..speccoder_runtime::actions::Dispatch::new(
+                        &run,
+                        speccoder_core::actions::Via::Terminal,
+                    )
+                },
+            )
+        }
         T::AcceptanceAt {
             task,
             story,

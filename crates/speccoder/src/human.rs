@@ -825,6 +825,14 @@ pub fn status(w: &mut impl Write, r: &StatusReport, message: &str) -> io::Result
             "ready" => "ready".to_owned(),
             _ => format!("blocked by {}", t.blocked_by.join(", ")),
         };
+        // Who does it, when not the implementer: `ready · 🙋 yours`.
+        let note = if t.lane.is_code() {
+            note
+        } else if look.ascii || look.screen_reader {
+            format!("{note} · {}", t.lane.as_str())
+        } else {
+            format!("{note} · {} {}", t.lane.mark(), t.lane.as_str())
+        };
         let glyph = crate::style::Glyph::of_state(&t.state);
         if look.screen_reader {
             writeln!(w, "task: {} {} — {note}", t.id, t.title)?;

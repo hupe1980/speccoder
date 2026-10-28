@@ -733,6 +733,39 @@ pub trait Approver: Send + Sync + std::fmt::Debug {
         let _ = request;
         None
     }
+
+    /// The person's answer at a task that needs them — an honest
+    /// `BLOCKED:` stop or a `[YOU]` task; `None` when nobody answers here
+    /// (it waits in Needs You with the same three actions).
+    fn at_stop(&self, stop: &StopRequest) -> Option<StopAnswer> {
+        let _ = stop;
+        None
+    }
+}
+
+/// A task that needs the person, as they are shown it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StopRequest {
+    /// `<feature>/<task>`.
+    pub task: String,
+    /// The task's title.
+    pub title: String,
+    /// Why the agent stopped (its claim); `None` for a `[YOU]` task.
+    pub claim: Option<String>,
+    /// What stays blocked when it is skipped.
+    pub dependents: Vec<String>,
+}
+
+/// The person's answer at a stop: each is taken through
+/// [`crate::actions::perform`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StopAnswer {
+    /// I did it: tick it on their word.
+    Done,
+    /// Hint & retry: the note, then a new attempt now.
+    Hint(String),
+    /// Skip it, with the reason.
+    Skip(String),
 }
 
 /// One reproduction as a person is shown it.

@@ -220,6 +220,8 @@ pub fn run_feature_with(
             },
         )))
     };
+    // `[YOU]` tasks the person gave a hint for: attempted after all.
+    let mut hinted: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
     // Tasks that must run on their own after a parallel group did not merge.
     let mut one_at_a_time: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
     let mut parallel_off = false;
@@ -328,6 +330,10 @@ pub fn run_feature_with(
                         })
                         .collect(),
                 });
+                // Who does what, said once: information, not a warning.
+                if let Some(l) = crate::status::lanes(path, Some(&w.feature)) {
+                    p.event(&crate::progress::Event::Notice { text: l.line() });
+                }
                 // The plan checks, said once per run start; they never
                 // stop, delay or re-order it.
                 let warnings = crate::plan_lint::lints(format, &snap, &project).len();
@@ -449,6 +455,66 @@ pub fn run_feature_with(
                 )
             };
         };
+        // A `[YOU]` task is not attempted: the person is asked, or it waits
+        // with its three actions.
+        let parsed: Vec<&speccoder_core::snapshot::Task> = snap
+            .feature
+            .as_ref()
+            .and_then(|f| f.tasks.as_ref())
+            .map(|t| t.tasks.iter().collect())
+            .unwrap_or_default();
+        let yours = |id: &str| !hinted.contains(id) && parsed.iter().any(|t| t.id == id && t.yours);
+        if yours(&next.id) {
+            let id = next.id.clone();
+            let title = parsed
+                .iter()
+                .find(|t| t.id == id)
+                .map(|t| t.title.clone())
+                .unwrap_or_default();
+            let stop = crate::approvals::StopRequest {
+                task: format!("{}/{id}", w.feature),
+                title: title.clone(),
+                claim: None,
+                dependents: speccoder_core::graph::dependents(&schedule, &id),
+            };
+            match ask_at_stop(path, feature_name.as_deref(), state, options, &stop) {
+                Some((answer, done)) if done.status() == CommandStatus::Ok => {
+                    if matches!(answer, crate::approvals::StopAnswer::Hint(_)) {
+                        hinted.insert(id);
+                    }
+                    continue;
+                }
+                Some((_, failed)) => {
+                    return finish(
+                        feature_name,
+                        attempts,
+                        failed.status(),
+                        format!("{id}: {}", failed.message()),
+                    )
+                    .caused_by(&failed);
+                }
+                None => {
+                    let fix = speccoder_core::codes::lookup("TASK-YOURS")
+                        .map(|e| {
+                            speccoder_core::codes::fixes(
+                                e,
+                                "run",
+                                Some(&id),
+                                feature_name.as_deref(),
+                            )
+                        })
+                        .unwrap_or_default();
+                    return finish(
+                        feature_name,
+                        attempts,
+                        CommandStatus::NeedsHuman,
+                        format!("{id} is yours — {title}: a step only a person can take"),
+                    )
+                    .with_code("TASK-YOURS")
+                    .with_fix(fix);
+                }
+            }
+        }
         // ready [P] tasks run at once, each in its own lane.
         let parallel_ids: std::collections::BTreeSet<String> = snap
             .feature
@@ -466,7 +532,9 @@ pub fn run_feature_with(
             .tasks
             .iter()
             .filter(|t| t.state == TaskState::Ready && !skipped.contains_key(&t.id))
-            .filter(|t| parallel_ids.contains(&t.id) && !one_at_a_time.contains(&t.id))
+            .filter(|t| {
+                parallel_ids.contains(&t.id) && !one_at_a_time.contains(&t.id) && !yours(&t.id)
+            })
             .map(|t| t.id.clone())
             .take(options.parallel.min(budget))
             .collect();
@@ -499,6 +567,44 @@ pub fn run_feature_with(
         if let Some(CommandData::Run(r)) = res.data() {
             attempts.push((**r).clone());
         }
+        // An honest stop: the person is asked in place — I did it, a hint
+        // and a new attempt, or skip — and the run goes on.
+        let claim = match res.data() {
+            Some(CommandData::Run(r)) if r.attempt_status == "blocked" => {
+                Some(r.reason.clone().unwrap_or_default())
+            }
+            _ => None,
+        };
+        if let Some(claim) = claim.filter(|_| res.status() != CommandStatus::Ok) {
+            let stop = crate::approvals::StopRequest {
+                task: format!("{}/{task}", w.feature),
+                title: parsed
+                    .iter()
+                    .find(|t| t.id == task)
+                    .map(|t| t.title.clone())
+                    .unwrap_or_default(),
+                claim: Some(claim),
+                dependents: speccoder_core::graph::dependents(&schedule, &task),
+            };
+            match ask_at_stop(path, feature_name.as_deref(), state, options, &stop) {
+                Some((answer, done)) if done.status() == CommandStatus::Ok => {
+                    if matches!(answer, crate::approvals::StopAnswer::Hint(_)) {
+                        hinted.insert(task);
+                    }
+                    continue;
+                }
+                Some((_, failed)) => {
+                    return finish(
+                        feature_name,
+                        attempts,
+                        failed.status(),
+                        format!("{task}: {}", failed.message()),
+                    )
+                    .caused_by(&failed);
+                }
+                None => {}
+            }
+        }
         if res.status() != CommandStatus::Ok {
             return finish(
                 feature_name,
@@ -515,6 +621,52 @@ pub fn run_feature_with(
         CommandStatus::Ok,
         "stopped at --max-tasks".to_owned(),
     )
+}
+
+/// Asks the person at a task that needs them — at a terminal, never in a
+/// lane — and takes the answer through the one dispatcher: I did it
+/// ([`Runnable::Done`]), the hint ([`Runnable::Nudge`]; the run then
+/// attempts the task again) or skip ([`Runnable::Skip`]). `None`: nobody
+/// answered; the task waits in Needs You.
+///
+/// [`Runnable::Done`]: speccoder_core::actions::Runnable::Done
+/// [`Runnable::Nudge`]: speccoder_core::actions::Runnable::Nudge
+/// [`Runnable::Skip`]: speccoder_core::actions::Runnable::Skip
+fn ask_at_stop(
+    path: &Path,
+    feature: Option<&str>,
+    state: &Path,
+    options: &RunOptions,
+    stop: &crate::approvals::StopRequest,
+) -> Option<(crate::approvals::StopAnswer, CommandResult)> {
+    use crate::approvals::StopAnswer;
+    use speccoder_core::actions::Runnable;
+    let approver = options
+        .approver
+        .as_ref()
+        .filter(|_| options.lane.is_none())?;
+    let answer = approver.at_stop(stop)?;
+    let task = stop
+        .task
+        .rsplit('/')
+        .next()
+        .unwrap_or(&stop.task)
+        .to_owned();
+    let (run, input) = match &answer {
+        StopAnswer::Done => (Runnable::Done { task }, None),
+        StopAnswer::Hint(note) => (Runnable::Nudge { task }, Some(note.as_str())),
+        StopAnswer::Skip(why) => (Runnable::Skip { task }, Some(why.as_str())),
+    };
+    let done = crate::actions::perform_in(
+        path,
+        feature,
+        crate::actions::Dispatch {
+            input,
+            ..crate::actions::Dispatch::new(&run, approver.via())
+        },
+        Some(state),
+    );
+    Some((answer, done))
 }
 
 /// Why a unit has nothing to run: no task list, or one without a task.

@@ -433,6 +433,7 @@ mod tests {
 
     fn task(state: &str) -> TaskStatus {
         TaskStatus {
+            lane: speccoder_core::lane::Lane::default(),
             id: "T002".to_owned(),
             title: "t".to_owned(),
             phase: "P".to_owned(),

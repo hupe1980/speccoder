@@ -13,7 +13,7 @@
           ],
           "current": true,
           "dir": "specs/001-graph",
-          "done": 5,
+          "done": 6,
           "name": "001-graph",
           "number": 1,
           "tasks": 11,
@@ -51,7 +51,7 @@
       "unit": "feature"
     },
     "exit_code": 0,
-    "message": "switched to 001-graph, 5/11 tasks done (recorded in .specify/feature.json: Spec Kit's scripts and the /speckit-* commands in your editor read it too)",
+    "message": "switched to 001-graph, 6/11 tasks done (recorded in .specify/feature.json: Spec Kit's scripts and the /speckit-* commands in your editor read it too)",
     "payload": "features",
     "schema_version": 2,
     "status": "ok"

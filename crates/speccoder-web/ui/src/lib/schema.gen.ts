@@ -98,7 +98,7 @@ export interface ActionId {
  * kind arrives with its `Runnable` variant (the *adding a kind* contract
  * of `speccoder_runtime::actions::perform`).
  */
-export type ActionKind = "skill" | "run_task" | "run_feature" | "converge" | "commit" | "approve" | "reject" | "accept" | "skip" | "nudge" | "rule" | "review" | "issue_comment" | "quick_change" | "keep_set_aside" | "drop_set_aside" | "fix_setup" | "feature" | "pull_request" | "bug_fix" | "bug_confirm" | "bug_run" | "bug_keep" | "allow_always" | "widen_policy" | "decide_batch" | "oracle_tests" | "approve_and_run" | "comment" | "comments_send" | "revision_undo" | "code_nudge" | "acceptance_at" | "preset_add" | "plan_through" | "new_project" | "undo_new_project" | "clone_repository" | "open_sample" | "sample_checks" | "command";
+export type ActionKind = "skill" | "run_task" | "run_feature" | "converge" | "commit" | "approve" | "reject" | "accept" | "skip" | "nudge" | "done" | "hint" | "rule" | "review" | "issue_comment" | "quick_change" | "keep_set_aside" | "drop_set_aside" | "fix_setup" | "feature" | "pull_request" | "bug_fix" | "bug_confirm" | "bug_run" | "bug_keep" | "allow_always" | "widen_policy" | "decide_batch" | "oracle_tests" | "approve_and_run" | "comment" | "comments_send" | "revision_undo" | "code_nudge" | "acceptance_at" | "preset_add" | "plan_through" | "new_project" | "undo_new_project" | "clone_repository" | "open_sample" | "sample_checks" | "command";
 
 /**
  * Result of `speccoder actions`: what a person can do now in the
@@ -2339,6 +2339,9 @@ export interface JourneyStep {
 /** How a code presents itself. */
 export type Kind = "error" | "stop" | "warning";
 
+/** A task's lane. */
+export type Lane = "code" | "planning" | "yours";
+
 /** An attempt that did not pass, as saved under `refs/speccoder/attempts/`. */
 export interface LastAttempt {
   /** `verification_failed`, `blocked`, `needs_approval`, `not_demonstrated`, `interrupted`, … */
@@ -3822,6 +3825,21 @@ export type Runnable =
     /** The task. */
     task: string;
   }
+  /**
+   * I did it: tick a step the person took on their word (`attested`;
+   * the input, when given, is the reason).
+   */
+  | {
+    kind: "done";
+    /** The task. */
+    task: string;
+  }
+  /** Hint & retry: a note for the task (the input), then a new attempt. */
+  | {
+    kind: "hint";
+    /** The task. */
+    task: string;
+  }
   /** Rule that a held attempt's tests are right (the input is the reason). */
   | {
     kind: "rule";
@@ -4706,6 +4724,8 @@ export interface TaskStatus {
   drift?: Drift | null;
   /** Task ID. */
   id: string;
+  /** Who does it ([`crate::lane`]); left out for `code`. */
+  lane?: Lane;
   /** For an open task: its latest saved attempt. */
   last_attempt: LastAttempt | null;
   /** The reason a person gave for `accept` or `skip`. */

@@ -1,0 +1,17 @@
+{
+  "head": "init",
+  "result": {
+    "code": "CONFIG",
+    "command": "job",
+    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#config",
+    "exit_code": 13,
+    "fix": [
+      "speccoder init"
+    ],
+    "message": "no state directory",
+    "schema_version": 2,
+    "status": "config_error"
+  },
+  "review": null,
+  "status": ""
+}

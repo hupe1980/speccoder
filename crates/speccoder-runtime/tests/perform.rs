@@ -308,6 +308,27 @@ fn cases() -> Vec<Case> {
             Runnable::Accept { task: task("T006") },
             Some("done by hand"),
         ),
+        // I did it: the person's word, in their words or "I did it".
+        no_state(case(
+            "done-no-state",
+            Runnable::Done { task: task("T010") },
+            None,
+        )),
+        case(
+            "done-no-reason",
+            Runnable::Done { task: task("T010") },
+            None,
+        ),
+        case(
+            "hint-empty",
+            Runnable::Hint { task: task("T008") },
+            Some(" "),
+        ),
+        no_state(case(
+            "hint-no-state",
+            Runnable::Hint { task: task("T008") },
+            Some("the repository is octo/md2csv"),
+        )),
         case("skip-empty", Runnable::Skip { task: task("T007") }, None),
         case(
             "skip-reason",

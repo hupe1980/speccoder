@@ -38,6 +38,13 @@ pub const RULES: [Rule; 3] = [
     },
 ];
 
+/// Who does a task, as the preset states it: design documents are the
+/// plan's, a person's steps are labelled (lanes: `speccoder_core::lane`).
+pub const LANE_RULES: [&str; 2] = [
+    "Design documents — contracts, the data model, research, a quickstart — belong to the plan: write them while planning, not as tasks (a task naming only paths in the feature's folder runs as planning work).",
+    "Label a step only a person can take — create an account, set a secret, publish — with `[YOU]` after the ID and markers (`- [ ] T019 [YOU] Create the GitHub repository`): speccoder does not attempt it and asks the person instead.",
+];
+
 /// One warning.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PlanLint {
@@ -462,5 +469,12 @@ mod tests {
                 r.code
             );
         }
+        for rule in LANE_RULES {
+            assert!(template.contains(rule), "{rule} is not in the preset");
+        }
+        assert!(
+            template.contains("- **[YOU]**:"),
+            "the format line names [YOU]"
+        );
     }
 }

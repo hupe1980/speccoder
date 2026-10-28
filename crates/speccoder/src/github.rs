@@ -135,6 +135,7 @@ mod tests {
 
     fn task(id: &str, state: &str, last: Option<&str>) -> TaskStatus {
         TaskStatus {
+            lane: speccoder_core::lane::Lane::default(),
             id: id.to_owned(),
             title: "Parse: a, b\nc %".to_owned(),
             phase: "P".to_owned(),

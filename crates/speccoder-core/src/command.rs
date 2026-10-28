@@ -2065,6 +2065,9 @@ pub struct TaskStatus {
     /// (`unrecorded` for a tick made before reasons were recorded).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub regression: Option<crate::regression::Regression>,
+    /// Who does it ([`crate::lane`]); left out for `code`.
+    #[serde(default, skip_serializing_if = "crate::lane::Lane::is_code")]
+    pub lane: crate::lane::Lane,
 }
 
 /// An attempt that did not pass, as saved under `refs/speccoder/attempts/`.

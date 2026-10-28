@@ -161,6 +161,17 @@ fn cases() -> Vec<(&'static str, Value, Value)> {
             json!("use the session type"),
         ),
         (
+            "done",
+            json!({ "kind": "done", "task": "T010" }),
+            Value::Null,
+        ),
+        // The hint is kept, then the attempt stops before it starts (no key).
+        (
+            "hint-note",
+            json!({ "kind": "hint", "task": "T005" }),
+            json!("the repository is octo/md2csv"),
+        ),
+        (
             "rule-reason",
             json!({ "kind": "rule", "task": "T009" }),
             json!("the tests are right"),

@@ -81,6 +81,9 @@ pub enum Kind {
     Review,
     /// Changes requested on the spec.
     Revise,
+    /// A step only a person can take: a `[YOU]` task, or one whose attempt
+    /// stopped `BLOCKED` — I did it, a hint and a new attempt, or skip.
+    Yours,
     /// The last attempt did not pass.
     Stuck,
     /// An autopilot run refused calls it would have asked about: listed
@@ -98,7 +101,7 @@ pub enum Kind {
 
 impl Kind {
     /// Every kind, the most urgent first.
-    pub const ALL: [Self; 21] = [
+    pub const ALL: [Self; 22] = [
         Self::Unknown,
         Self::Approval,
         Self::ApprovalBatch,
@@ -114,6 +117,7 @@ impl Kind {
         Self::Ambiguous,
         Self::Review,
         Self::Revise,
+        Self::Yours,
         Self::Stuck,
         Self::AutopilotDenied,
         Self::BugAlreadySatisfied,
@@ -141,6 +145,7 @@ impl Kind {
             Self::Ambiguous => "ambiguous",
             Self::Review => "review",
             Self::Revise => "revise",
+            Self::Yours => "yours",
             Self::Stuck => "stuck",
             Self::AutopilotDenied => "autopilot_denied",
             Self::BugAlreadySatisfied => "bug_already_satisfied",
@@ -166,6 +171,7 @@ impl Kind {
             | Self::Question
             | Self::Ambiguous
             | Self::Revise
+            | Self::Yours
             | Self::Stuck
             | Self::Commit => Group::BlockedOnYou,
             Self::Unverified
@@ -195,7 +201,7 @@ impl Kind {
 
     /// Every recorded name, the most urgent first.
     #[must_use]
-    pub fn names() -> [&'static str; 21] {
+    pub fn names() -> [&'static str; 22] {
         Self::ALL.map(Self::as_str)
     }
 }
@@ -227,7 +233,10 @@ mod tests {
             .into_iter()
             .filter(|n| {
                 !n.starts_with("bug_")
-                    && !matches!(*n, "ambiguous" | "autopilot_denied" | "unverified")
+                    && !matches!(
+                        *n,
+                        "ambiguous" | "autopilot_denied" | "unverified" | "yours"
+                    )
             })
             .collect();
         assert_eq!(

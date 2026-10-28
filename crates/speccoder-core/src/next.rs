@@ -139,12 +139,12 @@ pub fn next(outcome: &Outcome, feature: Option<&str>) -> Vec<NextStep> {
         ],
         O::Blocked { task } => vec![
             (
-                format!("speccoder task nudge {task} --note \"…\""),
-                "tell the next attempt what it is missing",
+                format!("speccoder task done {task}"),
+                "you did it: tick it on your word (attested)",
             ),
             (
-                format!("speccoder task accept {task} --reason \"…\""),
-                "tick it on your word (attested)",
+                format!("speccoder task hint {task} \"…\""),
+                "a hint, then a new attempt now",
             ),
             (
                 format!("speccoder task skip {task} --reason \"…\""),
@@ -381,8 +381,8 @@ mod tests {
             (
                 Outcome::Blocked { task: t() },
                 vec![
-                    "speccoder task nudge T004 --note \"…\"",
-                    "speccoder task accept T004 --reason \"…\"",
+                    "speccoder task done T004",
+                    "speccoder task hint T004 \"…\"",
                     "speccoder task skip T004 --reason \"…\"",
                 ],
             ),

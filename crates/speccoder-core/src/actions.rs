@@ -63,6 +63,17 @@ pub enum Runnable {
         /// The task.
         task: String,
     },
+    /// I did it: tick a step the person took on their word (`attested`;
+    /// the input, when given, is the reason).
+    Done {
+        /// The task.
+        task: String,
+    },
+    /// Hint & retry: a note for the task (the input), then a new attempt.
+    Hint {
+        /// The task.
+        task: String,
+    },
     /// Rule that a held attempt's tests are right (the input is the reason).
     Rule {
         /// The task.
@@ -471,6 +482,10 @@ pub enum ActionKind {
     Skip,
     /// [`Runnable::Nudge`].
     Nudge,
+    /// [`Runnable::Done`].
+    Done,
+    /// [`Runnable::Hint`].
+    Hint,
     /// [`Runnable::Rule`].
     Rule,
     /// [`Runnable::Review`].
@@ -548,6 +563,8 @@ impl ActionKind {
         Self::Accept,
         Self::Skip,
         Self::Nudge,
+        Self::Done,
+        Self::Hint,
         Self::Rule,
         Self::Review,
         Self::IssueComment,
@@ -595,6 +612,8 @@ impl ActionKind {
             Self::Accept => "accept",
             Self::Skip => "skip",
             Self::Nudge => "nudge",
+            Self::Done => "done",
+            Self::Hint => "hint",
             Self::Rule => "rule",
             Self::Review => "review",
             Self::IssueComment => "issue_comment",
@@ -658,6 +677,8 @@ impl ActionKind {
             Self::Accept => Runnable::Accept { task: task() },
             Self::Skip => Runnable::Skip { task: task() },
             Self::Nudge => Runnable::Nudge { task: task() },
+            Self::Done => Runnable::Done { task: task() },
+            Self::Hint => Runnable::Hint { task: task() },
             Self::Rule => Runnable::Rule { task: task() },
             Self::Review => Runnable::Review {
                 ids: vec!["FR-001".to_owned()],
@@ -800,6 +821,8 @@ impl Runnable {
             Self::Accept { .. } => ActionKind::Accept,
             Self::Skip { .. } => ActionKind::Skip,
             Self::Nudge { .. } => ActionKind::Nudge,
+            Self::Done { .. } => ActionKind::Done,
+            Self::Hint { .. } => ActionKind::Hint,
             Self::Rule { .. } => ActionKind::Rule,
             Self::Review { .. } => ActionKind::Review,
             Self::IssueComment { .. } => ActionKind::IssueComment,
@@ -874,6 +897,8 @@ pub fn identity(run: Option<&Runnable>, command: &str) -> ActionId {
         | Runnable::Accept { task }
         | Runnable::Skip { task }
         | Runnable::Nudge { task }
+        | Runnable::Done { task }
+        | Runnable::Hint { task }
         | Runnable::Rule { task }
         | Runnable::KeepSetAside { task }
         | Runnable::DropSetAside { task }

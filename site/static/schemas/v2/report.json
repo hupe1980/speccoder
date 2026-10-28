@@ -106,6 +106,26 @@
       ],
       "type": "object"
     },
+    "Lane": {
+      "description": "A task's lane.",
+      "oneOf": [
+        {
+          "const": "code",
+          "description": "The implementer's: code, judged by the checks and its acceptance tests.",
+          "type": "string"
+        },
+        {
+          "const": "planning",
+          "description": "Design documents the plan should have written: every path the task\nnames lies inside the unit's directory.",
+          "type": "string"
+        },
+        {
+          "const": "yours",
+          "description": "A step only a person can take: a `[YOU]` label, or an attempt that\nstopped `BLOCKED`.",
+          "type": "string"
+        }
+      ]
+    },
     "LastAttempt": {
       "description": "An attempt that did not pass, as saved under `refs/speccoder/attempts/`.",
       "properties": {
@@ -618,6 +638,10 @@
         "id": {
           "description": "Task ID.",
           "type": "string"
+        },
+        "lane": {
+          "$ref": "#/$defs/Lane",
+          "description": "Who does it ([`crate::lane`]); left out for `code`."
         },
         "last_attempt": {
           "anyOf": [

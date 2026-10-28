@@ -895,9 +895,22 @@ pub const CATALOG: &[Entry] = &[
         P,
         S::NeedsHuman,
         "the model says the task cannot be done as written",
-        "The model used its honest exit: something in the spec or the code stops it. Its reason is a claim, shown as \"Model says\".",
+        "The model used its honest exit: something in the spec or the code stops it — often a step only a person can take. Its reason is a claim, shown as \"Model says\". The task is yours now: say you did it, give a hint and retry, or skip it.",
         [
-            "speccoder task nudge {task} --note \"…\"",
+            "speccoder task done {task}",
+            "speccoder task hint {task} \"…\"",
+            "speccoder task skip {task} --reason \"…\""
+        ]
+    ),
+    entry!(
+        "TASK-YOURS",
+        P,
+        S::NeedsHuman,
+        "the next task is a step only a person can take",
+        "Its line carries `[YOU]`: the run does not attempt it. Do it, then say so; or give a hint and let the agent try; or skip it.",
+        [
+            "speccoder task done {task}",
+            "speccoder task hint {task} \"…\"",
             "speccoder task skip {task} --reason \"…\""
         ]
     ),

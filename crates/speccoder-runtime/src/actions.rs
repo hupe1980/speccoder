@@ -48,6 +48,9 @@ pub(crate) fn action(
     Action::new(group, label, why, command)
 }
 
+/// The reason an I-did-it tick records when the person gave none.
+pub const DONE_REASON: &str = "I did it";
+
 /// What can be done now in the project at `path` (`feature` as for every
 /// command), with `selected` the task an interface has selected.
 #[must_use]
@@ -485,6 +488,8 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::Accept
             | K::Skip
             | K::Nudge
+            | K::Done
+            | K::Hint
             | K::Rule
             | K::Review
             | K::IssueComment
@@ -529,6 +534,8 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::Accept
             | K::Skip
             | K::Nudge
+            | K::Done
+            | K::Hint
             | K::Rule
             | K::Review
             | K::IssueComment
@@ -572,6 +579,8 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::Accept
             | K::Skip
             | K::Nudge
+            | K::Done
+            | K::Hint
             | K::Rule
             | K::Review
             | K::IssueComment
@@ -613,6 +622,8 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::Accept
             | K::Skip
             | K::Nudge
+            | K::Done
+            | K::Hint
             | K::Rule
             | K::Review
             | K::IssueComment
@@ -762,6 +773,31 @@ pub fn perform_in(
                 crate::controls::nudge_with(root, feature, task, Some(note), s)
             }
             (None, _) => needs("a note"),
+            (_, None) => no_state(),
+        },
+        // I did it: the person's word, in the words they gave or these.
+        Runnable::Done { task } => match state {
+            Some(s) => crate::controls::accept_in(
+                root,
+                feature,
+                task,
+                text.unwrap_or(DONE_REASON),
+                s,
+                false,
+            ),
+            None => no_state(),
+        },
+        // Hint & retry: the note first; a new attempt only once it is kept.
+        Runnable::Hint { task } => match (text, state) {
+            (Some(note), Some(s)) => {
+                let noted = crate::controls::nudge_with(root, feature, task, Some(note), s);
+                if noted.status() == CommandStatus::Ok {
+                    run_task(root, feature, task, options)
+                } else {
+                    noted
+                }
+            }
+            (None, _) => needs("a hint"),
             (_, None) => no_state(),
         },
         Runnable::Rule { task } => match (text, state) {

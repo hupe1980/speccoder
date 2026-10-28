@@ -234,3 +234,223 @@ fn the_poc_runs_code_then_planning_then_code_without_a_command() {
         ]
     );
 }
+
+/// A person at the terminal answering each stop from a script.
+#[derive(Debug)]
+struct Person {
+    answers: std::sync::Mutex<Vec<speccoder_runtime::approvals::StopAnswer>>,
+    shown: std::sync::Mutex<Vec<speccoder_runtime::approvals::StopRequest>>,
+}
+
+impl Person {
+    fn answering(answers: Vec<speccoder_runtime::approvals::StopAnswer>) -> Arc<Self> {
+        Arc::new(Self {
+            answers: std::sync::Mutex::new(answers),
+            shown: std::sync::Mutex::new(Vec::new()),
+        })
+    }
+}
+
+impl speccoder_runtime::approvals::Approver for Person {
+    fn ask(
+        &self,
+        p: &speccoder_runtime::approvals::Presentation,
+    ) -> speccoder_runtime::approvals::Answer {
+        panic!("no call needs approval here: {:?}", p.request.tool)
+    }
+
+    fn at_stop(
+        &self,
+        stop: &speccoder_runtime::approvals::StopRequest,
+    ) -> Option<speccoder_runtime::approvals::StopAnswer> {
+        self.shown.lock().unwrap().push(stop.clone());
+        let mut a = self.answers.lock().unwrap();
+        (!a.is_empty()).then(|| a.remove(0))
+    }
+}
+
+fn blocked(f: &FakeProvider, id: &str, why: &str) {
+    f.will_call_tool(id, "report_blocked", json!({ "reason": why }));
+}
+
+fn options(person: &Arc<Person>) -> RunOptions {
+    RunOptions {
+        approver: Some(Arc::clone(person) as _),
+        ..RunOptions::default()
+    }
+}
+
+fn state_of(r: &Path, task: &str) -> String {
+    match speccoder_runtime::status::report(r, None).data() {
+        Some(CommandData::Report(rep)) => rep
+            .tasks
+            .iter()
+            .find(|t| t.id == task)
+            .map(|t| t.state.clone())
+            .unwrap_or_default(),
+        other => panic!("{other:?}"),
+    }
+}
+
+const TWO: &str = "# Tasks: X\n\n## Phase 1: Setup\n\n- [ ] T001 Wire the release in `src/lib.rs`\n- [ ] T002 Define the table type in `src/lib.rs`\n";
+
+#[test]
+fn a_hint_at_the_stop_starts_a_new_attempt_that_reads_it() {
+    let r = repo(TWO);
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    blocked(&f, "a1", "needs a GitHub repository");
+    // The new attempt, then T002.
+    f.will_call_tool(
+        "a2",
+        "edit_file",
+        json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\npub const REPO: &str = \"octo/md2csv\";" }),
+    );
+    f.will_structure(done("release wired"));
+    f.will_call_tool(
+        "b1",
+        "edit_file",
+        json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\npub struct Table;" }),
+    );
+    f.will_structure(done("table type"));
+    let person = Person::answering(vec![speccoder_runtime::approvals::StopAnswer::Hint(
+        "the repository is octo/md2csv".to_owned(),
+    )]);
+    let res = run_feature_with(r.path(), None, state.path(), &d, None, &options(&person));
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let shown = person.shown.lock().unwrap().clone();
+    assert_eq!(shown.len(), 1);
+    assert_eq!(shown[0].task, "001-x/T001");
+    assert_eq!(shown[0].claim.as_deref(), Some("needs a GitHub repository"));
+    assert_eq!(shown[0].dependents, ["T002"]);
+    // The second attempt's prompt carries the hint as the person's note.
+    let retried = f
+        .asked()
+        .iter()
+        .map(|a| serde_json::to_string(&a.prompt).unwrap())
+        .filter(|p| p.contains("Notes from a person"))
+        .count();
+    assert!(retried >= 1, "the hint never reached an attempt");
+    assert_eq!(state_of(r.path(), "T001"), "regression_only");
+    assert_eq!(state_of(r.path(), "T002"), "regression_only");
+}
+
+#[test]
+fn i_did_it_at_the_stop_ticks_it_attested_and_the_run_goes_on() {
+    let r = repo(TWO);
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    blocked(&f, "a1", "needs a GitHub repository");
+    f.will_call_tool(
+        "b1",
+        "edit_file",
+        json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\npub struct Table;" }),
+    );
+    f.will_structure(done("table type"));
+    let person = Person::answering(vec![speccoder_runtime::approvals::StopAnswer::Done]);
+    let res = run_feature_with(r.path(), None, state.path(), &d, None, &options(&person));
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    assert_eq!(state_of(r.path(), "T001"), "attested");
+    assert_eq!(state_of(r.path(), "T002"), "regression_only");
+}
+
+#[test]
+fn without_a_person_the_stop_waits_with_its_three_actions() {
+    let r = repo(TWO);
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    blocked(&f, "a1", "needs a GitHub repository");
+    let res = run_feature_with(
+        r.path(),
+        None,
+        state.path(),
+        &d,
+        None,
+        &RunOptions::default(),
+    );
+    assert_eq!(res.status(), CommandStatus::NeedsHuman, "{}", res.message());
+    let res = speccoder_runtime::next::attach(res, None);
+    let next: Vec<&str> = res.next().iter().map(|s| s.command.as_str()).collect();
+    assert_eq!(
+        next,
+        [
+            "speccoder task done T001",
+            "speccoder task hint T001 \"…\"",
+            "speccoder task skip T001 --reason \"…\""
+        ]
+    );
+    // Needs You: the agent's reason, and the three actions as typed ids.
+    let inbox = speccoder_runtime::inbox::inbox_with(r.path(), None, Some(state.path()));
+    let Some(CommandData::Inbox(i)) = inbox.data() else {
+        panic!("{inbox:?}");
+    };
+    let item = i.items.iter().find(|i| i.kind == "yours").unwrap();
+    assert_eq!(item.task.as_deref(), Some("T001"));
+    assert_eq!(item.detail, "needs a GitHub repository");
+    let kinds: Vec<&str> = item.actions.iter().map(|a| a.id.kind.as_str()).collect();
+    assert_eq!(kinds, ["done", "hint", "skip"]);
+    assert_eq!(item.actions[2].why, "runs pass it by; T002 stays blocked");
+    // The board: its lane is yours until it is done, skipped or retried.
+    match speccoder_runtime::status::report(r.path(), None).data() {
+        Some(CommandData::Report(rep)) => {
+            assert_eq!(rep.tasks[0].lane, speccoder_core::lane::Lane::Yours);
+            assert_eq!(rep.tasks[1].lane, speccoder_core::lane::Lane::Code);
+        }
+        other => panic!("{other:?}"),
+    }
+}
+
+const YOU: &str = "# Tasks: X\n\n## Phase 1: Setup\n\n- [X] T001 Create `src/lib.rs`\n- [ ] T002 [YOU] Create the GitHub repository\n- [ ] T003 Define the table type in `src/lib.rs`\n";
+
+#[test]
+fn a_you_task_is_never_attempted_it_waits_or_the_person_answers() {
+    let r = repo(YOU);
+    let state = tempfile::tempdir().unwrap();
+    // Nobody to ask: it waits, named, with its three actions; no model call.
+    let (f, d) = fake();
+    let res = run_feature_with(
+        r.path(),
+        None,
+        state.path(),
+        &d,
+        None,
+        &RunOptions::default(),
+    );
+    assert_eq!(res.status(), CommandStatus::NeedsHuman, "{}", res.message());
+    assert_eq!(res.code().map(|c| c.name), Some("TASK-YOURS"));
+    assert!(
+        res.message().starts_with("T002 is yours"),
+        "{}",
+        res.message()
+    );
+    assert_eq!(
+        res.fix(),
+        [
+            "speccoder task done T002",
+            "speccoder task hint T002 \"…\"",
+            "speccoder task skip T002 --reason \"…\""
+        ]
+    );
+    assert!(f.asked().is_empty());
+    // At the terminal: "I did it", and the run goes on with T003.
+    let (f, d) = fake();
+    f.will_call_tool(
+        "c1",
+        "edit_file",
+        json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\npub struct Table;" }),
+    );
+    f.will_structure(done("table type"));
+    let person = Person::answering(vec![speccoder_runtime::approvals::StopAnswer::Done]);
+    let res = run_feature_with(r.path(), None, state.path(), &d, None, &options(&person));
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let shown = person.shown.lock().unwrap().clone();
+    assert_eq!(shown.len(), 1);
+    assert_eq!(shown[0].claim, None);
+    assert_eq!(state_of(r.path(), "T002"), "attested");
+    assert_eq!(state_of(r.path(), "T003"), "regression_only");
+    let Some(CommandData::Feature(fr)) = res.data() else {
+        panic!("{res:?}");
+    };
+    let tried: Vec<&str> = fr.attempts.iter().map(|a| a.task.as_str()).collect();
+    assert_eq!(tried, ["T003"], "only T003 was attempted");
+}

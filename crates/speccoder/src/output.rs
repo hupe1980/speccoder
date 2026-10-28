@@ -514,6 +514,7 @@ mod look_tests {
 
     fn task(id: &str, state: &str, title: &str) -> TaskStatus {
         TaskStatus {
+            lane: speccoder_core::lane::Lane::default(),
             id: id.to_owned(),
             title: title.to_owned(),
             phase: "Phase 2: User Story 1 - Login".to_owned(),
@@ -537,6 +538,10 @@ mod look_tests {
     }
 
     fn report() -> CommandResult {
+        report_of(|_| {})
+    }
+
+    fn report_of(edit: impl Fn(&mut Vec<TaskStatus>)) -> CommandResult {
         let long = "Handle Unicode input in the slug generator, including combining marks and wide characters such as 日本語";
         let tasks = [
             "verified",
@@ -558,6 +563,8 @@ mod look_tests {
             )
         })
         .collect();
+        let mut tasks = tasks;
+        edit(&mut tasks);
         let r = CommandResult::ok("report", "8 tasks").with_data(CommandData::Report(Box::new(
             StatusReport {
                 review: None,
@@ -596,6 +603,32 @@ mod look_tests {
                 String::from_utf8(err).unwrap(),
             )
         })
+    }
+
+    #[test]
+    fn a_task_that_is_not_code_says_whose_it_is() {
+        let r = report_of(|tasks| {
+            tasks[6].lane = speccoder_core::lane::Lane::Yours;
+            tasks[7].lane = speccoder_core::lane::Lane::Planning;
+        });
+        let (out, _) = render(
+            Look {
+                width: 160,
+                ..Look::PLAIN
+            },
+            &r,
+        );
+        assert!(out.contains("ready · 🙋 yours"), "{out}");
+        assert!(out.contains("blocked by T001 · 📐 planning"), "{out}");
+        let (ascii, _) = render(
+            Look {
+                width: 160,
+                ascii: true,
+                ..Look::PLAIN
+            },
+            &r,
+        );
+        assert!(ascii.contains("yours") && !ascii.contains('🙋'), "{ascii}");
     }
 
     #[test]

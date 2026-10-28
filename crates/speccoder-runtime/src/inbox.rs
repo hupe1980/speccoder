@@ -18,27 +18,15 @@ use crate::actions::action;
 /// The kinds, most urgent first: what blocks a run, what questions the
 /// evidence, what stops a task, what blocks a hand-off — derived from the
 /// one registry, `speccoder_core::inbox::Kind`.
-pub const KINDS: [&str; 19] = [
-    Kind::ALL[0].as_str(),
-    Kind::ALL[1].as_str(),
-    Kind::ALL[2].as_str(),
-    Kind::ALL[3].as_str(),
-    Kind::ALL[4].as_str(),
-    Kind::ALL[5].as_str(),
-    Kind::ALL[6].as_str(),
-    Kind::ALL[7].as_str(),
-    Kind::ALL[8].as_str(),
-    Kind::ALL[9].as_str(),
-    Kind::ALL[10].as_str(),
-    Kind::ALL[11].as_str(),
-    Kind::ALL[12].as_str(),
-    Kind::ALL[13].as_str(),
-    Kind::ALL[14].as_str(),
-    Kind::ALL[15].as_str(),
-    Kind::ALL[16].as_str(),
-    Kind::ALL[17].as_str(),
-    Kind::ALL[18].as_str(),
-];
+pub const KINDS: [&str; Kind::ALL.len()] = {
+    let mut out = [""; Kind::ALL.len()];
+    let mut i = 0;
+    while i < out.len() {
+        out[i] = Kind::ALL[i].as_str();
+        i += 1;
+    }
+    out
+};
 
 use speccoder_core::inbox::Kind;
 
@@ -148,6 +136,7 @@ fn counted(kind: &str, n: usize) -> String {
         "review" => ("spec to review", "specs to review"),
         "revise" => ("change request", "change requests"),
         "stuck" => ("task that did not pass", "tasks that did not pass"),
+        "yours" => ("step only you can take", "steps only you can take"),
         "aside" => ("set-aside change", "set-aside changes"),
         "commit" => ("plan to commit", "plans to commit"),
         "handoff" => ("branch to hand off", "branches to hand off"),
@@ -446,6 +435,28 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
                 format!("{}'s tests reject an alternative the spec may allow", t.id),
                 findings.join("; "),
                 vec![rule, nudge(t, &flag), skip(t, &flag)],
+            ));
+            continue;
+        }
+        // A step only a person can take — a `[YOU]` task that is ready, or
+        // an honest stop: the agent's reason as its claim, and three ways on.
+        if t.lane == speccoder_core::lane::Lane::Yours
+            && (t.state == "ready" || t.last_attempt.is_some())
+        {
+            let (title, detail) = match &t.last_attempt {
+                Some(a) => (
+                    format!("{} needs you: the agent stopped", t.id),
+                    a.reason.clone(),
+                ),
+                // Marked `[YOU]`: no claim to show.
+                None => (format!("{} is yours: {}", t.id, t.title), String::new()),
+            };
+            out.push(item(
+                "yours",
+                Some(&t.id),
+                title,
+                detail,
+                yours_actions(t, &dependents(&r.tasks, &t.id), &flag),
             ));
             continue;
         }
@@ -1248,6 +1259,58 @@ fn bug_item(
         since: b.confirmation.as_ref().map(|c| c.at),
         actions,
     })
+}
+
+/// The open tasks that wait on `id`, directly or through another.
+fn dependents(tasks: &[speccoder_core::TaskStatus], id: &str) -> Vec<String> {
+    let mut waiting: Vec<&str> = vec![id];
+    loop {
+        let more: Vec<&str> = tasks
+            .iter()
+            .filter(|t| !waiting.contains(&t.id.as_str()))
+            .filter(|t| t.blocked_by.iter().any(|b| waiting.contains(&b.as_str())))
+            .map(|t| t.id.as_str())
+            .collect();
+        if more.is_empty() {
+            break;
+        }
+        waiting.extend(more);
+    }
+    tasks
+        .iter()
+        .filter(|t| t.id != id && waiting.contains(&t.id.as_str()))
+        .map(|t| t.id.clone())
+        .collect()
+}
+
+/// I did it, Hint & retry, Skip: the three ways on from a task that needs
+/// the person.
+fn yours_actions(
+    t: &speccoder_core::TaskStatus,
+    waiting: &[String],
+    flag: &dyn Fn(String) -> String,
+) -> Vec<Action> {
+    let mut done = action(
+        "task",
+        format!("I did it: {}", t.id),
+        "tick it on your word (attested, never shown as verified)",
+        flag(format!("speccoder task done {}", t.id)),
+    );
+    done = done.with_run(Runnable::Done { task: t.id.clone() });
+    let mut hint = action(
+        "task",
+        format!("hint & retry {}", t.id),
+        "a note the agent reads, then a new attempt now",
+        flag(format!("speccoder task hint {} \"…\"", t.id)),
+    );
+    hint = hint.with_run(Runnable::Hint { task: t.id.clone() });
+    hint.input = Some("The hint".to_owned());
+    let mut skip = skip(t, flag);
+    if !waiting.is_empty() {
+        let stay = if waiting.len() == 1 { "stays" } else { "stay" };
+        skip.why = format!("runs pass it by; {} {stay} blocked", waiting.join(", "));
+    }
+    vec![done, hint, skip]
 }
 
 fn nudge(t: &speccoder_core::TaskStatus, flag: &dyn Fn(String) -> String) -> Action {

@@ -156,6 +156,16 @@
           "type": "string"
         },
         {
+          "const": "done",
+          "description": "[`Runnable::Done`].",
+          "type": "string"
+        },
+        {
+          "const": "hint",
+          "description": "[`Runnable::Hint`].",
+          "type": "string"
+        },
+        {
           "const": "rule",
           "description": "[`Runnable::Rule`].",
           "type": "string"
@@ -1019,6 +1029,42 @@
           "properties": {
             "kind": {
               "const": "nudge",
+              "type": "string"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "I did it: tick a step the person took on their word (`attested`;\nthe input, when given, is the reason).",
+          "properties": {
+            "kind": {
+              "const": "done",
+              "type": "string"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Hint & retry: a note for the task (the input), then a new attempt.",
+          "properties": {
+            "kind": {
+              "const": "hint",
               "type": "string"
             },
             "task": {

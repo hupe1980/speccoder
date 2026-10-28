@@ -278,12 +278,21 @@ pub fn checks(
             }
             out.extend(o.adapter.doctor_checks(Path::new(&o.snapshot.root), env));
             // The plan checks of the selected feature: warnings.
-            if o.snapshot.feature.is_some() {
+            if let Some(f) = o.snapshot.feature.as_ref() {
                 out.extend(plan_checks(
                     o.adapter,
                     &o.snapshot,
                     Path::new(&o.snapshot.root),
                 ));
+                // Who does what: information, never a warning.
+                if let Some(l) =
+                    crate::status::lanes(Path::new(&o.snapshot.root), Some(&f.feature.name))
+                {
+                    out.push(DoctorCheck {
+                        tasks: l.planning.iter().chain(&l.yours).cloned().collect(),
+                        ..check("lanes", DoctorLevel::Pass, l.line())
+                    });
+                }
             }
             // Where speccoder's acceptance tests would go.
             let root = std::path::PathBuf::from(&o.snapshot.root);

@@ -734,6 +734,42 @@
           "type": "object"
         },
         {
+          "description": "I did it: tick a step the person took on their word (`attested`;\nthe input, when given, is the reason).",
+          "properties": {
+            "kind": {
+              "const": "done",
+              "type": "string"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Hint & retry: a note for the task (the input), then a new attempt.",
+          "properties": {
+            "kind": {
+              "const": "hint",
+              "type": "string"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Rule that a held attempt's tests are right (the input is the reason).",
           "properties": {
             "kind": {

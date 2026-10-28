@@ -614,6 +614,24 @@ pub enum TaskAction {
         #[arg(long)]
         in_place: bool,
     },
+    /// I did it: tick a step you took yourself on your word (`attested`).
+    Done {
+        /// The task, e.g. T019.
+        task: String,
+        /// Why it is done (default: "I did it").
+        #[arg(long)]
+        reason: Option<String>,
+    },
+    /// Hint & retry: a note for the task, then a new attempt of it now.
+    Hint {
+        /// The task, e.g. T019.
+        task: String,
+        /// The hint (the model reads it).
+        note: String,
+        /// Never ask; a call needing approval stops the attempt.
+        #[arg(long)]
+        no_prompt: bool,
+    },
     /// Skip the task: runs pass it by, and what depends on it stays blocked.
     Skip {
         /// The task, e.g. T005.

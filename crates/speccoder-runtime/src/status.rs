@@ -137,6 +137,7 @@ fn statuses(
                 "blocked".to_owned()
             };
             TaskStatus {
+                lane: speccoder_core::lane::Lane::default(),
                 id: t.id.clone(),
                 title: t.title.clone(),
                 phase: t.phase.clone().unwrap_or_default(),
@@ -202,6 +203,23 @@ fn totals(tasks: &[TaskStatus]) -> StatusTotals {
             .filter(|t| t.drift.as_ref().is_some_and(speccoder_core::Drift::stale))
             .count(),
     }
+}
+
+/// The open tasks by lane, for *Before you run*: `None` when every one
+/// is code (nothing worth saying) or there is no task to run.
+#[must_use]
+pub fn lanes(path: &Path, feature: Option<&str>) -> Option<speccoder_core::lane::Lanes> {
+    let r = report(path, feature);
+    let Some(CommandData::Report(r)) = r.data() else {
+        return None;
+    };
+    let lanes = speccoder_core::lane::Lanes::of(
+        r.tasks
+            .iter()
+            .filter(|t| matches!(t.state.as_str(), "ready" | "blocked"))
+            .map(|t| (t.id.as_str(), t.lane)),
+    );
+    lanes.notable().then_some(lanes)
 }
 
 /// `speccoder report [--feature]`.
@@ -411,6 +429,23 @@ pub fn report(path: &Path, feature: Option<&str>) -> CommandResult {
     let saved = crate::attempts::list(root, &name);
     let skipped = crate::controls::skipped(root, &name);
     let mut tasks = statuses(&parsed, &evidence, &lines, &saved, &skipped);
+    // Who does each task: derived from its line, its unit and its stop.
+    for (t, p) in tasks.iter_mut().zip(&parsed.tasks) {
+        let open = !matches!(
+            t.state.as_str(),
+            "verified" | "regression_only" | "attested" | "ticked_without_evidence" | "skipped"
+        );
+        t.lane = speccoder_core::lane::classify(
+            &p.title,
+            p.yours,
+            open && t
+                .last_attempt
+                .as_ref()
+                .is_some_and(|a| a.outcome == "blocked"),
+            &f.feature.dir,
+            &format.rules().judged,
+        );
+    }
     // Changes a run set aside, newest first: the person decides on them,
     // whatever became of the task.
     for a in saved.iter().filter(|a| crate::controls::is_set_aside(a)) {
@@ -695,6 +730,7 @@ mod tests {
     #[test]
     fn a_requirement_no_task_cites_is_a_row_of_its_own() {
         let task = |id: &str, title: &str, state: &str| TaskStatus {
+            lane: speccoder_core::lane::Lane::default(),
             id: id.to_owned(),
             title: title.to_owned(),
             phase: "Phase 3".to_owned(),

@@ -354,6 +354,32 @@ fn strongly_connected(edges: &[Vec<usize>]) -> Vec<usize> {
     component
 }
 
+/// The open tasks that wait on `id`, directly or through another, in
+/// document order: what stays blocked when it is skipped.
+#[must_use]
+pub fn dependents(schedule: &Schedule, id: &str) -> Vec<String> {
+    let mut waiting: BTreeSet<&str> = BTreeSet::from([id]);
+    loop {
+        let before = waiting.len();
+        for t in &schedule.tasks {
+            if t.state != TaskState::Done
+                && t.depends_on.iter().any(|d| waiting.contains(d.id.as_str()))
+            {
+                waiting.insert(t.id.as_str());
+            }
+        }
+        if waiting.len() == before {
+            break;
+        }
+    }
+    schedule
+        .tasks
+        .iter()
+        .filter(|t| t.id != id && waiting.contains(t.id.as_str()))
+        .map(|t| t.id.clone())
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -466,6 +492,19 @@ mod tests {
                 ("T003", Blocked, vec!["T001", "T002"]),
             ]
         );
+    }
+
+    #[test]
+    fn a_skipped_task_names_what_waits_on_it() {
+        let p = parsed(&[
+            ("T001", SETUP, None, false, None, false, &[]),
+            ("T002", FOUND, None, false, None, false, &[]),
+            ("T003", US1, None, false, Some("US1"), false, &[]),
+        ]);
+        let (s, _) = schedule(&p);
+        assert_eq!(dependents(&s, "T001"), ["T002", "T003"]);
+        assert_eq!(dependents(&s, "T002"), ["T003"]);
+        assert!(dependents(&s, "T003").is_empty());
     }
 
     #[test]
