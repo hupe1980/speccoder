@@ -627,6 +627,11 @@ const WRITES_WITHOUT_A_KIND: &[(&str, &str)] = &[
     ("start", "starts a job: the job runs `actions::perform`"),
     ("answer", "answers what a running job asks"),
     ("stop", "stops the running job"),
+    (
+        "fix_run",
+        "runs a command the host issued as a fix, as the person: not an action of speccoder's",
+    ),
+    ("terminal", "opens a terminal at the project folder"),
     ("config_save", "the settings form (speccoder.toml)"),
     ("config_commit", "commits speccoder.toml"),
     ("setup_init", "the setup form (speccoder init)"),

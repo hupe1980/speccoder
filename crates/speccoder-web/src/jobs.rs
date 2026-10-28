@@ -48,6 +48,8 @@ pub struct JobView {
 #[derive(Debug)]
 pub struct Hub {
     root: crate::Root,
+    /// Signs the person's own commands this host sends, and checks them.
+    pub issuer: crate::fixes::Issuer,
     events: broadcast::Sender<String>,
     next: AtomicU64,
     job: Mutex<Option<JobView>>,
@@ -56,12 +58,14 @@ pub struct Hub {
 }
 
 impl Hub {
-    /// A hub for the project `root` is (or will be, once bound).
+    /// A hub for the project `root` is (or will be, once bound), signing
+    /// with `issuer`.
     #[must_use]
-    pub fn new(root: crate::Root) -> Arc<Self> {
+    pub fn new(root: crate::Root, issuer: crate::fixes::Issuer) -> Arc<Self> {
         let (events, _) = broadcast::channel(1024);
         Arc::new(Self {
             root,
+            issuer,
             events,
             next: AtomicU64::new(1),
             job: Mutex::new(None),
@@ -169,17 +173,9 @@ impl Hub {
         Ok(out)
     }
 
-    /// Starts `run` (with `input` for actions that take one) for `feature`,
-    /// in `root` (the bound project's, or a folder of a host not bound yet);
+    /// Takes the job slot for `command`: its number and cancel flag;
     /// `Err` when a job is already working.
-    pub fn start(
-        self: &Arc<Self>,
-        run: Runnable,
-        input: Option<String>,
-        feature: Option<String>,
-        command: String,
-        root: PathBuf,
-    ) -> Result<u64, String> {
+    fn begin(&self, command: &str) -> Result<(u64, Arc<AtomicBool>), String> {
         let id = self.next.fetch_add(1, Ordering::SeqCst);
         {
             let mut job = self
@@ -191,7 +187,7 @@ impl Hub {
             }
             *job = Some(JobView {
                 id,
-                command: command.clone(),
+                command: command.to_owned(),
                 running: true,
                 result: None,
             });
@@ -201,6 +197,37 @@ impl Hub {
             *c = Some(Arc::clone(&cancel));
         }
         self.send(&json!({ "type": "started", "id": id, "command": command }));
+        Ok((id, cancel))
+    }
+
+    /// Ends job `id` with `result`, its command steps signed for `root`.
+    fn finish(&self, id: u64, root: &Path, result: &CommandResult) {
+        let mut value = serde_json::to_value(result).unwrap_or(Value::Null);
+        self.issuer.sign(root, &mut value);
+        if let Ok(mut job) = self.job.lock()
+            && let Some(j) = job.as_mut()
+        {
+            j.running = false;
+            j.result = Some(value.clone());
+        }
+        if let Ok(mut c) = self.cancel.lock() {
+            *c = None;
+        }
+        self.send(&json!({ "type": "done", "id": id, "result": value }));
+    }
+
+    /// Starts `run` (with `input` for actions that take one) for `feature`,
+    /// in `root` (the bound project's, or a folder of a host not bound yet);
+    /// `Err` when a job is already working.
+    pub fn start(
+        self: &Arc<Self>,
+        run: Runnable,
+        input: Option<String>,
+        feature: Option<String>,
+        command: String,
+        root: PathBuf,
+    ) -> Result<u64, String> {
+        let (id, cancel) = self.begin(&command)?;
         let hub = Arc::clone(self);
         std::thread::spawn(move || {
             let peer: Arc<Peer> = Arc::new(Peer {
@@ -226,17 +253,32 @@ impl Hub {
             if let Some(bound) = crate::welcome::bind_after(&hub.root, &run, &result) {
                 hub.send(&json!({ "type": "bound", "root": bound.display().to_string() }));
             }
-            let value = serde_json::to_value(&result).unwrap_or(Value::Null);
-            if let Ok(mut job) = hub.job.lock()
-                && let Some(j) = job.as_mut()
-            {
-                j.running = false;
-                j.result = Some(value.clone());
-            }
-            if let Ok(mut c) = hub.cancel.lock() {
-                *c = None;
-            }
-            hub.send(&json!({ "type": "done", "id": id, "result": value }));
+            hub.finish(id, &hub.root.get(), &result);
+        });
+        Ok(id)
+    }
+
+    /// Runs the person's own command — argvs this host issued, checked by
+    /// the caller — in `root`, as a job: its output lines go to the page
+    /// (`output` events), Stop ends it, and it ends in its result.
+    pub fn start_fix(
+        self: &Arc<Self>,
+        argvs: Vec<Vec<String>>,
+        root: PathBuf,
+    ) -> Result<u64, String> {
+        use speccoder_runtime::service::person;
+        let (id, cancel) = self.begin(&person::shown(&argvs))?;
+        let hub = Arc::clone(self);
+        std::thread::spawn(move || {
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                person::run(&root, &argvs, person::TIMEOUT, &cancel, &|stream, line| {
+                    hub.send(&json!({ "type": "output", "id": id, "stream": stream.as_str(), "line": line }));
+                })
+            }))
+            .unwrap_or_else(|_| {
+                CommandResult::new("fix", CommandStatus::Error, "the command stopped unexpectedly")
+            });
+            hub.finish(id, &root, &result);
         });
         Ok(id)
     }

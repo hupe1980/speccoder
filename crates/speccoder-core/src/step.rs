@@ -317,16 +317,20 @@ fn has_blank(w: &str) -> bool {
 }
 
 fn command(argvs: Vec<Vec<String>>) -> How {
-    let interactive = argvs.iter().any(|a| {
-        INTERACTIVE
-            .iter()
-            .any(|i| a.len() >= i.len() && a.iter().zip(i.iter()).all(|(w, p)| w == p))
-    });
     How::Command {
+        interactive: argvs.iter().any(|a| interactive(a)),
         argvs,
-        interactive,
         token: None,
     }
+}
+
+/// `argv` reads the keyboard (a login's prompt or device flow): it needs a
+/// terminal of the person's own.
+#[must_use]
+pub fn interactive(argv: &[String]) -> bool {
+    INTERACTIVE
+        .iter()
+        .any(|i| argv.len() >= i.len() && argv.iter().zip(i.iter()).all(|(w, p)| w == p))
 }
 
 /// The words of a line, split as a shell would for the plain cases;

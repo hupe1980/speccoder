@@ -17,6 +17,7 @@ Every result that is not plainly `ok` names a code — `error[CODE]`, `stopped[C
 | [`USAGE-CONFLICT`](#usage-conflict) | error | 2 | two options were given that exclude each other |
 | [`USAGE-UNKNOWN-CODE`](#usage-unknown-code) | error | 2 | there is no code by that name |
 | [`CALL-CHANGED`](#call-changed) | error | 2 | the call waiting now is not the one that was shown |
+| [`FIX-FAILED`](#fix-failed) | error | 1 | the command you ran from the app did not succeed |
 | [`INTERNAL`](#internal) | error | 1 | speccoder failed in a way it does not expect |
 | [`NO-PROJECT`](#no-project) | error | 10 | speccoder works on a Spec Kit or OpenSpec project, and found none here |
 | [`SPEC-DIAGNOSTICS`](#spec-diagnostics) | error | 11 | the spec artifacts have errors speccoder will not guess around |
@@ -168,6 +169,14 @@ The call waiting now is not the one that was shown.
 An approval or rejection from an interface names the call it showed and that call's object. The call expired or was decided and another waits now, or the attempt stopped on another object; nothing was decided.
 
 - `speccoder report --approvals`
+
+### FIX-FAILED
+
+The command you ran from the app did not succeed.
+
+A fix speccoder printed (`npm install`, `git commit …`) was run from the app, as you, in the project folder: it exited with an error, was stopped, or ran past its ten minutes. Its output is in the app's panel; nothing of speccoder's changed.
+
+- Read its output in the panel, fix what it names and run it again (or in your shell, to answer what it asks)
 
 ### INTERNAL
 

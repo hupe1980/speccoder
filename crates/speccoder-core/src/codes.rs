@@ -105,6 +105,17 @@ pub const CATALOG: &[Entry] = &[
         "An approval or rejection from an interface names the call it showed and that call's object. The call expired or was decided and another waits now, or the attempt stopped on another object; nothing was decided.",
         ["speccoder report --approvals"]
     ),
+    // ── the person's own commands ─────────────────────────────────────
+    entry!(
+        "FIX-FAILED",
+        E,
+        S::Error,
+        "the command you ran from the app did not succeed",
+        "A fix speccoder printed (`npm install`, `git commit …`) was run from the app, as you, in the project folder: it exited with an error, was stopped, or ran past its ten minutes. Its output is in the app's panel; nothing of speccoder's changed.",
+        [
+            "→ read its output in the panel, fix what it names and run it again (or in your shell, to answer what it asks)"
+        ]
+    ),
     // ── internal ──────────────────────────────────────────────────────
     entry!(
         "INTERNAL",

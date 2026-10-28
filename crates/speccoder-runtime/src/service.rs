@@ -13,6 +13,18 @@ pub mod actions {
     pub use crate::actions::{Dispatch, Interface, Offer, available, list, offered, perform};
 }
 
+/// The person's own commands, run for them (a fix speccoder printed), and
+/// a terminal at the project.
+pub mod person {
+    pub use crate::person::{Stream, TIMEOUT, open_terminal, run, shown};
+}
+
+/// What went wrong, as a block to copy; the setup as a bug report.
+pub mod copy {
+    pub use crate::copy::block;
+    pub use crate::doctor::bug_report;
+}
+
 /// Calls waiting for a person, and who answers them.
 pub mod approvals {
     pub use crate::approvals::{Answer, Approver, Presentation, Who, list};

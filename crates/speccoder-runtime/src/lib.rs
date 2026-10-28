@@ -47,6 +47,7 @@ pub mod mutation;
 pub mod new_project;
 pub mod next;
 pub mod oracle;
+pub mod person;
 pub mod pipeline;
 pub mod plan_lint;
 pub mod planning_chain;

@@ -301,7 +301,7 @@ fn ui(
         let (tx, rx) = std::sync::mpsc::channel();
         let served_root = root.clone();
         std::thread::spawn(move || {
-            let _ = speccoder_web::serve(&served_root, port, |s| {
+            let _ = speccoder_web::serve(&served_root, port, true, |s| {
                 let _ = tx.send((s.url, s.events, s.root));
             });
         });
@@ -320,7 +320,7 @@ fn ui(
     // Under `--json` the result is printed once the host listens — the
     // address a tool needs — and is the only one: the host serves on.
     let announced = std::sync::atomic::AtomicBool::new(false);
-    let served = speccoder_web::serve(&root, port, |s: speccoder_web::Started| {
+    let served = speccoder_web::serve(&root, port, false, |s: speccoder_web::Started| {
         if json {
             let ready = CommandResult::new("ui", CommandStatus::Ok, "serving the web interface")
                 .with_data(CommandData::Ui(Box::new(UiReport {

@@ -4,6 +4,7 @@
 //! holds no logic of its own: what it shows and offers comes from the
 //! runtime, as for the CLI.
 
+pub mod fixes;
 pub mod jobs;
 pub mod security;
 mod welcome;
@@ -102,6 +103,9 @@ pub struct Shared {
     pub port: u16,
     /// Jobs and events.
     pub hub: Arc<jobs::Hub>,
+    /// It serves the desktop window (in this process), not a browser tab:
+    /// it may open a terminal for the person.
+    pub window: bool,
     /// Turns true when the host stops: open event streams end with it.
     pub closing: tokio::sync::watch::Receiver<bool>,
     /// A GitHub sign-in waiting for the person to enter its code:
@@ -273,12 +277,17 @@ fn file_path_ok(path: &str) -> bool {
             .all(|c| matches!(c, std::path::Component::Normal(_)))
 }
 
-fn envelope(r: &CommandResult) -> Json<Value> {
-    Json(serde_json::to_value(r).unwrap_or(Value::Null))
+/// A result as the page gets it: the person's own commands in it signed
+/// for this host's project ([`fixes::Issuer`]).
+fn envelope(s: &Shared, r: &CommandResult) -> Json<Value> {
+    let mut v = serde_json::to_value(r).unwrap_or(Value::Null);
+    s.hub.issuer.sign(&s.root.get(), &mut v);
+    Json(v)
 }
 
 async fn project(State(s): State<Shared>) -> Json<Value> {
     let root = s.root.get();
+    let window = s.window;
     Json(
         off(move || {
             let words = speccoder_runtime::service::format_words(&root);
@@ -297,6 +306,8 @@ async fn project(State(s): State<Shared>) -> Json<Value> {
                     _ => None,
                 }),
                 "version": env!("CARGO_PKG_VERSION"),
+                "os": format!("{} {}", std::env::consts::OS, std::env::consts::ARCH),
+                "window": window,
                 "planning": speccoder_runtime::service::planning_words(&root),
                 "sample": welcome::sample_of(&root),
             })
@@ -314,14 +325,14 @@ async fn report(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Json<
         )
     })
     .await;
-    envelope(&r)
+    envelope(&s, &r)
 }
 
 async fn review(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Json<Value> {
     let root = s.root.get();
     let r =
         off(move || speccoder_runtime::service::review::report(&root, q.feature.as_deref())).await;
-    envelope(&r)
+    envelope(&s, &r)
 }
 
 /// The comment tray and the last revision turn.
@@ -331,7 +342,7 @@ async fn review_comments(State(s): State<Shared>, Query(q): Query<FeatureQuery>)
         speccoder_runtime::service::review::comments(&root, q.feature.as_deref(), None)
     })
     .await;
-    envelope(&r)
+    envelope(&s, &r)
 }
 
 #[derive(Debug, Deserialize)]
@@ -357,7 +368,7 @@ async fn account(State(s): State<Shared>, Query(q): Query<RunQuery>) -> Json<Val
 async fn inbox(State(s): State<Shared>) -> Json<Value> {
     let root = s.root.get();
     let r = off(move || speccoder_runtime::service::inbox::inbox(&root, None)).await;
-    envelope(&r)
+    envelope(&s, &r)
 }
 
 /// A bug by `<unit>/<task>` (`task`): its triad, reproductions and stage.
@@ -367,28 +378,28 @@ async fn bug(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Json<Val
         return Json(json!({ "error": "a bug is needed: task=<unit>/<task>" }));
     };
     let r = off(move || speccoder_runtime::service::bug::show(&root, &task)).await;
-    envelope(&r)
+    envelope(&s, &r)
 }
 
 async fn actions(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Json<Value> {
     let root = s.root.get();
-    Json(
-        off(move || {
-            json!(speccoder_runtime::service::actions::available(
-                &root,
-                q.feature.as_deref(),
-                q.task.as_deref()
-            ))
-        })
-        .await,
-    )
+    let mut v = off(move || {
+        json!(speccoder_runtime::service::actions::available(
+            &root,
+            q.feature.as_deref(),
+            q.task.as_deref()
+        ))
+    })
+    .await;
+    s.hub.issuer.sign(&s.root.get(), &mut v);
+    Json(v)
 }
 
 async fn approvals(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Json<Value> {
     let root = s.root.get();
     let r =
         off(move || speccoder_runtime::service::approvals::list(&root, q.feature.as_deref())).await;
-    envelope(&r)
+    envelope(&s, &r)
 }
 
 async fn evidence(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Json<Value> {
@@ -467,13 +478,13 @@ async fn doctor(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Json<
     let root = s.root.get();
     let r = off(move || speccoder_runtime::service::doctor::run(&root, q.feature.as_deref(), None))
         .await;
-    envelope(&r)
+    envelope(&s, &r)
 }
 
 async fn config(State(s): State<Shared>) -> Json<Value> {
     let root = s.root.get();
     let r = off(move || speccoder_runtime::service::settings::show(&root)).await;
-    envelope(&r)
+    envelope(&s, &r)
 }
 
 #[derive(Debug, Deserialize)]
@@ -487,7 +498,7 @@ struct ConfigBody {
 async fn config_save(State(s): State<Shared>, Json(b): Json<ConfigBody>) -> Json<Value> {
     let root = s.root.get();
     let r = off(move || speccoder_runtime::service::settings::apply(&root, &b.changes)).await;
-    envelope(&r)
+    envelope(&s, &r)
 }
 
 #[derive(Debug, Deserialize)]
@@ -517,7 +528,7 @@ async fn policy_coverage(State(s): State<Shared>, Query(q): Query<CoverageQuery>
         speccoder_runtime::service::settings::coverage(&root, state.as_deref(), list, &prefix)
     })
     .await;
-    envelope(&r)
+    envelope(&s, &r)
 }
 
 /// Commits `speccoder.toml` alone — not while a job runs (an in-place run
@@ -527,7 +538,7 @@ async fn config_commit(State(s): State<Shared>) -> Json<Value> {
     let r =
         off(move || hub.exclusive(|| speccoder_runtime::service::settings::commit(&root))).await;
     match r {
-        Ok(result) => envelope(&result),
+        Ok(result) => envelope(&s, &result),
         Err(e) => Json(json!({ "status": "error", "message": e })),
     }
 }
@@ -536,7 +547,7 @@ async fn cost(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Json<Va
     let root = s.root.get();
     let r =
         off(move || speccoder_runtime::service::controls::cost(&root, q.feature.as_deref())).await;
-    envelope(&r)
+    envelope(&s, &r)
 }
 
 /// What the feature's branch changed: commits, files, the patch.
@@ -634,10 +645,10 @@ async fn setup_init(State(s): State<Shared>, Json(b): Json<SetupBody>) -> Json<V
     })
     .await;
     match r {
-        Err(refused) => envelope(&refused),
+        Err(refused) => envelope(&s, &refused),
         Ok(p) => {
             let (to_commit, failed) = (p.to_commit.clone(), p.failed.clone());
-            let Json(mut v) = envelope(&speccoder_runtime::service::init::finish(p));
+            let Json(mut v) = envelope(&s, &speccoder_runtime::service::init::finish(p));
             v["to_commit"] = json!(to_commit);
             v["failed"] = json!(failed);
             Json(v)
@@ -767,7 +778,7 @@ async fn github_device_wait(State(s): State<Shared>) -> Json<Value> {
         }
     })
     .await;
-    envelope(&r)
+    envelope(&s, &r)
 }
 
 #[derive(Debug, Deserialize)]
@@ -789,7 +800,7 @@ async fn github_login(State(s): State<Shared>, Json(b): Json<TokenBody>) -> Json
         )
     })
     .await;
-    envelope(&r)
+    envelope(&s, &r)
 }
 
 /// One issue, the description a feature started from it gets, and the
@@ -834,7 +845,7 @@ async fn pr_preview(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> J
         )
     })
     .await;
-    envelope(&r)
+    envelope(&s, &r)
 }
 
 /// The project's current (or last) run, whoever started it: this host's
@@ -939,6 +950,99 @@ async fn events(State(s): State<Shared>) -> Response {
         .into_response()
 }
 
+#[derive(Debug, Deserialize)]
+struct FixBody {
+    argvs: Vec<Vec<String>>,
+    token: String,
+}
+
+/// The person's own command — argvs this host issued, exactly — run as
+/// them in the project folder, as a job (`output` events, then `done`).
+/// Anything else is refused: argvs the page composed, edited or took from
+/// elsewhere, and a command that reads the keyboard.
+async fn fix_run(State(s): State<Shared>, Json(b): Json<FixBody>) -> Response {
+    let root = s.root.get();
+    if !s.hub.issuer.issued(&root, &b.argvs, &b.token) {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({ "error": "speccoder did not issue this command here: only a fix it printed runs from the app" })),
+        )
+            .into_response();
+    }
+    if b.argvs.iter().any(|a| speccoder_core::step::interactive(a)) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "error": "it asks you questions as it runs: open it in a terminal" })),
+        )
+            .into_response();
+    }
+    match s.hub.start_fix(b.argvs, root) {
+        Ok(id) => Json(json!({ "id": id })).into_response(),
+        Err(e) => (StatusCode::CONFLICT, Json(json!({ "error": e }))).into_response(),
+    }
+}
+
+/// A terminal of the person's own at the project folder, for a command
+/// this host issued that reads the keyboard (the page puts it on the
+/// clipboard). The desktop window only: a tab copies.
+async fn terminal(State(s): State<Shared>, Json(b): Json<FixBody>) -> Response {
+    let root = s.root.get();
+    if !s.window {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "error": "a browser tab opens no terminal: copy the command" })),
+        )
+            .into_response();
+    }
+    if !s.hub.issuer.issued(&root, &b.argvs, &b.token) {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({ "error": "speccoder did not issue this command here" })),
+        )
+            .into_response();
+    }
+    match off(move || speccoder_runtime::service::person::open_terminal(&root)).await {
+        Ok(()) => Json(json!({ "ok": true })).into_response(),
+        Err(e) => (StatusCode::CONFLICT, Json(json!({ "error": e }))).into_response(),
+    }
+}
+
+/// `doctor --bug-report`: the setup in Markdown, secrets taken out.
+async fn bug_report(State(s): State<Shared>) -> Json<Value> {
+    let root = s.root.get();
+    Json(
+        off(move || {
+            let doctor = speccoder_runtime::service::doctor::run(&root, None, None);
+            json!({ "text": speccoder_runtime::service::copy::bug_report(&doctor, &root) })
+        })
+        .await,
+    )
+}
+
+#[derive(Debug, Deserialize)]
+struct CodeQuery {
+    code: String,
+}
+
+/// `explain CODE`: what a code means and how to resolve it.
+async fn explain(Query(q): Query<CodeQuery>) -> Json<Value> {
+    use speccoder_core::{CodeInfo, CommandData, ExplainReport};
+    let r = match speccoder_core::codes::lookup(&q.code.to_ascii_uppercase()) {
+        Some(e) => CommandResult::ok("explain", e.name).with_data(CommandData::Explain(Box::new(
+            ExplainReport {
+                codes: vec![CodeInfo::of(e)],
+            },
+        ))),
+        None => CommandResult::new(
+            "explain",
+            speccoder_core::CommandStatus::UsageError,
+            &format!("no code `{}`", q.code),
+        )
+        .with_code("USAGE-UNKNOWN-CODE"),
+    };
+    Json(serde_json::to_value(&r).unwrap_or(Value::Null))
+}
+
 /// The routes.
 pub fn router(s: Shared) -> Router {
     Router::new()
@@ -977,6 +1081,10 @@ pub fn router(s: Shared) -> Router {
         .route("/api/run", post(start))
         .route("/api/answer", post(answer))
         .route("/api/stop", post(stop))
+        .route("/api/fix/run", post(fix_run))
+        .route("/api/terminal", post(terminal))
+        .route("/api/bug-report", get(bug_report))
+        .route("/api/explain", get(explain))
         .route("/api/welcome", get(welcome::view))
         .route("/api/open", post(welcome::open))
         .route("/api/recent/forget", post(welcome::forget))
@@ -1019,7 +1127,12 @@ pub struct Started {
 /// Serves the project at `root` on `port` (0: any free one) until the
 /// process ends; `ready` is told the address once it listens. Outside a
 /// project the host serves the welcome until it is bound to one.
-pub fn serve(root: &Path, port: u16, ready: impl FnOnce(Started) + Send) -> Result<(), String> {
+pub fn serve(
+    root: &Path,
+    port: u16,
+    window: bool,
+    ready: impl FnOnce(Started) + Send,
+) -> Result<(), String> {
     let rt = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
         .enable_all()
@@ -1035,12 +1148,16 @@ pub fn serve(root: &Path, port: u16, ready: impl FnOnce(Started) + Send) -> Resu
         if token.is_empty() {
             return Err("no random source for the token".to_owned());
         }
+        let Some(issuer) = fixes::Issuer::new() else {
+            return Err("no random source for the token".to_owned());
+        };
         let root = Root::new(root, welcome::is_project(root));
         let shared = Shared {
             root: root.clone(),
             token: token.clone(),
             port,
-            hub: jobs::Hub::new(root.clone()),
+            hub: jobs::Hub::new(root.clone(), issuer),
+            window,
             closing: closed,
             device: Arc::default(),
         };

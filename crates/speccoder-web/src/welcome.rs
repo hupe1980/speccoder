@@ -314,14 +314,14 @@ pub(crate) struct TextQuery {
 pub(crate) async fn similar(State(s): State<Shared>, Query(q): Query<TextQuery>) -> Json<Value> {
     let root = s.root.get();
     let r = off(move || planning::similar_command(&root, &q.text)).await;
-    envelope(&r)
+    envelope(&s, &r)
 }
 
 /// The rung a description suggests (the composer).
 pub(crate) async fn suggest(State(s): State<Shared>, Query(q): Query<TextQuery>) -> Json<Value> {
     let root = s.root.get();
     let r = off(move || planning::suggest(&root, &q.text)).await;
-    envelope(&r)
+    envelope(&s, &r)
 }
 
 /// The person's GitHub repositories (Clone), read-only.
