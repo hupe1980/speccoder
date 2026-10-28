@@ -89,6 +89,7 @@ Every `regression_only` tick carries one reason, decided by code, recorded in th
 | `tests_not_collected` | The acceptance command collected no test |
 | `not_red` | The acceptance tests did not fail first (build error, timeout, flaky, …) |
 | `already_passing` | They passed before the attempt — with the task whose tick made them pass |
+| `planning_work` | A planning task: design documents, not code ([who does a task](@/docs/running.md#who-does-a-task)) |
 | `unrecorded` | Ticked by an earlier speccoder: the reason was not recorded |
 
 For `already_passing`, speccoder runs the acceptance tests on the feature's earlier ticks (bisected, at most five sandboxed runs, each in a scratch worktree of its own, under the checks' deadline) to find which task implemented the behaviour, or that it passed before the feature. For a section added to a story's file, only that section's tests run (Rust, pytest and Go; for others no answer is given). Any run that cannot say — a worktree that cannot be made, a timeout, output that cannot be read — ends the search with "could not be determined", never a task's name. A feature with at least three ticks of which more than half are regression-only gets one **Little Was Verified** item in Needs You, with the reasons by count and the fix, until its branch is pushed.

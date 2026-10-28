@@ -37,7 +37,7 @@ A project without `speccoder.toml` opens in the **setup assistant**: what was fo
 
 <figure class="shot"><img class="shot-light" src="../../screenshots/inbox-light.webp" alt="Needs You: a call waiting for approval, an open question and requirements to review, across two features" width="1440" height="900" loading="lazy" decoding="async"><img class="shot-dark" src="../../screenshots/inbox-dark.webp" alt="Needs You: a call waiting for approval, an open question and requirements to review, across two features" width="1440" height="900" loading="lazy" decoding="async"></figure>
 
-- Groups, in order: Waiting for Approval; the bug stops (Confirm a Bug's Reproduction, Could Not Reproduce, Unchanged Does Not Hold, Reproduction Too Weak, Already Fixed); Calls Waiting Together (the [batch](@/docs/approvals.md#the-asking-budget)); Rule on the Tests; Suspected Shortcuts; Little Was Verified (most ticks regression-only, the reasons by count, each task a button); The Spec Changed; Read Two Ways; Open Questions; Review the Spec; Change Requests; Refused on Autopilot; Did Not Pass; Changes Set Aside; Plans to Commit; Ready to Hand Off.
+- Groups, in order: Waiting for Approval; the bug stops (Confirm a Bug's Reproduction, Could Not Reproduce, Unchanged Does Not Hold, Reproduction Too Weak, Already Fixed); Calls Waiting Together (the [batch](@/docs/approvals.md#the-asking-budget)); Rule on the Tests; Suspected Shortcuts; Little Was Verified (most ticks regression-only, the reasons by count, each task a button); The Spec Changed; Read Two Ways; Open Questions; Review the Spec; Change Requests; Yours to Do (a `[YOU]` task or an honest stop: the agent's reason as its claim, **I Did It**, **Hint & Retry** with the note inline, **Skip…**); Refused on Autopilot; Did Not Pass; Changes Set Aside; Plans to Commit; Ready to Hand Off.
 - Each row decides in place; **Open** shows it with its evidence (a bug's row opens the [Bug sheet](#bug-sheet)). A disabled button says why on hover.
 - The tab and the page title carry the count. **Quick Change** (`q`) opens a sheet for a [quick change](@/docs/running.md#quick-changes). The terminal's equivalent is `speccoder inbox`.
 
@@ -52,11 +52,12 @@ Per feature: its ring of verdicts, stage, tasks done, requirements proven, spend
 <figure class="shot"><img class="shot-light" src="../../screenshots/board-light.webp" alt="The board: tasks by verdict, the next step above them" width="1440" height="900" loading="lazy" decoding="async"><img class="shot-dark" src="../../screenshots/board-dark.webp" alt="The board: tasks by verdict, the next step above them" width="1440" height="900" loading="lazy" decoding="async"></figure>
 
 - Lanes: Waiting for You, Running, Ready, Blocked, Verified, Regression Only, Attested, No Evidence, Skipped. A lane folds after five cards.
-- A ready card has **Run**; the running card shows its stage; a stale tick says *Spec changed: FR-001*; a task whose test file never ran says *Tests never ran*. A regression-only card says why on hover and to a screen reader. Right-click a card for its actions.
-- **Before you run** lists what `speccoder doctor` would warn about, the plan checks included: each with its tasks as buttons and its fix.
+- A card badges a planning task **📐 Planning** and one that is yours **🙋 Yours** ([who does a task](@/docs/running.md#who-does-a-task)); a ready card has **Run** (not one that is yours); the running card shows its stage; a stale tick says *Spec changed: FR-001*; a task whose test file never ran says *Tests never ran*. A regression-only card says why on hover and to a screen reader. Right-click a card for its actions.
+- **Before you run** lists what `speccoder doctor` would warn about, the plan checks included: each with its tasks as buttons and its fix; and, as information, **Who does what**.
 
 Click a card to open the **inspector**:
 
+- For a task that is yours, the same card as in Needs You: the reason, **I Did It**, **Hint & Retry**, **Skip…**.
 - The verdict; for a stale tick, the requirement then and now, word by word.
 - **Evidence**: a row per source (acceptance, held-out, checks, diff audit, gaming monitor, mutation, strength, approvals, attestation, attempts), read from the commit's attestation.
 - **Tour**: the task's [evidence tour](@/docs/verifier.md#the-evidence-tour); disabled until a commit carries the task's evidence.

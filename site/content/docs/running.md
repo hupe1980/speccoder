@@ -102,7 +102,8 @@ speccoder do "Make the login button blue" --no-run      # record it; prints the 
 | `error[NO-TASKS]` | 16 | The feature has no task list yet, or one without a task: nothing ran, and it is not done | `speccoder spec tasks` (OpenSpec: `spec propose`), then run |
 | feature done, full tier failed | 20 | Every task is ticked, but a `full` check failed | Fix it, or `speccoder pr --force` |
 | unfinished checklists | 23 | `checklists/*.md` has unchecked items; nothing ran | Finish them, or `--ignore-checklists` |
-| `blocked` | 23 | The model says the task cannot be done as written | Fix the spec or a wrong test, or `task skip` |
+| `blocked` | 23 | The model says the task cannot be done as written (its reason is a claim); the task is now [yours](#who-does-a-task) | `task done`, `task hint`, or `task skip` |
+| `stopped[TASK-YOURS]` | 23 | The next task is marked `[YOU]`; it is not attempted | `task done`, `task hint`, or `task skip` |
 | `needs_approval` | 23 | A call needs a person | `task approve` or `task reject` ([approvals](@/docs/approvals.md#later)) |
 | `denied` | 23 | Three denied calls in a row | Usually a task that asks for something protected |
 | `not_demonstrated` | 23 | A convergence gap no failing test shows | Decide whether it is real; `task skip` or fix it |
@@ -110,7 +111,19 @@ speccoder do "Make the login button blue" --no-run      # record it; prints the 
 | `budget_exhausted`, `incomplete` | 23 | Out of turns or calls, or the model did not finish | Raise `[budget]`, split the task, or `task nudge` |
 | `interrupted` | 23 | Killed while a tool call was running | Run again; see [recovery](@/docs/recovery.md) |
 
-The `task` commands (`approve`, `reject`, `accept`, `skip`, `nudge`, `rule`, `restore`, `drop`, `show`) are in the [CLI reference](@/docs/cli.md#work). `task accept` ticks on your word and shows as `attested`, never `verified`.
+The `task` commands (`approve`, `reject`, `accept`, `done`, `hint`, `skip`, `nudge`, `rule`, `restore`, `drop`, `show`) are in the [CLI reference](@/docs/cli.md#work). `task accept` ticks on your word and shows as `attested`, never `verified`.
+
+## Who does a task
+
+Each task has a lane, derived from its line — nothing is stored:
+
+- **code** — the implementer's; the default.
+- **📐 planning** — every path it names (its backticked paths, when it has any) lies inside the feature's folder (`specs/001-x/`; OpenSpec: the change's folder). It runs with planning rights: it may write design documents there, never the judged files (`spec.md`, `tasks.md`, `review.json`, `checklists/`; OpenSpec: `proposal.md`, `tasks.md`, `specs/`) or the constitution. No acceptance test is written for it; a pass ticks `regression_only` with the reason `planning_work`, the documents in the tick commit. An attempt that writes no document there fails. The run says `📐 planning · writes specs/001-x/contracts/`.
+- **🙋 yours** — a step only a person can take: the line carries `[YOU]` (Spec Kit), or its last attempt stopped `BLOCKED`, until it is done, skipped or tried again. A `[YOU]` task is never attempted by `speccoder run`.
+
+Such a stop is never a dead end. At a terminal the run asks, one key each: **d** I did it (`attested`), **h** a hint, typed next, and a new attempt now, **s** skip (what stays blocked is shown, the reason typed next); Enter leaves it waiting. With `--no-prompt` or in CI it waits with the same three: `speccoder task done T019`, `speccoder task hint T019 "…"`, `speccoder task skip T019 --reason "…"`. Needs You and the app show the agent's reason as its claim with the same three buttons.
+
+*Before you run* — `doctor --feature`, the app's preflight and the start of a run — says it in one line when a task is not code: `25 tasks · 23 code · 1 📐 planning (T002) · 1 🙋 yours (T019)`. `report` marks them (`ready · 🙋 yours`).
 
 ## Where tests go
 

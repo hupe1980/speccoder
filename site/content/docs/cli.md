@@ -81,6 +81,8 @@ Every stop and finish ends with a `Next:` block of commands to copy (`next` in J
 | `speccoder task reject [T] [--call ID] [--all] --reason R` | Reject it; the model is told why |
 | `speccoder task accept T --reason R [--in-place]` | Tick a task on your word (`attested`) |
 | `speccoder task skip T (--reason R \| --undo)` | Skip a task, or take the skip back; its dependents stay blocked |
+| `speccoder task done T [--reason R]` | I did it: tick a step you took on your word (`attested`; the reason defaults to "I did it") |
+| `speccoder task hint T NOTE [--no-prompt]` | Hint & retry: the note, then a new attempt of the task now |
 | `speccoder task nudge T (--note N \| --clear)` | Leave a note the next attempts read, or remove the notes |
 | `speccoder task rule T --tests-right --reason R [--variant ID]` | Rule that the tests are right ([over-strict tests](@/docs/evidence.md#over-strict-tests)); the next run ticks the held attempt without a model call |
 | `speccoder task restore T` / `task drop T` | Keep or discard the [changes set aside](@/docs/running.md#changes-set-aside) |
