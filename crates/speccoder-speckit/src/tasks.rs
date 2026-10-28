@@ -68,6 +68,7 @@ pub fn parse(path: &str, text: &str) -> (ParsedTasks, Vec<Diagnostic>) {
                             done: checked,
                             parallel: parsed.parallel,
                             story: parsed.story,
+                            yours: parsed.yours,
                             depends_on: explicit_deps(&parsed.title),
                             title: parsed.title,
                             phase: phases.last().map(|(p, _)| p.title.clone()),
@@ -191,10 +192,11 @@ struct TaskLine {
     id: String,
     parallel: bool,
     story: Option<String>,
+    yours: bool,
     title: String,
 }
 
-/// Parses `- [ ] T014 [P] [US1] Title` (the checkbox has already been seen by
+/// Parses `- [ ] T014 [P] [US1] [YOU] Title` (the checkbox has already been seen by
 /// the Markdown parser; here it is only skipped).
 fn parse_task_line(line: &str) -> Option<TaskLine> {
     let rest = line.trim_start();
@@ -230,9 +232,13 @@ fn parse_task_line(line: &str) -> Option<TaskLine> {
     let mut rest = rest[id_end..].trim_start();
     let mut parallel = false;
     let mut story = None;
+    let mut yours = false;
     loop {
         if let Some(r) = rest.strip_prefix("[P]") {
             parallel = true;
+            rest = r.trim_start();
+        } else if let Some(r) = rest.strip_prefix("[YOU]") {
+            yours = true;
             rest = r.trim_start();
         } else if let Some(label) = story_label(rest) {
             rest = rest[label.len() + 2..].trim_start();
@@ -245,6 +251,7 @@ fn parse_task_line(line: &str) -> Option<TaskLine> {
         id,
         parallel,
         story,
+        yours,
         title: rest.trim_end().to_owned(),
     })
 }
@@ -411,6 +418,18 @@ mod tests {
         assert!(t.parallel);
         assert_eq!(t.story.as_deref(), Some("US1"));
         assert_eq!(t.title, "Implement Service in src/x.py (depends on T012)");
+        assert!(!t.yours);
+    }
+
+    #[test]
+    fn a_you_label_marks_a_step_for_a_person() {
+        let t = parse_task_line("- [ ] T019 [US2] [YOU] Create the GitHub repository").unwrap();
+        assert!(t.yours);
+        assert_eq!(t.story.as_deref(), Some("US2"));
+        assert_eq!(t.title, "Create the GitHub repository");
+        let t = parse_task_line("- [ ] T020 [YOU] [P] Publish the package").unwrap();
+        assert!(t.yours && t.parallel);
+        assert_eq!(t.title, "Publish the package");
     }
 
     #[test]

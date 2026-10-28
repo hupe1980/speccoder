@@ -39,6 +39,7 @@ pub static ASSESS_RULES: Rules = Rules {
             "the `bug` extension's assess step writes only its bug's directory (.specify/bugs/<slug>/); `{p}` is not in it"
         )
     },
+    judged: super::texts::judged,
 };
 
 /// The format's own bug step: the extension's assess skill, given the

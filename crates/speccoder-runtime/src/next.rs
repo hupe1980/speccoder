@@ -176,6 +176,8 @@ fn regression_fix(result: &CommandResult, feature: Option<&str>) -> Option<Vec<S
         | R::NotRed { .. }
         | R::TestsNotCollected
         | R::Unrecorded => vec![checks, converge],
+        // Design documents: nothing to test, nothing to do.
+        R::PlanningWork => Vec::new(),
     })
 }
 

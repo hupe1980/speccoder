@@ -193,6 +193,9 @@ pub struct Task {
     pub parallel: bool,
     /// Story label without brackets, e.g. `US1`.
     pub story: Option<String>,
+    /// Carries the `[YOU]` label: a step only a person can take.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub yours: bool,
     /// Text after the ID and markers.
     pub title: String,
     /// Task IDs named after `depends on` / `after` in the text, in order.

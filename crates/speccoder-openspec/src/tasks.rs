@@ -282,6 +282,8 @@ pub fn parse(path: &str, text: &str) -> (ParsedTasks, Vec<Diagnostic>) {
                 done: cb.done(),
                 parallel: false,
                 story: None,
+                // OpenSpec has no `[YOU]` label: the text stays its title.
+                yours: false,
                 title,
                 depends_on,
                 phase,

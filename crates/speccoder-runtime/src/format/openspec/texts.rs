@@ -20,7 +20,13 @@ pub static RULES: Rules = Rules {
     ],
     found_env: crate::format::no_found_env,
     authoring_refusal,
+    judged,
 };
+
+/// A change's judged files: its proposal, its task list and its spec deltas.
+fn judged(rel: &str) -> bool {
+    matches!(rel, "proposal.md" | "tasks.md") || rel == "specs" || rel.starts_with("specs/")
+}
 
 /// What a hosted planning skill writes: active changes, never the archive.
 fn is_authoring_path(p: &str) -> bool {

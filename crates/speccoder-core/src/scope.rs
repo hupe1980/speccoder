@@ -19,12 +19,28 @@ pub struct ScopeFinding {
 /// or a file extension (`src/lib.rs`, `README.md`, `tests/`).
 #[must_use]
 pub fn named_paths(text: &str) -> Vec<String> {
+    paths_in(text, true)
+}
+
+/// The backticked paths of a task line only: what it names on purpose
+/// (`input/output` in its prose is no path).
+#[must_use]
+pub fn quoted_paths(text: &str) -> Vec<String> {
+    paths_in(text, false)
+}
+
+fn paths_in(text: &str, bare: bool) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     let mut push = |raw: &str| {
         let t = raw
             .trim_matches(|c: char| matches!(c, '(' | ')' | '"' | '\'' | '[' | ']' | '<' | '>'))
             .trim_end_matches(['.', ',', ';', ':', '!', '?']);
         let t = t.strip_prefix("./").unwrap_or(t);
+        // `/specs/001-x/plan.md`: Spec Kit writes repository paths from the root.
+        let t = t
+            .strip_prefix('/')
+            .filter(|r| !r.starts_with('/'))
+            .unwrap_or(t);
         if looks_like_path(t) && !out.iter().any(|p| p == t) {
             out.push(t.to_owned());
         }
@@ -37,8 +53,10 @@ pub fn named_paths(text: &str) -> Vec<String> {
         push(&rest[start + 1..start + 1 + len]);
         rest = &rest[start + 2 + len..];
     }
-    for token in text.split_whitespace().filter(|t| !t.contains('`')) {
-        push(token);
+    if bare {
+        for token in text.split_whitespace().filter(|t| !t.contains('`')) {
+            push(token);
+        }
     }
     out
 }
@@ -113,6 +131,10 @@ mod tests {
         assert_eq!(
             named_paths("Document `--bye` in README.md, and update `docs/`."),
             ["docs/", "README.md"]
+        );
+        assert_eq!(
+            named_paths("Scaffold `/specs/001-x/contracts/` from /specs/001-x/plan.md"),
+            ["specs/001-x/contracts/", "specs/001-x/plan.md"]
         );
         assert!(named_paths("Bump to v1.2 and say hi").is_empty());
         assert!(named_paths("See https://example.com/x for details").is_empty());

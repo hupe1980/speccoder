@@ -566,6 +566,10 @@ pub struct Rules {
     pub found_env: FoundEnv,
     /// Why a planning skill's other write needs approval (`path` given).
     pub authoring_refusal: fn(&str) -> String,
+    /// The unit's judged files, relative to its directory (no trailing
+    /// `/`): what a planning task never writes — the requirements, the task
+    /// list, the person's review.
+    pub judged: fn(&str) -> bool,
 }
 
 /// Model-facing fragments; the prompts around them are the same for every

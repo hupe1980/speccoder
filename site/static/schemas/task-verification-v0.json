@@ -503,6 +503,19 @@
           "type": "object"
         },
         {
+          "description": "A planning task: design documents, judged by the checks alone.",
+          "properties": {
+            "reason": {
+              "const": "planning_work",
+              "type": "string"
+            }
+          },
+          "required": [
+            "reason"
+          ],
+          "type": "object"
+        },
+        {
           "description": "A tick made before reasons were recorded (read side only).",
           "properties": {
             "reason": {

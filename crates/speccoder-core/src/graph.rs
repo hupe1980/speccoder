@@ -383,6 +383,7 @@ mod tests {
                 done,
                 parallel,
                 story: story.map(str::to_owned),
+                yours: false,
                 title: String::new(),
                 depends_on: deps.iter().map(|d| (*d).to_owned()).collect(),
                 phase: Some(phase.to_owned()),

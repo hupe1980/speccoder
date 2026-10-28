@@ -1004,6 +1004,7 @@ fn reason_count_words(c: &speccoder_core::ReasonCount) -> String {
         ),
         "not_red" => "had acceptance tests that did not fail first".to_owned(),
         "tests_not_collected" => "had acceptance tests that never ran".to_owned(),
+        "planning_work" => format!("{were} planning work (design documents)"),
         _ => format!("{were} ticked before reasons were recorded"),
     };
     format!("{n} {what}")

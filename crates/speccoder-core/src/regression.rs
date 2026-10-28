@@ -60,6 +60,8 @@ pub enum RegressionReason {
     },
     /// The acceptance command collected no test.
     TestsNotCollected,
+    /// A planning task: design documents, judged by the checks alone.
+    PlanningWork,
     /// A tick made before reasons were recorded (read side only).
     Unrecorded,
 }
@@ -96,6 +98,7 @@ impl RegressionReason {
             Self::AlreadyPassing { .. } => "already_passing",
             Self::NotRed { .. } => "not_red",
             Self::TestsNotCollected => "tests_not_collected",
+            Self::PlanningWork => "planning_work",
             Self::Unrecorded => "unrecorded",
         }
     }
@@ -291,6 +294,9 @@ pub fn wording(r: &RegressionReason) -> String {
         RegressionReason::TestsNotCollected => {
             "its acceptance tests never ran: the command collected 0 tests".to_owned()
         }
+        RegressionReason::PlanningWork => {
+            "planning work — design documents, not code: nothing to test".to_owned()
+        }
         RegressionReason::Unrecorded => {
             "why was not recorded (ticked by an earlier speccoder)".to_owned()
         }
@@ -363,6 +369,7 @@ pub fn parse_trailer(value: &str) -> Option<RegressionReason> {
             red_class: class_named(&get("red_class")?)?,
         },
         "tests_not_collected" => RegressionReason::TestsNotCollected,
+        "planning_work" => RegressionReason::PlanningWork,
         _ => return None,
     })
 }
@@ -437,6 +444,7 @@ mod tests {
             }),
             class().prop_map(|red_class| RegressionReason::NotRed { red_class }),
             Just(RegressionReason::TestsNotCollected),
+            Just(RegressionReason::PlanningWork),
         ]
     }
 
@@ -515,5 +523,14 @@ mod tests {
             serde_json::json!({ "reason": "already_passing", "implemented_by": { "task": "T003", "commit": "d433d77" } })
         );
         assert!(code_path(&"a".repeat(300)).chars().count() <= 122);
+        assert_eq!(trailer(&RegressionReason::PlanningWork), "planning_work");
+        assert_eq!(
+            parse_trailer("planning_work"),
+            Some(RegressionReason::PlanningWork)
+        );
+        assert_eq!(
+            wording(&RegressionReason::PlanningWork),
+            "planning work — design documents, not code: nothing to test"
+        );
     }
 }

@@ -17,6 +17,7 @@ pub mod evidence;
 pub mod graph;
 pub mod inbox;
 pub mod ladder;
+pub mod lane;
 pub mod new_project;
 pub mod next;
 pub mod oracle;

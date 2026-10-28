@@ -3298,6 +3298,10 @@ export type RegressionReason =
   | {
     reason: "tests_not_collected";
   }
+  /** A planning task: design documents, judged by the checks alone. */
+  | {
+    reason: "planning_work";
+  }
   /** A tick made before reasons were recorded (read side only). */
   | {
     reason: "unrecorded";
@@ -4660,6 +4664,8 @@ export interface Task {
   subsection: string | null;
   /** Text after the ID and markers. */
   title: string;
+  /** Carries the `[YOU]` label: a step only a person can take. */
+  yours?: boolean;
 }
 
 /** One task's cost. */

@@ -26,7 +26,16 @@ pub static RULES: Rules = Rules {
     // The Python Spec Kit's scripts resolve preset templates with.
     found_env: super::python::command_env,
     authoring_refusal,
+    judged,
 };
+
+/// A feature's judged files: its spec, its task list, the person's review
+/// and the checklists.
+pub(crate) fn judged(rel: &str) -> bool {
+    matches!(rel, "spec.md" | "tasks.md" | "review.json")
+        || rel == "checklists"
+        || rel.starts_with("checklists/")
+}
 
 /// What a hosted planning skill writes: the feature's artifacts, the
 /// feature selection and the constitution — Spec Kit's own outputs.
