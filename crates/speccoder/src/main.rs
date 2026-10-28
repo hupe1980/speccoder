@@ -10,7 +10,6 @@ mod attention;
 mod cli;
 #[cfg(test)]
 mod contract;
-mod doctor;
 mod events;
 mod explain;
 mod follow;
@@ -823,7 +822,7 @@ fn main() {
         Command::Doctor { bug_report } => {
             let report = speccoder_runtime::doctor::run(path, feature, Some(&look_line()));
             if *bug_report && !machine {
-                print!("{}", doctor::bug_report(&report));
+                print!("{}", speccoder_runtime::doctor::bug_report(&report, path));
                 return;
             }
             report
@@ -1665,6 +1664,14 @@ fn finish(
         Ok(()) => result.exit_code(),
         Err(_) => ExitCode::INTERNAL,
     };
+    // `--copy`: what went wrong, on the clipboard; the exit code stays.
+    if cli.copy && result.status() != speccoder_core::CommandStatus::Ok {
+        match speccoder_runtime::copy::to_clipboard(&speccoder_runtime::copy::block(&result, None))
+        {
+            Ok(program) => eprintln!("Copied what went wrong to the clipboard ({program})."),
+            Err(e) => eprintln!("Could not copy what went wrong: {e}."),
+        }
+    }
     // A fix speccoder knows is offered, at a terminal, then the command
     // runs again; never on its own, and never for a script.
     if let Some(remedy) = result.remedy()

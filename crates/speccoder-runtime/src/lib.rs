@@ -20,6 +20,7 @@ pub mod comments;
 pub mod context;
 pub mod controls;
 pub mod convergence;
+pub mod copy;
 pub mod current;
 pub mod doctor;
 pub mod documents;

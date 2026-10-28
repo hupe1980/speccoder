@@ -766,6 +766,42 @@ fn doctor_names_each_problem_with_its_fix() {
     }
 }
 
+/// `--copy`: what went wrong goes to the clipboard program (a fake one on
+/// PATH here), the exit code is the command's own.
+#[test]
+#[cfg(unix)]
+fn copy_puts_what_went_wrong_on_the_clipboard() {
+    use std::os::unix::fs::PermissionsExt as _;
+    let dir = make_project();
+    let bin = tempfile::tempdir().unwrap();
+    let clip = bin.path().join("clipboard.txt");
+    let fake = bin.path().join("pbcopy");
+    std::fs::write(&fake, "#!/bin/sh\ncat > \"$CLIP_OUT\"\n").unwrap();
+    std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let path = format!(
+        "{}:{}",
+        bin.path().display(),
+        std::env::var("PATH").unwrap_or_default()
+    );
+    let out = speccoder()
+        .args(["doctor", "--copy", "-C"])
+        .arg(dir.path())
+        .env("PATH", path)
+        .env("CLIP_OUT", &clip)
+        .env_remove("ANTHROPIC_API_KEY")
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(13));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("Copied what went wrong"));
+    let copied = std::fs::read_to_string(&clip).unwrap();
+    assert!(copied.starts_with("error[CONFIG-MISSING]: "), "{copied}");
+    assert!(copied.contains("\ndocs: https://"), "{copied}");
+    assert!(
+        copied.contains(&format!("speccoder {}", env!("CARGO_PKG_VERSION"))),
+        "{copied}"
+    );
+}
+
 #[test]
 fn completion_and_help_advanced_work_without_a_project() {
     let out = speccoder().args(["completion", "zsh"]).output().unwrap();
