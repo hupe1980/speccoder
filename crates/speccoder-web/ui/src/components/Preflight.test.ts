@@ -47,4 +47,19 @@ describe("Preflight", () => {
     expect(remedy.title).toContain("$ speccoder task acceptance-at T003 --story US1");
     expect(document.querySelector('section[aria-label="Before you run"]')).not.toBeNull();
   });
+
+  it("says who does what as information, not a warning", () => {
+    host.app.preflight = [
+      { check: "lanes", level: "pass", detail: "25 tasks · 23 code · 1 📐 planning (T002) · 1 🙋 yours (T019)", fix: [], tasks: ["T002", "T019"] },
+    ];
+    host.app.blockers = [];
+    shown = mount(Preflight, { target: document.body });
+    flushSync();
+    const text = document.body.textContent ?? "";
+    expect(text).toContain("Who does what");
+    expect(text).toContain("1 📐 planning (T002)");
+    expect(text).not.toContain("Fix before running");
+    expect(document.querySelector("li.pass")).not.toBeNull();
+    expect(document.querySelector('button[aria-label="Open T019"]')).not.toBeNull();
+  });
 });

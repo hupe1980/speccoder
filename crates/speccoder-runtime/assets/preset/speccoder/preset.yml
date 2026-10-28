@@ -3,7 +3,7 @@ preset:
   id: speccoder
   name: speccoder
   version: "{version}"
-  description: "Tasks that plan for evidence: a story's behaviour inside its story, no test-only tasks, tests where the runner collects them."
+  description: "Tasks that plan for evidence: a story's behaviour inside its story, no test-only tasks, tests where the runner collects them; design documents in the plan, a person's steps labelled [YOU]."
 requires:
   speckit_version: ">=1.2.0"
 provides:

@@ -81,4 +81,25 @@ describe("Inbox", () => {
     expect(titles.some((t) => t.includes("$ speccoder converge"))).toBe(true);
     expect(document.querySelectorAll("ul.reasons li")).toHaveLength(2);
   });
+
+  it("shows a stop as a card: the agent's claim and its three actions", () => {
+    const act = (kind: string, input: string | null) => ({ ...action(kind, `speccoder task ${kind} T019`, kind), id: { kind, subject: "T019" }, group: "task", input, run: { kind, task: "T019" } });
+    host.app.inbox = {
+      data: {
+        features: 1,
+        items: [
+          { kind: "yours", group: "blocked_on_you", feature: "001-greet-function", task: "T019", title: "T019 needs you: the agent stopped", detail: "needs a GitHub repository", since: null, actions: [act("done", null), act("hint", "The hint"), act("skip", "Why it is skipped")], unverified: null },
+        ],
+      },
+    };
+    shown = mount(Inbox, { target: document.body });
+    flushSync();
+    const text = document.body.textContent ?? "";
+    expect(text).toContain("Yours to Do");
+    expect(text).toContain("“needs a GitHub repository”");
+    const done = [...document.querySelectorAll("button")].find((b) => b.textContent?.includes("I Did It")) as HTMLButtonElement;
+    done.click();
+    expect(host.app.perform).toHaveBeenCalledWith(expect.objectContaining({ run: { kind: "done", task: "T019" } }));
+  });
 });
+

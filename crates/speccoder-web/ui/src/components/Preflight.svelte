@@ -13,7 +13,7 @@
 
   const badge: Record<string, string> = {
     "model key": "key", untracked: "tray", signing: "signature", sandbox: "shield", git: "branch", "spec tool": "terminal",
-    config: "doc", tests: "list", plan: "list", feature: "doc", project: "doc", state: "tray", instructions: "doc",
+    config: "doc", tests: "list", plan: "list", feature: "doc", project: "doc", state: "tray", instructions: "doc", lanes: "hand",
   };
   // A fix line is a command, sometimes followed by "(why)" or prose.
   const command = (f: string) => f.replace(/^→\s*/, "").replace(/\s+\(.*\)$/, "");
@@ -26,7 +26,7 @@
     "PLAN-TEST-ONLY-TASKS": "Tasks that only write tests",
   };
   const title = (i: { check: string; code?: string | null }) =>
-    (i.code && PLAN[i.code]) ?? i.check.charAt(0).toUpperCase() + i.check.slice(1);
+    i.check === "lanes" ? "Who does what" : ((i.code && PLAN[i.code]) ?? i.check.charAt(0).toUpperCase() + i.check.slice(1));
   function openTask(t: string) {
     app.view = "board";
     void app.selectTask(t);
@@ -86,6 +86,8 @@
   .badge { width: 28px; height: 28px; border-radius: 7px; display: grid; place-items: center; color: #fff; box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.12); }
   .fail .badge { background: linear-gradient(180deg, #ff6259, var(--danger-fill)); }
   .warn .badge { background: linear-gradient(180deg, #ffb340, var(--attention-fill)); }
+  /* Who does what is information, never a warning. */
+  .pass .badge { background: var(--fill-2); color: var(--text-2); box-shadow: none; }
   .what { display: grid; min-width: 0; }
   strong { font-weight: 600; }
   .d { color: var(--muted); font-size: 0.86rem; }

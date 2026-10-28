@@ -6,7 +6,7 @@
   const evidenceOf = latest();
   const patchOf = latest();
   import { phaseLabel, symbol, word } from "../lib/marks";
-  import { KINDS, key, offer, ofTask } from "../lib/actions";
+  import { KINDS, key, offer, ofTask, stopOffers } from "../lib/actions";
   import type { AccountTurn, Row, Task } from "../lib/types";
   import Account from "./Account.svelte";
   import Diff from "./Diff.svelte";
@@ -15,6 +15,7 @@
   import Code from "./Code.svelte";
   import Icon from "./Icon.svelte";
   import Tour from "./Tour.svelte";
+  import StopCard from "./StopCard.svelte";
 
   let tab = $state<"evidence" | "tour" | "diff">("evidence");
   let data = $state<{ task: Task; banner: { mark: string; words: string }; rows: Row[] } | null>(null);
@@ -119,6 +120,10 @@
       <span><strong>{verdictTitle}</strong>{#if verdictWords}<span class="words">{verdictWords}</span>{/if}</span>
     </div>
     {#if drift}<Drift {drift} />{/if}
+    {#if data.task.lane === "yours" && app.selected}
+      <!-- A step only the person can take: the three ways on, in place. -->
+      <StopCard task={app.selected} claim={data.task.last_attempt?.outcome === "blocked" ? data.task.last_attempt.reason : null} actions={stopOffers(app.selected)} />
+    {/if}
     {#if aside && app.selected}
       {@const id = app.selected}
       <section class="aside-card" aria-label="Changes set aside">

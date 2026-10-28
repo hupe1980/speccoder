@@ -91,7 +91,7 @@
           {@const never = neverRan(t)}
           <article class="card" class:on={app.selected === t.id} class:live role="listitem" oncontextmenu={(e) => menu(t, e)}>
             <button class="open" onclick={() => app.selectTask(t.id)} aria-label="{t.id} {t.title}, {why ?? word(laneOf(t))}" title={why ?? undefined}>
-              <span class="row"><span class="id mono">{t.id}</span>{#if t.phase}<span class="phase" title={t.phase}>{short(t.phase)}</span>{/if}</span>
+              <span class="row"><span class="id mono">{t.id}</span>{#if t.lane === "planning"}<span class="who planning" title="Planning work: design documents in the feature's folder, judged by the checks">📐 Planning</span>{:else if t.lane === "yours"}<span class="who yours" title="A step only you can take: open it to say you did it, give a hint, or skip it">🙋 Yours</span>{/if}{#if t.phase}<span class="phase" title={t.phase}>{short(t.phase)}</span>{/if}</span>
               <span class="t"><Code text={t.title} /></span>
               {#if t.drift?.requirements.length}
                 <span class="foot changed" title="The spec changed since this tick: its evidence is for the earlier wording"><Icon name="exclaim" size={12} weight={2.2} />Spec changed: {t.drift.requirements.map((r) => r.id).join(", ")}</span>
@@ -111,7 +111,7 @@
                 <span class="foot fail" title={t.last_attempt.reason}><Icon name="xoctagon" size={12} />Last attempt {t.last_attempt.outcome.replaceAll("_", " ")}</span>
               {/if}
             </button>
-            {#if lane.key === "ready"}
+            {#if lane.key === "ready" && t.lane !== "yours"}
               <div class="act">
                 <button class="btn small tinted" disabled={!!app.job?.running} onclick={(e) => runTask(t, e)}><Icon name="play" size={11} />Run</button>
               </div>
@@ -145,6 +145,8 @@
   .open:focus-visible { box-shadow: 0 0 0 3.5px var(--focus); }
   .row { display: flex; align-items: center; gap: 0.4rem; min-width: 0; }
   .id { font-size: 0.74rem; color: var(--muted); }
+  .who { flex: none; padding: 0 0.4rem; border-radius: 999px; font-size: 0.68rem; font-weight: 600; background: var(--fill); color: var(--text-2); }
+  .who.yours { background: color-mix(in srgb, var(--attention, #ff9f0a) 16%, var(--surface)); color: var(--attention); }
   .phase { min-width: 0; font-size: 0.7rem; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .t { font-weight: 500; line-height: 1.38; display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
   .foot { display: flex; align-items: center; gap: 0.35rem; font-size: 0.76rem; }

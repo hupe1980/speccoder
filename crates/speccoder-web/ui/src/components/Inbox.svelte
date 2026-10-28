@@ -7,6 +7,7 @@
   import type { Action, InboxItem } from "../lib/types";
   import Code from "./Code.svelte";
   import Icon from "./Icon.svelte";
+  import StopCard from "./StopCard.svelte";
 
   const sections: Record<string, { title: string; icon: string; tone: string; why: string }> = {
     unknown: { title: "Could Not Be Read", icon: "exclaim", tone: "needs_approval", why: "Another speccoder holds the journal — calls may be waiting for you that cannot be listed now." },
@@ -25,6 +26,7 @@
     question: { title: "Open Questions", icon: "exclaim", tone: "needs_approval", why: "The spec leaves these undecided — answer before it is built on." },
     review: { title: "Review the Spec", icon: "doc", tone: "ready", why: "The result will be judged against these words." },
     revise: { title: "Change Requests", icon: "sparkle", tone: "needs_approval", why: "Revise the spec as you asked, then review it again." },
+    yours: { title: "Yours to Do", icon: "hand", tone: "needs_approval", why: "A step only you can take — do it, give the agent a hint, or skip it." },
     autopilot_denied: { title: "Refused on Autopilot", icon: "shield", tone: "ready", why: "Calls the autopilot run would have asked you about were refused, not asked: look at each, and allow one when you run again." },
     stuck: { title: "Did Not Pass", icon: "xoctagon", tone: "failed", why: "Decide: run again, leave a note, skip or accept." },
     aside: { title: "Changes Set Aside", icon: "tray", tone: "needs_approval", why: "Found in the worktree when a run started — keep them on the branch, or let them go." },
@@ -101,6 +103,12 @@
         <h2 class="s-{g.tone}"><span class="gi"><Icon name={g.icon} size={13} weight={2.2} /></span>{g.title}<span class="count">{g.items.length}</span><span class="why">{g.why}</span></h2>
         <ul class="grouped">
           {#each g.items as i (i.feature + (i.task ?? "") + i.kind)}
+            {#if i.kind === "yours" && i.task}
+              <li class="yours">
+                {#if features > 1 || items.some((x) => x.feature !== i.feature)}<span class="feat">{i.feature.replace(/^\d+-/, "")}</span>{/if}
+                <StopCard task={i.task} claim={i.detail || null} actions={i.actions} />
+              </li>
+            {:else}
             <li>
               <div class="what">
                 <span class="where">
@@ -124,6 +132,7 @@
                 <button class="btn small ghost" onclick={() => open(i)} title="Show it with its evidence"><Icon name="chevron" size={10} weight={2.6} /> Open</button>
               </div>
             </li>
+            {/if}
           {/each}
         </ul>
       </section>
@@ -144,6 +153,8 @@
   ul { list-style: none; margin: 0; padding: 0; }
   li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 1rem; align-items: center; padding: 0.8rem 1rem; }
   .what { display: grid; gap: 0.18rem; min-width: 0; }
+  li.yours { grid-template-columns: 1fr; gap: 0.35rem; }
+  li.yours .feat { justify-self: start; font-size: 0.74rem; }
   .where { display: flex; gap: 0.45rem; align-items: center; font-size: 0.74rem; color: var(--muted); }
   .feat { padding: 0 0.45rem; border-radius: 999px; background: var(--fill); color: var(--text-2); font-weight: 600; }
   .task { color: var(--text-2); }

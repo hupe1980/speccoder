@@ -60,4 +60,23 @@ describe("Board", () => {
     expect(t004.title).toBe("Regression only: why was not recorded");
     expect(document.body.textContent).toContain("Tests never ran: tests/unit/greet_name.rs");
   });
+
+  it("badges a planning task and one that is yours, and offers no Run for the latter", () => {
+    host.app.report = {
+      data: {
+        tasks: [
+          task("T002", "ready", { lane: "planning" }),
+          task("T019", "ready", { lane: "yours" }),
+        ],
+      },
+    };
+    shown = mount(Board, { target: document.body });
+    flushSync();
+    const [planning, yours] = [...document.querySelectorAll("article.card")] as HTMLElement[];
+    expect(planning!.textContent).toContain("📐 Planning");
+    expect(planning!.textContent).toContain("Run");
+    expect(yours!.textContent).toContain("🙋 Yours");
+    expect(yours!.querySelector(".act")).toBeNull();
+  });
 });
+

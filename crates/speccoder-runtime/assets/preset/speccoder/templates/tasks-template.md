@@ -15,12 +15,18 @@ description: "Task list template for feature implementation"
 - Write no task whose only output is tests: speccoder writes each story's acceptance tests from its scenarios and judges the implementing tasks by them.
 - When a task names a test file, name a path the project's test runner collects (Cargo: `tests/<name>.rs`, or `tests/<dir>/main.rs` and the modules it declares; pytest: `test_*.py` under `testpaths`; vitest/jest: a file matching `include`, such as `<name>.test.ts`; Go: `<name>_test.go` beside the package's sources).
 
+**Who does it (speccoder)**: every task is code for the implementer unless it says otherwise.
+
+- Design documents — contracts, the data model, research, a quickstart — belong to the plan: write them while planning, not as tasks (a task naming only paths in the feature's folder runs as planning work).
+- Label a step only a person can take — create an account, set a secret, publish — with `[YOU]` after the ID and markers (`- [ ] T019 [YOU] Create the GitHub repository`): speccoder does not attempt it and asks the person instead.
+
 **Organization**: Tasks are grouped by user story to enable independent implementation and testing of each story.
 
 ## Format: `[ID] [P?] [Story] Description`
 
 - **[P]**: Can run in parallel (different files, no dependencies)
 - **[Story]**: Which user story this task belongs to (e.g., US1, US2, US3)
+- **[YOU]**: A step only a person can take (speccoder asks them instead of attempting it)
 - Include exact file paths in descriptions
 
 ## Path Conventions

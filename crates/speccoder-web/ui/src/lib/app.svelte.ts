@@ -157,7 +157,7 @@ class AppState {
       void get<Reply<{ checks: { check: string; level: string; detail: string; fix: string[]; code?: string | null }[] }>>(`/api/doctor${q({ feature: f })}`)
         .then((d) => {
           this.doctor = d.data?.checks ?? [];
-          this.preflight = this.doctor.filter((c) => c.level === "warn" || c.level === "fail") as typeof this.preflight;
+          this.preflight = this.doctor.filter((c) => c.level === "warn" || c.level === "fail" || c.check === "lanes") as typeof this.preflight;
         })
         .catch(() => {});
       this.project = project;

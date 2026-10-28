@@ -18,6 +18,8 @@ export const KINDS: Record<ActionKind, { verb: string; icon?: string; holdsWorkt
   accept: { verb: "Accept", icon: "check", holdsWorktree: false },
   skip: { verb: "Skip", icon: "skip", holdsWorktree: false },
   nudge: { verb: "Nudge", icon: "sparkle", holdsWorktree: false },
+  done: { verb: "I Did It", icon: "check", holdsWorktree: false },
+  hint: { verb: "Hint & Retry", icon: "sparkle", holdsWorktree: true },
   rule: { verb: "Rule", icon: "shield", holdsWorktree: false },
   review: { verb: "Review", icon: "doc", holdsWorktree: false },
   issue_comment: { verb: "Comment", icon: "branch", holdsWorktree: false },
@@ -88,4 +90,14 @@ export type Offer = Omit<Action, "id" | "role" | "blocked" | "input" | "confirm"
  *  run, a command to copy or an entry of its own). */
 export function offer(run: Runnable | null, shown: { group: string; label: string; why: string; command: string; confirm?: string | null; input?: string | null }): Offer {
   return { ...shown, run, blocked: null, input: shown.input ?? null, confirm: shown.confirm ?? null };
+}
+
+/** I did it, Hint & retry, Skip: the three ways on from a task that needs
+ *  the person, as the host's Needs You item words them. */
+export function stopOffers(task: string): Offer[] {
+  return [
+    offer({ kind: "done", task }, { group: "task", label: `I did it: ${task}`, why: "tick it on your word (attested, never shown as verified)", command: `speccoder task done ${task}` }),
+    offer({ kind: "hint", task }, { group: "task", label: `hint & retry ${task}`, why: "a note the agent reads, then a new attempt now", command: `speccoder task hint ${task} "…"`, input: "The hint" }),
+    offer({ kind: "skip", task }, { group: "task", label: `skip ${task}`, why: "runs pass it by; what depends on it stays blocked", command: `speccoder task skip ${task} --reason "…"`, input: "Why it is skipped" }),
+  ];
 }
