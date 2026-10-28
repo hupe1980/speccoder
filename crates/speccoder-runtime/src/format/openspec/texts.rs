@@ -21,6 +21,7 @@ pub static RULES: Rules = Rules {
     found_env: crate::format::no_found_env,
     authoring_refusal,
     judged,
+    plan: "design.md",
 };
 
 /// A change's judged files: its proposal, its task list and its spec deltas.

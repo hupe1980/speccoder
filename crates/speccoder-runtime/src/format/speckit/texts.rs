@@ -27,6 +27,7 @@ pub static RULES: Rules = Rules {
     found_env: super::python::command_env,
     authoring_refusal,
     judged,
+    plan: "plan.md",
 };
 
 /// A feature's judged files: its spec, its task list, the person's review

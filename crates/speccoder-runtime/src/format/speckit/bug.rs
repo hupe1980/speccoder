@@ -40,6 +40,7 @@ pub static ASSESS_RULES: Rules = Rules {
         )
     },
     judged: super::texts::judged,
+    plan: super::texts::RULES.plan,
 };
 
 /// The format's own bug step: the extension's assess skill, given the

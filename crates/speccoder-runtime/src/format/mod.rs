@@ -570,6 +570,9 @@ pub struct Rules {
     /// `/`): what a planning task never writes — the requirements, the task
     /// list, the person's review.
     pub judged: fn(&str) -> bool,
+    /// The unit's plan, relative to its directory: with the judged files,
+    /// what its ticks were judged against (other design documents are not).
+    pub plan: &'static str,
 }
 
 /// Model-facing fragments; the prompts around them are the same for every

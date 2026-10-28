@@ -116,9 +116,6 @@ pub(crate) fn at(
     Some(out)
 }
 
-/// A unit's plan, by the formats' names (Spec Kit, OpenSpec).
-const PLANS: &[&str] = &["plan.md", "design.md"];
-
 /// The intent files at `rev` that speak for the feature (its judged files
 /// and plan, and the format's shared ones, such as a constitution; not the
 /// task list or other design documents, not other units, not the
@@ -153,7 +150,7 @@ fn intent_now(
             // the other design documents (a planning task's work) and the
             // task list do not.
             let speaks = if let Some(rel) = path.strip_prefix(&unit) {
-                rel != tasks_file && ((rules.judged)(rel) || PLANS.contains(&rel))
+                rel != tasks_file && ((rules.judged)(rel) || rel == rules.plan)
             } else {
                 units.as_deref().is_none_or(|u| !path.starts_with(u))
                     && (rules.authoring_path)(path)
