@@ -8,6 +8,14 @@
     "fix": [
       "speccoder report --approvals"
     ],
+    "fix_steps": [
+      {
+        "command": "speccoder report --approvals",
+        "how": "view",
+        "subject": null,
+        "view": "approvals"
+      }
+    ],
     "message": "the call changed since it was shown; see `speccoder report --approvals` for the one waiting now",
     "schema_version": 2,
     "status": "usage_error"

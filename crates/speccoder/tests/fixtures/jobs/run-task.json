@@ -9,10 +9,26 @@
       "export OPENAI_API_KEY=…",
       "→ or another provider, or a local model: speccoder config set model.provider openai-compatible (see Settings › Model)"
     ],
+    "fix_steps": [
+      {
+        "command": "export OPENAI_API_KEY=…",
+        "how": "shell",
+        "setting": "model",
+        "why": "`OPENAI_API_KEY` must be set where speccoder starts: a command run from here ends with its own shell, and the variable with it"
+      },
+      {
+        "command": "→ or another provider, or a local model: speccoder config set model.provider openai-compatible (see Settings › Model)",
+        "how": "words",
+        "why": null
+      }
+    ],
     "message": "OPENAI_API_KEY is not set; speccoder reads the key only from the environment",
     "next": [
       {
         "command": "speccoder doctor",
+        "how": "view",
+        "subject": null,
+        "view": "doctor",
         "why": "check the rest of the setup once the key is set"
       }
     ],

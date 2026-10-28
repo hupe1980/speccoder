@@ -8,6 +8,14 @@
     "fix": [
       "speccoder task --help"
     ],
+    "fix_steps": [
+      {
+        "command": "speccoder task --help",
+        "how": "view",
+        "subject": null,
+        "view": "report"
+      }
+    ],
     "message": "T005 is not a Setup or Foundational task: its own story's acceptance applies",
     "schema_version": 2,
     "status": "usage_error"

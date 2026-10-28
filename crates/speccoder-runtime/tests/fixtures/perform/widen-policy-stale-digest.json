@@ -21,6 +21,20 @@
     "fix": [
       "speccoder config --help"
     ],
+    "fix_steps": [
+      {
+        "argvs": [
+          [
+            "speccoder",
+            "config",
+            "--help"
+          ]
+        ],
+        "command": "speccoder config --help",
+        "how": "command",
+        "interactive": false
+      }
+    ],
     "message": "the preview changed; review it again",
     "payload": "policy_coverage",
     "schema_version": 2,

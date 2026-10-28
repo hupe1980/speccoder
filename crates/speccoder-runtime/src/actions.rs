@@ -39,6 +39,12 @@ use speccoder_core::{ApprovalsReport, CommandData, CommandResult, CommandStatus,
 
 use crate::RunOptions;
 
+/// How an interface takes a line speccoder printed — a fix or a next
+/// step: performed through [`perform`], a view, the person's own command,
+/// or a line for their shell. The one parser every builder's lines go
+/// through (in their serialisation).
+pub use speccoder_core::step::{Context, How, Step, View, step_of as runnable_of};
+
 pub(crate) fn action(
     group: &str,
     label: impl Into<String>,
@@ -1207,6 +1213,95 @@ mod tests {
             offered(Interface::AcpRemedy, ActionKind::FixSetup),
             Offer::Take
         );
+    }
+
+    /// The speccoder commands no interface takes: developer tools, and a
+    /// pull request to a remote only the person can name.
+    fn copied(line: &str) -> bool {
+        let mut w = line.split_whitespace().skip(1);
+        matches!(w.next(), Some("eval" | "replay" | "bench")) || line.contains("--remote <")
+    }
+
+    /// Every `speccoder …` command the catalog and the next-step and fix
+    /// builders print (each string literal of the two crates' sources,
+    /// placeholders filled) is performed, opened as a view or run as
+    /// written — never only copied.
+    #[test]
+    fn no_speccoder_command_is_copy_only() {
+        let ctx = Context {
+            feature: Some("001-x"),
+            task: Some("T001"),
+        };
+        let mut seen = 0;
+        for e in speccoder_core::codes::CATALOG {
+            for line in speccoder_core::codes::fixes(e, "run", Some("T001"), Some("001-x")) {
+                if line.starts_with("speccoder ") && !copied(&line) {
+                    let how = runnable_of(&line, ctx).how;
+                    assert!(!how.copy_only(), "{}: {line} → {how:?}", e.name);
+                    seen += 1;
+                }
+            }
+        }
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let mut files = Vec::new();
+        for dir in [root.join("src"), root.join("../speccoder-core/src")] {
+            let mut stack = vec![dir];
+            while let Some(d) = stack.pop() {
+                for entry in std::fs::read_dir(&d).into_iter().flatten().flatten() {
+                    let p = entry.path();
+                    if p.is_dir() {
+                        stack.push(p);
+                    } else if p.extension().is_some_and(|x| x == "rs") {
+                        files.push(p);
+                    }
+                }
+            }
+        }
+        for f in files {
+            let src = std::fs::read_to_string(&f).unwrap_or_default();
+            for (at, _) in src.match_indices("\"speccoder ") {
+                // A quote within another literal is no literal.
+                if src[..at].ends_with('\\') {
+                    continue;
+                }
+                let mut line = String::new();
+                let mut chars = src[at + 1..].chars();
+                while let Some(c) = chars.next() {
+                    match c {
+                        '\\' => line.extend(chars.next()),
+                        '"' => break,
+                        c => line.push(c),
+                    }
+                }
+                // A format string's arguments, filled.
+                let mut filled = String::new();
+                let mut rest = line.as_str();
+                while let Some(open) = rest.find('{') {
+                    filled.push_str(&rest[..open]);
+                    let close = rest[open..].find('}').map_or(rest.len(), |c| open + c + 1);
+                    filled.push_str(match &rest[open..close] {
+                        "{task}" | "{t}" => "T001",
+                        "{feature}" => "001-x",
+                        _ => "x",
+                    });
+                    rest = &rest[close.min(rest.len())..];
+                }
+                filled.push_str(rest);
+                let sub = filled.split_whitespace().nth(1).unwrap_or_default();
+                if copied(&filled) || !speccoder_core::step::SUBCOMMANDS.contains(&sub) {
+                    continue;
+                }
+                let how = runnable_of(&filled, ctx).how;
+                // What the parser reads as words is a message's prose
+                // (`speccoder preset not installed …`), no command.
+                if how == (How::Words { why: None }) {
+                    continue;
+                }
+                assert!(!how.copy_only(), "{}: {filled} → {how:?}", f.display());
+                seen += 1;
+            }
+        }
+        assert!(seen > 100, "{seen} lines seen");
     }
 
     #[test]

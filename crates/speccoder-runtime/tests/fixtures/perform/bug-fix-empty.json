@@ -8,6 +8,14 @@
     "fix": [
       "speccoder bug \"<what happens>\" --expected \"<what should>\""
     ],
+    "fix_steps": [
+      {
+        "command": "speccoder bug \"<what happens>\" --expected \"<what should>\"",
+        "how": "view",
+        "subject": null,
+        "view": "bug"
+      }
+    ],
     "message": "say what should happen instead: `--expected \"…\"` (one per behaviour)",
     "schema_version": 2,
     "status": "usage_error"

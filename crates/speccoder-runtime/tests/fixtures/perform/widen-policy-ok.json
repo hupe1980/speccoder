@@ -1170,7 +1170,16 @@
     "message": "added [\"npm\",\"run\"] to `commands.allow_prefix` from its preview (0 command(s) newly allowed) — by Dana Example (web); commit speccoder.toml to put it in force",
     "next": [
       {
+        "argvs": [
+          [
+            "speccoder",
+            "config",
+            "commit"
+          ]
+        ],
         "command": "speccoder config commit",
+        "how": "command",
+        "interactive": false,
         "why": "speccoder reads committed configuration only"
       }
     ],

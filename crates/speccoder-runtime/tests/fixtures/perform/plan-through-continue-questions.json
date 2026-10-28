@@ -33,6 +33,14 @@
     "fix": [
       "speccoder review"
     ],
+    "fix_steps": [
+      {
+        "command": "speccoder review",
+        "how": "view",
+        "subject": null,
+        "view": "review"
+      }
+    ],
     "message": "1 open question in 001-graph: answer it, then review the spec",
     "payload": "planning_chain",
     "schema_version": 2,

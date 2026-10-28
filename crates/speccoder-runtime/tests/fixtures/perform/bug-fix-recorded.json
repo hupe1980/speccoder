@@ -59,6 +59,16 @@
     "next": [
       {
         "command": "speccoder bug run --task 003-bugfixes/T001",
+        "confirm": null,
+        "feature": null,
+        "how": "perform",
+        "input": null,
+        "run": {
+          "kind": "bug_run",
+          "slug": null,
+          "task": "003-bugfixes/T001"
+        },
+        "text": null,
         "why": "reproduce it"
       }
     ],

@@ -10,6 +10,43 @@
       "speccoder feature <name>",
       "speccoder issue --feature <name>"
     ],
+    "fix_steps": [
+      {
+        "command": "speccoder feature",
+        "confirm": null,
+        "feature": null,
+        "how": "perform",
+        "input": "The feature",
+        "run": {
+          "kind": "feature"
+        },
+        "text": null
+      },
+      {
+        "command": "speccoder feature <name>",
+        "confirm": null,
+        "feature": null,
+        "how": "perform",
+        "input": "The feature",
+        "run": {
+          "kind": "feature"
+        },
+        "text": null
+      },
+      {
+        "argvs": [
+          [
+            "speccoder",
+            "issue",
+            "--feature",
+            "<name>"
+          ]
+        ],
+        "command": "speccoder issue --feature <name>",
+        "how": "command",
+        "interactive": false
+      }
+    ],
     "message": "2 features, none selected; 1 errors, 0 warnings",
     "schema_version": 2,
     "status": "selection_needed"

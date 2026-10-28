@@ -8,6 +8,20 @@
     "fix": [
       "speccoder sample --help"
     ],
+    "fix_steps": [
+      {
+        "argvs": [
+          [
+            "speccoder",
+            "sample",
+            "--help"
+          ]
+        ],
+        "command": "speccoder sample --help",
+        "how": "command",
+        "interactive": false
+      }
+    ],
     "message": "these are the sample's checks: run them in its copy (speccoder sample)",
     "schema_version": 2,
     "status": "usage_error"

@@ -713,8 +713,9 @@ pub enum DoctorLevel {
     Fail,
 }
 
-/// One doctor check.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+/// One doctor check. Serialised with `fix_steps`: its fix lines with how
+/// an interface takes each.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DoctorCheck {
     /// `git`, `repository`, `project`, `config`, `key`, `sandbox`, …
     pub check: String,
@@ -727,11 +728,60 @@ pub struct DoctorCheck {
     /// How to resolve it.
     pub fix: Vec<String>,
     /// The fix speccoder can apply itself, on the person's yes.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub remedy: Option<Remedy>,
     /// The tasks a plan check names.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tasks: Vec<String>,
+}
+
+// A doctor check as it is serialised: the schema of `DoctorCheck`.
+/// One doctor check.
+#[derive(Serialize, schemars::JsonSchema)]
+#[schemars(rename = "DoctorCheck")]
+struct ShownCheck<'a> {
+    /// `git`, `repository`, `project`, `config`, `key`, `sandbox`, …
+    check: &'a str,
+    /// Pass, warn or fail.
+    level: DoctorLevel,
+    /// What was found.
+    detail: &'a str,
+    /// The catalog code of a failure or warning.
+    code: Option<&'a str>,
+    /// How to resolve it.
+    fix: &'a [String],
+    /// The same lines, with how an interface takes each.
+    fix_steps: Vec<crate::step::Step>,
+    /// The fix speccoder can apply itself, on the person's yes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    remedy: Option<&'a Remedy>,
+    /// The tasks a plan check names.
+    #[serde(skip_serializing_if = "<[String]>::is_empty")]
+    tasks: &'a [String],
+}
+
+impl Serialize for DoctorCheck {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        ShownCheck {
+            check: &self.check,
+            level: self.level,
+            detail: &self.detail,
+            code: self.code.as_deref(),
+            fix: &self.fix,
+            fix_steps: crate::step::steps(&self.fix, crate::step::Context::default()),
+            remedy: self.remedy.as_ref(),
+            tasks: &self.tasks,
+        }
+        .serialize(serializer)
+    }
+}
+
+impl schemars::JsonSchema for DoctorCheck {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "DoctorCheck".into()
+    }
+
+    fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        ShownCheck::json_schema(generator)
+    }
 }
 
 /// Result of `speccoder doctor`.
@@ -2307,8 +2357,13 @@ impl Serialize for CommandResult {
         map.serialize_entry("exit_code", &self.exit_code)?;
         map.serialize_entry("message", &self.message)?;
         if let Some(code) = self.code() {
+            let fix = self.fix();
             map.serialize_entry("code", code.name)?;
-            map.serialize_entry("fix", &self.fix())?;
+            map.serialize_entry("fix", &fix)?;
+            map.serialize_entry(
+                "fix_steps",
+                &crate::step::steps(&fix, crate::step::Context::default()),
+            )?;
             map.serialize_entry("docs", &code.docs())?;
         }
         if let Some(remedy) = &self.remedy {
@@ -2347,6 +2402,9 @@ struct Envelope {
     /// How to resolve it: commands, or `→ ` lines for a person.
     #[serde(skip_serializing_if = "Option::is_none")]
     fix: Option<Vec<String>>,
+    /// The same lines, with how an interface takes each.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    fix_steps: Option<Vec<crate::step::Step>>,
     /// The code's section on the codes page.
     #[serde(skip_serializing_if = "Option::is_none")]
     docs: Option<String>,
@@ -2618,6 +2676,7 @@ mod tests {
                 "message": "not replayable",
                 "code": "NOT-REPLAYABLE",
                 "fix": ["x"],
+                "fix_steps": [{ "command": "x", "how": "words", "why": null }],
                 "docs": "https://hupe1980.github.io/speccoder/docs/codes/#not-replayable"
             })
         );
@@ -2625,6 +2684,9 @@ mod tests {
             .with_next(crate::next::next(&crate::next::Outcome::Decided, None));
         let json = serde_json::to_value(&with_next).unwrap();
         assert_eq!(json["next"][0]["command"], "speccoder run");
+        // How an interface takes it, beside it.
+        assert_eq!(json["next"][0]["how"], "perform");
+        assert_eq!(json["next"][0]["run"]["kind"], "run");
         assert!(json.get("data").is_none());
     }
 }

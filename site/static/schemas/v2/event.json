@@ -189,7 +189,18 @@
               "type": "null"
             }
           ],
-          "description": "How an interface runs it; `None`: run the command yourself (it leaves\nthe machine, or it is not something an interface hosts)."
+          "description": "How an interface runs it; `None`: see `step`."
+        },
+        "step": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/How"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "How an interface takes it when it does not run it (`run` is `None`):\na view it opens, the person's own command, a line for their shell."
         },
         "why": {
           "description": "Why, or what follows (shown beside it).",
@@ -202,6 +213,7 @@
         "why",
         "command",
         "run",
+        "step",
         "blocked",
         "input",
         "confirm",
@@ -2407,6 +2419,16 @@
             "null"
           ]
         },
+        "fix_steps": {
+          "description": "The same lines, with how an interface takes each.",
+          "items": {
+            "$ref": "#/$defs/Step"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "message": {
           "description": "One line, for a person.",
           "type": "string"
@@ -3901,6 +3923,13 @@
           },
           "type": "array"
         },
+        "fix_steps": {
+          "description": "The same lines, with how an interface takes each.",
+          "items": {
+            "$ref": "#/$defs/Step"
+          },
+          "type": "array"
+        },
         "level": {
           "$ref": "#/$defs/DoctorLevel",
           "description": "Pass, warn or fail."
@@ -3929,7 +3958,8 @@
         "level",
         "detail",
         "code",
-        "fix"
+        "fix",
+        "fix_steps"
       ],
       "type": "object"
     },
@@ -5250,6 +5280,170 @@
         }
       ]
     },
+    "How": {
+      "description": "How an interface takes a line.",
+      "oneOf": [
+        {
+          "description": "speccoder performs it (`actions::perform`).",
+          "properties": {
+            "confirm": {
+              "description": "What to say in a confirmation first (it leaves the machine or\ncannot be undone).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "feature": {
+              "description": "The feature the line names (`--feature F`); `None`: the current.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "how": {
+              "const": "perform",
+              "type": "string"
+            },
+            "input": {
+              "description": "What to ask for first (`Why it is skipped`); `None`: nothing.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "run": {
+              "$ref": "#/$defs/Runnable",
+              "description": "What runs."
+            },
+            "text": {
+              "description": "The words the line gives already (a `--reason \"…\"` filled in).",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "how",
+            "run",
+            "input",
+            "text",
+            "confirm",
+            "feature"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A view to open.",
+          "properties": {
+            "how": {
+              "const": "view",
+              "type": "string"
+            },
+            "subject": {
+              "description": "What it is about: a code, a task.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "view": {
+              "$ref": "#/$defs/View",
+              "description": "Which."
+            }
+          },
+          "required": [
+            "how",
+            "view",
+            "subject"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A command speccoder printed as a fix and can run as the person, in\nthe project folder, outside the sandbox — never one composed\nelsewhere. Several argvs run in order, each only after the last\none succeeded (`a && b`).",
+          "properties": {
+            "argvs": {
+              "description": "The argvs, exactly.",
+              "items": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "type": "array"
+            },
+            "how": {
+              "const": "command",
+              "type": "string"
+            },
+            "interactive": {
+              "description": "It reads the keyboard (a login): a terminal of the person's\nown, not a panel.",
+              "type": "boolean"
+            },
+            "token": {
+              "description": "The host's proof that it issued exactly these argvs; only a\nhost that runs commands sets it.",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "how",
+            "argvs",
+            "interactive"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "It must run in the shell speccoder starts from (`export NAME=…`):\nnothing run elsewhere reaches that shell.",
+          "properties": {
+            "how": {
+              "const": "shell",
+              "type": "string"
+            },
+            "setting": {
+              "description": "The setting that stands for it (`model`), if there is one.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "why": {
+              "description": "Why it cannot run here.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "how",
+            "why",
+            "setting"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Words for a person (`→ …`), or a command only they can complete.",
+          "properties": {
+            "how": {
+              "const": "words",
+              "type": "string"
+            },
+            "why": {
+              "description": "Why it is not taken here; `None` for words.",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "how",
+            "why"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "ImplementedBy": {
       "anyOf": [
         {
@@ -6125,6 +6319,167 @@
     },
     "NextStep": {
       "description": "One step a person can take.",
+      "oneOf": [
+        {
+          "description": "speccoder performs it (`actions::perform`).",
+          "properties": {
+            "confirm": {
+              "description": "What to say in a confirmation first (it leaves the machine or\ncannot be undone).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "feature": {
+              "description": "The feature the line names (`--feature F`); `None`: the current.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "how": {
+              "const": "perform",
+              "type": "string"
+            },
+            "input": {
+              "description": "What to ask for first (`Why it is skipped`); `None`: nothing.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "run": {
+              "$ref": "#/$defs/Runnable",
+              "description": "What runs."
+            },
+            "text": {
+              "description": "The words the line gives already (a `--reason \"…\"` filled in).",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "how",
+            "run",
+            "input",
+            "text",
+            "confirm",
+            "feature"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A view to open.",
+          "properties": {
+            "how": {
+              "const": "view",
+              "type": "string"
+            },
+            "subject": {
+              "description": "What it is about: a code, a task.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "view": {
+              "$ref": "#/$defs/View",
+              "description": "Which."
+            }
+          },
+          "required": [
+            "how",
+            "view",
+            "subject"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A command speccoder printed as a fix and can run as the person, in\nthe project folder, outside the sandbox — never one composed\nelsewhere. Several argvs run in order, each only after the last\none succeeded (`a && b`).",
+          "properties": {
+            "argvs": {
+              "description": "The argvs, exactly.",
+              "items": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "type": "array"
+            },
+            "how": {
+              "const": "command",
+              "type": "string"
+            },
+            "interactive": {
+              "description": "It reads the keyboard (a login): a terminal of the person's\nown, not a panel.",
+              "type": "boolean"
+            },
+            "token": {
+              "description": "The host's proof that it issued exactly these argvs; only a\nhost that runs commands sets it.",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "how",
+            "argvs",
+            "interactive"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "It must run in the shell speccoder starts from (`export NAME=…`):\nnothing run elsewhere reaches that shell.",
+          "properties": {
+            "how": {
+              "const": "shell",
+              "type": "string"
+            },
+            "setting": {
+              "description": "The setting that stands for it (`model`), if there is one.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "why": {
+              "description": "Why it cannot run here.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "how",
+            "why",
+            "setting"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Words for a person (`→ …`), or a command only they can complete.",
+          "properties": {
+            "how": {
+              "const": "words",
+              "type": "string"
+            },
+            "why": {
+              "description": "Why it is not taken here; `None` for words.",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "how",
+            "why"
+          ],
+          "type": "object"
+        }
+      ],
       "properties": {
         "command": {
           "description": "A copy-pasteable command (`\"…\"` marks text the person writes).",
@@ -11878,6 +12233,180 @@
       ],
       "type": "object"
     },
+    "Step": {
+      "description": "A line with how it is taken.",
+      "oneOf": [
+        {
+          "description": "speccoder performs it (`actions::perform`).",
+          "properties": {
+            "confirm": {
+              "description": "What to say in a confirmation first (it leaves the machine or\ncannot be undone).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "feature": {
+              "description": "The feature the line names (`--feature F`); `None`: the current.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "how": {
+              "const": "perform",
+              "type": "string"
+            },
+            "input": {
+              "description": "What to ask for first (`Why it is skipped`); `None`: nothing.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "run": {
+              "$ref": "#/$defs/Runnable",
+              "description": "What runs."
+            },
+            "text": {
+              "description": "The words the line gives already (a `--reason \"…\"` filled in).",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "how",
+            "run",
+            "input",
+            "text",
+            "confirm",
+            "feature"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A view to open.",
+          "properties": {
+            "how": {
+              "const": "view",
+              "type": "string"
+            },
+            "subject": {
+              "description": "What it is about: a code, a task.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "view": {
+              "$ref": "#/$defs/View",
+              "description": "Which."
+            }
+          },
+          "required": [
+            "how",
+            "view",
+            "subject"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A command speccoder printed as a fix and can run as the person, in\nthe project folder, outside the sandbox — never one composed\nelsewhere. Several argvs run in order, each only after the last\none succeeded (`a && b`).",
+          "properties": {
+            "argvs": {
+              "description": "The argvs, exactly.",
+              "items": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "type": "array"
+            },
+            "how": {
+              "const": "command",
+              "type": "string"
+            },
+            "interactive": {
+              "description": "It reads the keyboard (a login): a terminal of the person's\nown, not a panel.",
+              "type": "boolean"
+            },
+            "token": {
+              "description": "The host's proof that it issued exactly these argvs; only a\nhost that runs commands sets it.",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "how",
+            "argvs",
+            "interactive"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "It must run in the shell speccoder starts from (`export NAME=…`):\nnothing run elsewhere reaches that shell.",
+          "properties": {
+            "how": {
+              "const": "shell",
+              "type": "string"
+            },
+            "setting": {
+              "description": "The setting that stands for it (`model`), if there is one.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "why": {
+              "description": "Why it cannot run here.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "how",
+            "why",
+            "setting"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Words for a person (`→ …`), or a command only they can complete.",
+          "properties": {
+            "how": {
+              "const": "words",
+              "type": "string"
+            },
+            "why": {
+              "description": "Why it is not taken here; `None` for words.",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "how",
+            "why"
+          ],
+          "type": "object"
+        }
+      ],
+      "properties": {
+        "command": {
+          "description": "The line, as printed.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "command"
+      ],
+      "type": "object"
+    },
     "StepAccess": {
       "description": "Whether a step stays on the machine.",
       "oneOf": [
@@ -13149,6 +13678,86 @@
         {
           "const": "mcp",
           "description": "A client over the Model Context Protocol.",
+          "type": "string"
+        }
+      ]
+    },
+    "View": {
+      "description": "A read-only place an interface opens instead of running a command.",
+      "oneOf": [
+        {
+          "const": "doctor",
+          "description": "`doctor`: every check of the setup.",
+          "type": "string"
+        },
+        {
+          "const": "bug_report",
+          "description": "`doctor --bug-report`: the setup as a bug report, to copy.",
+          "type": "string"
+        },
+        {
+          "const": "report",
+          "description": "`report`, `status`: every task and its evidence.",
+          "type": "string"
+        },
+        {
+          "const": "live",
+          "description": "`report --live`, `tui`: the run as it goes.",
+          "type": "string"
+        },
+        {
+          "const": "approvals",
+          "description": "`report --approvals`, `task approve|reject`: the calls waiting,\nshown in full before a decision.",
+          "type": "string"
+        },
+        {
+          "const": "explain",
+          "description": "`explain CODE`: what a code means and how to resolve it.",
+          "type": "string"
+        },
+        {
+          "const": "review",
+          "description": "`review`: the spec's review.",
+          "type": "string"
+        },
+        {
+          "const": "settings",
+          "description": "`config`: the settings.",
+          "type": "string"
+        },
+        {
+          "const": "setup",
+          "description": "`init`: the setup assistant.",
+          "type": "string"
+        },
+        {
+          "const": "bug",
+          "description": "`bug`: the bug sheet.",
+          "type": "string"
+        },
+        {
+          "const": "quick_change",
+          "description": "`do`: the quick-change sheet.",
+          "type": "string"
+        },
+        {
+          "const": "new_feature",
+          "description": "`feature similar`: the new-feature sheet.",
+          "type": "string"
+        },
+        {
+          "const": "new_project",
+          "description": "`new`: the new-project sheet.",
+          "type": "string"
+        },
+        {
+          "const": "git_hub",
+          "description": "`auth`: the GitHub sign-in.",
+          "type": "string"
+        },
+        {
+          "const": "task",
+          "description": "A task's drawer (`subject`: its id).",
           "type": "string"
         }
       ]

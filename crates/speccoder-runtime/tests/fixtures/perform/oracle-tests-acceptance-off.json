@@ -8,6 +8,22 @@
     "fix": [
       "speccoder config set acceptance.generate true"
     ],
+    "fix_steps": [
+      {
+        "argvs": [
+          [
+            "speccoder",
+            "config",
+            "set",
+            "acceptance.generate",
+            "true"
+          ]
+        ],
+        "command": "speccoder config set acceptance.generate true",
+        "how": "command",
+        "interactive": false
+      }
+    ],
     "message": "acceptance tests are off ([acceptance] generate = false): no tests are written at review",
     "schema_version": 2,
     "status": "config_error"

@@ -10,6 +10,38 @@
       "speccoder review approve",
       "git commit"
     ],
+    "fix_steps": [
+      {
+        "command": "speccoder review",
+        "how": "view",
+        "subject": null,
+        "view": "review"
+      },
+      {
+        "command": "speccoder review approve",
+        "confirm": null,
+        "feature": null,
+        "how": "perform",
+        "input": null,
+        "run": {
+          "ids": [],
+          "kind": "review",
+          "verdict": "approve"
+        },
+        "text": null
+      },
+      {
+        "argvs": [
+          [
+            "git",
+            "commit"
+          ]
+        ],
+        "command": "git commit",
+        "how": "command",
+        "interactive": false
+      }
+    ],
     "message": "1 open question(s) first: Q1 — answer (`speccoder review answer Q1 \"…\"`) or reword",
     "schema_version": 2,
     "status": "needs_human"

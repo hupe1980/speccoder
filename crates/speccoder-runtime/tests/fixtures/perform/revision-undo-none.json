@@ -8,6 +8,14 @@
     "fix": [
       "speccoder review --help"
     ],
+    "fix_steps": [
+      {
+        "command": "speccoder review --help",
+        "how": "view",
+        "subject": null,
+        "view": "review"
+      }
+    ],
     "message": "no revision to undo",
     "schema_version": 2,
     "status": "usage_error"

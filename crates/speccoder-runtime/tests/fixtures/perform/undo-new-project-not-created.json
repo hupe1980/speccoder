@@ -8,6 +8,13 @@
     "fix": [
       "→ undo it yourself; nothing was moved"
     ],
+    "fix_steps": [
+      {
+        "command": "→ undo it yourself; nothing was moved",
+        "how": "words",
+        "why": null
+      }
+    ],
     "message": "speccoder did not create <root>; nothing was moved",
     "schema_version": 2,
     "status": "git_precondition"

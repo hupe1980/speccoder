@@ -8,6 +8,14 @@
     "fix": [
       "export SPECCODER_STATE_DIR=\"$PWD/.speccoder-state\""
     ],
+    "fix_steps": [
+      {
+        "command": "export SPECCODER_STATE_DIR=\"$PWD/.speccoder-state\"",
+        "how": "shell",
+        "setting": null,
+        "why": "`SPECCODER_STATE_DIR` must be set where speccoder starts: a command run from here ends with its own shell, and the variable with it"
+      }
+    ],
     "message": "no state directory (set SPECCODER_STATE_DIR or HOME)",
     "schema_version": 2,
     "status": "config_error"

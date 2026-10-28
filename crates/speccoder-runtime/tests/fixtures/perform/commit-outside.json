@@ -8,6 +8,13 @@
     "fix": [
       "speccoder commit --help"
     ],
+    "fix_steps": [
+      {
+        "command": "speccoder commit --help",
+        "how": "words",
+        "why": null
+      }
+    ],
     "message": "`specs/001-graph/../../src/lib.rs` is not in specs/001-graph; only planning files are committed here",
     "schema_version": 2,
     "status": "usage_error"

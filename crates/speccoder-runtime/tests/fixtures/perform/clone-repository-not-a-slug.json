@@ -8,6 +8,13 @@
     "fix": [
       "→ choose a folder outside it"
     ],
+    "fix_steps": [
+      {
+        "command": "→ choose a folder outside it",
+        "how": "words",
+        "why": null
+      }
+    ],
     "message": "<root>/clone is inside the repository <root>",
     "schema_version": 2,
     "status": "git_precondition"

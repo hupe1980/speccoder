@@ -8,6 +8,20 @@
     "fix": [
       "speccoder config --help"
     ],
+    "fix_steps": [
+      {
+        "argvs": [
+          [
+            "speccoder",
+            "config",
+            "--help"
+          ]
+        ],
+        "command": "speccoder config --help",
+        "how": "command",
+        "interactive": false
+      }
+    ],
     "message": "not a call id",
     "schema_version": 2,
     "status": "usage_error"

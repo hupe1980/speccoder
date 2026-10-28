@@ -7,6 +7,15 @@
     "next": [
       {
         "command": "speccoder run --feature 002-quick-changes --task T001",
+        "confirm": null,
+        "feature": "002-quick-changes",
+        "how": "perform",
+        "input": null,
+        "run": {
+          "kind": "run",
+          "task": "T001"
+        },
+        "text": null,
         "why": "the change, judged on evidence"
       }
     ],

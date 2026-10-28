@@ -29,6 +29,7 @@ pub mod similar;
 pub mod snapshot;
 pub mod spec;
 pub mod stage;
+pub mod step;
 pub mod strength;
 pub mod tour;
 pub mod verify;

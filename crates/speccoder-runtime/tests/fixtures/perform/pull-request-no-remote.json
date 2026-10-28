@@ -10,6 +10,41 @@
       "speccoder feature <name>",
       "speccoder pr --feature <name>"
     ],
+    "fix_steps": [
+      {
+        "command": "speccoder feature",
+        "confirm": null,
+        "feature": null,
+        "how": "perform",
+        "input": "The feature",
+        "run": {
+          "kind": "feature"
+        },
+        "text": null
+      },
+      {
+        "command": "speccoder feature <name>",
+        "confirm": null,
+        "feature": null,
+        "how": "perform",
+        "input": "The feature",
+        "run": {
+          "kind": "feature"
+        },
+        "text": null
+      },
+      {
+        "command": "speccoder pr --feature <name>",
+        "confirm": "Push the feature's speccoder branch and its attestation notes to `origin`, and open (or update) its draft pull request on GitHub, as you (your token).",
+        "feature": null,
+        "how": "perform",
+        "input": null,
+        "run": {
+          "kind": "pull_request"
+        },
+        "text": null
+      }
+    ],
     "message": "2 features and none is current (001-graph, 002-quick-changes)",
     "schema_version": 2,
     "status": "selection_needed"

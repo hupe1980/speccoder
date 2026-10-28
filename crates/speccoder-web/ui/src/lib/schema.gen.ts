@@ -67,11 +67,13 @@ export interface Action {
    * everything else.
    */
   role: SkillRole | null;
-  /**
-   * How an interface runs it; `None`: run the command yourself (it leaves
-   * the machine, or it is not something an interface hosts).
-   */
+  /** How an interface runs it; `None`: see `step`. */
   run: Runnable | null;
+  /**
+   * How an interface takes it when it does not run it (`run` is `None`):
+   * a view it opens, the person's own command, a line for their shell.
+   */
+  step: How | null;
   /** Why, or what follows (shown beside it). */
   why: string;
 }
@@ -719,6 +721,8 @@ export interface CommandResult {
   exit_code: ExitCode;
   /** How to resolve it: commands, or `→ ` lines for a person. */
   fix?: string[] | null;
+  /** The same lines, with how an interface takes each. */
+  fix_steps?: Step[] | null;
   /** One line, for a person. */
   message: string;
   /** The steps that continue. */
@@ -1195,6 +1199,8 @@ export interface DoctorCheck {
   detail: string;
   /** How to resolve it. */
   fix: string[];
+  /** The same lines, with how an interface takes each. */
+  fix_steps: Step[];
   /** Pass, warn or fail. */
   level: DoctorLevel;
   /** The fix speccoder can apply itself, on the person's yes. */
@@ -1274,6 +1280,8 @@ export interface Envelope {
   exit_code: ExitCode;
   /** How to resolve it: commands, or `→ ` lines for a person. */
   fix?: string[] | null;
+  /** The same lines, with how an interface takes each. */
+  fix_steps?: Step[] | null;
   /** One line, for a person. */
   message: string;
   /** The steps that continue. */
@@ -2113,6 +2121,72 @@ export interface HeldOutVariant {
 /** Where the format keeps the bug. */
 export type HomeKind = "native_speckit_bug" | "native_kiro_bugfix" | "standing_speckit" | "standing_openspec";
 
+/** How an interface takes a line. */
+export type How =
+  /** speccoder performs it (`actions::perform`). */
+  | {
+    /**
+     * What to say in a confirmation first (it leaves the machine or
+     * cannot be undone).
+     */
+    confirm: string | null;
+    /** The feature the line names (`--feature F`); `None`: the current. */
+    feature: string | null;
+    how: "perform";
+    /** What to ask for first (`Why it is skipped`); `None`: nothing. */
+    input: string | null;
+    /** What runs. */
+    run: Runnable;
+    /** The words the line gives already (a `--reason "…"` filled in). */
+    text: string | null;
+  }
+  /** A view to open. */
+  | {
+    how: "view";
+    /** What it is about: a code, a task. */
+    subject: string | null;
+    /** Which. */
+    view: View;
+  }
+  /**
+   * A command speccoder printed as a fix and can run as the person, in
+   * the project folder, outside the sandbox — never one composed
+   * elsewhere. Several argvs run in order, each only after the last
+   * one succeeded (`a && b`).
+   */
+  | {
+    /** The argvs, exactly. */
+    argvs: string[][];
+    how: "command";
+    /**
+     * It reads the keyboard (a login): a terminal of the person's
+     * own, not a panel.
+     */
+    interactive: boolean;
+    /**
+     * The host's proof that it issued exactly these argvs; only a
+     * host that runs commands sets it.
+     */
+    token?: string | null;
+  }
+  /**
+   * It must run in the shell speccoder starts from (`export NAME=…`):
+   * nothing run elsewhere reaches that shell.
+   */
+  | {
+    how: "shell";
+    /** The setting that stands for it (`model`), if there is one. */
+    setting: string | null;
+    /** Why it cannot run here. */
+    why: string;
+  }
+  /** Words for a person (`→ …`), or a command only they can complete. */
+  | {
+    how: "words";
+    /** Why it is not taken here; `None` for words. */
+    why: string | null;
+  };
+
 /** Which tick made already-passing acceptance tests pass. */
 export type ImplementedBy =
   /** A tick on the feature branch. */
@@ -2452,12 +2526,75 @@ export interface NewProjectReport {
 }
 
 /** One step a person can take. */
-export interface NextStep {
+export type NextStep = {
   /** A copy-pasteable command (`"…"` marks text the person writes). */
   command: string;
   /** Why, in one short line. */
   why: string;
-}
+} & (
+  /** speccoder performs it (`actions::perform`). */
+  | {
+    /**
+     * What to say in a confirmation first (it leaves the machine or
+     * cannot be undone).
+     */
+    confirm: string | null;
+    /** The feature the line names (`--feature F`); `None`: the current. */
+    feature: string | null;
+    how: "perform";
+    /** What to ask for first (`Why it is skipped`); `None`: nothing. */
+    input: string | null;
+    /** What runs. */
+    run: Runnable;
+    /** The words the line gives already (a `--reason "…"` filled in). */
+    text: string | null;
+  }
+  /** A view to open. */
+  | {
+    how: "view";
+    /** What it is about: a code, a task. */
+    subject: string | null;
+    /** Which. */
+    view: View;
+  }
+  /**
+   * A command speccoder printed as a fix and can run as the person, in
+   * the project folder, outside the sandbox — never one composed
+   * elsewhere. Several argvs run in order, each only after the last
+   * one succeeded (`a && b`).
+   */
+  | {
+    /** The argvs, exactly. */
+    argvs: string[][];
+    how: "command";
+    /**
+     * It reads the keyboard (a login): a terminal of the person's
+     * own, not a panel.
+     */
+    interactive: boolean;
+    /**
+     * The host's proof that it issued exactly these argvs; only a
+     * host that runs commands sets it.
+     */
+    token?: string | null;
+  }
+  /**
+   * It must run in the shell speccoder starts from (`export NAME=…`):
+   * nothing run elsewhere reaches that shell.
+   */
+  | {
+    how: "shell";
+    /** The setting that stands for it (`model`), if there is one. */
+    setting: string | null;
+    /** Why it cannot run here. */
+    why: string;
+  }
+  /** Words for a person (`→ …`), or a command only they can complete. */
+  | {
+    how: "words";
+    /** Why it is not taken here; `None` for words. */
+    why: string | null;
+  });
 
 /** One task object's verification. */
 export interface ObjectVerification {
@@ -4633,6 +4770,75 @@ export interface StatusTotals {
   without_attestation: number;
 }
 
+/** A line with how it is taken. */
+export type Step = {
+  /** The line, as printed. */
+  command: string;
+} & (
+  /** speccoder performs it (`actions::perform`). */
+  | {
+    /**
+     * What to say in a confirmation first (it leaves the machine or
+     * cannot be undone).
+     */
+    confirm: string | null;
+    /** The feature the line names (`--feature F`); `None`: the current. */
+    feature: string | null;
+    how: "perform";
+    /** What to ask for first (`Why it is skipped`); `None`: nothing. */
+    input: string | null;
+    /** What runs. */
+    run: Runnable;
+    /** The words the line gives already (a `--reason "…"` filled in). */
+    text: string | null;
+  }
+  /** A view to open. */
+  | {
+    how: "view";
+    /** What it is about: a code, a task. */
+    subject: string | null;
+    /** Which. */
+    view: View;
+  }
+  /**
+   * A command speccoder printed as a fix and can run as the person, in
+   * the project folder, outside the sandbox — never one composed
+   * elsewhere. Several argvs run in order, each only after the last
+   * one succeeded (`a && b`).
+   */
+  | {
+    /** The argvs, exactly. */
+    argvs: string[][];
+    how: "command";
+    /**
+     * It reads the keyboard (a login): a terminal of the person's
+     * own, not a panel.
+     */
+    interactive: boolean;
+    /**
+     * The host's proof that it issued exactly these argvs; only a
+     * host that runs commands sets it.
+     */
+    token?: string | null;
+  }
+  /**
+   * It must run in the shell speccoder starts from (`export NAME=…`):
+   * nothing run elsewhere reaches that shell.
+   */
+  | {
+    how: "shell";
+    /** The setting that stands for it (`model`), if there is one. */
+    setting: string | null;
+    /** Why it cannot run here. */
+    why: string;
+  }
+  /** Words for a person (`→ …`), or a command only they can complete. */
+  | {
+    how: "words";
+    /** Why it is not taken here; `None` for words. */
+    why: string | null;
+  });
+
 /** Whether a step stays on the machine. */
 export type StepAccess = "local" | "network";
 
@@ -5023,6 +5229,9 @@ export interface VerifyReport {
  * `editor <name>` (read as [`Via::Acp`], the name a separate client).
  */
 export type Via = "terminal" | "web" | "window" | "acp" | "phone" | "ci" | "mcp";
+
+/** A read-only place an interface opens instead of running a command. */
+export type View = "doctor" | "bug_report" | "report" | "live" | "approvals" | "explain" | "review" | "settings" | "setup" | "bug" | "quick_change" | "new_feature" | "new_project" | "git_hub" | "task";
 
 /** Result of `speccoder worktree`. */
 export interface WorktreeReport {

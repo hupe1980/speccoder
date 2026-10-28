@@ -10,10 +10,37 @@
       "git remote -v",
       "speccoder pr --remote <name>"
     ],
+    "fix_steps": [
+      {
+        "command": "git remote add origin <url>",
+        "how": "words",
+        "why": "it has a part only you can fill in"
+      },
+      {
+        "argvs": [
+          [
+            "git",
+            "remote",
+            "-v"
+          ]
+        ],
+        "command": "git remote -v",
+        "how": "command",
+        "interactive": false
+      },
+      {
+        "command": "speccoder pr --remote <name>",
+        "how": "words",
+        "why": "name the remote it pushes to"
+      }
+    ],
     "message": "GitHub: this repository has no remote: `git remote add origin <url>` (GitHub's address for it)",
     "next": [
       {
         "command": "speccoder doctor",
+        "how": "view",
+        "subject": null,
+        "view": "doctor",
         "why": "check the rest of the setup"
       }
     ],

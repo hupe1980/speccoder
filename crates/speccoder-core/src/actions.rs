@@ -1040,9 +1040,11 @@ pub struct Action {
     pub why: String,
     /// The equivalent command; `"…"` marks the input.
     pub command: String,
-    /// How an interface runs it; `None`: run the command yourself (it leaves
-    /// the machine, or it is not something an interface hosts).
+    /// How an interface runs it; `None`: see `step`.
     pub run: Option<Runnable>,
+    /// How an interface takes it when it does not run it (`run` is `None`):
+    /// a view it opens, the person's own command, a line for their shell.
+    pub step: Option<crate::step::How>,
     /// Why it cannot run now; `None`: it can.
     pub blocked: Option<String>,
     /// What to ask for before it runs (`Describe the feature`).
@@ -1072,6 +1074,7 @@ impl Action {
             label: label.into(),
             why: why.into(),
             id: identity(None, &command),
+            step: Some(crate::step::step_of(&command, crate::step::Context::default()).how),
             command,
             run: None,
             blocked: None,
@@ -1086,6 +1089,7 @@ impl Action {
     pub fn with_run(mut self, run: Runnable) -> Self {
         self.id = identity(Some(&run), &self.command);
         self.run = Some(run);
+        self.step = None;
         self
     }
 

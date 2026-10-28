@@ -8,6 +8,13 @@
     "fix": [
       "speccoder job --help"
     ],
+    "fix_steps": [
+      {
+        "command": "speccoder job --help",
+        "how": "words",
+        "why": null
+      }
+    ],
     "message": "a reason is needed",
     "schema_version": 2,
     "status": "usage_error"

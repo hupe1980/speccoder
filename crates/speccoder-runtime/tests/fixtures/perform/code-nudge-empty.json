@@ -8,6 +8,14 @@
     "fix": [
       "speccoder review --help"
     ],
+    "fix_steps": [
+      {
+        "command": "speccoder review --help",
+        "how": "view",
+        "subject": null,
+        "view": "review"
+      }
+    ],
     "message": "a nudge needs at least one comment, each with its words",
     "schema_version": 2,
     "status": "usage_error"

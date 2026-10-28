@@ -8,14 +8,41 @@
     "fix": [
       "speccoder config set acceptance.generate true"
     ],
+    "fix_steps": [
+      {
+        "argvs": [
+          [
+            "speccoder",
+            "config",
+            "set",
+            "acceptance.generate",
+            "true"
+          ]
+        ],
+        "command": "speccoder config set acceptance.generate true",
+        "how": "command",
+        "interactive": false
+      }
+    ],
     "message": "acceptance tests are off ([acceptance] generate = false): no tests are written at review",
     "next": [
       {
         "command": "speccoder init",
+        "how": "view",
+        "subject": null,
+        "view": "setup",
         "why": "write or repair speccoder.toml"
       },
       {
+        "argvs": [
+          [
+            "speccoder",
+            "verify"
+          ]
+        ],
         "command": "speccoder verify",
+        "how": "command",
+        "interactive": false,
         "why": "check the configured checks run"
       }
     ],

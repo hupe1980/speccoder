@@ -5,13 +5,49 @@
 
 use serde::{Deserialize, Serialize};
 
-/// One step a person can take.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+/// One step a person can take. Serialised with how an interface takes it
+/// ([`crate::step::How`], beside `command` and `why`).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct NextStep {
     /// A copy-pasteable command (`"…"` marks text the person writes).
     pub command: String,
     /// Why, in one short line.
     pub why: String,
+}
+
+// A next step as it is serialised: the schema of `NextStep`.
+/// One step a person can take.
+#[derive(Serialize, schemars::JsonSchema)]
+#[schemars(rename = "NextStep")]
+struct Shown<'a> {
+    /// A copy-pasteable command (`"…"` marks text the person writes).
+    command: &'a str,
+    /// Why, in one short line.
+    why: &'a str,
+    /// How an interface takes it.
+    #[serde(flatten)]
+    how: crate::step::How,
+}
+
+impl Serialize for NextStep {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Shown {
+            command: &self.command,
+            why: &self.why,
+            how: crate::step::step_of(&self.command, crate::step::Context::default()).how,
+        }
+        .serialize(serializer)
+    }
+}
+
+impl schemars::JsonSchema for NextStep {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "NextStep".into()
+    }
+
+    fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        Shown::json_schema(generator)
+    }
 }
 
 /// How a command ended, as far as what comes next is concerned.

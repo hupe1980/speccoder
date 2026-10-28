@@ -158,6 +158,13 @@
     "fix": [
       "→ choose a folder outside it, or use <root> itself"
     ],
+    "fix_steps": [
+      {
+        "command": "→ choose a folder outside it, or use <root> itself",
+        "how": "words",
+        "why": null
+      }
+    ],
     "message": "<root>/sub/app is inside the repository <root>",
     "payload": "new_project",
     "schema_version": 2,

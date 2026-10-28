@@ -8,6 +8,14 @@
     "fix": [
       "speccoder init"
     ],
+    "fix_steps": [
+      {
+        "command": "speccoder init",
+        "how": "view",
+        "subject": null,
+        "view": "setup"
+      }
+    ],
     "message": "no state directory",
     "schema_version": 2,
     "status": "config_error"

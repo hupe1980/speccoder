@@ -8,6 +8,13 @@
     "fix": [
       "→ re-run with -v and report the output at https://github.com/hupe1980/speccoder/issues"
     ],
+    "fix_steps": [
+      {
+        "command": "→ re-run with -v and report the output at https://github.com/hupe1980/speccoder/issues",
+        "how": "words",
+        "why": null
+      }
+    ],
     "message": "the calls waiting for a decision could not be read: another speccoder is working on this project (its journal in <state>/<hex> is in use): Database already open. Cannot acquire lock.",
     "schema_version": 2,
     "status": "error"

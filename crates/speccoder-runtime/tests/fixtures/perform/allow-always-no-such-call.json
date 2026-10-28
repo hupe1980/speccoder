@@ -8,6 +8,14 @@
     "fix": [
       "speccoder report"
     ],
+    "fix_steps": [
+      {
+        "command": "speccoder report",
+        "how": "view",
+        "subject": null,
+        "view": "report"
+      }
+    ],
     "message": "no such waiting call",
     "schema_version": 2,
     "status": "not_found"
