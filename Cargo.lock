@@ -5508,7 +5508,7 @@ dependencies = [
 
 [[package]]
 name = "speccoder"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "assert_cmd",
  "base64 0.22.1",
@@ -5531,7 +5531,7 @@ dependencies = [
 
 [[package]]
 name = "speccoder-core"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "proptest",
  "schemars 1.2.3",
@@ -5542,7 +5542,7 @@ dependencies = [
 
 [[package]]
 name = "speccoder-openspec"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "proptest",
  "pulldown-cmark",
@@ -5557,7 +5557,7 @@ dependencies = [
 
 [[package]]
 name = "speccoder-runtime"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "agentplane",
  "async-trait",
@@ -5593,7 +5593,7 @@ dependencies = [
 
 [[package]]
 name = "speccoder-speckit"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "pulldown-cmark",
  "serde",
@@ -5605,7 +5605,7 @@ dependencies = [
 
 [[package]]
 name = "speccoder-web"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "axum",
  "futures-util",

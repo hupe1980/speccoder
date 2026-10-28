@@ -57,7 +57,7 @@ Every release lists `SHA256SUMS` and carries a [build-provenance attestation](ht
 
 ```sh
 shasum -a 256 -c SHA256SUMS --ignore-missing
-gh attestation verify speccoder-0.3.0-aarch64-apple-darwin.tar.gz --repo hupe1980/speccoder
+gh attestation verify speccoder-0.4.0-aarch64-apple-darwin.tar.gz --repo hupe1980/speccoder
 ```
 
 ## The branch check

@@ -159,7 +159,7 @@ Every output has a JSON Schema (draft 2020-12), generated from the code, at `htt
 With `--events` stdout carries only JSON Lines; stderr stays quiet (an approval prompt still appears at a terminal):
 
 ```jsonl
-{"v":2,"seq":1,"ts":"2026-10-24T10:00:00.000Z","type":"session.started","speccoder":"0.3.0","command":"run","capabilities":["events_v2","approvals_inline"]}
+{"v":2,"seq":1,"ts":"2026-10-24T10:00:00.000Z","type":"session.started","speccoder":"0.4.0","command":"run","capabilities":["events_v2","approvals_inline"]}
 {"v":2,"seq":9,"ts":"…","type":"tool_call","task":"T001","turn":3,"tool":"run_command","target":"cargo test","decision":"allow","ok":true,"tail":[]}
 {"v":2,"seq":15,"ts":"…","type":"result","result":{ …what --json prints… }}
 ```
