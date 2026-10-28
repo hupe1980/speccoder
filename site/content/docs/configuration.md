@@ -80,8 +80,6 @@ The API key comes from the environment, never from this file. A local model must
 
 ### Amazon Bedrock
 
-Preview: an attempt fails (`RUN-FAILED`, Bedrock's `ValidationException` on `toolResult…json`) when the model calls a tool whose answer is a list, until the embedded agentplane sends such answers as Bedrock expects.
-
 ```toml
 [model]
 provider = "bedrock"

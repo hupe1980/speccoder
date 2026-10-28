@@ -27,7 +27,6 @@ Every failure names a [code](@/docs/codes.md) and the command that fixes it; `sp
 | A tool writes outside the project and fails | Add its cache to `[sandbox] writable`, e.g. `["~/.m2"]` or `["~/.gradle"]`. |
 | `commands run unsandboxed: …` | The OS offers no sandbox (Linux without Landlock, another OS). Set `[sandbox] mode = "required"` to refuse instead. |
 | `error[TASK-NOT-READY]` or `TASK-BLOCKED` (16) | `speccoder inspect` shows what blocks what; a skipped task blocks its dependents. |
-| `error[RUN-FAILED]` on Bedrock: `ValidationException … toolResult.content.0.json is invalid` | A known issue of the Bedrock preview: a tool answer that is a list. Run the task again; it is fixed with the next agentplane release. |
 | `stopped[BUDGET-EXHAUSTED]` (23) | Raise the `[budget]` limit it hit, or split the task in `tasks.md`. |
 | `error[PROVIDER-REFUSED]` (21) or `stopped[ACCEPTANCE-UNWRITTEN]` (23), e.g. `credit_balance_exhausted` | The provider refuses the account, not the request; nothing is retried. Top it up or fix the key, and run again. On Bedrock, when access is denied (e.g. an invalid API key), the first fix renews the credential source (a new key, `aws login --profile P`, `aws sso login --profile P`). |
 | `another speccoder is working on this project` | Another process is writing the journal (a run, or a decision). Reads still work beside it; wait for it to finish before you decide or run, or watch it with `speccoder report --live`. |

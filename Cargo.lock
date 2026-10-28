@@ -10,9 +10,9 @@ checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
 name = "agentplane"
-version = "0.54.0"
+version = "0.55.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2cdee68041ba1dee733fed3ba3c9b1969288a22696a0d0ebb379e00881aa1141"
+checksum = "4e2686af6c01656459d2e9d8f818803da519c41e48237b5aba74564cb8f52bc3"
 dependencies = [
  "async-trait",
  "aws-config",

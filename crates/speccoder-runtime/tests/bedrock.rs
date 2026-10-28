@@ -488,6 +488,15 @@ fn bedrock_runs_a_task_for_real() {
         res.code().map(|c| c.name),
         res.message()
     );
+    // The tools it called: a tool answering with a list (list_files,
+    // search_code) must go through Bedrock as well as one answering with an
+    // object.
+    let tools: Vec<&str> = rep
+        .tool_calls
+        .iter()
+        .filter_map(|c| c["tool"].as_str().or_else(|| c["name"].as_str()))
+        .collect();
+    eprintln!("tools: {tools:?}");
     // A finished attempt reports its tokens; one stopped to ask reports
     // them when it finishes, and has its run in the journal now.
     if rep.verdict.is_some() {
@@ -574,4 +583,77 @@ fn doctor_names_the_region_and_the_source_never_a_value() {
         key.fix[..2],
         ["export AWS_BEARER_TOKEN_BEDROCK=…", "aws login"]
     );
+}
+
+/// A tool result that is not a JSON object — a list, and a failed call —
+/// reaches real Bedrock and is answered (Converse refused both before
+/// agentplane 0.55).
+#[test]
+#[ignore = "calls real Bedrock: SPECCODER_REAL_BEDROCK=1"]
+fn bedrock_takes_a_list_and_a_failed_tool_result() {
+    use agentplane::model::{ModelId, Request, ToolCall, ToolDeclaration, ToolExchange};
+    if std::env::var("SPECCODER_REAL_BEDROCK").as_deref() != Ok("1") {
+        eprintln!("skipped: SPECCODER_REAL_BEDROCK=1 is not set");
+        return;
+    }
+    let region = std::env::var("AWS_REGION").unwrap_or_else(|_| "us-east-1".to_owned());
+    let model = speccoder_runtime::substrate::model_config::parse(&format!(
+        "[model]\nprovider = \"bedrock\"\nmodel = \"{CLAUDE}\"\nregion = \"{region}\"\n"
+    ))
+    .unwrap()
+    .unwrap();
+    let (driver, _) = speccoder_runtime::substrate::model_config::open_driver(&model).unwrap();
+    let id = ModelId::new("bedrock", CLAUDE);
+    let prompt = serde_json::json!({
+        "system": "Answer in one short sentence.",
+        "input": [{ "type": "text", "text": "List the files, then read README.md, and say how many files there are." }]
+    });
+    let tools = [
+        ToolDeclaration::new(
+            "list_files",
+            "List the files.",
+            serde_json::json!({"type": "object", "properties": {}}),
+        ),
+        ToolDeclaration::new(
+            "read_file",
+            "Read a file.",
+            serde_json::json!({"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}),
+        ),
+    ];
+    let call = |id: &str, name: &str, args: serde_json::Value| ToolCall {
+        id: id.to_owned(),
+        name: name.to_owned(),
+        arguments: args,
+    };
+    let exchanges = [
+        ToolExchange::ok(
+            call("t1", "list_files", serde_json::json!({})),
+            serde_json::json!(["README.md", "src/lib.rs", "Cargo.toml"]),
+        ),
+        ToolExchange::failed(
+            call("t2", "read_file", serde_json::json!({"path": "README.md"})),
+            "README.md: no such file",
+        ),
+    ];
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let answer = rt.block_on(driver.complete(Request {
+        model: &id,
+        prompt: &prompt,
+        max_output_tokens: 200,
+        reasoning_effort: None,
+        reasoning_summary: false,
+        schema: None,
+        tools: &tools,
+        exchanges: &exchanges,
+        told: &[],
+        continuation: None,
+        compaction: None,
+        stream: None,
+    }));
+    let answer =
+        answer.unwrap_or_else(|e| panic!("Bedrock refused a list or a failed tool result: {e}"));
+    eprintln!("answer: {}", answer.text);
 }

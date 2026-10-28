@@ -8,12 +8,11 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- **Amazon Bedrock as a model provider (preview).** `[model] provider = "bedrock"`
+- **Amazon Bedrock as a model provider.** `[model] provider = "bedrock"`
   with a `region`; credentials from AWS — a Bedrock API key
   (`AWS_BEARER_TOKEN_BEDROCK`) or an `aws login`/SSO profile — never from
   the file. `init --provider bedrock [--region]` writes
-  `global.anthropic.claude-sonnet-5-5`; `doctor` names the source. Known
-  issue: a tool answer that is a list fails the attempt on Bedrock.
+  `global.anthropic.claude-sonnet-5-5`; `doctor` names the source.
 - **A worktree gets its dependency folders.** Before the baseline, the
   `prepare` step installs a Node or uv project's dependencies in the run's
   worktree with the toolchain's locked, offline install, sandboxed, once
@@ -30,6 +29,10 @@ adheres to [Semantic Versioning](https://semver.org/).
   file, and a diff that adds a value stops the task (`SECRET-IN-DIFF`).
   `init` proposes `include` for ignored `.env` files; `doctor` names what
   would be copied.
+
+### Changed
+
+- **Built on agentplane 0.55.0**, which sends a Bedrock tool result that is not a JSON object as text: a tool answering with a list, or failing, no longer fails the call.
 
 ### Fixed
 
