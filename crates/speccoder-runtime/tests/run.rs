@@ -1053,6 +1053,37 @@ fn a_flaky_acceptance_check_is_never_verified() {
 }
 
 #[test]
+fn a_planning_task_that_changes_code_runs_again_as_code_and_can_verify() {
+    // It names only a design document, so it is read as planning.
+    let tasks = "# Tasks: Graph\n\n## Phase 1: Setup\n\n- [x] T001 Create project structure\n\n## Phase 3: User Story 1 - Login (Priority: P1)\n\n- [ ] T005 [US1] Implement the login described in `specs/001-graph/contracts/login.md`\n";
+    let r = repo_with(
+        "[acceptance]\nheld_out = false\n\n[budget]\nmax_attempts = 1\n",
+        &[ACCEPTANCE_SPEC, ("specs/001-graph/tasks.md", tasks)],
+    );
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    // The planning attempt writes code.
+    f.will_call_tool("p1", "edit_file", json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\npub fn login() {}" }));
+    f.will_structure(done("login"));
+    // Then a code attempt: its acceptance tests first, red, then green.
+    f.will_structure(acceptance("tests/acceptance_login.txt", GREP_LOGIN));
+    f.will_call_tool("c1", "edit_file", json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\npub fn login() {}" }));
+    f.will_structure(done("login"));
+    let res = run(r.path(), state.path(), "T005", d);
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let rep = report(&res);
+    assert_eq!(rep.verdict, Some(Verdict::Verified));
+    assert!(rep.ticked);
+    // The planning attempt is saved, its reason recorded.
+    let saved = speccoder_runtime::attempts::list(r.path(), "001-graph");
+    let first = saved
+        .iter()
+        .find(|a| a.task == "T005" && a.outcome == "planning_changed_code")
+        .expect("the planning attempt is saved");
+    assert_eq!(first.reason, "a planning task changed code: src/lib.rs");
+}
+
+#[test]
 fn red_then_green_acceptance_makes_the_verdict_verified() {
     let r = repo_with("[acceptance]\nheld_out = false\n", &[ACCEPTANCE_SPEC]);
     let state = tempfile::tempdir().unwrap();

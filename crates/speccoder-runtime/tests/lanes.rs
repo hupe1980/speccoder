@@ -496,21 +496,33 @@ fn a_planning_task_that_changes_code_is_never_a_planning_tick() {
         json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\npub fn cli() {}" }),
     );
     f.will_structure(done("contract and code"));
-    let res = run_with(r.path(), None, "T002", state.path(), d, None);
-    assert_eq!(
-        res.status(),
-        CommandStatus::VerificationFailed,
-        "{}",
-        res.message()
+    // Run again as code: the planning attempt was undone.
+    f.will_call_tool(
+        "d1",
+        "edit_file",
+        json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\npub fn cli() {}" }),
     );
+    f.will_structure(done("code"));
+    let res = run_with(r.path(), None, "T002", state.path(), d, None);
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
     let rep = report(&res);
-    assert!(!rep.ticked);
-    match &rep.verdict {
-        Some(Verdict::Failed { reasons }) => assert!(
-            reasons
-                .iter()
-                .any(|r| r == "a planning task changed code: src/lib.rs"),
-            "{reasons:?}"
+    assert!(rep.ticked);
+    assert_eq!(
+        rep.changes,
+        [("src/lib.rs".to_owned(), "modified".to_owned())]
+    );
+    assert_ne!(
+        rep.regression.as_ref().map(|r| &r.reason),
+        Some(&RegressionReason::PlanningWork)
+    );
+    // The code attempt was told no planning task.
+    let last = serde_json::to_string(&f.asked().last().unwrap().prompt).unwrap();
+    assert!(!last.contains("# A planning task"));
+    // Its lane says so from now on.
+    match speccoder_runtime::status::report(r.path(), None).data() {
+        Some(CommandData::Report(rep)) => assert_eq!(
+            rep.tasks.iter().find(|t| t.id == "T002").unwrap().lane,
+            speccoder_core::lane::Lane::Code
         ),
         other => panic!("{other:?}"),
     }

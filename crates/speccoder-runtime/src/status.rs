@@ -445,6 +445,14 @@ pub fn report(path: &Path, feature: Option<&str>) -> CommandResult {
             &f.feature.dir,
             &format.rules().judged,
         );
+        // A planning attempt that changed code made the task code.
+        if t.lane == speccoder_core::lane::Lane::Planning
+            && saved
+                .iter()
+                .any(|a| a.task == t.id && a.outcome == crate::pipeline::CHANGED_CODE)
+        {
+            t.lane = speccoder_core::lane::Lane::Code;
+        }
     }
     // Changes a run set aside, newest first: the person decides on them,
     // whatever became of the task.

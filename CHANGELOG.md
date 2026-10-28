@@ -12,7 +12,7 @@ adheres to [Semantic Versioning](https://semver.org/).
   feature's folder is planning work: it runs with planning rights —
   design documents there, never `spec.md`, `tasks.md`, `review.json`,
   checklists or the constitution — and ticks `regression_only` with the
-  new reason `planning_work`. A `[YOU]` task (Spec Kit) is never
+  new reason `planning_work`; one that changes code runs again as code. A `[YOU]` task (Spec Kit) is never
   attempted by `speccoder run`; the run asks, or passes it by and ends
   with `TASK-YOURS`. So is a task whose attempt stopped `BLOCKED`, until
   the person answers.

@@ -108,8 +108,46 @@ pub fn run_native_bug(
     run_task(root, None, &bug.task, state, provider, secret, &options)
 }
 
-#[allow(clippy::too_many_lines)] // one linear procedure, kept in reading order
+/// One task: its attempt, and — when a planning attempt changed code —
+/// the task again as code (the planning attempt saved and undone, its
+/// saved outcome the reason it is code from now on).
 pub(crate) fn run_task(
+    path: &Path,
+    feature: Option<&str>,
+    task: &str,
+    state: &Path,
+    provider: std::sync::Arc<dyn agentplane::model::ModelProvider>,
+    secret: Option<&str>,
+    options: &RunOptions,
+) -> CommandResult {
+    let first = run_task_once(
+        path,
+        feature,
+        task,
+        state,
+        Arc::clone(&provider),
+        secret,
+        options,
+    );
+    match first.data() {
+        Some(CommandData::Run(r)) if r.attempt_status == CHANGED_CODE => {
+            if let Some(p) = &options.progress {
+                p.event(&progress::Event::Notice {
+                    text: format!("{task} changed code, so it runs as code"),
+                });
+            }
+            run_task_once(path, feature, task, state, provider, secret, options)
+        }
+        _ => first,
+    }
+}
+
+/// The outcome of a planning attempt that changed something outside its
+/// unit: saved and undone, and the task is code from then on.
+pub const CHANGED_CODE: &str = "planning_changed_code";
+
+#[allow(clippy::too_many_lines)] // one linear procedure, kept in reading order
+fn run_task_once(
     path: &Path,
     feature: Option<&str>,
     task: &str,
@@ -559,10 +597,14 @@ pub(crate) fn run_task(
         .as_ref()
         .map(|f| f.feature.dir.clone())
         .unwrap_or_default();
+    let changed_code = crate::attempts::list(&wt_root, &feature_name)
+        .iter()
+        .any(|a| a.task == task && a.outcome == CHANGED_CODE);
     let planning: Option<String> = parsed_task
         .as_ref()
         .filter(|t| {
             native.is_none()
+                && !changed_code
                 && speccoder_core::lane::by_paths(&t.title, &unit_dir, &format.rules().judged)
                     == speccoder_core::lane::Lane::Planning
         })
@@ -1984,6 +2026,11 @@ pub(crate) fn run_task(
                     } else {
                         None
                     };
+                    if !outside.is_empty() {
+                        // Not retried as planning: the task runs again as code.
+                        attempt_status = CHANGED_CODE.to_owned();
+                        report.attempt_status = CHANGED_CODE.to_owned();
+                    }
                     if let Some(r) = reason {
                         report.verdict =
                             Some(speccoder_core::verify::Verdict::Failed { reasons: vec![r] });
