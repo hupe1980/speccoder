@@ -69,7 +69,7 @@ impl Issuer {
     }
 
     /// Signs every command step of `v`, a result this host sends for the
-    /// project at `root`. Only where results hold steps ([`HOLDERS`]):
+    /// project at `root`. Only where results hold steps (`HOLDERS`):
     /// anything else (a file's content) is never signed.
     pub fn sign(&self, root: &Path, v: &mut Value) {
         match v {
