@@ -26,7 +26,8 @@
         ],
         "command": "git remote -v",
         "how": "command",
-        "interactive": false
+        "interactive": false,
+        "token": "<hex>"
       },
       {
         "command": "speccoder pr --remote <name>",

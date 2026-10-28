@@ -21,7 +21,8 @@
         ],
         "command": "speccoder config set acceptance.generate true",
         "how": "command",
-        "interactive": false
+        "interactive": false,
+        "token": "<hex>"
       }
     ],
     "message": "acceptance tests are off ([acceptance] generate = false): no tests are written at review",
@@ -43,6 +44,7 @@
         "command": "speccoder verify",
         "how": "command",
         "interactive": false,
+        "token": "<hex>",
         "why": "check the configured checks run"
       }
     ],

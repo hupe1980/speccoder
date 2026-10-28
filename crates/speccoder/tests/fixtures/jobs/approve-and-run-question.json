@@ -39,7 +39,8 @@
         ],
         "command": "git commit",
         "how": "command",
-        "interactive": false
+        "interactive": false,
+        "token": "<hex>"
       }
     ],
     "message": "1 open question(s) first: Q1 — answer (`speccoder review answer Q1 \"…\"`) or reword",

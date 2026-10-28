@@ -137,7 +137,7 @@ pub struct Cli {
 
     /// When the command fails, put what went wrong on the clipboard: the
     /// code, the message, the fixes, the docs link, the version (secrets masked).
-    #[arg(long, global = true)]
+    #[arg(long, global = true, hide_short_help = true)]
     pub copy: bool,
 
     /// Print only stops, finishes, resumes and what needs you.

@@ -243,7 +243,19 @@ fn the_command_and_the_web_host_list_the_same_actions() {
             path.push_str(&format!("?feature={f}&task={t}"));
             extra = vec!["--feature", f, "--task", t];
         }
-        let web = get(&path);
+        let mut web = get(&path);
+        // The host signs the person's own commands it lists (a token per
+        // host); otherwise the lists are the same.
+        for a in web.as_array_mut().into_iter().flatten() {
+            if let Some(step) = a.get_mut("step").and_then(Value::as_object_mut)
+                && step.get("how").and_then(Value::as_str) == Some("command")
+            {
+                assert!(
+                    step.remove("token").is_some_and(|t| t.is_string()),
+                    "{path}: {a}"
+                );
+            }
+        }
         let (cli, _) = actions(r, state.path(), &extra);
         assert_eq!(cli["data"]["actions"], web, "{path}");
     }
