@@ -13,7 +13,9 @@ adheres to [Semantic Versioning](https://semver.org/).
   design documents there, never `spec.md`, `tasks.md`, `review.json`,
   checklists or the constitution — and ticks `regression_only` with the
   new reason `planning_work`. A `[YOU]` task (Spec Kit) is never
-  attempted; the run asks, or stops with `TASK-YOURS`.
+  attempted by `speccoder run`; the run asks, or passes it by and ends
+  with `TASK-YOURS`. So is a task whose attempt stopped `BLOCKED`, until
+  the person answers.
 - **No stop is a dead end.** An honest `BLOCKED` stop, or a `[YOU]`
   task, offers **I did it**, **Hint & retry** and **Skip**: one key each
   at a terminal (`d`/`h`/`s`), buttons in Needs You and the inspector,
