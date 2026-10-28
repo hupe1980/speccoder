@@ -551,9 +551,39 @@ pub(crate) fn run_task(
         }
     };
     let check_argvs = verify::check_argvs(&config_root);
+    // A task naming only its unit's design documents is planning work:
+    // written with the planning-task profile — its unit's directory, never
+    // a judged file — and judged by the checks alone.
+    let unit_dir = snap
+        .feature
+        .as_ref()
+        .map(|f| f.feature.dir.clone())
+        .unwrap_or_default();
+    let planning: Option<String> = parsed_task
+        .as_ref()
+        .filter(|t| {
+            native.is_none()
+                && speccoder_core::lane::by_paths(&t.title, &unit_dir, &format.rules().judged)
+                    == speccoder_core::lane::Lane::Planning
+        })
+        .map(|_| {
+            let prefix = project
+                .strip_prefix(&wt_root)
+                .map(|p| p.to_string_lossy().replace('\\', "/"))
+                .unwrap_or_default();
+            if prefix.is_empty() {
+                unit_dir.trim_end_matches('/').to_owned()
+            } else {
+                format!("{prefix}/{}", unit_dir.trim_end_matches('/'))
+            }
+        });
     let policy = tools::policy::Policy::new(&check_argvs, &run_config.allow)
         .with_prefixes(run_config.allow_prefix.clone())
         .rules(format.rules());
+    let policy = match &planning {
+        Some(dir) => policy.planning(dir),
+        None => policy,
+    };
     // In place: the model's view of the checkout confined (git that moves
     // it denied, ignored files hidden, `.git` read-only to commands).
     let (policy, runner, carve_notice) = match options.session.as_ref().and_then(|s| s.lock().ok())
@@ -622,6 +652,16 @@ pub(crate) fn run_task(
             .map(|t| t.title.clone())
             .unwrap_or_default(),
     });
+    if planning.is_some()
+        && let Some(t) = &parsed_task
+    {
+        live.event(&progress::Event::Notice {
+            text: format!(
+                "📐 planning · writes {}",
+                speccoder_core::lane::task_paths(&t.title).join(", ")
+            ),
+        });
+    }
     // From here on, an early end is recorded as the task run's end.
     let fail = |status: CommandStatus, m: String| {
         live.event(&progress::Event::TaskFinished {
@@ -951,7 +991,8 @@ pub(crate) fn run_task(
 
     // A Convergence task is the converge model's claim that a gap exists;
     // it changes no code until a failing test demonstrates the gap.
-    let demand_red = run_config.acceptance && format.is_convergence(&bundle.task.phase);
+    let demand_red =
+        run_config.acceptance && planning.is_none() && format.is_convergence(&bundle.task.phase);
     // Where this run started: an attempt that does not pass is undone to here.
     // Where an attempt that does not pass is undone to: the tree the task
     // started from. A resumed attempt (interrupted, or waiting for a
@@ -1026,7 +1067,8 @@ pub(crate) fn run_task(
     // first task citing its scenarios while its wording is unchanged.
     let mut review_frozen: Option<(speccoder_core::acceptance::PreFrozenAcceptance, String)> = None;
     let mut review_reuse = None;
-    if bug_fix.is_none() && run_config.acceptance && !options.fresh_acceptance {
+    if bug_fix.is_none() && run_config.acceptance && !options.fresh_acceptance && planning.is_none()
+    {
         match crate::oracle::for_task(&s.plane_dir, &project, &wt_root, format, &snap, &scenarios) {
             Some(r @ crate::oracle::TaskReuse::Ready { .. }) => review_reuse = Some(r),
             Some(crate::oracle::TaskReuse::Reused { req }) => notices.push(format!(
@@ -1159,7 +1201,7 @@ pub(crate) fn run_task(
                 return fail(CommandStatus::NeedsHuman, e).with_code("ORACLE-TAMPERED");
             }
         }
-    } else if run_config.acceptance && format.acceptance_testable(&bundle) {
+    } else if run_config.acceptance && planning.is_none() && format.acceptance_testable(&bundle) {
         stage(&*live, task, Stage::Red, StageState::Started, None, None);
         Some(prepare_acceptance(&AcceptanceSetup {
             rt: &rt,
@@ -1256,7 +1298,11 @@ pub(crate) fn run_task(
             task,
             Stage::Red,
             StageState::Skipped,
-            Some("no acceptance examples".to_owned()),
+            Some(if planning.is_some() {
+                "planning work: design documents".to_owned()
+            } else {
+                "no acceptance examples".to_owned()
+            }),
             None,
         ),
         Some(a) if a.red => stage(
@@ -1457,6 +1503,7 @@ pub(crate) fn run_task(
                     in_place: options.session.is_some(),
                     hidden: &hidden,
                     autopilot: options.mode == speccoder_core::oracle::RunMode::Autopilot,
+                    planning: planning.as_deref(),
                 },
                 digest.as_ref(),
                 attempt_instructions,
@@ -1907,6 +1954,25 @@ pub(crate) fn run_task(
                         Some(began),
                     );
                     return fail(CommandStatus::ConfigError, format!("verification: {e}"));
+                }
+                // 7''. A planning task that wrote no document of its unit
+                //      did nothing: a failed attempt, retried like any.
+                if let Some(dir) = planning.as_ref().filter(|_| {
+                    matches!(
+                        report.verdict,
+                        Some(
+                            speccoder_core::verify::Verdict::Verified
+                                | speccoder_core::verify::Verdict::RegressionOnly
+                        )
+                    )
+                }) && !report
+                    .changes
+                    .iter()
+                    .any(|(p, kind)| kind != "deleted" && p.starts_with(&format!("{dir}/")))
+                {
+                    report.verdict = Some(speccoder_core::verify::Verdict::Failed {
+                        reasons: vec![format!("wrote no planning file under {dir}/")],
+                    });
                 }
                 // 7'. A test file the attempt wrote that the run never
                 //     collected is evidence of nothing: it fails the verdict;
@@ -2670,7 +2736,11 @@ pub(crate) fn run_task(
                 }
             }),
         };
-        let mut reason = decide(&facts);
+        let mut reason = if planning.is_some() {
+            RegressionReason::PlanningWork
+        } else {
+            decide(&facts)
+        };
         // A bug's reproductions passing already is the bug lane's own
         // outcome (already satisfied): no tick to search for.
         if matches!(reason, RegressionReason::AlreadyPassing { .. })

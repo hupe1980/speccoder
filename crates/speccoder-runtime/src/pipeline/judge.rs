@@ -73,9 +73,16 @@ pub(crate) fn attempt_findings(a: &Audited<'_>) -> Vec<String> {
         .filter(|p| !a.approved_writes.contains(*p))
         .cloned()
         .collect();
+    // A planning task's documents are its work, not a change to the spec.
+    let audited: Vec<worktree::Change> = a
+        .raw_changes
+        .iter()
+        .filter(|c| !a.policy.is_planning_write(&c.path))
+        .cloned()
+        .collect();
     let mut findings: Vec<String> = integrity::audit_in(
         a.policy.protected(),
-        a.raw_changes,
+        &audited,
         a.patch,
         &frozen,
         a.frozen_additions,

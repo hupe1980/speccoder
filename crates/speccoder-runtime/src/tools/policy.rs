@@ -368,6 +368,9 @@ pub struct Policy {
     mcp: std::collections::BTreeMap<String, String>,
     /// The planning profile for hosted planning skills.
     authoring: bool,
+    /// A planning task's unit directory (worktree-relative): its design
+    /// documents are the task's work, its judged files are not.
+    planning: Option<String>,
     /// `[sandbox] network_allow`: exact argvs that get the network.
     network_exact: std::collections::BTreeSet<Vec<String>>,
     /// `[sandbox] network_allow_prefix`: prefixes that get it.
@@ -567,6 +570,35 @@ impl Policy {
         self
     }
 
+    /// A planning task's profile: writes inside the unit's directory
+    /// `dir` (worktree-relative) are its work, except the format's judged
+    /// files ([`crate::format::Rules::judged`]), a credential and the
+    /// person's review; everything else is as the policy says.
+    #[must_use]
+    pub fn planning(mut self, dir: &str) -> Self {
+        let dir = dir.trim_matches('/');
+        self.planning = (!dir.is_empty()).then(|| dir.to_owned());
+        self
+    }
+
+    /// Whether `rel` (resolved, worktree-relative) is a planning task's
+    /// to write: inside its unit's directory and not judged.
+    #[must_use]
+    pub fn is_planning_write(&self, rel: &str) -> bool {
+        let Some(dir) = &self.planning else {
+            return false;
+        };
+        rel.strip_prefix(dir.as_str())
+            .and_then(|r| r.strip_prefix('/'))
+            .is_some_and(|r| {
+                !r.is_empty()
+                    && !r.split('/').any(|s| s == ".." || s == ".")
+                    && !(self.protected.rules().judged)(r.trim_end_matches('/'))
+                    && !self.protected.is_secret(rel)
+                    && !self.protected.is_review(rel)
+            })
+    }
+
     /// The project's format's rules (intent, planning artifacts); the
     /// reference format's by default.
     #[must_use]
@@ -633,6 +665,9 @@ impl Policy {
     /// artifacts, nothing else of the protected set.
     #[must_use]
     pub fn write_protected(&self, rel: &str) -> Option<super::paths::Class> {
+        if self.is_planning_write(rel) {
+            return None;
+        }
         if self.authoring
             && (self.protected.rules().authoring_path)(rel)
             && !self.protected.is_secret(rel)
@@ -792,10 +827,11 @@ impl Policy {
             Ok(p) => p,
             Err(e) => return Decision::Deny(e.0),
         };
-        if self.authoring
+        if (self.authoring
             && (self.protected.rules().authoring_path)(&p)
             && !self.protected.is_secret(&p)
-            && !self.protected.is_review(&p)
+            && !self.protected.is_review(&p))
+            || self.is_planning_write(&p)
         {
             return Decision::Allow;
         }
@@ -1381,6 +1417,58 @@ mod tests {
                 .changed_from(&tool("mcp__db__insert", "d1"))
                 .is_some_and(|c| c.contains("definition changed"))
         );
+    }
+
+    #[test]
+    fn a_planning_task_writes_design_docs_in_its_unit_never_a_judged_file() {
+        let p = Policy::new(&[], &[]).planning("specs/001-x/");
+        let w = |path: &str| p.classify("write_file", &json!({ "path": path }), None);
+        assert_eq!(w("specs/001-x/contracts/cli.md"), Decision::Allow);
+        assert_eq!(w("specs/001-x/data-model.md"), Decision::Allow);
+        assert_eq!(w("specs/001-x/plan.md"), Decision::Allow);
+        assert_eq!(p.write_protected("specs/001-x/contracts/cli.md"), None);
+        // The judged files, the person's review, the constitution, another
+        // unit: as the normal policy says (protected).
+        for judged in [
+            "specs/001-x/spec.md",
+            "specs/001-x/tasks.md",
+            "specs/001-x/review.json",
+            "specs/001-x/checklists/ux.md",
+            "specs/001-x/contracts/../spec.md",
+            ".specify/memory/constitution.md",
+            "specs/002-y/contracts/cli.md",
+            "specs/001-x/.env",
+        ] {
+            assert!(matches!(w(judged), Decision::Deny(_)), "{judged}");
+            assert!(!p.is_planning_write(judged), "{judged}");
+        }
+        assert!(p.write_protected("specs/001-x/spec.md").is_some());
+        // Outside the unit: the normal policy.
+        assert_eq!(w("src/lib.rs"), Decision::Allow);
+        assert!(matches!(w("Cargo.toml"), Decision::Approval(_)));
+        // Without the profile, the spec tree is protected as ever.
+        let normal = Policy::new(&[], &[]);
+        assert!(matches!(
+            normal.classify(
+                "write_file",
+                &json!({ "path": "specs/001-x/contracts/cli.md" }),
+                None
+            ),
+            Decision::Deny(_)
+        ));
+        // OpenSpec: a change's proposal, tasks and spec deltas are judged.
+        let o = Policy::new(&[], &[])
+            .rules(crate::format::Adapter::rules(
+                &crate::format::openspec::OPENSPEC,
+            ))
+            .planning("openspec/changes/add-x");
+        assert!(o.is_planning_write("openspec/changes/add-x/design.md"));
+        for judged in ["proposal.md", "tasks.md", "specs/auth/spec.md"] {
+            assert!(
+                !o.is_planning_write(&format!("openspec/changes/add-x/{judged}")),
+                "{judged}"
+            );
+        }
     }
 
     #[test]

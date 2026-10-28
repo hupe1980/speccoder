@@ -204,6 +204,7 @@ pub fn input(
     }));
     let trusted = |v: Value| Tainted::trusted(v);
     let autopilot = settings.autopilot;
+    let planning = settings.planning;
     let settings = vec![
         ("checks", trusted(json!(settings.checks))),
         ("allow", trusted(json!(settings.allow))),
@@ -242,6 +243,10 @@ pub fn input(
     let mut settings = settings;
     if autopilot {
         settings.push(("autopilot", trusted(json!(true))));
+    }
+    // Likewise only a planning task's.
+    if let Some(dir) = planning {
+        settings.push(("planning", trusted(json!(dir))));
     }
     let settings = Tainted::object(settings);
     Tainted::object([
@@ -354,6 +359,9 @@ pub struct Settings<'a> {
     pub hidden: &'a [String],
     /// An autopilot run: a call that would ask is refused instead.
     pub autopilot: bool,
+    /// A planning task: its unit's directory (worktree-relative), whose
+    /// design documents it writes ([`Policy::planning`]).
+    pub planning: Option<&'a str>,
 }
 
 /// The calls consecutive denials of which end an attempt.
@@ -505,6 +513,11 @@ impl Skill for Attempt {
         } else {
             policy
         };
+        let planning = settings["planning"].as_str().map(str::to_owned);
+        let policy = match &planning {
+            Some(dir) => policy.planning(dir),
+            None => policy,
+        };
         let max_turns = settings["max_turns"]
             .as_u64()
             .map_or(30, |n| u32::try_from(n).unwrap_or(u32::MAX))
@@ -560,6 +573,21 @@ impl Skill for Attempt {
                     if let Some(content) = p[key][0]["content"].as_array_mut() {
                         content
                             .push(json!({ "type": kind, "text": digest_text(&input["digest"]) }));
+                    }
+                }
+                // A planning task: where its documents go.
+                if let Some(dir) = &planning {
+                    let (key, kind) = match style {
+                        PromptStyle::OpenAi => ("input", "input_text"),
+                        PromptStyle::Anthropic | PromptStyle::Chat | PromptStyle::Parts { .. } => {
+                            ("messages", "text")
+                        }
+                    };
+                    let text = format!(
+                        "# A planning task\n\nThis task writes design documents, not code: write them under `{dir}/` (the plan, contracts, the data model, research and the like are yours to write there). The requirements, the task list and the person's review stay protected, as does everything else of the spec; change no source code. speccoder runs the checks afterwards.\n"
+                    );
+                    if let Some(content) = p[key][0]["content"].as_array_mut() {
+                        content.push(json!({ "type": kind, "text": text }));
                     }
                 }
                 // A person's notes for this task.
