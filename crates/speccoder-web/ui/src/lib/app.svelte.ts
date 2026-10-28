@@ -2,8 +2,9 @@
 // feature changes, and what the running job is doing, from its events.
 
 import { get, post, q, listen } from "./api";
-import { KINDS, kindOf, type Offer } from "./actions";
-import type { Action, Reply, Inbox, LiveRun, Project, Report, PendingCall, Presentation, Runnable, Document, Remedy, PlanningChainReport, PlanStepResult, Through, WelcomeView } from "./types";
+import { KINDS, kindOf, offer, type Offer } from "./actions";
+import { copyBlock, labelOf, shown, type Wrong } from "./steps";
+import type { Action, Reply, Inbox, LiveRun, Project, Report, PendingCall, Presentation, Runnable, Document, Remedy, PlanningChainReport, PlanStepResult, Through, WelcomeView, How, Step, View } from "./types";
 
 export interface StageView {
   stage: string;
@@ -24,6 +25,19 @@ export interface Toast {
   tone: "ok" | "warn" | "error";
   text: string;
   detail?: string;
+  /** What went wrong, as a block to copy (an error's Copy button). */
+  copy?: string;
+}
+
+/** The person's own command, or a line for their shell, waiting in its
+ *  card: what the host issued, exactly. */
+export type PersonStep = { command: string; how: Extract<How, { how: "command" } | { how: "shell" }> };
+
+/** The person's command running from the card: its job, its output, its end. */
+export interface FixRun {
+  id: number;
+  lines: { stream: string; line: string }[];
+  result: Reply | null;
 }
 
 class AppState {
@@ -40,9 +54,15 @@ class AppState {
   inbox = $state<Reply<Inbox> | null>(null);
   documents = $state<Document[]>([]);
   /** The doctor's warnings and failures: what would stop or spoil a run. */
-  preflight = $state<{ check: string; level: string; detail: string; fix: string[]; code?: string | null; remedy?: Remedy; tasks?: string[] }[]>([]);
+  preflight = $state<{ check: string; level: string; detail: string; fix: string[]; fix_steps?: Step[]; code?: string | null; remedy?: Remedy; tasks?: string[] }[]>([]);
   /** Every doctor check (the status bar reads the model and the sandbox). */
-  doctor = $state<{ check: string; level: string; detail: string }[]>([]);
+  doctor = $state<{ check: string; level: string; detail: string; fix?: string[]; fix_steps?: Step[]; code?: string | null }[]>([]);
+  /** The person's own command (or shell line) in its card. */
+  personStep = $state<PersonStep | null>(null);
+  /** That command, running or done. */
+  fixRun = $state<FixRun | null>(null);
+  /** A sheet of the doctor's checks, or of one code (`explain`). */
+  help = $state<{ kind: "doctor" } | { kind: "explain"; code: string } | null>(null);
   /** The quick-change sheet is open. */
   quick = $state(false);
   /** What the quick-change sheet opens with (typed in the palette). */
@@ -215,10 +235,11 @@ class AppState {
     }
   }
 
-  async perform(a: Action | Offer, input?: string, confirmed = false) {
+  async perform(a: Action | Offer, input?: string, confirmed = false): Promise<void> {
     if (!a.run) {
-      await navigator.clipboard?.writeText(a.command).catch(() => {});
-      this.toast({ tone: "ok", text: "Copied — run it in your shell", detail: a.command });
+      // The host says how: a view, the person's own command, their shell.
+      if (a.step) return this.take({ command: a.command, ...a.step } as Step);
+      await this.copy(a.command, "Copied", a.command);
       return;
     }
     if (a.blocked) {
@@ -247,6 +268,109 @@ class AppState {
     this.remedy = null;
     try {
       await post("/api/run", { run: a.run as Runnable, input: input ?? null, feature: this.feature, command: a.command });
+    } catch (e) {
+      this.toast({ tone: "error", text: String((e as Error).message ?? e) });
+    }
+  }
+
+  /** Takes a fix line or a next step the way the host says: performs it,
+   *  opens its view, shows the person's own command in its card, or copies
+   *  words. A speccoder command is never only copied. */
+  async take(step: Step): Promise<void> {
+    switch (step.how) {
+      case "perform": {
+        if (step.feature && step.feature !== this.feature) await this.selectFeature(step.feature);
+        const a = offer(step.run, { group: "fix", label: labelOf(step.command), why: "", command: step.command, confirm: step.confirm, input: step.input });
+        return this.perform(a, step.text ?? undefined);
+      }
+      case "view":
+        return this.open(step.view, step.subject);
+      case "command":
+      case "shell":
+        this.fixRun = null;
+        this.personStep = { command: step.command, how: step };
+        return;
+      case "words":
+        return this.copy(shown(step.command), "Copied", step.why ?? undefined);
+    }
+  }
+
+  /** Opens what a read-only speccoder command shows. */
+  async open(view: View, subject?: string | null): Promise<void> {
+    this.palette = false;
+    switch (view) {
+      case "doctor": this.help = { kind: "doctor" }; return;
+      case "bug_report": return this.copyBugReport();
+      case "explain": this.help = subject ? { kind: "explain", code: subject } : { kind: "doctor" }; return;
+      case "report": this.view = "report"; return;
+      case "live": this.view = "board"; return;
+      case "approvals": this.view = "inbox"; return;
+      case "review": this.doc = "review"; this.view = "documents"; return;
+      case "settings": this.view = "settings"; return;
+      case "setup": this.view = "setup"; return;
+      case "bug": this.bugSheet = {}; return;
+      case "quick_change": this.quick = true; return;
+      case "new_feature": this.newFeature = {}; return;
+      case "new_project": this.newProject = {}; return;
+      case "github":
+        this.view = "overview";
+        return void requestAnimationFrame(() => document.getElementById("github")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+      case "task":
+        this.view = "board";
+        if (subject) void this.selectTask(subject);
+        return;
+    }
+  }
+
+  /** Runs the person's command in the card: exactly the argvs the host
+   *  issued (it refuses any other), as them, in the project folder. */
+  async runFix() {
+    const s = this.personStep;
+    if (!s || s.how.how !== "command" || s.how.interactive) return;
+    try {
+      const { id } = await post<{ id: number }>("/api/fix/run", { argvs: s.how.argvs, token: s.how.token ?? "" });
+      this.fixRun = { id, lines: [], result: null };
+    } catch (e) {
+      this.toast({ tone: "error", text: String((e as Error).message ?? e) });
+    }
+  }
+
+  /** A command that asks questions as it runs: the desktop window opens a
+   *  terminal at the project with the command on the clipboard; a tab
+   *  copies it. */
+  async openTerminal() {
+    const s = this.personStep;
+    if (!s || s.how.how !== "command") return;
+    await navigator.clipboard?.writeText(s.command).catch(() => {});
+    if (!this.project?.window) return this.toast({ tone: "ok", text: "Copied — paste it in a terminal at the project", detail: s.command });
+    try {
+      await post("/api/terminal", { argvs: s.how.argvs, token: s.how.token ?? "" });
+      this.toast({ tone: "ok", text: "A terminal is open at the project — paste the command there", detail: s.command });
+    } catch (e) {
+      this.toast({ tone: "error", text: String((e as Error).message ?? e), detail: "The command is on the clipboard." });
+    }
+  }
+
+  async copy(text: string, said = "Copied", detail?: string) {
+    await navigator.clipboard?.writeText(text).catch(() => {});
+    this.toast({ tone: "ok", text: said, detail });
+  }
+
+  /** What went wrong, as one block (code, message, fixes, docs, version ·
+   *  OS · run), on the clipboard. */
+  copyError(r: Wrong, kind = "error") {
+    return this.copy(this.block(r, kind), "Copied what went wrong", "Paste it into an issue or a chat.");
+  }
+
+  block(r: Wrong, kind = "error"): string {
+    return copyBlock(r, { version: this.project?.version, os: this.project?.os }, kind);
+  }
+
+  /** `speccoder doctor --bug-report`, on the clipboard. */
+  async copyBugReport() {
+    try {
+      const { text } = await get<{ text: string }>("/api/bug-report");
+      await this.copy(text, "Copied the bug report", "The setup in Markdown, secrets taken out.");
     } catch (e) {
       this.toast({ tone: "error", text: String((e as Error).message ?? e) });
     }
@@ -310,8 +434,22 @@ class AppState {
         // Bound to the project a job made, cloned or opened.
         location.reload();
         break;
+      case "output":
+        if (this.fixRun && this.fixRun.id === e.id) {
+          const run: FixRun = this.fixRun;
+          this.fixRun = { ...run, lines: [...run.lines.slice(-1999), { stream: String(e.stream), line: String(e.line) }] };
+        }
+        break;
       case "done": {
         const r = e.result as Reply;
+        // The person's command ended: its card shows how, and what it was
+        // for is checked again.
+        if (this.fixRun && this.fixRun.id === e.id) {
+          this.job = { id: e.id, command: this.job?.command ?? "", running: false, result: r };
+          this.fixRun = { ...this.fixRun, result: r };
+          void this.refresh();
+          break;
+        }
         this.job = { id: e.id, command: this.job?.command ?? "", running: false, result: r };
         this.waiting = null;
         this.oracleStage = null;
@@ -341,6 +479,7 @@ class AppState {
           tone: r?.status === "ok" ? "ok" : r?.status === "needs_human" ? "warn" : "error",
           text: r?.message ?? "done",
           detail: r?.code ? `${r.code}${r.fix?.length ? " · " + r.fix[0] : ""}` : undefined,
+          copy: r && r.status !== "ok" ? this.block(r, r.status === "needs_human" ? "stopped" : "error") : undefined,
         });
         void this.refresh();
         break;

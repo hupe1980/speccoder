@@ -1,24 +1,21 @@
 <script lang="ts">
   // What `doctor` would warn about, as a grouped list in Settings' manner:
-  // each check with a coloured symbol badge, what is wrong, and its fix as a
-  // command to copy. Failures first: they stop a run; warnings spoil one.
+  // each check with a coloured symbol badge, what is wrong, its fixes as
+  // the host says they are taken, and a copy of what went wrong. Failures
+  // first: they stop a run; warnings spoil one.
   import { app } from "../lib/app.svelte";
   import { offer } from "../lib/actions";
   import Icon from "./Icon.svelte";
   import Code from "./Code.svelte";
+  import FixSteps from "./FixSteps.svelte";
 
   const items = $derived([...app.preflight].sort((a, b) => (a.level === "fail" ? 0 : 1) - (b.level === "fail" ? 0 : 1)));
   const failing = $derived(app.blockers.length > 0);
-  let copied = $state<string | null>(null);
 
   const badge: Record<string, string> = {
     "model key": "key", untracked: "tray", signing: "signature", sandbox: "shield", git: "branch", "spec tool": "terminal",
     config: "doc", tests: "list", plan: "list", feature: "doc", project: "doc", state: "tray", instructions: "doc", lanes: "hand",
   };
-  // A fix line is a command, sometimes followed by "(why)" or prose.
-  const command = (f: string) => f.replace(/^→\s*/, "").replace(/\s+\(.*\)$/, "");
-  const runnable = (f: string) => /^[a-z][\w.-]*( |$)/.test(command(f)) && !/\b(set|add|configure)\b.*\bto\b/i.test(command(f));
-
   // A plan check reads its code's catalog title; any other check its name.
   const PLAN: Record<string, string> = {
     "PLAN-TESTS-UNCOLLECTED": "The plan puts tests where the runner won't collect them",
@@ -32,11 +29,6 @@
     void app.selectTask(t);
   }
 
-  function copy(cmd: string) {
-    navigator.clipboard?.writeText(cmd);
-    copied = cmd;
-    setTimeout(() => (copied === cmd ? (copied = null) : null), 1600);
-  }
 </script>
 
 {#if items.length}
@@ -61,16 +53,10 @@
                 <Icon name="check" size={11} weight={2.4} /> {r.label}
               </button>
             {:else}
-            {#each i.fix.slice(0, 2) as f}
-              {#if runnable(f)}
-                <button class="fix" title="Copy: {command(f)}" onclick={() => copy(command(f))}>
-                  <span class="mono">{command(f)}</span>
-                  <span class="copy">{#if copied === command(f)}<Icon name="check" size={13} />{:else}<Icon name="copy" size={13} />{/if}</span>
-                </button>
-              {:else}
-                <span class="hint">{f.replace(/^→\s*/, "")}</span>
-              {/if}
-            {/each}
+              <FixSteps steps={i.fix_steps ?? []} limit={2} />
+            {/if}
+            {#if i.level !== "pass"}
+              <button class="btn icon small ghost" title="Copy what went wrong" aria-label="Copy what went wrong: {title(i)}" onclick={() => app.copyError({ message: i.detail, code: i.code, fix: i.fix })}><Icon name="copy" size={12} /></button>
             {/if}
           </span>
         </li>
@@ -95,15 +81,6 @@
   .chip { border: 0; border-radius: 6px; padding: 0 0.4rem; background: var(--fill); color: var(--text-2); font-size: 0.74rem; cursor: pointer; }
   .chip:hover { background: var(--fill-2); }
   .fixes { display: flex; flex-wrap: wrap; gap: 0.35rem; justify-content: flex-end; max-width: 46ch; }
-  .fix {
-    display: inline-flex; align-items: center; gap: 0.45rem; max-width: 100%; height: 26px; padding: 0 0.35rem 0 0.65rem;
-    border: 0; border-radius: 7px; background: var(--fill); cursor: copy; font-size: 0.8rem; color: var(--text-2);
-    transition: background var(--speed) var(--ease);
-  }
-  .fix:hover { background: var(--fill-2); }
-  .fix .mono { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .copy { display: grid; place-items: center; width: 18px; height: 18px; color: var(--muted); }
-  .hint { color: var(--muted); font-size: 0.8rem; }
   @container (max-width: 720px) {
     li { grid-template-columns: auto minmax(0, 1fr); }
     .fixes { grid-column: 2; justify-content: flex-start; max-width: none; }

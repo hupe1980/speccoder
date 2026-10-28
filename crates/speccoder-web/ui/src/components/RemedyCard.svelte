@@ -48,6 +48,7 @@
     {#if r.remedy.undo}<p class="undo muted"><Icon name="undo" size={11} /> Undo afterwards: <span class="mono">{r.remedy.undo}</span></p>{/if}
   {/if}
   <footer>
+    <button class="btn small ghost" title="Copy what went wrong" onclick={() => app.copyError({ message: r.message, code: r.code, fix: [r.remedy.command] })}><Icon name="copy" size={11} /> Copy</button>
     <button class="btn small" onclick={() => (app.remedy = null)}>Not Now</button>
     <!-- svelte-ignore a11y_autofocus -->
     <button class="btn small primary" autofocus disabled={!!app.job?.running} onclick={() => app.applyRemedy()}>

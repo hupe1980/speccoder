@@ -27,6 +27,7 @@ export type {
   Drift,
   Envelope,
   FeatureEntry,
+  How,
   InboxItem,
   JourneyStep,
   OpenQuestion,
@@ -43,6 +44,7 @@ export type {
   SkillRole,
   SpecVersion,
   StatusTotals,
+  Step,
   Usage,
   IssueEntry as GitHubIssue,
   InboxReport as Inbox,
@@ -67,6 +69,7 @@ export type {
   SimilarReport,
   StackOption,
   Through,
+  View,
 } from "./schema.gen";
 
 /** A route's envelope, its `data` as the route sends it. */
@@ -78,6 +81,10 @@ export interface Project {
   format: string;
   unit: string;
   version: string;
+  /** `macos aarch64`: where the host runs. */
+  os?: string;
+  /** The host serves the desktop window (it can open a terminal). */
+  window?: boolean;
   features: { current: string | null; reason_text: string; features: FeatureEntry[] } | null;
   /** The format's planning chain, by installed skill name. */
   planning?: { creates: string | null; toward: string[]; checks: string | null; revises: string | null };

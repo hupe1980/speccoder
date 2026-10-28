@@ -83,8 +83,8 @@ export function ofTask(actions: Action[], id: string): Action[] {
 /** An action the page builds itself (a board card's run button, a fix the
  *  code view shows): what runs and how it is shown, without an identity —
  *  the host's actions have those. The job endpoint gets `run` and the input. */
-export type Offer = Omit<Action, "id" | "role" | "blocked" | "input" | "confirm"> &
-  Partial<Pick<Action, "blocked" | "input" | "confirm">> & { id?: undefined; role?: undefined };
+export type Offer = Omit<Action, "id" | "role" | "blocked" | "input" | "confirm" | "step"> &
+  Partial<Pick<Action, "blocked" | "input" | "confirm" | "step">> & { id?: undefined; role?: undefined };
 
 /** The one way the page writes an action (`run` null: one it does not
  *  run, a command to copy or an entry of its own). */

@@ -39,6 +39,7 @@ pub enum View {
     /// `new`: the new-project sheet.
     NewProject,
     /// `auth`: the GitHub sign-in.
+    #[serde(rename = "github")]
     GitHub,
     /// A task's drawer (`subject`: its id).
     Task,

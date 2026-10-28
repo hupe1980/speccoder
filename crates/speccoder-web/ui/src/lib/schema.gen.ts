@@ -5231,7 +5231,7 @@ export interface VerifyReport {
 export type Via = "terminal" | "web" | "window" | "acp" | "phone" | "ci" | "mcp";
 
 /** A read-only place an interface opens instead of running a command. */
-export type View = "doctor" | "bug_report" | "report" | "live" | "approvals" | "explain" | "review" | "settings" | "setup" | "bug" | "quick_change" | "new_feature" | "new_project" | "git_hub" | "task";
+export type View = "doctor" | "bug_report" | "report" | "live" | "approvals" | "explain" | "review" | "settings" | "setup" | "bug" | "quick_change" | "new_feature" | "new_project" | "github" | "task";
 
 /** Result of `speccoder worktree`. */
 export interface WorktreeReport {

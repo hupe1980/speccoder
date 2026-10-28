@@ -6,6 +6,7 @@
   import Ring from "./Ring.svelte";
   import Icon from "./Icon.svelte";
   import Code from "./Code.svelte";
+  import FixSteps from "./FixSteps.svelte";
   import { ORDER, symbol, word } from "../lib/marks";
 
   /** Off the board: the title and the next step only, in one strip. */
@@ -131,7 +132,14 @@
       <div class="text">
         <span class="kicker"><Icon name="exclaim" size={13} weight={2} /> {app.report.code ?? "Needs you"}</span>
         <h2>{app.report.message}</h2>
-        {#each app.report.fix ?? [] as f}<p class="mono small">{f}</p>{/each}
+        {#if app.report.fix_steps?.length}
+          <p class="fixes"><FixSteps steps={app.report.fix_steps} /></p>
+        {:else}
+          {#each app.report.fix ?? [] as f}<p class="mono small">{f}</p>{/each}
+        {/if}
+      </div>
+      <div class="go">
+        <button class="btn small ghost" title="Copy what went wrong" onclick={() => app.report && app.copyError(app.report)}><Icon name="copy" size={11} /> Copy</button>
       </div>
     </div>
   {/if}

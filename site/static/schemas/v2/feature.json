@@ -4936,7 +4936,7 @@
           "type": "string"
         },
         {
-          "const": "git_hub",
+          "const": "github",
           "description": "`auth`: the GitHub sign-in.",
           "type": "string"
         },

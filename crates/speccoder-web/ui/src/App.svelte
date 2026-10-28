@@ -32,6 +32,8 @@
   import Clone from "./components/Clone.svelte";
   import SamplePlayback from "./components/SamplePlayback.svelte";
   import Keys from "./components/Keys.svelte";
+  import StepSheet from "./components/StepSheet.svelte";
+  import HelpSheet from "./components/HelpSheet.svelte";
   import { typing as inField } from "./lib/start";
 
   let theme = $state<string>(localStorage.getItem("speccoder-theme") ?? "auto");
@@ -75,7 +77,7 @@
       return command(e.key === "Enter" ? "review.send" : "review.tests");
     }
     // A sheet, the palette or a decision has the keys while it is open.
-    const sheet = app.composer || app.newFeature || app.newProject || app.clone || app.quick || app.bugSheet || app.confirming || app.keys;
+    const sheet = app.composer || app.newFeature || app.newProject || app.clone || app.quick || app.bugSheet || app.confirming || app.keys || app.personStep || app.help;
     if (typing || inField(e.target) || app.waiting || app.input || app.palette || sheet) return;
     if (e.key === "?") app.keys = true;
     // `N` (Shift+N): the composer; a browser keeps ⌘N for itself.
@@ -152,6 +154,8 @@
       case "review.inbox": return go("inbox");
       case "review.pr": return run(find((a) => a.run?.kind === "pull_request"), "No pull request can be opened from here");
       case "review.report": return go("report");
+      case "help.doctor": app.help = { kind: "doctor" }; return;
+      case "help.bug_report": return void app.copyBugReport();
     }
   }
   $effect(() => {
@@ -303,6 +307,8 @@
 {#if app.newProject}<NewProject />{/if}
 {#if app.clone}<Clone />{/if}
 {#if app.keys}<Keys />{/if}
+{#if app.help}<HelpSheet />{/if}
+{#if app.personStep}<StepSheet />{/if}
 <Toasts />
 
 <style>
