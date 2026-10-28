@@ -42,7 +42,17 @@ speccoder fix             # commit it in your checkout as `speccoder: setup`
 
 ## Dependency folders
 
-A worktree holds only what is committed, and `node_modules/` or `.venv/` never are. Before the baseline, the step `prepare` gives each Node or uv project in the worktree its dependency folder by the toolchain's locked install from its cache, offline and sandboxed — `npm ci --offline`, `pnpm install --frozen-lockfile --offline`, `yarn install --frozen-lockfile --offline` (Yarn 2+: `--immutable`), `bun install --frozen-lockfile`, `uv sync --locked --offline` — once per lockfile: the next task reuses it, and a branch that changes its lockfile is installed again — an attempt that changes it, before its checks, so they and the tick are about the lockfile committed. A workspace member whose lockfile sits above it is installed where that lockfile is. Go and Rust need no step.
+A worktree holds only what is committed, and `node_modules/` or `.venv/` never are. Before the baseline, the step `prepare` installs each Node or uv project in the worktree with its toolchain's locked install, offline from the cache and sandboxed:
+
+| Lockfile | Install |
+|---|---|
+| `package-lock.json` | `npm ci --offline` |
+| `pnpm-lock.yaml` | `pnpm install --frozen-lockfile --offline` |
+| `yarn.lock` | `yarn install --frozen-lockfile --offline` (Yarn 2+: `--immutable`) |
+| `bun.lock`, `bun.lockb` | `bun install --frozen-lockfile` |
+| `uv.lock` | `uv sync --locked --offline` |
+
+It runs once per lockfile; later tasks reuse it. An attempt that changes the lockfile is installed again before its checks, so they and the tick are about the lockfile committed. A workspace member whose lockfile sits above it is installed where that lockfile is. Go and Rust need no step.
 
 A package the cache lacks stops the task with `error[PREPARE-FAILED]`: run the install once in your checkout, or let its online form reach the network (`[sandbox] network_allow = [["npm", "ci"]]`). A project `speccoder new` made installs from the cache its own steps filled. Lane and bisection worktrees are prepared the same way; in-place runs use your checkout's own folders; `[worktree] prepare = "off"` skips the step.
 

@@ -9,36 +9,35 @@ adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 
 - **Amazon Bedrock as a model provider.** `[model] provider = "bedrock"`
-  with a `region`; credentials from AWS — a Bedrock API key
+  with a `region`. Credentials come from AWS — a Bedrock API key
   (`AWS_BEARER_TOKEN_BEDROCK`) or an `aws login`/SSO profile — never from
   the file. `init --provider bedrock [--region]` writes
   `global.anthropic.claude-sonnet-5-5`; `doctor` names the source.
-- **A worktree gets its dependency folders.** Before the baseline, the
-  `prepare` step installs a Node or uv project's dependencies in the run's
-  worktree with the toolchain's locked, offline install, sandboxed, once
-  per lockfile — again when an attempt changes the lockfile, before its
-  checks; a workspace member is installed where its lockfile is
+- **A run's worktree gets its dependencies.** Before the baseline, a Node
+  or uv project is installed in the worktree with the toolchain's locked,
+  offline install, once per lockfile and again when an attempt changes it
   (`PREPARE-FAILED` when it cannot; `[worktree] prepare = "off"` skips it).
-- **A worktree gets the git-ignored files its checks need.** `[worktree]
-  include = [".env"]` and an existing `.worktreeinclude` copy git-ignored
-  files from your checkout into each worktree. The values of secret-named
-  variables in a copied `.env`, and the lines of a copied key file, are
-  masked as `[redacted:NAME]` (also base64, hex, URL-encoded) in tool and
-  MCP results, command and check output and the journal (an `[executor]`'s
-  own reads excepted); a commit never holds a copied
-  file, and a diff that adds a value stops the task (`SECRET-IN-DIFF`).
-  `init` proposes `include` for ignored `.env` files; `doctor` names what
-  would be copied.
+- **A run's worktree gets the git-ignored files its tests need.**
+  `[worktree] include = [".env"]` and an existing `.worktreeinclude` copy
+  them from your checkout. Secret-named values in a copied `.env`, and the
+  lines of a copied key file, are masked as `[redacted:NAME]` in what the
+  model, the journal and the screen receive; a commit never holds a copied
+  file, and a diff that adds such a value stops the task
+  (`SECRET-IN-DIFF`).
 
 ### Changed
 
-- **Built on agentplane 0.55.0**, which sends a Bedrock tool result that is not a JSON object as text: a tool answering with a list, or failing, no longer fails the call.
+- **Built on agentplane 0.55.0.**
 
 ### Fixed
 
-- A Node project stopped at the baseline in a run's worktree: `node_modules/` is never committed, so its test runner was not there. The worktree is now prepared first.
-- A uv project's checks ran `.venv/bin/python`, which a run's worktree never has (`.venv/` is not committed), so every task stopped at the baseline. `init` now writes `uv run --locked --offline python -m pytest …`; a check run through `uv run` (or `poetry run`, `uvx`, …) allows exactly itself, never the runner as a prefix.
-- An empty pytest suite (exit 5, a fresh scaffold) failed the baseline as a broken check, although `init` reads it as *no tests yet*; it now passes as no tests yet, as nextest's `--no-tests=warn` does.
+- A Node project stopped at the baseline in a run's worktree, which has no
+  `node_modules/`; the worktree is now prepared first.
+- A uv project's checks ran `.venv/bin/python`, which a worktree never has;
+  `init` now writes `uv run --locked --offline python -m pytest …`, and a
+  check run through `uv run`, `poetry run` or `uvx` allows exactly itself.
+- An empty pytest suite (exit 5) failed the baseline as a broken check; it
+  now passes as *no tests yet*, as nextest's `--no-tests=warn` does.
 
 ## [0.3.0] - 2026-10-27
 

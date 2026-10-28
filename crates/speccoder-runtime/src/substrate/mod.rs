@@ -329,7 +329,7 @@ pub fn open_reader(dir: &Path) -> Result<Option<Arc<RedbStore>>, PlaneError> {
         // A writer that died without closing it (killed, Ctrl-C, a closed
         // terminal) leaves it to be repaired, which only a writer does.
         // agentplane reports that as unreadable; redb's wording tells it
-        // from damage (AP-34 asks for a variant of its own).
+        // from damage (agentplane has no error of its own for it).
         Err(agentplane::core::StoreError::Unreadable(e)) if needs_repair(&e) => {
             Err(PlaneError(format!(
                 "the last run ended without closing its journal in {}; the next run or decision repairs it ({e})",
