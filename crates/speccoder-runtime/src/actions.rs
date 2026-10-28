@@ -1056,6 +1056,37 @@ pub fn allow_always_inline(
         .collect()
 }
 
+/// The person's answer at a stop, given inline at their terminal, taken
+/// through [`perform`] with the interface it was answered through: I did
+/// it (`Done`), the hint (`Nudge`: the run then attempts the task again,
+/// with its own model) or skip (`Skip`).
+#[must_use]
+pub fn answered_at_stop(
+    root: &Path,
+    feature: Option<&str>,
+    task: &str,
+    answer: &crate::approvals::StopAnswer,
+    via: Via,
+    state: &Path,
+) -> CommandResult {
+    use crate::approvals::StopAnswer;
+    let task = task.to_owned();
+    let (run, input) = match answer {
+        StopAnswer::Done => (Runnable::Done { task }, None),
+        StopAnswer::Hint(note) => (Runnable::Nudge { task }, Some(note.as_str())),
+        StopAnswer::Skip(why) => (Runnable::Skip { task }, Some(why.as_str())),
+    };
+    perform_in(
+        root,
+        feature,
+        Dispatch {
+            input,
+            ..Dispatch::new(&run, via)
+        },
+        Some(state),
+    )
+}
+
 // The arms that run the model, one function each, so a build without the
 // engine can leave them out without a second dispatcher.
 

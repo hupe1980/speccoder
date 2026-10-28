@@ -624,14 +624,9 @@ pub fn run_feature_with(
 }
 
 /// Asks the person at a task that needs them — at a terminal, never in a
-/// lane — and takes the answer through the one dispatcher: I did it
-/// ([`Runnable::Done`]), the hint ([`Runnable::Nudge`]; the run then
-/// attempts the task again) or skip ([`Runnable::Skip`]). `None`: nobody
-/// answered; the task waits in Needs You.
-///
-/// [`Runnable::Done`]: speccoder_core::actions::Runnable::Done
-/// [`Runnable::Nudge`]: speccoder_core::actions::Runnable::Nudge
-/// [`Runnable::Skip`]: speccoder_core::actions::Runnable::Skip
+/// lane — and takes the answer — I did it, a hint, skip — through the one
+/// dispatcher ([`crate::actions::answered_at_stop`]); after a hint the run
+/// attempts the task again. `None`: nobody answered; the task waits in Needs You.
 fn ask_at_stop(
     path: &Path,
     feature: Option<&str>,
@@ -639,33 +634,14 @@ fn ask_at_stop(
     options: &RunOptions,
     stop: &crate::approvals::StopRequest,
 ) -> Option<(crate::approvals::StopAnswer, CommandResult)> {
-    use crate::approvals::StopAnswer;
-    use speccoder_core::actions::Runnable;
     let approver = options
         .approver
         .as_ref()
         .filter(|_| options.lane.is_none())?;
     let answer = approver.at_stop(stop)?;
-    let task = stop
-        .task
-        .rsplit('/')
-        .next()
-        .unwrap_or(&stop.task)
-        .to_owned();
-    let (run, input) = match &answer {
-        StopAnswer::Done => (Runnable::Done { task }, None),
-        StopAnswer::Hint(note) => (Runnable::Nudge { task }, Some(note.as_str())),
-        StopAnswer::Skip(why) => (Runnable::Skip { task }, Some(why.as_str())),
-    };
-    let done = crate::actions::perform_in(
-        path,
-        feature,
-        crate::actions::Dispatch {
-            input,
-            ..crate::actions::Dispatch::new(&run, approver.via())
-        },
-        Some(state),
-    );
+    let task = stop.task.rsplit('/').next().unwrap_or(&stop.task);
+    let done =
+        crate::actions::answered_at_stop(path, feature, task, &answer, approver.via(), state);
     Some((answer, done))
 }
 
