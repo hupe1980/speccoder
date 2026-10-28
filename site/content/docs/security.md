@@ -120,6 +120,10 @@ With an [`[executor]`](@/docs/integrations.md#external-agents), another agent ma
 
 [`speccoder attest verify --branch`](@/docs/verifier.md) is built to run on a pull request you do not trust: it executes nothing from the checked tree and takes trust only from you. The [action](@/docs/github.md#evidence-check) adds trust from a commit the checked one did not write and refuses to run with the head checked out under `pull_request_target`.
 
+## Your own commands from the app
+
+A fix that is your own command (`npm install`) can be run from the [web app](@/docs/web.md#fixes-and-what-went-wrong) after you confirm it. It runs as you, in the project folder, with your environment and **outside the sandbox** — what you would type. Only a command speccoder printed as a fix runs: the host signs its exact argvs and refuses anything else, so neither the page nor a model's suggestion can compose one. Its output is masked like every other.
+
 ## What it does not protect against
 
 - **Code that runs during checks, within the sandbox's limits:** it can read files outside the hidden paths, use CPU and memory, and write to package caches.

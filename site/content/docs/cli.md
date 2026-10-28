@@ -23,6 +23,7 @@ Every command takes:
 | `--color auto\|always\|never`, `--ascii`, `--screen-reader` | How output looks; also [your settings](@/docs/configuration.md#your-settings) |
 | `--plain` | Lines instead of the dashboard: `run` prints its progress, bare `speccoder` the report |
 | `--format speckit\|openspec\|kiro` | The spec format (also `SPECCODER_FORMAT`; default: `[spec] format`, else detected) |
+| `--copy` | When the command fails, put what went wrong on the clipboard (`pbcopy`, `wl-copy` or `xclip`): the code and message, each fix, the docs link, the version, the OS and the run — secrets masked; the exit code is the command's |
 
 Every stop and finish ends with a `Next:` block of commands to copy (`next` in JSON). Every failure and stop names a [code](@/docs/codes.md): `error[CODE]`, `stopped[CODE]` when the run waits for you, `warning[CODE]` when it worked with less evidence.
 
@@ -149,6 +150,7 @@ With `--json` every command prints exactly one object on stdout and no progress 
 
 - `status` is the exit code's name in `snake_case`.
 - `code`, `fix` and `docs` are present on every result that is not plainly `ok`, and on an `ok` with less evidence (`REGRESSION-ONLY`). Branch on `code`, never on `message`.
+- `fix_steps` (beside `fix`) and every `next` entry say how an interface takes the line in `how`: `perform` (a `run` speccoder performs, with the `input` it asks for), `view` (a read-only view: `doctor`, `report`, …), `command` (the person's own command as exact `argvs`; `interactive` when it reads the keyboard), `shell` (`export …`: it must be set where speccoder starts) or `words`.
 - `remedy`, when present, is a fix speccoder can apply itself: `label`, `effect`, the exact `command`, `undo`, and whether it writes git `history` (a commit). Nothing applies it unasked.
 - `payload` names the schema `data` follows.
 - An action (in `actions`, Needs You and the events) carries an `id`: its `kind` (`run_task`, `approve`, `pull_request`, …, or `command`) and `subject`. Match actions by `id`, never by `label`.

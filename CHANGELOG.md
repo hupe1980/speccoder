@@ -21,6 +21,17 @@ adheres to [Semantic Versioning](https://semver.org/).
   at a terminal (`d`/`h`/`s`), buttons in Needs You and the inspector,
   and `speccoder task done T` / `speccoder task hint T "…"` on the
   command line.
+- **Run it here, copy what went wrong.** In the web app a fix line or
+  next step that is a speccoder command performs or opens its view
+  (doctor, explain, report, …) instead of being copied. The person's own
+  fix (`npm install`, `git add … && git commit …`) runs from a card
+  after a yes — as you, outside the sandbox, streamed, cancellable —
+  and only exactly as speccoder printed it; sign-ins open a terminal
+  (window) or copy (tab); `export` says why it stays in your shell.
+  Every error has **Copy** (one masked block: code, message, fixes,
+  docs, version · OS · run) and **Copy Bug Report**; `--copy` does the
+  same at the CLI. Results carry `fix_steps`, next steps and actions a
+  `how`. New code `FIX-FAILED`.
 - **Who does what, before you run.** `doctor --feature`, the app's
   preflight and the start of a run say which tasks are planning work or
   yours; the board and `report` mark them. The speccoder preset's tasks

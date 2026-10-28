@@ -6,10 +6,11 @@
   import { app } from "../lib/app.svelte";
   import { byRole } from "../lib/actions";
   import { get, post } from "../lib/api";
-  import type { Reply } from "../lib/types";
+  import type { Reply, Step } from "../lib/types";
+  import FixSteps from "./FixSteps.svelte";
   import Icon from "./Icon.svelte";
 
-  interface Check { check: string; level: string; detail: string; fix: string[] }
+  interface Check { check: string; level: string; detail: string; fix: string[]; fix_steps?: Step[] }
   interface Proposed { name: string; argv: string[]; tier: string; junit: string | null; why: string }
   interface SetupState {
     doctor: Reply<{ checks: Check[] }>;
@@ -114,7 +115,7 @@
             <li class={level(c)}>
               <span class="ic"><Icon name={c.level === "pass" ? "check" : c.level === "fail" ? "xmark" : "exclaim"} size={12} weight={2.6} /></span>
               <span class="w"><strong>{name.charAt(0).toUpperCase() + name.slice(1)}</strong><span class="d">{c.detail}</span></span>
-              {#each c.fix.slice(0, 1) as f}<button class="fix mono" onclick={() => copy(f.replace(/^→\s*/, ""))} title="Copy">{f.replace(/^→\s*/, "")}</button>{/each}
+              {#if c.level !== "pass" && c.fix_steps?.length}<FixSteps steps={c.fix_steps} limit={1} />{/if}
             </li>
           {/if}
         {/each}
