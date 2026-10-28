@@ -3,7 +3,7 @@
 
 import { get, post, q, listen } from "./api";
 import { KINDS, kindOf, offer, type Offer } from "./actions";
-import { copyBlock, labelOf, shown, type Wrong } from "./steps";
+import { copyBlock, labelOf, render, shown, type Wrong } from "./steps";
 import type { Action, Reply, Inbox, LiveRun, Project, Report, PendingCall, Presentation, Runnable, Document, Remedy, PlanningChainReport, PlanStepResult, Through, WelcomeView, How, Step, View } from "./types";
 
 export interface StageView {
@@ -327,10 +327,16 @@ class AppState {
   async runFix() {
     const s = this.personStep;
     if (!s || s.how.how !== "command" || s.how.interactive) return;
+    // Its events can arrive before the reply: kept until it says its id.
+    this.#early = [];
     try {
       const { id } = await post<{ id: number }>("/api/fix/run", { argvs: s.how.argvs, token: s.how.token ?? "" });
       this.fixRun = { id, lines: [], result: null };
+      const early = this.#early.filter((e) => e.id === id);
+      this.#early = null;
+      for (const e of early) this.#onEvent(e);
     } catch (e) {
+      this.#early = null;
       this.toast({ tone: "error", text: String((e as Error).message ?? e) });
     }
   }
@@ -341,11 +347,12 @@ class AppState {
   async openTerminal() {
     const s = this.personStep;
     if (!s || s.how.how !== "command") return;
-    await navigator.clipboard?.writeText(s.command).catch(() => {});
-    if (!this.project?.window) return this.toast({ tone: "ok", text: "Copied — paste it in a terminal at the project", detail: s.command });
+    const exact = render(s.how.argvs);
+    await navigator.clipboard?.writeText(exact).catch(() => {});
+    if (!this.project?.window) return this.toast({ tone: "ok", text: "Copied — paste it in a terminal at the project", detail: exact });
     try {
       await post("/api/terminal", { argvs: s.how.argvs, token: s.how.token ?? "" });
-      this.toast({ tone: "ok", text: "A terminal is open at the project — paste the command there", detail: s.command });
+      this.toast({ tone: "ok", text: "A terminal is open at the project — paste the command there", detail: exact });
     } catch (e) {
       this.toast({ tone: "error", text: String((e as Error).message ?? e), detail: "The command is on the clipboard." });
     }
@@ -377,6 +384,8 @@ class AppState {
   }
 
   #waiters = new Map<number, (r: Reply | null) => void>();
+  /** A command's events while its start has not answered yet. */
+  #early: any[] | null = null;
 
   /** Takes `a` as a job and waits for its result (a step of a sequence:
    *  the review's approval, then plan through). */
@@ -407,6 +416,11 @@ class AppState {
   }
 
   #onEvent(e: any) {
+    if (this.#early && (e.type === "output" || e.type === "done")) {
+      this.#early.push(e);
+      if (e.type === "done") this.job = { id: e.id, command: this.job?.command ?? "", running: false, result: e.result };
+      return;
+    }
     switch (e.type) {
       case "started":
         this.job = { id: e.id, command: e.command, running: true, result: null };

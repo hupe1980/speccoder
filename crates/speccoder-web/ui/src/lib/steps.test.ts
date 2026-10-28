@@ -2,14 +2,23 @@
 // copy — the twin of the runtime's `copy::block`.
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { copyBlock, segments, verb } from "./steps";
+import { copyBlock, render, segments, verb } from "./steps";
 import { offer } from "./actions";
 
 const api = vi.hoisted(() => ({
   get: vi.fn(async (_p: string): Promise<unknown> => ({ text: "### speccoder doctor\n" })),
   post: vi.fn(async (_p: string, _b: unknown): Promise<unknown> => ({ id: 7 })),
+  on: null as ((e: unknown) => void) | null,
 }));
-vi.mock("./api", async (actual) => ({ ...(await actual<typeof import("./api")>()), get: api.get, post: api.post }));
+vi.mock("./api", async (actual) => ({
+  ...(await actual<typeof import("./api")>()),
+  get: api.get,
+  post: api.post,
+  listen: (on: (e: unknown) => void) => {
+    api.on = on;
+    return () => {};
+  },
+}));
 
 import { app } from "./app.svelte";
 
@@ -98,5 +107,27 @@ describe("taking a step", () => {
     await app.take({ command: "speccoder doctor --bug-report", how: "view", view: "bug_report", subject: null });
     expect(api.get).toHaveBeenCalledWith("/api/bug-report");
     expect(clip.writeText).toHaveBeenCalledWith("### speccoder doctor\n");
+  });
+});
+
+describe("what the card runs", () => {
+  it("shows the argvs as a shell reads them — the runtime's rendering", () => {
+    expect(render([["git", "add", "--", ".x&&make", "my file"], ["git", "commit", "-m", "it's"]])).toBe(
+      "git add -- '.x&&make' 'my file' && git commit -m 'it'\\''s'",
+    );
+  });
+
+  it("keeps a command's events that arrive before its start answers", async () => {
+    app.start();
+    const how = { how: "command" as const, argvs: [["true"]], interactive: false, token: "t" };
+    await app.take({ command: "true", ...how });
+    api.post.mockImplementationOnce(async () => {
+      api.on?.({ type: "output", id: 9, stream: "stdout", line: "fast" });
+      api.on?.({ type: "done", id: 9, result: { status: "ok", message: "`true` finished" } });
+      return { id: 9 };
+    });
+    await app.runFix();
+    expect(app.fixRun?.lines).toEqual([{ stream: "stdout", line: "fast" }]);
+    expect(app.fixRun?.result?.status).toBe("ok");
   });
 });

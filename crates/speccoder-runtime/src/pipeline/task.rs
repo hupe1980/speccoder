@@ -806,7 +806,8 @@ fn run_task_once(
                 );
                 return fail(CommandStatus::ConfigError, f.message)
                     .with_code("PREPARE-FAILED")
-                    .with_fix(f.fix);
+                    .with_fix(f.fix)
+                    .with_commands(f.commands);
             }
         }
     } else if options.session.is_none() {
@@ -1848,7 +1849,8 @@ fn run_task_once(
                         };
                         return fail(CommandStatus::ConfigError, message)
                             .with_code("PREPARE-FAILED")
-                            .with_fix(f.fix);
+                            .with_fix(f.fix)
+                            .with_commands(f.commands);
                     }
                 }
             }

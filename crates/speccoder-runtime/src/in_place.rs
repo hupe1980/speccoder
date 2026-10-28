@@ -46,6 +46,8 @@ pub struct InPlaceError {
     pub paths: Vec<(String, String)>,
     /// What to run: the first is `fix:`, the rest `or:`.
     pub fix: Vec<String>,
+    /// The person's own commands among them, as argvs.
+    pub commands: Vec<speccoder_core::step::Argvs>,
 }
 
 impl InPlaceError {
@@ -55,7 +57,15 @@ impl InPlaceError {
             message: message.into(),
             paths: Vec::new(),
             fix: Vec::new(),
+            commands: Vec::new(),
         }
+    }
+
+    /// The person's own command as argvs: its line is the fix.
+    fn command(mut self, commands: Vec<Vec<String>>) -> Self {
+        self.fix = vec![speccoder_core::step::render(&commands)];
+        self.commands = vec![commands];
+        self
     }
 
     fn fix(mut self, lines: &[&str]) -> Self {
@@ -99,6 +109,7 @@ impl InPlaceError {
         CommandResult::new(command, status, &self.message)
             .with_code(self.code)
             .with_fix(self.fix.clone())
+            .with_commands(self.commands.clone())
             .with_data(CommandData::InPlace(Box::new(InPlaceReport {
                 paths: self
                     .paths
@@ -387,7 +398,14 @@ impl Session {
                     "BRANCH-IN-WORKTREE",
                     format!("{branch} is checked out in the worktree {current_wt}"),
                 )
-                .fix(&[&format!("git worktree remove {current_wt}")]));
+                .command(vec![
+                    // An absolute path (git's listing): never a flag.
+                    ["git", "worktree", "remove"]
+                        .map(str::to_owned)
+                        .into_iter()
+                        .chain([current_wt.clone()])
+                        .collect(),
+                ]));
             }
         }
         let head_ref = git

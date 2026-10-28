@@ -166,21 +166,6 @@ const PROGRAMS: &[&str] = &[
     "yarn",
 ];
 
-/// Commands that read the keyboard: a login's prompt or device flow.
-const INTERACTIVE: &[&[&str]] = &[
-    &["copilot", "login"],
-    &["opencode", "auth", "login"],
-    &["gh", "auth", "login"],
-    &["aws", "login"],
-    &["aws", "sso", "login"],
-    &["aws", "configure"],
-    &["claude", "login"],
-    &["claude", "/login"],
-    &["codex", "login"],
-    &["gemini"],
-    &["speccoder", "tui"],
-];
-
 /// The commands of speccoder no interface takes: developer tools.
 const DEVELOPER: &[&str] = &["eval", "replay", "bench", "completion", "acp", "workflow"];
 
@@ -232,7 +217,19 @@ pub const SUBCOMMANDS: &[&str] = &[
 /// The marker of text a person writes.
 const BLANK: &str = "…";
 
+/// Argvs run one after the other (`a && b`).
+pub type Argvs = Vec<Vec<String>>;
+
 /// How `line` is taken, with `ctx` filling what it leaves open.
+///
+/// A line is text, and text can carry values spliced into it (a file's
+/// name, a feature's): so a line becomes the person's own command
+/// ([`How::Command`]) only when it is one of speccoder's constant lines —
+/// a catalog fix or a builder's line, its `{task}`/`{feature}` slots
+/// filled with plain identifiers. A source that wants a command with
+/// other values gives its argvs ([`person`], [`steps_with`]). A speccoder
+/// command that speccoder performs or opens is read from any line: what it
+/// becomes is a typed runnable, never an argv.
 #[must_use]
 pub fn step_of(line: &str, ctx: Context<'_>) -> Step {
     let filled = fill(line, ctx);
@@ -240,6 +237,51 @@ pub fn step_of(line: &str, ctx: Context<'_>) -> Step {
         command: line.to_owned(),
         how: how(&filled),
     }
+}
+
+/// The person's own command a source built as argvs: shown as the line a
+/// shell would read ([`render`]), run exactly as given.
+#[must_use]
+pub fn person(argvs: Argvs) -> Step {
+    Step {
+        command: render(&argvs),
+        how: command(argvs),
+    }
+}
+
+/// Every line of `fix`, as steps; a line a source gave as argvs
+/// (`typed`, rendered to that line) is those argvs.
+#[must_use]
+pub fn steps_with(fix: &[String], typed: &[Argvs], ctx: Context<'_>) -> Vec<Step> {
+    fix.iter()
+        .map(|f| match typed.iter().find(|t| render(t) == *f) {
+            Some(t) => person(t.clone()),
+            None => step_of(f, ctx),
+        })
+        .collect()
+}
+
+/// Argvs as a shell reads them: a word with anything but plain characters
+/// single-quoted; `&&` between them.
+#[must_use]
+pub fn render(argvs: &[Vec<String>]) -> String {
+    let word = |w: &String| {
+        let plain = !w.is_empty()
+            && w.chars().all(|c| {
+                c.is_ascii_alphanumeric()
+                    || matches!(c, '-' | '_' | '.' | '/' | ':' | '=' | ',' | '@' | '+')
+            });
+        if plain {
+            w.clone()
+        } else {
+            format!("'{}'", w.replace('\'', "'\\''"))
+        }
+    };
+    argvs
+        .iter()
+        .map(|a| a.iter().map(word).collect::<Vec<_>>().join(" "))
+        .collect::<Vec<_>>()
+        .join(" && ")
 }
 
 fn fill(line: &str, ctx: Context<'_>) -> String {
@@ -259,16 +301,23 @@ fn words(why: Option<&str>) -> How {
     }
 }
 
-fn how(line: &str) -> How {
+/// Why a line with values of the project's is not run from here.
+const NAMES_VALUES: &str = "it names files or values of this project: run it in your shell";
+
+/// A trailing "(why)" is said, not run.
+fn said(line: &str) -> &str {
     let line = line.trim();
+    match line.rfind(" (") {
+        Some(at) if line.ends_with(')') => line[..at].trim_end(),
+        _ => line,
+    }
+}
+
+fn how(line: &str) -> How {
+    let line = said(line);
     if line.starts_with('→') || line.is_empty() {
         return words(None);
     }
-    // A trailing "(why)" is said, not run.
-    let line = match line.rfind(" (") {
-        Some(at) if line.ends_with(')') => line[..at].trim_end(),
-        _ => line,
-    };
     if let Some(rest) = line.strip_prefix("export ") {
         let name = rest.split('=').next().unwrap_or_default().trim();
         let model = name.ends_with("_API_KEY") || name.starts_with("AWS_");
@@ -285,12 +334,13 @@ fn how(line: &str) -> How {
     let Some(first) = chain.first() else {
         return words(None);
     };
+    let constant = constant(&chain);
     if first.first().map(String::as_str) == Some("speccoder") {
         let known = first
             .get(1)
-            .is_some_and(|w| SUBCOMMANDS.contains(&w.as_str()) || w.starts_with('{'));
+            .is_some_and(|w| SUBCOMMANDS.contains(&w.as_str()));
         return if known && chain.len() == 1 {
-            speccoder(first)
+            speccoder(first, constant)
         } else {
             words(None)
         };
@@ -303,35 +353,186 @@ fn how(line: &str) -> How {
     }
     if chain.iter().any(|a| {
         a.first()
-            .is_none_or(|p| p != "speccoder" && !PROGRAMS.contains(&p.as_str()))
+            .is_none_or(|p| p == "speccoder" || !PROGRAMS.contains(&p.as_str()))
     }) {
         return words(None);
     }
     if chain.iter().flatten().any(|w| has_blank(w)) {
         return words(Some("it has a part only you can fill in"));
     }
-    command(chain)
+    if constant {
+        command(chain)
+    } else {
+        words(Some(NAMES_VALUES))
+    }
+}
+
+/// Lines builders print that are no catalog fix: constant, or with
+/// `{task}`/`{feature}` slots.
+const BUILT: &[&str] = &[
+    "speccoder run --in-place",
+    "speccoder run --in-place --return",
+    "speccoder run --ignore-checklists",
+    "speccoder run --allow-failing-baseline",
+    "speccoder run --parallel 2",
+    "speccoder run --task {task} --fresh-acceptance",
+    "speccoder attest verify",
+    "speccoder attest verify --feature {feature} --json",
+    "speccoder feature --clear",
+    "speccoder explain --list",
+    "speccoder fix --dry-run",
+    "speccoder inspect",
+    "speccoder worktree",
+    "speccoder verify",
+    "speccoder schema",
+    "speccoder sample",
+    "speccoder spec archive",
+    "speccoder spec archive --yes",
+    "git stash -u",
+    "git status",
+    "speccoder spec archive {change} --yes",
+    "speccoder config commit",
+    "speccoder config get {key}",
+    "speccoder config unset {key}",
+    "speccoder help",
+    "speccoder help advanced",
+    "speccoder sample --fresh --yes",
+    "speccoder spec",
+    "ssh-keygen -t ed25519",
+    "git config --global gpg.format ssh",
+];
+
+/// The constant lines, parsed: the catalog's fixes and [`BUILT`].
+fn templates() -> &'static [Argvs] {
+    static PARSED: std::sync::OnceLock<Vec<Argvs>> = std::sync::OnceLock::new();
+    PARSED.get_or_init(|| {
+        crate::codes::CATALOG
+            .iter()
+            .flat_map(|e| e.fix.iter())
+            .chain(BUILT.iter())
+            .filter_map(|l| argvs(said(l)))
+            .collect()
+    })
+}
+
+/// A value a slot may take: a plain identifier (`001-x`, `T004`), never a
+/// flag, never more than one word.
+fn plain(v: &str) -> bool {
+    v.chars().next().is_some_and(|c| c.is_ascii_alphanumeric())
+        && v.chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+}
+
+/// `w` is the template word `t` with its slots filled by plain values.
+fn fills(t: &str, w: &str) -> bool {
+    let Some(open) = t.find('{') else {
+        return t == w;
+    };
+    let Some(close) = t[open..].find('}').map(|c| open + c) else {
+        return t == w;
+    };
+    let (head, rest) = (&t[..open], &t[close + 1..]);
+    let Some(w) = w.strip_prefix(head) else {
+        return false;
+    };
+    // The slot takes the shortest plain run after which the rest fits.
+    (1..=w.len())
+        .filter(|n| w.is_char_boundary(*n))
+        .any(|n| plain(&w[..n]) && fills(rest, &w[n..]))
+}
+
+/// `chain` is one of speccoder's constant lines (with `--feature F`
+/// appended, as next steps are).
+fn constant(chain: &[Vec<String>]) -> bool {
+    let matches = |t: &[String], a: &[String]| {
+        let a = match a {
+            [rest @ .., f, v]
+                if f == "--feature" && plain(v) && !t.iter().any(|w| w == "--feature") =>
+            {
+                rest
+            }
+            a => a,
+        };
+        t.len() == a.len() && t.iter().zip(a).all(|(t, w)| fills(t, w))
+    };
+    templates()
+        .iter()
+        .any(|t| t.len() == chain.len() && t.iter().zip(chain).all(|(t, a)| matches(t, a)))
 }
 
 fn has_blank(w: &str) -> bool {
     w.contains(BLANK) || (w.contains('<') && w.contains('>')) || w.contains('{')
 }
 
-fn command(argvs: Vec<Vec<String>>) -> How {
+type Signer = std::rc::Rc<dyn Fn(&[Vec<String>], bool) -> String>;
+
+thread_local! {
+    static SIGNER: std::cell::RefCell<Option<Signer>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Runs `f` with `signer` signing every command step built meanwhile on
+/// this thread (its `token`): a host that runs commands signs only the
+/// steps speccoder itself builds, never JSON from elsewhere.
+pub fn signing<T>(signer: Signer, f: impl FnOnce() -> T) -> T {
+    struct Reset(Option<Signer>);
+    impl Drop for Reset {
+        fn drop(&mut self) {
+            let before = self.0.take();
+            SIGNER.with(|s| *s.borrow_mut() = before);
+        }
+    }
+    let before = SIGNER.with(|s| s.borrow_mut().replace(signer));
+    let _reset = Reset(before);
+    f()
+}
+
+fn command(argvs: Argvs) -> How {
+    let interactive = argvs.iter().any(|a| interactive(a));
+    let token = SIGNER.with(|s| s.borrow().as_ref().map(|f| f(&argvs, interactive)));
     How::Command {
-        interactive: argvs.iter().any(|a| interactive(a)),
+        interactive,
         argvs,
-        token: None,
+        token,
     }
 }
 
-/// `argv` reads the keyboard (a login's prompt or device flow): it needs a
-/// terminal of the person's own.
+/// `argv` reads the keyboard — a sign-in's prompt or device flow, an
+/// editor, a question — so it needs a terminal of the person's own.
 #[must_use]
 pub fn interactive(argv: &[String]) -> bool {
-    INTERACTIVE
-        .iter()
-        .any(|i| argv.len() >= i.len() && argv.iter().zip(i.iter()).all(|(w, p)| w == p))
+    let w: Vec<&str> = argv.iter().map(String::as_str).collect();
+    let has = |f: &[&str]| {
+        w.iter()
+            .any(|x| f.contains(x) || f.iter().any(|p| p.ends_with('=') && x.starts_with(p)))
+    };
+    match w.as_slice() {
+        ["copilot", "login", ..]
+        | ["opencode", "auth", "login", ..]
+        | ["gh", "auth", "login" | "refresh", ..]
+        | ["aws", "login" | "configure", ..]
+        | ["aws", "sso", "login", ..]
+        | ["claude", ..]
+        | ["codex", "login", ..]
+        | ["codex"]
+        | ["gemini", ..]
+        | ["npm", "login" | "adduser", ..]
+        | ["specify", "init", ..]
+        | ["openspec", "init", ..]
+        | [
+            "gpg",
+            "--full-generate-key" | "--gen-key" | "--edit-key",
+            ..,
+        ]
+        | ["speccoder", "tui" | "ui", ..]
+        | ["speccoder", "auth", "login", ..] => true,
+        ["speccoder", "spec", "archive", ..] => !has(&["--yes"]),
+        ["ssh-keygen", ..] => !(has(&["-N"]) && has(&["-f"])),
+        ["git", "commit", ..] => !has(&["-m", "-F", "--file", "--no-edit", "-C", "--message="]),
+        ["git", "merge", ..] => !has(&["--no-edit", "--ff-only", "--abort"]),
+        ["git", "rebase", ..] => has(&["-i", "--interactive"]),
+        ["git", "add", ..] => has(&["-p", "-i", "--patch", "--interactive"]),
+        _ => false,
+    }
 }
 
 /// The words of a line, split as a shell would for the plain cases;
@@ -352,14 +553,16 @@ fn argvs(line: &str) -> Option<Vec<Vec<String>>> {
                 quote = Some(c);
                 in_word = true;
             }
-            (None, '&') if chars.peek() == Some(&'&') => {
+            // `&&` separates only as a word of its own (`a && b`).
+            (None, '&') if !in_word && chars.peek() == Some(&'&') => {
                 chars.next();
-                if in_word {
-                    out.last_mut()?.push(std::mem::take(&mut word));
-                    in_word = false;
+                if !chars.peek().is_none_or(|c| c.is_whitespace()) {
+                    return None;
                 }
                 out.push(Vec::new());
             }
+            // A comment ends the line.
+            (None, '#') if !in_word => break,
             // `<name>` is a blank to fill in, never a redirection.
             (None, '<') => {
                 word.push('<');
@@ -490,7 +693,7 @@ pub const PR_CONFIRM: &str = "Push the feature's speccoder branch and its attest
 
 /// A speccoder command line, as an interface takes it.
 #[allow(clippy::too_many_lines)] // one table, read top to bottom
-fn speccoder(argv: &[String]) -> How {
+fn speccoder(argv: &[String], constant: bool) -> How {
     // A feature not named yet is the one the interface has selected.
     let mut args: Vec<String> = argv.get(1..).unwrap_or_default().to_vec();
     if let Some(i) = args.iter().position(|a| a == "--feature")
@@ -505,11 +708,14 @@ fn speccoder(argv: &[String]) -> How {
             .filter(|t| !has_blank(t))
             .map(str::to_owned)
     };
+    // As written: only one of speccoder's constant lines.
     let run_cmd = || {
         if a.iter().any(|w| has_blank(w)) {
             words(Some("it has a part only you can fill in"))
-        } else {
+        } else if constant {
             command(vec![argv.to_vec()])
+        } else {
+            words(Some(NAMES_VALUES))
         }
     };
     match (word(0), word(1)) {
@@ -613,19 +819,9 @@ fn speccoder(argv: &[String]) -> How {
             None => view(View::Review, None),
         },
         (Some("review"), _) => view(View::Review, None),
-        // Another project's: as written, at a terminal of the person's own
-        // (a host serves on until it is stopped).
-        (Some(_), _) if has(a, "-C") => How::Command {
-            argvs: vec![argv.to_vec()],
-            interactive: true,
-            token: None,
-        },
-        (Some("spec"), Some("archive")) => How::Command {
-            argvs: vec![argv.to_vec()],
-            // Without `--yes` it asks first.
-            interactive: !has(a, "--yes"),
-            token: None,
-        },
+        // Another project's: run there.
+        (Some(_), _) if has(a, "-C") => words(Some("it is another project's: run it there")),
+        (Some("spec"), Some("archive")) => run_cmd(),
         (Some("spec"), Some(name)) if !has_blank(name) && !name.starts_with('-') => {
             let given = positional(a, 2);
             if let Some(through) = flag(a, "--through").and_then(Through::parse) {
@@ -723,7 +919,7 @@ impl How {
 /// Every line of `fix`, as steps.
 #[must_use]
 pub fn steps(fix: &[String], ctx: Context<'_>) -> Vec<Step> {
-    fix.iter().map(|f| step_of(f, ctx)).collect()
+    steps_with(fix, &[], ctx)
 }
 
 #[cfg(test)]
@@ -900,7 +1096,7 @@ mod tests {
     }
 
     #[test]
-    fn what_has_no_runnable_runs_as_written() {
+    fn what_has_no_runnable_runs_as_written_when_speccoder_wrote_it() {
         assert_eq!(
             argvs_of("speccoder run --ignore-checklists").0,
             vec![s(&["speccoder", "run", "--ignore-checklists"])]
@@ -924,10 +1120,7 @@ mod tests {
 
     #[test]
     fn the_persons_own_commands_are_exact_argvs() {
-        assert_eq!(
-            argvs_of("npm install"),
-            (vec![s(&["npm", "install"])], false)
-        );
+        // A constant line of speccoder's: run as it reads.
         assert_eq!(
             argvs_of("git add speccoder.toml && git commit -m \"speccoder: config\"").0,
             vec![
@@ -935,15 +1128,97 @@ mod tests {
                 s(&["git", "commit", "-m", "speccoder: config"])
             ]
         );
-        assert_eq!(
-            argvs_of("uv sync (the lockfile's own)").0,
-            vec![s(&["uv", "sync"])]
+        assert_eq!(argvs_of("git stash -u").0, vec![s(&["git", "stash", "-u"])]);
+        // Built as argvs by its source: run as given, shown as a shell reads it.
+        let built = person(vec![s(&["git", "add", "--", "my file.toml", "it's"])]);
+        assert_eq!(built.command, "git add -- 'my file.toml' 'it'\\''s'");
+        assert!(matches!(&built.how, How::Command { argvs, .. } if argvs[0][3] == "my file.toml"));
+        let typed = vec![vec![s(&["npm", "install"])]];
+        let steps = steps_with(
+            &["npm install".to_owned(), "npm ci".to_owned()],
+            &typed,
+            Context::default(),
         );
-        assert!(argvs_of("copilot login").1);
-        assert!(argvs_of("opencode auth login").1);
-        assert!(argvs_of("gh auth login").1);
-        assert!(argvs_of("aws sso login --profile dev").1);
-        assert!(!argvs_of("brew install gh").1);
+        assert!(matches!(&steps[0].how, How::Command { argvs, .. } if argvs == &typed[0]));
+        // A line nobody built as argvs is never run from its text.
+        assert!(steps[1].how.copy_only(), "{:?}", steps[1]);
+    }
+
+    #[test]
+    fn spliced_values_never_become_a_command() {
+        // A file named `.x&&make`, spliced into a line, and a comment.
+        for line in [
+            "git add .x&&make && git commit -m \"Track project config\"",
+            "git add .x && make && git commit -m init",
+            "git switch B && git merge b   # resolve the conflicts",
+            "git worktree remove /tmp/wt --force",
+            "npm install",
+            "speccoder run --feature 001-a --yes",
+            "speccoder attest verify --feature 001-a --yes",
+        ] {
+            let how = h(line);
+            assert!(!matches!(&how, How::Command { .. }), "{line}: {how:?}");
+        }
+        // `&&` separates only as a word; a word with it is no line at all.
+        assert_eq!(argvs("a .x&&make"), None);
+        assert_eq!(
+            argvs("git merge b   # resolve"),
+            Some(vec![s(&["git", "merge", "b"])])
+        );
+        // A slot takes a plain identifier, never a flag or two words.
+        assert!(matches!(
+            h("speccoder run --task T004 --fresh-acceptance"),
+            How::Command { .. }
+        ));
+        assert!(!matches!(
+            h("speccoder run --task --yes --fresh-acceptance"),
+            How::Command { .. }
+        ));
+        assert!(matches!(
+            h("speccoder run --ignore-checklists --feature 001-x"),
+            How::Command { .. }
+        ));
+    }
+
+    #[test]
+    fn what_reads_the_keyboard_is_known() {
+        for argv in [
+            &["copilot", "login"][..],
+            &["opencode", "auth", "login"],
+            &["gh", "auth", "login"],
+            &["aws", "sso", "login", "--profile", "dev"],
+            &["ssh-keygen", "-t", "ed25519"],
+            &["git", "commit"],
+            &["git", "merge", "b"],
+            &["specify", "init", "--here"],
+            &["speccoder", "spec", "archive"],
+        ] {
+            assert!(interactive(&s(argv)), "{argv:?}");
+        }
+        for argv in [
+            &["brew", "install", "gh"][..],
+            &["git", "commit", "-m", "x"],
+            &["ssh-keygen", "-t", "ed25519", "-N", "", "-f", "k"],
+            &["speccoder", "spec", "archive", "--yes"],
+        ] {
+            assert!(!interactive(&s(argv)), "{argv:?}");
+        }
+    }
+
+    #[test]
+    fn only_a_signer_on_this_thread_signs_and_only_what_is_built() {
+        let unsigned = person(vec![s(&["npm", "install"])]);
+        assert!(matches!(unsigned.how, How::Command { token: None, .. }));
+        let signed = signing(
+            std::rc::Rc::new(|a: &[Vec<String>], i: bool| format!("{}:{i}", a.len())),
+            || person(vec![s(&["npm", "install"])]),
+        );
+        assert!(matches!(signed.how, How::Command { token: Some(t), .. } if t == "1:false"));
+        // Reset once done.
+        assert!(matches!(
+            person(vec![s(&["x"])]).how,
+            How::Command { token: None, .. }
+        ));
     }
 
     #[test]

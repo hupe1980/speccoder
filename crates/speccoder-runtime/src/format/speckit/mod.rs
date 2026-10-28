@@ -160,6 +160,7 @@ impl Adapter for SpecKit {
                 fix: python::FIX.iter().map(|f| (*f).to_owned()).collect(),
                 remedy: None,
                 tasks: Vec::new(),
+                commands: Vec::new(),
             })
             .into_iter()
             .collect()

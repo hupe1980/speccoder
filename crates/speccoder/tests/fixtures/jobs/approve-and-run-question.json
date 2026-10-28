@@ -39,7 +39,7 @@
         ],
         "command": "git commit",
         "how": "command",
-        "interactive": false,
+        "interactive": true,
         "token": "<hex>"
       }
     ],

@@ -49,7 +49,7 @@ pub struct JobView {
 pub struct Hub {
     root: crate::Root,
     /// Signs the person's own commands this host sends, and checks them.
-    pub issuer: crate::fixes::Issuer,
+    pub issuer: Arc<crate::fixes::Issuer>,
     events: broadcast::Sender<String>,
     next: AtomicU64,
     job: Mutex<Option<JobView>>,
@@ -61,7 +61,7 @@ impl Hub {
     /// A hub for the project `root` is (or will be, once bound), signing
     /// with `issuer`.
     #[must_use]
-    pub fn new(root: crate::Root, issuer: crate::fixes::Issuer) -> Arc<Self> {
+    pub fn new(root: crate::Root, issuer: Arc<crate::fixes::Issuer>) -> Arc<Self> {
         let (events, _) = broadcast::channel(1024);
         Arc::new(Self {
             root,
@@ -202,8 +202,14 @@ impl Hub {
 
     /// Ends job `id` with `result`, its command steps signed for `root`.
     fn finish(&self, id: u64, root: &Path, result: &CommandResult) {
-        let mut value = serde_json::to_value(result).unwrap_or(Value::Null);
-        self.issuer.sign(root, &mut value);
+        let value = self.issuer.signing(root.to_path_buf(), || {
+            serde_json::to_value(result).unwrap_or(Value::Null)
+        });
+        self.finish_value(id, value);
+    }
+
+    /// Ends job `id` with the result `value`, as it is.
+    fn finish_value(&self, id: u64, value: Value) {
         if let Ok(mut job) = self.job.lock()
             && let Some(j) = job.as_mut()
         {
@@ -234,15 +240,19 @@ impl Hub {
                 hub: Arc::clone(&hub),
                 who: Who::local_in(&root, Via::Web),
             });
+            // What the job builds (an action's step among it) is signed
+            // for the host's project.
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                execute(
-                    &root,
-                    feature.as_deref(),
-                    &run,
-                    input.as_deref(),
-                    &peer,
-                    cancel,
-                )
+                hub.issuer.signing(hub.root.get(), || {
+                    execute(
+                        &root,
+                        feature.as_deref(),
+                        &run,
+                        input.as_deref(),
+                        &peer,
+                        cancel,
+                    )
+                })
             }))
             .unwrap_or_else(|_| {
                 CommandResult::new("job", CommandStatus::Error, "the job stopped unexpectedly")
@@ -279,6 +289,45 @@ impl Hub {
                 CommandResult::new("fix", CommandStatus::Error, "the command stopped unexpectedly")
             });
             hub.finish(id, &root, &result);
+        });
+        Ok(id)
+    }
+
+    /// Runs one of speccoder's own commands that has no action of its own
+    /// (`speccoder run --ignore-checklists`) — `args` issued by this host,
+    /// checked by the caller — as a job of speccoder's: no time limit, Stop
+    /// asks it to stop, its run shows as any run does (the project's live
+    /// state), and its own result is the job's.
+    pub fn start_speccoder(
+        self: &Arc<Self>,
+        args: Vec<String>,
+        root: PathBuf,
+    ) -> Result<u64, String> {
+        use speccoder_runtime::service::person;
+        let mut shown = vec!["speccoder".to_owned()];
+        shown.extend(args.iter().cloned());
+        let (id, cancel) = self.begin(&person::shown(&[shown]))?;
+        let hub = Arc::clone(self);
+        std::thread::spawn(move || {
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                person::speccoder(&root, &args, &cancel, &|stream, line| {
+                    hub.send(&json!({ "type": "output", "id": id, "stream": stream.as_str(), "line": line }));
+                })
+            }))
+            .unwrap_or_else(|_| Err("it stopped unexpectedly".to_owned()));
+            match result {
+                // Its own result, from its own process: passed on, unsigned.
+                Ok(v) => hub.finish_value(id, v),
+                Err(e) => hub.finish(
+                    id,
+                    &root,
+                    &CommandResult::new(
+                        "job",
+                        CommandStatus::Error,
+                        &format!("the command ended without a result: {e}"),
+                    ),
+                ),
+            }
         });
         Ok(id)
     }

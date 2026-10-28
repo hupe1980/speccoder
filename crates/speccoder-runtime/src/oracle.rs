@@ -1242,7 +1242,8 @@ impl Bench {
             .map_err(|f| {
                 Box::new(
                     refuse(CommandStatus::ConfigError, "PREPARE-FAILED", &f.message)
-                        .with_fix(f.fix),
+                        .with_fix(f.fix)
+                        .with_commands(f.commands),
                 )
             })?;
         }

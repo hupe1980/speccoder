@@ -17,7 +17,7 @@ Every result that is not plainly `ok` names a code — `error[CODE]`, `stopped[C
 | [`USAGE-CONFLICT`](#usage-conflict) | error | 2 | two options were given that exclude each other |
 | [`USAGE-UNKNOWN-CODE`](#usage-unknown-code) | error | 2 | there is no code by that name |
 | [`CALL-CHANGED`](#call-changed) | error | 2 | the call waiting now is not the one that was shown |
-| [`FIX-FAILED`](#fix-failed) | error | 1 | the command you ran from the app did not succeed |
+| [`FIX-FAILED`](#fix-failed) | error | 1 | your own command, run from the app, did not succeed |
 | [`INTERNAL`](#internal) | error | 1 | speccoder failed in a way it does not expect |
 | [`NO-PROJECT`](#no-project) | error | 10 | speccoder works on a Spec Kit or OpenSpec project, and found none here |
 | [`SPEC-DIAGNOSTICS`](#spec-diagnostics) | error | 11 | the spec artifacts have errors speccoder will not guess around |
@@ -172,9 +172,9 @@ An approval or rejection from an interface names the call it showed and that cal
 
 ### FIX-FAILED
 
-The command you ran from the app did not succeed.
+Your own command, run from the app, did not succeed.
 
-A fix speccoder printed (`npm install`, `git commit …`) was run from the app, as you, in the project folder: it exited with an error, was stopped, or ran past its ten minutes. Its output is in the app's panel; nothing of speccoder's changed.
+A fix that is your own command (`npm install`, `git commit …`) was run from the app, as you, in the project folder: it exited with an error, was stopped, or ran past its ten minutes. Its output is in the app's panel. speccoder's own commands never end in this code.
 
 - Read its output in the panel, fix what it names and run it again (or in your shell, to answer what it asks)
 

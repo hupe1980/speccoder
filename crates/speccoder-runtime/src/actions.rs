@@ -1219,13 +1219,56 @@ mod tests {
     /// pull request to a remote only the person can name.
     fn copied(line: &str) -> bool {
         let mut w = line.split_whitespace().skip(1);
-        matches!(w.next(), Some("eval" | "replay" | "bench")) || line.contains("--remote <")
+        matches!(w.next(), Some("eval" | "replay" | "bench"))
+            || line.contains("--remote <")
+            // Another project's command: run there.
+            || line.split_whitespace().any(|w| w == "-C")
     }
 
-    /// Every `speccoder …` command the catalog and the next-step and fix
-    /// builders print (each string literal of the two crates' sources,
-    /// placeholders filled) is performed, opened as a view or run as
-    /// written — never only copied.
+    /// String literals that start `speccoder ` and are a message's prose,
+    /// not a command (the start of each). A new one is added here only
+    /// when it is no command.
+    const PROSE: &[&str] = &[
+        "speccoder did not ",
+        "speccoder cannot ",
+        "speccoder commits ",
+        "speccoder could ",
+        "speccoder failed ",
+        "speccoder has ",
+        "speccoder is ",
+        "speccoder needs ",
+        "speccoder reads ",
+        "speccoder works ",
+        "speccoder does not ",
+        "speccoder implements ",
+        "speccoder converges ",
+        "speccoder runs ",
+        "speccoder Documentation",
+        "speccoder — ",
+        "speccoder ✓",
+        "speccoder ■",
+        "speccoder ▸",
+        "speccoder △",
+        "speccoder ✗",
+        "speccoder / ",
+        "speccoder attempt: ",
+        "speccoder manifest: ",
+        "speccoder inspect: ",
+        "speccoder preset ",
+        "speccoder bundles",
+        "speccoder {}: ",
+        "speccoder {feature}: ",
+        "speccoder 001-x: ",
+        "speccoder {} · ",
+        // The command the person typed, echoed.
+        "speccoder {} --yes",
+    ];
+
+    /// Every `speccoder …` command the catalog and every builder print
+    /// (each string literal of the core, runtime, web and CLI sources,
+    /// placeholders filled) is performed, opened as a view or run as one
+    /// of speccoder's own commands — never only copied, and never words
+    /// the parser could not read.
     #[test]
     fn no_speccoder_command_is_copy_only() {
         let ctx = Context {
@@ -1233,19 +1276,27 @@ mod tests {
             task: Some("T001"),
         };
         let mut seen = 0;
+        let mut errors = Vec::new();
         for e in speccoder_core::codes::CATALOG {
             for line in speccoder_core::codes::fixes(e, "run", Some("T001"), Some("001-x")) {
                 if line.starts_with("speccoder ") && !copied(&line) {
                     let how = runnable_of(&line, ctx).how;
-                    assert!(!how.copy_only(), "{}: {line} → {how:?}", e.name);
+                    if how.copy_only() {
+                        errors.push(format!("{}: {line} → {how:?}", e.name));
+                    }
                     seen += 1;
                 }
             }
         }
         let root = Path::new(env!("CARGO_MANIFEST_DIR"));
         let mut files = Vec::new();
-        for dir in [root.join("src"), root.join("../speccoder-core/src")] {
-            let mut stack = vec![dir];
+        for dir in [
+            "src",
+            "../speccoder-core/src",
+            "../speccoder-web/src",
+            "../speccoder/src",
+        ] {
+            let mut stack = vec![root.join(dir)];
             while let Some(d) = stack.pop() {
                 for entry in std::fs::read_dir(&d).into_iter().flatten().flatten() {
                     let p = entry.path();
@@ -1257,8 +1308,14 @@ mod tests {
                 }
             }
         }
+        assert!(files.len() > 100, "{} files", files.len());
         for f in files {
             let src = std::fs::read_to_string(&f).unwrap_or_default();
+            // A test's lines are its cases, not what speccoder prints.
+            let src = src
+                .split("#[cfg(test)]\nmod tests")
+                .next()
+                .unwrap_or_default();
             for (at, _) in src.match_indices("\"speccoder ") {
                 // A quote within another literal is no literal.
                 if src[..at].ends_with('\\') {
@@ -1279,28 +1336,34 @@ mod tests {
                 while let Some(open) = rest.find('{') {
                     filled.push_str(&rest[..open]);
                     let close = rest[open..].find('}').map_or(rest.len(), |c| open + c + 1);
+                    // A suffix (`doctor{f}`: ` --feature F` or nothing).
+                    let suffix = filled.ends_with(|c: char| c.is_ascii_alphanumeric());
                     filled.push_str(match &rest[open..close] {
+                        _ if suffix => "",
                         "{task}" | "{t}" => "T001",
-                        "{feature}" => "001-x",
+                        "{feature}" | "{f}" => "001-x",
+                        "{command}" | "{verb}" => "run",
+                        _ if filled.ends_with("--through ") => "tasks",
                         _ => "x",
                     });
                     rest = &rest[close.min(rest.len())..];
                 }
                 filled.push_str(rest);
-                let sub = filled.split_whitespace().nth(1).unwrap_or_default();
-                if copied(&filled) || !speccoder_core::step::SUBCOMMANDS.contains(&sub) {
+                // A prefix compared against, no line.
+                if line == "speccoder "
+                    || copied(&filled)
+                    || PROSE.iter().any(|p| line.starts_with(p))
+                {
                     continue;
                 }
                 let how = runnable_of(&filled, ctx).how;
-                // What the parser reads as words is a message's prose
-                // (`speccoder preset not installed …`), no command.
-                if how == (How::Words { why: None }) {
-                    continue;
+                if how.copy_only() {
+                    errors.push(format!("{}: {filled} → {how:?}", f.display()));
                 }
-                assert!(!how.copy_only(), "{}: {filled} → {how:?}", f.display());
                 seen += 1;
             }
         }
+        assert!(errors.is_empty(), "\n{}", errors.join("\n"));
         assert!(seen > 100, "{seen} lines seen");
     }
 

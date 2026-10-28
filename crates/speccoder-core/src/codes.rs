@@ -110,8 +110,8 @@ pub const CATALOG: &[Entry] = &[
         "FIX-FAILED",
         E,
         S::Error,
-        "the command you ran from the app did not succeed",
-        "A fix speccoder printed (`npm install`, `git commit …`) was run from the app, as you, in the project folder: it exited with an error, was stopped, or ran past its ten minutes. Its output is in the app's panel; nothing of speccoder's changed.",
+        "your own command, run from the app, did not succeed",
+        "A fix that is your own command (`npm install`, `git commit …`) was run from the app, as you, in the project folder: it exited with an error, was stopped, or ran past its ten minutes. Its output is in the app's panel. speccoder's own commands never end in this code.",
         [
             "→ read its output in the panel, fix what it names and run it again (or in your shell, to answer what it asks)"
         ]

@@ -7,10 +7,14 @@
   // goes to a terminal instead; `export` belongs to the shell speccoder
   // starts from, and the card says why.
   import { app } from "../lib/app.svelte";
-  import { segments } from "../lib/steps";
+  import { ownCommand, render, segments } from "../lib/steps";
   import Icon from "./Icon.svelte";
 
   const s = $derived(app.personStep!);
+  // What runs, exactly: the argvs as a shell reads them, never the line
+  // they were printed in.
+  const exact = $derived(s.how.how === "command" ? render(s.how.argvs) : s.command);
+  const own = $derived(s.how.how === "command" && ownCommand(s.how.argvs));
   const run = $derived(app.fixRun);
   const running = $derived(!!run && !run.result);
   const ended = $derived(run?.result ?? null);
@@ -27,7 +31,7 @@
   function key(e: KeyboardEvent) {
     if (e.key === "Escape") close();
   }
-  const copyCommand = () => app.copy(s.command, "Copied the command", s.command);
+  const copyCommand = () => app.copy(exact, "Copied the command", exact);
   function settings() {
     app.personStep = null;
     app.view = "settings";
@@ -49,12 +53,16 @@
           <p id="p-what">It asks you questions as it runs (a sign-in), so it needs a terminal of your own{app.project?.window ? "" : ": copy it and run it at the project"}.</p>
         {:else}
           <h2 id="p-title">{running ? "Running…" : ended ? (ended.status === "ok" ? "Done" : "It did not succeed") : "Run this command?"}</h2>
-          <p id="p-what">speccoder printed it as a fix. It runs as you, outside the sandbox, in the project folder — what you would type yourself.</p>
+          {#if own}
+            <p id="p-what">One of speccoder's own commands: it runs here as from your terminal, its run shown as any run is; Cancel asks it to stop.</p>
+          {:else}
+            <p id="p-what">speccoder printed it as a fix. It runs as you — your environment, your keys — outside the sandbox, in the project folder: what you would type yourself. Cancel stops it and everything it started.</p>
+          {/if}
         {/if}
       </div>
     </header>
     <dl class="grouped">
-      <div><dt>Command</dt><dd class="mono">{s.command}</dd></div>
+      <div><dt>Command</dt><dd class="mono">{exact}</dd></div>
       <div><dt>Folder</dt><dd class="mono">{app.project?.root ?? ""}</dd></div>
     </dl>
     {#if run}
@@ -77,15 +85,16 @@
           <!-- svelte-ignore a11y_autofocus -->
           <button class="btn primary" autofocus onclick={copyCommand}><Icon name="copy" size={11} /> Copy</button>
         {:else if s.how.interactive}
-          <button class="btn" onclick={copyCommand}><Icon name="copy" size={11} /> Copy</button>
+          <!-- svelte-ignore a11y_autofocus -->
+          <button class="btn" autofocus onclick={copyCommand}><Icon name="copy" size={11} /> Copy</button>
           {#if app.project?.window}
-            <!-- svelte-ignore a11y_autofocus -->
-            <button class="btn primary" autofocus onclick={() => app.openTerminal()}><Icon name="terminal" size={11} /> Open Terminal Here</button>
+            <button class="btn primary" onclick={() => app.openTerminal()}><Icon name="terminal" size={11} /> Open Terminal Here</button>
           {/if}
         {:else}
-          <button class="btn" onclick={copyCommand}><Icon name="copy" size={11} /> Copy</button>
+          <!-- One Enter never starts a command: Copy has the focus, Run a click. -->
           <!-- svelte-ignore a11y_autofocus -->
-          <button class="btn primary" autofocus disabled={!!app.job?.running} onclick={() => app.runFix()}><Icon name="play" size={11} /> {ended ? "Run Again" : "Run"}</button>
+          <button class="btn" autofocus onclick={copyCommand}><Icon name="copy" size={11} /> Copy</button>
+          <button class="btn primary" disabled={!!app.job?.running} onclick={() => app.runFix()}><Icon name="play" size={11} /> {ended ? "Run Again" : "Run"}</button>
         {/if}
       {/if}
     </div>

@@ -352,7 +352,7 @@ pub fn missing_lockfile(project: &Path, roots: &[Root]) -> Option<(String, Strin
     {
         return Some((
             "package.json declares dependencies, but no lockfile is committed".to_owned(),
-            "npm install (writes package-lock.json; commit it)".to_owned(),
+            "npm install".to_owned(),
         ));
     }
     let pyproject = std::fs::read_to_string(project.join("pyproject.toml")).unwrap_or_default();
@@ -360,7 +360,7 @@ pub fn missing_lockfile(project: &Path, roots: &[Root]) -> Option<(String, Strin
     if uv && !at_root(true) {
         return Some((
             "pyproject.toml is a uv project, but no uv.lock is committed".to_owned(),
-            "uv lock (writes uv.lock; commit it)".to_owned(),
+            "uv lock".to_owned(),
         ));
     }
     None
@@ -441,6 +441,7 @@ fn store(worktree: &Path, record: &Record) -> Result<(), Failure> {
         .map_err(|e| Failure {
             message: format!("the worktree's prepare record could not be written: {e}"),
             fix: vec!["speccoder doctor".to_owned()],
+            commands: Vec::new(),
         })
 }
 
@@ -490,6 +491,8 @@ pub struct Failure {
     pub message: String,
     /// How to resolve it.
     pub fix: Vec<String>,
+    /// The person's own commands among them, as argvs.
+    pub commands: Vec<speccoder_core::step::Argvs>,
 }
 
 fn now() -> u64 {
@@ -509,12 +512,16 @@ fn now() -> u64 {
 pub fn prepare(p: &Prepare<'_>) -> Result<Option<Prepared>, Failure> {
     let roots = roots(p.project);
     if let Some((what, writes)) = missing_lockfile(p.project, &roots) {
+        let commands = vec![vec![writes.split_whitespace().map(str::to_owned).collect()]];
         return Err(Failure {
-            message: format!("{what}: the worktree cannot get the dependencies it locks"),
+            message: format!(
+                "{what}: the worktree cannot get the dependencies it locks (it writes the lockfile: commit it)"
+            ),
             fix: vec![
-                format!("→ in your checkout: {writes}"),
+                speccoder_core::step::render(&commands[0]),
                 "→ or, when the checks need none of it: [worktree] prepare = \"off\"".to_owned(),
             ],
+            commands,
         });
     }
     if roots.is_empty() {
@@ -585,6 +592,7 @@ fn install_at(p: &Prepare<'_>, root: &Root, folder: &Path) -> Result<String, Fai
     confined(p.worktree, folder).map_err(|why| Failure {
         message: format!("the worktree's {} cannot be prepared: {why}", root.folder()),
         fix: vec!["speccoder doctor".to_owned()],
+        commands: Vec::new(),
     })?;
     remove_link(folder)?;
     install(p, root)
@@ -635,6 +643,7 @@ fn remove_link(folder: &Path) -> Result<(), Failure> {
                 folder.display()
             ),
             fix: vec!["speccoder doctor".to_owned()],
+            commands: Vec::new(),
         })?;
     }
     Ok(())
@@ -736,11 +745,27 @@ fn install(p: &Prepare<'_>, root: &Root) -> Result<String, Failure> {
             began.elapsed().as_secs_f64()
         ));
     }
-    let mut fix = vec![format!(
-        "→ run `{}` once in your checkout{at} to fill {}'s cache",
-        root.toolchain.fill(),
-        argv.first().map_or("the toolchain", String::as_str)
-    )];
+    // At the project's own directory, the fill is the person's command;
+    // elsewhere it is words (it runs in that folder).
+    let fill: Vec<String> = root
+        .toolchain
+        .fill()
+        .split_whitespace()
+        .map(str::to_owned)
+        .collect();
+    let commands: Vec<speccoder_core::step::Argvs> = if root.dir.is_empty() {
+        vec![vec![fill]]
+    } else {
+        Vec::new()
+    };
+    let mut fix = match commands.first() {
+        Some(c) => vec![speccoder_core::step::render(c)],
+        None => vec![format!(
+            "→ run `{}` once in your checkout{at} to fill {}'s cache",
+            root.toolchain.fill(),
+            argv.first().map_or("the toolchain", String::as_str)
+        )],
+    };
     if online != argv {
         fix.push(format!(
             "→ or let `{}` reach the network: [sandbox] network_allow = [[{}]]",
@@ -756,6 +781,7 @@ fn install(p: &Prepare<'_>, root: &Root) -> Result<String, Failure> {
     Err(Failure {
         message: format!("`{shown}` failed in the worktree{at}: {}", reason(&out)),
         fix,
+        commands,
     })
 }
 

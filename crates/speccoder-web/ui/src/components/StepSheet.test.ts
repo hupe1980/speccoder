@@ -37,14 +37,18 @@ const button = (text: string) => [...document.querySelectorAll("button")].find((
 
 describe("the person's step", () => {
   it("shows the exact command and where it runs, and runs it on Run", () => {
-    host.app.personStep = { command: "npm install", how: { how: "command", argvs: [["npm", "install"]], interactive: false, token: "t" } };
+    host.app.personStep = { command: "npm install   # fill the cache", how: { how: "command", argvs: [["npm", "install"]], interactive: false, token: "t" } };
     shown = mount(StepSheet, { target: document.body });
     flushSync();
     const text = document.body.textContent ?? "";
     expect(text).toContain("Run this command?");
     expect(text).toContain("npm install");
+    // What runs, never the line it was printed in.
+    expect(text).not.toContain("fill the cache");
     expect(text).toContain("/work/app");
     expect(text).toContain("outside the sandbox");
+    // One Enter never starts it: the focus is on Copy.
+    expect((document.activeElement as HTMLElement | null)?.textContent?.trim()).toBe("Copy");
     button("Run")!.click();
     expect(host.app.runFix).toHaveBeenCalled();
   });

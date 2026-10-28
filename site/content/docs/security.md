@@ -122,7 +122,7 @@ With an [`[executor]`](@/docs/integrations.md#external-agents), another agent ma
 
 ## Your own commands from the app
 
-A fix that is your own command (`npm install`) can be run from the [web app](@/docs/web.md#fixes-and-what-went-wrong) after you confirm it. It runs as you, in the project folder, with your environment and **outside the sandbox** — what you would type. Only a command speccoder printed as a fix runs: the host signs its exact argvs and refuses anything else, so neither the page nor a model's suggestion can compose one. Its output is masked like every other.
+A fix that is your own command (`npm install`) can be run from the [web app](@/docs/web.md#fixes-and-what-went-wrong) after you confirm it. It runs as you, in the project folder, **outside the sandbox**, with your full environment — your model keys among it, as in your own shell — for ten minutes at most; Cancel stops it and everything it started. Only a command speccoder issued runs: built as exact argvs (a file name stays one argument, however it is spelled), or one of speccoder's constant fix lines, and signed by the host for this project. The host refuses anything else — argvs the page composed or changed, a model's suggestion, a sign-in that must run in a terminal. speccoder's own commands run as speccoder, never through this path. Output is masked like every other.
 
 ## What it does not protect against
 

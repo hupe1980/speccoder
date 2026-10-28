@@ -731,6 +731,9 @@ pub struct DoctorCheck {
     pub remedy: Option<Remedy>,
     /// The tasks a plan check names.
     pub tasks: Vec<String>,
+    /// The person's own commands among the fix lines, as built
+    /// ([`CommandResult::with_commands`]).
+    pub commands: Vec<crate::step::Argvs>,
 }
 
 // A doctor check as it is serialised: the schema of `DoctorCheck`.
@@ -766,7 +769,11 @@ impl Serialize for DoctorCheck {
             detail: &self.detail,
             code: self.code.as_deref(),
             fix: &self.fix,
-            fix_steps: crate::step::steps(&self.fix, crate::step::Context::default()),
+            fix_steps: crate::step::steps_with(
+                &self.fix,
+                &self.commands,
+                crate::step::Context::default(),
+            ),
             remedy: self.remedy.as_ref(),
             tasks: &self.tasks,
         }
@@ -2324,6 +2331,7 @@ pub struct CommandResult {
     next: Vec<crate::next::NextStep>,
     code: Option<&'static crate::codes::Entry>,
     fix: Vec<String>,
+    commands: Vec<crate::step::Argvs>,
     remedy: Option<Box<Remedy>>,
 }
 
@@ -2362,7 +2370,7 @@ impl Serialize for CommandResult {
             map.serialize_entry("fix", &fix)?;
             map.serialize_entry(
                 "fix_steps",
-                &crate::step::steps(&fix, crate::step::Context::default()),
+                &crate::step::steps_with(&fix, &self.commands, crate::step::Context::default()),
             )?;
             map.serialize_entry("docs", &code.docs())?;
         }
@@ -2446,6 +2454,7 @@ impl CommandResult {
             next: Vec::new(),
             code: None,
             fix: Vec::new(),
+            commands: Vec::new(),
             remedy: None,
         }
     }
@@ -2457,6 +2466,7 @@ impl CommandResult {
         let mut out = Self::new(command, from.status, &from.message);
         out.code = from.code;
         out.fix.clone_from(&from.fix);
+        out.commands.clone_from(&from.commands);
         out.remedy.clone_from(&from.remedy);
         out
     }
@@ -2468,6 +2478,7 @@ impl CommandResult {
         if self.status == from.status {
             self.code = from.code;
             self.fix.clone_from(&from.fix);
+            self.commands.clone_from(&from.commands);
             self.remedy.clone_from(&from.remedy);
         }
         self
@@ -2480,6 +2491,7 @@ impl CommandResult {
         if status != self.status {
             self.code = None;
             self.fix.clear();
+            self.commands.clear();
             self.remedy = None;
         }
         self.status = status;
@@ -2503,6 +2515,27 @@ impl CommandResult {
     #[must_use]
     pub fn with_fix(mut self, fix: Vec<String>) -> Self {
         self.fix = fix;
+        self
+    }
+
+    /// The person's own commands among the fix lines, as the argvs the
+    /// source built (each line [`crate::step::render`] of its argvs): run
+    /// as these argvs, never re-read from the line.
+    #[must_use]
+    pub fn with_commands(mut self, commands: Vec<crate::step::Argvs>) -> Self {
+        self.commands = commands;
+        self
+    }
+
+    /// A fix that is the person's own command, built as argvs: its line
+    /// joins the fixes, the argvs are what runs.
+    #[must_use]
+    pub fn with_command(mut self, argvs: crate::step::Argvs) -> Self {
+        if self.fix.is_empty() {
+            self.fix = self.fix();
+        }
+        self.fix.push(crate::step::render(&argvs));
+        self.commands.push(argvs);
         self
     }
 

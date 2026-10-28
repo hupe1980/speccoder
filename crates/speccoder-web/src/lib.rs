@@ -280,9 +280,9 @@ fn file_path_ok(path: &str) -> bool {
 /// A result as the page gets it: the person's own commands in it signed
 /// for this host's project ([`fixes::Issuer`]).
 fn envelope(s: &Shared, r: &CommandResult) -> Json<Value> {
-    let mut v = serde_json::to_value(r).unwrap_or(Value::Null);
-    s.hub.issuer.sign(&s.root.get(), &mut v);
-    Json(v)
+    Json(s.hub.issuer.signing(s.root.get(), || {
+        serde_json::to_value(r).unwrap_or(Value::Null)
+    }))
 }
 
 async fn project(State(s): State<Shared>) -> Json<Value> {
@@ -367,8 +367,17 @@ async fn account(State(s): State<Shared>, Query(q): Query<RunQuery>) -> Json<Val
 
 async fn inbox(State(s): State<Shared>) -> Json<Value> {
     let root = s.root.get();
-    let r = off(move || speccoder_runtime::service::inbox::inbox(&root, None)).await;
-    envelope(&s, &r)
+    let issuer = Arc::clone(&s.hub.issuer);
+    // Its actions' steps are built with them: signed as built.
+    Json(
+        off(move || {
+            issuer.signing(root.clone(), || {
+                serde_json::to_value(speccoder_runtime::service::inbox::inbox(&root, None))
+                    .unwrap_or(Value::Null)
+            })
+        })
+        .await,
+    )
 }
 
 /// A bug by `<unit>/<task>` (`task`): its triad, reproductions and stage.
@@ -383,16 +392,20 @@ async fn bug(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Json<Val
 
 async fn actions(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Json<Value> {
     let root = s.root.get();
-    let mut v = off(move || {
-        json!(speccoder_runtime::service::actions::available(
-            &root,
-            q.feature.as_deref(),
-            q.task.as_deref()
-        ))
-    })
-    .await;
-    s.hub.issuer.sign(&s.root.get(), &mut v);
-    Json(v)
+    let issuer = Arc::clone(&s.hub.issuer);
+    Json(
+        off(move || {
+            // An action's step is built with the action: signed as built.
+            issuer.signing(root.clone(), || {
+                json!(speccoder_runtime::service::actions::available(
+                    &root,
+                    q.feature.as_deref(),
+                    q.task.as_deref()
+                ))
+            })
+        })
+        .await,
+    )
 }
 
 async fn approvals(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Json<Value> {
@@ -962,10 +975,11 @@ struct FixBody {
 /// elsewhere, and a command that reads the keyboard.
 async fn fix_run(State(s): State<Shared>, Json(b): Json<FixBody>) -> Response {
     let root = s.root.get();
-    if !s.hub.issuer.issued(&root, &b.argvs, &b.token) {
+    // Signed as a step that does not read the keyboard, or not at all.
+    if !s.hub.issuer.issued(&root, &b.argvs, false, &b.token) {
         return (
             StatusCode::FORBIDDEN,
-            Json(json!({ "error": "speccoder did not issue this command here: only a fix it printed runs from the app" })),
+            Json(json!({ "error": "speccoder did not issue this command here to run: only a fix it printed runs from the app, and one that asks questions runs in a terminal" })),
         )
             .into_response();
     }
@@ -976,7 +990,26 @@ async fn fix_run(State(s): State<Shared>, Json(b): Json<FixBody>) -> Response {
         )
             .into_response();
     }
-    match s.hub.start_fix(b.argvs, root) {
+    // speccoder's own command is a job of speccoder's, never the
+    // person's command runner.
+    let started = match b.argvs.as_slice() {
+        [one] if one.first().map(String::as_str) == Some("speccoder") => {
+            s.hub.start_speccoder(one[1..].to_vec(), root)
+        }
+        argvs
+            if argvs
+                .iter()
+                .any(|a| a.first().map(String::as_str) == Some("speccoder")) =>
+        {
+            return (
+                StatusCode::FORBIDDEN,
+                Json(json!({ "error": "speccoder runs on its own, never in a chain" })),
+            )
+                .into_response();
+        }
+        _ => s.hub.start_fix(b.argvs, root),
+    };
+    match started {
         Ok(id) => Json(json!({ "id": id })).into_response(),
         Err(e) => (StatusCode::CONFLICT, Json(json!({ "error": e }))).into_response(),
     }
@@ -994,10 +1027,10 @@ async fn terminal(State(s): State<Shared>, Json(b): Json<FixBody>) -> Response {
         )
             .into_response();
     }
-    if !s.hub.issuer.issued(&root, &b.argvs, &b.token) {
+    if !s.hub.issuer.issued(&root, &b.argvs, true, &b.token) {
         return (
             StatusCode::FORBIDDEN,
-            Json(json!({ "error": "speccoder did not issue this command here" })),
+            Json(json!({ "error": "speccoder did not issue this command here for a terminal" })),
         )
             .into_response();
     }
@@ -1156,7 +1189,7 @@ pub fn serve(
             root: root.clone(),
             token: token.clone(),
             port,
-            hub: jobs::Hub::new(root.clone(), issuer),
+            hub: jobs::Hub::new(root.clone(), Arc::new(issuer)),
             window,
             closing: closed,
             device: Arc::default(),

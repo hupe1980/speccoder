@@ -305,6 +305,7 @@ pub(crate) fn in_session(
             message: "an in-place run has one checkout; it cannot run tasks in parallel".to_owned(),
             paths: Vec::new(),
             fix: vec!["speccoder run --in-place   (without --parallel)".to_owned()],
+            commands: Vec::new(),
         }
         .result(command);
     }

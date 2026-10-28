@@ -23,6 +23,7 @@ fn check(name: &str, level: DoctorLevel, detail: impl Into<String>) -> DoctorChe
         fix: Vec::new(),
         remedy: None,
         tasks: Vec::new(),
+        commands: Vec::new(),
     }
 }
 
@@ -676,7 +677,14 @@ fn include_check(project: &Path, patterns: &[String]) -> Option<DoctorCheck> {
 /// `*.toml` passes here and cannot run there.
 fn untracked_check(root: &Path, feature: Option<&str>) -> Option<DoctorCheck> {
     let out = Git::at(root)
-        .run(&["status", "--porcelain", "--untracked-files=normal", "."])
+        // NUL-separated: a name is never quoted or split.
+        .run(&[
+            "status",
+            "--porcelain",
+            "-z",
+            "--untracked-files=normal",
+            ".",
+        ])
         .ok()?;
     // Output and caches are no configuration: a worktree makes its own.
     const OUTPUT: &[&str] = &[
@@ -712,7 +720,7 @@ fn untracked_check(root: &Path, feature: Option<&str>) -> Option<DoctorCheck> {
                 .any(|e| name.ends_with(e))
     };
     let found: Vec<String> = String::from_utf8_lossy(&out)
-        .lines()
+        .split('\0')
         .filter_map(|l| l.strip_prefix("?? "))
         .filter(|p| config(p))
         .map(str::to_owned)
@@ -721,10 +729,19 @@ fn untracked_check(root: &Path, feature: Option<&str>) -> Option<DoctorCheck> {
         return None;
     }
     let list = found.join(" ");
+    // The paths are the repository's: argvs, never a line read back.
+    let mut add = vec!["git".to_owned(), "add".to_owned(), "--".to_owned()];
+    add.extend(found.iter().cloned());
+    let commit = ["git", "commit", "-m", "Track project config"]
+        .map(str::to_owned)
+        .to_vec();
+    let commands = vec![vec![add, commit]];
     Some(DoctorCheck {
-        fix: vec![format!(
-            "git add {list} && git commit -m \"Track project config\"   (if the checks need them)"
-        )],
+        fix: commands
+            .iter()
+            .map(|c| speccoder_core::step::render(c))
+            .collect(),
+        commands,
         // What of it a run needs, speccoder commits itself.
         remedy: crate::code::setup_remedy(root, feature),
         ..check(

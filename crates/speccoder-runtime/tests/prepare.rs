@@ -411,7 +411,19 @@ fn a_package_missing_from_the_cache_stops_with_the_fix() {
         res.message()
     );
     let fix = res.fix().join("\n");
-    assert!(fix.contains("`npm install` once in your checkout"), "{fix}");
+    // Filling the cache is the person's own command, built as argvs.
+    assert_eq!(
+        res.fix().first().map(String::as_str),
+        Some("npm install"),
+        "{fix}"
+    );
+    let v = serde_json::to_value(&res).unwrap_or_default();
+    assert_eq!(v["fix_steps"][0]["how"], "command", "{v}");
+    assert_eq!(
+        v["fix_steps"][0]["argvs"],
+        serde_json::json!([["npm", "install"]]),
+        "{v}"
+    );
     assert!(fix.contains("network_allow = [[\"npm\", \"ci\"]]"), "{fix}");
     assert_eq!(rec.prepare().last().map(|p| p.0.as_str()), Some("failed"));
 }

@@ -163,7 +163,7 @@ An action that leaves your machine (a push, a pull request, an issue comment) fi
 
 A fix line or next step that is a speccoder command runs here or opens its view: `doctor` and `explain CODE` in a sheet, `report`, the waiting calls, Settings. Nothing speccoder can do is only copied.
 
-A fix that is your own command (`npm install`, `uv sync`, `git add … && git commit …`) opens a card: the exact command, the folder, and that it runs as you, outside the sandbox. **Run** streams its output (links and sign-in codes are clickable), **Cancel** stops it, ten minutes at most; afterwards the stop that offered it is checked again. A command that asks questions as it runs (`copilot login`, `gh auth login`, `aws sso login`) gets **Open Terminal Here** in the window (a terminal at the project, the command on the clipboard) and **Copy** in a tab. `export NAME=…` cannot run here — the variable must be set where speccoder starts — so the card says so and links Settings › Model.
+A fix that is your own command (`npm install`, `uv sync`, `git add … && git commit …`) opens a card: exactly what runs, the folder, and that it runs as you — your environment — outside the sandbox. **Run** (a click; Enter copies) streams its output (links and sign-in codes are clickable), **Cancel** stops it and everything it started, ten minutes at most; afterwards the stop that offered it is checked again. One of speccoder's own commands without a button of its own (`speccoder run --ignore-checklists`) runs as speccoder, its run shown like any other. A command that asks questions as it runs (`copilot login`, `gh auth login`, `aws sso login`) gets **Open Terminal Here** in the window (a terminal at the project, the command on the clipboard) and **Copy** in a tab. `export NAME=…` cannot run here — the variable must be set where speccoder starts — so the card says so and links Settings › Model.
 
 Every error — a toast, a stop or remedy card, a doctor row, a failed command — has **Copy**: one plain-text block (`error[CODE]: message`, each fix, the docs link, version · OS · run), masked values kept masked. **Copy Bug Report** (the doctor sheet, the palette) copies `speccoder doctor --bug-report`.
 
@@ -173,7 +173,7 @@ Every error — a toast, a stop or remedy card, a doctor row, a failed command �
 - The key reaches the page once, in the address's fragment (which a browser never sends); the page removes it from the address bar. API requests carry it in a header, never in a URL.
 - Requests naming another host are refused (DNS rebinding), and so are changes from another origin.
 - The page loads from and sends to this host only, cannot be framed, and is never cached.
-- The host runs only commands it printed as fixes: it signs their exact argvs for this project with a key the page never sees, and refuses any other (changed, composed in the page, or taken from a model's words).
+- The host runs only commands it issued as fixes — built as exact argvs, or one of speccoder's constant fix lines — signed for this project with a key the page never sees; it refuses any other (changed, composed in the page, taken from a model's words, or a sign-in that needs a terminal).
 - The interface is built into the binary; nothing is fetched from the network. The window navigates nowhere else.
 
 Do not share the printed address: it holds the key.

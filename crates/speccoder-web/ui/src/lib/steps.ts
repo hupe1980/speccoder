@@ -36,6 +36,18 @@ export function labelOf(line: string): string {
   return line.replace(/^speccoder /, "");
 }
 
+/** Argvs as a shell reads them — the twin of the runtime's
+ *  `step::render`: what a card shows is exactly what runs. */
+export function render(argvs: string[][]): string {
+  const word = (w: string) => (w !== "" && /^[A-Za-z0-9_.\/:=,@+-]+$/.test(w) ? w : `'${w.replaceAll("'", "'\\''")}'`);
+  return argvs.map((a) => a.map(word).join(" ")).join(" && ");
+}
+
+/** The argvs are speccoder's own command (a job of speccoder's). */
+export function ownCommand(argvs: string[][]): boolean {
+  return argvs.length === 1 && argvs[0]?.[0] === "speccoder";
+}
+
 /** Where the codes are documented (the catalog's `DOCS`): a code's
  *  section is its name in lower case. */
 export const DOCS = "https://hupe1980.github.io/speccoder/docs/codes/";
