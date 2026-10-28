@@ -1,0 +1,194 @@
+{
+ "SOURCE": "From devplane tests/fixtures/acp/claude-acp@0.85.1/session.jsonl (its SOURCE: Recorded 2026-10-02 by scripts/record-acp.sh claude, on Darwin 25.6.0.)",
+ "initialize": {
+  "protocolVersion": 1,
+  "agentCapabilities": {
+   "_meta": {
+    "claudeCode": {
+     "promptQueueing": true
+    },
+    "authStatus": {}
+   },
+   "promptCapabilities": {
+    "image": true,
+    "embeddedContext": true
+   },
+   "mcpCapabilities": {
+    "http": true,
+    "sse": true
+   },
+   "auth": {
+    "logout": {}
+   },
+   "providers": {},
+   "loadSession": true,
+   "sessionCapabilities": {
+    "additionalDirectories": {},
+    "close": {},
+    "delete": {},
+    "fork": {},
+    "list": {},
+    "resume": {},
+    "subagents": {}
+   }
+  },
+  "agentInfo": {
+   "name": "@agentclientprotocol/claude-agent-acp",
+   "title": "Claude Agent",
+   "version": "0.85.1"
+  },
+  "authMethods": [],
+  "_meta": {
+   "steering": {
+    "supported": true
+   }
+  }
+ },
+ "session/new": {
+  "sessionId": "s",
+  "modes": {
+   "currentModeId": "default",
+   "availableModes": [
+    {
+     "id": "default",
+     "name": "Manual",
+     "description": "Always ask before making changes"
+    },
+    {
+     "id": "acceptEdits",
+     "name": "Accept edits",
+     "description": "Automatically accept all file edits"
+    },
+    {
+     "id": "plan",
+     "name": "Plan",
+     "description": "Create a plan before making changes"
+    },
+    {
+     "id": "auto",
+     "name": "Auto",
+     "description": "Claude handles permission decisions"
+    },
+    {
+     "id": "bypassPermissions",
+     "name": "Bypass permissions",
+     "description": "Accepts all permissions"
+    }
+   ]
+  },
+  "configOptions": [
+   {
+    "id": "mode",
+    "name": "Mode",
+    "description": "Session permission mode",
+    "category": "mode",
+    "type": "select",
+    "currentValue": "default",
+    "options": [
+     {
+      "value": "default",
+      "name": "Manual",
+      "description": "Always ask before making changes"
+     },
+     {
+      "value": "acceptEdits",
+      "name": "Accept edits",
+      "description": "Automatically accept all file edits"
+     },
+     {
+      "value": "plan",
+      "name": "Plan",
+      "description": "Create a plan before making changes"
+     },
+     {
+      "value": "auto",
+      "name": "Auto",
+      "description": "Claude handles permission decisions"
+     },
+     {
+      "value": "bypassPermissions",
+      "name": "Bypass permissions",
+      "description": "Accepts all permissions"
+     }
+    ]
+   },
+   {
+    "id": "model",
+    "name": "Model",
+    "description": "AI model to use",
+    "category": "model",
+    "type": "select",
+    "currentValue": "opus",
+    "options": [
+     {
+      "value": "default",
+      "name": "Default (recommended)",
+      "description": "Opus 5.5"
+     },
+     {
+      "value": "opus",
+      "name": "Opus 5.5",
+      "description": "For complex work and everyday tasks"
+     },
+     {
+      "value": "claude-fable-5-1",
+      "name": "Fable 5.1",
+      "description": "For your toughest challenges"
+     }
+    ]
+   },
+   {
+    "id": "effort",
+    "name": "Effort",
+    "description": "Available effort levels for this model",
+    "category": "thought_level",
+    "type": "select",
+    "currentValue": "default",
+    "options": [
+     {
+      "value": "default",
+      "name": "Default"
+     },
+     {
+      "value": "low",
+      "name": "Low"
+     },
+     {
+      "value": "medium",
+      "name": "Medium"
+     },
+     {
+      "value": "high",
+      "name": "High"
+     },
+     {
+      "value": "xhigh",
+      "name": "Xhigh"
+     },
+     {
+      "value": "max",
+      "name": "Max"
+     }
+    ]
+   },
+   {
+    "id": "fast",
+    "name": "Fast mode",
+    "description": "Faster responses on supported models",
+    "category": "model_config",
+    "type": "select",
+    "currentValue": "off",
+    "options": [
+     {
+      "value": "on",
+      "name": "On"
+     },
+     {
+      "value": "off",
+      "name": "Off"
+     }
+    ]
+   }
+  ]
+ }
+}

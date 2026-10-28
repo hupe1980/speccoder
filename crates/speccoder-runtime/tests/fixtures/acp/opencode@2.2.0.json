@@ -1,0 +1,84 @@
+{
+ "SOURCE": "Recorded 2026-10-28 on Darwin 25.6.0 from `opencode acp`: the initialize and session/new answers (protocolVersion 1, fs and terminal declared); model lists cut to three entries.",
+ "initialize": {
+  "protocolVersion": 1,
+  "agentCapabilities": {
+   "loadSession": true,
+   "mcpCapabilities": {
+    "http": true,
+    "sse": false
+   },
+   "promptCapabilities": {
+    "embeddedContext": true,
+    "image": true
+   },
+   "sessionCapabilities": {
+    "additionalDirectories": {},
+    "close": {},
+    "delete": {},
+    "fork": {},
+    "list": {},
+    "resume": {}
+   },
+   "_meta": {
+    "opencode/child-session-updates": true
+   }
+  },
+  "authMethods": [
+   {
+    "description": "Run `opencode auth login` in the terminal",
+    "name": "Login with opencode",
+    "id": "opencode-login"
+   }
+  ],
+  "agentInfo": {
+   "name": "OpenCode",
+   "version": "2.2.0"
+  }
+ },
+ "session/new": {
+  "sessionId": "s",
+  "configOptions": [
+   {
+    "id": "model",
+    "name": "Model",
+    "category": "model",
+    "type": "select",
+    "currentValue": "opencode/big-pickle",
+    "options": [
+     {
+      "value": "opencode/beam-free",
+      "name": "opencode/Beam Free"
+     },
+     {
+      "value": "opencode/big-pickle",
+      "name": "opencode/Big Pickle"
+     },
+     {
+      "value": "opencode/deepseek-v4.1-flash-free",
+      "name": "opencode/DeepSeek V4.1 Flash Free"
+     }
+    ]
+   },
+   {
+    "id": "mode",
+    "name": "Session Mode",
+    "category": "mode",
+    "type": "select",
+    "currentValue": "build",
+    "options": [
+     {
+      "value": "build",
+      "name": "Build",
+      "description": "The default agent. Executes tools based on configured permissions."
+     },
+     {
+      "value": "plan",
+      "name": "Plan",
+      "description": "Read-only agent for exploring the codebase and planning work before implementation."
+     }
+    ]
+   }
+  ]
+ }
+}

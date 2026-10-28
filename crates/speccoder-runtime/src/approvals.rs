@@ -825,6 +825,7 @@ pub fn kind_of(tool: &str, arguments: &serde_json::Value) -> &'static str {
         "run_command" if arguments["network"] == true => "network",
         "run_command" => "run",
         t if t.starts_with(crate::mcp::PREFIX) => "mcp",
+        crate::acp::govern::AGENT_CALL => "agent",
         _ => "edit",
     }
 }
@@ -878,7 +879,9 @@ pub fn claim(text: &str) -> Option<String> {
 #[must_use]
 pub fn risk(tool: &str, reason: &str) -> &'static str {
     let r = reason.to_lowercase();
-    if tool == "run_command" && (r.contains("arbitrary") || r.contains("network")) {
+    if (tool == "run_command" && (r.contains("arbitrary") || r.contains("network")))
+        || tool == crate::acp::govern::AGENT_CALL
+    {
         "high"
     } else if tool.starts_with(crate::mcp::PREFIX)
         || r.contains("manifest")

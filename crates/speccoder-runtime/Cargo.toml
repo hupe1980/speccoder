@@ -20,12 +20,13 @@ speccoder-speckit.workspace = true
 speccoder-openspec.workspace = true
 agentplane.workspace = true
 async-trait.workspace = true
+agent-client-protocol.workspace = true
 globset.workspace = true
 ignore.workspace = true
 regex.workspace = true
 similar.workspace = true
 schemars.workspace = true
-tokio = { workspace = true, features = ["rt"] }
+tokio = { workspace = true, features = ["rt", "macros", "sync"] }
 reqwest.workspace = true
 keyring.workspace = true
 nix.workspace = true

@@ -539,7 +539,7 @@ impl WorkspaceTools {
     }
 
     /// The directory a command runs in.
-    fn command_cwd(&self, cwd: Option<&str>) -> Result<PathBuf, Value> {
+    pub(crate) fn command_cwd(&self, cwd: Option<&str>) -> Result<PathBuf, Value> {
         // `.`, `./` and an empty string mean the workspace root (models pass them).
         match cwd.filter(|d| !matches!(d.trim(), "" | "." | "./")) {
             None => Ok(self.root.clone()),
@@ -552,7 +552,7 @@ impl WorkspaceTools {
     }
 
     /// The environment every command gets.
-    fn command_env(&self, call_id: Option<&str>) -> Vec<(String, String)> {
+    pub(crate) fn command_env(&self, call_id: Option<&str>) -> Vec<(String, String)> {
         let mut env = scrubbed_env(std::env::vars());
         for (k, v) in &self.env {
             env.retain(|(name, _)| name != k);

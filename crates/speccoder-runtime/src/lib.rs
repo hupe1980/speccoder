@@ -6,6 +6,7 @@
 //! The CLI only parses arguments, calls a service and renders its result.
 
 pub mod acceptance_at;
+pub mod acp;
 pub mod actions;
 pub mod approvals;
 pub mod attempts;

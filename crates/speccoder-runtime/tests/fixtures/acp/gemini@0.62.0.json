@@ -1,0 +1,64 @@
+{
+ "SOURCE": "From devplane tests/fixtures/acp/gemini@0.62.0/session.jsonl (its SOURCE: SYNTHETIC \u2014 not a recording of a live Gemini CLI session.)",
+ "initialize": {
+  "protocolVersion": 1,
+  "authMethods": [
+   {
+    "id": "oauth-personal",
+    "name": "Log in with Google"
+   },
+   {
+    "id": "gemini-api-key",
+    "name": "Gemini API key"
+   },
+   {
+    "id": "vertex-ai",
+    "name": "Vertex AI"
+   },
+   {
+    "id": "gateway",
+    "name": "AI API Gateway"
+   }
+  ],
+  "agentInfo": {
+   "name": "gemini-cli",
+   "title": "Gemini CLI",
+   "version": "0.62.0"
+  },
+  "agentCapabilities": {
+   "loadSession": true,
+   "promptCapabilities": {
+    "image": true,
+    "audio": true,
+    "embeddedContext": true
+   },
+   "mcpCapabilities": {
+    "http": true,
+    "sse": true
+   }
+  }
+ },
+ "session/new": {
+  "sessionId": "s",
+  "modes": {
+   "availableModes": [
+    {
+     "id": "default",
+     "name": "Default",
+     "description": "Prompts for approval"
+    },
+    {
+     "id": "autoEdit",
+     "name": "Auto Edit",
+     "description": "Auto-approves edit tools"
+    },
+    {
+     "id": "yolo",
+     "name": "YOLO",
+     "description": "Auto-approves all tools"
+    }
+   ],
+   "currentModeId": "default"
+  }
+ }
+}
