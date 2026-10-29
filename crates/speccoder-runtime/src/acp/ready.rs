@@ -296,11 +296,11 @@ fn asks(
     match (plan.why, &plan.request) {
         (Why::AskedForAskFirst, Some(v)) => AgentTick::new(
             TickState::Yes,
-            format!("speccoder puts it into {} before each attempt", name(v)),
+            format!("put into {} before each attempt", name(v)),
         ),
         (Why::AsksAlready, _) if profile.is_some_and(|p| p.launch_env.is_some()) => AgentTick::new(
             TickState::Yes,
-            "speccoder starts it with every permission rule set to ask",
+            "started with every permission rule set to ask",
         ),
         (Why::AsksAlready, _) => AgentTick::new(
             TickState::Yes,
