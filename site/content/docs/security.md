@@ -105,7 +105,7 @@ Held-out tests are sealed in the state directory ([where they are kept](@/docs/e
 - API keys are read only from the environment, and never written to the journal or the output. Bedrock's AWS credentials (an API key, an `aws login` or SSO session, a profile) are loaded by speccoder's own process for its model calls; `doctor` and `init` name their source, never a value.
 - Every command speccoder starts gets an environment without secret-looking variables: `*_API_KEY`, `*_TOKEN`, `*SECRET*`, `*PASSWORD*`, `AWS_*`, `ANTHROPIC_*`, `OPENAI_*`, `SSH_AUTH_SOCK`, `GIT_ASKPASS`, `SSH_ASKPASS`. Colour is off for these commands (`NO_COLOR=1`, `CARGO_TERM_COLOR=never`).
 - Commands run with stdin closed, a deadline for their whole process group, and capped output.
-- A git-ignored secret file [copied into a worktree](@/docs/running.md#copied-files) (`[worktree] include`, `.worktreeinclude`) stays unreadable to the model's file tools. The values of its secret-named variables, and the lines of a key file (8 characters or more, not a plain number), are masked as `[redacted:NAME]`, also base64-, hex- and URL-encoded, in speccoder's tool results, MCP results, command and check output, the journal and the screen — an external `[executor]` reads files with its own tools, so only its captured output is masked; a commit never holds the file, and a diff adding a value stops the task (`SECRET-IN-DIFF`). A value transformed otherwise is not recognised.
+- A git-ignored secret file [copied into a worktree](@/docs/running.md#copied-files) (`[worktree] include`, `.worktreeinclude`) stays unreadable to the model's file tools. The values of its secret-named variables, and the lines of a key file (8 characters or more, not a plain number), are masked as `[redacted:NAME]`, also base64-, hex- and URL-encoded, in speccoder's tool results, MCP results, command and check output, the journal and the screen — an external `[executor]` reads files with its own tools too, so only what it reads through speccoder is masked; a commit never holds the file, and a diff adding a value stops the task (`SECRET-IN-DIFF`). A value transformed otherwise is not recognised.
 - Signing keys: see [what a signature proves](@/docs/attestations.md#what-a-signature-proves).
 
 ## Provenance labels
@@ -114,7 +114,7 @@ speccoder runs on the [agentplane](https://crates.io/crates/agentplane) runtime,
 
 ## External agents
 
-With an [`[executor]`](@/docs/integrations.md#external-agents), another agent makes the attempt with its own tools, outside speccoder's sandbox and with your environment (it needs its own credentials). speccoder's policy cannot refuse its individual calls; its own permission system is the boundary. The worktree, the diff audit, the checks and the verdict still apply.
+With an [`[executor]`](@/docs/integrations.md#external-agents), another agent makes the attempt over ACP. speccoder asks it to work in its ask-first permission mode, decides each permission request it sends with the same policy and approvals as a native call (never answering *always*), and serves the files and commands it runs through speccoder with the protected paths, masking and OS sandbox. The agent's own process runs with your environment, outside the sandbox: what it does without asking is outside speccoder, and the run says *decides alone* when no ask-first mode was set. The worktree, the diff audit, the checks and the verdict apply as always.
 
 ## Checking someone else's evidence
 

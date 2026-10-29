@@ -37,6 +37,9 @@ Every failure names a [code](@/docs/codes.md) and the command that fixes it; `sp
 | No colour | Output is not a terminal, `NO_COLOR` or `TERM=dumb` is set, or screen-reader mode is on. `--color always` forces it (not in screen-reader mode). |
 | Odd symbols or boxes | The font lacks them: `--ascii`, or `[ui] ascii = true` in [your settings](@/docs/configuration.md#your-settings). |
 | `spec tasks` stops: "Template 'tasks-template' was not found…" | A Spec Kit preset is installed and Spec Kit's scripts found no Python with PyYAML (`common.sh` reads a preset's manifest with it; the system `python3` usually lacks it). speccoder gives its commands the installed `specify`'s own interpreter as `SPECKIT_PYTHON_EXECUTABLE` when it imports PyYAML, and never replaces a value you set; `speccoder doctor` warns when none is found. Fix: `python3 -m pip install pyyaml`, or `export SPECKIT_PYTHON_EXECUTABLE=/path/to/a/python-with-pyyaml`. |
+| `stopped[EXECUTOR-LOGIN]` (23) | The `[executor]` agent needs signing in; nothing was attempted. Run the login the fix names in your terminal (the app opens one: Open Terminal here), e.g. `copilot login` or `opencode auth login`, then run again. `speccoder doctor --agents` shows every agent's ticks. |
+| `[executor]: kind = "claude" is now agent = "claude"` | Agents run over ACP now: write `agent = "claude"` (or `"codex"`). |
+| The run says an agent *decides alone* | speccoder could not put it into a mode that asks first (its own settings chose another, or this version is not recorded): calls it makes without asking never reach speccoder. Set its ask-first mode in its own settings, or `[executor] mode`. |
 | A run seems stuck | `speccoder report --live` from another terminal shows the step and the last tool call. |
 
 ## Getting help

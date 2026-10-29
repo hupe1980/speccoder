@@ -209,10 +209,12 @@ Who makes the attempts; see [external agents](@/docs/integrations.md#external-ag
 
 | Key | Default | Meaning |
 |---|---|---|
-| `kind` | required | `native`, `claude` (Claude Code), `codex`, or `command` |
-| `model` | — | The agent's model |
+| `agent` | — | `copilot`, `opencode`, `claude`, `codex` or `gemini`, over ACP |
+| `kind` | — | Without `agent`: `native`, `acp` (any ACP agent, by `argv`) or `command` |
+| `argv` | — | For `acp`: the agent's command; for `command`: the program, which reads the task on stdin |
+| `model` | — | The agent's model, where it offers a choice |
+| `mode` | — | The agent's own permission mode; unset, speccoder asks for the one that asks first |
 | `timeout_secs` | `1800` | How long one attempt may take |
-| `argv` | — | For `command`: the program, which reads the task on stdin |
 
 ## `[mcp.<name>]`
 

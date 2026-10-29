@@ -49,23 +49,28 @@ deny = ["delete_everything"]  # never offered
 
 ## External agents
 
-Let another coding agent make the attempts while speccoder judges them:
+Let another coding agent make the attempts while speccoder decides its calls and judges the result:
 
 ```toml
 [executor]
-kind = "claude"      # or "codex", "command"
+agent = "copilot"    # or "opencode", "claude", "codex", "gemini"
 ```
 
-| `kind` | Runs |
+| `agent` | Starts (over the [Agent Client Protocol](https://agentclientprotocol.com)) |
 |---|---|
-| `claude` | Claude Code (`claude -p`) with `acceptEdits`, its file tools, Bash only for your checks and `[commands] allow` (passed as exact Claude Code `Bash(…)` rules), no web tools |
-| `codex` | `codex exec --sandbox workspace-write` |
-| `command` | the program in `argv`: the task on stdin, working in the current directory, its summary on stdout |
+| `copilot` | GitHub Copilot: `copilot --acp`, else `npx -y @github/copilot@1.0.105 --acp` |
+| `opencode` | OpenCode: `opencode acp` |
+| `claude` | Claude Code: `npx -y @agentclientprotocol/claude-agent-acp@0.98.0` |
+| `codex` | Codex: `npx -y @agentclientprotocol/codex-acp@2.3.0` |
+| `gemini` | Gemini CLI: `npx -y @google/gemini-cli@0.66.0 --acp` |
 
-- `model` and `timeout_secs` (default `1800`) are optional. Log in to the agent first.
-- The agent gets the context a native attempt gets (task, story, plan, constitution, the verifier's facts after a failure) and the rules speccoder will check. A final message starting with `BLOCKED:` is an honest stop.
-- What stays: the isolated worktree, the acceptance tests written before the attempt (by the model in `[model]`), the diff audit, the checks and the verdict, retries, the monitor, ticking and committing.
-- What changes: **guarantees are diff-level, not call-level.** The agent runs outside speccoder's sandbox under its own permission system, so there are no approvals during an attempt; a frozen test it edits is caught by the audit and fails the verdict. See [security](@/docs/security.md#external-agents).
+- Any other ACP agent: `kind = "acp"` with `argv = ["my-agent", "--acp"]`. A program that is not an ACP agent: `kind = "command"` with `argv` — the task on stdin, its summary on stdout, judged from the diff alone.
+- `model` selects the agent's model where it offers a choice; `mode` keeps a permission mode of your choosing; `timeout_secs` (default `1800`) bounds one attempt — then speccoder cancels the turn and stops the agent.
+- `speccoder run --agent opencode` (and the app's Run ▾ menu) picks the agent for one run; `speccoder.toml` is unchanged. `speccoder doctor --agents` and Settings › Executor show each agent as *installed*, *signed in* and *asks first*, with the one step that fixes a missing tick. speccoder never signs an agent in: a sign-in it needs stops the task with [`EXECUTOR-LOGIN`](@/docs/codes.md#executor-login) and the agent's own login command.
+
+**What speccoder governs.** Before the first prompt speccoder puts the agent into its own ask-first permission mode (recorded per adapter version; OpenCode is started with every permission rule set to ask), unless you set `mode`. Every permission request the agent sends is then decided as a [native attempt's call](@/docs/approvals.md): a command by the command policy (plain reads such as `cat src/lib.rs` as reads), a file by the protected paths, a call speccoder cannot classify by a person, a fetch refused — allowed calls with the agent's *allow once*, never *always*; a call that needs you waits at the terminal, in Needs You, or for `task approve`. Files and commands the agent runs through speccoder's file and terminal access go through the workspace tools, the protected paths, the secret masking and the OS sandbox.
+
+**What stays outside.** The agent runs as its own process with your environment, outside speccoder's sandbox. What it does without asking (some agents read files unasked; an agent in a mode that decides alone does more) never reaches speccoder: the run says *decides alone* when the agent was not put into a mode that asks first. The worktree, the acceptance tests written before the attempt (by the model in `[model]`), the diff audit, the checks and the verdict, retries, the monitor, ticking and committing are the same as for every attempt. A final message starting with `BLOCKED:`, or a turn that changed nothing, is an honest stop. See [security](@/docs/security.md#external-agents).
 
 ## CI and scripting
 

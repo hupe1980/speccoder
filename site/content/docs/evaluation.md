@@ -31,7 +31,7 @@ speccoder eval evals/bugs                    # the bug cases
 speccoder eval evals --case wrap-text        # one case
 speccoder eval evals --repeat 3              # repeat each case (1–100)
 speccoder eval evals --keep runs/            # keep each case's repository and journal
-speccoder eval evals --executor claude       # let Claude Code (or codex) make the attempts
+speccoder eval evals --executor copilot      # let an agent (copilot, opencode, claude, codex, gemini) make the attempts
 ```
 
 | Class | Means |
@@ -69,7 +69,7 @@ The same cases compare one model with another, or speccoder's own loop with an e
 git clone https://github.com/sharkdp/bat repos/sharkdp__bat        # one clone per repository: owner__name
 speccoder bench import instances.jsonl --repos repos --out bench  # JSON Lines or a JSON array; --limit N
 (cd bench/<case>/project && cargo fetch)                         # the sandbox has no network
-speccoder eval bench --executor claude
+speccoder eval bench --executor copilot
 ```
 
 Each case's project is the repository at `base_commit` with a Spec Kit feature around the issue: `spec.md` carries the issue text and one task resolves it, `expect = "complete"`. The oracle is the set of files the benchmark's `test_patch` adds or changes, which the agent never sees. The test command comes from the instance's `test_cmd`, else `--test-cmd`, else the project (Cargo, npm, pytest, Go).

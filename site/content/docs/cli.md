@@ -35,7 +35,7 @@ Every stop and finish ends with a `Next:` block of commands to copy (`next` in J
 | `speccoder new --undo [PATH] [--yes]` | Undo a project speccoder created: the folder to the Trash, or a revert of its commit in an existing repository — only while nothing else happened there (`NEW-UNDO-REFUSED`) |
 | `speccoder sample [--fresh] [--yes]` | Copy the bundled sample into speccoder's state directory and replay its recorded run strictly, no model (payload `sample`; `SAMPLE-DIVERGED`, `SAMPLE-MISSING`) |
 | `speccoder init [--provider anthropic\|openai\|bedrock] [--model M] [--region R] [--force] [--no-verify] [--yes]` | Write `speccoder.toml` with the detected checks, run them on the untouched code, offer the commit. `--region` is Bedrock's (default: `AWS_REGION`, `AWS_DEFAULT_REGION`, the profile's); `--force` replaces the file; `--yes` asks nothing and commits nothing |
-| `speccoder doctor [--bug-report]` | Check git, the project, the configuration, the key, the sandbox, the state directory, signing, GitHub and the look; changes nothing. `--bug-report`: a redacted Markdown bundle for an issue |
+| `speccoder doctor [--bug-report] [--agents]` | Check git, the project, the configuration, the key, the sandbox, the state directory, signing, GitHub and the look; changes nothing. `--bug-report`: a redacted Markdown bundle for an issue. `--agents`: every agent's *installed*, *signed in*, *asks first* (an installed one is asked for a session, never a prompt) |
 | `speccoder config` | Every key of `speccoder.toml` with its value or default ([configuration](@/docs/configuration.md#changing-it)) |
 | `speccoder config get KEY` / `unset KEY` | One key's value; remove a key so its default applies |
 | `speccoder config set KEY VALUE… [--yes]` | Set a key, comments kept; a prefix list only after its preview is confirmed |
@@ -70,6 +70,7 @@ Every stop and finish ends with a `Next:` block of commands to copy (`next` in J
 | Command | What it does |
 |---|---|
 | `speccoder run [--task T] [--max-tasks N] [--parallel N] [--converge] [--no-prompt] [--ignore-checklists]` | Work through the ready tasks, or one; resumes where it stopped ([running](@/docs/running.md)) |
+| `speccoder run --agent copilot` | This run's attempts by that [agent](@/docs/integrations.md#external-agents) (`native`: speccoder's own); `speccoder.toml` is unchanged |
 | `speccoder run --task T --fresh-acceptance` | Set the task's held attempt aside and write its acceptance tests anew |
 | `speccoder run --allow-failing-baseline` | Attempt although a check cannot run on the untouched code (`CHECK-BROKEN`) |
 | `speccoder run --in-place [--return]` | [Work in your checkout](@/docs/running.md#in-place-runs); `--return` leaves an interrupted in-place run |
@@ -126,7 +127,7 @@ Every stop and finish ends with a `Next:` block of commands to copy (`next` in J
 | `speccoder acp` | Serve the Agent Client Protocol on stdio, for [editors](@/docs/integrations.md#editors-acp) |
 | `speccoder workflow install [--force] [--overlay bugfix]` | Add the [workflow step type](@/docs/planning.md#spec-kit-workflows), or the [`bugfix` overlay](@/docs/bugs.md#commands) |
 | `speccoder workflow uninstall --overlay bugfix` | Remove that overlay |
-| `speccoder eval [DIR] [--case C] [--repeat N] [--keep DIR] [--executor native\|claude\|codex]` | Run the [evaluation suite](@/docs/evaluation.md) (default `evals`) |
+| `speccoder eval [DIR] [--case C] [--repeat N] [--keep DIR] [--executor native\|copilot\|opencode\|claude\|codex\|gemini]` | Run the [evaluation suite](@/docs/evaluation.md) (default `evals`) |
 | `speccoder bench import FILE --repos DIR --out DIR [--limit N] [--test-cmd CMD]` | Turn SWE-bench-format instances into evaluation cases |
 | `speccoder propose T` | Ask the model how it would do one task; nothing is executed |
 | `speccoder explain [CODE] [--list]` | What a code means and how to fix it, offline |

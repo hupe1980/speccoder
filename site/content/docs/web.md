@@ -100,7 +100,7 @@ Anchor a comment to a passage (select it, press `c`), a test line (`+`), an open
 
 ### The live capsule and the status bar
 
-A running job floats at the bottom of the page (task, stage, time; orange when it needs you). Click it for the stages, tool calls with their decisions, the model's words, tokens and money. **Stop** ends the job before the next task; the attempt stays resumable. The **status bar** shows the feature, branch, verdicts, approvals, stale ticks, the running task, spend, model, sandbox and decisions waiting.
+A running job floats at the bottom of the page (task, stage, time; orange when it needs you). Click it for the stages, tool calls with their decisions, the model's words, tokens and money. **Stop** ends the job before the next task; the attempt stays resumable. When an [external agent](@/docs/integrations.md#external-agents) makes the attempt, it shows the agent, its plan as a checklist and what speccoder decided (*asked · allowed · waited for you · refused* — each count filters the calls), with one warning line when the agent *decides alone*; a failed task ends with **Try with** the next agent. The **status bar** shows the feature, branch, verdicts, approvals, stale ticks, the running task, spend, model, sandbox and decisions waiting.
 
 A run that stops on uncommitted setup shows a card with the fix, its command and undo, and **Commit and Run Again**. A `speccoder run` from a terminal shows as a pill in the status bar (*interrupted*, with **Resume**, when that process died); a run started here meanwhile is refused.
 
@@ -134,7 +134,7 @@ Spec & Plan then follows the new unit as its skill writes it. Above the document
 
 ## Settings
 
-The gear (`,`) opens `speccoder.toml` as a page: each key with its default and meaning, checks and MCP servers as tables. **Save** writes the file only when it parses, keeping its comments, then offers **Commit** for `speccoder.toml` alone. Prefix lists are saved separately, from their coverage preview (**Preview…**, **Save Prefix**, **Coverage**; see [prefix lists](@/docs/configuration.md#prefix-lists)).
+The gear (`,`) opens `speccoder.toml` as a page: each key with its default and meaning, checks and MCP servers as tables. **Save** writes the file only when it parses, keeping its comments, then offers **Commit** for `speccoder.toml` alone. Prefix lists are saved separately, from their coverage preview (**Preview…**, **Save Prefix**, **Coverage**; see [prefix lists](@/docs/configuration.md#prefix-lists)). **Executor** shows each agent with *installed*, *signed in* and *asks first* and the one step a missing tick needs; **Use** writes `[executor] agent`. The Run button's **▾** picks an agent for the runs started here (remembered in this browser), without changing the file.
 
 ## When a run needs you
 

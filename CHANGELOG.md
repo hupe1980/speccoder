@@ -8,6 +8,24 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Agents as executors, governed call by call.** `[executor] agent =
+  "copilot"` (or `opencode`, `claude`, `codex`, `gemini`; any other ACP
+  agent with `kind = "acp"` and `argv`) runs the agent over the Agent
+  Client Protocol, its `npx` adapters pinned to exact versions. speccoder
+  puts it into its ask-first permission mode, decides every permission
+  request with the native policy and approvals (never answering
+  "always"), serves its file and terminal calls through the protected
+  paths, masking and OS sandbox, and judges the attempt as every attempt.
+  The report and the live card show the agent, its plan and what
+  speccoder decided (asked · allowed · waited for you · refused), and say
+  *decides alone* when no ask-first mode was set. A sign-in it needs stops
+  the task with `EXECUTOR-LOGIN` and the agent's own login as a step.
+- **Pick an agent for one run.** `speccoder run --agent opencode`, and
+  the app's Run ▾ menu; `speccoder doctor --agents` and Settings ›
+  Executor show each agent as installed, signed in and asks first, with
+  the one step that fixes a missing tick; a failed task an agent
+  attempted offers Try with the next one.
+
 - **Every task finds its doer.** A task naming only paths in its
   feature's folder is planning work: it runs with planning rights —
   design documents there, never `spec.md`, `tasks.md`, `review.json`,
@@ -43,6 +61,9 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **`[executor] kind = "claude"` and `"codex"` are gone**: write
+  `agent = "claude"` / `agent = "codex"` (they run over ACP now).
+  `kind = "command"` stays.
 - A task line's leading `/` (`/specs/001-x/plan.md`) names the
   repository root.
 - `BLOCKED`'s next steps are `task done`, `task hint` and `task skip`.

@@ -120,7 +120,7 @@ Held-out tests never enter the worktree (except overlaid while a judge run check
 
 **Publication.** `refs/speccoder/held-out/<feature>` carries exactly the sets whose manifest digest a task closed on the pushed head names in its signed evidence (or `Held-Out:` trailer); sets of open tasks stay local. A feature run builds it when every task is ticked; [`speccoder pr`](@/docs/github.md#its-pull-request) builds and pushes it from the private store, never forced, writing nothing into the project's repository. Each publication is parented on the branch and the previous one, so the ref only grows.
 
-**External agents** (`[executor]`) run with your permissions, so the set is *withheld, not sealed*: Claude Code is told not to read its directory, and a held-out literal copied into the attempt stops the tick.
+**External agents** (`[executor]`) run with your permissions, so the set is *withheld, not sealed*: it lies outside the worktree, where speccoder refuses every read the agent asks for, and a held-out literal copied into the attempt stops the tick.
 
 ## Where the evidence lives
 
