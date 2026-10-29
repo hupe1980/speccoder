@@ -1,41 +1,106 @@
 {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "verify: the checks' results",
+  "description": "Everything one `verify` run established.",
+  "type": "object",
+  "properties": {
+    "root": {
+      "description": "Project root the checks ran in.",
+      "type": "string"
+    },
+    "tier": {
+      "description": "`fast` or `full`.",
+      "type": "string"
+    },
+    "checks": {
+      "description": "One result per configured check, in configuration order.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/CheckResult"
+      }
+    },
+    "comparison": {
+      "description": "Comparison with a baseline, if one was given.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Comparison"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "passed": {
+      "description": "Whether verification passed (see [`passes`]).",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "root",
+    "tier",
+    "checks",
+    "comparison",
+    "passed"
+  ],
   "$defs": {
     "CheckResult": {
       "description": "One check run.",
+      "type": "object",
       "properties": {
+        "name": {
+          "description": "Name from `speccoder.toml`.",
+          "type": "string"
+        },
         "argv": {
           "description": "The command, as run.",
+          "type": "array",
           "items": {
             "type": "string"
-          },
-          "type": "array"
+          }
         },
-        "duration_ms": {
-          "description": "Wall-clock duration.",
-          "format": "uint64",
-          "minimum": 0,
-          "type": "integer"
+        "status": {
+          "description": "What happened.",
+          "$ref": "#/$defs/CheckStatus"
         },
         "exit_code": {
           "description": "Process exit code, if it exited.",
-          "format": "int32",
           "type": [
             "integer",
             "null"
-          ]
+          ],
+          "format": "int32"
         },
-        "flaky": {
-          "default": false,
-          "description": "It failed once and passed when run again: named, never trusted as\ntask evidence.",
-          "type": "boolean"
+        "duration_ms": {
+          "description": "Wall-clock duration.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
         },
         "junit": {
           "description": "Whether the check declares a JUnit report.",
           "type": "boolean"
         },
-        "name": {
-          "description": "Name from `speccoder.toml`.",
+        "tests": {
+          "description": "Tests from the JUnit report, if one was declared and freshly written.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/TestResult"
+          }
+        },
+        "stdout_tail": {
+          "description": "Last part of stdout (lossy UTF-8).",
           "type": "string"
+        },
+        "stderr_tail": {
+          "description": "Last part of stderr (lossy UTF-8).",
+          "type": "string"
+        },
+        "truncated": {
+          "description": "Output exceeded the capture cap.",
+          "type": "boolean"
         },
         "note": {
           "description": "Why the check was skipped, errored, or has no tests.",
@@ -44,31 +109,10 @@
             "null"
           ]
         },
-        "status": {
-          "$ref": "#/$defs/CheckStatus",
-          "description": "What happened."
-        },
-        "stderr_tail": {
-          "description": "Last part of stderr (lossy UTF-8).",
-          "type": "string"
-        },
-        "stdout_tail": {
-          "description": "Last part of stdout (lossy UTF-8).",
-          "type": "string"
-        },
-        "tests": {
-          "description": "Tests from the JUnit report, if one was declared and freshly written.",
-          "items": {
-            "$ref": "#/$defs/TestResult"
-          },
-          "type": [
-            "array",
-            "null"
-          ]
-        },
-        "truncated": {
-          "description": "Output exceeded the capture cap.",
-          "type": "boolean"
+        "flaky": {
+          "description": "It failed once and passed when run again: named, never trusted as\ntask evidence.",
+          "type": "boolean",
+          "default": false
         }
       },
       "required": [
@@ -84,81 +128,124 @@
         "truncated",
         "note",
         "flaky"
-      ],
-      "type": "object"
+      ]
     },
     "CheckStatus": {
       "description": "Outcome of one check.",
       "oneOf": [
         {
-          "const": "passed",
           "description": "Exited 0.",
-          "type": "string"
+          "type": "string",
+          "const": "passed"
         },
         {
-          "const": "failed",
           "description": "Exited non-zero.",
-          "type": "string"
+          "type": "string",
+          "const": "failed"
         },
         {
-          "const": "timed_out",
           "description": "Killed at its deadline.",
-          "type": "string"
+          "type": "string",
+          "const": "timed_out"
         },
         {
-          "const": "skipped",
           "description": "Not applicable (its `when_exists` path is absent); not evidence of anything.",
-          "type": "string"
+          "type": "string",
+          "const": "skipped"
         },
         {
-          "const": "error",
           "description": "Could not be run at all (e.g. command not found).",
+          "type": "string",
+          "const": "error"
+        }
+      ]
+    },
+    "TestResult": {
+      "description": "One test.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "`classname::name`, or `name` when there is no class.",
           "type": "string"
+        },
+        "outcome": {
+          "description": "What happened.",
+          "$ref": "#/$defs/TestOutcome"
+        }
+      },
+      "required": [
+        "id",
+        "outcome"
+      ]
+    },
+    "TestOutcome": {
+      "description": "Outcome of one test from a JUnit report.",
+      "oneOf": [
+        {
+          "description": "Passed.",
+          "type": "string",
+          "const": "passed"
+        },
+        {
+          "description": "Failed (an assertion, a `<failure>` in JUnit).",
+          "type": "string",
+          "const": "failed"
+        },
+        {
+          "description": "Skipped or ignored.",
+          "type": "string",
+          "const": "skipped"
+        },
+        {
+          "description": "Errored before or outside an assertion (a `<error>` in JUnit: setup,\ncollection, an unexpected exception).",
+          "type": "string",
+          "const": "error"
         }
       ]
     },
     "Comparison": {
       "description": "What changed relative to a baseline (pass-to-pass).",
+      "type": "object",
       "properties": {
-        "count_after": {
-          "description": "Tests collected now.",
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "count_before": {
-          "description": "Tests collected in the baseline.",
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "failing_as_before": {
-          "description": "Checks failing now only because of tests that already failed in the baseline.",
+        "regressions": {
+          "description": "Tests that passed in the baseline and now fail or are missing.",
+          "type": "array",
           "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "new_tests": {
-          "description": "Tests not in the baseline.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
+            "$ref": "#/$defs/Regression"
+          }
         },
         "pre_existing": {
           "description": "Tests failing in both runs.",
+          "type": "array",
           "items": {
             "type": "string"
-          },
-          "type": "array"
+          }
         },
-        "regressions": {
-          "description": "Tests that passed in the baseline and now fail or are missing.",
+        "new_tests": {
+          "description": "Tests not in the baseline.",
+          "type": "array",
           "items": {
-            "$ref": "#/$defs/Regression"
-          },
-          "type": "array"
+            "type": "string"
+          }
+        },
+        "count_before": {
+          "description": "Tests collected in the baseline.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "count_after": {
+          "description": "Tests collected now.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "failing_as_before": {
+          "description": "Checks failing now only because of tests that already failed in the baseline.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "required": [
@@ -168,11 +255,11 @@
         "count_before",
         "count_after",
         "failing_as_before"
-      ],
-      "type": "object"
+      ]
     },
     "Regression": {
       "description": "A test that passed in the baseline and no longer does.",
+      "type": "object",
       "properties": {
         "id": {
           "description": "`check/test`.",
@@ -186,95 +273,8 @@
       "required": [
         "id",
         "now"
-      ],
-      "type": "object"
-    },
-    "TestOutcome": {
-      "description": "Outcome of one test from a JUnit report.",
-      "oneOf": [
-        {
-          "const": "passed",
-          "description": "Passed.",
-          "type": "string"
-        },
-        {
-          "const": "failed",
-          "description": "Failed (an assertion, a `<failure>` in JUnit).",
-          "type": "string"
-        },
-        {
-          "const": "skipped",
-          "description": "Skipped or ignored.",
-          "type": "string"
-        },
-        {
-          "const": "error",
-          "description": "Errored before or outside an assertion (a `<error>` in JUnit: setup,\ncollection, an unexpected exception).",
-          "type": "string"
-        }
       ]
-    },
-    "TestResult": {
-      "description": "One test.",
-      "properties": {
-        "id": {
-          "description": "`classname::name`, or `name` when there is no class.",
-          "type": "string"
-        },
-        "outcome": {
-          "$ref": "#/$defs/TestOutcome",
-          "description": "What happened."
-        }
-      },
-      "required": [
-        "id",
-        "outcome"
-      ],
-      "type": "object"
     }
   },
-  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/verify.json",
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Everything one `verify` run established.",
-  "properties": {
-    "checks": {
-      "description": "One result per configured check, in configuration order.",
-      "items": {
-        "$ref": "#/$defs/CheckResult"
-      },
-      "type": "array"
-    },
-    "comparison": {
-      "anyOf": [
-        {
-          "$ref": "#/$defs/Comparison"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "description": "Comparison with a baseline, if one was given."
-    },
-    "passed": {
-      "description": "Whether verification passed (see [`passes`]).",
-      "type": "boolean"
-    },
-    "root": {
-      "description": "Project root the checks ran in.",
-      "type": "string"
-    },
-    "tier": {
-      "description": "`fast` or `full`.",
-      "type": "string"
-    }
-  },
-  "required": [
-    "root",
-    "tier",
-    "checks",
-    "comparison",
-    "passed"
-  ],
-  "title": "verify: the checks' results",
-  "type": "object"
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/verify.json"
 }

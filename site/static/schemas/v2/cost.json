@@ -1,87 +1,27 @@
 {
-  "$defs": {
-    "TaskCost": {
-      "description": "One task's cost.",
-      "properties": {
-        "attempts": {
-          "description": "Attempts recorded in git (the passing commit and saved attempts).",
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "task": {
-          "description": "Task ID.",
-          "type": "string"
-        },
-        "usage": {
-          "$ref": "#/$defs/Usage",
-          "description": "Tokens and money."
-        }
-      },
-      "required": [
-        "task",
-        "attempts",
-        "usage"
-      ],
-      "type": "object"
-    },
-    "Usage": {
-      "description": "Token counts, and USD when prices are configured.",
-      "properties": {
-        "cache_read_tokens": {
-          "description": "Input tokens read from the cache.",
-          "format": "uint64",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "cache_write_tokens": {
-          "description": "Tokens written to the cache.",
-          "format": "uint64",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "input_tokens": {
-          "description": "Input tokens (including those read from the cache).",
-          "format": "uint64",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "output_tokens": {
-          "description": "Output tokens.",
-          "format": "uint64",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "usd": {
-          "description": "USD, when `[model]` has prices.",
-          "format": "double",
-          "type": [
-            "number",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "input_tokens",
-        "output_tokens",
-        "cache_read_tokens",
-        "cache_write_tokens",
-        "usd"
-      ],
-      "type": "object"
-    }
-  },
-  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/cost.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "cost: tokens and money per task",
   "description": "Result of `speccoder report --cost`.",
+  "type": "object",
   "properties": {
-    "convergence": {
-      "$ref": "#/$defs/Usage",
-      "description": "Convergence assessments."
-    },
     "feature": {
       "description": "Feature directory name.",
       "type": "string"
+    },
+    "tasks": {
+      "description": "Per task, every attempt counted (passed and saved).",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/TaskCost"
+      }
+    },
+    "convergence": {
+      "description": "Convergence assessments.",
+      "$ref": "#/$defs/Usage"
+    },
+    "total": {
+      "description": "Everything.",
+      "$ref": "#/$defs/Usage"
     },
     "priced_model": {
       "description": "The model the prices apply to, when prices are configured.",
@@ -89,17 +29,6 @@
         "string",
         "null"
       ]
-    },
-    "tasks": {
-      "description": "Per task, every attempt counted (passed and saved).",
-      "items": {
-        "$ref": "#/$defs/TaskCost"
-      },
-      "type": "array"
-    },
-    "total": {
-      "$ref": "#/$defs/Usage",
-      "description": "Everything."
     }
   },
   "required": [
@@ -109,6 +38,77 @@
     "total",
     "priced_model"
   ],
-  "title": "cost: tokens and money per task",
-  "type": "object"
+  "$defs": {
+    "TaskCost": {
+      "description": "One task's cost.",
+      "type": "object",
+      "properties": {
+        "task": {
+          "description": "Task ID.",
+          "type": "string"
+        },
+        "attempts": {
+          "description": "Attempts recorded in git (the passing commit and saved attempts).",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "usage": {
+          "description": "Tokens and money.",
+          "$ref": "#/$defs/Usage"
+        }
+      },
+      "required": [
+        "task",
+        "attempts",
+        "usage"
+      ]
+    },
+    "Usage": {
+      "description": "Token counts, and USD when prices are configured.",
+      "type": "object",
+      "properties": {
+        "input_tokens": {
+          "description": "Input tokens (including those read from the cache).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "output_tokens": {
+          "description": "Output tokens.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "cache_read_tokens": {
+          "description": "Input tokens read from the cache.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "cache_write_tokens": {
+          "description": "Tokens written to the cache.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "usd": {
+          "description": "USD, when `[model]` has prices.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        }
+      },
+      "required": [
+        "input_tokens",
+        "output_tokens",
+        "cache_read_tokens",
+        "cache_write_tokens",
+        "usd"
+      ]
+    }
+  },
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/cost.json"
 }

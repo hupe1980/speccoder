@@ -1,557 +1,179 @@
 {
-  "$defs": {
-    "CheckStatus": {
-      "description": "Outcome of one check.",
-      "oneOf": [
-        {
-          "const": "passed",
-          "description": "Exited 0.",
-          "type": "string"
-        },
-        {
-          "const": "failed",
-          "description": "Exited non-zero.",
-          "type": "string"
-        },
-        {
-          "const": "timed_out",
-          "description": "Killed at its deadline.",
-          "type": "string"
-        },
-        {
-          "const": "skipped",
-          "description": "Not applicable (its `when_exists` path is absent); not evidence of anything.",
-          "type": "string"
-        },
-        {
-          "const": "error",
-          "description": "Could not be run at all (e.g. command not found).",
-          "type": "string"
-        }
-      ]
-    },
-    "Collection": {
-      "description": "The attempt's changed test files and whether the run collected them.",
-      "properties": {
-        "files": {
-          "description": "Every judged file, by path.",
-          "items": {
-            "$ref": "#/$defs/FileCollection"
-          },
-          "type": "array"
-        },
-        "listing": {
-          "description": "The listings run, in order.",
-          "items": {
-            "$ref": "#/$defs/ListingRun"
-          },
-          "type": "array"
-        }
-      },
-      "required": [
-        "files"
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "https://speccoder.dev/task-verification/v0 (revision 3)",
+  "description": "The `task-verification` predicate, v0.\n\nFields `null` in a tick may be absent in a decision (`attested`,\n`skipped`), which carries `decider` instead of the test evidence.",
+  "type": "object",
+  "properties": {
+    "revision": {
+      "description": "Additive revision within v0; absent: 1.",
+      "type": [
+        "integer",
+        "null"
       ],
-      "type": "object"
+      "format": "uint32",
+      "minimum": 0
     },
-    "CollectionRule": {
-      "description": "A runner's collection rule: one sentence a person reads, and where it\ncame from.",
-      "properties": {
-        "source": {
-          "description": "Where it came from (`Cargo.toml (default)`, `pyproject.toml [tool.pytest.ini_options]`).",
-          "type": "string"
-        },
-        "text": {
-          "description": "The rule (``Cargo builds `tests/*.rs` and `tests/<dir>/main.rs` (and the modules they declare)``).",
-          "type": "string"
-        },
-        "toolchain": {
-          "$ref": "#/$defs/Toolchain",
-          "description": "The toolchain."
-        }
-      },
-      "required": [
-        "toolchain",
-        "text",
-        "source"
-      ],
-      "type": "object"
+    "verdict": {
+      "description": "`verified`, `regression_only`, `attested` or `skipped`.",
+      "type": "string"
     },
-    "DecidedBy": {
-      "description": "What decided a file's state.",
-      "oneOf": [
-        {
-          "const": "static",
-          "description": "The toolchain's static rule.",
-          "type": "string"
-        },
-        {
-          "const": "junit",
-          "description": "The check's fresh JUnit report.",
-          "type": "string"
-        },
-        {
-          "const": "listing",
-          "description": "The runner's own listing.",
-          "type": "string"
-        }
-      ]
+    "unit": {
+      "description": "The unit.",
+      "$ref": "#/$defs/Unit"
     },
-    "Decider": {
-      "description": "Who decided an `attested` or `skipped` task, and why.",
-      "properties": {
-        "by": {
-          "description": "The person.",
-          "type": "string"
-        },
-        "reason": {
-          "description": "Their reason.",
-          "type": "string"
-        }
-      },
-      "required": [
-        "by",
-        "reason"
-      ],
-      "type": "object"
+    "task": {
+      "description": "The task.",
+      "$ref": "#/$defs/TaskRef"
     },
-    "FileCollection": {
-      "description": "One judged test file.",
-      "properties": {
-        "decided_by": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/DecidedBy"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "What decided it; `null` only when unknown."
-        },
-        "fixes": {
-          "description": "The ways out, for this toolchain and file.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "path": {
-          "description": "Workspace-relative path.",
-          "type": "string"
-        },
-        "rule": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/CollectionRule"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "The runner's rule (not collected)."
-        },
-        "state": {
-          "$ref": "#/$defs/FileState",
-          "description": "Collected, not collected, or unknown."
-        },
-        "test_ids": {
-          "description": "The first 20 of their ids.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "tests": {
-          "description": "Tests from it that ran (skipped and ignored ones excluded).",
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "why": {
-          "description": "Not collected: which part of the rule the file breaks; unknown: why\nspeccoder cannot tell.",
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "path",
-        "state",
-        "tests",
-        "test_ids"
-      ],
-      "type": "object"
+    "tree": {
+      "description": "The task commit's tree.",
+      "type": "string"
     },
-    "FileState": {
-      "description": "Whether the run collected a test from a file.",
-      "oneOf": [
-        {
-          "const": "collected",
-          "description": "At least one test from it ran (passed or failed).",
-          "type": "string"
-        },
-        {
-          "const": "not_collected",
-          "description": "None did.",
-          "type": "string"
-        },
-        {
-          "const": "unknown",
-          "description": "speccoder cannot tell.",
-          "type": "string"
-        }
-      ]
-    },
-    "ImplementedBy": {
+    "spec": {
+      "description": "The requirement and its text's hash (ticks).",
       "anyOf": [
         {
-          "description": "A tick on the feature branch.",
-          "properties": {
-            "commit": {
-              "description": "Its commit (short).",
-              "type": "string"
-            },
-            "task": {
-              "description": "Its task.",
-              "type": "string"
-            }
-          },
-          "required": [
-            "task",
-            "commit"
-          ],
-          "type": "object"
+          "$ref": "#/$defs/SpecRef"
         },
         {
-          "description": "They passed before the feature's first tick.",
-          "properties": {
-            "before_feature": {
-              "description": "Always `true`.",
-              "type": "boolean"
-            }
-          },
-          "required": [
-            "before_feature"
-          ],
-          "type": "object"
-        }
-      ],
-      "description": "Which tick made already-passing acceptance tests pass."
-    },
-    "ListingRun": {
-      "description": "A listing speccoder ran because the earlier sources left a file undecided.",
-      "properties": {
-        "argv": {
-          "description": "The command.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "duration_ms": {
-          "description": "How long it took.",
-          "format": "uint64",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "status": {
-          "$ref": "#/$defs/CheckStatus",
-          "description": "How it ended."
-        }
-      },
-      "required": [
-        "argv",
-        "duration_ms",
-        "status"
-      ],
-      "type": "object"
-    },
-    "Red": {
-      "description": "The red run's output, bounded and checked clean (revision 2).",
-      "properties": {
-        "excerpt": {
-          "description": "The last bytes of the output (at most 2048); `null` when withheld.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "excerpt_sha256": {
-          "description": "sha256 of `excerpt`.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "kind": {
-          "$ref": "#/$defs/RedKind",
-          "description": "How the tests failed."
-        },
-        "output_sha256": {
-          "description": "sha256 of the captured output the excerpt was cut from.",
-          "type": "string"
-        },
-        "withheld": {
-          "description": "The excerpt was not clean (a local path, a credential): dropped.",
-          "type": "boolean"
-        }
-      },
-      "required": [
-        "kind",
-        "output_sha256",
-        "withheld"
-      ],
-      "type": "object"
-    },
-    "RedClass": {
-      "description": "What a red run of acceptance tests showed.\n\nOnly [`RedClass::Assertion`] and [`RedClass::Absent`] are red: a test was\ncollected and failed on an assertion, or the tests could not build only\nbecause symbols the task is to introduce do not exist yet. Everything\nelse is not demonstrated.",
-      "oneOf": [
-        {
-          "const": "assertion",
-          "description": "A collected test failed on an assertion.",
-          "type": "string"
-        },
-        {
-          "const": "absent",
-          "description": "The only build or import errors name symbols that do not exist yet.",
-          "type": "string"
-        },
-        {
-          "const": "build_error",
-          "description": "Any other build error.",
-          "type": "string"
-        },
-        {
-          "const": "collection_error",
-          "description": "Tests errored at setup or collection.",
-          "type": "string"
-        },
-        {
-          "const": "timeout",
-          "description": "The run hit its deadline.",
-          "type": "string"
-        },
-        {
-          "const": "no_tests",
-          "description": "Nothing was collected.",
-          "type": "string"
-        },
-        {
-          "const": "flaky",
-          "description": "Red once, not red when confirmed.",
-          "type": "string"
-        },
-        {
-          "const": "unclassified",
-          "description": "The output was not recognised.",
-          "type": "string"
-        },
-        {
-          "const": "passed",
-          "description": "The tests passed.",
-          "type": "string"
+          "type": "null"
         }
       ]
     },
-    "RedKind": {
-      "description": "How the acceptance tests first failed (revision 2).",
-      "oneOf": [
+    "trace": {
+      "description": "Requirement → scenario → test rows, each with its phase and result."
+    },
+    "integrity": {
+      "description": "The diff audit's findings (`{ findings: [] }`)."
+    },
+    "monitor": {
+      "description": "The gaming monitor: `{ state: clean|suspected|unreviewed|off, findings }`."
+    },
+    "mutation": {
+      "description": "Mutation testing: `{ caught, missed, … }`, or `null`."
+    },
+    "sandbox": {
+      "description": "Where the attempt ran: `{ mode, backend, network }`."
+    },
+    "executor": {
+      "description": "Who implemented: `{ kind, agent? }`."
+    },
+    "model": {
+      "description": "The judging model: `{ provider, model }`, or `null`."
+    },
+    "run": {
+      "description": "The agentplane run, or `null`."
+    },
+    "decisions": {
+      "description": "People's decisions on the attempt's calls."
+    },
+    "strength": {
+      "description": "The acceptance set's strength (shares, near misses, permitted\nalternatives), or `null`."
+    },
+    "instructions": {
+      "description": "Repository instruction files given to the attempt."
+    },
+    "decider": {
+      "description": "The decision's maker (`attested`, `skipped`).",
+      "anyOf": [
         {
-          "const": "assertion",
-          "description": "On an assertion.",
-          "type": "string"
+          "$ref": "#/$defs/Decider"
         },
         {
-          "const": "missing_symbol",
-          "description": "Because what the task introduces did not exist yet.",
-          "type": "string"
+          "type": "null"
         }
       ]
     },
-    "RegressionReason": {
-      "description": "Why a tick is regression-only.",
-      "oneOf": [
+    "policy_sha256": {
+      "description": "sha256 of the judge's configuration at the parent commit.",
+      "type": "string"
+    },
+    "time": {
+      "description": "When it was recorded (RFC 3339, UTC).",
+      "type": "string"
+    },
+    "red": {
+      "description": "The red run's output excerpt (revision 2).",
+      "anyOf": [
         {
-          "description": "The task belongs to no user story.",
-          "properties": {
-            "reason": {
-              "const": "no_story",
-              "type": "string"
-            }
-          },
-          "required": [
-            "reason"
-          ],
-          "type": "object"
+          "$ref": "#/$defs/Red"
         },
         {
-          "description": "Its story states no acceptance scenario.",
-          "properties": {
-            "reason": {
-              "const": "no_scenarios",
-              "type": "string"
-            },
-            "story": {
-              "description": "The story.",
-              "type": "string"
-            }
-          },
-          "required": [
-            "reason",
-            "story"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "`[acceptance] generate = false`.",
-          "properties": {
-            "reason": {
-              "const": "acceptance_off",
-              "type": "string"
-            }
-          },
-          "required": [
-            "reason"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "The test author returned no file.",
-          "properties": {
-            "reason": {
-              "const": "author_wrote_none",
-              "type": "string"
-            }
-          },
-          "required": [
-            "reason"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "The author's answer could not be used.",
-          "properties": {
-            "detail": {
-              "description": "What speccoder refused (its own words).",
-              "type": "string"
-            },
-            "reason": {
-              "const": "author_failed",
-              "type": "string"
-            }
-          },
-          "required": [
-            "reason",
-            "detail"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "The acceptance tests passed before the attempt.",
-          "properties": {
-            "implemented_by": {
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/ImplementedBy"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "The tick that made them pass; `null` when it could not be determined."
-            },
-            "reason": {
-              "const": "already_passing",
-              "type": "string"
-            }
-          },
-          "required": [
-            "reason"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "They did not fail on an assertion or an absent symbol.",
-          "properties": {
-            "reason": {
-              "const": "not_red",
-              "type": "string"
-            },
-            "red_class": {
-              "$ref": "#/$defs/RedClass",
-              "description": "How the red run ended."
-            }
-          },
-          "required": [
-            "reason",
-            "red_class"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "The acceptance command collected no test.",
-          "properties": {
-            "reason": {
-              "const": "tests_not_collected",
-              "type": "string"
-            }
-          },
-          "required": [
-            "reason"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "A planning task: design documents, judged by the checks alone.",
-          "properties": {
-            "reason": {
-              "const": "planning_work",
-              "type": "string"
-            }
-          },
-          "required": [
-            "reason"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "A tick made before reasons were recorded (read side only).",
-          "properties": {
-            "reason": {
-              "const": "unrecorded",
-              "type": "string"
-            }
-          },
-          "required": [
-            "reason"
-          ],
-          "type": "object"
+          "type": "null"
         }
       ]
     },
-    "SpecRef": {
-      "description": "The requirement the task belongs to.",
+    "bug": {
+      "description": "A bug task's evidence: where the bug lives, its triad's digest, the\noutcome, the reproductions' discrimination, special-case rejections\nand the pass-to-pass set. Opaque to the verifier."
+    },
+    "acceptance": {
+      "description": "Where the acceptance tests were decided —\n`{ source: authored|review|bug_confirmation|person_test, pre_frozen }`.\nOpaque here."
+    },
+    "regression": {
+      "description": "Why a `regression_only` tick is one (revision 3); absent on other\nverdicts and in earlier revisions (read as unrecorded).",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RegressionReason"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "collection": {
+      "description": "The test files the attempt added or changed and whether the run\ncollected each (revision 3).",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Collection"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "context": {
+      "description": "Reserved: what reached the model, by digest. Opaque here."
+    },
+    "dependencies": {
+      "description": "Reserved: dependencies the change added, with their\nregistry checksums. Opaque here."
+    }
+  },
+  "required": [
+    "verdict",
+    "unit",
+    "task",
+    "tree",
+    "policy_sha256",
+    "time"
+  ],
+  "additionalProperties": true,
+  "$defs": {
+    "Unit": {
+      "description": "The spec unit (feature, change) the task belongs to.",
+      "type": "object",
       "properties": {
-        "section": {
-          "description": "The requirement or story, e.g. `US1`; `null`: none.",
-          "type": [
-            "string",
-            "null"
-          ]
+        "format": {
+          "description": "The spec format, e.g. `speckit`, `openspec`.",
+          "type": "string"
         },
-        "section_hash": {
-          "description": "sha256 of that requirement's text as the attempt was given it.",
+        "feature": {
+          "description": "The unit's name, e.g. `007-config`.",
+          "type": "string"
+        },
+        "dir": {
+          "description": "The unit's directory, project-relative.",
           "type": "string"
         }
       },
       "required": [
-        "section_hash"
-      ],
-      "type": "object"
+        "format",
+        "feature",
+        "dir"
+      ]
     },
     "TaskRef": {
       "description": "The task.",
+      "type": "object",
       "properties": {
         "id": {
           "description": "Task ID (`T012`, `1.3`).",
@@ -570,205 +192,583 @@
         "id",
         "line_hash",
         "title"
-      ],
-      "type": "object"
+      ]
+    },
+    "SpecRef": {
+      "description": "The requirement the task belongs to.",
+      "type": "object",
+      "properties": {
+        "section": {
+          "description": "The requirement or story, e.g. `US1`; `null`: none.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "section_hash": {
+          "description": "sha256 of that requirement's text as the attempt was given it.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "section_hash"
+      ]
+    },
+    "Decider": {
+      "description": "Who decided an `attested` or `skipped` task, and why.",
+      "type": "object",
+      "properties": {
+        "by": {
+          "description": "The person.",
+          "type": "string"
+        },
+        "reason": {
+          "description": "Their reason.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "by",
+        "reason"
+      ]
+    },
+    "Red": {
+      "description": "The red run's output, bounded and checked clean (revision 2).",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "description": "How the tests failed.",
+          "$ref": "#/$defs/RedKind"
+        },
+        "excerpt": {
+          "description": "The last bytes of the output (at most 2048); `null` when withheld.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "excerpt_sha256": {
+          "description": "sha256 of `excerpt`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "output_sha256": {
+          "description": "sha256 of the captured output the excerpt was cut from.",
+          "type": "string"
+        },
+        "withheld": {
+          "description": "The excerpt was not clean (a local path, a credential): dropped.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "kind",
+        "output_sha256",
+        "withheld"
+      ]
+    },
+    "RedKind": {
+      "description": "How the acceptance tests first failed (revision 2).",
+      "oneOf": [
+        {
+          "description": "On an assertion.",
+          "type": "string",
+          "const": "assertion"
+        },
+        {
+          "description": "Because what the task introduces did not exist yet.",
+          "type": "string",
+          "const": "missing_symbol"
+        }
+      ]
+    },
+    "RegressionReason": {
+      "description": "Why a tick is regression-only.",
+      "oneOf": [
+        {
+          "description": "The task belongs to no user story.",
+          "type": "object",
+          "properties": {
+            "reason": {
+              "type": "string",
+              "const": "no_story"
+            }
+          },
+          "required": [
+            "reason"
+          ]
+        },
+        {
+          "description": "Its story states no acceptance scenario.",
+          "type": "object",
+          "properties": {
+            "reason": {
+              "type": "string",
+              "const": "no_scenarios"
+            },
+            "story": {
+              "description": "The story.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "reason",
+            "story"
+          ]
+        },
+        {
+          "description": "`[acceptance] generate = false`.",
+          "type": "object",
+          "properties": {
+            "reason": {
+              "type": "string",
+              "const": "acceptance_off"
+            }
+          },
+          "required": [
+            "reason"
+          ]
+        },
+        {
+          "description": "The test author returned no file.",
+          "type": "object",
+          "properties": {
+            "reason": {
+              "type": "string",
+              "const": "author_wrote_none"
+            }
+          },
+          "required": [
+            "reason"
+          ]
+        },
+        {
+          "description": "The author's answer could not be used.",
+          "type": "object",
+          "properties": {
+            "reason": {
+              "type": "string",
+              "const": "author_failed"
+            },
+            "detail": {
+              "description": "What speccoder refused (its own words).",
+              "type": "string"
+            }
+          },
+          "required": [
+            "reason",
+            "detail"
+          ]
+        },
+        {
+          "description": "The acceptance tests passed before the attempt.",
+          "type": "object",
+          "properties": {
+            "reason": {
+              "type": "string",
+              "const": "already_passing"
+            },
+            "implemented_by": {
+              "description": "The tick that made them pass; `null` when it could not be determined.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ImplementedBy"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "reason"
+          ]
+        },
+        {
+          "description": "They did not fail on an assertion or an absent symbol.",
+          "type": "object",
+          "properties": {
+            "reason": {
+              "type": "string",
+              "const": "not_red"
+            },
+            "red_class": {
+              "description": "How the red run ended.",
+              "$ref": "#/$defs/RedClass"
+            }
+          },
+          "required": [
+            "reason",
+            "red_class"
+          ]
+        },
+        {
+          "description": "The acceptance command collected no test.",
+          "type": "object",
+          "properties": {
+            "reason": {
+              "type": "string",
+              "const": "tests_not_collected"
+            }
+          },
+          "required": [
+            "reason"
+          ]
+        },
+        {
+          "description": "A planning task: design documents, judged by the checks alone.",
+          "type": "object",
+          "properties": {
+            "reason": {
+              "type": "string",
+              "const": "planning_work"
+            }
+          },
+          "required": [
+            "reason"
+          ]
+        },
+        {
+          "description": "A tick made before reasons were recorded (read side only).",
+          "type": "object",
+          "properties": {
+            "reason": {
+              "type": "string",
+              "const": "unrecorded"
+            }
+          },
+          "required": [
+            "reason"
+          ]
+        }
+      ]
+    },
+    "ImplementedBy": {
+      "description": "Which tick made already-passing acceptance tests pass.",
+      "anyOf": [
+        {
+          "description": "A tick on the feature branch.",
+          "type": "object",
+          "properties": {
+            "task": {
+              "description": "Its task.",
+              "type": "string"
+            },
+            "commit": {
+              "description": "Its commit (short).",
+              "type": "string"
+            }
+          },
+          "required": [
+            "task",
+            "commit"
+          ]
+        },
+        {
+          "description": "They passed before the feature's first tick.",
+          "type": "object",
+          "properties": {
+            "before_feature": {
+              "description": "Always `true`.",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "before_feature"
+          ]
+        }
+      ]
+    },
+    "RedClass": {
+      "description": "What a red run of acceptance tests showed.\n\nOnly [`RedClass::Assertion`] and [`RedClass::Absent`] are red: a test was\ncollected and failed on an assertion, or the tests could not build only\nbecause symbols the task is to introduce do not exist yet. Everything\nelse is not demonstrated.",
+      "oneOf": [
+        {
+          "description": "A collected test failed on an assertion.",
+          "type": "string",
+          "const": "assertion"
+        },
+        {
+          "description": "The only build or import errors name symbols that do not exist yet.",
+          "type": "string",
+          "const": "absent"
+        },
+        {
+          "description": "Any other build error.",
+          "type": "string",
+          "const": "build_error"
+        },
+        {
+          "description": "Tests errored at setup or collection.",
+          "type": "string",
+          "const": "collection_error"
+        },
+        {
+          "description": "The run hit its deadline.",
+          "type": "string",
+          "const": "timeout"
+        },
+        {
+          "description": "Nothing was collected.",
+          "type": "string",
+          "const": "no_tests"
+        },
+        {
+          "description": "Red once, not red when confirmed.",
+          "type": "string",
+          "const": "flaky"
+        },
+        {
+          "description": "The output was not recognised.",
+          "type": "string",
+          "const": "unclassified"
+        },
+        {
+          "description": "The tests passed.",
+          "type": "string",
+          "const": "passed"
+        }
+      ]
+    },
+    "Collection": {
+      "description": "The attempt's changed test files and whether the run collected them.",
+      "type": "object",
+      "properties": {
+        "files": {
+          "description": "Every judged file, by path.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FileCollection"
+          }
+        },
+        "listing": {
+          "description": "The listings run, in order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ListingRun"
+          }
+        }
+      },
+      "required": [
+        "files"
+      ]
+    },
+    "FileCollection": {
+      "description": "One judged test file.",
+      "type": "object",
+      "properties": {
+        "path": {
+          "description": "Workspace-relative path.",
+          "type": "string"
+        },
+        "state": {
+          "description": "Collected, not collected, or unknown.",
+          "$ref": "#/$defs/FileState"
+        },
+        "decided_by": {
+          "description": "What decided it; `null` only when unknown.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DecidedBy"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tests": {
+          "description": "Tests from it that ran (skipped and ignored ones excluded).",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "test_ids": {
+          "description": "The first 20 of their ids.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "rule": {
+          "description": "The runner's rule (not collected).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CollectionRule"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "why": {
+          "description": "Not collected: which part of the rule the file breaks; unknown: why\nspeccoder cannot tell.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fixes": {
+          "description": "The ways out, for this toolchain and file.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "path",
+        "state",
+        "tests",
+        "test_ids"
+      ]
+    },
+    "FileState": {
+      "description": "Whether the run collected a test from a file.",
+      "oneOf": [
+        {
+          "description": "At least one test from it ran (passed or failed).",
+          "type": "string",
+          "const": "collected"
+        },
+        {
+          "description": "None did.",
+          "type": "string",
+          "const": "not_collected"
+        },
+        {
+          "description": "speccoder cannot tell.",
+          "type": "string",
+          "const": "unknown"
+        }
+      ]
+    },
+    "DecidedBy": {
+      "description": "What decided a file's state.",
+      "oneOf": [
+        {
+          "description": "The toolchain's static rule.",
+          "type": "string",
+          "const": "static"
+        },
+        {
+          "description": "The check's fresh JUnit report.",
+          "type": "string",
+          "const": "junit"
+        },
+        {
+          "description": "The runner's own listing.",
+          "type": "string",
+          "const": "listing"
+        }
+      ]
+    },
+    "CollectionRule": {
+      "description": "A runner's collection rule: one sentence a person reads, and where it\ncame from.",
+      "type": "object",
+      "properties": {
+        "toolchain": {
+          "description": "The toolchain.",
+          "$ref": "#/$defs/Toolchain"
+        },
+        "text": {
+          "description": "The rule (``Cargo builds `tests/*.rs` and `tests/<dir>/main.rs` (and the modules they declare)``).",
+          "type": "string"
+        },
+        "source": {
+          "description": "Where it came from (`Cargo.toml (default)`, `pyproject.toml [tool.pytest.ini_options]`).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "toolchain",
+        "text",
+        "source"
+      ]
     },
     "Toolchain": {
       "description": "A test toolchain speccoder knows how to ask.",
       "oneOf": [
         {
-          "const": "rust",
           "description": "Cargo (`cargo test`, `cargo nextest`).",
-          "type": "string"
+          "type": "string",
+          "const": "rust"
         },
         {
-          "const": "python",
           "description": "pytest.",
-          "type": "string"
+          "type": "string",
+          "const": "python"
         },
         {
-          "const": "javascript",
           "description": "vitest or jest.",
-          "type": "string"
+          "type": "string",
+          "const": "javascript"
         },
         {
-          "const": "go",
           "description": "`go test`.",
-          "type": "string"
+          "type": "string",
+          "const": "go"
         }
       ]
     },
-    "Unit": {
-      "description": "The spec unit (feature, change) the task belongs to.",
+    "ListingRun": {
+      "description": "A listing speccoder ran because the earlier sources left a file undecided.",
+      "type": "object",
       "properties": {
-        "dir": {
-          "description": "The unit's directory, project-relative.",
-          "type": "string"
+        "argv": {
+          "description": "The command.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         },
-        "feature": {
-          "description": "The unit's name, e.g. `007-config`.",
-          "type": "string"
+        "duration_ms": {
+          "description": "How long it took.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
         },
-        "format": {
-          "description": "The spec format, e.g. `speckit`, `openspec`.",
-          "type": "string"
+        "status": {
+          "description": "How it ended.",
+          "$ref": "#/$defs/CheckStatus"
         }
       },
       "required": [
-        "format",
-        "feature",
-        "dir"
-      ],
-      "type": "object"
-    }
-  },
-  "$id": "https://hupe1980.github.io/speccoder/schemas/task-verification-v0.json",
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "additionalProperties": true,
-  "description": "The `task-verification` predicate, v0.\n\nFields `null` in a tick may be absent in a decision (`attested`,\n`skipped`), which carries `decider` instead of the test evidence.",
-  "properties": {
-    "acceptance": {
-      "description": "Where the acceptance tests were decided —\n`{ source: authored|review|bug_confirmation|person_test, pre_frozen }`.\nOpaque here."
-    },
-    "bug": {
-      "description": "A bug task's evidence: where the bug lives, its triad's digest, the\noutcome, the reproductions' discrimination, special-case rejections\nand the pass-to-pass set. Opaque to the verifier."
-    },
-    "collection": {
-      "anyOf": [
-        {
-          "$ref": "#/$defs/Collection"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "description": "The test files the attempt added or changed and whether the run\ncollected each (revision 3)."
-    },
-    "context": {
-      "description": "Reserved: what reached the model, by digest. Opaque here."
-    },
-    "decider": {
-      "anyOf": [
-        {
-          "$ref": "#/$defs/Decider"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "description": "The decision's maker (`attested`, `skipped`)."
-    },
-    "decisions": {
-      "description": "People's decisions on the attempt's calls."
-    },
-    "dependencies": {
-      "description": "Reserved: dependencies the change added, with their\nregistry checksums. Opaque here."
-    },
-    "executor": {
-      "description": "Who implemented: `{ kind, agent? }`."
-    },
-    "instructions": {
-      "description": "Repository instruction files given to the attempt."
-    },
-    "integrity": {
-      "description": "The diff audit's findings (`{ findings: [] }`)."
-    },
-    "model": {
-      "description": "The judging model: `{ provider, model }`, or `null`."
-    },
-    "monitor": {
-      "description": "The gaming monitor: `{ state: clean|suspected|unreviewed|off, findings }`."
-    },
-    "mutation": {
-      "description": "Mutation testing: `{ caught, missed, … }`, or `null`."
-    },
-    "policy_sha256": {
-      "description": "sha256 of the judge's configuration at the parent commit.",
-      "type": "string"
-    },
-    "red": {
-      "anyOf": [
-        {
-          "$ref": "#/$defs/Red"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "description": "The red run's output excerpt (revision 2)."
-    },
-    "regression": {
-      "anyOf": [
-        {
-          "$ref": "#/$defs/RegressionReason"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "description": "Why a `regression_only` tick is one (revision 3); absent on other\nverdicts and in earlier revisions (read as unrecorded)."
-    },
-    "revision": {
-      "description": "Additive revision within v0; absent: 1.",
-      "format": "uint32",
-      "minimum": 0,
-      "type": [
-        "integer",
-        "null"
+        "argv",
+        "duration_ms",
+        "status"
       ]
     },
-    "run": {
-      "description": "The agentplane run, or `null`."
-    },
-    "sandbox": {
-      "description": "Where the attempt ran: `{ mode, backend, network }`."
-    },
-    "spec": {
-      "anyOf": [
+    "CheckStatus": {
+      "description": "Outcome of one check.",
+      "oneOf": [
         {
-          "$ref": "#/$defs/SpecRef"
+          "description": "Exited 0.",
+          "type": "string",
+          "const": "passed"
         },
         {
-          "type": "null"
+          "description": "Exited non-zero.",
+          "type": "string",
+          "const": "failed"
+        },
+        {
+          "description": "Killed at its deadline.",
+          "type": "string",
+          "const": "timed_out"
+        },
+        {
+          "description": "Not applicable (its `when_exists` path is absent); not evidence of anything.",
+          "type": "string",
+          "const": "skipped"
+        },
+        {
+          "description": "Could not be run at all (e.g. command not found).",
+          "type": "string",
+          "const": "error"
         }
-      ],
-      "description": "The requirement and its text's hash (ticks)."
-    },
-    "strength": {
-      "description": "The acceptance set's strength (shares, near misses, permitted\nalternatives), or `null`."
-    },
-    "task": {
-      "$ref": "#/$defs/TaskRef",
-      "description": "The task."
-    },
-    "time": {
-      "description": "When it was recorded (RFC 3339, UTC).",
-      "type": "string"
-    },
-    "trace": {
-      "description": "Requirement → scenario → test rows, each with its phase and result."
-    },
-    "tree": {
-      "description": "The task commit's tree.",
-      "type": "string"
-    },
-    "unit": {
-      "$ref": "#/$defs/Unit",
-      "description": "The unit."
-    },
-    "verdict": {
-      "description": "`verified`, `regression_only`, `attested` or `skipped`.",
-      "type": "string"
+      ]
     }
   },
-  "required": [
-    "verdict",
-    "unit",
-    "task",
-    "tree",
-    "policy_sha256",
-    "time"
-  ],
-  "title": "https://speccoder.dev/task-verification/v0 (revision 3)",
-  "type": "object"
+  "$id": "https://hupe1980.github.io/speccoder/schemas/task-verification-v0.json"
 }

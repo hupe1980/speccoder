@@ -1,357 +1,67 @@
 {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "approvals: calls waiting and decisions made",
+  "description": "Result of `speccoder report --approvals`, `approve` and `reject`.",
+  "type": "object",
+  "properties": {
+    "feature": {
+      "description": "Feature directory name.",
+      "type": "string"
+    },
+    "pending": {
+      "description": "Calls that stopped an open task and await a decision.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/PendingCall"
+      }
+    },
+    "decided": {
+      "description": "Decisions recorded for the feature's tasks.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/DecidedCall"
+      }
+    },
+    "unreadable": {
+      "description": "Why the calls waiting in the journal could not be read (another\nspeccoder holds it, …): `pending` may then be incomplete — unknown,\nnever \"nothing waiting\".",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "batch": {
+      "description": "Runs whose asking budget is used: their waiting calls, decided\ntogether (`speccoder approvals batch`).",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/BatchView"
+      }
+    }
+  },
+  "required": [
+    "feature",
+    "pending",
+    "decided",
+    "unreadable"
+  ],
   "$defs": {
-    "ApprovalView": {
-      "description": "A pending call as a person sees it: what, why, what it can reach, what\nthe model claimed, and what approving it grants.",
-      "properties": {
-        "body_lines": {
-          "description": "The diff, the file's head, the command or the arguments.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "claim": {
-          "description": "What the model said when it asked (a claim).",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "kind": {
-          "description": "`write`, `edit`, `run`, `network` or `mcp`.",
-          "type": "string"
-        },
-        "object": {
-          "description": "The object's lines.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "options": {
-          "description": "The choices offered, in order.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "risk": {
-          "description": "`low`, `medium` or `high`.",
-          "type": "string"
-        },
-        "sandbox": {
-          "description": "What the call can reach.",
-          "type": "string"
-        },
-        "scope": {
-          "description": "What `approve` grants: `for the rest of T004: this file, any content`.",
-          "type": "string"
-        },
-        "sources": {
-          "description": "Where arguments were copied from.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "subject": {
-          "description": "The path, the whole command, or the MCP tool.",
-          "type": "string"
-        },
-        "title": {
-          "description": "`Edit this file?`, `Run this command?`, ….",
-          "type": "string"
-        }
-      },
-      "required": [
-        "kind",
-        "title",
-        "subject",
-        "body_lines",
-        "sandbox",
-        "claim",
-        "risk",
-        "scope",
-        "object",
-        "sources",
-        "options"
-      ],
-      "type": "object"
-    },
-    "BatchGroup": {
-      "description": "One class of a batch.",
-      "properties": {
-        "calls": {
-          "description": "The waiting calls' ids.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "class": {
-          "description": "`write`, `command`, `network` or `mcp`.",
-          "type": "string"
-        }
-      },
-      "required": [
-        "class",
-        "calls"
-      ],
-      "type": "object"
-    },
-    "BatchView": {
-      "description": "A run whose asking budget is used, with its waiting calls by class.",
-      "properties": {
-        "digest": {
-          "description": "SHA-256 over the sorted digests of every call listed\n([`PendingCall::digest`]): a decision names it and is refused when\nthe list, or the object of a call in it, changed.",
-          "type": "string"
-        },
-        "groups": {
-          "description": "The calls by class, in the order write, command, network, mcp.",
-          "items": {
-            "$ref": "#/$defs/BatchGroup"
-          },
-          "type": "array"
-        },
-        "run": {
-          "description": "The run.",
-          "type": "string"
-        }
-      },
-      "required": [
-        "run",
-        "digest",
-        "groups"
-      ],
-      "type": "object"
-    },
-    "DecidedCall": {
-      "description": "A person's decision.",
-      "properties": {
-        "by": {
-          "description": "Who decided, as `name (via)`.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "call": {
-          "description": "The waiting call it decided, when it was one.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "client": {
-          "description": "The editor decided in, over the Agent Client Protocol.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "covers": {
-          "description": "What it covers.",
-          "type": "string"
-        },
-        "decision": {
-          "description": "`approved` or `rejected`.",
-          "type": "string"
-        },
-        "expired": {
-          "description": "Nobody decided: the deadline passed and the call was denied.",
-          "type": "boolean"
-        },
-        "note": {
-          "description": "An approval's note to the model.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "object": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/ObjectView"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "The object it decided on."
-        },
-        "operator": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/OperatorView"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "Who decided; `None` for an expiry."
-        },
-        "reason": {
-          "description": "The reason, for a rejection.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "run": {
-          "description": "The run it belongs to (a grant covers nothing after it).",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "scope": {
-          "description": "How far an approval reaches: `once`, `task` or `run`.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "task": {
-          "description": "Task ID.",
-          "type": "string"
-        },
-        "via": {
-          "description": "Through what: an origin of `actions::Via` (`terminal`, `web`,\n`acp`, …).",
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "task",
-        "decision",
-        "covers",
-        "reason",
-        "by",
-        "scope",
-        "note",
-        "call",
-        "operator",
-        "via",
-        "expired",
-        "object",
-        "run"
-      ],
-      "type": "object"
-    },
-    "ObjectView": {
-      "description": "The object a person's decision covers, as reports show it.",
-      "properties": {
-        "class": {
-          "description": "`write`, `command`, `network` or `mcp`.",
-          "type": "string"
-        },
-        "describe": {
-          "description": "One line: ``run `make check` ``.",
-          "type": "string"
-        },
-        "lines": {
-          "description": "The object in full, as every interface shows it.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "short": {
-          "description": "The canonical path, `argv#<12 hex>` or `<tool>@<12 hex>`.",
-          "type": "string"
-        }
-      },
-      "required": [
-        "class",
-        "short",
-        "describe",
-        "lines"
-      ],
-      "type": "object"
-    },
-    "OperatorView": {
-      "description": "Who decided, and how speccoder knows the name.",
-      "properties": {
-        "actor": {
-          "description": "The name.",
-          "type": "string"
-        },
-        "basis": {
-          "description": "`asserted` (typed at a local terminal or the CLI) or `connected`\n(reported by a client over its connection, e.g. an editor).",
-          "type": "string"
-        }
-      },
-      "required": [
-        "actor",
-        "basis"
-      ],
-      "type": "object"
-    },
     "PendingCall": {
       "description": "A call that stopped an attempt for approval, or a question, waiting for\na person.",
+      "type": "object",
       "properties": {
-        "arguments": {
-          "description": "Its arguments as the model sent them."
-        },
-        "batched": {
-          "description": "It waits in its run's batch: the asking budget was used.",
-          "type": "boolean"
-        },
-        "call": {
-          "description": "The waiting call's id (`approve --call`); empty for a stopped attempt.",
+        "task": {
+          "description": "Task ID.",
           "type": "string"
         },
         "covers": {
           "description": "What a decision would cover, e.g. ``write `Cargo.toml` ``.",
           "type": "string"
         },
-        "deadline": {
-          "description": "Seconds since the epoch it is denied as expired at.",
-          "format": "uint64",
-          "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
-        },
-        "digest": {
-          "description": "SHA-256 over its id and the object a decision covers: a decision\nnames it and is refused when another call (or another object) waits\nnow.",
+        "tool": {
+          "description": "The tool.",
           "type": "string"
         },
-        "kind": {
-          "description": "`approval` or `question`.",
-          "type": "string"
-        },
-        "object": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/ObjectView"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "The object a decision covers."
-        },
-        "presentation": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/ApprovalView"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "The call as the inline prompt shows it."
-        },
-        "question": {
-          "description": "A question's text.",
-          "type": [
-            "string",
-            "null"
-          ]
+        "arguments": {
+          "description": "Its arguments as the model sent them."
         },
         "reason": {
           "description": "Why it needs approval.",
@@ -361,6 +71,72 @@
           "description": "The saved attempt.",
           "type": "string"
         },
+        "presentation": {
+          "description": "The call as the inline prompt shows it.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ApprovalView"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "call": {
+          "description": "The waiting call's id (`approve --call`); empty for a stopped attempt.",
+          "type": "string"
+        },
+        "source": {
+          "description": "`task` (the attempt waits and resumes) or `attempt` (stopped and saved\nin a parallel lane).",
+          "type": "string"
+        },
+        "kind": {
+          "description": "`approval` or `question`.",
+          "type": "string"
+        },
+        "question": {
+          "description": "A question's text.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "waiting_since": {
+          "description": "Seconds since the epoch the call has waited since.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "deadline": {
+          "description": "Seconds since the epoch it is denied as expired at.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "object": {
+          "description": "The object a decision covers.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ObjectView"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sources": {
+          "description": "Where arguments of the call were copied from (source lines).",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "run": {
           "description": "The run it belongs to.",
           "type": [
@@ -368,33 +144,13 @@
             "null"
           ]
         },
-        "source": {
-          "description": "`task` (the attempt waits and resumes) or `attempt` (stopped and saved\nin a parallel lane).",
+        "batched": {
+          "description": "It waits in its run's batch: the asking budget was used.",
+          "type": "boolean"
+        },
+        "digest": {
+          "description": "SHA-256 over its id and the object a decision covers: a decision\nnames it and is refused when another call (or another object) waits\nnow.",
           "type": "string"
-        },
-        "sources": {
-          "description": "Where arguments of the call were copied from (source lines).",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "task": {
-          "description": "Task ID.",
-          "type": "string"
-        },
-        "tool": {
-          "description": "The tool.",
-          "type": "string"
-        },
-        "waiting_since": {
-          "description": "Seconds since the epoch the call has waited since.",
-          "format": "uint64",
-          "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
         }
       },
       "required": [
@@ -415,53 +171,297 @@
         "run",
         "batched",
         "digest"
-      ],
-      "type": "object"
-    }
-  },
-  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/approvals.json",
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Result of `speccoder report --approvals`, `approve` and `reject`.",
-  "properties": {
-    "batch": {
-      "description": "Runs whose asking budget is used: their waiting calls, decided\ntogether (`speccoder approvals batch`).",
-      "items": {
-        "$ref": "#/$defs/BatchView"
+      ]
+    },
+    "ApprovalView": {
+      "description": "A pending call as a person sees it: what, why, what it can reach, what\nthe model claimed, and what approving it grants.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "description": "`write`, `edit`, `run`, `network` or `mcp`.",
+          "type": "string"
+        },
+        "title": {
+          "description": "`Edit this file?`, `Run this command?`, ….",
+          "type": "string"
+        },
+        "subject": {
+          "description": "The path, the whole command, or the MCP tool.",
+          "type": "string"
+        },
+        "body_lines": {
+          "description": "The diff, the file's head, the command or the arguments.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "sandbox": {
+          "description": "What the call can reach.",
+          "type": "string"
+        },
+        "claim": {
+          "description": "What the model said when it asked (a claim).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "risk": {
+          "description": "`low`, `medium` or `high`.",
+          "type": "string"
+        },
+        "scope": {
+          "description": "What `approve` grants: `for the rest of T004: this file, any content`.",
+          "type": "string"
+        },
+        "object": {
+          "description": "The object's lines.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "sources": {
+          "description": "Where arguments were copied from.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "options": {
+          "description": "The choices offered, in order.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
       },
-      "type": "array"
+      "required": [
+        "kind",
+        "title",
+        "subject",
+        "body_lines",
+        "sandbox",
+        "claim",
+        "risk",
+        "scope",
+        "object",
+        "sources",
+        "options"
+      ]
     },
-    "decided": {
-      "description": "Decisions recorded for the feature's tasks.",
-      "items": {
-        "$ref": "#/$defs/DecidedCall"
+    "ObjectView": {
+      "description": "The object a person's decision covers, as reports show it.",
+      "type": "object",
+      "properties": {
+        "class": {
+          "description": "`write`, `command`, `network` or `mcp`.",
+          "type": "string"
+        },
+        "short": {
+          "description": "The canonical path, `argv#<12 hex>` or `<tool>@<12 hex>`.",
+          "type": "string"
+        },
+        "describe": {
+          "description": "One line: ``run `make check` ``.",
+          "type": "string"
+        },
+        "lines": {
+          "description": "The object in full, as every interface shows it.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
       },
-      "type": "array"
+      "required": [
+        "class",
+        "short",
+        "describe",
+        "lines"
+      ]
     },
-    "feature": {
-      "description": "Feature directory name.",
-      "type": "string"
-    },
-    "pending": {
-      "description": "Calls that stopped an open task and await a decision.",
-      "items": {
-        "$ref": "#/$defs/PendingCall"
+    "DecidedCall": {
+      "description": "A person's decision.",
+      "type": "object",
+      "properties": {
+        "task": {
+          "description": "Task ID.",
+          "type": "string"
+        },
+        "decision": {
+          "description": "`approved` or `rejected`.",
+          "type": "string"
+        },
+        "covers": {
+          "description": "What it covers.",
+          "type": "string"
+        },
+        "reason": {
+          "description": "The reason, for a rejection.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "by": {
+          "description": "Who decided, as `name (via)`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "scope": {
+          "description": "How far an approval reaches: `once`, `task` or `run`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "note": {
+          "description": "An approval's note to the model.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "call": {
+          "description": "The waiting call it decided, when it was one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "operator": {
+          "description": "Who decided; `None` for an expiry.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OperatorView"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "via": {
+          "description": "Through what: an origin of `actions::Via` (`terminal`, `web`,\n`acp`, …).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "client": {
+          "description": "The editor decided in, over the Agent Client Protocol.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "expired": {
+          "description": "Nobody decided: the deadline passed and the call was denied.",
+          "type": "boolean"
+        },
+        "object": {
+          "description": "The object it decided on.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ObjectView"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "run": {
+          "description": "The run it belongs to (a grant covers nothing after it).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
       },
-      "type": "array"
+      "required": [
+        "task",
+        "decision",
+        "covers",
+        "reason",
+        "by",
+        "scope",
+        "note",
+        "call",
+        "operator",
+        "via",
+        "expired",
+        "object",
+        "run"
+      ]
     },
-    "unreadable": {
-      "description": "Why the calls waiting in the journal could not be read (another\nspeccoder holds it, …): `pending` may then be incomplete — unknown,\nnever \"nothing waiting\".",
-      "type": [
-        "string",
-        "null"
+    "OperatorView": {
+      "description": "Who decided, and how speccoder knows the name.",
+      "type": "object",
+      "properties": {
+        "actor": {
+          "description": "The name.",
+          "type": "string"
+        },
+        "basis": {
+          "description": "`asserted` (typed at a local terminal or the CLI) or `connected`\n(reported by a client over its connection, e.g. an editor).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "actor",
+        "basis"
+      ]
+    },
+    "BatchView": {
+      "description": "A run whose asking budget is used, with its waiting calls by class.",
+      "type": "object",
+      "properties": {
+        "run": {
+          "description": "The run.",
+          "type": "string"
+        },
+        "digest": {
+          "description": "SHA-256 over the sorted digests of every call listed\n([`PendingCall::digest`]): a decision names it and is refused when\nthe list, or the object of a call in it, changed.",
+          "type": "string"
+        },
+        "groups": {
+          "description": "The calls by class, in the order write, command, network, mcp.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/BatchGroup"
+          }
+        }
+      },
+      "required": [
+        "run",
+        "digest",
+        "groups"
+      ]
+    },
+    "BatchGroup": {
+      "description": "One class of a batch.",
+      "type": "object",
+      "properties": {
+        "class": {
+          "description": "`write`, `command`, `network` or `mcp`.",
+          "type": "string"
+        },
+        "calls": {
+          "description": "The waiting calls' ids.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "class",
+        "calls"
       ]
     }
   },
-  "required": [
-    "feature",
-    "pending",
-    "decided",
-    "unreadable"
-  ],
-  "title": "approvals: calls waiting and decisions made",
-  "type": "object"
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/approvals.json"
 }

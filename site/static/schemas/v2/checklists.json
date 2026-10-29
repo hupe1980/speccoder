@@ -1,29 +1,36 @@
 {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "run: the unfinished checklists that stopped it",
+  "type": "array",
+  "items": {
+    "$ref": "#/$defs/ChecklistStatus"
+  },
   "$defs": {
     "ChecklistStatus": {
       "description": "One Spec Kit checklist (`specs/<feature>/checklists/*.md`).",
+      "type": "object",
       "properties": {
-        "done": {
-          "description": "Items checked.",
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
         "file": {
           "description": "Path relative to the project root.",
           "type": "string"
         },
-        "open": {
-          "description": "Items not checked.",
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
         "total": {
           "description": "Checklist items.",
+          "type": "integer",
           "format": "uint",
-          "minimum": 0,
-          "type": "integer"
+          "minimum": 0
+        },
+        "done": {
+          "description": "Items checked.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "open": {
+          "description": "Items not checked.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
         }
       },
       "required": [
@@ -31,15 +38,8 @@
         "total",
         "done",
         "open"
-      ],
-      "type": "object"
+      ]
     }
   },
-  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/checklists.json",
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "items": {
-    "$ref": "#/$defs/ChecklistStatus"
-  },
-  "title": "run: the unfinished checklists that stopped it",
-  "type": "array"
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/checklists.json"
 }

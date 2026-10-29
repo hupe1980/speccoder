@@ -1,114 +1,12 @@
 {
-  "$defs": {
-    "Source": {
-      "description": "Where a step's content comes from.",
-      "oneOf": [
-        {
-          "const": "signed",
-          "description": "A signed statement says it (and what is shown hashes to it).",
-          "type": "string"
-        },
-        {
-          "const": "committed",
-          "description": "The commit holds it (git objects, not a signature).",
-          "type": "string"
-        },
-        {
-          "const": "not_recorded",
-          "description": "Nothing recorded it.",
-          "type": "string"
-        }
-      ]
-    },
-    "StepKind": {
-      "description": "A step of the tour, in its order.",
-      "oneOf": [
-        {
-          "const": "requirement",
-          "description": "The requirement passage the task cites, as the tick's commit has it.",
-          "type": "string"
-        },
-        {
-          "const": "frozen_tests",
-          "description": "The acceptance tests frozen before the attempt.",
-          "type": "string"
-        },
-        {
-          "const": "red",
-          "description": "The tests failing first, and how.",
-          "type": "string"
-        },
-        {
-          "const": "diff",
-          "description": "The task commit's diff.",
-          "type": "string"
-        },
-        {
-          "const": "green",
-          "description": "What passed after: acceptance, held-out, the regression checks.",
-          "type": "string"
-        },
-        {
-          "const": "strength",
-          "description": "How well the tests tell right from wrong.",
-          "type": "string"
-        }
-      ]
-    },
-    "TourStep": {
-      "description": "One step.",
-      "properties": {
-        "body_markdown": {
-          "description": "What it shows, Markdown: a first line, then optional block lines.",
-          "type": "string"
-        },
-        "facts": {
-          "description": "The facts shown, as data (names, counts, digests)."
-        },
-        "kind": {
-          "$ref": "#/$defs/StepKind",
-          "description": "Which."
-        },
-        "source": {
-          "$ref": "#/$defs/Source",
-          "description": "Where it comes from."
-        },
-        "title": {
-          "description": "Its title (`Requirement`, `Frozen tests`, …).",
-          "type": "string"
-        }
-      },
-      "required": [
-        "kind",
-        "source",
-        "title",
-        "body_markdown",
-        "facts"
-      ],
-      "type": "object"
-    }
-  },
-  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/evidence_tour.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "attest tour, /api/tour: one task's evidence, step by step",
   "description": "Result of `speccoder attest tour` and `/api/tour`: one task's tour.",
+  "type": "object",
   "properties": {
-    "commit": {
-      "description": "The task commit, when one carries the task's evidence.",
-      "type": [
-        "string",
-        "null"
-      ]
-    },
     "feature": {
       "description": "The unit.",
       "type": "string"
-    },
-    "steps": {
-      "description": "The six steps, in order — only the first for an unverifiable tick.",
-      "items": {
-        "$ref": "#/$defs/TourStep"
-      },
-      "type": "array"
     },
     "task": {
       "description": "Task ID.",
@@ -118,15 +16,29 @@
       "description": "The task's title.",
       "type": "string"
     },
-    "unverifiable": {
-      "description": "For an unverifiable tick: why the evidence does not count.",
+    "verdict": {
+      "description": "The verdict the evidence claims, when any.",
       "type": [
         "string",
         "null"
       ]
     },
-    "verdict": {
-      "description": "The verdict the evidence claims, when any.",
+    "commit": {
+      "description": "The task commit, when one carries the task's evidence.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "steps": {
+      "description": "The six steps, in order — only the first for an unverifiable tick.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/TourStep"
+      }
+    },
+    "unverifiable": {
+      "description": "For an unverifiable tick: why the evidence does not count.",
       "type": [
         "string",
         "null"
@@ -142,6 +54,94 @@
     "steps",
     "unverifiable"
   ],
-  "title": "attest tour, /api/tour: one task's evidence, step by step",
-  "type": "object"
+  "$defs": {
+    "TourStep": {
+      "description": "One step.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "description": "Which.",
+          "$ref": "#/$defs/StepKind"
+        },
+        "source": {
+          "description": "Where it comes from.",
+          "$ref": "#/$defs/Source"
+        },
+        "title": {
+          "description": "Its title (`Requirement`, `Frozen tests`, …).",
+          "type": "string"
+        },
+        "body_markdown": {
+          "description": "What it shows, Markdown: a first line, then optional block lines.",
+          "type": "string"
+        },
+        "facts": {
+          "description": "The facts shown, as data (names, counts, digests)."
+        }
+      },
+      "required": [
+        "kind",
+        "source",
+        "title",
+        "body_markdown",
+        "facts"
+      ]
+    },
+    "StepKind": {
+      "description": "A step of the tour, in its order.",
+      "oneOf": [
+        {
+          "description": "The requirement passage the task cites, as the tick's commit has it.",
+          "type": "string",
+          "const": "requirement"
+        },
+        {
+          "description": "The acceptance tests frozen before the attempt.",
+          "type": "string",
+          "const": "frozen_tests"
+        },
+        {
+          "description": "The tests failing first, and how.",
+          "type": "string",
+          "const": "red"
+        },
+        {
+          "description": "The task commit's diff.",
+          "type": "string",
+          "const": "diff"
+        },
+        {
+          "description": "What passed after: acceptance, held-out, the regression checks.",
+          "type": "string",
+          "const": "green"
+        },
+        {
+          "description": "How well the tests tell right from wrong.",
+          "type": "string",
+          "const": "strength"
+        }
+      ]
+    },
+    "Source": {
+      "description": "Where a step's content comes from.",
+      "oneOf": [
+        {
+          "description": "A signed statement says it (and what is shown hashes to it).",
+          "type": "string",
+          "const": "signed"
+        },
+        {
+          "description": "The commit holds it (git objects, not a signature).",
+          "type": "string",
+          "const": "committed"
+        },
+        {
+          "description": "Nothing recorded it.",
+          "type": "string",
+          "const": "not_recorded"
+        }
+      ]
+    }
+  },
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/evidence_tour.json"
 }

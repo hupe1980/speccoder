@@ -1,46 +1,9 @@
 {
-  "$defs": {
-    "RefusedPath": {
-      "description": "A path that blocks worktree mode.",
-      "properties": {
-        "path": {
-          "description": "Repository-relative path.",
-          "type": "string"
-        },
-        "reason": {
-          "description": "`ignored`, `untracked` or `modified`.",
-          "type": "string"
-        }
-      },
-      "required": [
-        "path",
-        "reason"
-      ],
-      "type": "object"
-    }
-  },
-  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/worktree.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "worktree: the feature's worktree",
   "description": "Result of `speccoder worktree`.",
+  "type": "object",
   "properties": {
-    "base": {
-      "description": "Commit the branch points at.",
-      "type": [
-        "string",
-        "null"
-      ]
-    },
-    "branch": {
-      "description": "`speccoder/<feature>`.",
-      "type": [
-        "string",
-        "null"
-      ]
-    },
-    "created": {
-      "description": "Created now (`false`: reused).",
-      "type": "boolean"
-    },
     "feature": {
       "description": "The feature the worktree is for.",
       "type": "string"
@@ -59,12 +22,30 @@
         "null"
       ]
     },
+    "branch": {
+      "description": "`speccoder/<feature>`.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "base": {
+      "description": "Commit the branch points at.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "created": {
+      "description": "Created now (`false`: reused).",
+      "type": "boolean"
+    },
     "refused_paths": {
       "description": "Offending paths with reasons, when refused.",
+      "type": "array",
       "items": {
         "$ref": "#/$defs/RefusedPath"
-      },
-      "type": "array"
+      }
     }
   },
   "required": [
@@ -76,6 +57,25 @@
     "created",
     "refused_paths"
   ],
-  "title": "worktree: the feature's worktree",
-  "type": "object"
+  "$defs": {
+    "RefusedPath": {
+      "description": "A path that blocks worktree mode.",
+      "type": "object",
+      "properties": {
+        "path": {
+          "description": "Repository-relative path.",
+          "type": "string"
+        },
+        "reason": {
+          "description": "`ignored`, `untracked` or `modified`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "reason"
+      ]
+    }
+  },
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/worktree.json"
 }

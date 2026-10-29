@@ -1,18 +1,19 @@
 {
-  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/replay.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "replay: the replayed run",
   "description": "Result of `speccoder replay`.",
+  "type": "object",
   "properties": {
-    "detail": {
-      "description": "What the replay said.",
+    "run_id": {
+      "description": "The replayed run.",
       "type": "string"
     },
     "result": {
       "description": "`reproduced`, `diverged` or `not_found`.",
       "type": "string"
     },
-    "run_id": {
-      "description": "The replayed run.",
+    "detail": {
+      "description": "What the replay said.",
       "type": "string"
     }
   },
@@ -21,6 +22,5 @@
     "result",
     "detail"
   ],
-  "title": "replay: the replayed run",
-  "type": "object"
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/replay.json"
 }

@@ -1,3045 +1,20 @@
 {
-  "$defs": {
-    "AcceptanceRef": {
-      "description": "What the fix's visible acceptance set came from.",
-      "properties": {
-        "pre_frozen": {
-          "$ref": "#/$defs/PreFrozenRef",
-          "description": "The record it reused."
-        },
-        "source": {
-          "$ref": "#/$defs/AcceptanceSource",
-          "description": "`bug_confirmation` or `person_test`."
-        }
-      },
-      "required": [
-        "source",
-        "pre_frozen"
-      ],
-      "type": "object"
-    },
-    "AcceptanceSource": {
-      "description": "Where a task's visible acceptance set came from.",
-      "oneOf": [
-        {
-          "const": "authored",
-          "description": "Written by the acceptance author at the run's checkpoint.",
-          "type": "string"
-        },
-        {
-          "const": "review",
-          "description": "Frozen in review.",
-          "type": "string"
-        },
-        {
-          "const": "bug_confirmation",
-          "description": "A bug's confirmed reproductions.",
-          "type": "string"
-        },
-        {
-          "const": "person_test",
-          "description": "Tests the person named for a bug.",
-          "type": "string"
-        }
-      ]
-    },
-    "AuthorClaim": {
-      "description": "The author's own words, kept only as a labelled claim.",
-      "properties": {
-        "by": {
-          "description": "Always `author`.",
-          "type": "string"
-        },
-        "text": {
-          "description": "The words.",
-          "type": "string"
-        }
-      },
-      "required": [
-        "text",
-        "by"
-      ],
-      "type": "object"
-    },
-    "Basis": {
-      "description": "How the person decided the reproductions.",
-      "oneOf": [
-        {
-          "const": "shown",
-          "description": "They saw the reproductions and confirmed them.",
-          "type": "string"
-        },
-        {
-          "const": "named_test",
-          "description": "They named the tests themselves (`--test`).",
-          "type": "string"
-        }
-      ]
-    },
-    "BatchVerdict": {
-      "description": "A batch decision.",
-      "oneOf": [
-        {
-          "const": "approve",
-          "description": "Each listed call once.",
-          "type": "string"
-        },
-        {
-          "const": "reject",
-          "description": "Each listed call, with one reason.",
-          "type": "string"
-        }
-      ]
-    },
-    "BugHome": {
-      "description": "The bug's home, as the format adapter chose it.",
-      "properties": {
-        "kind": {
-          "$ref": "#/$defs/HomeKind",
-          "description": "Which structure."
-        },
-        "location": {
-          "description": "Project-relative directory (or file).",
-          "type": "string"
-        },
-        "reason": {
-          "description": "Why this one, as shown and recorded.",
-          "type": "string"
-        }
-      },
-      "required": [
-        "kind",
-        "location",
-        "reason"
-      ],
-      "type": "object"
-    },
-    "BugOutcome": {
-      "description": "The bug's outcome; distinct from a task's verdict.",
-      "oneOf": [
-        {
-          "const": "recorded",
-          "description": "The triad is recorded; nothing reproduced yet.",
-          "type": "string"
-        },
-        {
-          "const": "awaiting_confirmation",
-          "description": "Every statement is reproduced; the person confirms.",
-          "type": "string"
-        },
-        {
-          "const": "cannot_reproduce",
-          "description": "The tries ran out without a reproduction of every statement.",
-          "type": "string"
-        },
-        {
-          "const": "already_satisfied",
-          "description": "Every reproduction passed on the untouched code, on every try.",
-          "type": "string"
-        },
-        {
-          "const": "unchanged_not_holding",
-          "description": "An *Unchanged* statement does not hold today.",
-          "type": "string"
-        },
-        {
-          "const": "fixed",
-          "description": "The fix was judged; see the verdict.",
-          "type": "string"
-        },
-        {
-          "const": "failed",
-          "description": "The fix did not pass.",
-          "type": "string"
-        }
-      ]
-    },
-    "BugStage": {
-      "description": "Where the bug is.",
-      "oneOf": [
-        {
-          "const": "record",
-          "description": "The triad is being recorded.",
-          "type": "string"
-        },
-        {
-          "const": "reproduce",
-          "description": "Reproductions are being written and shown to fail.",
-          "type": "string"
-        },
-        {
-          "const": "confirm",
-          "description": "The reproductions wait for the person's confirmation.",
-          "type": "string"
-        },
-        {
-          "const": "unchanged",
-          "description": "The pass-to-pass set is chosen and run.",
-          "type": "string"
-        },
-        {
-          "const": "fix",
-          "description": "The fix is attempted and judged.",
-          "type": "string"
-        },
-        {
-          "const": "ship",
-          "description": "The verdict commit.",
-          "type": "string"
-        },
-        {
-          "const": "done",
-          "description": "Nothing more happens without the person.",
-          "type": "string"
-        }
-      ]
-    },
-    "Candidate": {
-      "description": "Someone else's fix, judged as the attempt.",
-      "properties": {
-        "applied": {
-          "description": "It was applied as the attempt.",
-          "type": "boolean"
-        },
-        "digest": {
-          "description": "`sha256:<hex>` of the diff.",
-          "type": "string"
-        },
-        "head_sha": {
-          "description": "The pull request's head commit.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "number": {
-          "description": "The pull request's number.",
-          "format": "uint64",
-          "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
-        },
-        "origin": {
-          "$ref": "#/$defs/CandidateOrigin",
-          "description": "A patch or a pull request."
-        },
-        "path": {
-          "description": "The patch file, as given.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "refused": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/CandidateRefusal"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "Why it was not."
-        }
-      },
-      "required": [
-        "origin",
-        "digest",
-        "applied"
-      ],
-      "type": "object"
-    },
-    "CandidateOrigin": {
-      "description": "Where a foreign fix came from.",
-      "oneOf": [
-        {
-          "const": "patch",
-          "description": "A patch file.",
-          "type": "string"
-        },
-        {
-          "const": "pr",
-          "description": "A GitHub pull request.",
-          "type": "string"
-        }
-      ]
-    },
-    "CandidateRefusal": {
-      "description": "Why a candidate was refused before it was applied.",
-      "properties": {
-        "code": {
-          "description": "`BUG-CANDIDATE-JUDGE` or `BUG-CANDIDATE-APPLY`.",
-          "type": "string"
-        },
-        "paths": {
-          "description": "The judge paths it touches, or the hunks that did not apply.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        }
-      },
-      "required": [
-        "code",
-        "paths"
-      ],
-      "type": "object"
-    },
-    "CodeComment": {
-      "description": "One line comment of the Code view.",
-      "properties": {
-        "line": {
-          "description": "The line (1-based).",
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "path": {
-          "description": "Project-relative path.",
-          "type": "string"
-        },
-        "quote": {
-          "description": "The code on that line.",
-          "type": "string"
-        },
-        "text": {
-          "description": "The person's words.",
-          "type": "string"
-        }
-      },
-      "required": [
-        "path",
-        "line",
-        "quote",
-        "text"
-      ],
-      "type": "object"
-    },
-    "CommentAnchor": {
-      "description": "What an anchored comment points at.",
-      "oneOf": [
-        {
-          "description": "A passage of a feature document.",
-          "properties": {
-            "end_line": {
-              "description": "Last line.",
-              "format": "uint",
-              "minimum": 0,
-              "type": "integer"
-            },
-            "kind": {
-              "const": "passage",
-              "type": "string"
-            },
-            "path": {
-              "description": "Project-relative path.",
-              "type": "string"
-            },
-            "quote": {
-              "description": "The words selected.",
-              "type": "string"
-            },
-            "quote_sha256": {
-              "default": "",
-              "description": "`sha256:<hex>` of the quote (filled when the draft is stored).",
-              "type": "string"
-            },
-            "section": {
-              "default": "",
-              "description": "Its section's heading path (`Requirements › Functional`).",
-              "type": "string"
-            },
-            "start_line": {
-              "description": "First line (1-based).",
-              "format": "uint",
-              "minimum": 0,
-              "type": "integer"
-            }
-          },
-          "required": [
-            "kind",
-            "path",
-            "start_line",
-            "end_line",
-            "quote",
-            "quote_sha256",
-            "section"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "A line of the spec's changes since the last commit.",
-          "properties": {
-            "kind": {
-              "const": "diff_line",
-              "type": "string"
-            },
-            "line": {
-              "description": "The line (1-based) on that side.",
-              "format": "uint",
-              "minimum": 0,
-              "type": "integer"
-            },
-            "path": {
-              "description": "Project-relative path.",
-              "type": "string"
-            },
-            "quote": {
-              "description": "The line's text.",
-              "type": "string"
-            },
-            "side": {
-              "description": "`old` or `new`.",
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind",
-            "path",
-            "side",
-            "line",
-            "quote"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "A line of a shown visible test.",
-          "properties": {
-            "kind": {
-              "const": "test_line",
-              "type": "string"
-            },
-            "line": {
-              "description": "The line (1-based).",
-              "format": "uint",
-              "minimum": 0,
-              "type": "integer"
-            },
-            "path": {
-              "description": "The test's path.",
-              "type": "string"
-            },
-            "quote": {
-              "description": "The line's text.",
-              "type": "string"
-            },
-            "req": {
-              "description": "The requirement.",
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind",
-            "req",
-            "path",
-            "line",
-            "quote"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "A finding the review shows.",
-          "properties": {
-            "id": {
-              "description": "Its id.",
-              "type": "string"
-            },
-            "kind": {
-              "const": "finding",
-              "type": "string"
-            },
-            "source": {
-              "description": "`analyze` or `review`.",
-              "type": "string"
-            },
-            "text": {
-              "description": "Its text.",
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind",
-            "source",
-            "id",
-            "text"
-          ],
-          "type": "object"
-        }
-      ]
-    },
-    "CommentOp": {
-      "description": "What a comment action does.",
-      "oneOf": [
-        {
-          "const": "add",
-          "description": "A new draft.",
-          "type": "string"
-        },
-        {
-          "const": "delete",
-          "description": "Remove a draft.",
-          "type": "string"
-        },
-        {
-          "const": "keep",
-          "description": "Keep an outdated draft.",
-          "type": "string"
-        }
-      ]
-    },
-    "Confirmation": {
-      "description": "The person's one confirmation, bound to what they saw.",
-      "properties": {
-        "at": {
-          "description": "Unix seconds.",
-          "format": "uint64",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "basis": {
-          "$ref": "#/$defs/Basis",
-          "description": "Seen or named."
-        },
-        "by": {
-          "description": "Who.",
-          "type": "string"
-        },
-        "digest": {
-          "description": "`sha256:<hex>` over the reproductions shown (their files and\nstatement ids).",
-          "type": "string"
-        },
-        "triad_digest": {
-          "description": "The triad's digest when confirmed: a different one lapses this.",
-          "type": "string"
-        },
-        "via": {
-          "$ref": "#/$defs/Via",
-          "description": "Through what."
-        }
-      },
-      "required": [
-        "digest",
-        "triad_digest",
-        "by",
-        "via",
-        "basis",
-        "at"
-      ],
-      "type": "object"
-    },
-    "FeatureSource": {
-      "description": "Where a new feature's description comes from. Later rungs add theirs\n(an Explore brief, a promoted quick change) when they are built.",
-      "oneOf": [
-        {
-          "description": "The person's own words.",
-          "properties": {
-            "kind": {
-              "const": "description",
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "A GitHub issue's description, verbatim.",
-          "properties": {
-            "kind": {
-              "const": "issue",
-              "type": "string"
-            },
-            "number": {
-              "description": "Its number.",
-              "format": "uint64",
-              "minimum": 0,
-              "type": "integer"
-            }
-          },
-          "required": [
-            "kind",
-            "number"
-          ],
-          "type": "object"
-        }
-      ]
-    },
-    "FinalState": {
-      "description": "A reproduction on the final tree.",
-      "oneOf": [
-        {
-          "const": "passed",
-          "description": "It passed.",
-          "type": "string"
-        },
-        {
-          "const": "failed",
-          "description": "It failed.",
-          "type": "string"
-        },
-        {
-          "const": "not_run",
-          "description": "Not run (no attempt yet).",
-          "type": "string"
-        }
-      ]
-    },
-    "Handoff": {
-      "description": "The hand-off of a stopped bug, composed by the engine from the journal\n(never written by a model).",
-      "properties": {
-        "claim": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/AuthorClaim"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "The author's last words, labelled as its claim."
-        },
-        "cost": {
-          "description": "Tokens the tries spent."
-        },
-        "elapsed_ms": {
-          "description": "How long reproduce took.",
-          "format": "uint64",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "next": {
-          "description": "What the person can do.",
-          "items": {
-            "$ref": "#/$defs/NextStep"
-          },
-          "type": "array"
-        },
-        "outcome": {
-          "$ref": "#/$defs/BugOutcome",
-          "description": "The outcome it hands off."
-        },
-        "statements": {
-          "$ref": "#/$defs/StatementsShown",
-          "description": "Per statement."
-        },
-        "tries": {
-          "description": "The tries made.",
-          "items": {
-            "$ref": "#/$defs/ReproduceTry"
-          },
-          "type": "array"
-        }
-      },
-      "required": [
-        "outcome",
-        "tries",
-        "statements",
-        "elapsed_ms",
-        "next"
-      ],
-      "type": "object"
-    },
-    "HeldOutVariant": {
-      "description": "A held-out variant, as the payload shows it: never its content or path.",
-      "properties": {
-        "baseline": {
-          "$ref": "#/$defs/RedClass",
-          "description": "On the untouched code."
-        },
-        "final": {
-          "$ref": "#/$defs/FinalState",
-          "description": "On the final tree."
-        },
-        "statement": {
-          "description": "The statement it covers.",
-          "type": "string"
-        }
-      },
-      "required": [
-        "statement",
-        "baseline",
-        "final"
-      ],
-      "type": "object"
-    },
-    "HomeKind": {
-      "description": "Where the format keeps the bug.",
-      "oneOf": [
-        {
-          "const": "native_speckit_bug",
-          "description": "Spec Kit's first-party `bug` extension: its own per-bug directory.",
-          "type": "string"
-        },
-        {
-          "const": "native_kiro_bugfix",
-          "description": "Kiro's `bugfix.md` spec.",
-          "type": "string"
-        },
-        {
-          "const": "standing_speckit",
-          "description": "Spec Kit without the extension: the standing bug-fix unit.",
-          "type": "string"
-        },
-        {
-          "const": "standing_openspec",
-          "description": "OpenSpec: the standing bug-fix change.",
-          "type": "string"
-        }
-      ]
-    },
-    "IssueRef": {
-      "description": "The issue a bug was recorded from.",
-      "properties": {
-        "context_digest": {
-          "description": "The digest of its context-manifest entry (title and body as given\nto the reproduction author).",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "number": {
-          "description": "Its number.",
-          "format": "uint64",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "repo": {
-          "description": "`owner/repo`, when known.",
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "number"
-      ],
-      "type": "object"
-    },
-    "MemberFinal": {
-      "description": "A pass-to-pass member on the final tree.",
-      "oneOf": [
-        {
-          "const": "passed",
-          "description": "Passed, by name.",
-          "type": "string"
-        },
-        {
-          "const": "failed",
-          "description": "Failed.",
-          "type": "string"
-        },
-        {
-          "const": "missing",
-          "description": "Not found in the final run: a failure.",
-          "type": "string"
-        },
-        {
-          "const": "not_run",
-          "description": "Not run yet.",
-          "type": "string"
-        }
-      ]
-    },
-    "NewChoices": {
-      "description": "What the person chose; with the folder, everything the plan follows from.",
-      "properties": {
-        "extensions": {
-          "default": [],
-          "description": "Spec Kit extensions.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "format": {
-          "description": "The spec format (`speckit`, `openspec`); `None`: Spec Kit.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "idea": {
-          "description": "What they are building, verbatim (kept for the first feature).",
-          "type": "string"
-        },
-        "no_preset": {
-          "default": false,
-          "description": "Leave out the speccoder Spec Kit preset.",
-          "type": "boolean"
-        },
-        "stack": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Stack"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "The stack; `None`: the suggestion."
-        }
-      },
-      "required": [
-        "idea",
-        "stack",
-        "format",
-        "extensions",
-        "no_preset"
-      ],
-      "type": "object"
-    },
-    "NextStep": {
-      "description": "One step a person can take.",
-      "oneOf": [
-        {
-          "description": "speccoder performs it (`actions::perform`).",
-          "properties": {
-            "confirm": {
-              "description": "What to say in a confirmation first (it leaves the machine or\ncannot be undone).",
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "feature": {
-              "description": "The feature the line names (`--feature F`); `None`: the current.",
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "how": {
-              "const": "perform",
-              "type": "string"
-            },
-            "input": {
-              "description": "What to ask for first (`Why it is skipped`); `None`: nothing.",
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "run": {
-              "$ref": "#/$defs/Runnable",
-              "description": "What runs."
-            },
-            "text": {
-              "description": "The words the line gives already (a `--reason \"…\"` filled in).",
-              "type": [
-                "string",
-                "null"
-              ]
-            }
-          },
-          "required": [
-            "how",
-            "run",
-            "input",
-            "text",
-            "confirm",
-            "feature"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "A view to open.",
-          "properties": {
-            "how": {
-              "const": "view",
-              "type": "string"
-            },
-            "subject": {
-              "description": "What it is about: a code, a task.",
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "view": {
-              "$ref": "#/$defs/View",
-              "description": "Which."
-            }
-          },
-          "required": [
-            "how",
-            "view",
-            "subject"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "A command speccoder printed as a fix and can run as the person, in\nthe project folder, outside the sandbox — never one composed\nelsewhere. Several argvs run in order, each only after the last\none succeeded (`a && b`).",
-          "properties": {
-            "argvs": {
-              "description": "The argvs, exactly.",
-              "items": {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              "type": "array"
-            },
-            "how": {
-              "const": "command",
-              "type": "string"
-            },
-            "interactive": {
-              "description": "It reads the keyboard (a login): a terminal of the person's\nown, not a panel.",
-              "type": "boolean"
-            },
-            "outside": {
-              "description": "What it changes outside the project, for a command that runs\noutside the sandbox by its nature (`changes your global git\nconfig`); `None`: it runs in the sandbox, writes confined to\nthe project and the package caches.",
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "token": {
-              "description": "The host's proof that it issued exactly these argvs; only a\nhost that runs commands sets it.",
-              "type": [
-                "string",
-                "null"
-              ]
-            }
-          },
-          "required": [
-            "how",
-            "argvs",
-            "interactive"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "It must run in the shell speccoder starts from (`export NAME=…`):\nnothing run elsewhere reaches that shell.",
-          "properties": {
-            "how": {
-              "const": "shell",
-              "type": "string"
-            },
-            "setting": {
-              "description": "The setting that stands for it (`model`), if there is one.",
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "why": {
-              "description": "Why it cannot run here.",
-              "type": "string"
-            }
-          },
-          "required": [
-            "how",
-            "why",
-            "setting"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "Words for a person (`→ …`), or a command only they can complete.",
-          "properties": {
-            "how": {
-              "const": "words",
-              "type": "string"
-            },
-            "why": {
-              "description": "Why it is not taken here; `None` for words.",
-              "type": [
-                "string",
-                "null"
-              ]
-            }
-          },
-          "required": [
-            "how",
-            "why"
-          ],
-          "type": "object"
-        }
-      ],
-      "properties": {
-        "command": {
-          "description": "A copy-pasteable command (`\"…\"` marks text the person writes).",
-          "type": "string"
-        },
-        "why": {
-          "description": "Why, in one short line.",
-          "type": "string"
-        }
-      },
-      "required": [
-        "command",
-        "why"
-      ],
-      "type": "object"
-    },
-    "OracleOp": {
-      "description": "What a change to a requirement's tests does.",
-      "oneOf": [
-        {
-          "const": "write",
-          "description": "Write the tests (the author calls, the comparison, the red check,\nthe held-out set).",
-          "type": "string"
-        },
-        {
-          "const": "reject",
-          "description": "Drop one test (the input is the reason, required).",
-          "type": "string"
-        },
-        {
-          "const": "again",
-          "description": "Write one test again (the input is the person's comment).",
-          "type": "string"
-        },
-        {
-          "const": "edit",
-          "description": "Replace one test's content with the person's (the input).",
-          "type": "string"
-        },
-        {
-          "const": "reading",
-          "description": "Say which reading of an ambiguous scenario is meant.",
-          "type": "string"
-        }
-      ]
-    },
-    "PassToPass": {
-      "description": "The tests that passed before the fix and must pass after it.",
-      "properties": {
-        "members": {
-          "description": "The members.",
-          "items": {
-            "$ref": "#/$defs/PassToPassMember"
-          },
-          "type": "array"
-        },
-        "state": {
-          "$ref": "#/$defs/PassToPassState",
-          "description": "Selected, or nothing was."
-        }
-      },
-      "required": [
-        "state",
-        "members"
-      ],
-      "type": "object"
-    },
-    "PassToPassMember": {
-      "description": "One test that must stay green.",
-      "properties": {
-        "file": {
-          "description": "Its file.",
-          "type": "string"
-        },
-        "final": {
-          "$ref": "#/$defs/MemberFinal",
-          "description": "On the final tree."
-        },
-        "rule": {
-          "description": "How it was selected: `same_file`, `references:<module>`,\n`imports:<path>`, `package:<pkg>`, `unchanged:U<n>`.",
-          "type": "string"
-        },
-        "test": {
-          "description": "The test id, as the runner reports it.",
-          "type": "string"
-        }
-      },
-      "required": [
-        "test",
-        "file",
-        "rule",
-        "final"
-      ],
-      "type": "object"
-    },
-    "PassToPassState": {
-      "description": "Whether anything was selected for pass-to-pass.",
-      "oneOf": [
-        {
-          "const": "selected",
-          "description": "Members were selected.",
-          "type": "string"
-        },
-        {
-          "const": "none_selected",
-          "description": "Nothing was: never counted as passed.",
-          "type": "string"
-        }
-      ]
-    },
-    "PlanFrom": {
-      "description": "What plan through starts from.",
-      "oneOf": [
-        {
-          "description": "A new unit from a description.",
-          "properties": {
-            "description": {
-              "description": "What it should do, verbatim.",
-              "type": "string"
-            },
-            "kind": {
-              "const": "create",
-              "type": "string"
-            },
-            "source": {
-              "$ref": "#/$defs/FeatureSource",
-              "description": "Where the description comes from."
-            }
-          },
-          "required": [
-            "kind",
-            "description",
-            "source"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "The next skill after a stop, derived from the unit's files.",
-          "properties": {
-            "kind": {
-              "const": "continue",
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind"
-          ],
-          "type": "object"
-        }
-      ]
-    },
-    "PolicyList": {
-      "description": "A prefix list in `speccoder.toml`.",
-      "oneOf": [
-        {
-          "const": "commands_prefix",
-          "description": "`[commands] allow_prefix`.",
-          "type": "string"
-        },
-        {
-          "const": "network_prefix",
-          "description": "`[sandbox] network_allow_prefix`.",
-          "type": "string"
-        }
-      ]
-    },
-    "PreFrozenRef": {
-      "description": "Where the confirmed reproductions are kept, as recorded with the fix.",
-      "properties": {
-        "approval": {
-          "description": "The confirmation's digest.",
-          "type": "string"
-        },
-        "manifest": {
-          "description": "`sha256:<hex>` over the visible set.",
-          "type": "string"
-        },
-        "wording": {
-          "description": "The triad's digest.",
-          "type": "string"
-        }
-      },
-      "required": [
-        "manifest",
-        "approval",
-        "wording"
-      ],
-      "type": "object"
-    },
-    "Reading": {
-      "description": "One of the two readings of an ambiguous scenario.",
-      "oneOf": [
-        {
-          "const": "A",
-          "description": "The first author's.",
-          "type": "string"
-        },
-        {
-          "const": "B",
-          "description": "The second author's.",
-          "type": "string"
-        }
-      ]
-    },
-    "RedClass": {
-      "description": "What a red run of acceptance tests showed.\n\nOnly [`RedClass::Assertion`] and [`RedClass::Absent`] are red: a test was\ncollected and failed on an assertion, or the tests could not build only\nbecause symbols the task is to introduce do not exist yet. Everything\nelse is not demonstrated.",
-      "oneOf": [
-        {
-          "const": "assertion",
-          "description": "A collected test failed on an assertion.",
-          "type": "string"
-        },
-        {
-          "const": "absent",
-          "description": "The only build or import errors name symbols that do not exist yet.",
-          "type": "string"
-        },
-        {
-          "const": "build_error",
-          "description": "Any other build error.",
-          "type": "string"
-        },
-        {
-          "const": "collection_error",
-          "description": "Tests errored at setup or collection.",
-          "type": "string"
-        },
-        {
-          "const": "timeout",
-          "description": "The run hit its deadline.",
-          "type": "string"
-        },
-        {
-          "const": "no_tests",
-          "description": "Nothing was collected.",
-          "type": "string"
-        },
-        {
-          "const": "flaky",
-          "description": "Red once, not red when confirmed.",
-          "type": "string"
-        },
-        {
-          "const": "unclassified",
-          "description": "The output was not recognised.",
-          "type": "string"
-        },
-        {
-          "const": "passed",
-          "description": "The tests passed.",
-          "type": "string"
-        }
-      ]
-    },
-    "Rejection": {
-      "description": "The person rejected the reproductions shown; the reason goes to the\nauthor's next try.",
-      "properties": {
-        "at": {
-          "description": "Unix seconds.",
-          "format": "uint64",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "by": {
-          "description": "Who.",
-          "type": "string"
-        },
-        "digest": {
-          "description": "The digest rejected.",
-          "type": "string"
-        },
-        "reason": {
-          "description": "Why.",
-          "type": "string"
-        },
-        "via": {
-          "$ref": "#/$defs/Via",
-          "description": "Through what."
-        }
-      },
-      "required": [
-        "digest",
-        "reason",
-        "by",
-        "via",
-        "at"
-      ],
-      "type": "object"
-    },
-    "ReproduceTry": {
-      "description": "One try of the reproduction author.",
-      "properties": {
-        "discarded": {
-          "description": "Why the whole try was discarded (`wrote outside tests`, …).",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "n": {
-          "description": "1, 2, …",
-          "format": "uint32",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "per_statement": {
-          "description": "Per statement.",
-          "items": {
-            "$ref": "#/$defs/TryStatement"
-          },
-          "type": "array"
-        },
-        "rejection": {
-          "description": "The person's reason for rejecting the reproductions before it.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "run_id": {
-          "description": "The author's run.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "usage": {
-          "description": "Its tokens."
-        }
-      },
-      "required": [
-        "n",
-        "per_statement"
-      ],
-      "type": "object"
-    },
-    "Reproduction": {
-      "description": "One reproduction test.",
-      "properties": {
-        "argv": {
-          "description": "The command that runs only it.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "baseline": {
-          "description": "Its class on the untouched code, run twice.",
-          "items": {
-            "$ref": "#/$defs/RedClass"
-          },
-          "type": "array"
-        },
-        "digest": {
-          "description": "`sha256:<hex>` of its content.",
-          "type": "string"
-        },
-        "file": {
-          "description": "Project-relative test file.",
-          "type": "string"
-        },
-        "final": {
-          "$ref": "#/$defs/FinalState",
-          "description": "On the final tree."
-        },
-        "revert": {
-          "$ref": "#/$defs/RevertOutcome",
-          "description": "Against the revert candidate."
-        },
-        "source": {
-          "$ref": "#/$defs/ReproductionSource",
-          "description": "Who wrote it."
-        },
-        "statement": {
-          "description": "The statement it reproduces (`E1`) — or, for a test of an\n*Unchanged* statement, that one (`U1`).",
-          "type": "string"
-        },
-        "test": {
-          "description": "The test's name.",
-          "type": "string"
-        }
-      },
-      "required": [
-        "statement",
-        "file",
-        "test",
-        "source",
-        "baseline",
-        "digest",
-        "argv",
-        "final",
-        "revert"
-      ],
-      "type": "object"
-    },
-    "ReproductionSource": {
-      "description": "Who wrote a reproduction.",
-      "oneOf": [
-        {
-          "const": "author",
-          "description": "The test-blind reproduction author.",
-          "type": "string"
-        },
-        {
-          "const": "person",
-          "description": "The person (`--test`).",
-          "type": "string"
-        }
-      ]
-    },
-    "RevertOutcome": {
-      "description": "A reproduction against the revert candidate (the fix undone).",
-      "oneOf": [
-        {
-          "const": "rejected",
-          "description": "It failed on an assertion: it tells the fix from no fix.",
-          "type": "string"
-        },
-        {
-          "const": "survived",
-          "description": "It passed without the fix.",
-          "type": "string"
-        },
-        {
-          "const": "unviable",
-          "description": "The revert did not build: no evidence either way.",
-          "type": "string"
-        },
-        {
-          "const": "not_run",
-          "description": "Not run.",
-          "type": "string"
-        }
-      ]
-    },
-    "RevertResult": {
-      "description": "The revert candidate's result.",
-      "properties": {
-        "outcome": {
-          "$ref": "#/$defs/RevertOutcome",
-          "description": "The gravest outcome over the reproductions."
-        },
-        "rejected_by": {
-          "description": "The statements whose reproduction failed on an assertion.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        }
-      },
-      "required": [
-        "outcome",
-        "rejected_by"
-      ],
-      "type": "object"
-    },
-    "RunMode": {
-      "description": "How a run started from the review asks for a person.",
-      "oneOf": [
-        {
-          "const": "ask",
-          "description": "*Ask on Risky Calls*: a call the policy asks about is asked inline,\nas a run from the interface does.",
-          "type": "string"
-        },
-        {
-          "const": "autopilot",
-          "description": "*Autopilot*: nothing asks; a call the policy would ask about and no\nticked grant covers is refused for the run and listed afterwards.",
-          "type": "string"
-        }
-      ]
-    },
-    "Runnable": {
-      "description": "How an interface runs an action itself.",
-      "oneOf": [
-        {
-          "description": "A planning skill (`speccoder spec <name> <arguments>`).",
-          "properties": {
-            "arguments": {
-              "description": "Its arguments (the input, when one is asked for).",
-              "type": "string"
-            },
-            "kind": {
-              "const": "skill",
-              "type": "string"
-            },
-            "name": {
-              "description": "The skill.",
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind",
-            "name",
-            "arguments"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "`speccoder run`, the feature or one task.",
-          "properties": {
-            "kind": {
-              "const": "run",
-              "type": "string"
-            },
-            "task": {
-              "description": "One task, or the feature's ready tasks.",
-              "type": [
-                "string",
-                "null"
-              ]
-            }
-          },
-          "required": [
-            "kind",
-            "task"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "`speccoder run --converge`: the ready tasks, then the assessment of\nthe code against the spec as it is now, appending what remains.",
-          "properties": {
-            "kind": {
-              "const": "converge",
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "Commit exactly these planning files.",
-          "properties": {
-            "kind": {
-              "const": "commit",
-              "type": "string"
-            },
-            "paths": {
-              "description": "Repository-relative paths.",
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            }
-          },
-          "required": [
-            "kind",
-            "paths"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "Approve the task's waiting call: the one that was shown, refused\nwhen another waits now.",
-          "properties": {
-            "call": {
-              "description": "The call's id ([`crate::PendingCall::id`]).",
-              "type": "string"
-            },
-            "digest": {
-              "description": "The digest of the call that was shown ([`crate::PendingCall::digest`]).",
-              "type": "string"
-            },
-            "kind": {
-              "const": "approve",
-              "type": "string"
-            },
-            "task": {
-              "description": "The task.",
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind",
-            "task",
-            "call",
-            "digest"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "Reject it (the input is the reason), bound the same way.",
-          "properties": {
-            "call": {
-              "description": "The call's id ([`crate::PendingCall::id`]).",
-              "type": "string"
-            },
-            "digest": {
-              "description": "The digest of the call that was shown ([`crate::PendingCall::digest`]).",
-              "type": "string"
-            },
-            "kind": {
-              "const": "reject",
-              "type": "string"
-            },
-            "task": {
-              "description": "The task.",
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind",
-            "task",
-            "call",
-            "digest"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "Tick the task on the person's word (the input is the reason).",
-          "properties": {
-            "kind": {
-              "const": "accept",
-              "type": "string"
-            },
-            "task": {
-              "description": "The task.",
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind",
-            "task"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "Skip the task (the input is the reason).",
-          "properties": {
-            "kind": {
-              "const": "skip",
-              "type": "string"
-            },
-            "task": {
-              "description": "The task.",
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind",
-            "task"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "Leave a note for the task's next attempts (the input is the note).",
-          "properties": {
-            "kind": {
-              "const": "nudge",
-              "type": "string"
-            },
-            "task": {
-              "description": "The task.",
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind",
-            "task"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "I did it: tick a step the person took on their word (`attested`;\nthe input, when given, is the reason).",
-          "properties": {
-            "kind": {
-              "const": "done",
-              "type": "string"
-            },
-            "task": {
-              "description": "The task.",
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind",
-            "task"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "Hint & retry: a note for the task (the input), then a new attempt.",
-          "properties": {
-            "kind": {
-              "const": "hint",
-              "type": "string"
-            },
-            "task": {
-              "description": "The task.",
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind",
-            "task"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "Rule that a held attempt's tests are right (the input is the reason).",
-          "properties": {
-            "kind": {
-              "const": "rule",
-              "type": "string"
-            },
-            "task": {
-              "description": "The task.",
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind",
-            "task"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "Record the person's review of requirements (the input is the\ncomment; required to request changes).",
-          "properties": {
-            "ids": {
-              "description": "The requirement identifiers; empty: every one not yet approved.",
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "kind": {
-              "const": "review",
-              "type": "string"
-            },
-            "verdict": {
-              "description": "`approve`, `request` (changes), `clear`; `answer` (ids: the\nquestion) and `edit` / `edit-approve` (ids: the requirement) take\nthe input as the words.",
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind",
-            "ids",
-            "verdict"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "Tell a GitHub issue it is being specified as the current feature.",
-          "properties": {
-            "assign": {
-              "description": "Also assign it to the person.",
-              "type": "boolean"
-            },
-            "issue": {
-              "description": "The issue's number.",
-              "format": "uint64",
-              "minimum": 0,
-              "type": "integer"
-            },
-            "kind": {
-              "const": "issue_comment",
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind",
-            "issue",
-            "assign"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "Record a quick change and, when `run`, run it.",
-          "properties": {
-            "checks": {
-              "description": "When it is done: its acceptance scenarios.",
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "kind": {
-              "const": "quick_change",
-              "type": "string"
-            },
-            "request": {
-              "description": "The change, in the person's words.",
-              "type": "string"
-            },
-            "run": {
-              "description": "Run it once recorded.",
-              "type": "boolean"
-            }
-          },
-          "required": [
-            "kind",
-            "request",
-            "checks",
-            "run"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "Commit the changes set aside before the task's run onto the\nfeature's branch, as the person's own.",
-          "properties": {
-            "kind": {
-              "const": "keep_set_aside",
-              "type": "string"
-            },
-            "task": {
-              "description": "The task.",
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind",
-            "task"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "Discard them.",
-          "properties": {
-            "kind": {
-              "const": "drop_set_aside",
-              "type": "string"
-            },
-            "task": {
-              "description": "The task.",
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind",
-            "task"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "Commit the setup a run stops on (an uncommitted lockfile, build\noutput not ignored) in the checkout.",
-          "properties": {
-            "kind": {
-              "const": "fix_setup",
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "Pick the current feature.",
-          "properties": {
-            "kind": {
-              "const": "feature",
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "Push the feature's branch and open (or update) its draft pull request.",
-          "properties": {
-            "kind": {
-              "const": "pull_request",
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "Record a bug in the person's words (`speccoder bug`) and, when\n`run`, reproduce it.",
-          "properties": {
-            "candidate": {
-              "description": "Someone else's fix to judge: a patch file or `pr:N`.",
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "expected": {
-              "description": "What should happen instead (one or more).",
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "issue": {
-              "description": "The GitHub issue it comes from.",
-              "format": "uint64",
-              "minimum": 0,
-              "type": [
-                "integer",
-                "null"
-              ]
-            },
-            "kind": {
-              "const": "bug_fix",
-              "type": "string"
-            },
-            "run": {
-              "description": "Reproduce it once recorded.",
-              "type": "boolean"
-            },
-            "slug": {
-              "description": "Continue a bug the format's own bug step created.",
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "symptom": {
-              "description": "What happens (the symptom).",
-              "type": "string"
-            },
-            "tests": {
-              "description": "The person's own reproduction tests, one per expected statement\n(`PATH::NAME`).",
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "unchanged": {
-              "description": "What must keep working (zero or more).",
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            }
-          },
-          "required": [
-            "kind",
-            "symptom",
-            "expected",
-            "unchanged",
-            "issue",
-            "tests",
-            "candidate",
-            "slug",
-            "run"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "Confirm (or, with `reject`, reject: the input is the reason) a\nbug's reproductions, bound to the digest shown.",
-          "properties": {
-            "digest": {
-              "description": "The digest the person saw.",
-              "type": "string"
-            },
-            "kind": {
-              "const": "bug_confirm",
-              "type": "string"
-            },
-            "reject": {
-              "description": "Reject instead.",
-              "type": "boolean"
-            },
-            "task": {
-              "description": "`<unit>/<task>`.",
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind",
-            "task",
-            "digest",
-            "reject"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "Keep an already-satisfied bug's reproductions as a regression test:\ncommitted, the task attested (the input is the reason).",
-          "properties": {
-            "kind": {
-              "const": "bug_keep",
-              "type": "string"
-            },
-            "task": {
-              "description": "`<unit>/<task>`.",
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind",
-            "task"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "Continue a bug: reproduce again, or run its confirmed fix.",
-          "properties": {
-            "kind": {
-              "const": "bug_run",
-              "type": "string"
-            },
-            "slug": {
-              "description": "A bug of the format's own bug structure, by slug.",
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "task": {
-              "description": "Or `<unit>/<task>`.",
-              "type": [
-                "string",
-                "null"
-              ]
-            }
-          },
-          "required": [
-            "kind",
-            "slug",
-            "task"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "Always Allow: approve the waiting command once and add exactly its\nargv to `[commands] allow` (or `[sandbox] network_allow`).",
-          "properties": {
-            "call": {
-              "description": "The waiting call's id.",
-              "type": "string"
-            },
-            "kind": {
-              "const": "allow_always",
-              "type": "string"
-            },
-            "task": {
-              "description": "The task.",
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind",
-            "task",
-            "call"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "Add a prefix to a prefix list, as the confirmation of its coverage\npreview (refused when the preview changed or is incomplete).",
-          "properties": {
-            "digest": {
-              "description": "The digest of the preview the person saw.",
-              "type": "string"
-            },
-            "key": {
-              "$ref": "#/$defs/PolicyList",
-              "description": "Which list."
-            },
-            "kind": {
-              "const": "widen_policy",
-              "type": "string"
-            },
-            "prefix": {
-              "description": "The prefix (two elements or more).",
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            }
-          },
-          "required": [
-            "kind",
-            "key",
-            "prefix",
-            "digest"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "Decide the calls waiting in a run's batch together, each once.",
-          "properties": {
-            "calls": {
-              "description": "The listed calls decided (a non-empty subset).",
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "digest": {
-              "description": "The digest of the list the person saw.",
-              "type": "string"
-            },
-            "kind": {
-              "const": "decide_batch",
-              "type": "string"
-            },
-            "resume_asking": {
-              "description": "Start the run's asking budget again.",
-              "type": "boolean"
-            },
-            "run": {
-              "description": "The run.",
-              "type": "string"
-            },
-            "verdict": {
-              "$ref": "#/$defs/BatchVerdict",
-              "description": "Approve or reject (the input is the reason)."
-            }
-          },
-          "required": [
-            "kind",
-            "run",
-            "verdict",
-            "calls",
-            "digest",
-            "resume_asking"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "Write, reject, ask again for, edit or settle a requirement's tests\nat review (the input: the reason, the comment or the content).",
-          "properties": {
-            "kind": {
-              "const": "oracle_tests",
-              "type": "string"
-            },
-            "op": {
-              "$ref": "#/$defs/OracleOp",
-              "description": "What to do."
-            },
-            "path": {
-              "description": "The test (reject, again, edit).",
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "reading": {
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/Reading"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "The reading meant (reading)."
-            },
-            "req": {
-              "description": "The requirement (`US1`).",
-              "type": "string"
-            },
-            "scenario": {
-              "description": "The ambiguous scenario (reading).",
-              "type": [
-                "string",
-                "null"
-              ]
-            }
-          },
-          "required": [
-            "kind",
-            "req",
-            "op",
-            "path",
-            "scenario",
-            "reading"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "Approve every approvable decision line, freeze the written tests and\nstart the feature's run, asking or on autopilot.",
-          "properties": {
-            "grants": {
-              "description": "The grant ids (object-bound grants) an autopilot run holds.",
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "kind": {
-              "const": "approve_and_run",
-              "type": "string"
-            },
-            "mode": {
-              "$ref": "#/$defs/RunMode",
-              "description": "How the run asks."
-            },
-            "sheet": {
-              "description": "The sheet's `sha256`: what the person saw approved and frozen.\nRequired from every interface but a terminal command.",
-              "type": [
-                "string",
-                "null"
-              ]
-            }
-          },
-          "required": [
-            "kind",
-            "mode",
-            "grants"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "Add, delete or keep a review comment (the input: its words).",
-          "properties": {
-            "anchor": {
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/CommentAnchor"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "What a new comment is about."
-            },
-            "id": {
-              "description": "The draft (delete, keep).",
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "kind": {
-              "const": "comment",
-              "type": "string"
-            },
-            "op": {
-              "$ref": "#/$defs/CommentOp",
-              "description": "What to do."
-            }
-          },
-          "required": [
-            "kind",
-            "op",
-            "anchor",
-            "id"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "Send the comments as one revision turn.",
-          "properties": {
-            "ids": {
-              "description": "The drafts the person saw (empty: every draft in the tray); a\ndraft sent already refuses the send.",
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "kind": {
-              "const": "comments_send",
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind",
-            "ids"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "Undo the last revision turn: the documents back, byte for byte.",
-          "properties": {
-            "kind": {
-              "const": "revision_undo",
-              "type": "string"
-            },
-            "turn": {
-              "description": "The turn the person saw.",
-              "type": [
-                "string",
-                "null"
-              ]
-            }
-          },
-          "required": [
-            "kind",
-            "turn"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "Code-view line comments as one nudge for the task's next attempt.",
-          "properties": {
-            "comments": {
-              "description": "The comments.",
-              "items": {
-                "$ref": "#/$defs/CodeComment"
-              },
-              "type": "array"
-            },
-            "kind": {
-              "const": "code_nudge",
-              "type": "string"
-            },
-            "task": {
-              "description": "The task.",
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind",
-            "task",
-            "comments"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "Write a story's acceptance tests at a Setup or Foundational task\n(`revoke`: take the decision back) — a decision recorded in the\nstate directory, never an edit of the spec.",
-          "properties": {
-            "feature": {
-              "description": "The feature.",
-              "type": "string"
-            },
-            "kind": {
-              "const": "acceptance_at",
-              "type": "string"
-            },
-            "revoke": {
-              "description": "Take the decision back.",
-              "type": "boolean"
-            },
-            "story": {
-              "description": "The story (`US1`).",
-              "type": "string"
-            },
-            "task": {
-              "description": "The task.",
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind",
-            "feature",
-            "story",
-            "task",
-            "revoke"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "Install the bundled `speccoder` Spec Kit preset through Spec Kit's\nown `specify preset add` (`update`: the installed one, replaced).",
-          "properties": {
-            "kind": {
-              "const": "preset_add",
-              "type": "string"
-            },
-            "update": {
-              "description": "Replace an installed older version.",
-              "type": "boolean"
-            }
-          },
-          "required": [
-            "kind",
-            "update"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "Plan a new feature through the format's own skills — the creating\nskill, then toward the task list, then the check — stopping where a\nperson decides (`speccoder spec <skill> --through <t>`).",
-          "properties": {
-            "from": {
-              "$ref": "#/$defs/PlanFrom",
-              "description": "A new description, or the continuation after a stop."
-            },
-            "kind": {
-              "const": "plan_through",
-              "type": "string"
-            },
-            "through": {
-              "$ref": "#/$defs/Through",
-              "description": "How far."
-            }
-          },
-          "required": [
-            "kind",
-            "from",
-            "through"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "Make `target` a project: the plan the person saw, bound to its digest\n(`speccoder new`).",
-          "properties": {
-            "choices": {
-              "$ref": "#/$defs/NewChoices",
-              "description": "What the person chose."
-            },
-            "kind": {
-              "const": "new_project",
-              "type": "string"
-            },
-            "plan_digest": {
-              "description": "The digest of the plan on screen.",
-              "type": "string"
-            },
-            "target": {
-              "description": "The folder, as the plan names it.",
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind",
-            "target",
-            "choices",
-            "plan_digest"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "Undo the project speccoder created at the dispatch's root\n(`speccoder new --undo`): to the Trash, or a revert of its commit.",
-          "properties": {
-            "commit": {
-              "description": "speccoder's commit, as recorded.",
-              "type": "string"
-            },
-            "kind": {
-              "const": "undo_new_project",
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind",
-            "commit"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "Clone a repository of the person's with their git (their credentials).",
-          "properties": {
-            "kind": {
-              "const": "clone_repository",
-              "type": "string"
-            },
-            "repo": {
-              "description": "`owner/repo`.",
-              "type": "string"
-            },
-            "target": {
-              "description": "The destination folder.",
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind",
-            "repo",
-            "target"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "Copy the bundled sample into the state directory and replay its\nrecorded run strictly (`speccoder sample`).",
-          "properties": {
-            "fresh": {
-              "description": "Replace an existing copy.",
-              "type": "boolean"
-            },
-            "kind": {
-              "const": "open_sample",
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind",
-            "fresh"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "Run the sample's own checks, offline, in its copy (the sample's\nend card, *Run the checks yourself*).",
-          "properties": {
-            "kind": {
-              "const": "sample_checks",
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind"
-          ],
-          "type": "object"
-        }
-      ]
-    },
-    "SealedRef": {
-      "description": "A sealed held-out set: kept in the state directory, never shown.",
-      "properties": {
-        "count": {
-          "description": "Files in it.",
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "key": {
-          "description": "The requirement it is keyed by.",
-          "type": "string"
-        },
-        "manifest_sha256": {
-          "description": "The manifest's hash.",
-          "type": "string"
-        }
-      },
-      "required": [
-        "key",
-        "manifest_sha256",
-        "count"
-      ],
-      "type": "object"
-    },
-    "SpecialCase": {
-      "description": "One special-case candidate: a fix that recognises a reproduction's\nliteral inputs.",
-      "properties": {
-        "digest": {
-          "description": "`sha256:<hex>` of its files: what a ruling is bound to.",
-          "type": "string"
-        },
-        "regenerated": {
-          "description": "Its statement's held-out variant was written again once, told it.",
-          "type": "boolean"
-        },
-        "rejected": {
-          "description": "The combined set (reproductions and held-out variants) rejected it.",
-          "type": "boolean"
-        },
-        "ruled": {
-          "default": false,
-          "description": "A person ruled the tests right about it.",
-          "type": "boolean"
-        },
-        "statement": {
-          "description": "The statement whose reproduction it targets.",
-          "type": "string"
-        }
-      },
-      "required": [
-        "statement",
-        "digest",
-        "rejected",
-        "regenerated",
-        "ruled"
-      ],
-      "type": "object"
-    },
-    "Stack": {
-      "description": "A stack the plan can scaffold, or none.",
-      "oneOf": [
-        {
-          "const": "rust",
-          "description": "Rust with cargo.",
-          "type": "string"
-        },
-        {
-          "const": "python",
-          "description": "Python with uv and pytest.",
-          "type": "string"
-        },
-        {
-          "const": "node",
-          "description": "TypeScript with npm and vitest.",
-          "type": "string"
-        },
-        {
-          "const": "go",
-          "description": "Go modules.",
-          "type": "string"
-        },
-        {
-          "const": "none",
-          "description": "No scaffold: the person adds code.",
-          "type": "string"
-        }
-      ]
-    },
-    "Statement": {
-      "description": "One statement of the triad, in the person's words.",
-      "properties": {
-        "id": {
-          "description": "`C` (current), `E1`, `E2`, … (expected), `U1`, … (unchanged):\npositional, stable within the requirement.",
-          "type": "string"
-        },
-        "text": {
-          "description": "The words, whitespace-normalised.",
-          "type": "string"
-        }
-      },
-      "required": [
-        "id",
-        "text"
-      ],
-      "type": "object"
-    },
-    "StatementsShown": {
-      "description": "Statements, by what the tries showed.",
-      "properties": {
-        "not_reproduced": {
-          "description": "Neither red nor passing.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "reproduced": {
-          "description": "Red by assertion in some try.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "satisfied": {
-          "description": "Passed on every try.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        }
-      },
-      "required": [
-        "reproduced",
-        "not_reproduced",
-        "satisfied"
-      ],
-      "type": "object"
-    },
-    "Through": {
-      "description": "How far plan through goes.",
-      "oneOf": [
-        {
-          "const": "spec",
-          "description": "The spec only.",
-          "type": "string"
-        },
-        {
-          "const": "plan",
-          "description": "The spec and the plan.",
-          "type": "string"
-        },
-        {
-          "const": "tasks",
-          "description": "The spec, the plan and the tasks.",
-          "type": "string"
-        },
-        {
-          "const": "analyze",
-          "description": "Then the format's check of the planning files.",
-          "type": "string"
-        }
-      ]
-    },
-    "Triad": {
-      "description": "The person's three statements about a bug.",
-      "properties": {
-        "current": {
-          "$ref": "#/$defs/Statement",
-          "description": "What happens now (the symptom)."
-        },
-        "digest": {
-          "description": "`sha256:<hex>` over the normalised statements: a different digest\nlapses a confirmation.",
-          "type": "string"
-        },
-        "expected": {
-          "description": "What should happen instead; at least one.",
-          "items": {
-            "$ref": "#/$defs/Statement"
-          },
-          "type": "array"
-        },
-        "unchanged": {
-          "description": "What must keep working as it does.",
-          "items": {
-            "$ref": "#/$defs/Statement"
-          },
-          "type": "array"
-        }
-      },
-      "required": [
-        "current",
-        "expected",
-        "unchanged",
-        "digest"
-      ],
-      "type": "object"
-    },
-    "TryStatement": {
-      "description": "One statement's class in one try.",
-      "properties": {
-        "class": {
-          "$ref": "#/$defs/RedClass",
-          "description": "What its test did on the untouched code (`assertion` only when both\nruns failed on one)."
-        },
-        "excerpt": {
-          "description": "Up to 20 lines of the run, when it was not red.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "statement": {
-          "description": "`E1`, `U1`.",
-          "type": "string"
-        }
-      },
-      "required": [
-        "statement",
-        "class"
-      ],
-      "type": "object"
-    },
-    "Verdict": {
-      "description": "How strong the evidence for a task is.",
-      "oneOf": [
-        {
-          "description": "A task-specific check produced evidence, nothing failed, nothing regressed.",
-          "properties": {
-            "verdict": {
-              "const": "verified",
-              "type": "string"
-            }
-          },
-          "required": [
-            "verdict"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "Nothing failed or regressed, but nothing task-specific was established.",
-          "properties": {
-            "verdict": {
-              "const": "regression_only",
-              "type": "string"
-            }
-          },
-          "required": [
-            "verdict"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "Something failed or regressed.",
-          "properties": {
-            "reasons": {
-              "description": "One line per reason.",
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "verdict": {
-              "const": "failed",
-              "type": "string"
-            }
-          },
-          "required": [
-            "verdict",
-            "reasons"
-          ],
-          "type": "object"
-        }
-      ]
-    },
-    "Via": {
-      "description": "The interface a person acted through, as a write records it (`via`):\none vocabulary for every record. Records written before it named\n`cli`, `tui` or `dashboard` (read as [`Via::Terminal`]) and\n`editor <name>` (read as [`Via::Acp`], the name a separate client).",
-      "oneOf": [
-        {
-          "const": "terminal",
-          "description": "A terminal: the line CLI, its prompts, the dashboard.",
-          "type": "string"
-        },
-        {
-          "const": "web",
-          "description": "The web app, in a browser tab or the desktop window.",
-          "type": "string"
-        },
-        {
-          "const": "window",
-          "description": "The desktop window, once it can tell itself from a tab.",
-          "type": "string"
-        },
-        {
-          "const": "acp",
-          "description": "An editor over the Agent Client Protocol.",
-          "type": "string"
-        },
-        {
-          "const": "phone",
-          "description": "A phone.",
-          "type": "string"
-        },
-        {
-          "const": "ci",
-          "description": "Continuous integration.",
-          "type": "string"
-        },
-        {
-          "const": "mcp",
-          "description": "A client over the Model Context Protocol.",
-          "type": "string"
-        }
-      ]
-    },
-    "View": {
-      "description": "A read-only place an interface opens instead of running a command.",
-      "oneOf": [
-        {
-          "const": "doctor",
-          "description": "`doctor`: every check of the setup.",
-          "type": "string"
-        },
-        {
-          "const": "bug_report",
-          "description": "`doctor --bug-report`: the setup as a bug report, to copy.",
-          "type": "string"
-        },
-        {
-          "const": "report",
-          "description": "`report`, `status`: every task and its evidence.",
-          "type": "string"
-        },
-        {
-          "const": "live",
-          "description": "`report --live`, `tui`: the run as it goes.",
-          "type": "string"
-        },
-        {
-          "const": "approvals",
-          "description": "`report --approvals`, `task approve|reject`: the calls waiting,\nshown in full before a decision.",
-          "type": "string"
-        },
-        {
-          "const": "explain",
-          "description": "`explain CODE`: what a code means and how to resolve it.",
-          "type": "string"
-        },
-        {
-          "const": "review",
-          "description": "`review`: the spec's review.",
-          "type": "string"
-        },
-        {
-          "const": "settings",
-          "description": "`config`: the settings.",
-          "type": "string"
-        },
-        {
-          "const": "setup",
-          "description": "`init`: the setup assistant.",
-          "type": "string"
-        },
-        {
-          "const": "bug",
-          "description": "`bug`: the bug sheet.",
-          "type": "string"
-        },
-        {
-          "const": "quick_change",
-          "description": "`do`: the quick-change sheet.",
-          "type": "string"
-        },
-        {
-          "const": "new_feature",
-          "description": "`feature similar`: the new-feature sheet.",
-          "type": "string"
-        },
-        {
-          "const": "new_project",
-          "description": "`new`: the new-project sheet.",
-          "type": "string"
-        },
-        {
-          "const": "github",
-          "description": "`auth`: the GitHub sign-in.",
-          "type": "string"
-        },
-        {
-          "const": "task",
-          "description": "A task's drawer (`subject`: its id).",
-          "type": "string"
-        }
-      ]
-    }
-  },
-  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/bug.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bug: a bug, its triad, reproductions, confirmation and how far it got",
   "description": "A bug: where it lives, the person's triad, the reproductions and how\nfar it got. The `bug` payload, and what speccoder keeps of it.",
+  "type": "object",
   "properties": {
-    "acceptance": {
-      "anyOf": [
-        {
-          "$ref": "#/$defs/AcceptanceRef"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "description": "What the fix's acceptance set came from."
-    },
-    "candidate": {
-      "anyOf": [
-        {
-          "$ref": "#/$defs/Candidate"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "description": "Someone else's fix, judged."
-    },
-    "code": {
-      "default": null,
-      "description": "The code of the last stop or refusal.",
-      "type": [
-        "string",
-        "null"
-      ]
-    },
-    "commit": {
-      "default": null,
-      "description": "The verdict commit.",
-      "type": [
-        "string",
-        "null"
-      ]
-    },
-    "confirm_digest": {
-      "default": null,
-      "description": "The digest waiting for the person's confirmation.",
-      "type": [
-        "string",
-        "null"
-      ]
-    },
-    "confirmation": {
-      "anyOf": [
-        {
-          "$ref": "#/$defs/Confirmation"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "description": "The confirmation."
-    },
-    "handoff": {
-      "anyOf": [
-        {
-          "$ref": "#/$defs/Handoff"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "description": "The engine's hand-off, when it stopped."
-    },
-    "held_out": {
-      "default": [],
-      "description": "The held-out variants (never their content or path).",
-      "items": {
-        "$ref": "#/$defs/HeldOutVariant"
-      },
-      "type": "array"
-    },
-    "held_out_reason": {
-      "description": "Why no held-out variant is sealed (the author's call failed, none\nwas red): the verdict names it, and the confirmation says it first.",
-      "type": [
-        "string",
-        "null"
-      ]
-    },
-    "held_out_sealed": {
-      "anyOf": [
-        {
-          "$ref": "#/$defs/SealedRef"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "description": "The sealed set holding them."
-    },
     "home": {
-      "$ref": "#/$defs/BugHome",
-      "description": "Where the format keeps it."
+      "description": "Where the format keeps it.",
+      "$ref": "#/$defs/BugHome"
     },
-    "issue": {
-      "anyOf": [
-        {
-          "$ref": "#/$defs/IssueRef"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "description": "The issue it came from."
-    },
-    "max_tries": {
-      "description": "At most this many tries.",
-      "format": "uint32",
-      "minimum": 0,
-      "type": "integer"
-    },
-    "outcome": {
-      "$ref": "#/$defs/BugOutcome",
-      "description": "How it stands."
-    },
-    "pass_to_pass": {
-      "anyOf": [
-        {
-          "$ref": "#/$defs/PassToPass"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "description": "The tests selected to stay green."
-    },
-    "recorded_commit": {
-      "default": null,
-      "description": "The planning commit that recorded it.",
-      "type": [
-        "string",
-        "null"
-      ]
-    },
-    "rejections": {
-      "default": [],
-      "description": "Rejections of earlier reproductions.",
-      "items": {
-        "$ref": "#/$defs/Rejection"
-      },
-      "type": "array"
-    },
-    "reproductions": {
-      "default": [],
-      "description": "The reproductions (and *Unchanged* tests).",
-      "items": {
-        "$ref": "#/$defs/Reproduction"
-      },
-      "type": "array"
+    "unit": {
+      "description": "The unit, as the adapter names it (`007-bugfixes`, `bugs/<slug>`).",
+      "type": "string"
     },
     "requirement": {
       "description": "The requirement (`FR-003`, or `bug:<slug>`).",
       "type": "string"
-    },
-    "revert": {
-      "anyOf": [
-        {
-          "$ref": "#/$defs/RevertResult"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "description": "The revert candidate."
-    },
-    "run_id": {
-      "default": null,
-      "description": "The last run.",
-      "type": [
-        "string",
-        "null"
-      ]
-    },
-    "special_case": {
-      "default": [],
-      "description": "The special-case candidates.",
-      "items": {
-        "$ref": "#/$defs/SpecialCase"
-      },
-      "type": "array"
-    },
-    "stage": {
-      "$ref": "#/$defs/BugStage",
-      "description": "Where it is."
     },
     "task": {
       "description": "The task (`T003`, or `bug:<slug>`).",
@@ -3050,22 +25,19 @@
       "type": "string"
     },
     "triad": {
-      "$ref": "#/$defs/Triad",
-      "description": "The person's words."
+      "description": "The person's words.",
+      "$ref": "#/$defs/Triad"
     },
-    "tries": {
-      "default": [],
-      "description": "The reproduce tries.",
-      "items": {
-        "$ref": "#/$defs/ReproduceTry"
-      },
-      "type": "array"
+    "stage": {
+      "description": "Where it is.",
+      "$ref": "#/$defs/BugStage"
     },
-    "unit": {
-      "description": "The unit, as the adapter names it (`007-bugfixes`, `bugs/<slug>`).",
-      "type": "string"
+    "outcome": {
+      "description": "How it stands.",
+      "$ref": "#/$defs/BugOutcome"
     },
     "verdict": {
+      "description": "The fix's verdict, once judged.",
       "anyOf": [
         {
           "$ref": "#/$defs/Verdict"
@@ -3074,8 +46,196 @@
           "type": "null"
         }
       ],
-      "default": null,
-      "description": "The fix's verdict, once judged."
+      "default": null
+    },
+    "code": {
+      "description": "The code of the last stop or refusal.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "reproductions": {
+      "description": "The reproductions (and *Unchanged* tests).",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Reproduction"
+      },
+      "default": []
+    },
+    "held_out": {
+      "description": "The held-out variants (never their content or path).",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/HeldOutVariant"
+      },
+      "default": []
+    },
+    "held_out_sealed": {
+      "description": "The sealed set holding them.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SealedRef"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "held_out_reason": {
+      "description": "Why no held-out variant is sealed (the author's call failed, none\nwas red): the verdict names it, and the confirmation says it first.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "confirm_digest": {
+      "description": "The digest waiting for the person's confirmation.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "confirmation": {
+      "description": "The confirmation.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Confirmation"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "rejections": {
+      "description": "Rejections of earlier reproductions.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Rejection"
+      },
+      "default": []
+    },
+    "acceptance": {
+      "description": "What the fix's acceptance set came from.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AcceptanceRef"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "pass_to_pass": {
+      "description": "The tests selected to stay green.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PassToPass"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "revert": {
+      "description": "The revert candidate.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RevertResult"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "special_case": {
+      "description": "The special-case candidates.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/SpecialCase"
+      },
+      "default": []
+    },
+    "tries": {
+      "description": "The reproduce tries.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ReproduceTry"
+      },
+      "default": []
+    },
+    "max_tries": {
+      "description": "At most this many tries.",
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "handoff": {
+      "description": "The engine's hand-off, when it stopped.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Handoff"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "issue": {
+      "description": "The issue it came from.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/IssueRef"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "candidate": {
+      "description": "Someone else's fix, judged.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Candidate"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "recorded_commit": {
+      "description": "The planning commit that recorded it.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "commit": {
+      "description": "The verdict commit.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "run_id": {
+      "description": "The last run.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
     }
   },
   "required": [
@@ -3108,6 +268,2846 @@
     "commit",
     "run_id"
   ],
-  "title": "bug: a bug, its triad, reproductions, confirmation and how far it got",
-  "type": "object"
+  "$defs": {
+    "BugHome": {
+      "description": "The bug's home, as the format adapter chose it.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "description": "Which structure.",
+          "$ref": "#/$defs/HomeKind"
+        },
+        "location": {
+          "description": "Project-relative directory (or file).",
+          "type": "string"
+        },
+        "reason": {
+          "description": "Why this one, as shown and recorded.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "location",
+        "reason"
+      ]
+    },
+    "HomeKind": {
+      "description": "Where the format keeps the bug.",
+      "oneOf": [
+        {
+          "description": "Spec Kit's first-party `bug` extension: its own per-bug directory.",
+          "type": "string",
+          "const": "native_speckit_bug"
+        },
+        {
+          "description": "Kiro's `bugfix.md` spec.",
+          "type": "string",
+          "const": "native_kiro_bugfix"
+        },
+        {
+          "description": "Spec Kit without the extension: the standing bug-fix unit.",
+          "type": "string",
+          "const": "standing_speckit"
+        },
+        {
+          "description": "OpenSpec: the standing bug-fix change.",
+          "type": "string",
+          "const": "standing_openspec"
+        }
+      ]
+    },
+    "Triad": {
+      "description": "The person's three statements about a bug.",
+      "type": "object",
+      "properties": {
+        "current": {
+          "description": "What happens now (the symptom).",
+          "$ref": "#/$defs/Statement"
+        },
+        "expected": {
+          "description": "What should happen instead; at least one.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Statement"
+          }
+        },
+        "unchanged": {
+          "description": "What must keep working as it does.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Statement"
+          }
+        },
+        "digest": {
+          "description": "`sha256:<hex>` over the normalised statements: a different digest\nlapses a confirmation.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "current",
+        "expected",
+        "unchanged",
+        "digest"
+      ]
+    },
+    "Statement": {
+      "description": "One statement of the triad, in the person's words.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "`C` (current), `E1`, `E2`, … (expected), `U1`, … (unchanged):\npositional, stable within the requirement.",
+          "type": "string"
+        },
+        "text": {
+          "description": "The words, whitespace-normalised.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "text"
+      ]
+    },
+    "BugStage": {
+      "description": "Where the bug is.",
+      "oneOf": [
+        {
+          "description": "The triad is being recorded.",
+          "type": "string",
+          "const": "record"
+        },
+        {
+          "description": "Reproductions are being written and shown to fail.",
+          "type": "string",
+          "const": "reproduce"
+        },
+        {
+          "description": "The reproductions wait for the person's confirmation.",
+          "type": "string",
+          "const": "confirm"
+        },
+        {
+          "description": "The pass-to-pass set is chosen and run.",
+          "type": "string",
+          "const": "unchanged"
+        },
+        {
+          "description": "The fix is attempted and judged.",
+          "type": "string",
+          "const": "fix"
+        },
+        {
+          "description": "The verdict commit.",
+          "type": "string",
+          "const": "ship"
+        },
+        {
+          "description": "Nothing more happens without the person.",
+          "type": "string",
+          "const": "done"
+        }
+      ]
+    },
+    "BugOutcome": {
+      "description": "The bug's outcome; distinct from a task's verdict.",
+      "oneOf": [
+        {
+          "description": "The triad is recorded; nothing reproduced yet.",
+          "type": "string",
+          "const": "recorded"
+        },
+        {
+          "description": "Every statement is reproduced; the person confirms.",
+          "type": "string",
+          "const": "awaiting_confirmation"
+        },
+        {
+          "description": "The tries ran out without a reproduction of every statement.",
+          "type": "string",
+          "const": "cannot_reproduce"
+        },
+        {
+          "description": "Every reproduction passed on the untouched code, on every try.",
+          "type": "string",
+          "const": "already_satisfied"
+        },
+        {
+          "description": "An *Unchanged* statement does not hold today.",
+          "type": "string",
+          "const": "unchanged_not_holding"
+        },
+        {
+          "description": "The fix was judged; see the verdict.",
+          "type": "string",
+          "const": "fixed"
+        },
+        {
+          "description": "The fix did not pass.",
+          "type": "string",
+          "const": "failed"
+        }
+      ]
+    },
+    "Verdict": {
+      "description": "How strong the evidence for a task is.",
+      "oneOf": [
+        {
+          "description": "A task-specific check produced evidence, nothing failed, nothing regressed.",
+          "type": "object",
+          "properties": {
+            "verdict": {
+              "type": "string",
+              "const": "verified"
+            }
+          },
+          "required": [
+            "verdict"
+          ]
+        },
+        {
+          "description": "Nothing failed or regressed, but nothing task-specific was established.",
+          "type": "object",
+          "properties": {
+            "verdict": {
+              "type": "string",
+              "const": "regression_only"
+            }
+          },
+          "required": [
+            "verdict"
+          ]
+        },
+        {
+          "description": "Something failed or regressed.",
+          "type": "object",
+          "properties": {
+            "verdict": {
+              "type": "string",
+              "const": "failed"
+            },
+            "reasons": {
+              "description": "One line per reason.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "verdict",
+            "reasons"
+          ]
+        }
+      ]
+    },
+    "Reproduction": {
+      "description": "One reproduction test.",
+      "type": "object",
+      "properties": {
+        "statement": {
+          "description": "The statement it reproduces (`E1`) — or, for a test of an\n*Unchanged* statement, that one (`U1`).",
+          "type": "string"
+        },
+        "file": {
+          "description": "Project-relative test file.",
+          "type": "string"
+        },
+        "test": {
+          "description": "The test's name.",
+          "type": "string"
+        },
+        "source": {
+          "description": "Who wrote it.",
+          "$ref": "#/$defs/ReproductionSource"
+        },
+        "baseline": {
+          "description": "Its class on the untouched code, run twice.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RedClass"
+          }
+        },
+        "digest": {
+          "description": "`sha256:<hex>` of its content.",
+          "type": "string"
+        },
+        "argv": {
+          "description": "The command that runs only it.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "final": {
+          "description": "On the final tree.",
+          "$ref": "#/$defs/FinalState"
+        },
+        "revert": {
+          "description": "Against the revert candidate.",
+          "$ref": "#/$defs/RevertOutcome"
+        }
+      },
+      "required": [
+        "statement",
+        "file",
+        "test",
+        "source",
+        "baseline",
+        "digest",
+        "argv",
+        "final",
+        "revert"
+      ]
+    },
+    "ReproductionSource": {
+      "description": "Who wrote a reproduction.",
+      "oneOf": [
+        {
+          "description": "The test-blind reproduction author.",
+          "type": "string",
+          "const": "author"
+        },
+        {
+          "description": "The person (`--test`).",
+          "type": "string",
+          "const": "person"
+        }
+      ]
+    },
+    "RedClass": {
+      "description": "What a red run of acceptance tests showed.\n\nOnly [`RedClass::Assertion`] and [`RedClass::Absent`] are red: a test was\ncollected and failed on an assertion, or the tests could not build only\nbecause symbols the task is to introduce do not exist yet. Everything\nelse is not demonstrated.",
+      "oneOf": [
+        {
+          "description": "A collected test failed on an assertion.",
+          "type": "string",
+          "const": "assertion"
+        },
+        {
+          "description": "The only build or import errors name symbols that do not exist yet.",
+          "type": "string",
+          "const": "absent"
+        },
+        {
+          "description": "Any other build error.",
+          "type": "string",
+          "const": "build_error"
+        },
+        {
+          "description": "Tests errored at setup or collection.",
+          "type": "string",
+          "const": "collection_error"
+        },
+        {
+          "description": "The run hit its deadline.",
+          "type": "string",
+          "const": "timeout"
+        },
+        {
+          "description": "Nothing was collected.",
+          "type": "string",
+          "const": "no_tests"
+        },
+        {
+          "description": "Red once, not red when confirmed.",
+          "type": "string",
+          "const": "flaky"
+        },
+        {
+          "description": "The output was not recognised.",
+          "type": "string",
+          "const": "unclassified"
+        },
+        {
+          "description": "The tests passed.",
+          "type": "string",
+          "const": "passed"
+        }
+      ]
+    },
+    "FinalState": {
+      "description": "A reproduction on the final tree.",
+      "oneOf": [
+        {
+          "description": "It passed.",
+          "type": "string",
+          "const": "passed"
+        },
+        {
+          "description": "It failed.",
+          "type": "string",
+          "const": "failed"
+        },
+        {
+          "description": "Not run (no attempt yet).",
+          "type": "string",
+          "const": "not_run"
+        }
+      ]
+    },
+    "RevertOutcome": {
+      "description": "A reproduction against the revert candidate (the fix undone).",
+      "oneOf": [
+        {
+          "description": "It failed on an assertion: it tells the fix from no fix.",
+          "type": "string",
+          "const": "rejected"
+        },
+        {
+          "description": "It passed without the fix.",
+          "type": "string",
+          "const": "survived"
+        },
+        {
+          "description": "The revert did not build: no evidence either way.",
+          "type": "string",
+          "const": "unviable"
+        },
+        {
+          "description": "Not run.",
+          "type": "string",
+          "const": "not_run"
+        }
+      ]
+    },
+    "HeldOutVariant": {
+      "description": "A held-out variant, as the payload shows it: never its content or path.",
+      "type": "object",
+      "properties": {
+        "statement": {
+          "description": "The statement it covers.",
+          "type": "string"
+        },
+        "baseline": {
+          "description": "On the untouched code.",
+          "$ref": "#/$defs/RedClass"
+        },
+        "final": {
+          "description": "On the final tree.",
+          "$ref": "#/$defs/FinalState"
+        }
+      },
+      "required": [
+        "statement",
+        "baseline",
+        "final"
+      ]
+    },
+    "SealedRef": {
+      "description": "A sealed held-out set: kept in the state directory, never shown.",
+      "type": "object",
+      "properties": {
+        "key": {
+          "description": "The requirement it is keyed by.",
+          "type": "string"
+        },
+        "manifest_sha256": {
+          "description": "The manifest's hash.",
+          "type": "string"
+        },
+        "count": {
+          "description": "Files in it.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "key",
+        "manifest_sha256",
+        "count"
+      ]
+    },
+    "Confirmation": {
+      "description": "The person's one confirmation, bound to what they saw.",
+      "type": "object",
+      "properties": {
+        "digest": {
+          "description": "`sha256:<hex>` over the reproductions shown (their files and\nstatement ids).",
+          "type": "string"
+        },
+        "triad_digest": {
+          "description": "The triad's digest when confirmed: a different one lapses this.",
+          "type": "string"
+        },
+        "by": {
+          "description": "Who.",
+          "type": "string"
+        },
+        "via": {
+          "description": "Through what.",
+          "$ref": "#/$defs/Via"
+        },
+        "basis": {
+          "description": "Seen or named.",
+          "$ref": "#/$defs/Basis"
+        },
+        "at": {
+          "description": "Unix seconds.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "digest",
+        "triad_digest",
+        "by",
+        "via",
+        "basis",
+        "at"
+      ]
+    },
+    "Via": {
+      "description": "The interface a person acted through, as a write records it (`via`):\none vocabulary for every record. Records written before it named\n`cli`, `tui` or `dashboard` (read as [`Via::Terminal`]) and\n`editor <name>` (read as [`Via::Acp`], the name a separate client).",
+      "oneOf": [
+        {
+          "description": "A terminal: the line CLI, its prompts, the dashboard.",
+          "type": "string",
+          "const": "terminal"
+        },
+        {
+          "description": "The web app, in a browser tab or the desktop window.",
+          "type": "string",
+          "const": "web"
+        },
+        {
+          "description": "The desktop window, once it can tell itself from a tab.",
+          "type": "string",
+          "const": "window"
+        },
+        {
+          "description": "An editor over the Agent Client Protocol.",
+          "type": "string",
+          "const": "acp"
+        },
+        {
+          "description": "A phone.",
+          "type": "string",
+          "const": "phone"
+        },
+        {
+          "description": "Continuous integration.",
+          "type": "string",
+          "const": "ci"
+        },
+        {
+          "description": "A client over the Model Context Protocol.",
+          "type": "string",
+          "const": "mcp"
+        }
+      ]
+    },
+    "Basis": {
+      "description": "How the person decided the reproductions.",
+      "oneOf": [
+        {
+          "description": "They saw the reproductions and confirmed them.",
+          "type": "string",
+          "const": "shown"
+        },
+        {
+          "description": "They named the tests themselves (`--test`).",
+          "type": "string",
+          "const": "named_test"
+        }
+      ]
+    },
+    "Rejection": {
+      "description": "The person rejected the reproductions shown; the reason goes to the\nauthor's next try.",
+      "type": "object",
+      "properties": {
+        "digest": {
+          "description": "The digest rejected.",
+          "type": "string"
+        },
+        "reason": {
+          "description": "Why.",
+          "type": "string"
+        },
+        "by": {
+          "description": "Who.",
+          "type": "string"
+        },
+        "via": {
+          "description": "Through what.",
+          "$ref": "#/$defs/Via"
+        },
+        "at": {
+          "description": "Unix seconds.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "digest",
+        "reason",
+        "by",
+        "via",
+        "at"
+      ]
+    },
+    "AcceptanceRef": {
+      "description": "What the fix's visible acceptance set came from.",
+      "type": "object",
+      "properties": {
+        "source": {
+          "description": "`bug_confirmation` or `person_test`.",
+          "$ref": "#/$defs/AcceptanceSource"
+        },
+        "pre_frozen": {
+          "description": "The record it reused.",
+          "$ref": "#/$defs/PreFrozenRef"
+        }
+      },
+      "required": [
+        "source",
+        "pre_frozen"
+      ]
+    },
+    "AcceptanceSource": {
+      "description": "Where a task's visible acceptance set came from.",
+      "oneOf": [
+        {
+          "description": "Written by the acceptance author at the run's checkpoint.",
+          "type": "string",
+          "const": "authored"
+        },
+        {
+          "description": "Frozen in review.",
+          "type": "string",
+          "const": "review"
+        },
+        {
+          "description": "A bug's confirmed reproductions.",
+          "type": "string",
+          "const": "bug_confirmation"
+        },
+        {
+          "description": "Tests the person named for a bug.",
+          "type": "string",
+          "const": "person_test"
+        }
+      ]
+    },
+    "PreFrozenRef": {
+      "description": "Where the confirmed reproductions are kept, as recorded with the fix.",
+      "type": "object",
+      "properties": {
+        "manifest": {
+          "description": "`sha256:<hex>` over the visible set.",
+          "type": "string"
+        },
+        "approval": {
+          "description": "The confirmation's digest.",
+          "type": "string"
+        },
+        "wording": {
+          "description": "The triad's digest.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "manifest",
+        "approval",
+        "wording"
+      ]
+    },
+    "PassToPass": {
+      "description": "The tests that passed before the fix and must pass after it.",
+      "type": "object",
+      "properties": {
+        "state": {
+          "description": "Selected, or nothing was.",
+          "$ref": "#/$defs/PassToPassState"
+        },
+        "members": {
+          "description": "The members.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PassToPassMember"
+          }
+        }
+      },
+      "required": [
+        "state",
+        "members"
+      ]
+    },
+    "PassToPassState": {
+      "description": "Whether anything was selected for pass-to-pass.",
+      "oneOf": [
+        {
+          "description": "Members were selected.",
+          "type": "string",
+          "const": "selected"
+        },
+        {
+          "description": "Nothing was: never counted as passed.",
+          "type": "string",
+          "const": "none_selected"
+        }
+      ]
+    },
+    "PassToPassMember": {
+      "description": "One test that must stay green.",
+      "type": "object",
+      "properties": {
+        "test": {
+          "description": "The test id, as the runner reports it.",
+          "type": "string"
+        },
+        "file": {
+          "description": "Its file.",
+          "type": "string"
+        },
+        "rule": {
+          "description": "How it was selected: `same_file`, `references:<module>`,\n`imports:<path>`, `package:<pkg>`, `unchanged:U<n>`.",
+          "type": "string"
+        },
+        "final": {
+          "description": "On the final tree.",
+          "$ref": "#/$defs/MemberFinal"
+        }
+      },
+      "required": [
+        "test",
+        "file",
+        "rule",
+        "final"
+      ]
+    },
+    "MemberFinal": {
+      "description": "A pass-to-pass member on the final tree.",
+      "oneOf": [
+        {
+          "description": "Passed, by name.",
+          "type": "string",
+          "const": "passed"
+        },
+        {
+          "description": "Failed.",
+          "type": "string",
+          "const": "failed"
+        },
+        {
+          "description": "Not found in the final run: a failure.",
+          "type": "string",
+          "const": "missing"
+        },
+        {
+          "description": "Not run yet.",
+          "type": "string",
+          "const": "not_run"
+        }
+      ]
+    },
+    "RevertResult": {
+      "description": "The revert candidate's result.",
+      "type": "object",
+      "properties": {
+        "outcome": {
+          "description": "The gravest outcome over the reproductions.",
+          "$ref": "#/$defs/RevertOutcome"
+        },
+        "rejected_by": {
+          "description": "The statements whose reproduction failed on an assertion.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "outcome",
+        "rejected_by"
+      ]
+    },
+    "SpecialCase": {
+      "description": "One special-case candidate: a fix that recognises a reproduction's\nliteral inputs.",
+      "type": "object",
+      "properties": {
+        "statement": {
+          "description": "The statement whose reproduction it targets.",
+          "type": "string"
+        },
+        "digest": {
+          "description": "`sha256:<hex>` of its files: what a ruling is bound to.",
+          "type": "string"
+        },
+        "rejected": {
+          "description": "The combined set (reproductions and held-out variants) rejected it.",
+          "type": "boolean"
+        },
+        "regenerated": {
+          "description": "Its statement's held-out variant was written again once, told it.",
+          "type": "boolean"
+        },
+        "ruled": {
+          "description": "A person ruled the tests right about it.",
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "required": [
+        "statement",
+        "digest",
+        "rejected",
+        "regenerated",
+        "ruled"
+      ]
+    },
+    "ReproduceTry": {
+      "description": "One try of the reproduction author.",
+      "type": "object",
+      "properties": {
+        "n": {
+          "description": "1, 2, …",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "per_statement": {
+          "description": "Per statement.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TryStatement"
+          }
+        },
+        "discarded": {
+          "description": "Why the whole try was discarded (`wrote outside tests`, …).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "run_id": {
+          "description": "The author's run.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "usage": {
+          "description": "Its tokens."
+        },
+        "rejection": {
+          "description": "The person's reason for rejecting the reproductions before it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "n",
+        "per_statement"
+      ]
+    },
+    "TryStatement": {
+      "description": "One statement's class in one try.",
+      "type": "object",
+      "properties": {
+        "statement": {
+          "description": "`E1`, `U1`.",
+          "type": "string"
+        },
+        "class": {
+          "description": "What its test did on the untouched code (`assertion` only when both\nruns failed on one).",
+          "$ref": "#/$defs/RedClass"
+        },
+        "excerpt": {
+          "description": "Up to 20 lines of the run, when it was not red.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "statement",
+        "class"
+      ]
+    },
+    "Handoff": {
+      "description": "The hand-off of a stopped bug, composed by the engine from the journal\n(never written by a model).",
+      "type": "object",
+      "properties": {
+        "outcome": {
+          "description": "The outcome it hands off.",
+          "$ref": "#/$defs/BugOutcome"
+        },
+        "tries": {
+          "description": "The tries made.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ReproduceTry"
+          }
+        },
+        "statements": {
+          "description": "Per statement.",
+          "$ref": "#/$defs/StatementsShown"
+        },
+        "cost": {
+          "description": "Tokens the tries spent."
+        },
+        "elapsed_ms": {
+          "description": "How long reproduce took.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "next": {
+          "description": "What the person can do.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/NextStep"
+          }
+        },
+        "claim": {
+          "description": "The author's last words, labelled as its claim.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AuthorClaim"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "outcome",
+        "tries",
+        "statements",
+        "elapsed_ms",
+        "next"
+      ]
+    },
+    "StatementsShown": {
+      "description": "Statements, by what the tries showed.",
+      "type": "object",
+      "properties": {
+        "reproduced": {
+          "description": "Red by assertion in some try.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "not_reproduced": {
+          "description": "Neither red nor passing.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "satisfied": {
+          "description": "Passed on every try.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "reproduced",
+        "not_reproduced",
+        "satisfied"
+      ]
+    },
+    "NextStep": {
+      "description": "One step a person can take.",
+      "type": "object",
+      "properties": {
+        "command": {
+          "description": "A copy-pasteable command (`\"…\"` marks text the person writes).",
+          "type": "string"
+        },
+        "why": {
+          "description": "Why, in one short line.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "command",
+        "why"
+      ],
+      "oneOf": [
+        {
+          "description": "speccoder performs it (`actions::perform`).",
+          "type": "object",
+          "properties": {
+            "how": {
+              "type": "string",
+              "const": "perform"
+            },
+            "run": {
+              "description": "What runs.",
+              "$ref": "#/$defs/Runnable"
+            },
+            "input": {
+              "description": "What to ask for first (`Why it is skipped`); `None`: nothing.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "text": {
+              "description": "The words the line gives already (a `--reason \"…\"` filled in).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "confirm": {
+              "description": "What to say in a confirmation first (it leaves the machine or\ncannot be undone).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "feature": {
+              "description": "The feature the line names (`--feature F`); `None`: the current.",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "how",
+            "run",
+            "input",
+            "text",
+            "confirm",
+            "feature"
+          ]
+        },
+        {
+          "description": "A view to open.",
+          "type": "object",
+          "properties": {
+            "how": {
+              "type": "string",
+              "const": "view"
+            },
+            "view": {
+              "description": "Which.",
+              "$ref": "#/$defs/View"
+            },
+            "subject": {
+              "description": "What it is about: a code, a task.",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "how",
+            "view",
+            "subject"
+          ]
+        },
+        {
+          "description": "A command speccoder printed as a fix and can run as the person, in\nthe project folder, outside the sandbox — never one composed\nelsewhere. Several argvs run in order, each only after the last\none succeeded (`a && b`).",
+          "type": "object",
+          "properties": {
+            "how": {
+              "type": "string",
+              "const": "command"
+            },
+            "argvs": {
+              "description": "The argvs, exactly.",
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "interactive": {
+              "description": "It reads the keyboard (a login): a terminal of the person's\nown, not a panel.",
+              "type": "boolean"
+            },
+            "outside": {
+              "description": "What it changes outside the project, for a command that runs\noutside the sandbox by its nature (`changes your global git\nconfig`); `None`: it runs in the sandbox, writes confined to\nthe project and the package caches.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "token": {
+              "description": "The host's proof that it issued exactly these argvs; only a\nhost that runs commands sets it.",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "how",
+            "argvs",
+            "interactive"
+          ]
+        },
+        {
+          "description": "It must run in the shell speccoder starts from (`export NAME=…`):\nnothing run elsewhere reaches that shell.",
+          "type": "object",
+          "properties": {
+            "how": {
+              "type": "string",
+              "const": "shell"
+            },
+            "why": {
+              "description": "Why it cannot run here.",
+              "type": "string"
+            },
+            "setting": {
+              "description": "The setting that stands for it (`model`), if there is one.",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "how",
+            "why",
+            "setting"
+          ]
+        },
+        {
+          "description": "Words for a person (`→ …`), or a command only they can complete.",
+          "type": "object",
+          "properties": {
+            "how": {
+              "type": "string",
+              "const": "words"
+            },
+            "why": {
+              "description": "Why it is not taken here; `None` for words.",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "how",
+            "why"
+          ]
+        }
+      ]
+    },
+    "Runnable": {
+      "description": "How an interface runs an action itself.",
+      "oneOf": [
+        {
+          "description": "A planning skill (`speccoder spec <name> <arguments>`).",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "skill"
+            },
+            "name": {
+              "description": "The skill.",
+              "type": "string"
+            },
+            "arguments": {
+              "description": "Its arguments (the input, when one is asked for).",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "name",
+            "arguments"
+          ]
+        },
+        {
+          "description": "`speccoder run`, the feature or one task.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "run"
+            },
+            "task": {
+              "description": "One task, or the feature's ready tasks.",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "task"
+          ]
+        },
+        {
+          "description": "`speccoder run --converge`: the ready tasks, then the assessment of\nthe code against the spec as it is now, appending what remains.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "converge"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "description": "Commit exactly these planning files.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "commit"
+            },
+            "paths": {
+              "description": "Repository-relative paths.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "paths"
+          ]
+        },
+        {
+          "description": "Approve the task's waiting call: the one that was shown, refused\nwhen another waits now.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "approve"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            },
+            "call": {
+              "description": "The call's id ([`crate::PendingCall::id`]).",
+              "type": "string"
+            },
+            "digest": {
+              "description": "The digest of the call that was shown ([`crate::PendingCall::digest`]).",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task",
+            "call",
+            "digest"
+          ]
+        },
+        {
+          "description": "Reject it (the input is the reason), bound the same way.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "reject"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            },
+            "call": {
+              "description": "The call's id ([`crate::PendingCall::id`]).",
+              "type": "string"
+            },
+            "digest": {
+              "description": "The digest of the call that was shown ([`crate::PendingCall::digest`]).",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task",
+            "call",
+            "digest"
+          ]
+        },
+        {
+          "description": "Tick the task on the person's word (the input is the reason).",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "accept"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task"
+          ]
+        },
+        {
+          "description": "Skip the task (the input is the reason).",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "skip"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task"
+          ]
+        },
+        {
+          "description": "Leave a note for the task's next attempts (the input is the note).",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "nudge"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task"
+          ]
+        },
+        {
+          "description": "I did it: tick a step the person took on their word (`attested`;\nthe input, when given, is the reason).",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "done"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task"
+          ]
+        },
+        {
+          "description": "Hint & retry: a note for the task (the input), then a new attempt.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "hint"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task"
+          ]
+        },
+        {
+          "description": "Rule that a held attempt's tests are right (the input is the reason).",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "rule"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task"
+          ]
+        },
+        {
+          "description": "Record the person's review of requirements (the input is the\ncomment; required to request changes).",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "review"
+            },
+            "ids": {
+              "description": "The requirement identifiers; empty: every one not yet approved.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "verdict": {
+              "description": "`approve`, `request` (changes), `clear`; `answer` (ids: the\nquestion) and `edit` / `edit-approve` (ids: the requirement) take\nthe input as the words.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "ids",
+            "verdict"
+          ]
+        },
+        {
+          "description": "Tell a GitHub issue it is being specified as the current feature.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "issue_comment"
+            },
+            "issue": {
+              "description": "The issue's number.",
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "assign": {
+              "description": "Also assign it to the person.",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "kind",
+            "issue",
+            "assign"
+          ]
+        },
+        {
+          "description": "Record a quick change and, when `run`, run it.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "quick_change"
+            },
+            "request": {
+              "description": "The change, in the person's words.",
+              "type": "string"
+            },
+            "checks": {
+              "description": "When it is done: its acceptance scenarios.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "run": {
+              "description": "Run it once recorded.",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "kind",
+            "request",
+            "checks",
+            "run"
+          ]
+        },
+        {
+          "description": "Commit the changes set aside before the task's run onto the\nfeature's branch, as the person's own.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "keep_set_aside"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task"
+          ]
+        },
+        {
+          "description": "Discard them.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "drop_set_aside"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task"
+          ]
+        },
+        {
+          "description": "Commit the setup a run stops on (an uncommitted lockfile, build\noutput not ignored) in the checkout.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "fix_setup"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "description": "Pick the current feature.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "feature"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "description": "Push the feature's branch and open (or update) its draft pull request.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "pull_request"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "description": "Record a bug in the person's words (`speccoder bug`) and, when\n`run`, reproduce it.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "bug_fix"
+            },
+            "symptom": {
+              "description": "What happens (the symptom).",
+              "type": "string"
+            },
+            "expected": {
+              "description": "What should happen instead (one or more).",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "unchanged": {
+              "description": "What must keep working (zero or more).",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "issue": {
+              "description": "The GitHub issue it comes from.",
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "tests": {
+              "description": "The person's own reproduction tests, one per expected statement\n(`PATH::NAME`).",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "candidate": {
+              "description": "Someone else's fix to judge: a patch file or `pr:N`.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "slug": {
+              "description": "Continue a bug the format's own bug step created.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "run": {
+              "description": "Reproduce it once recorded.",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "kind",
+            "symptom",
+            "expected",
+            "unchanged",
+            "issue",
+            "tests",
+            "candidate",
+            "slug",
+            "run"
+          ]
+        },
+        {
+          "description": "Confirm (or, with `reject`, reject: the input is the reason) a\nbug's reproductions, bound to the digest shown.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "bug_confirm"
+            },
+            "task": {
+              "description": "`<unit>/<task>`.",
+              "type": "string"
+            },
+            "digest": {
+              "description": "The digest the person saw.",
+              "type": "string"
+            },
+            "reject": {
+              "description": "Reject instead.",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "kind",
+            "task",
+            "digest",
+            "reject"
+          ]
+        },
+        {
+          "description": "Keep an already-satisfied bug's reproductions as a regression test:\ncommitted, the task attested (the input is the reason).",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "bug_keep"
+            },
+            "task": {
+              "description": "`<unit>/<task>`.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task"
+          ]
+        },
+        {
+          "description": "Continue a bug: reproduce again, or run its confirmed fix.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "bug_run"
+            },
+            "slug": {
+              "description": "A bug of the format's own bug structure, by slug.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "task": {
+              "description": "Or `<unit>/<task>`.",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "slug",
+            "task"
+          ]
+        },
+        {
+          "description": "Always Allow: approve the waiting command once and add exactly its\nargv to `[commands] allow` (or `[sandbox] network_allow`).",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "allow_always"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            },
+            "call": {
+              "description": "The waiting call's id.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task",
+            "call"
+          ]
+        },
+        {
+          "description": "Add a prefix to a prefix list, as the confirmation of its coverage\npreview (refused when the preview changed or is incomplete).",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "widen_policy"
+            },
+            "key": {
+              "description": "Which list.",
+              "$ref": "#/$defs/PolicyList"
+            },
+            "prefix": {
+              "description": "The prefix (two elements or more).",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "digest": {
+              "description": "The digest of the preview the person saw.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "key",
+            "prefix",
+            "digest"
+          ]
+        },
+        {
+          "description": "Decide the calls waiting in a run's batch together, each once.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "decide_batch"
+            },
+            "run": {
+              "description": "The run.",
+              "type": "string"
+            },
+            "verdict": {
+              "description": "Approve or reject (the input is the reason).",
+              "$ref": "#/$defs/BatchVerdict"
+            },
+            "calls": {
+              "description": "The listed calls decided (a non-empty subset).",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "digest": {
+              "description": "The digest of the list the person saw.",
+              "type": "string"
+            },
+            "resume_asking": {
+              "description": "Start the run's asking budget again.",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "kind",
+            "run",
+            "verdict",
+            "calls",
+            "digest",
+            "resume_asking"
+          ]
+        },
+        {
+          "description": "Write, reject, ask again for, edit or settle a requirement's tests\nat review (the input: the reason, the comment or the content).",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "oracle_tests"
+            },
+            "req": {
+              "description": "The requirement (`US1`).",
+              "type": "string"
+            },
+            "op": {
+              "description": "What to do.",
+              "$ref": "#/$defs/OracleOp"
+            },
+            "path": {
+              "description": "The test (reject, again, edit).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "scenario": {
+              "description": "The ambiguous scenario (reading).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "reading": {
+              "description": "The reading meant (reading).",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Reading"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "req",
+            "op",
+            "path",
+            "scenario",
+            "reading"
+          ]
+        },
+        {
+          "description": "Approve every approvable decision line, freeze the written tests and\nstart the feature's run, asking or on autopilot.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "approve_and_run"
+            },
+            "mode": {
+              "description": "How the run asks.",
+              "$ref": "#/$defs/RunMode"
+            },
+            "grants": {
+              "description": "The grant ids (object-bound grants) an autopilot run holds.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "sheet": {
+              "description": "The sheet's `sha256`: what the person saw approved and frozen.\nRequired from every interface but a terminal command.",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "mode",
+            "grants"
+          ]
+        },
+        {
+          "description": "Add, delete or keep a review comment (the input: its words).",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "comment"
+            },
+            "op": {
+              "description": "What to do.",
+              "$ref": "#/$defs/CommentOp"
+            },
+            "anchor": {
+              "description": "What a new comment is about.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CommentAnchor"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "id": {
+              "description": "The draft (delete, keep).",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "op",
+            "anchor",
+            "id"
+          ]
+        },
+        {
+          "description": "Send the comments as one revision turn.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "comments_send"
+            },
+            "ids": {
+              "description": "The drafts the person saw (empty: every draft in the tray); a\ndraft sent already refuses the send.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "ids"
+          ]
+        },
+        {
+          "description": "Undo the last revision turn: the documents back, byte for byte.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "revision_undo"
+            },
+            "turn": {
+              "description": "The turn the person saw.",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "turn"
+          ]
+        },
+        {
+          "description": "Code-view line comments as one nudge for the task's next attempt.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "code_nudge"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            },
+            "comments": {
+              "description": "The comments.",
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/CodeComment"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "task",
+            "comments"
+          ]
+        },
+        {
+          "description": "Write a story's acceptance tests at a Setup or Foundational task\n(`revoke`: take the decision back) — a decision recorded in the\nstate directory, never an edit of the spec.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "acceptance_at"
+            },
+            "feature": {
+              "description": "The feature.",
+              "type": "string"
+            },
+            "story": {
+              "description": "The story (`US1`).",
+              "type": "string"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            },
+            "revoke": {
+              "description": "Take the decision back.",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "kind",
+            "feature",
+            "story",
+            "task",
+            "revoke"
+          ]
+        },
+        {
+          "description": "Install the bundled `speccoder` Spec Kit preset through Spec Kit's\nown `specify preset add` (`update`: the installed one, replaced).",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "preset_add"
+            },
+            "update": {
+              "description": "Replace an installed older version.",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "kind",
+            "update"
+          ]
+        },
+        {
+          "description": "Plan a new feature through the format's own skills — the creating\nskill, then toward the task list, then the check — stopping where a\nperson decides (`speccoder spec <skill> --through <t>`).",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "plan_through"
+            },
+            "from": {
+              "description": "A new description, or the continuation after a stop.",
+              "$ref": "#/$defs/PlanFrom"
+            },
+            "through": {
+              "description": "How far.",
+              "$ref": "#/$defs/Through"
+            }
+          },
+          "required": [
+            "kind",
+            "from",
+            "through"
+          ]
+        },
+        {
+          "description": "Make `target` a project: the plan the person saw, bound to its digest\n(`speccoder new`).",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "new_project"
+            },
+            "target": {
+              "description": "The folder, as the plan names it.",
+              "type": "string"
+            },
+            "choices": {
+              "description": "What the person chose.",
+              "$ref": "#/$defs/NewChoices"
+            },
+            "plan_digest": {
+              "description": "The digest of the plan on screen.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "target",
+            "choices",
+            "plan_digest"
+          ]
+        },
+        {
+          "description": "Undo the project speccoder created at the dispatch's root\n(`speccoder new --undo`): to the Trash, or a revert of its commit.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "undo_new_project"
+            },
+            "commit": {
+              "description": "speccoder's commit, as recorded.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "commit"
+          ]
+        },
+        {
+          "description": "Clone a repository of the person's with their git (their credentials).",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "clone_repository"
+            },
+            "repo": {
+              "description": "`owner/repo`.",
+              "type": "string"
+            },
+            "target": {
+              "description": "The destination folder.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "repo",
+            "target"
+          ]
+        },
+        {
+          "description": "Copy the bundled sample into the state directory and replay its\nrecorded run strictly (`speccoder sample`).",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "open_sample"
+            },
+            "fresh": {
+              "description": "Replace an existing copy.",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "kind",
+            "fresh"
+          ]
+        },
+        {
+          "description": "Run the sample's own checks, offline, in its copy (the sample's\nend card, *Run the checks yourself*).",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "sample_checks"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        }
+      ]
+    },
+    "PolicyList": {
+      "description": "A prefix list in `speccoder.toml`.",
+      "oneOf": [
+        {
+          "description": "`[commands] allow_prefix`.",
+          "type": "string",
+          "const": "commands_prefix"
+        },
+        {
+          "description": "`[sandbox] network_allow_prefix`.",
+          "type": "string",
+          "const": "network_prefix"
+        }
+      ]
+    },
+    "BatchVerdict": {
+      "description": "A batch decision.",
+      "oneOf": [
+        {
+          "description": "Each listed call once.",
+          "type": "string",
+          "const": "approve"
+        },
+        {
+          "description": "Each listed call, with one reason.",
+          "type": "string",
+          "const": "reject"
+        }
+      ]
+    },
+    "OracleOp": {
+      "description": "What a change to a requirement's tests does.",
+      "oneOf": [
+        {
+          "description": "Write the tests (the author calls, the comparison, the red check,\nthe held-out set).",
+          "type": "string",
+          "const": "write"
+        },
+        {
+          "description": "Drop one test (the input is the reason, required).",
+          "type": "string",
+          "const": "reject"
+        },
+        {
+          "description": "Write one test again (the input is the person's comment).",
+          "type": "string",
+          "const": "again"
+        },
+        {
+          "description": "Replace one test's content with the person's (the input).",
+          "type": "string",
+          "const": "edit"
+        },
+        {
+          "description": "Say which reading of an ambiguous scenario is meant.",
+          "type": "string",
+          "const": "reading"
+        }
+      ]
+    },
+    "Reading": {
+      "description": "One of the two readings of an ambiguous scenario.",
+      "oneOf": [
+        {
+          "description": "The first author's.",
+          "type": "string",
+          "const": "A"
+        },
+        {
+          "description": "The second author's.",
+          "type": "string",
+          "const": "B"
+        }
+      ]
+    },
+    "RunMode": {
+      "description": "How a run started from the review asks for a person.",
+      "oneOf": [
+        {
+          "description": "*Ask on Risky Calls*: a call the policy asks about is asked inline,\nas a run from the interface does.",
+          "type": "string",
+          "const": "ask"
+        },
+        {
+          "description": "*Autopilot*: nothing asks; a call the policy would ask about and no\nticked grant covers is refused for the run and listed afterwards.",
+          "type": "string",
+          "const": "autopilot"
+        }
+      ]
+    },
+    "CommentOp": {
+      "description": "What a comment action does.",
+      "oneOf": [
+        {
+          "description": "A new draft.",
+          "type": "string",
+          "const": "add"
+        },
+        {
+          "description": "Remove a draft.",
+          "type": "string",
+          "const": "delete"
+        },
+        {
+          "description": "Keep an outdated draft.",
+          "type": "string",
+          "const": "keep"
+        }
+      ]
+    },
+    "CommentAnchor": {
+      "description": "What an anchored comment points at.",
+      "oneOf": [
+        {
+          "description": "A passage of a feature document.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "passage"
+            },
+            "path": {
+              "description": "Project-relative path.",
+              "type": "string"
+            },
+            "start_line": {
+              "description": "First line (1-based).",
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "end_line": {
+              "description": "Last line.",
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "quote": {
+              "description": "The words selected.",
+              "type": "string"
+            },
+            "quote_sha256": {
+              "description": "`sha256:<hex>` of the quote (filled when the draft is stored).",
+              "type": "string",
+              "default": ""
+            },
+            "section": {
+              "description": "Its section's heading path (`Requirements › Functional`).",
+              "type": "string",
+              "default": ""
+            }
+          },
+          "required": [
+            "kind",
+            "path",
+            "start_line",
+            "end_line",
+            "quote",
+            "quote_sha256",
+            "section"
+          ]
+        },
+        {
+          "description": "A line of the spec's changes since the last commit.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "diff_line"
+            },
+            "path": {
+              "description": "Project-relative path.",
+              "type": "string"
+            },
+            "side": {
+              "description": "`old` or `new`.",
+              "type": "string"
+            },
+            "line": {
+              "description": "The line (1-based) on that side.",
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "quote": {
+              "description": "The line's text.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "path",
+            "side",
+            "line",
+            "quote"
+          ]
+        },
+        {
+          "description": "A line of a shown visible test.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "test_line"
+            },
+            "req": {
+              "description": "The requirement.",
+              "type": "string"
+            },
+            "path": {
+              "description": "The test's path.",
+              "type": "string"
+            },
+            "line": {
+              "description": "The line (1-based).",
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "quote": {
+              "description": "The line's text.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "req",
+            "path",
+            "line",
+            "quote"
+          ]
+        },
+        {
+          "description": "A finding the review shows.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "finding"
+            },
+            "source": {
+              "description": "`analyze` or `review`.",
+              "type": "string"
+            },
+            "id": {
+              "description": "Its id.",
+              "type": "string"
+            },
+            "text": {
+              "description": "Its text.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "source",
+            "id",
+            "text"
+          ]
+        }
+      ]
+    },
+    "CodeComment": {
+      "description": "One line comment of the Code view.",
+      "type": "object",
+      "properties": {
+        "path": {
+          "description": "Project-relative path.",
+          "type": "string"
+        },
+        "line": {
+          "description": "The line (1-based).",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "quote": {
+          "description": "The code on that line.",
+          "type": "string"
+        },
+        "text": {
+          "description": "The person's words.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "line",
+        "quote",
+        "text"
+      ]
+    },
+    "PlanFrom": {
+      "description": "What plan through starts from.",
+      "oneOf": [
+        {
+          "description": "A new unit from a description.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "create"
+            },
+            "description": {
+              "description": "What it should do, verbatim.",
+              "type": "string"
+            },
+            "source": {
+              "description": "Where the description comes from.",
+              "$ref": "#/$defs/FeatureSource"
+            }
+          },
+          "required": [
+            "kind",
+            "description",
+            "source"
+          ]
+        },
+        {
+          "description": "The next skill after a stop, derived from the unit's files.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "continue"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        }
+      ]
+    },
+    "FeatureSource": {
+      "description": "Where a new feature's description comes from. Later rungs add theirs\n(an Explore brief, a promoted quick change) when they are built.",
+      "oneOf": [
+        {
+          "description": "The person's own words.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "description"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "description": "A GitHub issue's description, verbatim.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "issue"
+            },
+            "number": {
+              "description": "Its number.",
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "kind",
+            "number"
+          ]
+        }
+      ]
+    },
+    "Through": {
+      "description": "How far plan through goes.",
+      "oneOf": [
+        {
+          "description": "The spec only.",
+          "type": "string",
+          "const": "spec"
+        },
+        {
+          "description": "The spec and the plan.",
+          "type": "string",
+          "const": "plan"
+        },
+        {
+          "description": "The spec, the plan and the tasks.",
+          "type": "string",
+          "const": "tasks"
+        },
+        {
+          "description": "Then the format's check of the planning files.",
+          "type": "string",
+          "const": "analyze"
+        }
+      ]
+    },
+    "NewChoices": {
+      "description": "What the person chose; with the folder, everything the plan follows from.",
+      "type": "object",
+      "properties": {
+        "idea": {
+          "description": "What they are building, verbatim (kept for the first feature).",
+          "type": "string"
+        },
+        "stack": {
+          "description": "The stack; `None`: the suggestion.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Stack"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "format": {
+          "description": "The spec format (`speckit`, `openspec`); `None`: Spec Kit.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "extensions": {
+          "description": "Spec Kit extensions.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "no_preset": {
+          "description": "Leave out the speccoder Spec Kit preset.",
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "required": [
+        "idea",
+        "stack",
+        "format",
+        "extensions",
+        "no_preset"
+      ]
+    },
+    "Stack": {
+      "description": "A stack the plan can scaffold, or none.",
+      "oneOf": [
+        {
+          "description": "Rust with cargo.",
+          "type": "string",
+          "const": "rust"
+        },
+        {
+          "description": "Python with uv and pytest.",
+          "type": "string",
+          "const": "python"
+        },
+        {
+          "description": "TypeScript with npm and vitest.",
+          "type": "string",
+          "const": "node"
+        },
+        {
+          "description": "Go modules.",
+          "type": "string",
+          "const": "go"
+        },
+        {
+          "description": "No scaffold: the person adds code.",
+          "type": "string",
+          "const": "none"
+        }
+      ]
+    },
+    "View": {
+      "description": "A read-only place an interface opens instead of running a command.",
+      "oneOf": [
+        {
+          "description": "`doctor`: every check of the setup.",
+          "type": "string",
+          "const": "doctor"
+        },
+        {
+          "description": "`doctor --bug-report`: the setup as a bug report, to copy.",
+          "type": "string",
+          "const": "bug_report"
+        },
+        {
+          "description": "`report`, `status`: every task and its evidence.",
+          "type": "string",
+          "const": "report"
+        },
+        {
+          "description": "`report --live`, `tui`: the run as it goes.",
+          "type": "string",
+          "const": "live"
+        },
+        {
+          "description": "`report --approvals`, `task approve|reject`: the calls waiting,\nshown in full before a decision.",
+          "type": "string",
+          "const": "approvals"
+        },
+        {
+          "description": "`explain CODE`: what a code means and how to resolve it.",
+          "type": "string",
+          "const": "explain"
+        },
+        {
+          "description": "`review`: the spec's review.",
+          "type": "string",
+          "const": "review"
+        },
+        {
+          "description": "`config`: the settings.",
+          "type": "string",
+          "const": "settings"
+        },
+        {
+          "description": "`init`: the setup assistant.",
+          "type": "string",
+          "const": "setup"
+        },
+        {
+          "description": "`bug`: the bug sheet.",
+          "type": "string",
+          "const": "bug"
+        },
+        {
+          "description": "`do`: the quick-change sheet.",
+          "type": "string",
+          "const": "quick_change"
+        },
+        {
+          "description": "`feature similar`: the new-feature sheet.",
+          "type": "string",
+          "const": "new_feature"
+        },
+        {
+          "description": "`new`: the new-project sheet.",
+          "type": "string",
+          "const": "new_project"
+        },
+        {
+          "description": "`auth`: the GitHub sign-in.",
+          "type": "string",
+          "const": "github"
+        },
+        {
+          "description": "A task's drawer (`subject`: its id).",
+          "type": "string",
+          "const": "task"
+        }
+      ]
+    },
+    "AuthorClaim": {
+      "description": "The author's own words, kept only as a labelled claim.",
+      "type": "object",
+      "properties": {
+        "text": {
+          "description": "The words.",
+          "type": "string"
+        },
+        "by": {
+          "description": "Always `author`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "by"
+      ]
+    },
+    "IssueRef": {
+      "description": "The issue a bug was recorded from.",
+      "type": "object",
+      "properties": {
+        "number": {
+          "description": "Its number.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "repo": {
+          "description": "`owner/repo`, when known.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "context_digest": {
+          "description": "The digest of its context-manifest entry (title and body as given\nto the reproduction author).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "number"
+      ]
+    },
+    "Candidate": {
+      "description": "Someone else's fix, judged as the attempt.",
+      "type": "object",
+      "properties": {
+        "origin": {
+          "description": "A patch or a pull request.",
+          "$ref": "#/$defs/CandidateOrigin"
+        },
+        "path": {
+          "description": "The patch file, as given.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "number": {
+          "description": "The pull request's number.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "digest": {
+          "description": "`sha256:<hex>` of the diff.",
+          "type": "string"
+        },
+        "head_sha": {
+          "description": "The pull request's head commit.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "applied": {
+          "description": "It was applied as the attempt.",
+          "type": "boolean"
+        },
+        "refused": {
+          "description": "Why it was not.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CandidateRefusal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "origin",
+        "digest",
+        "applied"
+      ]
+    },
+    "CandidateOrigin": {
+      "description": "Where a foreign fix came from.",
+      "oneOf": [
+        {
+          "description": "A patch file.",
+          "type": "string",
+          "const": "patch"
+        },
+        {
+          "description": "A GitHub pull request.",
+          "type": "string",
+          "const": "pr"
+        }
+      ]
+    },
+    "CandidateRefusal": {
+      "description": "Why a candidate was refused before it was applied.",
+      "type": "object",
+      "properties": {
+        "code": {
+          "description": "`BUG-CANDIDATE-JUDGE` or `BUG-CANDIDATE-APPLY`.",
+          "type": "string"
+        },
+        "paths": {
+          "description": "The judge paths it touches, or the hunks that did not apply.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "code",
+        "paths"
+      ]
+    }
+  },
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/bug.json"
 }

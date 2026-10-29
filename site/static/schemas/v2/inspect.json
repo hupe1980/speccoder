@@ -1,573 +1,82 @@
 {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "inspect: the project snapshot",
+  "description": "Everything discovered about one Spec Kit project.",
+  "type": "object",
+  "properties": {
+    "root": {
+      "description": "Absolute, canonical project root (the directory containing `.specify/`).",
+      "type": "string"
+    },
+    "speckit": {
+      "description": "Spec Kit metadata recorded in the project.",
+      "$ref": "#/$defs/SpeckitMeta"
+    },
+    "constitution": {
+      "description": "State of `.specify/memory/constitution.md`.",
+      "$ref": "#/$defs/ConstitutionState"
+    },
+    "features": {
+      "description": "Feature directories, ordered by numeric prefix then name.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/FeatureRef"
+      }
+    },
+    "selection": {
+      "description": "Which feature was selected, and why.",
+      "$ref": "#/$defs/Selection"
+    },
+    "feature": {
+      "description": "The selected feature, if any.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/FeatureSnapshot"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "diagnostics": {
+      "description": "Problems found while discovering and parsing.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Diagnostic"
+      }
+    },
+    "format": {
+      "description": "The spec format (omitted for Spec Kit, the reference format).",
+      "$ref": "#/$defs/FormatKind"
+    },
+    "openspec": {
+      "description": "What an OpenSpec project adds: its schema, context and the selected\nchange's requirements.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/OpenSpecMeta"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "root",
+    "speckit",
+    "constitution",
+    "features",
+    "selection",
+    "feature",
+    "diagnostics"
+  ],
   "$defs": {
-    "Artifacts": {
-      "description": "Presence of a feature's artifacts.",
-      "properties": {
-        "checklists": {
-          "description": "`checklists/`",
-          "type": "boolean"
-        },
-        "contracts": {
-          "description": "`contracts/`",
-          "type": "boolean"
-        },
-        "data_model": {
-          "description": "`data-model.md`",
-          "type": "boolean"
-        },
-        "plan": {
-          "description": "`plan.md`",
-          "type": "boolean"
-        },
-        "quickstart": {
-          "description": "`quickstart.md`",
-          "type": "boolean"
-        },
-        "research": {
-          "description": "`research.md`",
-          "type": "boolean"
-        },
-        "spec": {
-          "description": "`spec.md`",
-          "type": "boolean"
-        },
-        "tasks": {
-          "description": "`tasks.md`",
-          "type": "boolean"
-        }
-      },
-      "required": [
-        "spec",
-        "plan",
-        "tasks",
-        "research",
-        "data_model",
-        "contracts",
-        "quickstart",
-        "checklists"
-      ],
-      "type": "object"
-    },
-    "ConstitutionState": {
-      "description": "State of the project constitution.",
-      "oneOf": [
-        {
-          "const": "present",
-          "description": "Present and filled in.",
-          "type": "string"
-        },
-        {
-          "const": "unfilled",
-          "description": "Present but still the Spec Kit template.",
-          "type": "string"
-        },
-        {
-          "const": "absent",
-          "description": "Not present.",
-          "type": "string"
-        }
-      ]
-    },
-    "DeltaRequirement": {
-      "description": "One requirement of a change's spec delta.",
-      "properties": {
-        "capability": {
-          "description": "The capability (`openspec/specs/<capability>/spec.md`).",
-          "type": "string"
-        },
-        "line": {
-          "description": "Its heading's line.",
-          "format": "uint32",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "name": {
-          "description": "The requirement's name (the new name for a rename).",
-          "type": "string"
-        },
-        "operation": {
-          "description": "`added`, `modified`, `removed` or `renamed`.",
-          "type": "string"
-        },
-        "path": {
-          "description": "The delta file, relative to the project root.",
-          "type": "string"
-        },
-        "scenarios": {
-          "description": "Its scenarios' names.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        }
-      },
-      "required": [
-        "capability",
-        "operation",
-        "name",
-        "scenarios",
-        "path",
-        "line"
-      ],
-      "type": "object"
-    },
-    "Dependency": {
-      "description": "One direct dependency.",
-      "properties": {
-        "id": {
-          "description": "The task depended on.",
-          "type": "string"
-        },
-        "kind": {
-          "$ref": "#/$defs/DependencyKind",
-          "description": "Where the edge comes from."
-        },
-        "missing": {
-          "description": "The ID does not exist in the task list.",
-          "type": "boolean"
-        }
-      },
-      "required": [
-        "id",
-        "kind",
-        "missing"
-      ],
-      "type": "object"
-    },
-    "DependencyKind": {
-      "description": "Origin of a dependency.",
-      "oneOf": [
-        {
-          "const": "structural",
-          "description": "From phase, subsection or `[P]` structure.",
-          "type": "string"
-        },
-        {
-          "const": "explicit",
-          "description": "Written in the task text.",
-          "type": "string"
-        }
-      ]
-    },
-    "DependencyMode": {
-      "description": "How dependencies within a phase are determined.",
-      "oneOf": [
-        {
-          "const": "structural",
-          "description": "Default template: subsections, `[P]` runs and document order, plus written references.",
-          "type": "string"
-        },
-        {
-          "const": "declared",
-          "description": "The Format line documents `(depends on …)`: written references are the\ncomplete order within a phase; only phase order is added.",
-          "type": "string"
-        },
-        {
-          "const": "chain",
-          "description": "A chain (OpenSpec): each group waits on every earlier group, each task\non the one before it in its group; written references are added.",
-          "type": "string"
-        }
-      ]
-    },
-    "Diagnostic": {
-      "description": "A problem found while discovering or parsing.",
-      "properties": {
-        "code": {
-          "description": "Stable code, e.g. `tasks.duplicate-id`.",
-          "type": "string"
-        },
-        "hint": {
-          "description": "What to do about it.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "line": {
-          "description": "1-based line, if known.",
-          "format": "uint32",
-          "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
-        },
-        "message": {
-          "description": "What is wrong.",
-          "type": "string"
-        },
-        "path": {
-          "description": "Workspace-relative file, if the problem is in one.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "severity": {
-          "$ref": "#/$defs/Severity",
-          "description": "How serious it is."
-        }
-      },
-      "required": [
-        "severity",
-        "code",
-        "path",
-        "line",
-        "message",
-        "hint"
-      ],
-      "type": "object"
-    },
-    "FeatureRef": {
-      "description": "A feature directory under `specs/`.",
-      "properties": {
-        "dir": {
-          "description": "Workspace-relative directory, e.g. `specs/002-speckit-inspect`.",
-          "type": "string"
-        },
-        "name": {
-          "description": "Directory name, e.g. `002-speckit-inspect`.",
-          "type": "string"
-        },
-        "prefix": {
-          "description": "Numeric prefix as written, e.g. `002` or `20260319-143022`.",
-          "type": "string"
-        }
-      },
-      "required": [
-        "dir",
-        "name",
-        "prefix"
-      ],
-      "type": "object"
-    },
-    "FeatureSnapshot": {
-      "description": "The selected feature's artifacts and tasks.",
-      "properties": {
-        "artifacts": {
-          "$ref": "#/$defs/Artifacts",
-          "description": "Which artifacts exist."
-        },
-        "feature": {
-          "$ref": "#/$defs/FeatureRef",
-          "description": "The feature directory."
-        },
-        "schedule": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Schedule"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "Dependencies and states of the tasks; present iff `tasks` is."
-        },
-        "tasks": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/ParsedTasks"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "The parsed task list, if `tasks.md` was readable."
-        }
-      },
-      "required": [
-        "feature",
-        "artifacts",
-        "tasks",
-        "schedule"
-      ],
-      "type": "object"
-    },
-    "FormatKind": {
-      "description": "A spec-driven format.",
-      "oneOf": [
-        {
-          "const": "speckit",
-          "description": "GitHub Spec Kit (`.specify/`, `specs/NNN-name/`).",
-          "type": "string"
-        },
-        {
-          "const": "openspec",
-          "description": "OpenSpec (`openspec/changes/<id>/`).",
-          "type": "string"
-        },
-        {
-          "const": "kiro",
-          "description": "Kiro and cc-sdd (`.kiro/specs/<name>/`).",
-          "type": "string"
-        }
-      ]
-    },
-    "OpenSpecMeta": {
-      "description": "What an OpenSpec project adds to its snapshot.",
-      "properties": {
-        "context": {
-          "description": "`context` of `openspec/config.yaml`, if any.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "requirements": {
-          "description": "The selected change's delta requirements, in file order.",
-          "items": {
-            "$ref": "#/$defs/DeltaRequirement"
-          },
-          "type": "array"
-        },
-        "schema": {
-          "description": "The workflow schema (`spec-driven` is the one speccoder runs).",
-          "type": "string"
-        },
-        "unit_kind": {
-          "description": "What a unit of work is called.",
-          "type": "string"
-        }
-      },
-      "required": [
-        "schema",
-        "context",
-        "unit_kind",
-        "requirements"
-      ],
-      "type": "object"
-    },
-    "ParsedTasks": {
-      "description": "A parsed `tasks.md`.",
-      "properties": {
-        "dependency_mode": {
-          "$ref": "#/$defs/DependencyMode",
-          "description": "How dependencies within a phase are determined."
-        },
-        "path": {
-          "description": "Workspace-relative path of the file.",
-          "type": "string"
-        },
-        "phases": {
-          "description": "Level-2 headings, in document order.",
-          "items": {
-            "$ref": "#/$defs/Phase"
-          },
-          "type": "array"
-        },
-        "tasks": {
-          "description": "Tasks, in document order.",
-          "items": {
-            "$ref": "#/$defs/Task"
-          },
-          "type": "array"
-        },
-        "totals": {
-          "$ref": "#/$defs/Totals",
-          "description": "Counts over `tasks`."
-        }
-      },
-      "required": [
-        "path",
-        "phases",
-        "tasks",
-        "totals",
-        "dependency_mode"
-      ],
-      "type": "object"
-    },
-    "Phase": {
-      "description": "A level-2 heading of `tasks.md`.",
-      "properties": {
-        "line": {
-          "description": "1-based line of the heading.",
-          "format": "uint32",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "section_hash": {
-          "description": "SHA-256 (hex) of the section, heading through the byte before the next phase.",
-          "type": "string"
-        },
-        "title": {
-          "description": "Heading text, e.g. `Phase 1: Setup`.",
-          "type": "string"
-        }
-      },
-      "required": [
-        "title",
-        "line",
-        "section_hash"
-      ],
-      "type": "object"
-    },
-    "Schedule": {
-      "description": "Which tasks can start now, and what blocks the rest.",
-      "properties": {
-        "tasks": {
-          "description": "One entry per task, in document order.",
-          "items": {
-            "$ref": "#/$defs/ScheduledTask"
-          },
-          "type": "array"
-        },
-        "totals": {
-          "$ref": "#/$defs/ScheduleTotals",
-          "description": "Counts over `tasks`."
-        }
-      },
-      "required": [
-        "tasks",
-        "totals"
-      ],
-      "type": "object"
-    },
-    "ScheduleTotals": {
-      "description": "Schedule counts.",
-      "properties": {
-        "blocked": {
-          "description": "Tasks waiting on something.",
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "done": {
-          "description": "Ticked tasks.",
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "ready": {
-          "description": "Tasks that can start now.",
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        }
-      },
-      "required": [
-        "done",
-        "ready",
-        "blocked"
-      ],
-      "type": "object"
-    },
-    "ScheduledTask": {
-      "description": "A task's dependencies and state.",
-      "properties": {
-        "blocked_by": {
-          "description": "Open, missing or cyclic dependencies, in document order.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "depends_on": {
-          "description": "Direct dependencies.",
-          "items": {
-            "$ref": "#/$defs/Dependency"
-          },
-          "type": "array"
-        },
-        "id": {
-          "description": "Task ID.",
-          "type": "string"
-        },
-        "state": {
-          "$ref": "#/$defs/TaskState",
-          "description": "Done, ready or blocked."
-        }
-      },
-      "required": [
-        "id",
-        "state",
-        "depends_on",
-        "blocked_by"
-      ],
-      "type": "object"
-    },
-    "Selection": {
-      "description": "How the feature was selected.",
-      "properties": {
-        "feature": {
-          "description": "Name of the selected feature.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "reason": {
-          "$ref": "#/$defs/SelectionReason",
-          "description": "Why this feature (or none) was selected."
-        }
-      },
-      "required": [
-        "reason",
-        "feature"
-      ],
-      "type": "object"
-    },
-    "SelectionReason": {
-      "description": "Why a feature was selected.",
-      "oneOf": [
-        {
-          "const": "argument",
-          "description": "Named on the command line.",
-          "type": "string"
-        },
-        {
-          "const": "environment",
-          "description": "From the `SPECIFY_FEATURE_DIRECTORY` environment variable.",
-          "type": "string"
-        },
-        {
-          "const": "recorded",
-          "description": "Recorded in `.specify/feature.json`.",
-          "type": "string"
-        },
-        {
-          "const": "only_feature",
-          "description": "The project has exactly one feature.",
-          "type": "string"
-        },
-        {
-          "const": "none",
-          "description": "Nothing was selected.",
-          "type": "string"
-        }
-      ]
-    },
-    "Severity": {
-      "description": "Diagnostic severity.",
-      "oneOf": [
-        {
-          "const": "error",
-          "description": "Unsafe to act on.",
-          "type": "string"
-        },
-        {
-          "const": "warning",
-          "description": "Suspicious but usable.",
-          "type": "string"
-        },
-        {
-          "const": "info",
-          "description": "For information.",
-          "type": "string"
-        }
-      ]
-    },
     "SpeckitMeta": {
       "description": "Spec Kit metadata from `.specify/*.json`; each field is `None` when absent.",
+      "type": "object",
       "properties": {
-        "current_feature": {
-          "description": "`feature_directory` from `feature.json`, as recorded.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "feature_numbering": {
-          "description": "`sequential` or `timestamp`.",
+        "version": {
+          "description": "`speckit_version` from `init-options.json`.",
           "type": [
             "string",
             "null"
@@ -587,8 +96,15 @@
             "null"
           ]
         },
-        "version": {
-          "description": "`speckit_version` from `init-options.json`.",
+        "feature_numbering": {
+          "description": "`sequential` or `timestamp`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "current_feature": {
+          "description": "`feature_directory` from `feature.json`, as recorded.",
           "type": [
             "string",
             "null"
@@ -601,61 +117,296 @@
         "script",
         "feature_numbering",
         "current_feature"
-      ],
-      "type": "object"
+      ]
+    },
+    "ConstitutionState": {
+      "description": "State of the project constitution.",
+      "oneOf": [
+        {
+          "description": "Present and filled in.",
+          "type": "string",
+          "const": "present"
+        },
+        {
+          "description": "Present but still the Spec Kit template.",
+          "type": "string",
+          "const": "unfilled"
+        },
+        {
+          "description": "Not present.",
+          "type": "string",
+          "const": "absent"
+        }
+      ]
+    },
+    "FeatureRef": {
+      "description": "A feature directory under `specs/`.",
+      "type": "object",
+      "properties": {
+        "dir": {
+          "description": "Workspace-relative directory, e.g. `specs/002-speckit-inspect`.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Directory name, e.g. `002-speckit-inspect`.",
+          "type": "string"
+        },
+        "prefix": {
+          "description": "Numeric prefix as written, e.g. `002` or `20260319-143022`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "dir",
+        "name",
+        "prefix"
+      ]
+    },
+    "Selection": {
+      "description": "How the feature was selected.",
+      "type": "object",
+      "properties": {
+        "reason": {
+          "description": "Why this feature (or none) was selected.",
+          "$ref": "#/$defs/SelectionReason"
+        },
+        "feature": {
+          "description": "Name of the selected feature.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "reason",
+        "feature"
+      ]
+    },
+    "SelectionReason": {
+      "description": "Why a feature was selected.",
+      "oneOf": [
+        {
+          "description": "Named on the command line.",
+          "type": "string",
+          "const": "argument"
+        },
+        {
+          "description": "From the `SPECIFY_FEATURE_DIRECTORY` environment variable.",
+          "type": "string",
+          "const": "environment"
+        },
+        {
+          "description": "Recorded in `.specify/feature.json`.",
+          "type": "string",
+          "const": "recorded"
+        },
+        {
+          "description": "The project has exactly one feature.",
+          "type": "string",
+          "const": "only_feature"
+        },
+        {
+          "description": "Nothing was selected.",
+          "type": "string",
+          "const": "none"
+        }
+      ]
+    },
+    "FeatureSnapshot": {
+      "description": "The selected feature's artifacts and tasks.",
+      "type": "object",
+      "properties": {
+        "feature": {
+          "description": "The feature directory.",
+          "$ref": "#/$defs/FeatureRef"
+        },
+        "artifacts": {
+          "description": "Which artifacts exist.",
+          "$ref": "#/$defs/Artifacts"
+        },
+        "tasks": {
+          "description": "The parsed task list, if `tasks.md` was readable.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ParsedTasks"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "schedule": {
+          "description": "Dependencies and states of the tasks; present iff `tasks` is.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Schedule"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "feature",
+        "artifacts",
+        "tasks",
+        "schedule"
+      ]
+    },
+    "Artifacts": {
+      "description": "Presence of a feature's artifacts.",
+      "type": "object",
+      "properties": {
+        "spec": {
+          "description": "`spec.md`",
+          "type": "boolean"
+        },
+        "plan": {
+          "description": "`plan.md`",
+          "type": "boolean"
+        },
+        "tasks": {
+          "description": "`tasks.md`",
+          "type": "boolean"
+        },
+        "research": {
+          "description": "`research.md`",
+          "type": "boolean"
+        },
+        "data_model": {
+          "description": "`data-model.md`",
+          "type": "boolean"
+        },
+        "contracts": {
+          "description": "`contracts/`",
+          "type": "boolean"
+        },
+        "quickstart": {
+          "description": "`quickstart.md`",
+          "type": "boolean"
+        },
+        "checklists": {
+          "description": "`checklists/`",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "spec",
+        "plan",
+        "tasks",
+        "research",
+        "data_model",
+        "contracts",
+        "quickstart",
+        "checklists"
+      ]
+    },
+    "ParsedTasks": {
+      "description": "A parsed `tasks.md`.",
+      "type": "object",
+      "properties": {
+        "path": {
+          "description": "Workspace-relative path of the file.",
+          "type": "string"
+        },
+        "phases": {
+          "description": "Level-2 headings, in document order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Phase"
+          }
+        },
+        "tasks": {
+          "description": "Tasks, in document order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Task"
+          }
+        },
+        "totals": {
+          "description": "Counts over `tasks`.",
+          "$ref": "#/$defs/Totals"
+        },
+        "dependency_mode": {
+          "description": "How dependencies within a phase are determined.",
+          "$ref": "#/$defs/DependencyMode"
+        }
+      },
+      "required": [
+        "path",
+        "phases",
+        "tasks",
+        "totals",
+        "dependency_mode"
+      ]
+    },
+    "Phase": {
+      "description": "A level-2 heading of `tasks.md`.",
+      "type": "object",
+      "properties": {
+        "title": {
+          "description": "Heading text, e.g. `Phase 1: Setup`.",
+          "type": "string"
+        },
+        "line": {
+          "description": "1-based line of the heading.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "section_hash": {
+          "description": "SHA-256 (hex) of the section, heading through the byte before the next phase.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "line",
+        "section_hash"
+      ]
     },
     "Task": {
       "description": "One task line of `tasks.md`, as written.",
+      "type": "object",
       "properties": {
-        "byte_range": {
-          "description": "Byte range `[start, end)` of the list item in the file.",
-          "items": {
-            "format": "uint",
-            "minimum": 0,
-            "type": "integer"
-          },
-          "maxItems": 2,
-          "minItems": 2,
-          "type": "array"
-        },
-        "depends_on": {
-          "description": "Task IDs named after `depends on` / `after` in the text, in order.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
+        "id": {
+          "description": "Task ID, e.g. `T014`.",
+          "type": "string"
         },
         "done": {
           "description": "`[x]` or `[X]`.",
           "type": "boolean"
         },
-        "id": {
-          "description": "Task ID, e.g. `T014`.",
-          "type": "string"
-        },
-        "line": {
-          "description": "1-based line.",
-          "format": "uint32",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "line_hash": {
-          "description": "SHA-256 (hex) of the task's line, without its line ending.",
-          "type": "string"
-        },
         "parallel": {
           "description": "Carries the `[P]` marker.",
           "type": "boolean"
         },
-        "phase": {
-          "description": "Enclosing level-2 heading.",
+        "story": {
+          "description": "Story label without brackets, e.g. `US1`.",
           "type": [
             "string",
             "null"
           ]
         },
-        "story": {
-          "description": "Story label without brackets, e.g. `US1`.",
+        "yours": {
+          "description": "Carries the `[YOU]` label: a step only a person can take.",
+          "type": "boolean"
+        },
+        "title": {
+          "description": "Text after the ID and markers.",
+          "type": "string"
+        },
+        "depends_on": {
+          "description": "Task IDs named after `depends on` / `after` in the text, in order.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "phase": {
+          "description": "Enclosing level-2 heading.",
           "type": [
             "string",
             "null"
@@ -668,13 +419,26 @@
             "null"
           ]
         },
-        "title": {
-          "description": "Text after the ID and markers.",
-          "type": "string"
+        "line": {
+          "description": "1-based line.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
         },
-        "yours": {
-          "description": "Carries the `[YOU]` label: a step only a person can take.",
-          "type": "boolean"
+        "byte_range": {
+          "description": "Byte range `[start, end)` of the list item in the file.",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "line_hash": {
+          "description": "SHA-256 (hex) of the task's line, without its line ending.",
+          "type": "string"
         }
       },
       "required": [
@@ -689,129 +453,365 @@
         "line",
         "byte_range",
         "line_hash"
-      ],
-      "type": "object"
-    },
-    "TaskState": {
-      "description": "Whether a task can start.",
-      "oneOf": [
-        {
-          "const": "done",
-          "description": "Ticked in `tasks.md`.",
-          "type": "string"
-        },
-        {
-          "const": "ready",
-          "description": "Open, and every dependency is done.",
-          "type": "string"
-        },
-        {
-          "const": "blocked",
-          "description": "Open, and some dependency is open, missing or part of a cycle.",
-          "type": "string"
-        }
       ]
     },
     "Totals": {
       "description": "Task counts.",
+      "type": "object",
       "properties": {
+        "total": {
+          "description": "All tasks.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
         "done": {
           "description": "Ticked tasks.",
+          "type": "integer",
           "format": "uint",
-          "minimum": 0,
-          "type": "integer"
+          "minimum": 0
         },
         "open": {
           "description": "Unticked tasks.",
+          "type": "integer",
           "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "total": {
-          "description": "All tasks.",
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
+          "minimum": 0
         }
       },
       "required": [
         "total",
         "done",
         "open"
-      ],
-      "type": "object"
-    }
-  },
-  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/inspect.json",
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Everything discovered about one Spec Kit project.",
-  "properties": {
-    "constitution": {
-      "$ref": "#/$defs/ConstitutionState",
-      "description": "State of `.specify/memory/constitution.md`."
+      ]
     },
-    "diagnostics": {
-      "description": "Problems found while discovering and parsing.",
-      "items": {
-        "$ref": "#/$defs/Diagnostic"
-      },
-      "type": "array"
-    },
-    "feature": {
-      "anyOf": [
+    "DependencyMode": {
+      "description": "How dependencies within a phase are determined.",
+      "oneOf": [
         {
-          "$ref": "#/$defs/FeatureSnapshot"
+          "description": "Default template: subsections, `[P]` runs and document order, plus written references.",
+          "type": "string",
+          "const": "structural"
         },
         {
-          "type": "null"
-        }
-      ],
-      "description": "The selected feature, if any."
-    },
-    "features": {
-      "description": "Feature directories, ordered by numeric prefix then name.",
-      "items": {
-        "$ref": "#/$defs/FeatureRef"
-      },
-      "type": "array"
-    },
-    "format": {
-      "$ref": "#/$defs/FormatKind",
-      "description": "The spec format (omitted for Spec Kit, the reference format)."
-    },
-    "openspec": {
-      "anyOf": [
-        {
-          "$ref": "#/$defs/OpenSpecMeta"
+          "description": "The Format line documents `(depends on …)`: written references are the\ncomplete order within a phase; only phase order is added.",
+          "type": "string",
+          "const": "declared"
         },
         {
-          "type": "null"
+          "description": "A chain (OpenSpec): each group waits on every earlier group, each task\non the one before it in its group; written references are added.",
+          "type": "string",
+          "const": "chain"
         }
-      ],
-      "description": "What an OpenSpec project adds: its schema, context and the selected\nchange's requirements."
+      ]
     },
-    "root": {
-      "description": "Absolute, canonical project root (the directory containing `.specify/`).",
-      "type": "string"
+    "Schedule": {
+      "description": "Which tasks can start now, and what blocks the rest.",
+      "type": "object",
+      "properties": {
+        "tasks": {
+          "description": "One entry per task, in document order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ScheduledTask"
+          }
+        },
+        "totals": {
+          "description": "Counts over `tasks`.",
+          "$ref": "#/$defs/ScheduleTotals"
+        }
+      },
+      "required": [
+        "tasks",
+        "totals"
+      ]
     },
-    "selection": {
-      "$ref": "#/$defs/Selection",
-      "description": "Which feature was selected, and why."
+    "ScheduledTask": {
+      "description": "A task's dependencies and state.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "Task ID.",
+          "type": "string"
+        },
+        "state": {
+          "description": "Done, ready or blocked.",
+          "$ref": "#/$defs/TaskState"
+        },
+        "depends_on": {
+          "description": "Direct dependencies.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Dependency"
+          }
+        },
+        "blocked_by": {
+          "description": "Open, missing or cyclic dependencies, in document order.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "state",
+        "depends_on",
+        "blocked_by"
+      ]
     },
-    "speckit": {
-      "$ref": "#/$defs/SpeckitMeta",
-      "description": "Spec Kit metadata recorded in the project."
+    "TaskState": {
+      "description": "Whether a task can start.",
+      "oneOf": [
+        {
+          "description": "Ticked in `tasks.md`.",
+          "type": "string",
+          "const": "done"
+        },
+        {
+          "description": "Open, and every dependency is done.",
+          "type": "string",
+          "const": "ready"
+        },
+        {
+          "description": "Open, and some dependency is open, missing or part of a cycle.",
+          "type": "string",
+          "const": "blocked"
+        }
+      ]
+    },
+    "Dependency": {
+      "description": "One direct dependency.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "The task depended on.",
+          "type": "string"
+        },
+        "kind": {
+          "description": "Where the edge comes from.",
+          "$ref": "#/$defs/DependencyKind"
+        },
+        "missing": {
+          "description": "The ID does not exist in the task list.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "missing"
+      ]
+    },
+    "DependencyKind": {
+      "description": "Origin of a dependency.",
+      "oneOf": [
+        {
+          "description": "From phase, subsection or `[P]` structure.",
+          "type": "string",
+          "const": "structural"
+        },
+        {
+          "description": "Written in the task text.",
+          "type": "string",
+          "const": "explicit"
+        }
+      ]
+    },
+    "ScheduleTotals": {
+      "description": "Schedule counts.",
+      "type": "object",
+      "properties": {
+        "done": {
+          "description": "Ticked tasks.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "ready": {
+          "description": "Tasks that can start now.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "blocked": {
+          "description": "Tasks waiting on something.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "done",
+        "ready",
+        "blocked"
+      ]
+    },
+    "Diagnostic": {
+      "description": "A problem found while discovering or parsing.",
+      "type": "object",
+      "properties": {
+        "severity": {
+          "description": "How serious it is.",
+          "$ref": "#/$defs/Severity"
+        },
+        "code": {
+          "description": "Stable code, e.g. `tasks.duplicate-id`.",
+          "type": "string"
+        },
+        "path": {
+          "description": "Workspace-relative file, if the problem is in one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "line": {
+          "description": "1-based line, if known.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "message": {
+          "description": "What is wrong.",
+          "type": "string"
+        },
+        "hint": {
+          "description": "What to do about it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "severity",
+        "code",
+        "path",
+        "line",
+        "message",
+        "hint"
+      ]
+    },
+    "Severity": {
+      "description": "Diagnostic severity.",
+      "oneOf": [
+        {
+          "description": "Unsafe to act on.",
+          "type": "string",
+          "const": "error"
+        },
+        {
+          "description": "Suspicious but usable.",
+          "type": "string",
+          "const": "warning"
+        },
+        {
+          "description": "For information.",
+          "type": "string",
+          "const": "info"
+        }
+      ]
+    },
+    "FormatKind": {
+      "description": "A spec-driven format.",
+      "oneOf": [
+        {
+          "description": "GitHub Spec Kit (`.specify/`, `specs/NNN-name/`).",
+          "type": "string",
+          "const": "speckit"
+        },
+        {
+          "description": "OpenSpec (`openspec/changes/<id>/`).",
+          "type": "string",
+          "const": "openspec"
+        },
+        {
+          "description": "Kiro and cc-sdd (`.kiro/specs/<name>/`).",
+          "type": "string",
+          "const": "kiro"
+        }
+      ]
+    },
+    "OpenSpecMeta": {
+      "description": "What an OpenSpec project adds to its snapshot.",
+      "type": "object",
+      "properties": {
+        "schema": {
+          "description": "The workflow schema (`spec-driven` is the one speccoder runs).",
+          "type": "string"
+        },
+        "context": {
+          "description": "`context` of `openspec/config.yaml`, if any.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "unit_kind": {
+          "description": "What a unit of work is called.",
+          "type": "string"
+        },
+        "requirements": {
+          "description": "The selected change's delta requirements, in file order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DeltaRequirement"
+          }
+        }
+      },
+      "required": [
+        "schema",
+        "context",
+        "unit_kind",
+        "requirements"
+      ]
+    },
+    "DeltaRequirement": {
+      "description": "One requirement of a change's spec delta.",
+      "type": "object",
+      "properties": {
+        "capability": {
+          "description": "The capability (`openspec/specs/<capability>/spec.md`).",
+          "type": "string"
+        },
+        "operation": {
+          "description": "`added`, `modified`, `removed` or `renamed`.",
+          "type": "string"
+        },
+        "name": {
+          "description": "The requirement's name (the new name for a rename).",
+          "type": "string"
+        },
+        "scenarios": {
+          "description": "Its scenarios' names.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "path": {
+          "description": "The delta file, relative to the project root.",
+          "type": "string"
+        },
+        "line": {
+          "description": "Its heading's line.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "capability",
+        "operation",
+        "name",
+        "scenarios",
+        "path",
+        "line"
+      ]
     }
   },
-  "required": [
-    "root",
-    "speckit",
-    "constitution",
-    "features",
-    "selection",
-    "feature",
-    "diagnostics"
-  ],
-  "title": "inspect: the project snapshot",
-  "type": "object"
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/inspect.json"
 }

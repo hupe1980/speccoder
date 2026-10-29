@@ -41,6 +41,7 @@ Every result that is not plainly `ok` names a code — `error[CODE]`, `stopped[C
 | [`FEATURE-UNKNOWN`](#feature-unknown) | error | 12 | no feature has that name or number |
 | [`CONFIG`](#config) | error | 13 | the configuration or the environment is not usable |
 | [`NO-STATE-DIR`](#no-state-dir) | error | 13 | speccoder has nowhere to keep its state |
+| [`EXECUTOR-LOGIN`](#executor-login) | error | 23 | the external agent needs signing in |
 | [`SANDBOX-UNAVAILABLE`](#sandbox-unavailable) | error | 13 | the OS sandbox is not available and the project requires it |
 | [`GITHUB-AUTH`](#github-auth) | error | 1 | not signed in to GitHub |
 | [`GITHUB-FAILED`](#github-failed) | error | 1 | the GitHub API could not do it |
@@ -383,6 +384,15 @@ Speccoder has nowhere to keep its state.
 Journals, worktrees and live progress live in a state directory: `$SPECCODER_STATE_DIR`, else `$XDG_STATE_HOME/speccoder`, else `~/.local/state/speccoder`. None of these variables is set.
 
 - `export SPECCODER_STATE_DIR="$PWD/.speccoder-state"`
+
+### EXECUTOR-LOGIN
+
+The external agent needs signing in.
+
+The `[executor]` agent answered over ACP that it needs signing in (or failed its session while it offered ways to sign in). Nothing was attempted and the task is unchanged. speccoder never signs in for you and stores no credential: the agent's own login runs in a terminal of yours.
+
+- Run the agent's login in your terminal (the agent names it; for Copilot `copilot login`, for OpenCode `opencode auth login`)
+- `speccoder doctor`
 
 ### SANDBOX-UNAVAILABLE
 

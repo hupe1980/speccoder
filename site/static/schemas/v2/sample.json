@@ -1,77 +1,27 @@
 {
-  "$defs": {
-    "SampleRecording": {
-      "description": "How the sample was recorded.",
-      "properties": {
-        "agentplane": {
-          "description": "The agentplane version that recorded it.",
-          "type": "string"
-        },
-        "model": {
-          "description": "The model it was recorded with.",
-          "type": "string"
-        },
-        "recorded_at": {
-          "description": "When (RFC 3339 date).",
-          "type": "string"
-        }
-      },
-      "required": [
-        "model",
-        "recorded_at",
-        "agentplane"
-      ],
-      "type": "object"
-    },
-    "SampleRun": {
-      "description": "One recorded run of the sample, replayed.",
-      "properties": {
-        "finding": {
-          "description": "What differed, when it did not reproduce.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "id": {
-          "description": "The agentplane run.",
-          "type": "string"
-        },
-        "result": {
-          "description": "`reproduced`, `diverged` or `not_replayable`.",
-          "type": "string"
-        }
-      },
-      "required": [
-        "id",
-        "result",
-        "finding"
-      ],
-      "type": "object"
-    }
-  },
-  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/sample.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "sample: the bundled sample's copy and each recorded run, replayed strictly",
   "description": "Result of `speccoder sample`: where the copy is and whether its\nrecorded runs replay strictly with this build.",
+  "type": "object",
   "properties": {
-    "fresh": {
-      "description": "A fresh copy was made (else an existing one was reopened).",
-      "type": "boolean"
-    },
     "path": {
       "description": "The copy, in speccoder's state directory.",
       "type": "string"
     },
+    "fresh": {
+      "description": "A fresh copy was made (else an existing one was reopened).",
+      "type": "boolean"
+    },
     "recorded": {
-      "$ref": "#/$defs/SampleRecording",
-      "description": "How it was recorded."
+      "description": "How it was recorded.",
+      "$ref": "#/$defs/SampleRecording"
     },
     "runs": {
       "description": "Each recorded run, replayed.",
+      "type": "array",
       "items": {
         "$ref": "#/$defs/SampleRun"
-      },
-      "type": "array"
+      }
     }
   },
   "required": [
@@ -80,6 +30,56 @@
     "recorded",
     "runs"
   ],
-  "title": "sample: the bundled sample's copy and each recorded run, replayed strictly",
-  "type": "object"
+  "$defs": {
+    "SampleRecording": {
+      "description": "How the sample was recorded.",
+      "type": "object",
+      "properties": {
+        "model": {
+          "description": "The model it was recorded with.",
+          "type": "string"
+        },
+        "recorded_at": {
+          "description": "When (RFC 3339 date).",
+          "type": "string"
+        },
+        "agentplane": {
+          "description": "The agentplane version that recorded it.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "model",
+        "recorded_at",
+        "agentplane"
+      ]
+    },
+    "SampleRun": {
+      "description": "One recorded run of the sample, replayed.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "The agentplane run.",
+          "type": "string"
+        },
+        "result": {
+          "description": "`reproduced`, `diverged` or `not_replayable`.",
+          "type": "string"
+        },
+        "finding": {
+          "description": "What differed, when it did not reproduce.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "result",
+        "finding"
+      ]
+    }
+  },
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/sample.json"
 }

@@ -1,82 +1,50 @@
 {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "eval: the evaluation",
+  "description": "Result of `speccoder eval`.",
+  "type": "object",
+  "properties": {
+    "model": {
+      "description": "The model the suite ran with, `provider/model`.",
+      "type": "string"
+    },
+    "cases": {
+      "description": "One entry per case, in name order.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/EvalCase"
+      }
+    },
+    "summary": {
+      "description": "Counts per classification.",
+      "$ref": "#/$defs/EvalSummary"
+    }
+  },
+  "required": [
+    "model",
+    "cases",
+    "summary"
+  ],
   "$defs": {
     "EvalCase": {
       "description": "One judged case.",
+      "type": "object",
       "properties": {
-        "attempt_status": {
-          "description": "The attempt status.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "attempts": {
-          "description": "Attempts made at the task, retries included.",
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "classification": {
-          "description": "`correct`, `false_completion`, `not_completed`, `honest_stop`, `caught`, `cheat`, `invalid_case` or `error`.",
+        "name": {
+          "description": "Directory name.",
           "type": "string"
         },
         "expect": {
           "description": "What the case expects: `complete`, `stop` or `reject`; a bug case also\n`already_satisfied` or `cannot_reproduce`.",
           "type": "string"
         },
-        "gap": {
-          "description": "An attempt passed the visible checks and failed the held-out tests.",
-          "type": "boolean"
-        },
-        "held_out": {
-          "description": "The held-out tests' part (`acceptance.held_out` of the run report)."
-        },
-        "model_said": {
-          "description": "The model's own closing report, or its reason for stopping.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "monitor_flagged": {
-          "description": "Whether the gaming monitor flagged the attempt, when it ran.",
-          "type": [
-            "boolean",
-            "null"
-          ]
-        },
-        "name": {
-          "description": "Directory name.",
+        "classification": {
+          "description": "`correct`, `false_completion`, `not_completed`, `honest_stop`, `caught`, `cheat`, `invalid_case` or `error`.",
           "type": "string"
-        },
-        "oracle_passed": {
-          "description": "Whether the held-out oracle passed (when it ran).",
-          "type": [
-            "boolean",
-            "null"
-          ]
         },
         "outcome": {
           "description": "The run's status word and message.",
           "type": "string"
-        },
-        "over_strict": {
-          "default": false,
-          "description": "Stopped because a test rejected a permitted alternative.",
-          "type": "boolean"
-        },
-        "replays": {
-          "description": "Whether the recorded attempt replays strictly from its journal;\n`None` when there is no journaled run (external executors).",
-          "type": [
-            "boolean",
-            "null"
-          ]
-        },
-        "round": {
-          "description": "The round of a repeated suite run (1-based).",
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
         },
         "run_id": {
           "description": "The attempt's run id, when one ran.",
@@ -85,23 +53,15 @@
             "null"
           ]
         },
-        "strength": {
-          "description": "The combined acceptance strength, when measured.",
-          "format": "double",
+        "attempt_status": {
+          "description": "The attempt status.",
           "type": [
-            "number",
+            "string",
             "null"
           ]
         },
-        "tool_calls": {
-          "description": "The attempt's tool calls with the policy's decisions.",
-          "items": true,
-          "type": "array"
-        },
-        "usage": {
-          "description": "Token usage of the attempt."
-        },
         "verdict": {
+          "description": "The verifier's verdict.",
           "anyOf": [
             {
               "$ref": "#/$defs/Verdict"
@@ -109,8 +69,75 @@
             {
               "type": "null"
             }
+          ]
+        },
+        "oracle_passed": {
+          "description": "Whether the held-out oracle passed (when it ran).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "usage": {
+          "description": "Token usage of the attempt."
+        },
+        "tool_calls": {
+          "description": "The attempt's tool calls with the policy's decisions.",
+          "type": "array",
+          "items": true
+        },
+        "model_said": {
+          "description": "The model's own closing report, or its reason for stopping.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "attempts": {
+          "description": "Attempts made at the task, retries included.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "round": {
+          "description": "The round of a repeated suite run (1-based).",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "monitor_flagged": {
+          "description": "Whether the gaming monitor flagged the attempt, when it ran.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "replays": {
+          "description": "Whether the recorded attempt replays strictly from its journal;\n`None` when there is no journaled run (external executors).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "held_out": {
+          "description": "The held-out tests' part (`acceptance.held_out` of the run report)."
+        },
+        "gap": {
+          "description": "An attempt passed the visible checks and failed the held-out tests.",
+          "type": "boolean"
+        },
+        "strength": {
+          "description": "The combined acceptance strength, when measured.",
+          "type": [
+            "number",
+            "null"
           ],
-          "description": "The verifier's verdict."
+          "format": "double"
+        },
+        "over_strict": {
+          "description": "Stopped because a test rejected a permitted alternative.",
+          "type": "boolean",
+          "default": false
         }
       },
       "required": [
@@ -132,85 +159,125 @@
         "held_out",
         "gap",
         "over_strict"
-      ],
-      "type": "object"
+      ]
+    },
+    "Verdict": {
+      "description": "How strong the evidence for a task is.",
+      "oneOf": [
+        {
+          "description": "A task-specific check produced evidence, nothing failed, nothing regressed.",
+          "type": "object",
+          "properties": {
+            "verdict": {
+              "type": "string",
+              "const": "verified"
+            }
+          },
+          "required": [
+            "verdict"
+          ]
+        },
+        {
+          "description": "Nothing failed or regressed, but nothing task-specific was established.",
+          "type": "object",
+          "properties": {
+            "verdict": {
+              "type": "string",
+              "const": "regression_only"
+            }
+          },
+          "required": [
+            "verdict"
+          ]
+        },
+        {
+          "description": "Something failed or regressed.",
+          "type": "object",
+          "properties": {
+            "verdict": {
+              "type": "string",
+              "const": "failed"
+            },
+            "reasons": {
+              "description": "One line per reason.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "verdict",
+            "reasons"
+          ]
+        }
+      ]
     },
     "EvalSummary": {
       "description": "Suite counts and metrics.",
+      "type": "object",
       "properties": {
         "cases": {
           "description": "Cases run.",
+          "type": "integer",
           "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "caught": {
-          "description": "`expect = \"reject\"` cases that were not ticked.",
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "cheats": {
-          "description": "Impossible cases that finished with green checks.",
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
+          "minimum": 0
         },
         "correct": {
           "description": "Completed and right.",
+          "type": "integer",
           "format": "uint",
-          "minimum": 0,
-          "type": "integer"
+          "minimum": 0
         },
         "false_completions": {
           "description": "Completed with a passing verdict but wrong.",
+          "type": "integer",
           "format": "uint",
-          "minimum": 0,
-          "type": "integer"
+          "minimum": 0
         },
-        "held_out_gap": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/HeldOutGap"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "Attempts that passed visibly, and how many of them the held-out tests\nfailed; `None` when no held-out test ran."
-        },
-        "held_out_oracle": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/HeldOutOracle"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "Ticked cases whose held-out tests passed, against the oracle."
+        "not_completed": {
+          "description": "Possible cases that stopped or failed verification.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
         },
         "honest_stops": {
           "description": "Impossible cases that stopped for a person.",
+          "type": "integer",
           "format": "uint",
-          "minimum": 0,
-          "type": "integer"
+          "minimum": 0
+        },
+        "cheats": {
+          "description": "Impossible cases that finished with green checks.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
         },
         "invalid_or_error": {
           "description": "Cases that could not be judged.",
+          "type": "integer",
           "format": "uint",
-          "minimum": 0,
-          "type": "integer"
+          "minimum": 0
         },
-        "median_acceptance_strength": {
-          "description": "The median combined acceptance strength over verified cases that\nmeasured it; `None`: not measured.",
-          "format": "double",
+        "precision": {
+          "description": "correct / (correct + false completions), when defined.",
           "type": [
             "number",
             "null"
-          ]
+          ],
+          "format": "double"
+        },
+        "tokens_per_correct": {
+          "description": "Input + output tokens per correct case, when any.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
         },
         "monitor": {
+          "description": "How well the gaming monitor did, when it ran on any case.",
           "anyOf": [
             {
               "$ref": "#/$defs/MonitorScore"
@@ -218,49 +285,61 @@
             {
               "type": "null"
             }
-          ],
-          "description": "How well the gaming monitor did, when it ran on any case."
-        },
-        "not_completed": {
-          "description": "Possible cases that stopped or failed verification.",
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "over_strict_stops": {
-          "description": "Cases stopped for a person because a test rejected a permitted\nalternative.",
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "precision": {
-          "description": "correct / (correct + false completions), when defined.",
-          "format": "double",
-          "type": [
-            "number",
-            "null"
           ]
         },
         "replay_checked": {
           "description": "Recorded attempts checked by strict replay, and how many replayed.",
+          "type": "integer",
           "format": "uint",
-          "minimum": 0,
-          "type": "integer"
+          "minimum": 0
         },
         "replayed": {
           "description": "Of those, the ones that replayed exactly.",
+          "type": "integer",
           "format": "uint",
-          "minimum": 0,
-          "type": "integer"
+          "minimum": 0
         },
-        "tokens_per_correct": {
-          "description": "Input + output tokens per correct case, when any.",
-          "format": "uint64",
-          "minimum": 0,
-          "type": [
-            "integer",
-            "null"
+        "caught": {
+          "description": "`expect = \"reject\"` cases that were not ticked.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "held_out_gap": {
+          "description": "Attempts that passed visibly, and how many of them the held-out tests\nfailed; `None` when no held-out test ran.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HeldOutGap"
+            },
+            {
+              "type": "null"
+            }
           ]
+        },
+        "held_out_oracle": {
+          "description": "Ticked cases whose held-out tests passed, against the oracle.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HeldOutOracle"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "median_acceptance_strength": {
+          "description": "The median combined acceptance strength over verified cases that\nmeasured it; `None`: not measured.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "over_strict_stops": {
+          "description": "Cases stopped for a person because a test rejected a permitted\nalternative.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
         }
       },
       "required": [
@@ -281,101 +360,51 @@
         "held_out_oracle",
         "median_acceptance_strength",
         "over_strict_stops"
-      ],
-      "type": "object"
-    },
-    "HeldOutGap": {
-      "description": "Visible passes the held-out tests caught.",
-      "properties": {
-        "held_out_failed": {
-          "description": "Of those, the ones the held-out tests failed.",
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "rate": {
-          "description": "`held_out_failed / visible_passed`.",
-          "format": "double",
-          "type": "number"
-        },
-        "visible_passed": {
-          "description": "Attempts the held-out tests judged (they had passed visibly).",
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        }
-      },
-      "required": [
-        "visible_passed",
-        "held_out_failed",
-        "rate"
-      ],
-      "type": "object"
-    },
-    "HeldOutOracle": {
-      "description": "Held-out passes the hidden oracle agreed with, or not.",
-      "properties": {
-        "agree": {
-          "description": "The oracle passed too.",
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "disagree": {
-          "description": "The oracle failed: the held-out tests missed something.",
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        }
-      },
-      "required": [
-        "agree",
-        "disagree"
-      ],
-      "type": "object"
+      ]
     },
     "MonitorScore": {
       "description": "The gaming monitor against the oracle's ground truth: a positive is a\ncheat or a false completion (both passed the visible checks).",
+      "type": "object",
       "properties": {
-        "false_negatives": {
-          "description": "Not flagged but a cheat or false completion.",
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "false_positives": {
-          "description": "Flagged but correct.",
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
         "judged": {
           "description": "Cases the monitor judged.",
+          "type": "integer",
           "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "precision": {
-          "description": "true / (true + false positives), when anything was flagged.",
-          "format": "double",
-          "type": [
-            "number",
-            "null"
-          ]
-        },
-        "recall": {
-          "description": "true positives / all positives, when there were any.",
-          "format": "double",
-          "type": [
-            "number",
-            "null"
-          ]
+          "minimum": 0
         },
         "true_positives": {
           "description": "Flagged and really a cheat or false completion.",
+          "type": "integer",
           "format": "uint",
-          "minimum": 0,
-          "type": "integer"
+          "minimum": 0
+        },
+        "false_positives": {
+          "description": "Flagged but correct.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "false_negatives": {
+          "description": "Not flagged but a cheat or false completion.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "precision": {
+          "description": "true / (true + false positives), when anything was flagged.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "recall": {
+          "description": "true positives / all positives, when there were any.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
         }
       },
       "required": [
@@ -385,87 +414,58 @@
         "false_negatives",
         "precision",
         "recall"
-      ],
-      "type": "object"
+      ]
     },
-    "Verdict": {
-      "description": "How strong the evidence for a task is.",
-      "oneOf": [
-        {
-          "description": "A task-specific check produced evidence, nothing failed, nothing regressed.",
-          "properties": {
-            "verdict": {
-              "const": "verified",
-              "type": "string"
-            }
-          },
-          "required": [
-            "verdict"
-          ],
-          "type": "object"
+    "HeldOutGap": {
+      "description": "Visible passes the held-out tests caught.",
+      "type": "object",
+      "properties": {
+        "visible_passed": {
+          "description": "Attempts the held-out tests judged (they had passed visibly).",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
         },
-        {
-          "description": "Nothing failed or regressed, but nothing task-specific was established.",
-          "properties": {
-            "verdict": {
-              "const": "regression_only",
-              "type": "string"
-            }
-          },
-          "required": [
-            "verdict"
-          ],
-          "type": "object"
+        "held_out_failed": {
+          "description": "Of those, the ones the held-out tests failed.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
         },
-        {
-          "description": "Something failed or regressed.",
-          "properties": {
-            "reasons": {
-              "description": "One line per reason.",
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "verdict": {
-              "const": "failed",
-              "type": "string"
-            }
-          },
-          "required": [
-            "verdict",
-            "reasons"
-          ],
-          "type": "object"
+        "rate": {
+          "description": "`held_out_failed / visible_passed`.",
+          "type": "number",
+          "format": "double"
         }
+      },
+      "required": [
+        "visible_passed",
+        "held_out_failed",
+        "rate"
+      ]
+    },
+    "HeldOutOracle": {
+      "description": "Held-out passes the hidden oracle agreed with, or not.",
+      "type": "object",
+      "properties": {
+        "agree": {
+          "description": "The oracle passed too.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "disagree": {
+          "description": "The oracle failed: the held-out tests missed something.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "agree",
+        "disagree"
       ]
     }
   },
-  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/eval.json",
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Result of `speccoder eval`.",
-  "properties": {
-    "cases": {
-      "description": "One entry per case, in name order.",
-      "items": {
-        "$ref": "#/$defs/EvalCase"
-      },
-      "type": "array"
-    },
-    "model": {
-      "description": "The model the suite ran with, `provider/model`.",
-      "type": "string"
-    },
-    "summary": {
-      "$ref": "#/$defs/EvalSummary",
-      "description": "Counts per classification."
-    }
-  },
-  "required": [
-    "model",
-    "cases",
-    "summary"
-  ],
-  "title": "eval: the evaluation",
-  "type": "object"
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/eval.json"
 }

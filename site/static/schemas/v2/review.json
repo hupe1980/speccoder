@@ -1,309 +1,277 @@
 {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "review: the spec's requirements and the person's decision on each",
+  "description": "Result of `speccoder review`: every requirement of the feature's\nspec as a card, with the person's decision on its exact wording.",
+  "type": "object",
+  "properties": {
+    "feature": {
+      "description": "The feature.",
+      "type": "string"
+    },
+    "file": {
+      "description": "Where the review is recorded (project-relative); commit it to share.",
+      "type": "string"
+    },
+    "requirements": {
+      "description": "One per requirement, in the spec's order.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ReviewItem"
+      }
+    },
+    "totals": {
+      "description": "Counts by state.",
+      "$ref": "#/$defs/ReviewTotals"
+    },
+    "revise_with": {
+      "description": "The format's skill that revises the spec from the comments\n(Spec Kit: `clarify`), when it has one.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "revision": {
+      "description": "What that skill is asked, while changes are requested: every\nrequest with its requirement.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "questions": {
+      "description": "The questions the documents leave open (`[NEEDS CLARIFICATION: …]`),\nin reading order.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/OpenQuestion"
+      }
+    },
+    "changes": {
+      "description": "Requirements changed in the checkout since the last commit of the\nspec: what a commit would record.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ReviewChange"
+      }
+    },
+    "history": {
+      "description": "The spec's versions in git, newest first (the last twelve).",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/SpecVersion"
+      }
+    },
+    "oracle": {
+      "description": "One per requirement with scenarios (`US1`), beside the decision\nlines: the tests the run would use, as written at review.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/OracleView"
+      },
+      "default": []
+    },
+    "tests_notice": {
+      "description": "Why the review writes no tests for this unit: its own pipeline\nauthors and confirms them (a quick change, a bug).",
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "bug_tests": {
+      "description": "A bug unit's confirmed reproductions, read only.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/BugTests"
+      }
+    },
+    "approval": {
+      "description": "The approval that froze the oracle, when one is recorded.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ReviewApproval"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "sheet": {
+      "description": "What *Approve and Run* would do and what blocks it (the full review\nonly).",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ApproveSheet"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "error": {
+      "description": "Why the review record (`review.json`) cannot be read: shown, never\nread as \"nothing decided\" by a write.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "readiness": {
+      "description": "What the future oracle will be made of, counted now.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Readiness"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "required": [
+    "feature",
+    "file",
+    "requirements",
+    "totals",
+    "revise_with",
+    "revision",
+    "questions",
+    "changes",
+    "history",
+    "oracle",
+    "tests_notice",
+    "approval",
+    "sheet",
+    "readiness"
+  ],
   "$defs": {
-    "Ambiguity": {
-      "description": "Two authors read a scenario differently.",
+    "ReviewItem": {
+      "description": "One requirement and its review.",
+      "type": "object",
       "properties": {
-        "a": {
-          "$ref": "#/$defs/ReadingText",
-          "description": "The first author's reading (its tests are the ones kept)."
-        },
-        "b": {
-          "$ref": "#/$defs/ReadingText",
-          "description": "The second author's."
-        },
-        "resolution": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Resolution"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "The person's choice; `None` while it is open."
-        },
-        "scenario": {
-          "description": "The scenario.",
-          "type": "string"
-        }
-      },
-      "required": [
-        "scenario",
-        "a",
-        "b",
-        "resolution"
-      ],
-      "type": "object"
-    },
-    "ApproveSheet": {
-      "description": "What the approve sheet shows besides the requirements: who can approve\nand run now, and what autopilot would hold.",
-      "properties": {
-        "approves": {
-          "description": "Decision lines the approval records.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "autopilot_blocked": {
-          "description": "Why autopilot is disabled (no enforced sandbox); `None`: it can run.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "blocked": {
-          "description": "Why *Approve and Run* is disabled now (each a line naming its\ncause); empty: it can run.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "grants": {
-          "description": "The grants autopilot may hold, none ticked by default.",
-          "items": {
-            "$ref": "#/$defs/OfferedGrant"
-          },
-          "type": "array"
-        },
-        "sandbox": {
-          "description": "The sandbox line (`Seatbelt, network off`).",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "sha256": {
-          "default": null,
-          "description": "The approval digest *Approve and Run* would record now (decision\nlines and frozen manifests): the click sends it back and is refused\nwhen it no longer matches. `None`: it cannot be computed here.",
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "sha256",
-        "approves",
-        "blocked",
-        "autopilot_blocked",
-        "sandbox",
-        "grants"
-      ],
-      "type": "object"
-    },
-    "AuthoredBy": {
-      "description": "Who wrote a shown test.",
-      "oneOf": [
-        {
-          "const": "model",
-          "description": "The acceptance author.",
+        "id": {
+          "description": "`FR-001`.",
           "type": "string"
         },
-        {
-          "const": "person",
-          "description": "The person (an edit).",
+        "text": {
+          "description": "Its wording now (the line, markup aside).",
           "type": "string"
-        }
-      ]
-    },
-    "Basis": {
-      "description": "How the person decided the reproductions.",
-      "oneOf": [
-        {
-          "const": "shown",
-          "description": "They saw the reproductions and confirmed them.",
-          "type": "string"
-        },
-        {
-          "const": "named_test",
-          "description": "They named the tests themselves (`--test`).",
-          "type": "string"
-        }
-      ]
-    },
-    "BugTest": {
-      "description": "One confirmed reproduction.",
-      "properties": {
-        "content": {
-          "description": "Its content as confirmed; `None` when the kept copy is missing or no\nlonger matches its digest.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "file": {
-          "description": "Project-relative test file.",
-          "type": "string"
-        },
-        "red_class": {
-          "description": "Its class on the untouched code (`assertion`).",
-          "type": "string"
-        },
-        "statement": {
-          "description": "The statement it reproduces (`E1`) or guards (`U1`).",
-          "type": "string"
-        },
-        "test": {
-          "description": "The test's name.",
-          "type": "string"
-        }
-      },
-      "required": [
-        "statement",
-        "file",
-        "test",
-        "red_class",
-        "content"
-      ],
-      "type": "object"
-    },
-    "BugTests": {
-      "description": "A bug's confirmed reproductions as a bug unit's Tests tab shows them,\nread only: a bug's tests are written and confirmed by its own pipeline.",
-      "properties": {
-        "confirmation": {
-          "$ref": "#/$defs/Confirmation",
-          "description": "The person's confirmation of the reproductions."
-        },
-        "reproductions": {
-          "description": "The reproductions, in the order confirmed.",
-          "items": {
-            "$ref": "#/$defs/BugTest"
-          },
-          "type": "array"
-        },
-        "task": {
-          "description": "The bug's task (`T001`).",
-          "type": "string"
-        },
-        "title": {
-          "description": "Its title.",
-          "type": "string"
-        }
-      },
-      "required": [
-        "task",
-        "title",
-        "confirmation",
-        "reproductions"
-      ],
-      "type": "object"
-    },
-    "Confirmation": {
-      "description": "The person's one confirmation, bound to what they saw.",
-      "properties": {
-        "at": {
-          "description": "Unix seconds.",
-          "format": "uint64",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "basis": {
-          "$ref": "#/$defs/Basis",
-          "description": "Seen or named."
-        },
-        "by": {
-          "description": "Who.",
-          "type": "string"
-        },
-        "digest": {
-          "description": "`sha256:<hex>` over the reproductions shown (their files and\nstatement ids).",
-          "type": "string"
-        },
-        "triad_digest": {
-          "description": "The triad's digest when confirmed: a different one lapses this.",
-          "type": "string"
-        },
-        "via": {
-          "$ref": "#/$defs/Via",
-          "description": "Through what."
-        }
-      },
-      "required": [
-        "digest",
-        "triad_digest",
-        "by",
-        "via",
-        "basis",
-        "at"
-      ],
-      "type": "object"
-    },
-    "HeldOutSummary": {
-      "description": "The held-out set of a requirement as anyone may see it: a count, a\nstate and a digest — never a path or a line of it.",
-      "properties": {
-        "count": {
-          "description": "Tests kept.",
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "manifest_sha256": {
-          "description": "The sealed manifest's digest, when kept.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "reason": {
-          "description": "Why none was kept (`not_red`, `none_generated`, …).",
-          "type": [
-            "string",
-            "null"
-          ]
         },
         "state": {
-          "description": "`kept`, `absent` or `off` (`[acceptance] held_out = false`).",
-          "type": "string"
-        }
-      },
-      "required": [
-        "state",
-        "count",
-        "manifest_sha256",
-        "reason"
-      ],
-      "type": "object"
-    },
-    "OfferedGrant": {
-      "description": "A grant an autopilot run may hold, offered on the approve sheet: one\nobject-bound grant a person decided earlier for this feature.",
-      "properties": {
-        "class": {
-          "description": "`write`, `command`, `network` or `mcp`.",
+          "description": "`open` (not reviewed), `approved`, `changes_requested`, or `lapsed`\n(decided on a wording that has changed since).",
           "type": "string"
         },
-        "id": {
-          "description": "Its grant id: what `--grant` and the sheet's tick name.",
-          "type": "string"
+        "by": {
+          "description": "Who decided (as for every decision: git's `user.name`, else the OS\nuser), when someone did.",
+          "type": [
+            "string",
+            "null"
+          ]
         },
-        "object": {
-          "description": "The object in full (`run: cargo run --example demo · argv #3f…`).",
-          "type": "string"
+        "at": {
+          "description": "When (Unix seconds).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "comment": {
+          "description": "The comment, for a change request (or a note on an approval).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "decided_on": {
+          "description": "For `lapsed`: the wording that was decided on.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
         "id",
-        "class",
-        "object"
-      ],
-      "type": "object"
+        "text",
+        "state",
+        "by",
+        "at",
+        "comment",
+        "decided_on"
+      ]
+    },
+    "ReviewTotals": {
+      "description": "Counts of [`ReviewItem::state`].",
+      "type": "object",
+      "properties": {
+        "approved": {
+          "description": "Approved on their current wording.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "changes_requested": {
+          "description": "Changes requested.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "open": {
+          "description": "Never reviewed.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "lapsed": {
+          "description": "Decided on an earlier wording.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "questions": {
+          "description": "Questions the documents leave open.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0,
+          "default": 0
+        },
+        "ambiguous": {
+          "description": "Requirements two test authors read differently, not yet resolved:\n*Approve and Run* and a gated run wait on them.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0,
+          "default": 0
+        }
+      },
+      "required": [
+        "approved",
+        "changes_requested",
+        "open",
+        "lapsed",
+        "questions",
+        "ambiguous"
+      ]
     },
     "OpenQuestion": {
       "description": "A question a document leaves open, to answer in place.",
+      "type": "object",
       "properties": {
-        "file": {
-          "description": "The document (project-relative).",
-          "type": "string"
-        },
         "id": {
           "description": "`Q1`, `Q2`, … in reading order.",
           "type": "string"
         },
+        "text": {
+          "description": "The question.",
+          "type": "string"
+        },
+        "file": {
+          "description": "The document (project-relative).",
+          "type": "string"
+        },
         "line": {
           "description": "Its line (1-based).",
+          "type": "integer",
           "format": "uint",
-          "minimum": 0,
-          "type": "integer"
+          "minimum": 0
         },
         "near": {
           "description": "The requirement or section it is in.",
@@ -311,10 +279,6 @@
             "string",
             "null"
           ]
-        },
-        "text": {
-          "description": "The question.",
-          "type": "string"
         }
       },
       "required": [
@@ -323,192 +287,141 @@
         "file",
         "line",
         "near"
-      ],
-      "type": "object"
-    },
-    "OracleDiscarded": {
-      "description": "A test the author wrote that is not part of the set.",
-      "properties": {
-        "path": {
-          "description": "Its path as given.",
-          "type": "string"
-        },
-        "why": {
-          "description": "`cites_no_scenario`, `not_a_new_test_file`, `exists`.",
-          "type": "string"
-        }
-      },
-      "required": [
-        "path",
-        "why"
-      ],
-      "type": "object"
-    },
-    "OracleRejected": {
-      "description": "A test the person rejected.",
-      "properties": {
-        "at": {
-          "description": "Unix seconds.",
-          "format": "uint64",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "by": {
-          "description": "Who.",
-          "type": "string"
-        },
-        "path": {
-          "description": "Its path.",
-          "type": "string"
-        },
-        "reason": {
-          "description": "The person's reason (told to every later author call).",
-          "type": "string"
-        }
-      },
-      "required": [
-        "path",
-        "reason",
-        "by",
-        "at"
-      ],
-      "type": "object"
-    },
-    "OracleState": {
-      "description": "Where a requirement's oracle is.",
-      "oneOf": [
-        {
-          "const": "none",
-          "description": "No tests written yet.",
-          "type": "string"
-        },
-        {
-          "const": "written",
-          "description": "Written; some are red.",
-          "type": "string"
-        },
-        {
-          "const": "not_red",
-          "description": "Written; none is red, so none can be frozen.",
-          "type": "string"
-        },
-        {
-          "const": "failed",
-          "description": "The author call failed.",
-          "type": "string"
-        },
-        {
-          "const": "ambiguous",
-          "description": "Two readings disagree: the person chooses or rewords.",
-          "type": "string"
-        },
-        {
-          "const": "frozen",
-          "description": "Frozen with the approval, on the current wording.",
-          "type": "string"
-        },
-        {
-          "const": "lapsed",
-          "description": "Frozen on an earlier wording: the run writes tests anew.",
-          "type": "string"
-        },
-        {
-          "const": "frozen_elsewhere",
-          "description": "`review.json` names a frozen set this machine does not have.",
-          "type": "string"
-        }
       ]
     },
-    "OracleTest": {
-      "description": "One visible test as the review shows it.",
+    "ReviewChange": {
+      "description": "A requirement changed in the checkout since the last commit of the\nspec, with where its line is — a comment anchors to it (`diff_line`).",
+      "type": "object",
       "properties": {
-        "authored_by": {
-          "$ref": "#/$defs/AuthoredBy",
-          "description": "Who wrote it."
-        },
-        "content": {
-          "description": "Its content (a visible test: the implementer reads it too).",
+        "id": {
+          "description": "`FR-003`.",
           "type": "string"
         },
-        "edited_by": {
-          "description": "The person who edited it.",
+        "then": {
+          "description": "Its line at the last commit; `None`: it did not exist yet.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "now": {
+          "description": "Its line now; `None`: it was removed.",
           "type": [
             "string",
             "null"
           ]
         },
         "path": {
-          "description": "Project-relative path.",
+          "description": "The document it is in (project-relative).",
           "type": "string"
         },
-        "red": {
-          "description": "Red: it can be frozen.",
-          "type": "boolean"
+        "then_line": {
+          "description": "Its line number (1-based) at the last commit.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
         },
-        "red_class": {
-          "description": "Its red class on the current tree (`assertion`, `absent_symbol`,\n`passed`, `build_error`, `flaky`, …).",
-          "type": "string"
-        },
-        "scenarios": {
-          "description": "The scenarios it cites (never empty).",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
+        "now_line": {
+          "description": "Its line number (1-based) now.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
         }
       },
       "required": [
+        "id",
+        "then",
+        "now",
         "path",
-        "content",
-        "scenarios",
-        "red_class",
-        "red",
-        "authored_by",
-        "edited_by"
-      ],
-      "type": "object"
+        "then_line",
+        "now_line"
+      ]
+    },
+    "SpecVersion": {
+      "description": "One commit of the spec and what it changed in its requirements.",
+      "type": "object",
+      "properties": {
+        "commit": {
+          "description": "The commit.",
+          "type": "string"
+        },
+        "date": {
+          "description": "`YYYY-MM-DD`.",
+          "type": "string"
+        },
+        "author": {
+          "description": "Its author.",
+          "type": "string"
+        },
+        "subject": {
+          "description": "Its subject line.",
+          "type": "string"
+        },
+        "added": {
+          "description": "Requirements it added.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "reworded": {
+          "description": "Requirements it reworded.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "removed": {
+          "description": "Requirements it removed.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "commit",
+        "date",
+        "author",
+        "subject",
+        "added",
+        "reworded",
+        "removed"
+      ]
     },
     "OracleView": {
       "description": "One requirement's oracle in the review: everything the Tests card shows.",
+      "type": "object",
       "properties": {
-        "ambiguities": {
-          "description": "Readings that disagree.",
+        "req": {
+          "description": "The requirement (`US1`).",
+          "type": "string"
+        },
+        "title": {
+          "description": "Its title.",
+          "type": "string"
+        },
+        "scenarios": {
+          "description": "Its scenarios: id and words.",
+          "type": "array",
           "items": {
-            "$ref": "#/$defs/Ambiguity"
-          },
-          "type": "array"
+            "$ref": "#/$defs/ScenarioRef"
+          }
         },
-        "ambiguity_check": {
-          "description": "With one call there is nothing to compare.",
-          "type": "boolean"
+        "state": {
+          "description": "Where it is.",
+          "$ref": "#/$defs/OracleState"
         },
-        "calls": {
-          "description": "The author calls *Write Tests* makes (`[review] oracle_samples`).",
-          "format": "uint8",
-          "maximum": 255,
-          "minimum": 0,
-          "type": "integer"
-        },
-        "discarded": {
-          "description": "The tests not kept, and why.",
-          "items": {
-            "$ref": "#/$defs/OracleDiscarded"
-          },
-          "type": "array"
-        },
-        "error": {
-          "description": "Why writing failed, or why it cannot be written here.",
+        "frozen_on": {
+          "description": "For `lapsed`: the wording it was frozen on.",
           "type": [
             "string",
-            "null"
-          ]
-        },
-        "frozen_at": {
-          "description": "When (Unix seconds).",
-          "format": "uint64",
-          "minimum": 0,
-          "type": [
-            "integer",
             "null"
           ]
         },
@@ -519,16 +432,81 @@
             "null"
           ]
         },
-        "frozen_on": {
-          "description": "For `lapsed`: the wording it was frozen on.",
+        "frozen_at": {
+          "description": "When (Unix seconds).",
           "type": [
-            "string",
+            "integer",
             "null"
-          ]
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "tests": {
+          "description": "The kept tests.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/OracleTest"
+          }
+        },
+        "discarded": {
+          "description": "The tests not kept, and why.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/OracleDiscarded"
+          }
+        },
+        "rejected": {
+          "description": "The tests the person rejected.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/OracleRejected"
+          }
+        },
+        "uncovered": {
+          "description": "Scenarios no red kept test covers.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "untestable": {
+          "description": "Scenarios an author found untestable, with why.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Untestable"
+          }
+        },
+        "ambiguities": {
+          "description": "Readings that disagree.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Ambiguity"
+          }
         },
         "held_out": {
-          "$ref": "#/$defs/HeldOutSummary",
-          "description": "The held-out set: count and digest only."
+          "description": "The held-out set: count and digest only.",
+          "$ref": "#/$defs/HeldOutSummary"
+        },
+        "strength_target": {
+          "description": "`[acceptance] min_strength` (0–100), `None` when none is set.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint8",
+          "minimum": 0,
+          "maximum": 255
+        },
+        "calls": {
+          "description": "The author calls *Write Tests* makes (`[review] oracle_samples`).",
+          "type": "integer",
+          "format": "uint8",
+          "minimum": 0,
+          "maximum": 255
+        },
+        "ambiguity_check": {
+          "description": "With one call there is nothing to compare.",
+          "type": "boolean"
         },
         "manifest_sha256": {
           "description": "The visible set's manifest digest, when tests are written.",
@@ -537,62 +515,12 @@
             "null"
           ]
         },
-        "rejected": {
-          "description": "The tests the person rejected.",
-          "items": {
-            "$ref": "#/$defs/OracleRejected"
-          },
-          "type": "array"
-        },
-        "req": {
-          "description": "The requirement (`US1`).",
-          "type": "string"
-        },
-        "scenarios": {
-          "description": "Its scenarios: id and words.",
-          "items": {
-            "$ref": "#/$defs/ScenarioRef"
-          },
-          "type": "array"
-        },
-        "state": {
-          "$ref": "#/$defs/OracleState",
-          "description": "Where it is."
-        },
-        "strength_target": {
-          "description": "`[acceptance] min_strength` (0–100), `None` when none is set.",
-          "format": "uint8",
-          "maximum": 255,
-          "minimum": 0,
+        "error": {
+          "description": "Why writing failed, or why it cannot be written here.",
           "type": [
-            "integer",
+            "string",
             "null"
           ]
-        },
-        "tests": {
-          "description": "The kept tests.",
-          "items": {
-            "$ref": "#/$defs/OracleTest"
-          },
-          "type": "array"
-        },
-        "title": {
-          "description": "Its title.",
-          "type": "string"
-        },
-        "uncovered": {
-          "description": "Scenarios no red kept test covers.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "untestable": {
-          "description": "Scenarios an author found untestable, with why.",
-          "items": {
-            "$ref": "#/$defs/Untestable"
-          },
-          "type": "array"
         }
       },
       "required": [
@@ -615,324 +543,11 @@
         "ambiguity_check",
         "manifest_sha256",
         "error"
-      ],
-      "type": "object"
-    },
-    "Readiness": {
-      "description": "What the future oracle of a unit will be made of, counted from its\nfiles as they are now: requirements, scenarios, open questions, and\nrequirements no scenario covers (they cannot be tested).",
-      "properties": {
-        "identifiers": {
-          "description": "The format defines requirement identifiers (else only questions count).",
-          "type": "boolean"
-        },
-        "open_questions": {
-          "description": "Open-question markers left in the unit's documents.",
-          "format": "uint32",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "requirements": {
-          "description": "Requirements the spec defines.",
-          "format": "uint32",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "scenarios": {
-          "description": "Scenarios over them.",
-          "format": "uint32",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "untestable": {
-          "description": "Requirements without a scenario, by id: they cannot be tested.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        }
-      },
-      "required": [
-        "requirements",
-        "scenarios",
-        "open_questions",
-        "untestable",
-        "identifiers"
-      ],
-      "type": "object"
-    },
-    "Reading": {
-      "description": "One of the two readings of an ambiguous scenario.",
-      "oneOf": [
-        {
-          "const": "A",
-          "description": "The first author's.",
-          "type": "string"
-        },
-        {
-          "const": "B",
-          "description": "The second author's.",
-          "type": "string"
-        }
-      ]
-    },
-    "ReadingText": {
-      "description": "One reading of a scenario: what one author expects.",
-      "properties": {
-        "expect": {
-          "description": "The outcome (`untestable: …` when the author found none).",
-          "type": "string"
-        },
-        "given": {
-          "description": "The situation.",
-          "type": "string"
-        }
-      },
-      "required": [
-        "given",
-        "expect"
-      ],
-      "type": "object"
-    },
-    "Resolution": {
-      "description": "The person's choice on an ambiguous scenario.",
-      "properties": {
-        "at": {
-          "description": "Unix seconds.",
-          "format": "uint64",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "by": {
-          "description": "Who chose.",
-          "type": "string"
-        },
-        "reading": {
-          "$ref": "#/$defs/Reading",
-          "description": "The reading meant."
-        }
-      },
-      "required": [
-        "reading",
-        "by",
-        "at"
-      ],
-      "type": "object"
-    },
-    "ReviewApproval": {
-      "description": "The record of an approval that froze the oracle (in `review.json`).",
-      "properties": {
-        "at": {
-          "description": "Unix seconds.",
-          "format": "uint64",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "by": {
-          "description": "Who approved.",
-          "type": "string"
-        },
-        "mode": {
-          "$ref": "#/$defs/RunMode",
-          "description": "The run's mode."
-        },
-        "sha256": {
-          "description": "SHA-256 over the approved decision lines and the frozen oracle\nentries: what a tick that reused a frozen set names.",
-          "type": "string"
-        },
-        "via": {
-          "$ref": "#/$defs/Via",
-          "description": "Through what."
-        }
-      },
-      "required": [
-        "sha256",
-        "mode",
-        "by",
-        "via",
-        "at"
-      ],
-      "type": "object"
-    },
-    "ReviewChange": {
-      "description": "A requirement changed in the checkout since the last commit of the\nspec, with where its line is — a comment anchors to it (`diff_line`).",
-      "properties": {
-        "id": {
-          "description": "`FR-003`.",
-          "type": "string"
-        },
-        "now": {
-          "description": "Its line now; `None`: it was removed.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "now_line": {
-          "description": "Its line number (1-based) now.",
-          "format": "uint32",
-          "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
-        },
-        "path": {
-          "description": "The document it is in (project-relative).",
-          "type": "string"
-        },
-        "then": {
-          "description": "Its line at the last commit; `None`: it did not exist yet.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "then_line": {
-          "description": "Its line number (1-based) at the last commit.",
-          "format": "uint32",
-          "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "id",
-        "then",
-        "now",
-        "path",
-        "then_line",
-        "now_line"
-      ],
-      "type": "object"
-    },
-    "ReviewItem": {
-      "description": "One requirement and its review.",
-      "properties": {
-        "at": {
-          "description": "When (Unix seconds).",
-          "format": "uint64",
-          "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
-        },
-        "by": {
-          "description": "Who decided (as for every decision: git's `user.name`, else the OS\nuser), when someone did.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "comment": {
-          "description": "The comment, for a change request (or a note on an approval).",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "decided_on": {
-          "description": "For `lapsed`: the wording that was decided on.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "id": {
-          "description": "`FR-001`.",
-          "type": "string"
-        },
-        "state": {
-          "description": "`open` (not reviewed), `approved`, `changes_requested`, or `lapsed`\n(decided on a wording that has changed since).",
-          "type": "string"
-        },
-        "text": {
-          "description": "Its wording now (the line, markup aside).",
-          "type": "string"
-        }
-      },
-      "required": [
-        "id",
-        "text",
-        "state",
-        "by",
-        "at",
-        "comment",
-        "decided_on"
-      ],
-      "type": "object"
-    },
-    "ReviewTotals": {
-      "description": "Counts of [`ReviewItem::state`].",
-      "properties": {
-        "ambiguous": {
-          "default": 0,
-          "description": "Requirements two test authors read differently, not yet resolved:\n*Approve and Run* and a gated run wait on them.",
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "approved": {
-          "description": "Approved on their current wording.",
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "changes_requested": {
-          "description": "Changes requested.",
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "lapsed": {
-          "description": "Decided on an earlier wording.",
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "open": {
-          "description": "Never reviewed.",
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "questions": {
-          "default": 0,
-          "description": "Questions the documents leave open.",
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        }
-      },
-      "required": [
-        "approved",
-        "changes_requested",
-        "open",
-        "lapsed",
-        "questions",
-        "ambiguous"
-      ],
-      "type": "object"
-    },
-    "RunMode": {
-      "description": "How a run started from the review asks for a person.",
-      "oneOf": [
-        {
-          "const": "ask",
-          "description": "*Ask on Risky Calls*: a call the policy asks about is asked inline,\nas a run from the interface does.",
-          "type": "string"
-        },
-        {
-          "const": "autopilot",
-          "description": "*Autopilot*: nothing asks; a call the policy would ask about and no\nticked grant covers is refused for the run and listed afterwards.",
-          "type": "string"
-        }
       ]
     },
     "ScenarioRef": {
       "description": "A scenario a task's acceptance tests cite: `US1-2` (Spec Kit), or\n`capability: requirement / scenario` (OpenSpec), with the spec's words.",
+      "type": "object",
       "properties": {
         "id": {
           "description": "Stable within the unit.",
@@ -946,63 +561,168 @@
       "required": [
         "id",
         "text"
-      ],
-      "type": "object"
+      ]
     },
-    "SpecVersion": {
-      "description": "One commit of the spec and what it changed in its requirements.",
+    "OracleState": {
+      "description": "Where a requirement's oracle is.",
+      "oneOf": [
+        {
+          "description": "No tests written yet.",
+          "type": "string",
+          "const": "none"
+        },
+        {
+          "description": "Written; some are red.",
+          "type": "string",
+          "const": "written"
+        },
+        {
+          "description": "Written; none is red, so none can be frozen.",
+          "type": "string",
+          "const": "not_red"
+        },
+        {
+          "description": "The author call failed.",
+          "type": "string",
+          "const": "failed"
+        },
+        {
+          "description": "Two readings disagree: the person chooses or rewords.",
+          "type": "string",
+          "const": "ambiguous"
+        },
+        {
+          "description": "Frozen with the approval, on the current wording.",
+          "type": "string",
+          "const": "frozen"
+        },
+        {
+          "description": "Frozen on an earlier wording: the run writes tests anew.",
+          "type": "string",
+          "const": "lapsed"
+        },
+        {
+          "description": "`review.json` names a frozen set this machine does not have.",
+          "type": "string",
+          "const": "frozen_elsewhere"
+        }
+      ]
+    },
+    "OracleTest": {
+      "description": "One visible test as the review shows it.",
+      "type": "object",
       "properties": {
-        "added": {
-          "description": "Requirements it added.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "author": {
-          "description": "Its author.",
+        "path": {
+          "description": "Project-relative path.",
           "type": "string"
         },
-        "commit": {
-          "description": "The commit.",
+        "content": {
+          "description": "Its content (a visible test: the implementer reads it too).",
           "type": "string"
         },
-        "date": {
-          "description": "`YYYY-MM-DD`.",
+        "scenarios": {
+          "description": "The scenarios it cites (never empty).",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "red_class": {
+          "description": "Its red class on the current tree (`assertion`, `absent_symbol`,\n`passed`, `build_error`, `flaky`, …).",
           "type": "string"
         },
-        "removed": {
-          "description": "Requirements it removed.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
+        "red": {
+          "description": "Red: it can be frozen.",
+          "type": "boolean"
         },
-        "reworded": {
-          "description": "Requirements it reworded.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
+        "authored_by": {
+          "description": "Who wrote it.",
+          "$ref": "#/$defs/AuthoredBy"
         },
-        "subject": {
-          "description": "Its subject line.",
+        "edited_by": {
+          "description": "The person who edited it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "path",
+        "content",
+        "scenarios",
+        "red_class",
+        "red",
+        "authored_by",
+        "edited_by"
+      ]
+    },
+    "AuthoredBy": {
+      "description": "Who wrote a shown test.",
+      "oneOf": [
+        {
+          "description": "The acceptance author.",
+          "type": "string",
+          "const": "model"
+        },
+        {
+          "description": "The person (an edit).",
+          "type": "string",
+          "const": "person"
+        }
+      ]
+    },
+    "OracleDiscarded": {
+      "description": "A test the author wrote that is not part of the set.",
+      "type": "object",
+      "properties": {
+        "path": {
+          "description": "Its path as given.",
+          "type": "string"
+        },
+        "why": {
+          "description": "`cites_no_scenario`, `not_a_new_test_file`, `exists`.",
           "type": "string"
         }
       },
       "required": [
-        "commit",
-        "date",
-        "author",
-        "subject",
-        "added",
-        "reworded",
-        "removed"
-      ],
-      "type": "object"
+        "path",
+        "why"
+      ]
+    },
+    "OracleRejected": {
+      "description": "A test the person rejected.",
+      "type": "object",
+      "properties": {
+        "path": {
+          "description": "Its path.",
+          "type": "string"
+        },
+        "reason": {
+          "description": "The person's reason (told to every later author call).",
+          "type": "string"
+        },
+        "by": {
+          "description": "Who.",
+          "type": "string"
+        },
+        "at": {
+          "description": "Unix seconds.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "path",
+        "reason",
+        "by",
+        "at"
+      ]
     },
     "Untestable": {
       "description": "A scenario an author found untestable, and why.",
+      "type": "object",
       "properties": {
         "scenario": {
           "description": "The scenario's id.",
@@ -1016,191 +736,471 @@
       "required": [
         "scenario",
         "why"
-      ],
-      "type": "object"
+      ]
+    },
+    "Ambiguity": {
+      "description": "Two authors read a scenario differently.",
+      "type": "object",
+      "properties": {
+        "scenario": {
+          "description": "The scenario.",
+          "type": "string"
+        },
+        "a": {
+          "description": "The first author's reading (its tests are the ones kept).",
+          "$ref": "#/$defs/ReadingText"
+        },
+        "b": {
+          "description": "The second author's.",
+          "$ref": "#/$defs/ReadingText"
+        },
+        "resolution": {
+          "description": "The person's choice; `None` while it is open.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Resolution"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "scenario",
+        "a",
+        "b",
+        "resolution"
+      ]
+    },
+    "ReadingText": {
+      "description": "One reading of a scenario: what one author expects.",
+      "type": "object",
+      "properties": {
+        "given": {
+          "description": "The situation.",
+          "type": "string"
+        },
+        "expect": {
+          "description": "The outcome (`untestable: …` when the author found none).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "given",
+        "expect"
+      ]
+    },
+    "Resolution": {
+      "description": "The person's choice on an ambiguous scenario.",
+      "type": "object",
+      "properties": {
+        "reading": {
+          "description": "The reading meant.",
+          "$ref": "#/$defs/Reading"
+        },
+        "by": {
+          "description": "Who chose.",
+          "type": "string"
+        },
+        "at": {
+          "description": "Unix seconds.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "reading",
+        "by",
+        "at"
+      ]
+    },
+    "Reading": {
+      "description": "One of the two readings of an ambiguous scenario.",
+      "oneOf": [
+        {
+          "description": "The first author's.",
+          "type": "string",
+          "const": "A"
+        },
+        {
+          "description": "The second author's.",
+          "type": "string",
+          "const": "B"
+        }
+      ]
+    },
+    "HeldOutSummary": {
+      "description": "The held-out set of a requirement as anyone may see it: a count, a\nstate and a digest — never a path or a line of it.",
+      "type": "object",
+      "properties": {
+        "state": {
+          "description": "`kept`, `absent` or `off` (`[acceptance] held_out = false`).",
+          "type": "string"
+        },
+        "count": {
+          "description": "Tests kept.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "manifest_sha256": {
+          "description": "The sealed manifest's digest, when kept.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reason": {
+          "description": "Why none was kept (`not_red`, `none_generated`, …).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "state",
+        "count",
+        "manifest_sha256",
+        "reason"
+      ]
+    },
+    "BugTests": {
+      "description": "A bug's confirmed reproductions as a bug unit's Tests tab shows them,\nread only: a bug's tests are written and confirmed by its own pipeline.",
+      "type": "object",
+      "properties": {
+        "task": {
+          "description": "The bug's task (`T001`).",
+          "type": "string"
+        },
+        "title": {
+          "description": "Its title.",
+          "type": "string"
+        },
+        "confirmation": {
+          "description": "The person's confirmation of the reproductions.",
+          "$ref": "#/$defs/Confirmation"
+        },
+        "reproductions": {
+          "description": "The reproductions, in the order confirmed.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/BugTest"
+          }
+        }
+      },
+      "required": [
+        "task",
+        "title",
+        "confirmation",
+        "reproductions"
+      ]
+    },
+    "Confirmation": {
+      "description": "The person's one confirmation, bound to what they saw.",
+      "type": "object",
+      "properties": {
+        "digest": {
+          "description": "`sha256:<hex>` over the reproductions shown (their files and\nstatement ids).",
+          "type": "string"
+        },
+        "triad_digest": {
+          "description": "The triad's digest when confirmed: a different one lapses this.",
+          "type": "string"
+        },
+        "by": {
+          "description": "Who.",
+          "type": "string"
+        },
+        "via": {
+          "description": "Through what.",
+          "$ref": "#/$defs/Via"
+        },
+        "basis": {
+          "description": "Seen or named.",
+          "$ref": "#/$defs/Basis"
+        },
+        "at": {
+          "description": "Unix seconds.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "digest",
+        "triad_digest",
+        "by",
+        "via",
+        "basis",
+        "at"
+      ]
     },
     "Via": {
       "description": "The interface a person acted through, as a write records it (`via`):\none vocabulary for every record. Records written before it named\n`cli`, `tui` or `dashboard` (read as [`Via::Terminal`]) and\n`editor <name>` (read as [`Via::Acp`], the name a separate client).",
       "oneOf": [
         {
-          "const": "terminal",
           "description": "A terminal: the line CLI, its prompts, the dashboard.",
-          "type": "string"
+          "type": "string",
+          "const": "terminal"
         },
         {
-          "const": "web",
           "description": "The web app, in a browser tab or the desktop window.",
-          "type": "string"
+          "type": "string",
+          "const": "web"
         },
         {
-          "const": "window",
           "description": "The desktop window, once it can tell itself from a tab.",
-          "type": "string"
+          "type": "string",
+          "const": "window"
         },
         {
-          "const": "acp",
           "description": "An editor over the Agent Client Protocol.",
-          "type": "string"
+          "type": "string",
+          "const": "acp"
         },
         {
-          "const": "phone",
           "description": "A phone.",
-          "type": "string"
+          "type": "string",
+          "const": "phone"
         },
         {
-          "const": "ci",
           "description": "Continuous integration.",
-          "type": "string"
+          "type": "string",
+          "const": "ci"
         },
         {
-          "const": "mcp",
           "description": "A client over the Model Context Protocol.",
+          "type": "string",
+          "const": "mcp"
+        }
+      ]
+    },
+    "Basis": {
+      "description": "How the person decided the reproductions.",
+      "oneOf": [
+        {
+          "description": "They saw the reproductions and confirmed them.",
+          "type": "string",
+          "const": "shown"
+        },
+        {
+          "description": "They named the tests themselves (`--test`).",
+          "type": "string",
+          "const": "named_test"
+        }
+      ]
+    },
+    "BugTest": {
+      "description": "One confirmed reproduction.",
+      "type": "object",
+      "properties": {
+        "statement": {
+          "description": "The statement it reproduces (`E1`) or guards (`U1`).",
+          "type": "string"
+        },
+        "file": {
+          "description": "Project-relative test file.",
+          "type": "string"
+        },
+        "test": {
+          "description": "The test's name.",
+          "type": "string"
+        },
+        "red_class": {
+          "description": "Its class on the untouched code (`assertion`).",
+          "type": "string"
+        },
+        "content": {
+          "description": "Its content as confirmed; `None` when the kept copy is missing or no\nlonger matches its digest.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "statement",
+        "file",
+        "test",
+        "red_class",
+        "content"
+      ]
+    },
+    "ReviewApproval": {
+      "description": "The record of an approval that froze the oracle (in `review.json`).",
+      "type": "object",
+      "properties": {
+        "sha256": {
+          "description": "SHA-256 over the approved decision lines and the frozen oracle\nentries: what a tick that reused a frozen set names.",
+          "type": "string"
+        },
+        "mode": {
+          "description": "The run's mode.",
+          "$ref": "#/$defs/RunMode"
+        },
+        "by": {
+          "description": "Who approved.",
+          "type": "string"
+        },
+        "via": {
+          "description": "Through what.",
+          "$ref": "#/$defs/Via"
+        },
+        "at": {
+          "description": "Unix seconds.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "sha256",
+        "mode",
+        "by",
+        "via",
+        "at"
+      ]
+    },
+    "RunMode": {
+      "description": "How a run started from the review asks for a person.",
+      "oneOf": [
+        {
+          "description": "*Ask on Risky Calls*: a call the policy asks about is asked inline,\nas a run from the interface does.",
+          "type": "string",
+          "const": "ask"
+        },
+        {
+          "description": "*Autopilot*: nothing asks; a call the policy would ask about and no\nticked grant covers is refused for the run and listed afterwards.",
+          "type": "string",
+          "const": "autopilot"
+        }
+      ]
+    },
+    "ApproveSheet": {
+      "description": "What the approve sheet shows besides the requirements: who can approve\nand run now, and what autopilot would hold.",
+      "type": "object",
+      "properties": {
+        "sha256": {
+          "description": "The approval digest *Approve and Run* would record now (decision\nlines and frozen manifests): the click sends it back and is refused\nwhen it no longer matches. `None`: it cannot be computed here.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "approves": {
+          "description": "Decision lines the approval records.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "blocked": {
+          "description": "Why *Approve and Run* is disabled now (each a line naming its\ncause); empty: it can run.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "autopilot_blocked": {
+          "description": "Why autopilot is disabled (no enforced sandbox); `None`: it can run.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sandbox": {
+          "description": "The sandbox line (`Seatbelt, network off`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "grants": {
+          "description": "The grants autopilot may hold, none ticked by default.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/OfferedGrant"
+          }
+        }
+      },
+      "required": [
+        "sha256",
+        "approves",
+        "blocked",
+        "autopilot_blocked",
+        "sandbox",
+        "grants"
+      ]
+    },
+    "OfferedGrant": {
+      "description": "A grant an autopilot run may hold, offered on the approve sheet: one\nobject-bound grant a person decided earlier for this feature.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "Its grant id: what `--grant` and the sheet's tick name.",
+          "type": "string"
+        },
+        "class": {
+          "description": "`write`, `command`, `network` or `mcp`.",
+          "type": "string"
+        },
+        "object": {
+          "description": "The object in full (`run: cargo run --example demo · argv #3f…`).",
           "type": "string"
         }
+      },
+      "required": [
+        "id",
+        "class",
+        "object"
+      ]
+    },
+    "Readiness": {
+      "description": "What the future oracle of a unit will be made of, counted from its\nfiles as they are now: requirements, scenarios, open questions, and\nrequirements no scenario covers (they cannot be tested).",
+      "type": "object",
+      "properties": {
+        "requirements": {
+          "description": "Requirements the spec defines.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "scenarios": {
+          "description": "Scenarios over them.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "open_questions": {
+          "description": "Open-question markers left in the unit's documents.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "untestable": {
+          "description": "Requirements without a scenario, by id: they cannot be tested.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "identifiers": {
+          "description": "The format defines requirement identifiers (else only questions count).",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "requirements",
+        "scenarios",
+        "open_questions",
+        "untestable",
+        "identifiers"
       ]
     }
   },
-  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/review.json",
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Result of `speccoder review`: every requirement of the feature's\nspec as a card, with the person's decision on its exact wording.",
-  "properties": {
-    "approval": {
-      "anyOf": [
-        {
-          "$ref": "#/$defs/ReviewApproval"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "description": "The approval that froze the oracle, when one is recorded."
-    },
-    "bug_tests": {
-      "description": "A bug unit's confirmed reproductions, read only.",
-      "items": {
-        "$ref": "#/$defs/BugTests"
-      },
-      "type": "array"
-    },
-    "changes": {
-      "description": "Requirements changed in the checkout since the last commit of the\nspec: what a commit would record.",
-      "items": {
-        "$ref": "#/$defs/ReviewChange"
-      },
-      "type": "array"
-    },
-    "error": {
-      "description": "Why the review record (`review.json`) cannot be read: shown, never\nread as \"nothing decided\" by a write.",
-      "type": [
-        "string",
-        "null"
-      ]
-    },
-    "feature": {
-      "description": "The feature.",
-      "type": "string"
-    },
-    "file": {
-      "description": "Where the review is recorded (project-relative); commit it to share.",
-      "type": "string"
-    },
-    "history": {
-      "description": "The spec's versions in git, newest first (the last twelve).",
-      "items": {
-        "$ref": "#/$defs/SpecVersion"
-      },
-      "type": "array"
-    },
-    "oracle": {
-      "default": [],
-      "description": "One per requirement with scenarios (`US1`), beside the decision\nlines: the tests the run would use, as written at review.",
-      "items": {
-        "$ref": "#/$defs/OracleView"
-      },
-      "type": "array"
-    },
-    "questions": {
-      "description": "The questions the documents leave open (`[NEEDS CLARIFICATION: …]`),\nin reading order.",
-      "items": {
-        "$ref": "#/$defs/OpenQuestion"
-      },
-      "type": "array"
-    },
-    "readiness": {
-      "anyOf": [
-        {
-          "$ref": "#/$defs/Readiness"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "description": "What the future oracle will be made of, counted now."
-    },
-    "requirements": {
-      "description": "One per requirement, in the spec's order.",
-      "items": {
-        "$ref": "#/$defs/ReviewItem"
-      },
-      "type": "array"
-    },
-    "revise_with": {
-      "description": "The format's skill that revises the spec from the comments\n(Spec Kit: `clarify`), when it has one.",
-      "type": [
-        "string",
-        "null"
-      ]
-    },
-    "revision": {
-      "description": "What that skill is asked, while changes are requested: every\nrequest with its requirement.",
-      "type": [
-        "string",
-        "null"
-      ]
-    },
-    "sheet": {
-      "anyOf": [
-        {
-          "$ref": "#/$defs/ApproveSheet"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "description": "What *Approve and Run* would do and what blocks it (the full review\nonly)."
-    },
-    "tests_notice": {
-      "default": null,
-      "description": "Why the review writes no tests for this unit: its own pipeline\nauthors and confirms them (a quick change, a bug).",
-      "type": [
-        "string",
-        "null"
-      ]
-    },
-    "totals": {
-      "$ref": "#/$defs/ReviewTotals",
-      "description": "Counts by state."
-    }
-  },
-  "required": [
-    "feature",
-    "file",
-    "requirements",
-    "totals",
-    "revise_with",
-    "revision",
-    "questions",
-    "changes",
-    "history",
-    "oracle",
-    "tests_notice",
-    "approval",
-    "sheet",
-    "readiness"
-  ],
-  "title": "review: the spec's requirements and the person's decision on each",
-  "type": "object"
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/review.json"
 }

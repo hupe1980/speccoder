@@ -1,62 +1,15 @@
 {
-  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/skill.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "spec SKILL: the hosted skill's run",
   "description": "Result of `speccoder spec <name>`.",
+  "type": "object",
   "properties": {
-    "changes": {
-      "description": "Paths changed in the checkout: `added` / `modified` / `deleted`.",
-      "items": {
-        "maxItems": 2,
-        "minItems": 2,
-        "prefixItems": [
-          {
-            "type": "string"
-          },
-          {
-            "type": "string"
-          }
-        ],
-        "type": "array"
-      },
-      "type": "array"
-    },
-    "current": {
-      "description": "The unit the skill worked on, or created and made current, and how\nit is known (`001-x (recorded in .specify/feature.json)`).",
-      "type": [
-        "string",
-        "null"
-      ]
-    },
-    "hooks": {
-      "description": "Extension hooks run, offered or skipped around it.",
-      "items": {
-        "type": "string"
-      },
-      "type": "array"
-    },
-    "pending": {
-      "description": "The call awaiting approval, if any."
-    },
-    "questions": {
-      "description": "Questions it could not get answered.",
-      "items": {
-        "type": "string"
-      },
-      "type": "array"
-    },
-    "reason": {
-      "description": "Why it stopped, when it did not complete.",
-      "type": [
-        "string",
-        "null"
-      ]
+    "skill": {
+      "description": "The skill.",
+      "type": "string"
     },
     "run_id": {
       "description": "The agentplane run.",
-      "type": "string"
-    },
-    "skill": {
-      "description": "The skill.",
       "type": "string"
     },
     "status": {
@@ -70,13 +23,61 @@
         "null"
       ]
     },
+    "questions": {
+      "description": "Questions it could not get answered.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "changes": {
+      "description": "Paths changed in the checkout: `added` / `modified` / `deleted`.",
+      "type": "array",
+      "items": {
+        "type": "array",
+        "prefixItems": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "minItems": 2,
+        "maxItems": 2
+      }
+    },
     "tool_calls": {
       "description": "Every tool call with the policy's decision.",
-      "items": true,
-      "type": "array"
+      "type": "array",
+      "items": true
+    },
+    "pending": {
+      "description": "The call awaiting approval, if any."
+    },
+    "reason": {
+      "description": "Why it stopped, when it did not complete.",
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "usage": {
       "description": "Token usage."
+    },
+    "hooks": {
+      "description": "Extension hooks run, offered or skipped around it.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "current": {
+      "description": "The unit the skill worked on, or created and made current, and how\nit is known (`001-x (recorded in .specify/feature.json)`).",
+      "type": [
+        "string",
+        "null"
+      ]
     }
   },
   "required": [
@@ -92,6 +93,5 @@
     "usage",
     "hooks"
   ],
-  "title": "spec SKILL: the hosted skill's run",
-  "type": "object"
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/skill.json"
 }

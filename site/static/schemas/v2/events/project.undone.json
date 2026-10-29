@@ -1,14 +1,15 @@
 {
-  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/events/project.undone.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "a domain event's public projection: ids, digests and counts",
   "description": "`project.undone`, as published.",
+  "type": "object",
   "properties": {
-    "kind": {
-      "description": "`trash` or `revert`.",
-      "type": "string"
-    },
     "path_digest": {
       "description": "SHA-256 of the folder's canonical path.",
+      "type": "string"
+    },
+    "kind": {
+      "description": "`trash` or `revert`.",
       "type": "string"
     },
     "via": {
@@ -21,6 +22,5 @@
     "kind",
     "via"
   ],
-  "title": "a domain event's public projection: ids, digests and counts",
-  "type": "object"
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/events/project.undone.json"
 }

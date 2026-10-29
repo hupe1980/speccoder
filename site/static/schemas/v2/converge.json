@@ -1,52 +1,12 @@
 {
-  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/converge.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "converge: the convergence round",
   "description": "Result of `speccoder converge`.",
+  "type": "object",
   "properties": {
-    "appended": {
-      "description": "Tasks speccoder appended, as `T0NN text`.",
-      "items": {
-        "type": "string"
-      },
-      "type": "array"
-    },
-    "commit": {
-      "description": "The commit on `speccoder/<feature>` holding the appended section.",
-      "type": [
-        "string",
-        "null"
-      ]
-    },
     "feature": {
       "description": "Feature directory name.",
       "type": "string"
-    },
-    "findings": {
-      "description": "Every finding as the model reported it (its claim, not evidence).",
-      "items": true,
-      "type": "array"
-    },
-    "hooks": {
-      "description": "Extension hooks run, offered or skipped around it.",
-      "items": {
-        "type": "string"
-      },
-      "type": "array"
-    },
-    "outcome": {
-      "description": "`converged`, `tasks_appended`, `needs_review` (only unrequested\nfindings), `no_progress`, `round_limit` or `failed`.",
-      "type": "string"
-    },
-    "repeated": {
-      "description": "Findings that repeat an earlier convergence task: no progress.",
-      "items": true,
-      "type": "array"
-    },
-    "round": {
-      "description": "This round's number (1 = the first Convergence phase).",
-      "format": "uint32",
-      "minimum": 0,
-      "type": "integer"
     },
     "run_id": {
       "description": "The agentplane run of the assessment, if one ran.",
@@ -55,18 +15,59 @@
         "null"
       ]
     },
-    "tool_calls": {
-      "description": "Every tool call with the policy's decision.",
-      "items": true,
-      "type": "array"
+    "round": {
+      "description": "This round's number (1 = the first Convergence phase).",
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "outcome": {
+      "description": "`converged`, `tasks_appended`, `needs_review` (only unrequested\nfindings), `no_progress`, `round_limit` or `failed`.",
+      "type": "string"
+    },
+    "findings": {
+      "description": "Every finding as the model reported it (its claim, not evidence).",
+      "type": "array",
+      "items": true
+    },
+    "appended": {
+      "description": "Tasks speccoder appended, as `T0NN text`.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
     },
     "unrequested": {
       "description": "`unrequested` findings: for a person, never turned into tasks.",
-      "items": true,
-      "type": "array"
+      "type": "array",
+      "items": true
+    },
+    "repeated": {
+      "description": "Findings that repeat an earlier convergence task: no progress.",
+      "type": "array",
+      "items": true
+    },
+    "commit": {
+      "description": "The commit on `speccoder/<feature>` holding the appended section.",
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "usage": {
       "description": "Token usage of the assessment."
+    },
+    "tool_calls": {
+      "description": "Every tool call with the policy's decision.",
+      "type": "array",
+      "items": true
+    },
+    "hooks": {
+      "description": "Extension hooks run, offered or skipped around it.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
     }
   },
   "required": [
@@ -83,6 +84,5 @@
     "tool_calls",
     "hooks"
   ],
-  "title": "converge: the convergence round",
-  "type": "object"
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/converge.json"
 }

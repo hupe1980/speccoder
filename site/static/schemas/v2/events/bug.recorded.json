@@ -1,10 +1,15 @@
 {
-  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/events/bug.recorded.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "a domain event's public projection: ids, digests and counts",
   "description": "`bug.recorded`, as published: ids and digests only.",
+  "type": "object",
   "properties": {
     "home": {
       "description": "The home's kind.",
+      "type": "string"
+    },
+    "unit": {
+      "description": "The unit.",
       "type": "string"
     },
     "requirement": {
@@ -13,10 +18,6 @@
     },
     "triad_digest": {
       "description": "The triad's digest.",
-      "type": "string"
-    },
-    "unit": {
-      "description": "The unit.",
       "type": "string"
     },
     "via": {
@@ -31,6 +32,5 @@
     "triad_digest",
     "via"
   ],
-  "title": "a domain event's public projection: ids, digests and counts",
-  "type": "object"
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/events/bug.recorded.json"
 }

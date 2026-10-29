@@ -1,71 +1,11 @@
 {
-  "$defs": {
-    "FeatureEntry": {
-      "description": "One feature (or change) of the project, as `speccoder feature` lists it.",
-      "properties": {
-        "artifacts": {
-          "description": "Which planning artifacts exist: `spec`, `plan`, `tasks`.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "current": {
-          "description": "The current one.",
-          "type": "boolean"
-        },
-        "dir": {
-          "description": "Repository-relative directory.",
-          "type": "string"
-        },
-        "done": {
-          "description": "Ticked tasks.",
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "name": {
-          "description": "Directory name, e.g. `001-greet`.",
-          "type": "string"
-        },
-        "number": {
-          "description": "1-based position, the number `speccoder feature <n>` takes.",
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "tasks": {
-          "description": "All tasks (0: no task list yet).",
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "title": {
-          "description": "The title its spec (or proposal) gives, when it has one.",
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "number",
-        "name",
-        "dir",
-        "current",
-        "done",
-        "tasks",
-        "artifacts"
-      ],
-      "type": "object"
-    }
-  },
-  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/features.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "feature: the features and which one is current",
   "description": "Result of `speccoder feature`.",
+  "type": "object",
   "properties": {
-    "action": {
-      "description": "What this call did: `listed`, `switched` or `cleared`.",
+    "unit": {
+      "description": "`feature` or `change`.",
       "type": "string"
     },
     "current": {
@@ -75,13 +15,6 @@
         "null"
       ]
     },
-    "features": {
-      "description": "Every feature, in order.",
-      "items": {
-        "$ref": "#/$defs/FeatureEntry"
-      },
-      "type": "array"
-    },
     "reason": {
       "description": "How it is current: `argument`, `environment`, `recorded`,\n`only_feature` or `none`.",
       "type": "string"
@@ -90,9 +23,16 @@
       "description": "The same in words (`recorded in .specify/feature.json`).",
       "type": "string"
     },
-    "unit": {
-      "description": "`feature` or `change`.",
+    "action": {
+      "description": "What this call did: `listed`, `switched` or `cleared`.",
       "type": "string"
+    },
+    "features": {
+      "description": "Every feature, in order.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/FeatureEntry"
+      }
     }
   },
   "required": [
@@ -103,6 +43,66 @@
     "action",
     "features"
   ],
-  "title": "feature: the features and which one is current",
-  "type": "object"
+  "$defs": {
+    "FeatureEntry": {
+      "description": "One feature (or change) of the project, as `speccoder feature` lists it.",
+      "type": "object",
+      "properties": {
+        "number": {
+          "description": "1-based position, the number `speccoder feature <n>` takes.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "name": {
+          "description": "Directory name, e.g. `001-greet`.",
+          "type": "string"
+        },
+        "title": {
+          "description": "The title its spec (or proposal) gives, when it has one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dir": {
+          "description": "Repository-relative directory.",
+          "type": "string"
+        },
+        "current": {
+          "description": "The current one.",
+          "type": "boolean"
+        },
+        "done": {
+          "description": "Ticked tasks.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "tasks": {
+          "description": "All tasks (0: no task list yet).",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "artifacts": {
+          "description": "Which planning artifacts exist: `spec`, `plan`, `tasks`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "number",
+        "name",
+        "dir",
+        "current",
+        "done",
+        "tasks",
+        "artifacts"
+      ]
+    }
+  },
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/features.json"
 }

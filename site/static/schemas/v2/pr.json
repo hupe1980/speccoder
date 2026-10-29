@@ -1,34 +1,50 @@
 {
-  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/pr.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "pr: the draft pull request",
   "description": "Result of `speccoder pr`: a draft pull request with the evidence.",
+  "type": "object",
   "properties": {
-    "base": {
-      "description": "The branch the pull request targets.",
-      "type": "string"
-    },
-    "body": {
-      "description": "Pull request body (Markdown): every task's evidence.",
+    "feature": {
+      "description": "Feature directory name.",
       "type": "string"
     },
     "branch": {
       "description": "`speccoder/<feature>`.",
       "type": "string"
     },
+    "base": {
+      "description": "The branch the pull request targets.",
+      "type": "string"
+    },
+    "remote": {
+      "description": "The git remote pushed to.",
+      "type": "string"
+    },
+    "title": {
+      "description": "Pull request title.",
+      "type": "string"
+    },
+    "body": {
+      "description": "Pull request body (Markdown): every task's evidence.",
+      "type": "string"
+    },
     "commands": {
       "description": "What runs (or would run), in order.",
+      "type": "array",
       "items": {
         "type": "string"
-      },
-      "type": "array"
+      }
     },
-    "evidence_check": {
-      "description": "`present`: a workflow under `.github/workflows/` runs\n`speccoder attest verify --branch`; `absent`: none does.",
-      "type": "string"
+    "opened": {
+      "description": "Whether the branch was pushed and the draft opened (`false`: a dry run).",
+      "type": "boolean"
     },
-    "feature": {
-      "description": "Feature directory name.",
-      "type": "string"
+    "url": {
+      "description": "The pull request, when opened.",
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "held_out_ref": {
       "description": "The unit's held-out ref pushed with the branch\n(`refs/speccoder/held-out/<unit>`), when a closed task names a set.",
@@ -39,35 +55,20 @@
     },
     "held_out_tasks": {
       "description": "The tasks closed on the pushed head whose held-out sets it carries.",
+      "type": "array",
       "items": {
         "type": "string"
-      },
-      "type": "array"
+      }
     },
     "held_out_withheld": {
       "description": "Held-out sets of open tasks: they stay local.",
+      "type": "integer",
       "format": "uint",
-      "minimum": 0,
-      "type": "integer"
+      "minimum": 0
     },
-    "opened": {
-      "description": "Whether the branch was pushed and the draft opened (`false`: a dry run).",
-      "type": "boolean"
-    },
-    "remote": {
-      "description": "The git remote pushed to.",
+    "evidence_check": {
+      "description": "`present`: a workflow under `.github/workflows/` runs\n`speccoder attest verify --branch`; `absent`: none does.",
       "type": "string"
-    },
-    "title": {
-      "description": "Pull request title.",
-      "type": "string"
-    },
-    "url": {
-      "description": "The pull request, when opened.",
-      "type": [
-        "string",
-        "null"
-      ]
     }
   },
   "required": [
@@ -85,6 +86,5 @@
     "held_out_withheld",
     "evidence_check"
   ],
-  "title": "pr: the draft pull request",
-  "type": "object"
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/pr.json"
 }

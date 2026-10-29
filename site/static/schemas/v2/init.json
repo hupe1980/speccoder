@@ -1,18 +1,108 @@
 {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "init: the configuration written",
+  "description": "Result of `speccoder init`.",
+  "type": "object",
+  "properties": {
+    "path": {
+      "description": "The configuration file.",
+      "type": "string"
+    },
+    "checks": {
+      "description": "The checks it declares.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/InitCheck"
+      }
+    },
+    "model": {
+      "description": "`provider/model`.",
+      "type": "string"
+    },
+    "wrote": {
+      "description": "Files written, relative to the project root.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "ran": {
+      "description": "The checks run on the untouched code (empty: not run).",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/InitRun"
+      }
+    },
+    "instructions": {
+      "description": "The repository instructions found (`AGENTS.md`, `CLAUDE.md`).",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "key": {
+      "description": "The model key: the variable and whether it is set.",
+      "$ref": "#/$defs/InitKey"
+    },
+    "region": {
+      "description": "The region written (Bedrock only).",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "committed": {
+      "description": "The commit holding `speccoder.toml`, when one was made.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "include": {
+      "description": "The git-ignored files proposed for `[worktree] include` (the\ncheckout's `.env` files): copied into each run's worktree.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "include_active": {
+      "description": "The proposal was written as the setting (confirmed, or `--yes`);\nelse it is commented.",
+      "type": "boolean",
+      "default": false
+    },
+    "worktreeinclude": {
+      "description": "The checkout has a `.worktreeinclude`, which runs read already.",
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "required": [
+    "path",
+    "checks",
+    "model",
+    "wrote",
+    "ran",
+    "instructions",
+    "key",
+    "committed",
+    "include_active",
+    "worktreeinclude"
+  ],
   "$defs": {
     "InitCheck": {
       "description": "One detected check.",
+      "type": "object",
       "properties": {
-        "argv": {
-          "description": "The command.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
         "name": {
           "description": "`[checks.<name>]`.",
           "type": "string"
+        },
+        "argv": {
+          "description": "The command.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         },
         "tier": {
           "description": "`fast` or `full`.",
@@ -28,12 +118,54 @@
         "argv",
         "tier",
         "why"
-      ],
-      "type": "object"
+      ]
+    },
+    "InitRun": {
+      "description": "One check `init` ran on the untouched code.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "`[checks.<name>]`.",
+          "type": "string"
+        },
+        "passed": {
+          "description": "Passed on the untouched code.",
+          "type": "boolean"
+        },
+        "status": {
+          "description": "`passed`, `failed`, `timed_out`, `skipped`, `error`.",
+          "type": "string"
+        },
+        "duration_ms": {
+          "description": "How long it took.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "reason": {
+          "description": "Why it did not pass: the last line of its output that says something\n(`No module named pytest`), or the runner's note.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "passed",
+        "status",
+        "duration_ms",
+        "reason"
+      ]
     },
     "InitKey": {
       "description": "The model key `init` looked for.",
+      "type": "object",
       "properties": {
+        "variable": {
+          "description": "`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `AWS_BEARER_TOKEN_BEDROCK`.",
+          "type": "string"
+        },
         "set": {
           "description": "Set in this environment (Bedrock: a credential source was found).",
           "type": "boolean"
@@ -44,145 +176,13 @@
             "string",
             "null"
           ]
-        },
-        "variable": {
-          "description": "`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `AWS_BEARER_TOKEN_BEDROCK`.",
-          "type": "string"
         }
       },
       "required": [
         "variable",
         "set"
-      ],
-      "type": "object"
-    },
-    "InitRun": {
-      "description": "One check `init` ran on the untouched code.",
-      "properties": {
-        "duration_ms": {
-          "description": "How long it took.",
-          "format": "uint64",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "name": {
-          "description": "`[checks.<name>]`.",
-          "type": "string"
-        },
-        "passed": {
-          "description": "Passed on the untouched code.",
-          "type": "boolean"
-        },
-        "reason": {
-          "description": "Why it did not pass: the last line of its output that says something\n(`No module named pytest`), or the runner's note.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "status": {
-          "description": "`passed`, `failed`, `timed_out`, `skipped`, `error`.",
-          "type": "string"
-        }
-      },
-      "required": [
-        "name",
-        "passed",
-        "status",
-        "duration_ms",
-        "reason"
-      ],
-      "type": "object"
+      ]
     }
   },
-  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/init.json",
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Result of `speccoder init`.",
-  "properties": {
-    "checks": {
-      "description": "The checks it declares.",
-      "items": {
-        "$ref": "#/$defs/InitCheck"
-      },
-      "type": "array"
-    },
-    "committed": {
-      "description": "The commit holding `speccoder.toml`, when one was made.",
-      "type": [
-        "string",
-        "null"
-      ]
-    },
-    "include": {
-      "description": "The git-ignored files proposed for `[worktree] include` (the\ncheckout's `.env` files): copied into each run's worktree.",
-      "items": {
-        "type": "string"
-      },
-      "type": "array"
-    },
-    "include_active": {
-      "default": false,
-      "description": "The proposal was written as the setting (confirmed, or `--yes`);\nelse it is commented.",
-      "type": "boolean"
-    },
-    "instructions": {
-      "description": "The repository instructions found (`AGENTS.md`, `CLAUDE.md`).",
-      "items": {
-        "type": "string"
-      },
-      "type": "array"
-    },
-    "key": {
-      "$ref": "#/$defs/InitKey",
-      "description": "The model key: the variable and whether it is set."
-    },
-    "model": {
-      "description": "`provider/model`.",
-      "type": "string"
-    },
-    "path": {
-      "description": "The configuration file.",
-      "type": "string"
-    },
-    "ran": {
-      "description": "The checks run on the untouched code (empty: not run).",
-      "items": {
-        "$ref": "#/$defs/InitRun"
-      },
-      "type": "array"
-    },
-    "region": {
-      "description": "The region written (Bedrock only).",
-      "type": [
-        "string",
-        "null"
-      ]
-    },
-    "worktreeinclude": {
-      "default": false,
-      "description": "The checkout has a `.worktreeinclude`, which runs read already.",
-      "type": "boolean"
-    },
-    "wrote": {
-      "description": "Files written, relative to the project root.",
-      "items": {
-        "type": "string"
-      },
-      "type": "array"
-    }
-  },
-  "required": [
-    "path",
-    "checks",
-    "model",
-    "wrote",
-    "ran",
-    "instructions",
-    "key",
-    "committed",
-    "include_active",
-    "worktreeinclude"
-  ],
-  "title": "init: the configuration written",
-  "type": "object"
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/init.json"
 }

@@ -1,26 +1,27 @@
 {
-  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/events/project.created.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "a domain event's public projection: ids, digests and counts",
   "description": "`project.created`, as published: no path, no idea text.",
+  "type": "object",
   "properties": {
-    "commit": {
-      "description": "speccoder's commit.",
-      "type": "string"
-    },
-    "format": {
-      "description": "The spec format.",
+    "path_digest": {
+      "description": "SHA-256 of the folder's canonical path.",
       "type": "string"
     },
     "mode": {
       "description": "`new_folder` or `existing_repository`.",
       "type": "string"
     },
-    "path_digest": {
-      "description": "SHA-256 of the folder's canonical path.",
-      "type": "string"
-    },
     "stack": {
       "description": "The stack.",
+      "type": "string"
+    },
+    "format": {
+      "description": "The spec format.",
+      "type": "string"
+    },
+    "commit": {
+      "description": "speccoder's commit.",
       "type": "string"
     },
     "via": {
@@ -36,6 +37,5 @@
     "commit",
     "via"
   ],
-  "title": "a domain event's public projection: ids, digests and counts",
-  "type": "object"
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/events/project.created.json"
 }

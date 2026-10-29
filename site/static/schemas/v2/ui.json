@@ -1,21 +1,22 @@
 {
-  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/ui.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ui: where the web interface is served",
   "description": "Result of `speccoder ui`, printed once the host listens (under `--json`\nthe only result: the host keeps serving after it).",
+  "type": "object",
   "properties": {
+    "url": {
+      "description": "The address to open, with this start's key in its fragment.",
+      "type": "string"
+    },
     "port": {
       "description": "The port on 127.0.0.1.",
+      "type": "integer",
       "format": "uint16",
-      "maximum": 65535,
       "minimum": 0,
-      "type": "integer"
+      "maximum": 65535
     },
     "root": {
       "description": "The project served.",
-      "type": "string"
-    },
-    "url": {
-      "description": "The address to open, with this start's key in its fragment.",
       "type": "string"
     }
   },
@@ -24,6 +25,5 @@
     "port",
     "root"
   ],
-  "title": "ui: where the web interface is served",
-  "type": "object"
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/ui.json"
 }

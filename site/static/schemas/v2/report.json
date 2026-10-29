@@ -1,792 +1,12 @@
 {
-  "$defs": {
-    "ConvergenceRound": {
-      "description": "One convergence round, from its commit.",
-      "properties": {
-        "commit": {
-          "description": "The commit that appended it.",
-          "type": "string"
-        },
-        "round": {
-          "description": "Round number.",
-          "format": "uint32",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "tasks": {
-          "description": "The appended tasks, as `T0NN text`.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        }
-      },
-      "required": [
-        "round",
-        "commit",
-        "tasks"
-      ],
-      "type": "object"
-    },
-    "Drift": {
-      "description": "What changed since a tick: the tick's commit holds the intent\nit was judged against; the checkout's `HEAD` holds the intent now.",
-      "properties": {
-        "files": {
-          "description": "The intent files that differ (project-relative), task lists aside.\nEmpty when the intent is not in git (in place, ignored): it changed,\nwhich file is not known.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "requirements": {
-          "description": "The requirements the task cites whose line changed, appeared or went\naway: the evidence no longer speaks for them. Empty: what changed is\nelsewhere in the intent.",
-          "items": {
-            "$ref": "#/$defs/RequirementDrift"
-          },
-          "type": "array"
-        }
-      },
-      "required": [
-        "requirements",
-        "files"
-      ],
-      "type": "object"
-    },
-    "ImplementedBy": {
-      "anyOf": [
-        {
-          "description": "A tick on the feature branch.",
-          "properties": {
-            "commit": {
-              "description": "Its commit (short).",
-              "type": "string"
-            },
-            "task": {
-              "description": "Its task.",
-              "type": "string"
-            }
-          },
-          "required": [
-            "task",
-            "commit"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "They passed before the feature's first tick.",
-          "properties": {
-            "before_feature": {
-              "description": "Always `true`.",
-              "type": "boolean"
-            }
-          },
-          "required": [
-            "before_feature"
-          ],
-          "type": "object"
-        }
-      ],
-      "description": "Which tick made already-passing acceptance tests pass."
-    },
-    "JourneyStep": {
-      "description": "One step of a feature's journey: `spec`, `plan`, `tasks`, `commit`,\n`run`, `review`.",
-      "properties": {
-        "name": {
-          "description": "Its name.",
-          "type": "string"
-        },
-        "state": {
-          "$ref": "#/$defs/StepState",
-          "description": "Where it is."
-        }
-      },
-      "required": [
-        "name",
-        "state"
-      ],
-      "type": "object"
-    },
-    "Lane": {
-      "description": "A task's lane.",
-      "oneOf": [
-        {
-          "const": "code",
-          "description": "The implementer's: code, judged by the checks and its acceptance tests.",
-          "type": "string"
-        },
-        {
-          "const": "planning",
-          "description": "Design documents the plan should have written: every path the task\nnames lies inside the unit's directory.",
-          "type": "string"
-        },
-        {
-          "const": "yours",
-          "description": "A step only a person can take: a `[YOU]` label, or an attempt that\nstopped `BLOCKED`.",
-          "type": "string"
-        }
-      ]
-    },
-    "LastAttempt": {
-      "description": "An attempt that did not pass, as saved under `refs/speccoder/attempts/`.",
-      "properties": {
-        "outcome": {
-          "description": "`verification_failed`, `blocked`, `needs_approval`, `not_demonstrated`, `interrupted`, …",
-          "type": "string"
-        },
-        "reason": {
-          "description": "Why.",
-          "type": "string"
-        },
-        "reference": {
-          "description": "The ref holding the attempt's tree.",
-          "type": "string"
-        },
-        "run_id": {
-          "description": "The agentplane run, when there was one.",
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "outcome",
-        "reason",
-        "run_id",
-        "reference"
-      ],
-      "type": "object"
-    },
-    "RedClass": {
-      "description": "What a red run of acceptance tests showed.\n\nOnly [`RedClass::Assertion`] and [`RedClass::Absent`] are red: a test was\ncollected and failed on an assertion, or the tests could not build only\nbecause symbols the task is to introduce do not exist yet. Everything\nelse is not demonstrated.",
-      "oneOf": [
-        {
-          "const": "assertion",
-          "description": "A collected test failed on an assertion.",
-          "type": "string"
-        },
-        {
-          "const": "absent",
-          "description": "The only build or import errors name symbols that do not exist yet.",
-          "type": "string"
-        },
-        {
-          "const": "build_error",
-          "description": "Any other build error.",
-          "type": "string"
-        },
-        {
-          "const": "collection_error",
-          "description": "Tests errored at setup or collection.",
-          "type": "string"
-        },
-        {
-          "const": "timeout",
-          "description": "The run hit its deadline.",
-          "type": "string"
-        },
-        {
-          "const": "no_tests",
-          "description": "Nothing was collected.",
-          "type": "string"
-        },
-        {
-          "const": "flaky",
-          "description": "Red once, not red when confirmed.",
-          "type": "string"
-        },
-        {
-          "const": "unclassified",
-          "description": "The output was not recognised.",
-          "type": "string"
-        },
-        {
-          "const": "passed",
-          "description": "The tests passed.",
-          "type": "string"
-        }
-      ]
-    },
-    "RegressionOnly": {
-      "description": "A regression-only tick's reason with its one-line wording.",
-      "properties": {
-        "reason": {
-          "$ref": "#/$defs/RegressionReason",
-          "description": "The reason with its typed details."
-        },
-        "text": {
-          "description": "speccoder's sentence for it, the same in every interface.",
-          "type": "string"
-        }
-      },
-      "required": [
-        "reason",
-        "text"
-      ],
-      "type": "object"
-    },
-    "RegressionReason": {
-      "description": "Why a tick is regression-only.",
-      "oneOf": [
-        {
-          "description": "The task belongs to no user story.",
-          "properties": {
-            "reason": {
-              "const": "no_story",
-              "type": "string"
-            }
-          },
-          "required": [
-            "reason"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "Its story states no acceptance scenario.",
-          "properties": {
-            "reason": {
-              "const": "no_scenarios",
-              "type": "string"
-            },
-            "story": {
-              "description": "The story.",
-              "type": "string"
-            }
-          },
-          "required": [
-            "reason",
-            "story"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "`[acceptance] generate = false`.",
-          "properties": {
-            "reason": {
-              "const": "acceptance_off",
-              "type": "string"
-            }
-          },
-          "required": [
-            "reason"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "The test author returned no file.",
-          "properties": {
-            "reason": {
-              "const": "author_wrote_none",
-              "type": "string"
-            }
-          },
-          "required": [
-            "reason"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "The author's answer could not be used.",
-          "properties": {
-            "detail": {
-              "description": "What speccoder refused (its own words).",
-              "type": "string"
-            },
-            "reason": {
-              "const": "author_failed",
-              "type": "string"
-            }
-          },
-          "required": [
-            "reason",
-            "detail"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "The acceptance tests passed before the attempt.",
-          "properties": {
-            "implemented_by": {
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/ImplementedBy"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "The tick that made them pass; `null` when it could not be determined."
-            },
-            "reason": {
-              "const": "already_passing",
-              "type": "string"
-            }
-          },
-          "required": [
-            "reason",
-            "implemented_by"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "They did not fail on an assertion or an absent symbol.",
-          "properties": {
-            "reason": {
-              "const": "not_red",
-              "type": "string"
-            },
-            "red_class": {
-              "$ref": "#/$defs/RedClass",
-              "description": "How the red run ended."
-            }
-          },
-          "required": [
-            "reason",
-            "red_class"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "The acceptance command collected no test.",
-          "properties": {
-            "reason": {
-              "const": "tests_not_collected",
-              "type": "string"
-            }
-          },
-          "required": [
-            "reason"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "A planning task: design documents, judged by the checks alone.",
-          "properties": {
-            "reason": {
-              "const": "planning_work",
-              "type": "string"
-            }
-          },
-          "required": [
-            "reason"
-          ],
-          "type": "object"
-        },
-        {
-          "description": "A tick made before reasons were recorded (read side only).",
-          "properties": {
-            "reason": {
-              "const": "unrecorded",
-              "type": "string"
-            }
-          },
-          "required": [
-            "reason"
-          ],
-          "type": "object"
-        }
-      ]
-    },
-    "RequirementDrift": {
-      "description": "One cited requirement, as the tick saw it and as the spec has it now.",
-      "properties": {
-        "id": {
-          "description": "`FR-003`.",
-          "type": "string"
-        },
-        "now": {
-          "description": "Its line now; `None`: it was removed.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "then": {
-          "description": "Its line when the task was ticked; `None`: it did not exist yet.",
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "id",
-        "then",
-        "now"
-      ],
-      "type": "object"
-    },
-    "ReviewTotals": {
-      "description": "Counts of [`ReviewItem::state`].",
-      "properties": {
-        "ambiguous": {
-          "default": 0,
-          "description": "Requirements two test authors read differently, not yet resolved:\n*Approve and Run* and a gated run wait on them.",
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "approved": {
-          "description": "Approved on their current wording.",
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "changes_requested": {
-          "description": "Changes requested.",
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "lapsed": {
-          "description": "Decided on an earlier wording.",
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "open": {
-          "description": "Never reviewed.",
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "questions": {
-          "default": 0,
-          "description": "Questions the documents leave open.",
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        }
-      },
-      "required": [
-        "approved",
-        "changes_requested",
-        "open",
-        "lapsed",
-        "questions",
-        "ambiguous"
-      ],
-      "type": "object"
-    },
-    "SetAside": {
-      "description": "Changes saved and set aside so a run could start from the branch tip.",
-      "properties": {
-        "files": {
-          "description": "The files they change, repository-relative.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "reference": {
-          "description": "The ref holding them.",
-          "type": "string"
-        }
-      },
-      "required": [
-        "reference",
-        "files"
-      ],
-      "type": "object"
-    },
-    "StatusTotals": {
-      "description": "Counts of [`TaskStatus::state`].",
-      "properties": {
-        "attested": {
-          "description": "Ticked by `speccoder task accept`: a person's attestation, not evidence.",
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "blocked": {
-          "description": "Open and blocked.",
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "evidence_without_tick": {
-          "description": "In place: committed by speccoder, the local tick missing.",
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "ready": {
-          "description": "Open and ready.",
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "regression_only": {
-          "description": "Ticked with regression evidence only.",
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "skipped": {
-          "description": "Open and skipped by a person.",
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "stale": {
-          "default": 0,
-          "description": "Ticks whose cited requirements changed since.",
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "ticked_without_evidence": {
-          "description": "Ticked without a speccoder commit (by a person, or before speccoder).",
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "verified": {
-          "description": "Ticked with task-specific evidence.",
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "without_attestation": {
-          "description": "Ticks speccoder committed without an attestation.",
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        }
-      },
-      "required": [
-        "verified",
-        "regression_only",
-        "ticked_without_evidence",
-        "evidence_without_tick",
-        "without_attestation",
-        "attested",
-        "skipped",
-        "ready",
-        "blocked",
-        "stale"
-      ],
-      "type": "object"
-    },
-    "StepState": {
-      "description": "Where a step of the journey is.",
-      "oneOf": [
-        {
-          "const": "done",
-          "description": "Done.",
-          "type": "string"
-        },
-        {
-          "const": "now",
-          "description": "The one to take now.",
-          "type": "string"
-        },
-        {
-          "const": "todo",
-          "description": "Later.",
-          "type": "string"
-        },
-        {
-          "const": "skipped",
-          "description": "Passed without its file: a task list written without a spec or a\nplan. Not a step left to take.",
-          "type": "string"
-        }
-      ]
-    },
-    "TaskStatus": {
-      "description": "One task and its evidence.",
-      "properties": {
-        "attestation": {
-          "description": "For a task speccoder committed: its attestation as the note says,\nsignatures unchecked — `signed <kind> <keyid>`, `unsigned` or\n`missing` (`attest verify` checks them).",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "blocked_by": {
-          "description": "Open dependencies of a blocked task.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "bug": {
-          "description": "A bug task: the bug's outcome (`awaiting_confirmation`,\n`cannot_reproduce`, `fixed`, …).",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "commit": {
-          "description": "The speccoder commit that ticked it.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "drift": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Drift"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "What changed in the intent (spec, plan, constitution) since this\ntask's evidence was committed: its tick was judged against an earlier\nversion. `None`: nothing changed, or the task has no commit."
-        },
-        "id": {
-          "description": "Task ID.",
-          "type": "string"
-        },
-        "lane": {
-          "$ref": "#/$defs/Lane",
-          "description": "Who does it ([`crate::lane`]); left out for `code`."
-        },
-        "last_attempt": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/LastAttempt"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "For an open task: its latest saved attempt."
-        },
-        "note": {
-          "description": "The reason a person gave for `accept` or `skip`.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "phase": {
-          "description": "Enclosing phase heading.",
-          "type": "string"
-        },
-        "regression": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/RegressionOnly"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "A regression-only tick: why, with speccoder's wording\n(`unrecorded` for a tick made before reasons were recorded)."
-        },
-        "run_id": {
-          "description": "The agentplane run of that attempt.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "set_aside": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/SetAside"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "Changes found in the worktree when the task's run started (a person's\nedits, or an interrupted run's leftovers), saved and set aside."
-        },
-        "state": {
-          "description": "`verified`, `regression_only` (ticked by speccoder with that verdict),\n`attested` (ticked by `speccoder task accept`), `ticked_without_evidence`\n(ticked, no speccoder commit), `evidence_without_tick` (in place: a\nverdict commit names the task, its local tick is missing),\n`skipped`, `ready` or `blocked`.",
-          "type": "string"
-        },
-        "strength": {
-          "description": "A verified tick's acceptance strength as its trailer says\n(`0.83 mutants=9/11 near-miss=1/2`, `not measured (…)`).",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "title": {
-          "description": "Title after markers.",
-          "type": "string"
-        }
-      },
-      "required": [
-        "id",
-        "title",
-        "phase",
-        "state",
-        "attestation",
-        "blocked_by",
-        "commit",
-        "run_id",
-        "last_attempt",
-        "note"
-      ],
-      "type": "object"
-    },
-    "TraceRow": {
-      "description": "One row of the requirement → scenario → test → verdict matrix.",
-      "properties": {
-        "changed": {
-          "default": false,
-          "description": "The requirement changed since that task's tick: the verdict is for\nits earlier wording.",
-          "type": "boolean"
-        },
-        "requirement": {
-          "description": "`FR-001`, `SC-002`.",
-          "type": "string"
-        },
-        "scenario": {
-          "description": "`US1.2`: story 1, acceptance scenario 2.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "task": {
-          "description": "The task that cites it.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "test": {
-          "description": "The acceptance test.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "verdict": {
-          "description": "That task's verdict.",
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "requirement",
-        "scenario",
-        "test",
-        "task",
-        "verdict",
-        "changed"
-      ],
-      "type": "object"
-    }
-  },
-  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/report.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "report: every task and its evidence",
   "description": "Result of `speccoder report`: what the branch's history shows.",
+  "type": "object",
   "properties": {
-    "artifacts": {
-      "default": [],
-      "description": "The planning artifacts that exist (`spec`, `plan`, `tasks`).",
-      "items": {
-        "type": "string"
-      },
-      "type": "array"
+    "feature": {
+      "description": "Feature directory name.",
+      "type": "string"
     },
     "branch": {
       "description": "`speccoder/<feature>`, if speccoder has worked on the feature.",
@@ -795,40 +15,85 @@
         "null"
       ]
     },
-    "convergence": {
-      "description": "Convergence rounds, oldest first.",
-      "items": {
-        "$ref": "#/$defs/ConvergenceRound"
-      },
-      "type": "array"
-    },
-    "feature": {
-      "description": "Feature directory name.",
+    "source": {
+      "description": "Where `tasks.md` was read: `branch` or `checkout`.",
       "type": "string"
     },
-    "issues": {
-      "description": "GitHub issue URLs the feature's spec names: where it came from, and\nwhat its pull request closes.",
+    "selected_by": {
+      "description": "How the feature was chosen (`recorded in .specify/feature.json`,\n`the only feature`, `named with --feature`).",
+      "type": "string",
+      "default": ""
+    },
+    "artifacts": {
+      "description": "The planning artifacts that exist (`spec`, `plan`, `tasks`).",
+      "type": "array",
       "items": {
         "type": "string"
       },
-      "type": "array"
-    },
-    "journey": {
-      "default": [],
-      "description": "Where the feature is: spec → plan → tasks → commit → run → review.",
-      "items": {
-        "$ref": "#/$defs/JourneyStep"
-      },
-      "type": "array"
+      "default": []
     },
     "planning": {
       "description": "While the feature has no task list: the planning skills that come\nnext (`plan`, `tasks`); empty once it has one.",
+      "type": "array",
       "items": {
         "type": "string"
+      }
+    },
+    "uncommitted": {
+      "description": "Planning files under the feature's directory not yet committed\n(`speccoder run` reads committed files only).",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "journey": {
+      "description": "Where the feature is: spec → plan → tasks → commit → run → review.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/JourneyStep"
       },
-      "type": "array"
+      "default": []
+    },
+    "unmerged_commits": {
+      "description": "Commits on the branch that the checkout's HEAD does not contain.",
+      "type": "integer",
+      "format": "uint",
+      "minimum": 0
+    },
+    "tasks": {
+      "description": "Every task, in document order.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/TaskStatus"
+      }
+    },
+    "convergence": {
+      "description": "Convergence rounds, oldest first.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ConvergenceRound"
+      }
+    },
+    "trace": {
+      "description": "Requirement → task → verdict, in the spec's order; a requirement no\ntask cites is a row without a task.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/TraceRow"
+      }
+    },
+    "totals": {
+      "description": "Counts by evidence.",
+      "$ref": "#/$defs/StatusTotals"
+    },
+    "issues": {
+      "description": "GitHub issue URLs the feature's spec names: where it came from, and\nwhat its pull request closes.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
     },
     "review": {
+      "description": "The person's review of the spec's requirements, when the\nformat has requirement identifiers.",
       "anyOf": [
         {
           "$ref": "#/$defs/ReviewTotals"
@@ -836,48 +101,7 @@
         {
           "type": "null"
         }
-      ],
-      "description": "The person's review of the spec's requirements, when the\nformat has requirement identifiers."
-    },
-    "selected_by": {
-      "default": "",
-      "description": "How the feature was chosen (`recorded in .specify/feature.json`,\n`the only feature`, `named with --feature`).",
-      "type": "string"
-    },
-    "source": {
-      "description": "Where `tasks.md` was read: `branch` or `checkout`.",
-      "type": "string"
-    },
-    "tasks": {
-      "description": "Every task, in document order.",
-      "items": {
-        "$ref": "#/$defs/TaskStatus"
-      },
-      "type": "array"
-    },
-    "totals": {
-      "$ref": "#/$defs/StatusTotals",
-      "description": "Counts by evidence."
-    },
-    "trace": {
-      "description": "Requirement → task → verdict, in the spec's order; a requirement no\ntask cites is a row without a task.",
-      "items": {
-        "$ref": "#/$defs/TraceRow"
-      },
-      "type": "array"
-    },
-    "uncommitted": {
-      "description": "Planning files under the feature's directory not yet committed\n(`speccoder run` reads committed files only).",
-      "items": {
-        "type": "string"
-      },
-      "type": "array"
-    },
-    "unmerged_commits": {
-      "description": "Commits on the branch that the checkout's HEAD does not contain.",
-      "format": "uint",
-      "minimum": 0,
-      "type": "integer"
+      ]
     }
   },
   "required": [
@@ -894,6 +118,782 @@
     "totals",
     "issues"
   ],
-  "title": "report: every task and its evidence",
-  "type": "object"
+  "$defs": {
+    "JourneyStep": {
+      "description": "One step of a feature's journey: `spec`, `plan`, `tasks`, `commit`,\n`run`, `review`.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "Its name.",
+          "type": "string"
+        },
+        "state": {
+          "description": "Where it is.",
+          "$ref": "#/$defs/StepState"
+        }
+      },
+      "required": [
+        "name",
+        "state"
+      ]
+    },
+    "StepState": {
+      "description": "Where a step of the journey is.",
+      "oneOf": [
+        {
+          "description": "Done.",
+          "type": "string",
+          "const": "done"
+        },
+        {
+          "description": "The one to take now.",
+          "type": "string",
+          "const": "now"
+        },
+        {
+          "description": "Later.",
+          "type": "string",
+          "const": "todo"
+        },
+        {
+          "description": "Passed without its file: a task list written without a spec or a\nplan. Not a step left to take.",
+          "type": "string",
+          "const": "skipped"
+        }
+      ]
+    },
+    "TaskStatus": {
+      "description": "One task and its evidence.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "Task ID.",
+          "type": "string"
+        },
+        "title": {
+          "description": "Title after markers.",
+          "type": "string"
+        },
+        "phase": {
+          "description": "Enclosing phase heading.",
+          "type": "string"
+        },
+        "state": {
+          "description": "`verified`, `regression_only` (ticked by speccoder with that verdict),\n`attested` (ticked by `speccoder task accept`), `ticked_without_evidence`\n(ticked, no speccoder commit), `evidence_without_tick` (in place: a\nverdict commit names the task, its local tick is missing),\n`skipped`, `ready` or `blocked`.",
+          "type": "string"
+        },
+        "drift": {
+          "description": "What changed in the intent (spec, plan, constitution) since this\ntask's evidence was committed: its tick was judged against an earlier\nversion. `None`: nothing changed, or the task has no commit.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Drift"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "attestation": {
+          "description": "For a task speccoder committed: its attestation as the note says,\nsignatures unchecked — `signed <kind> <keyid>`, `unsigned` or\n`missing` (`attest verify` checks them).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "blocked_by": {
+          "description": "Open dependencies of a blocked task.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "commit": {
+          "description": "The speccoder commit that ticked it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "run_id": {
+          "description": "The agentplane run of that attempt.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "last_attempt": {
+          "description": "For an open task: its latest saved attempt.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LastAttempt"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "set_aside": {
+          "description": "Changes found in the worktree when the task's run started (a person's\nedits, or an interrupted run's leftovers), saved and set aside.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SetAside"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "note": {
+          "description": "The reason a person gave for `accept` or `skip`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "strength": {
+          "description": "A verified tick's acceptance strength as its trailer says\n(`0.83 mutants=9/11 near-miss=1/2`, `not measured (…)`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "bug": {
+          "description": "A bug task: the bug's outcome (`awaiting_confirmation`,\n`cannot_reproduce`, `fixed`, …).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "regression": {
+          "description": "A regression-only tick: why, with speccoder's wording\n(`unrecorded` for a tick made before reasons were recorded).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RegressionOnly"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "lane": {
+          "description": "Who does it ([`crate::lane`]); left out for `code`.",
+          "$ref": "#/$defs/Lane"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "phase",
+        "state",
+        "attestation",
+        "blocked_by",
+        "commit",
+        "run_id",
+        "last_attempt",
+        "note"
+      ]
+    },
+    "Drift": {
+      "description": "What changed since a tick: the tick's commit holds the intent\nit was judged against; the checkout's `HEAD` holds the intent now.",
+      "type": "object",
+      "properties": {
+        "requirements": {
+          "description": "The requirements the task cites whose line changed, appeared or went\naway: the evidence no longer speaks for them. Empty: what changed is\nelsewhere in the intent.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RequirementDrift"
+          }
+        },
+        "files": {
+          "description": "The intent files that differ (project-relative), task lists aside.\nEmpty when the intent is not in git (in place, ignored): it changed,\nwhich file is not known.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "requirements",
+        "files"
+      ]
+    },
+    "RequirementDrift": {
+      "description": "One cited requirement, as the tick saw it and as the spec has it now.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "`FR-003`.",
+          "type": "string"
+        },
+        "then": {
+          "description": "Its line when the task was ticked; `None`: it did not exist yet.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "now": {
+          "description": "Its line now; `None`: it was removed.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "then",
+        "now"
+      ]
+    },
+    "LastAttempt": {
+      "description": "An attempt that did not pass, as saved under `refs/speccoder/attempts/`.",
+      "type": "object",
+      "properties": {
+        "outcome": {
+          "description": "`verification_failed`, `blocked`, `needs_approval`, `not_demonstrated`, `interrupted`, …",
+          "type": "string"
+        },
+        "reason": {
+          "description": "Why.",
+          "type": "string"
+        },
+        "run_id": {
+          "description": "The agentplane run, when there was one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reference": {
+          "description": "The ref holding the attempt's tree.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "outcome",
+        "reason",
+        "run_id",
+        "reference"
+      ]
+    },
+    "SetAside": {
+      "description": "Changes saved and set aside so a run could start from the branch tip.",
+      "type": "object",
+      "properties": {
+        "reference": {
+          "description": "The ref holding them.",
+          "type": "string"
+        },
+        "files": {
+          "description": "The files they change, repository-relative.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "reference",
+        "files"
+      ]
+    },
+    "RegressionOnly": {
+      "description": "A regression-only tick's reason with its one-line wording.",
+      "type": "object",
+      "properties": {
+        "reason": {
+          "description": "The reason with its typed details.",
+          "$ref": "#/$defs/RegressionReason"
+        },
+        "text": {
+          "description": "speccoder's sentence for it, the same in every interface.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "reason",
+        "text"
+      ]
+    },
+    "RegressionReason": {
+      "description": "Why a tick is regression-only.",
+      "oneOf": [
+        {
+          "description": "The task belongs to no user story.",
+          "type": "object",
+          "properties": {
+            "reason": {
+              "type": "string",
+              "const": "no_story"
+            }
+          },
+          "required": [
+            "reason"
+          ]
+        },
+        {
+          "description": "Its story states no acceptance scenario.",
+          "type": "object",
+          "properties": {
+            "reason": {
+              "type": "string",
+              "const": "no_scenarios"
+            },
+            "story": {
+              "description": "The story.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "reason",
+            "story"
+          ]
+        },
+        {
+          "description": "`[acceptance] generate = false`.",
+          "type": "object",
+          "properties": {
+            "reason": {
+              "type": "string",
+              "const": "acceptance_off"
+            }
+          },
+          "required": [
+            "reason"
+          ]
+        },
+        {
+          "description": "The test author returned no file.",
+          "type": "object",
+          "properties": {
+            "reason": {
+              "type": "string",
+              "const": "author_wrote_none"
+            }
+          },
+          "required": [
+            "reason"
+          ]
+        },
+        {
+          "description": "The author's answer could not be used.",
+          "type": "object",
+          "properties": {
+            "reason": {
+              "type": "string",
+              "const": "author_failed"
+            },
+            "detail": {
+              "description": "What speccoder refused (its own words).",
+              "type": "string"
+            }
+          },
+          "required": [
+            "reason",
+            "detail"
+          ]
+        },
+        {
+          "description": "The acceptance tests passed before the attempt.",
+          "type": "object",
+          "properties": {
+            "reason": {
+              "type": "string",
+              "const": "already_passing"
+            },
+            "implemented_by": {
+              "description": "The tick that made them pass; `null` when it could not be determined.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ImplementedBy"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "reason",
+            "implemented_by"
+          ]
+        },
+        {
+          "description": "They did not fail on an assertion or an absent symbol.",
+          "type": "object",
+          "properties": {
+            "reason": {
+              "type": "string",
+              "const": "not_red"
+            },
+            "red_class": {
+              "description": "How the red run ended.",
+              "$ref": "#/$defs/RedClass"
+            }
+          },
+          "required": [
+            "reason",
+            "red_class"
+          ]
+        },
+        {
+          "description": "The acceptance command collected no test.",
+          "type": "object",
+          "properties": {
+            "reason": {
+              "type": "string",
+              "const": "tests_not_collected"
+            }
+          },
+          "required": [
+            "reason"
+          ]
+        },
+        {
+          "description": "A planning task: design documents, judged by the checks alone.",
+          "type": "object",
+          "properties": {
+            "reason": {
+              "type": "string",
+              "const": "planning_work"
+            }
+          },
+          "required": [
+            "reason"
+          ]
+        },
+        {
+          "description": "A tick made before reasons were recorded (read side only).",
+          "type": "object",
+          "properties": {
+            "reason": {
+              "type": "string",
+              "const": "unrecorded"
+            }
+          },
+          "required": [
+            "reason"
+          ]
+        }
+      ]
+    },
+    "ImplementedBy": {
+      "description": "Which tick made already-passing acceptance tests pass.",
+      "anyOf": [
+        {
+          "description": "A tick on the feature branch.",
+          "type": "object",
+          "properties": {
+            "task": {
+              "description": "Its task.",
+              "type": "string"
+            },
+            "commit": {
+              "description": "Its commit (short).",
+              "type": "string"
+            }
+          },
+          "required": [
+            "task",
+            "commit"
+          ]
+        },
+        {
+          "description": "They passed before the feature's first tick.",
+          "type": "object",
+          "properties": {
+            "before_feature": {
+              "description": "Always `true`.",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "before_feature"
+          ]
+        }
+      ]
+    },
+    "RedClass": {
+      "description": "What a red run of acceptance tests showed.\n\nOnly [`RedClass::Assertion`] and [`RedClass::Absent`] are red: a test was\ncollected and failed on an assertion, or the tests could not build only\nbecause symbols the task is to introduce do not exist yet. Everything\nelse is not demonstrated.",
+      "oneOf": [
+        {
+          "description": "A collected test failed on an assertion.",
+          "type": "string",
+          "const": "assertion"
+        },
+        {
+          "description": "The only build or import errors name symbols that do not exist yet.",
+          "type": "string",
+          "const": "absent"
+        },
+        {
+          "description": "Any other build error.",
+          "type": "string",
+          "const": "build_error"
+        },
+        {
+          "description": "Tests errored at setup or collection.",
+          "type": "string",
+          "const": "collection_error"
+        },
+        {
+          "description": "The run hit its deadline.",
+          "type": "string",
+          "const": "timeout"
+        },
+        {
+          "description": "Nothing was collected.",
+          "type": "string",
+          "const": "no_tests"
+        },
+        {
+          "description": "Red once, not red when confirmed.",
+          "type": "string",
+          "const": "flaky"
+        },
+        {
+          "description": "The output was not recognised.",
+          "type": "string",
+          "const": "unclassified"
+        },
+        {
+          "description": "The tests passed.",
+          "type": "string",
+          "const": "passed"
+        }
+      ]
+    },
+    "Lane": {
+      "description": "A task's lane.",
+      "oneOf": [
+        {
+          "description": "The implementer's: code, judged by the checks and its acceptance tests.",
+          "type": "string",
+          "const": "code"
+        },
+        {
+          "description": "Design documents the plan should have written: every path the task\nnames lies inside the unit's directory.",
+          "type": "string",
+          "const": "planning"
+        },
+        {
+          "description": "A step only a person can take: a `[YOU]` label, or an attempt that\nstopped `BLOCKED`.",
+          "type": "string",
+          "const": "yours"
+        }
+      ]
+    },
+    "ConvergenceRound": {
+      "description": "One convergence round, from its commit.",
+      "type": "object",
+      "properties": {
+        "round": {
+          "description": "Round number.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "commit": {
+          "description": "The commit that appended it.",
+          "type": "string"
+        },
+        "tasks": {
+          "description": "The appended tasks, as `T0NN text`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "round",
+        "commit",
+        "tasks"
+      ]
+    },
+    "TraceRow": {
+      "description": "One row of the requirement → scenario → test → verdict matrix.",
+      "type": "object",
+      "properties": {
+        "requirement": {
+          "description": "`FR-001`, `SC-002`.",
+          "type": "string"
+        },
+        "scenario": {
+          "description": "`US1.2`: story 1, acceptance scenario 2.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "test": {
+          "description": "The acceptance test.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "task": {
+          "description": "The task that cites it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "verdict": {
+          "description": "That task's verdict.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "changed": {
+          "description": "The requirement changed since that task's tick: the verdict is for\nits earlier wording.",
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "required": [
+        "requirement",
+        "scenario",
+        "test",
+        "task",
+        "verdict",
+        "changed"
+      ]
+    },
+    "StatusTotals": {
+      "description": "Counts of [`TaskStatus::state`].",
+      "type": "object",
+      "properties": {
+        "verified": {
+          "description": "Ticked with task-specific evidence.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "regression_only": {
+          "description": "Ticked with regression evidence only.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "ticked_without_evidence": {
+          "description": "Ticked without a speccoder commit (by a person, or before speccoder).",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "evidence_without_tick": {
+          "description": "In place: committed by speccoder, the local tick missing.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "without_attestation": {
+          "description": "Ticks speccoder committed without an attestation.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "attested": {
+          "description": "Ticked by `speccoder task accept`: a person's attestation, not evidence.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "skipped": {
+          "description": "Open and skipped by a person.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "ready": {
+          "description": "Open and ready.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "blocked": {
+          "description": "Open and blocked.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "stale": {
+          "description": "Ticks whose cited requirements changed since.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0,
+          "default": 0
+        }
+      },
+      "required": [
+        "verified",
+        "regression_only",
+        "ticked_without_evidence",
+        "evidence_without_tick",
+        "without_attestation",
+        "attested",
+        "skipped",
+        "ready",
+        "blocked",
+        "stale"
+      ]
+    },
+    "ReviewTotals": {
+      "description": "Counts of [`ReviewItem::state`].",
+      "type": "object",
+      "properties": {
+        "approved": {
+          "description": "Approved on their current wording.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "changes_requested": {
+          "description": "Changes requested.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "open": {
+          "description": "Never reviewed.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "lapsed": {
+          "description": "Decided on an earlier wording.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "questions": {
+          "description": "Questions the documents leave open.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0,
+          "default": 0
+        },
+        "ambiguous": {
+          "description": "Requirements two test authors read differently, not yet resolved:\n*Approve and Run* and a gated run wait on them.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0,
+          "default": 0
+        }
+      },
+      "required": [
+        "approved",
+        "changes_requested",
+        "open",
+        "lapsed",
+        "questions",
+        "ambiguous"
+      ]
+    }
+  },
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/report.json"
 }

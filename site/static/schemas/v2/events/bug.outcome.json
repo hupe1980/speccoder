@@ -1,22 +1,9 @@
 {
-  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/events/bug.outcome.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "a domain event's public projection: ids, digests and counts",
   "description": "`bug.outcome`, as published.",
+  "type": "object",
   "properties": {
-    "code": {
-      "description": "The stop's code.",
-      "type": [
-        "string",
-        "null"
-      ]
-    },
-    "next": {
-      "description": "What to do next.",
-      "items": {
-        "type": "string"
-      },
-      "type": "array"
-    },
     "outcome": {
       "description": "`awaiting_confirmation`, `cannot_reproduce`, `fixed`, …",
       "type": "string"
@@ -27,6 +14,20 @@
         "string",
         "null"
       ]
+    },
+    "code": {
+      "description": "The stop's code.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "next": {
+      "description": "What to do next.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
     }
   },
   "required": [
@@ -35,6 +36,5 @@
     "code",
     "next"
   ],
-  "title": "a domain event's public projection: ids, digests and counts",
-  "type": "object"
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/events/bug.outcome.json"
 }

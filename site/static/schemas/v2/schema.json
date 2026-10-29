@@ -1,14 +1,35 @@
 {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "schema: the published schemas",
+  "description": "Result of `speccoder schema`.",
+  "type": "object",
+  "properties": {
+    "names": {
+      "description": "Every schema speccoder publishes.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/SchemaName"
+      }
+    },
+    "schema": {
+      "description": "The schema asked for."
+    }
+  },
+  "required": [
+    "names",
+    "schema"
+  ],
   "$defs": {
     "SchemaName": {
       "description": "One published schema.",
+      "type": "object",
       "properties": {
-        "describes": {
-          "description": "What it describes.",
-          "type": "string"
-        },
         "name": {
           "description": "`result`, `event`, `run`, …",
+          "type": "string"
+        },
+        "describes": {
+          "description": "What it describes.",
           "type": "string"
         },
         "url": {
@@ -20,29 +41,8 @@
         "name",
         "describes",
         "url"
-      ],
-      "type": "object"
+      ]
     }
   },
-  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/schema.json",
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Result of `speccoder schema`.",
-  "properties": {
-    "names": {
-      "description": "Every schema speccoder publishes.",
-      "items": {
-        "$ref": "#/$defs/SchemaName"
-      },
-      "type": "array"
-    },
-    "schema": {
-      "description": "The schema asked for."
-    }
-  },
-  "required": [
-    "names",
-    "schema"
-  ],
-  "title": "schema: the published schemas",
-  "type": "object"
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/schema.json"
 }

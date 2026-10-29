@@ -1,22 +1,105 @@
 {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "config: every key of speccoder.toml, its value and its default",
+  "description": "Result of `speccoder config`: the project's configuration as a catalogue\nof every key, each with its type, default and value (when set).",
+  "type": "object",
+  "properties": {
+    "file": {
+      "description": "The file, relative to the project root.",
+      "type": "string"
+    },
+    "exists": {
+      "description": "Whether it exists.",
+      "type": "boolean"
+    },
+    "committed": {
+      "description": "Whether it is committed as it is on disk (speccoder reads committed\nconfiguration only, so an uncommitted change is not yet in force).",
+      "type": "boolean"
+    },
+    "valid": {
+      "description": "Whether every parser accepts it.",
+      "type": "boolean"
+    },
+    "error": {
+      "description": "The first parser's complaint, when not valid.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "sections": {
+      "description": "Sections, in the reference's order.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ConfigSection"
+      }
+    },
+    "diff": {
+      "description": "The uncommitted change, as a diff, when there is one.",
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "file",
+    "exists",
+    "committed",
+    "valid",
+    "error",
+    "sections",
+    "diff"
+  ],
   "$defs": {
-    "ConfigKey": {
-      "description": "One key: what it is, what it is set to, and what it is otherwise.",
+    "ConfigSection": {
+      "description": "One section of `speccoder.toml`.",
+      "type": "object",
       "properties": {
-        "about": {
-          "description": "What it does.",
+        "name": {
+          "description": "The table name, e.g. `model`, or `checks` for `[checks.<name>]`.",
           "type": "string"
         },
-        "choices": {
-          "description": "For `choice`: the allowed values.",
+        "title": {
+          "description": "A title for people, e.g. `Model`.",
+          "type": "string"
+        },
+        "about": {
+          "description": "What the section decides.",
+          "type": "string"
+        },
+        "named": {
+          "description": "Named tables (`[checks.<name>]`, `[mcp.<name>]`): `keys` describe\none, `tables` hold the configured ones.",
+          "type": "boolean"
+        },
+        "keys": {
+          "description": "The keys (for a named section: the keys of each table, unset).",
+          "type": "array",
           "items": {
-            "type": "string"
-          },
-          "type": "array"
+            "$ref": "#/$defs/ConfigKey"
+          }
         },
-        "default": {
-          "description": "The value speccoder uses when the key is absent; none for keys\nwithout a default (unset means off, or the key is required)."
-        },
+        "tables": {
+          "description": "The configured named tables.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ConfigTable"
+          }
+        }
+      },
+      "required": [
+        "name",
+        "title",
+        "about",
+        "named",
+        "keys",
+        "tables"
+      ]
+    },
+    "ConfigKey": {
+      "description": "One key: what it is, what it is set to, and what it is otherwise.",
+      "type": "object",
+      "properties": {
         "key": {
           "description": "The key, e.g. `max_turns`; dotted below a sub-table (`sigstore.identity`).",
           "type": "string"
@@ -25,28 +108,42 @@
           "description": "`bool`, `integer`, `number`, `string`, `choice`, `duration`, `argv`,\n`argv_list` or `string_list`.",
           "type": "string"
         },
-        "max": {
-          "description": "For numbers: the largest allowed.",
-          "format": "double",
-          "type": [
-            "number",
-            "null"
-          ]
+        "about": {
+          "description": "What it does.",
+          "type": "string"
+        },
+        "default": {
+          "description": "The value speccoder uses when the key is absent; none for keys\nwithout a default (unset means off, or the key is required)."
+        },
+        "value": {
+          "description": "The value in the file, when set."
+        },
+        "choices": {
+          "description": "For `choice`: the allowed values.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         },
         "min": {
           "description": "For numbers: the smallest allowed.",
-          "format": "double",
           "type": [
             "number",
             "null"
-          ]
+          ],
+          "format": "double"
+        },
+        "max": {
+          "description": "For numbers: the largest allowed.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
         },
         "required": {
           "description": "The section (or table) is refused without it.",
           "type": "boolean"
-        },
-        "value": {
-          "description": "The value in the file, when set."
         }
       },
       "required": [
@@ -59,126 +156,29 @@
         "min",
         "max",
         "required"
-      ],
-      "type": "object"
-    },
-    "ConfigSection": {
-      "description": "One section of `speccoder.toml`.",
-      "properties": {
-        "about": {
-          "description": "What the section decides.",
-          "type": "string"
-        },
-        "keys": {
-          "description": "The keys (for a named section: the keys of each table, unset).",
-          "items": {
-            "$ref": "#/$defs/ConfigKey"
-          },
-          "type": "array"
-        },
-        "name": {
-          "description": "The table name, e.g. `model`, or `checks` for `[checks.<name>]`.",
-          "type": "string"
-        },
-        "named": {
-          "description": "Named tables (`[checks.<name>]`, `[mcp.<name>]`): `keys` describe\none, `tables` hold the configured ones.",
-          "type": "boolean"
-        },
-        "tables": {
-          "description": "The configured named tables.",
-          "items": {
-            "$ref": "#/$defs/ConfigTable"
-          },
-          "type": "array"
-        },
-        "title": {
-          "description": "A title for people, e.g. `Model`.",
-          "type": "string"
-        }
-      },
-      "required": [
-        "name",
-        "title",
-        "about",
-        "named",
-        "keys",
-        "tables"
-      ],
-      "type": "object"
+      ]
     },
     "ConfigTable": {
       "description": "One configured named table, e.g. `[checks.test]`.",
+      "type": "object",
       "properties": {
-        "keys": {
-          "description": "Its keys, with values.",
-          "items": {
-            "$ref": "#/$defs/ConfigKey"
-          },
-          "type": "array"
-        },
         "name": {
           "description": "Its name, e.g. `test`.",
           "type": "string"
+        },
+        "keys": {
+          "description": "Its keys, with values.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ConfigKey"
+          }
         }
       },
       "required": [
         "name",
         "keys"
-      ],
-      "type": "object"
+      ]
     }
   },
-  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/config.json",
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Result of `speccoder config`: the project's configuration as a catalogue\nof every key, each with its type, default and value (when set).",
-  "properties": {
-    "committed": {
-      "description": "Whether it is committed as it is on disk (speccoder reads committed\nconfiguration only, so an uncommitted change is not yet in force).",
-      "type": "boolean"
-    },
-    "diff": {
-      "description": "The uncommitted change, as a diff, when there is one.",
-      "type": [
-        "string",
-        "null"
-      ]
-    },
-    "error": {
-      "description": "The first parser's complaint, when not valid.",
-      "type": [
-        "string",
-        "null"
-      ]
-    },
-    "exists": {
-      "description": "Whether it exists.",
-      "type": "boolean"
-    },
-    "file": {
-      "description": "The file, relative to the project root.",
-      "type": "string"
-    },
-    "sections": {
-      "description": "Sections, in the reference's order.",
-      "items": {
-        "$ref": "#/$defs/ConfigSection"
-      },
-      "type": "array"
-    },
-    "valid": {
-      "description": "Whether every parser accepts it.",
-      "type": "boolean"
-    }
-  },
-  "required": [
-    "file",
-    "exists",
-    "committed",
-    "valid",
-    "error",
-    "sections",
-    "diff"
-  ],
-  "title": "config: every key of speccoder.toml, its value and its default",
-  "type": "object"
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/config.json"
 }
