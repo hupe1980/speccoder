@@ -5,6 +5,7 @@
   // while a job runs, and the end of one until it is put away.
   import { app } from "../lib/app.svelte";
   import Icon from "./Icon.svelte";
+  import { offer } from "../lib/actions";
   import AgentStrip from "./AgentStrip.svelte";
 
   let open = $state(false);
@@ -33,7 +34,7 @@
   function tryWith() {
     if (!failedRun || !nextAgent) return;
     const { task } = failedRun;
-    void app.perform({ run: { kind: "run", task, agent: nextAgent.id }, group: "work", label: `try ${task} with ${nextAgent.name}`, why: "the same task, another agent: one attempt, judged the same way", command: `speccoder run --task ${task} --agent ${nextAgent.id}`, blocked: null, input: null, confirm: null });
+    void app.perform(offer({ kind: "run", task, agent: nextAgent.id }, { group: "work", label: `try ${task} with ${nextAgent.name}`, why: "the same task, another agent: one attempt, judged the same way", command: `speccoder run --task ${task} --agent ${nextAgent.id}` }));
   }
   let dismissed = $state<number | null>(null);
   let now = $state(Date.now());
