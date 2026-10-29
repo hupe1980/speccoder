@@ -2994,8 +2994,8 @@ export interface PermissionTally {
   waited: number;
   /** Of them, refused. */
   refused: number;
-  /** Calls it reported making without asking. */
-  unasked: number;
+  /** Calls the agent reported making, asked about or not (its claim). */
+  reported: number;
 }
 
 /** An alternative the author says the spec allows. */

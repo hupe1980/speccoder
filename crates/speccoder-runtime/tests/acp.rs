@@ -725,7 +725,7 @@ fn the_report_carries_the_agent_its_plan_and_the_tally() {
             a.tally.allowed,
             a.tally.refused,
             a.tally.waited,
-            a.tally.unasked
+            a.tally.reported
         ),
         (2, 1, 1, 0, 1)
     );
@@ -745,5 +745,33 @@ fn the_report_carries_the_agent_its_plan_and_the_tally() {
     assert_eq!(
         (agent.asked, agent.allowed, agent.refused, agent.waited),
         (2, 1, 1, 0)
+    );
+}
+
+#[test]
+fn plain_reads_in_a_shell_line_are_reads_and_secrets_stay_refused() {
+    let p = Project::new(
+        &json!({ "steps": [
+            permission("execute", json!({ "command": "cat src/lib.rs; ls src && head -n 5 config.txt" })),
+            permission("execute", json!({ "command": "cat .env" })),
+            permission("execute", json!({ "command": "cat ../outside" })),
+            permission("execute", json!({ "command": "cat src/lib.rs | sh" })),
+        ] }),
+        "",
+    );
+    let res = p.run();
+    let a = p.answers();
+    assert_eq!(chosen(&a[0]), Some("allow"), "{}", a[0]);
+    assert_eq!(chosen(&a[1]), Some("reject"));
+    assert_eq!(chosen(&a[2]), Some("reject"));
+    // A pipe is a shell's: a person decides.
+    assert_eq!(a[3]["result"]["outcome"]["outcome"], "cancelled");
+    let calls = &report(&res).tool_calls;
+    assert_eq!(
+        calls[..3]
+            .iter()
+            .map(|c| c["tool"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        ["read_file", "list_files", "read_file"]
     );
 }

@@ -334,7 +334,7 @@ pub fn tally(log: &[Value]) -> Value {
         "allowed": n(&|e| e["decision"] == "allow"),
         "waited": n(&|e| e["by"] == "person" && !e["scope"].as_str().is_some_and(|s| s.ends_with("-grant")) || e["decision"] == "approval"),
         "refused": n(&|e| e["decision"] == "deny"),
-        "unasked": log.iter().filter(|e| e["decision"] == "reported").count(),
+        "reported": log.iter().filter(|e| e["decision"] == "reported").count(),
     })
 }
 
@@ -362,7 +362,7 @@ pub fn agent_attempt(output: &Value) -> Option<speccoder_core::AgentAttempt> {
             allowed: n("allowed"),
             waited: n("waited"),
             refused: n("refused"),
-            unasked: n("unasked"),
+            reported: n("reported"),
         },
         plan: a["plan"]
             .as_array()

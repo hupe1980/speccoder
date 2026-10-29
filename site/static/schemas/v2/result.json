@@ -4111,8 +4111,8 @@
           "format": "uint32",
           "minimum": 0
         },
-        "unasked": {
-          "description": "Calls it reported making without asking.",
+        "reported": {
+          "description": "Calls the agent reported making, asked about or not (its claim).",
           "type": "integer",
           "format": "uint32",
           "minimum": 0
@@ -4123,7 +4123,7 @@
         "allowed",
         "waited",
         "refused",
-        "unasked"
+        "reported"
       ]
     },
     "AgentPlanStep": {

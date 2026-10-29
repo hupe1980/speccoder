@@ -137,6 +137,38 @@ pub fn argv_of_line(line: &str) -> Vec<String> {
     line.split_whitespace().map(str::to_owned).collect()
 }
 
+/// A shell line of plain commands joined by `;`, `&&`, `||` or newlines:
+/// its commands, each plain; `None` for anything else a shell would read.
+#[must_use]
+pub fn commands_of_line(line: &str) -> Option<Vec<Vec<String>>> {
+    let mut parts = Vec::new();
+    let mut rest = line.trim();
+    while !rest.is_empty() {
+        let at = ["&&", "||", ";", "\n"]
+            .iter()
+            .filter_map(|sep| rest.find(sep).map(|i| (i, sep.len())))
+            .min();
+        let (part, next) = match at {
+            Some((i, n)) => (&rest[..i], &rest[i + n..]),
+            None => (rest, ""),
+        };
+        let argv = argv_of_line(part);
+        if argv.is_empty() {
+            return None;
+        }
+        if argv.first().is_some_and(|p| p == "sh") && argv.get(1).is_some_and(|f| f == "-c") {
+            return None;
+        }
+        parts.push(argv);
+        rest = next.trim();
+    }
+    (!parts.is_empty()).then_some(parts)
+}
+
+/// Programs that only read the files they name: decided as speccoder's
+/// own reads (credentials refused, the worktree only).
+const READS: &[&str] = &["cat", "head", "tail", "wc", "ls", "pwd"];
+
 /// A call in the policy's vocabulary: the speccoder tool calls it amounts to,
 /// or the reason no rule covers it.
 #[derive(Debug, Clone, PartialEq)]
@@ -338,14 +370,38 @@ impl Governor {
                         "the agent did not send what it means to run".to_owned(),
                     );
                 };
-                let mut args = json!({ "argv": argv });
-                if let Some(cwd) = text("cwd").or_else(|| text("workdir")) {
-                    match self.rel(Path::new(&cwd)) {
-                        Ok(r) => args["cwd"] = json!(r),
+                let cwd = match text("cwd").or_else(|| text("workdir")) {
+                    Some(c) => match self.rel(Path::new(&c)) {
+                        Ok(r) => Some(r),
                         Err(e) => return Subject::Deny(e),
+                    },
+                    None => None,
+                };
+                // `cat a; ls` is two plain commands, each decided.
+                let commands = match argv.as_slice() {
+                    [sh, c, line] if sh == "sh" && c == "-c" => {
+                        commands_of_line(line).unwrap_or_else(|| vec![argv.clone()])
+                    }
+                    _ => vec![argv.clone()],
+                };
+                let mut calls = Vec::new();
+                for argv in commands {
+                    match self.reads(&argv, cwd.as_deref()) {
+                        Some(Ok(mut r)) => calls.append(&mut r),
+                        Some(Err(e)) => return Subject::Deny(e),
+                        None => {
+                            let mut args = json!({ "argv": argv });
+                            if let Some(c) = &cwd {
+                                args["cwd"] = json!(c);
+                            }
+                            calls.push(("run_command", args));
+                        }
                     }
                 }
-                Subject::Calls(vec![("run_command", args)])
+                if calls.is_empty() {
+                    return Subject::Allow("a read with nothing named");
+                }
+                Subject::Calls(calls)
             }
             "read" | "search" | "edit" | "delete" | "move" => {
                 let rels = match rels() {
@@ -384,6 +440,45 @@ impl Governor {
             }
             _ => Subject::Person("no rule can tell what this call does".to_owned()),
         }
+    }
+
+    /// A command that only reads what it names (`cat src/lib.rs`, `ls
+    /// src`) as speccoder's own reads of those paths; `None` for any other
+    /// command (or a read whose paths are not plain files and directories).
+    fn reads(
+        &self,
+        argv: &[String],
+        cwd: Option<&str>,
+    ) -> Option<Result<Vec<(&'static str, Value)>, String>> {
+        let (program, args) = argv.split_first()?;
+        if !READS.contains(&program.as_str()) {
+            return None;
+        }
+        let base = self.root.join(cwd.unwrap_or("."));
+        let mut out = Vec::new();
+        for a in args {
+            // Options and their numbers (`-n 5`).
+            if a.starts_with('-') || a.chars().all(|c| c.is_ascii_digit()) {
+                continue;
+            }
+            let full = base.join(a);
+            let rel = match self.rel(&full) {
+                Ok(r) => r,
+                Err(e) => return Some(Err(e)),
+            };
+            if full.is_dir() {
+                if program != "ls" {
+                    return None;
+                }
+                out.push(("list_files", json!({ "path": rel })));
+            } else {
+                out.push(("read_file", json!({ "path": rel })));
+            }
+        }
+        if out.is_empty() && program == "ls" {
+            out.push(("list_files", json!({ "path": cwd.unwrap_or(".") })));
+        }
+        Some(Ok(out))
     }
 
     /// Answers a permission request: the agent's allow-once option when
@@ -907,5 +1002,15 @@ mod tests {
             ["sh", "-c", "git commit -m \"x\""]
         );
         assert_eq!(argv_of_line("A=1 make"), ["sh", "-c", "A=1 make"]);
+        assert_eq!(
+            commands_of_line("cat src/lib.rs; ls && cargo test"),
+            Some(vec![
+                vec!["cat".to_owned(), "src/lib.rs".to_owned()],
+                vec!["ls".to_owned()],
+                vec!["cargo".to_owned(), "test".to_owned()],
+            ])
+        );
+        assert_eq!(commands_of_line("cat a | grep b"), None);
+        assert_eq!(commands_of_line("echo $(id)"), None);
     }
 }

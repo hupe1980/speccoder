@@ -1490,8 +1490,8 @@ pub struct PermissionTally {
     pub waited: u32,
     /// Of them, refused.
     pub refused: u32,
-    /// Calls it reported making without asking.
-    pub unasked: u32,
+    /// Calls the agent reported making, asked about or not (its claim).
+    pub reported: u32,
 }
 
 /// One step of an external agent's plan.
