@@ -193,7 +193,11 @@ fn an_allowed_call_goes_ahead_and_the_verdict_is_speccoders() {
     );
     // A command the agent runs itself asks you, even one a check allows
     // (it runs outside the sandbox); "for this task" holds for that argv.
-    let res = p.run_asking(vec![Answer::approve(Scope::Task, None, None)]);
+    let res = p.run_asking(vec![
+        Answer::approve(Scope::Task, None, None),
+        // "for this task" on a read: the task's plain reads.
+        Answer::approve(Scope::Task, None, None),
+    ]);
     assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
     let rep = report(&res);
     assert!(rep.run_id.starts_with("external_acp_"), "{}", rep.run_id);
@@ -567,7 +571,7 @@ fn calls_speccoder_cannot_classify_need_a_person_and_fetches_are_refused() {
         ] }),
         "",
     );
-    let _ = p.run();
+    let _ = p.run_asking(vec![Answer::approve(Scope::Once, None, None)]);
     assert_eq!(chosen(&p.answers()[0]), Some("no"));
 }
 
@@ -722,7 +726,7 @@ fn the_report_carries_the_agent_its_plan_and_the_tally() {
         ] }),
         "",
     );
-    let res = p.run();
+    let res = p.run_asking(vec![Answer::approve(Scope::Task, None, None)]);
     assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
     let calls = &report(&res).tool_calls;
     let a = report(&res).agent.as_ref().unwrap();
@@ -743,7 +747,7 @@ fn the_report_carries_the_agent_its_plan_and_the_tally() {
             a.tally.waited,
             a.tally.reported
         ),
-        (2, 1, 1, 0, 1)
+        (2, 1, 1, 1, 1)
     );
     assert_eq!(a.plan[0].status, "in_progress");
     // What it did without asking is listed as its own report.
@@ -761,7 +765,7 @@ fn the_report_carries_the_agent_its_plan_and_the_tally() {
     assert_eq!(agent.plan[0].content, "Add login");
     assert_eq!(
         (agent.asked, agent.allowed, agent.refused, agent.waited),
-        (2, 1, 1, 0)
+        (2, 1, 1, 1)
     );
 }
 
@@ -776,20 +780,25 @@ fn plain_reads_in_a_shell_line_are_reads_and_secrets_stay_refused() {
         ] }),
         "",
     );
-    let res = p.run();
+    // You allow the task's plain reads once; a pipe is a shell's, asked
+    // on its own (and refused here).
+    let res = p.run_asking(vec![
+        Answer::approve(Scope::Task, None, None),
+        Answer::reject("no pipes", None),
+    ]);
     let a = p.answers();
     assert_eq!(chosen(&a[0]), Some("allow"), "{}", a[0]);
     assert_eq!(chosen(&a[1]), Some("reject"));
     assert_eq!(chosen(&a[2]), Some("reject"));
-    // A pipe is a shell's: a person decides.
-    assert_eq!(a[3]["result"]["outcome"]["outcome"], "cancelled");
+    assert_eq!(chosen(&a[3]), Some("reject"));
     let calls = &report(&res).tool_calls;
-    assert_eq!(calls[0]["tool"], "read_file");
+    // The head line is a plain read: what you were offered was the reads.
+    assert_eq!(calls[0]["object"]["call"], "reads", "{}", calls[0]);
     // One count per request.
     let t = report(&res).agent.as_ref().unwrap().tally;
     assert_eq!(
         (t.asked, t.allowed, t.refused, t.waited),
-        (4, 1, 2, 1),
+        (4, 1, 3, 2),
         "{t:?}"
     );
 }

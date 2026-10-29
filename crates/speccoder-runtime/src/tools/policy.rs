@@ -261,6 +261,9 @@ impl Object {
                 paths,
                 ..
             } => {
+                if kind == "reads" {
+                    return format!("{agent}'s plain reads of one file each, for the task");
+                }
                 let what: Vec<String> = argvs
                     .iter()
                     .map(|a| format!("`{}`", a.join(" ")))

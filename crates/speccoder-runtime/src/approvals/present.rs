@@ -126,7 +126,8 @@ pub fn scope_text(kind: &str) -> &'static str {
         "run" => "exactly this command in this directory",
         "network" => "exactly this command in this directory, with the network",
         "mcp" => "this tool as defined now, any arguments",
-        "agent" => "this one call",
+        "agent" => "exactly this call again",
+        "reads" => "the agent's plain reads of one file each, inside the worktree",
         _ => "this file, any content",
     }
 }
@@ -343,7 +344,7 @@ pub fn present(request: &Request, context: &PresentContext) -> Presentation {
         }
         // An external agent's own call speccoder cannot classify: what the
         // agent said about it, as it said it.
-        "agent" => {
+        "agent" | "reads" => {
             let pretty = serde_json::to_string_pretty(&args["rawInput"]).unwrap_or_default();
             let mut lines = vec![format!(
                 "kind: {}",
@@ -430,7 +431,9 @@ pub fn present(request: &Request, context: &PresentContext) -> Presentation {
             None => "sandbox off — runs unconfined".to_owned(),
         },
         "mcp" => "the MCP server runs outside speccoder's sandbox".to_owned(),
-        "agent" => "the agent's own call — it runs outside speccoder's sandbox".to_owned(),
+        "agent" | "reads" => {
+            "the agent's own call — it runs outside speccoder's sandbox".to_owned()
+        }
         _ => "a file write — nothing is executed".to_owned(),
     };
     let scope = scope_text(kind).to_owned();
