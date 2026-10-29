@@ -99,7 +99,10 @@ mod tests {
             "2 ready task(s)",
             "speccoder run",
         )
-        .with_run(Runnable::Run { task: None });
+        .with_run(Runnable::Run {
+            task: None,
+            agent: None,
+        });
         run.blocked = Some("commit the planning files first".to_owned());
         let mut pr = Action::new(
             "review",

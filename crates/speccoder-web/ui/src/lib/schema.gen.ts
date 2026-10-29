@@ -3952,6 +3952,11 @@ export type Runnable =
     kind: "run";
     /** One task, or the feature's ready tasks. */
     task: string | null;
+    /**
+     * This run's agent (`--agent`): an ACP preset or `native`; `None`
+     * is the configured executor.
+     */
+    agent?: string | null;
   }
   /**
    * `speccoder run --converge`: the ready tasks, then the assessment of

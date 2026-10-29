@@ -490,6 +490,7 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
             );
             again = again.with_run(Runnable::Run {
                 task: Some(t.id.clone()),
+                agent: None,
             });
             again.blocked = retry_blocked(r, &waiting);
             actions.push(again);

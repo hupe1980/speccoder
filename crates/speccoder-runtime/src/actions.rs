@@ -219,7 +219,10 @@ pub fn available_with(
             format!("{ready} ready task(s), each judged on evidence"),
             "speccoder run",
         );
-        a = a.with_run(Runnable::Run { task: None });
+        a = a.with_run(Runnable::Run {
+            task: None,
+            agent: None,
+        });
         a.blocked = run_blocked.clone();
         out.push(a);
     }
@@ -282,6 +285,7 @@ pub fn available_with(
             );
             a = a.with_run(Runnable::Run {
                 task: Some(t.id.clone()),
+                agent: None,
             });
             a.blocked = run_blocked.clone();
             out.push(a);
@@ -336,7 +340,10 @@ pub fn available_with(
             format!("{ready} ready task(s)"),
             "speccoder run",
         );
-        a = a.with_run(Runnable::Run { task: None });
+        a = a.with_run(Runnable::Run {
+            task: None,
+            agent: None,
+        });
         a.blocked = run_blocked;
         out.push(a);
     }
@@ -714,6 +721,14 @@ pub fn perform(root: &Path, feature: Option<&str>, d: Dispatch<'_>) -> CommandRe
     perform_in(root, feature, d, crate::worktree::state_dir().as_deref())
 }
 
+/// `options` with this run's agent, when the action names one.
+fn with_agent(options: &RunOptions, agent: Option<&String>) -> RunOptions {
+    RunOptions {
+        agent: agent.cloned().or_else(|| options.agent.clone()),
+        ..options.clone()
+    }
+}
+
 /// [`perform`] with the state directory given (`None`: there is none).
 #[must_use]
 pub fn perform_in(
@@ -737,8 +752,13 @@ pub fn perform_in(
     let text = d.input.map(str::trim).filter(|t| !t.is_empty());
     match d.run {
         Runnable::Skill { name, arguments } => skill(root, feature, name, text, arguments, options),
-        Runnable::Run { task: Some(t) } => run_task(root, feature, t, options),
-        Runnable::Run { task: None } => run_feature(root, feature, options, false),
+        Runnable::Run {
+            task: Some(t),
+            agent,
+        } => run_task(root, feature, t, &with_agent(options, agent.as_ref())),
+        Runnable::Run { task: None, agent } => {
+            run_feature(root, feature, &with_agent(options, agent.as_ref()), false)
+        }
         Runnable::Converge => run_feature(root, feature, options, true),
         Runnable::Commit { paths } => crate::hosting::commit_planning(root, feature, paths),
         Runnable::Approve { task, call, digest } => decide(Verb::Decide(

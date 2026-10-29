@@ -766,7 +766,7 @@ fn speccoder(argv: &[String], constant: bool) -> How {
             let mut plain = true;
             while let Some(w) = rest.next() {
                 match w.as_str() {
-                    "--task" | "--feature" => plain &= rest.next().is_some(),
+                    "--task" | "--feature" | "--agent" => plain &= rest.next().is_some(),
                     "-v" => {}
                     _ => plain = false,
                 }
@@ -777,10 +777,17 @@ fn speccoder(argv: &[String], constant: bool) -> How {
                 Some(t) => perform(
                     Runnable::Run {
                         task: Some(t.to_owned()),
+                        agent: flag(a, "--agent").map(str::to_owned),
                     },
                     a,
                 ),
-                None => perform(Runnable::Run { task: None }, a),
+                None => perform(
+                    Runnable::Run {
+                        task: None,
+                        agent: flag(a, "--agent").map(str::to_owned),
+                    },
+                    a,
+                ),
             }
         }
         (Some("task"), Some("approve" | "reject")) => view(View::Approvals, None),
@@ -1035,14 +1042,33 @@ mod tests {
     #[test]
     fn speccoder_commands_with_a_runnable_perform() {
         let t = || "T001".to_owned();
-        assert_eq!(run_of("speccoder run").0, Runnable::Run { task: None });
+        assert_eq!(
+            run_of("speccoder run").0,
+            Runnable::Run {
+                task: None,
+                agent: None
+            }
+        );
+        assert_eq!(
+            run_of("speccoder run --task T004 --agent opencode").0,
+            Runnable::Run {
+                task: Some("T004".to_owned()),
+                agent: Some("opencode".to_owned())
+            }
+        );
         assert_eq!(
             run_of("speccoder run --task {task}").0,
-            Runnable::Run { task: Some(t()) }
+            Runnable::Run {
+                task: Some(t()),
+                agent: None
+            }
         );
         assert_eq!(
             run_of("speccoder run --feature {feature} -v").0,
-            Runnable::Run { task: None }
+            Runnable::Run {
+                task: None,
+                agent: None
+            }
         );
         assert_eq!(run_of("speccoder run --converge").0, Runnable::Converge);
         assert_eq!(

@@ -2327,6 +2327,13 @@
                 "string",
                 "null"
               ]
+            },
+            "agent": {
+              "description": "This run's agent (`--agent`): an ACP preset or `native`; `None`\nis the configured executor.",
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           "required": [

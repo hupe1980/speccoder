@@ -20,6 +20,10 @@ pub enum Runnable {
     Run {
         /// One task, or the feature's ready tasks.
         task: Option<String>,
+        /// This run's agent (`--agent`): an ACP preset or `native`; `None`
+        /// is the configured executor.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        agent: Option<String>,
     },
     /// `speccoder run --converge`: the ready tasks, then the assessment of
     /// the code against the spec as it is now, appending what remains.
@@ -658,8 +662,14 @@ impl ActionKind {
                 name: "plan".to_owned(),
                 arguments: String::new(),
             },
-            Self::RunTask => Runnable::Run { task: Some(task()) },
-            Self::RunFeature => Runnable::Run { task: None },
+            Self::RunTask => Runnable::Run {
+                task: Some(task()),
+                agent: None,
+            },
+            Self::RunFeature => Runnable::Run {
+                task: None,
+                agent: None,
+            },
             Self::Converge => Runnable::Converge,
             Self::Commit => Runnable::Commit {
                 paths: vec!["plan.md".to_owned()],
@@ -812,8 +822,8 @@ impl Runnable {
     pub const fn kind(&self) -> ActionKind {
         match self {
             Self::Skill { .. } => ActionKind::Skill,
-            Self::Run { task: Some(_) } => ActionKind::RunTask,
-            Self::Run { task: None } => ActionKind::RunFeature,
+            Self::Run { task: Some(_), .. } => ActionKind::RunTask,
+            Self::Run { task: None, .. } => ActionKind::RunFeature,
             Self::Converge => ActionKind::Converge,
             Self::Commit { .. } => ActionKind::Commit,
             Self::Approve { .. } => ActionKind::Approve,
@@ -891,7 +901,7 @@ pub fn identity(run: Option<&Runnable>, command: &str) -> ActionId {
     };
     let subject = match run {
         Runnable::Skill { name, .. } => Some(name.clone()),
-        Runnable::Run { task } => task.clone(),
+        Runnable::Run { task, .. } => task.clone(),
         Runnable::Approve { task, .. }
         | Runnable::Reject { task, .. }
         | Runnable::Accept { task }
