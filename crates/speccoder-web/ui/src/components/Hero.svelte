@@ -37,6 +37,14 @@
     setTimeout(() => (copied = false), 1600);
   }
   const title = $derived(report ? app.titleOf(report.feature) : "");
+  // Run with …: the agents that can start here, the choice kept per project.
+  const isRun = $derived(primary?.run?.kind === "run");
+  $effect(() => {
+    if (isRun) void app.loadAgents(false).catch(() => {});
+  });
+  const runnable = $derived((app.agents?.cards ?? []).filter((c) => c.installed.state === "yes"));
+  const withName = $derived(app.runWith ? (runnable.find((c) => c.id === app.runWith)?.name ?? app.runWith) : null);
+  let choosing = $state(false);
   const number = $derived(report?.feature.match(/^\d+/)?.[0]);
 </script>
 
@@ -116,10 +124,23 @@
         {/if}
       </div>
       <div class="go">
-        <button class="btn large" class:primary={!stops.length} disabled={busy} onclick={() => app.perform(primary)}>
-          {#if busy}<span class="spin" aria-hidden="true"></span>{:else if primary.run?.kind !== "commit"}<Icon name="play" size={13} />{/if}
-          {verb}<kbd>N</kbd>
-        </button>
+        <span class="split">
+          <button class="btn large" class:primary={!stops.length} disabled={busy} onclick={() => app.perform(app.withAgent(primary))}>
+            {#if busy}<span class="spin" aria-hidden="true"></span>{:else if primary.run?.kind !== "commit"}<Icon name="play" size={13} />{/if}
+            {verb}{#if isRun && withName && !busy}{" "}with {withName}{/if}<kbd>N</kbd>
+          </button>
+          {#if isRun && runnable.length}
+            <button class="btn large more" class:primary={!stops.length} disabled={busy} aria-label="Run with …" aria-expanded={choosing} onclick={() => (choosing = !choosing)}>▾</button>
+            {#if choosing}
+              <span class="menu" role="menu">
+                <button role="menuitem" class:on={!app.runWith} onclick={() => { choosing = false; app.chooseRunWith(null); }}>As configured</button>
+                {#each runnable as c (c.id)}
+                  <button role="menuitem" class:on={app.runWith === c.id} onclick={() => { choosing = false; app.chooseRunWith(c.id); }}>Run with {c.name}</button>
+                {/each}
+              </span>
+            {/if}
+          {/if}
+        </span>
         {#if !compact}
           {#each others.slice(0, 2) as o (key(o))}
             <button class="btn small ghost" disabled={busy || !!o.blocked} title={o.blocked ?? o.why} onclick={() => app.perform(o)}>{cap(o.label)}</button>
@@ -146,6 +167,12 @@
 </section>
 
 <style>
+  .split { position: relative; display: inline-flex; gap: 1px; }
+  .split .more { padding: 0 0.6rem; }
+  .menu { position: absolute; right: 0; top: calc(100% + 4px); z-index: 20; display: grid; min-width: 12rem; padding: 0.25rem; border-radius: 10px; background: var(--glass-strong, var(--bg)); box-shadow: var(--shadow-lg); }
+  .menu button { all: unset; padding: 0.35rem 0.6rem; border-radius: 6px; cursor: pointer; font-size: 0.85rem; }
+  .menu button:hover, .menu button:focus-visible { background: var(--fill); }
+  .menu button.on::after { content: " ✓"; color: var(--accent); }
   .elsewhere .kicker { color: #a78bfa; display: inline-flex; align-items: center; gap: 0.4rem; }
   .elsewhere .thought { color: color-mix(in srgb, #bf5af2 60%, var(--text-2)); }
   .ring { width: 10px; height: 10px; border-radius: 50%; background: conic-gradient(from var(--a, 0deg), #ff9f0a, #ff375f, #bf5af2, #0a84ff, #64d2ff, #30d158, #ff9f0a); animation: turn 2.4s linear infinite; mask: radial-gradient(circle, transparent 30%, #000 34%); }

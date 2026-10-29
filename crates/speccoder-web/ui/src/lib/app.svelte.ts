@@ -110,6 +110,11 @@ class AppState {
   /** Every agent's card (`doctor --agents`); `probed`: installed ones were
    *  asked for a session. */
   agents = $state<{ cards: AgentCard[]; probed: boolean } | null>(null);
+  /** The agent this browser last chose to run with in this project
+   *  (`run --agent`); `null`: the configured executor. */
+  runWith = $state<string | null>(null);
+  /** The Settings section to open next (`executor` from a card's fix). */
+  settingsPick = $state<string | null>(null);
   /** The project's current run from any process (a terminal's included). */
   live = $state<LiveRun | null>(null);
   /** Another process runs this project now: it holds the worktree. */
@@ -186,6 +191,7 @@ class AppState {
         })
         .catch(() => {});
       this.project = project;
+      this.#loadRunWith();
       this.report = report;
       this.actions = actions;
       this.approvals = approvals.data?.pending ?? [];
@@ -212,6 +218,33 @@ class AppState {
     const r = await get<Reply<{ agents?: AgentCard[] }>>(`/api/agents${q({ probe: String(probe) })}`);
     this.agents = { cards: r.data?.agents ?? [], probed: probe };
     return this.agents.cards;
+  }
+
+  #runWithKey() {
+    return `speccoder.runWith.${this.project?.root ?? ""}`;
+  }
+  #loadRunWith() {
+    try {
+      this.runWith = localStorage.getItem(this.#runWithKey());
+    } catch {
+      this.runWith = null;
+    }
+  }
+  /** Remembers the agent to run with here (this browser only). */
+  chooseRunWith(id: string | null) {
+    this.runWith = id;
+    try {
+      if (id) localStorage.setItem(this.#runWithKey(), id);
+      else localStorage.removeItem(this.#runWithKey());
+    } catch {
+      /* no storage here: it holds for this page only */
+    }
+  }
+  /** `a` with the agent chosen to run with, when it is a run. */
+  withAgent<T extends { run?: Runnable | null; command: string; label: string }>(a: T): T {
+    if (!this.runWith || a.run?.kind !== "run" || a.run.agent) return a;
+    const name = this.agents?.cards.find((c) => c.id === this.runWith)?.name ?? this.runWith;
+    return { ...a, run: { ...a.run, agent: this.runWith }, command: `${a.command} --agent ${this.runWith}`, label: `${a.label} with ${name}` };
   }
 
   async selectFeature(name: string) {

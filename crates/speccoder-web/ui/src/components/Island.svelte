@@ -8,6 +8,33 @@
   import AgentStrip from "./AgentStrip.svelte";
 
   let open = $state(false);
+  /** The call log filtered by a tally count (`allow`, `approval`, `deny`). */
+  let only = $state<"allow" | "approval" | "deny" | null>(null);
+  const calls = $derived(only ? app.calls.filter((c) => c.includes(`  ${only}`)) : app.calls);
+  function askFirst() {
+    app.settingsPick = "executor";
+    app.view = "settings";
+  }
+  // A failed task an agent attempted: the same task with the next agent.
+  const failedRun = $derived.by(() => {
+    const d = app.job?.result?.data as { task?: string; agent?: { preset: string } | null } | null | undefined;
+    if (app.job?.running || app.job?.result?.status === "ok" || !d?.task || !d.agent) return null;
+    return { task: d.task, preset: d.agent.preset };
+  });
+  $effect(() => {
+    if (failedRun) void app.loadAgents(false).catch(() => {});
+  });
+  const nextAgent = $derived.by(() => {
+    if (!failedRun) return null;
+    const cards = (app.agents?.cards ?? []).filter((c) => c.installed.state === "yes");
+    const at = cards.findIndex((c) => c.id === failedRun.preset);
+    return [...cards.slice(at + 1), ...cards.slice(0, Math.max(at, 0))].find((c) => c.id !== failedRun.preset) ?? null;
+  });
+  function tryWith() {
+    if (!failedRun || !nextAgent) return;
+    const { task } = failedRun;
+    void app.perform({ run: { kind: "run", task, agent: nextAgent.id }, group: "work", label: `try ${task} with ${nextAgent.name}`, why: "the same task, another agent: one attempt, judged the same way", command: `speccoder run --task ${task} --agent ${nextAgent.id}`, blocked: null, input: null, confirm: null });
+  }
   let dismissed = $state<number | null>(null);
   let now = $state(Date.now());
   let started = $state<number | null>(null);
@@ -67,7 +94,7 @@
           <code>{app.job.command}</code>
           {#if app.task}<span class="task">{app.task.title}</span>{/if}
         </div>
-        {#if app.agent}<AgentStrip agent={app.agent} dark />{/if}
+        {#if app.agent}<AgentStrip agent={app.agent} dark filter={only} onfilter={(f) => (only = f)} onfix={askFirst} />{/if}
         {#if app.thinking}<p class="thinking" class:live={app.job?.running} title="Where the model's reasoning landed — its account, not evidence"><span class="therefore" aria-hidden="true">∴</span> {app.thinking}</p>{/if}
         {#if app.said}<p class="now" title="What the model says it is doing — its account, not evidence">“{app.said}”</p>{/if}
         <ol class="pipeline" aria-label="Pipeline">
@@ -83,13 +110,14 @@
           {/each}
         </ol>
         <div class="log mono" bind:this={log} aria-live="polite">
-          {#each app.calls as c}<div class:said={c.startsWith("“")} class:thought={c.startsWith("∴")} class:deny={c.includes(" deny")} class:ask={c.includes(" approval")}>{c}</div>{:else}<div class="dim">No tool calls yet.</div>{/each}
+          {#each calls as c}<div class:said={c.startsWith("“")} class:thought={c.startsWith("∴")} class:deny={c.includes(" deny")} class:ask={c.includes(" approval")}>{c}</div>{:else}<div class="dim">No tool calls yet.</div>{/each}
         </div>
         <div class="foot">
           {#if app.usage.in || app.usage.out}<span class="usage mono">{app.usage.in.toLocaleString()} in · {app.usage.out.toLocaleString()} out{#if app.usage.usd != null}{" · "}${app.usage.usd.toFixed(4)}{/if}</span>{/if}
           {#if running}
             <button class="btn small danger" onclick={() => app.stop()} title="Stops before the next task; the attempt stays resumable"><Icon name="stop" size={10} />Stop</button>
           {:else}
+            {#if nextAgent}<button class="btn small" onclick={tryWith} title="speccoder run --task {failedRun?.task} --agent {nextAgent.id}">Try with {nextAgent.name}</button>{/if}
             <button class="btn small" onclick={() => { dismissed = app.job?.id ?? null; open = false; }}>Dismiss</button>
           {/if}
         </div>

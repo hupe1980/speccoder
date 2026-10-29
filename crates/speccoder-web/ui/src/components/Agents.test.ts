@@ -68,13 +68,29 @@ describe("Agents", () => {
 });
 
 describe("AgentStrip", () => {
+  it("filters the call log by a count, and offers the fix for an agent that decides alone", () => {
+    const onfilter = vi.fn();
+    const onfix = vi.fn();
+    shown = mount(AgentStrip, {
+      target: document.body,
+      props: { agent: { name: "Codex", mode: null, decides_alone: true, plan: [], asked: 5, allowed: 3, waited: 0, refused: 2 }, onfilter, onfix },
+    });
+    flushSync();
+    [...document.querySelectorAll("button")].find((b) => b.textContent?.trim() === "2 refused")!.click();
+    expect(onfilter).toHaveBeenCalledWith("deny");
+    [...document.querySelectorAll("button")].find((b) => b.textContent?.trim() === "Make it ask first")!.click();
+    expect(onfix).toHaveBeenCalled();
+    // A count of none is not shown, but "allowed" always is.
+    expect(document.body.textContent).not.toContain("waited");
+  });
+
   it("counts what speccoder decided and warns when the agent decides alone", () => {
     shown = mount(AgentStrip, {
       target: document.body,
       props: { agent: { name: "Codex", mode: "Codex is in Auto review", decides_alone: true, plan: [{ content: "Add login", status: "completed" }], asked: 14, allowed: 12, waited: 1, refused: 1 } },
     });
     flushSync();
-    const text = document.body.textContent ?? "";
+    const text = (document.body.textContent ?? "").replace(/\s+/g, " ");
     expect(text).toContain("14 asked · 12 allowed · 1 waited for you · 1 refused");
     expect(text).toContain("decides alone");
     expect(text).toContain("Add login");
@@ -88,7 +104,7 @@ describe("AgentStrip", () => {
     });
     flushSync();
     expect(document.body.textContent).toContain("asks before acting");
-    expect(document.body.textContent).toContain("3 asked · 3 allowed");
+    expect((document.body.textContent ?? "").replace(/\s+/g, " ")).toContain("3 asked · 3 allowed");
     expect(document.querySelector(".alone")).toBeNull();
   });
 });

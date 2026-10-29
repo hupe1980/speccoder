@@ -14,6 +14,13 @@
 
   let report = $state<ConfigReport | null>(null);
   let pick = $state("model");
+  // Opened at a section from elsewhere (an agent that decides alone).
+  $effect(() => {
+    if (app.settingsPick) {
+      pick = app.settingsPick;
+      app.settingsPick = null;
+    }
+  });
   let draft = $state<Record<string, ConfigChange>>({});
   let saving = $state(false);
   let error = $state<string | null>(null);
