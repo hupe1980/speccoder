@@ -114,7 +114,7 @@ speccoder runs on the [agentplane](https://crates.io/crates/agentplane) runtime,
 
 ## External agents
 
-With an [`[executor]`](@/docs/integrations.md#external-agents), another agent makes the attempt over ACP. speccoder asks it to work in its ask-first permission mode, decides each permission request it sends with the same policy and approvals as a native call (never answering *always*), and serves the files and commands it runs through speccoder with the protected paths, masking and OS sandbox. The agent's own process runs with your environment, outside the sandbox: what it does without asking is outside speccoder, and the run says *decides alone* when no ask-first mode was set. The worktree, the diff audit, the checks and the verdict apply as always.
+With an [`[executor]`](@/docs/integrations.md#external-agents), another agent makes the attempt over ACP. speccoder asks it to work in its ask-first permission mode and decides each permission request with the same policy and approvals as a native call, never answering *always*; a command the agent runs itself always needs your decision, because it runs outside the sandbox. Files and commands it runs through speccoder get the protected paths, masking and the OS sandbox. The agent's own process runs with your environment: what it does without asking — an allow rule in its own settings, its own reads — is outside speccoder; the run says *decides alone* when it sees such a change, or when the agent's mode decides alone. The worktree, the diff audit, the checks and the verdict apply as always.
 
 ## Checking someone else's evidence
 
