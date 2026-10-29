@@ -1,10 +1,10 @@
 {
-  "head": "spec(001-graph): review.json",
   "result": {
-    "command": "fix",
-    "exit_code": 0,
-    "message": "nothing in the setup stops a run",
     "schema_version": 2,
-    "status": "ok"
-  }
+    "command": "fix",
+    "status": "ok",
+    "exit_code": 0,
+    "message": "nothing in the setup stops a run"
+  },
+  "head": "spec(001-graph): review.json"
 }

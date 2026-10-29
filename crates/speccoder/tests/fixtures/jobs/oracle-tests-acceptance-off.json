@@ -1,15 +1,18 @@
 {
-  "head": "spec(001-graph): review.json",
   "result": {
-    "code": "ACCEPTANCE-OFF",
+    "schema_version": 2,
     "command": "review",
-    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#acceptance-off",
+    "status": "config_error",
     "exit_code": 13,
+    "message": "acceptance tests are off ([acceptance] generate = false): no tests are written at review",
+    "code": "ACCEPTANCE-OFF",
     "fix": [
       "speccoder config set acceptance.generate true"
     ],
     "fix_steps": [
       {
+        "command": "speccoder config set acceptance.generate true",
+        "how": "command",
         "argvs": [
           [
             "speccoder",
@@ -19,36 +22,33 @@
             "true"
           ]
         ],
-        "command": "speccoder config set acceptance.generate true",
-        "how": "command",
         "interactive": false,
         "token": "<hex>"
       }
     ],
-    "message": "acceptance tests are off ([acceptance] generate = false): no tests are written at review",
+    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#acceptance-off",
     "next": [
       {
         "command": "speccoder init",
+        "why": "write or repair speccoder.toml",
         "how": "view",
-        "subject": null,
         "view": "setup",
-        "why": "write or repair speccoder.toml"
+        "subject": null
       },
       {
+        "command": "speccoder verify",
+        "why": "check the configured checks run",
+        "how": "command",
         "argvs": [
           [
             "speccoder",
             "verify"
           ]
         ],
-        "command": "speccoder verify",
-        "how": "command",
         "interactive": false,
-        "token": "<hex>",
-        "why": "check the configured checks run"
+        "token": "<hex>"
       }
-    ],
-    "schema_version": 2,
-    "status": "config_error"
-  }
+    ]
+  },
+  "head": "spec(001-graph): review.json"
 }

@@ -343,7 +343,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     entry!(
         "EXECUTOR-LOGIN",
-        E,
+        P,
         S::NeedsHuman,
         "the external agent needs signing in",
         "The `[executor]` agent answered over ACP that it needs signing in (or failed its session while it offered ways to sign in). Nothing was attempted and the task is unchanged. speccoder never signs in for you and stores no credential: the agent's own login runs in a terminal of yours.",

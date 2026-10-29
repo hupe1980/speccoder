@@ -1,10 +1,11 @@
 {
-  "head": "init",
   "result": {
-    "code": "NOT-FOUND",
+    "schema_version": 2,
     "command": "approve",
-    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#not-found",
+    "status": "not_found",
     "exit_code": 15,
+    "message": "T005 has no call awaiting a decision (see `speccoder report --approvals`)",
+    "code": "NOT-FOUND",
     "fix": [
       "speccoder report"
     ],
@@ -12,12 +13,11 @@
       {
         "command": "speccoder report",
         "how": "view",
-        "subject": null,
-        "view": "report"
+        "view": "report",
+        "subject": null
       }
     ],
-    "message": "T005 has no call awaiting a decision (see `speccoder report --approvals`)",
-    "schema_version": 2,
-    "status": "not_found"
-  }
+    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#not-found"
+  },
+  "head": "init"
 }

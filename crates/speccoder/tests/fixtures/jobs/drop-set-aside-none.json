@@ -1,10 +1,11 @@
 {
-  "head": "spec(001-graph): review.json",
   "result": {
-    "code": "NOT-FOUND",
+    "schema_version": 2,
     "command": "drop",
-    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#not-found",
+    "status": "not_found",
     "exit_code": 15,
+    "message": "nothing was set aside before T010's run",
+    "code": "NOT-FOUND",
     "fix": [
       "speccoder report"
     ],
@@ -12,12 +13,11 @@
       {
         "command": "speccoder report",
         "how": "view",
-        "subject": null,
-        "view": "report"
+        "view": "report",
+        "subject": null
       }
     ],
-    "message": "nothing was set aside before T010's run",
-    "schema_version": 2,
-    "status": "not_found"
-  }
+    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#not-found"
+  },
+  "head": "spec(001-graph): review.json"
 }

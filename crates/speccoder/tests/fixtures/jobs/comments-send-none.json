@@ -1,10 +1,11 @@
 {
-  "head": "spec(001-graph): review.json",
   "result": {
-    "code": "USAGE",
+    "schema_version": 2,
     "command": "review",
-    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#usage",
+    "status": "usage_error",
     "exit_code": 2,
+    "message": "no comments to send",
+    "code": "USAGE",
     "fix": [
       "speccoder review --help"
     ],
@@ -12,12 +13,11 @@
       {
         "command": "speccoder review --help",
         "how": "view",
-        "subject": null,
-        "view": "review"
+        "view": "review",
+        "subject": null
       }
     ],
-    "message": "no comments to send",
-    "schema_version": 2,
-    "status": "usage_error"
-  }
+    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#usage"
+  },
+  "head": "spec(001-graph): review.json"
 }

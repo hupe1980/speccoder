@@ -1,10 +1,11 @@
 {
-  "head": "spec(001-graph): review.json",
   "result": {
-    "code": "NO-REMOTE",
+    "schema_version": 2,
     "command": "pr",
-    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#no-remote",
+    "status": "git_precondition",
     "exit_code": 14,
+    "message": "no git remote `origin`",
+    "code": "NO-REMOTE",
     "fix": [
       "git remote add origin <url>",
       "git remote -v",
@@ -17,6 +18,8 @@
         "why": "it has a part only you can fill in"
       },
       {
+        "command": "git remote -v",
+        "how": "command",
         "argvs": [
           [
             "git",
@@ -24,8 +27,6 @@
             "-v"
           ]
         ],
-        "command": "git remote -v",
-        "how": "command",
         "interactive": false,
         "token": "<hex>"
       },
@@ -35,17 +36,16 @@
         "why": "name the remote it pushes to"
       }
     ],
-    "message": "no git remote `origin`",
+    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#no-remote",
     "next": [
       {
         "command": "speccoder doctor",
+        "why": "check the rest of the setup",
         "how": "view",
-        "subject": null,
         "view": "doctor",
-        "why": "check the rest of the setup"
+        "subject": null
       }
-    ],
-    "schema_version": 2,
-    "status": "git_precondition"
-  }
+    ]
+  },
+  "head": "spec(001-graph): review.json"
 }

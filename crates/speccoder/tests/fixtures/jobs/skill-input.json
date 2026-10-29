@@ -1,10 +1,11 @@
 {
-  "head": "init",
   "result": {
-    "code": "KEY-MISSING",
+    "schema_version": 2,
     "command": "skill",
-    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#key-missing",
+    "status": "config_error",
     "exit_code": 13,
+    "message": "OPENAI_API_KEY is not set; speccoder reads the key only from the environment",
+    "code": "KEY-MISSING",
     "fix": [
       "export OPENAI_API_KEY=…",
       "→ or another provider, or a local model: speccoder config set model.provider openai-compatible (see Settings › Model)"
@@ -13,8 +14,8 @@
       {
         "command": "export OPENAI_API_KEY=…",
         "how": "shell",
-        "setting": "model",
-        "why": "`OPENAI_API_KEY` must be set where speccoder starts: a command run from here ends with its own shell, and the variable with it"
+        "why": "`OPENAI_API_KEY` must be set where speccoder starts: a command run from here ends with its own shell, and the variable with it",
+        "setting": "model"
       },
       {
         "command": "→ or another provider, or a local model: speccoder config set model.provider openai-compatible (see Settings › Model)",
@@ -22,17 +23,16 @@
         "why": null
       }
     ],
-    "message": "OPENAI_API_KEY is not set; speccoder reads the key only from the environment",
+    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#key-missing",
     "next": [
       {
         "command": "speccoder doctor",
+        "why": "check the rest of the setup once the key is set",
         "how": "view",
-        "subject": null,
         "view": "doctor",
-        "why": "check the rest of the setup once the key is set"
+        "subject": null
       }
-    ],
-    "schema_version": 2,
-    "status": "config_error"
-  }
+    ]
+  },
+  "head": "init"
 }

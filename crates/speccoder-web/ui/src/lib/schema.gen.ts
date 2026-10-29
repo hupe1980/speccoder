@@ -2,10 +2,10 @@
 
 /** What the fix's visible acceptance set came from. */
 export interface AcceptanceRef {
-  /** The record it reused. */
-  pre_frozen: PreFrozenRef;
   /** `bug_confirmation` or `person_test`. */
   source: AcceptanceSource;
+  /** The record it reused. */
+  pre_frozen: PreFrozenRef;
 }
 
 /** Where a task's visible acceptance set came from. */
@@ -13,60 +13,46 @@ export type AcceptanceSource = "authored" | "review" | "bug_confirmation" | "per
 
 /** The acceptance set's strength, as recorded with a verdict. */
 export interface AcceptanceStrength {
+  /** The visible set alone. */
+  visible: Strength;
   /**
    * Visible and held-out together: what the verdict rests on (equal to
    * `visible` without held-out tests). Mutants run with the visible
    * command only, so its mutant counts are a lower bound.
    */
   combined: Strength;
-  /** How long the stage took. */
-  duration_ms: number;
-  /** The gate. */
-  gate: Gate;
   /** A held-out set was overlaid. */
   held_out: boolean;
   /** The mutants. */
   mutants?: Mutants | null;
   /** The near misses. */
   near_misses: NearMiss[];
-  /** Why not (fully) measured, or what was dropped. */
-  notes?: string[];
   /** The permitted alternatives. */
   permitted: Permitted[];
   /** Rulings that applied. */
   rulings?: Ruling[];
+  /** The gate. */
+  gate: Gate;
+  /** Why not (fully) measured, or what was dropped. */
+  notes?: string[];
   /** The near-miss call's run. */
   run_id?: string | null;
   /** The near-miss call's tokens. */
   usage?: unknown;
-  /** The visible set alone. */
-  visible: Strength;
+  /** How long the stage took. */
+  duration_ms: number;
 }
 
 /** One thing a person can do now. */
 export interface Action {
-  /** Why it cannot run now; `None`: it can. */
-  blocked: string | null;
-  /** The equivalent command; `"…"` marks the input. */
-  command: string;
-  /**
-   * It leaves the machine (a push, a pull request) or cannot be undone
-   * (a discard): what an interface says in a confirmation before it runs it.
-   */
-  confirm: string | null;
   /** `next`, `plan`, `work`, `task`, `feature` or `review`. */
   group: string;
-  /** What it is, independent of its wording ([`identity`]). */
-  id: ActionId;
-  /** What to ask for before it runs (`Describe the feature`). */
-  input: string | null;
   /** What it does, in a few words. */
   label: string;
-  /**
-   * A planning skill's part in its format's planning; `None` for
-   * everything else.
-   */
-  role: SkillRole | null;
+  /** Why, or what follows (shown beside it). */
+  why: string;
+  /** The equivalent command; `"…"` marks the input. */
+  command: string;
   /** How an interface runs it; `None`: see `step`. */
   run: Runnable | null;
   /**
@@ -74,8 +60,22 @@ export interface Action {
    * a view it opens, the person's own command, a line for their shell.
    */
   step: How | null;
-  /** Why, or what follows (shown beside it). */
-  why: string;
+  /** Why it cannot run now; `None`: it can. */
+  blocked: string | null;
+  /** What to ask for before it runs (`Describe the feature`). */
+  input: string | null;
+  /**
+   * It leaves the machine (a push, a pull request) or cannot be undone
+   * (a discard): what an interface says in a confirmation before it runs it.
+   */
+  confirm: string | null;
+  /** What it is, independent of its wording ([`identity`]). */
+  id: ActionId;
+  /**
+   * A planning skill's part in its format's planning; `None` for
+   * everything else.
+   */
+  role: SkillRole | null;
 }
 
 /**
@@ -114,24 +114,32 @@ export interface ActionsReport {
   journey: JourneyStep[];
 }
 
+/** One entry of an external agent's plan. */
+export interface AgentPlanEntry {
+  /** Its words. */
+  content: string;
+  /** `pending`, `in_progress` or `completed`. */
+  status: string;
+}
+
 /** Two authors read a scenario differently. */
 export interface Ambiguity {
+  /** The scenario. */
+  scenario: string;
   /** The first author's reading (its tests are the ones kept). */
   a: ReadingText;
   /** The second author's. */
   b: ReadingText;
   /** The person's choice; `None` while it is open. */
   resolution: Resolution | null;
-  /** The scenario. */
-  scenario: string;
 }
 
 /** Where an annotation lands: a file and a 1-based line, at the head. */
 export interface Anchor {
-  /** 1-based line. */
-  line: number;
   /** Repository-relative path. */
   path: string;
+  /** 1-based line. */
+  line: number;
 }
 
 /**
@@ -139,49 +147,49 @@ export interface Anchor {
  * the model claimed, and what approving it grants.
  */
 export interface ApprovalView {
-  /** The diff, the file's head, the command or the arguments. */
-  body_lines: string[];
-  /** What the model said when it asked (a claim). */
-  claim: string | null;
   /** `write`, `edit`, `run`, `network` or `mcp`. */
   kind: string;
-  /** The object's lines. */
-  object: string[];
-  /** The choices offered, in order. */
-  options: string[];
-  /** `low`, `medium` or `high`. */
-  risk: string;
-  /** What the call can reach. */
-  sandbox: string;
-  /** What `approve` grants: `for the rest of T004: this file, any content`. */
-  scope: string;
-  /** Where arguments were copied from. */
-  sources: string[];
-  /** The path, the whole command, or the MCP tool. */
-  subject: string;
   /** `Edit this file?`, `Run this command?`, …. */
   title: string;
+  /** The path, the whole command, or the MCP tool. */
+  subject: string;
+  /** The diff, the file's head, the command or the arguments. */
+  body_lines: string[];
+  /** What the call can reach. */
+  sandbox: string;
+  /** What the model said when it asked (a claim). */
+  claim: string | null;
+  /** `low`, `medium` or `high`. */
+  risk: string;
+  /** What `approve` grants: `for the rest of T004: this file, any content`. */
+  scope: string;
+  /** The object's lines. */
+  object: string[];
+  /** Where arguments were copied from. */
+  sources: string[];
+  /** The choices offered, in order. */
+  options: string[];
 }
 
 /** Result of `speccoder report --approvals`, `approve` and `reject`. */
 export interface ApprovalsReport {
-  /**
-   * Runs whose asking budget is used: their waiting calls, decided
-   * together (`speccoder approvals batch`).
-   */
-  batch?: BatchView[];
-  /** Decisions recorded for the feature's tasks. */
-  decided: DecidedCall[];
   /** Feature directory name. */
   feature: string;
   /** Calls that stopped an open task and await a decision. */
   pending: PendingCall[];
+  /** Decisions recorded for the feature's tasks. */
+  decided: DecidedCall[];
   /**
    * Why the calls waiting in the journal could not be read (another
    * speccoder holds it, …): `pending` may then be incomplete — unknown,
    * never "nothing waiting".
    */
   unreadable: string | null;
+  /**
+   * Runs whose asking budget is used: their waiting calls, decided
+   * together (`speccoder approvals batch`).
+   */
+  batch?: BatchView[];
 }
 
 /**
@@ -189,85 +197,85 @@ export interface ApprovalsReport {
  * and run now, and what autopilot would hold.
  */
 export interface ApproveSheet {
-  /** Decision lines the approval records. */
-  approves: string[];
-  /** Why autopilot is disabled (no enforced sandbox); `None`: it can run. */
-  autopilot_blocked: string | null;
-  /**
-   * Why *Approve and Run* is disabled now (each a line naming its
-   * cause); empty: it can run.
-   */
-  blocked: string[];
-  /** The grants autopilot may hold, none ticked by default. */
-  grants: OfferedGrant[];
-  /** The sandbox line (`Seatbelt, network off`). */
-  sandbox: string | null;
   /**
    * The approval digest *Approve and Run* would record now (decision
    * lines and frozen manifests): the click sends it back and is refused
    * when it no longer matches. `None`: it cannot be computed here.
    */
   sha256: string | null;
+  /** Decision lines the approval records. */
+  approves: string[];
+  /**
+   * Why *Approve and Run* is disabled now (each a line naming its
+   * cause); empty: it can run.
+   */
+  blocked: string[];
+  /** Why autopilot is disabled (no enforced sandbox); `None`: it can run. */
+  autopilot_blocked: string | null;
+  /** The sandbox line (`Seatbelt, network off`). */
+  sandbox: string | null;
+  /** The grants autopilot may hold, none ticked by default. */
+  grants: OfferedGrant[];
 }
 
 /** Result of `speccoder spec archive` (an OpenSpec change). */
 export interface ArchiveReport {
-  /** Where OpenSpec moved the change. */
-  archived_as: string | null;
   /** The change. */
   change: string;
-  /** The commit `archive <id>`. */
-  commit: string | null;
-  /** Who confirmed. */
-  confirmed_by: string | null;
-  /** What archiving changes (`openspec show <id> --diff`), when shown. */
-  diff: string | null;
-  /** OpenSpec's own `{severity, code, message, fix}` from its last answer. */
-  openspec_status: unknown;
   /**
    * `probe`, `incomplete`, `unverified`, `awaiting_confirmation`,
    * `declined`, `archived` or `failed`.
    */
   stage: string;
-  /** OpenSpec's counts of added, modified, removed and renamed requirements. */
-  totals: unknown;
+  /** OpenSpec's own `{severity, code, message, fix}` from its last answer. */
+  openspec_status: unknown;
   /** Tasks ticked without a speccoder verdict commit. */
   unverified_tasks: string[];
+  /** What archiving changes (`openspec show <id> --diff`), when shown. */
+  diff: string | null;
+  /** Where OpenSpec moved the change. */
+  archived_as: string | null;
+  /** OpenSpec's counts of added, modified, removed and renamed requirements. */
+  totals: unknown;
+  /** The commit `archive <id>`. */
+  commit: string | null;
+  /** Who confirmed. */
+  confirmed_by: string | null;
 }
 
 /** Presence of a feature's artifacts. */
 export interface Artifacts {
-  /** `checklists/` */
-  checklists: boolean;
-  /** `contracts/` */
-  contracts: boolean;
-  /** `data-model.md` */
-  data_model: boolean;
-  /** `plan.md` */
-  plan: boolean;
-  /** `quickstart.md` */
-  quickstart: boolean;
-  /** `research.md` */
-  research: boolean;
   /** `spec.md` */
   spec: boolean;
+  /** `plan.md` */
+  plan: boolean;
   /** `tasks.md` */
   tasks: boolean;
+  /** `research.md` */
+  research: boolean;
+  /** `data-model.md` */
+  data_model: boolean;
+  /** `contracts/` */
+  contracts: boolean;
+  /** `quickstart.md` */
+  quickstart: boolean;
+  /** `checklists/` */
+  checklists: boolean;
 }
 
 /** Result of `speccoder attest verify` and `attest sign`. */
 export interface AttestReport {
   /** Feature directory name. */
   feature: string;
-  /** One per object. */
-  objects: ObjectVerification[];
-  /** Count per outcome word. */
-  totals: Record<string, number>;
   /**
    * Where trust came from: the allowed-signers file, whether GPG's keyring
    * was used, the expected Sigstore identity.
    */
   trust: unknown;
+  /** One per object. */
+  objects: ObjectVerification[];
+  /** Count per outcome word. */
+  totals: Record<string, number>;
 }
 
 /**
@@ -285,10 +293,10 @@ export interface AuthReport {
 
 /** The author's own words, kept only as a labelled claim. */
 export interface AuthorClaim {
-  /** Always `author`. */
-  by: string;
   /** The words. */
   text: string;
+  /** Always `author`. */
+  by: string;
 }
 
 /** Who wrote a shown test. */
@@ -296,16 +304,16 @@ export type AuthoredBy = "model" | "person";
 
 /** One call an autopilot run refused instead of asking. */
 export interface AutopilotDenial {
+  /** The task. */
+  task: string;
+  /** The model turn. */
+  turn: number;
   /** `write`, `command`, `network`, `mcp` (empty: none resolved). */
   class: string;
   /** What it reached (`src/a.rs`, `cargo add x`). */
   object: string;
   /** `autopilot: not asked — listed for you`. */
   reason: string;
-  /** The task. */
-  task: string;
-  /** The model turn. */
-  turn: number;
 }
 
 /** How the person decided the reproductions. */
@@ -313,10 +321,10 @@ export type Basis = "shown" | "named_test";
 
 /** One class of a batch. */
 export interface BatchGroup {
-  /** The waiting calls' ids. */
-  calls: string[];
   /** `write`, `command`, `network` or `mcp`. */
   class: string;
+  /** The waiting calls' ids. */
+  calls: string[];
 }
 
 /** A batch decision. */
@@ -324,6 +332,8 @@ export type BatchVerdict = "approve" | "reject";
 
 /** A run whose asking budget is used, with its waiting calls by class. */
 export interface BatchView {
+  /** The run. */
+  run: string;
   /**
    * SHA-256 over the sorted digests of every call listed
    * ([`PendingCall::digest`]): a decision names it and is refused when
@@ -332,78 +342,76 @@ export interface BatchView {
   digest: string;
   /** The calls by class, in the order write, command, network, mcp. */
   groups: BatchGroup[];
-  /** The run. */
-  run: string;
 }
 
 /** Result of `speccoder bench import`. */
 export interface BenchReport {
-  /** Instances turned into cases. */
-  imported: string[];
   /** The suite directory written. */
   out: string;
+  /** Instances turned into cases. */
+  imported: string[];
   /** Instances not imported, with why. */
   skipped: string[];
 }
 
 /** Result of `speccoder attest verify --branch` / `speccoder attest badge`. */
 export interface BranchReport {
-  /** Unsigned evidence was accepted (`--require-signed=false`). */
-  accepted_unsigned: boolean;
-  /** The merge base with the given base, when one was given. */
-  base: string | null;
-  /** The conclusion. */
-  conclusion: Conclusion;
-  /** The units checked, in order. */
-  features: string[];
   /** The commit checked. */
   head: string;
+  /** The merge base with the given base, when one was given. */
+  base: string | null;
   /** Which units were covered. */
   mode: Mode;
-  /** Predicate fields or revisions seen but unknown here (tolerated). */
-  newer_fields: string[];
-  /** Rules this verifier version does not evaluate yet. */
-  not_evaluated: string[];
-  /** Bug homes touched without a verdict commit (informational). */
-  open_no_claim: string[];
-  /** `regression_only` and `attested` fail too. */
-  require_verified: boolean;
-  /** Evidenced (not stale) over all ticks; `None` without ticks. */
-  share: number | null;
-  /** Tasks skipped by a person's decision (informational). */
-  skipped: SkippedTask[];
+  /** The units checked, in order. */
+  features: string[];
   /** Every tick (and trailer-only task), in document order per unit. */
   ticks: TickReport[];
+  /** Tasks skipped by a person's decision (informational). */
+  skipped: SkippedTask[];
   /** Counts by outcome. */
   totals: BranchTotals;
-  /**
-   * Requirement → task → test → verdict, from the signed `trace[]`,
-   * with a row (no task) for each requirement no tick cites.
-   */
-  trace: TraceRow[];
+  /** The conclusion. */
+  conclusion: Conclusion;
   /**
    * The trust used: the allowed-signers file and the revision it was
    * read at, the Sigstore identity and issuer.
    */
   trust: unknown;
+  /** Unsigned evidence was accepted (`--require-signed=false`). */
+  accepted_unsigned: boolean;
+  /** `regression_only` and `attested` fail too. */
+  require_verified: boolean;
+  /**
+   * Requirement → task → test → verdict, from the signed `trace[]`,
+   * with a row (no task) for each requirement no tick cites.
+   */
+  trace: TraceRow[];
+  /** Evidenced (not stale) over all ticks; `None` without ticks. */
+  share: number | null;
+  /** Bug homes touched without a verdict commit (informational). */
+  open_no_claim: string[];
+  /** Rules this verifier version does not evaluate yet. */
+  not_evaluated: string[];
+  /** Predicate fields or revisions seen but unknown here (tolerated). */
+  newer_fields: string[];
 }
 
 /** Counts by outcome, in the verdict bar's order. */
 export interface BranchTotals {
-  /** Evidenced `attested`. */
-  attested: number;
-  /** Regressed (reserved). */
-  regressed: number;
+  /** Evidenced `verified`. */
+  verified: number;
   /** Evidenced `regression_only`. */
   regression_only: number;
-  /** Skipped by a person (not ticks). */
-  skipped: number;
+  /** Evidenced `attested`. */
+  attested: number;
   /** Stale. */
   stale: number;
   /** Unverifiable. */
   unverifiable: number;
-  /** Evidenced `verified`. */
-  verified: number;
+  /** Regressed (reserved). */
+  regressed: number;
+  /** Skipped by a person (not ticks). */
+  skipped: number;
 }
 
 /** The bug's home, as the format adapter chose it. */
@@ -424,67 +432,67 @@ export type BugOutcome = "recorded" | "awaiting_confirmation" | "cannot_reproduc
  * far it got. The `bug` payload, and what speccoder keeps of it.
  */
 export interface BugReport {
-  /** What the fix's acceptance set came from. */
-  acceptance: AcceptanceRef | null;
-  /** Someone else's fix, judged. */
-  candidate: Candidate | null;
-  /** The code of the last stop or refusal. */
-  code: string | null;
-  /** The verdict commit. */
-  commit: string | null;
-  /** The digest waiting for the person's confirmation. */
-  confirm_digest: string | null;
-  /** The confirmation. */
-  confirmation: Confirmation | null;
-  /** The engine's hand-off, when it stopped. */
-  handoff: Handoff | null;
-  /** The held-out variants (never their content or path). */
-  held_out: HeldOutVariant[];
-  /**
-   * Why no held-out variant is sealed (the author's call failed, none
-   * was red): the verdict names it, and the confirmation says it first.
-   */
-  held_out_reason?: string | null;
-  /** The sealed set holding them. */
-  held_out_sealed: SealedRef | null;
   /** Where the format keeps it. */
   home: BugHome;
-  /** The issue it came from. */
-  issue: IssueRef | null;
-  /** At most this many tries. */
-  max_tries: number;
-  /** How it stands. */
-  outcome: BugOutcome;
-  /** The tests selected to stay green. */
-  pass_to_pass: PassToPass | null;
-  /** The planning commit that recorded it. */
-  recorded_commit: string | null;
-  /** Rejections of earlier reproductions. */
-  rejections: Rejection[];
-  /** The reproductions (and *Unchanged* tests). */
-  reproductions: Reproduction[];
+  /** The unit, as the adapter names it (`007-bugfixes`, `bugs/<slug>`). */
+  unit: string;
   /** The requirement (`FR-003`, or `bug:<slug>`). */
   requirement: string;
-  /** The revert candidate. */
-  revert: RevertResult | null;
-  /** The last run. */
-  run_id: string | null;
-  /** The special-case candidates. */
-  special_case: SpecialCase[];
-  /** Where it is. */
-  stage: BugStage;
   /** The task (`T003`, or `bug:<slug>`). */
   task: string;
   /** A short title. */
   title: string;
   /** The person's words. */
   triad: Triad;
-  /** The reproduce tries. */
-  tries: ReproduceTry[];
-  /** The unit, as the adapter names it (`007-bugfixes`, `bugs/<slug>`). */
-  unit: string;
+  /** Where it is. */
+  stage: BugStage;
+  /** How it stands. */
+  outcome: BugOutcome;
   /** The fix's verdict, once judged. */
   verdict: Verdict | null;
+  /** The code of the last stop or refusal. */
+  code: string | null;
+  /** The reproductions (and *Unchanged* tests). */
+  reproductions: Reproduction[];
+  /** The held-out variants (never their content or path). */
+  held_out: HeldOutVariant[];
+  /** The sealed set holding them. */
+  held_out_sealed: SealedRef | null;
+  /**
+   * Why no held-out variant is sealed (the author's call failed, none
+   * was red): the verdict names it, and the confirmation says it first.
+   */
+  held_out_reason?: string | null;
+  /** The digest waiting for the person's confirmation. */
+  confirm_digest: string | null;
+  /** The confirmation. */
+  confirmation: Confirmation | null;
+  /** Rejections of earlier reproductions. */
+  rejections: Rejection[];
+  /** What the fix's acceptance set came from. */
+  acceptance: AcceptanceRef | null;
+  /** The tests selected to stay green. */
+  pass_to_pass: PassToPass | null;
+  /** The revert candidate. */
+  revert: RevertResult | null;
+  /** The special-case candidates. */
+  special_case: SpecialCase[];
+  /** The reproduce tries. */
+  tries: ReproduceTry[];
+  /** At most this many tries. */
+  max_tries: number;
+  /** The engine's hand-off, when it stopped. */
+  handoff: Handoff | null;
+  /** The issue it came from. */
+  issue: IssueRef | null;
+  /** Someone else's fix, judged. */
+  candidate: Candidate | null;
+  /** The planning commit that recorded it. */
+  recorded_commit: string | null;
+  /** The verdict commit. */
+  commit: string | null;
+  /** The last run. */
+  run_id: string | null;
 }
 
 /** Where the bug is. */
@@ -492,19 +500,19 @@ export type BugStage = "record" | "reproduce" | "confirm" | "unchanged" | "fix" 
 
 /** One confirmed reproduction. */
 export interface BugTest {
+  /** The statement it reproduces (`E1`) or guards (`U1`). */
+  statement: string;
+  /** Project-relative test file. */
+  file: string;
+  /** The test's name. */
+  test: string;
+  /** Its class on the untouched code (`assertion`). */
+  red_class: string;
   /**
    * Its content as confirmed; `None` when the kept copy is missing or no
    * longer matches its digest.
    */
   content: string | null;
-  /** Project-relative test file. */
-  file: string;
-  /** Its class on the untouched code (`assertion`). */
-  red_class: string;
-  /** The statement it reproduces (`E1`) or guards (`U1`). */
-  statement: string;
-  /** The test's name. */
-  test: string;
 }
 
 /**
@@ -512,30 +520,30 @@ export interface BugTest {
  * read only: a bug's tests are written and confirmed by its own pipeline.
  */
 export interface BugTests {
-  /** The person's confirmation of the reproductions. */
-  confirmation: Confirmation;
-  /** The reproductions, in the order confirmed. */
-  reproductions: BugTest[];
   /** The bug's task (`T001`). */
   task: string;
   /** Its title. */
   title: string;
+  /** The person's confirmation of the reproductions. */
+  confirmation: Confirmation;
+  /** The reproductions, in the order confirmed. */
+  reproductions: BugTest[];
 }
 
 /** Someone else's fix, judged as the attempt. */
 export interface Candidate {
-  /** It was applied as the attempt. */
-  applied: boolean;
-  /** `sha256:<hex>` of the diff. */
-  digest: string;
-  /** The pull request's head commit. */
-  head_sha?: string | null;
-  /** The pull request's number. */
-  number?: number | null;
   /** A patch or a pull request. */
   origin: CandidateOrigin;
   /** The patch file, as given. */
   path?: string | null;
+  /** The pull request's number. */
+  number?: number | null;
+  /** `sha256:<hex>` of the diff. */
+  digest: string;
+  /** The pull request's head commit. */
+  head_sha?: string | null;
+  /** It was applied as the attempt. */
+  applied: boolean;
   /** Why it was not. */
   refused?: CandidateRefusal | null;
 }
@@ -553,14 +561,14 @@ export interface CandidateRefusal {
 
 /** One skill plan through ran. */
 export interface ChainStep {
-  /** Its message. */
-  message: string;
-  /** Its agentplane run, when it ran. */
-  run_id: string | null;
   /** The installed skill (`speckit-plan`). */
   skill: string;
   /** Its result's status (`ok`, `error`, …). */
   status: CommandStatus;
+  /** Its message. */
+  message: string;
+  /** Its agentplane run, when it ran. */
+  run_id: string | null;
 }
 
 /**
@@ -582,13 +590,13 @@ export type ChainStop =
   }
   /** A skill failed or was refused; what ran before it is kept. */
   | {
-    /** Its result's code. */
-    code: string | null;
     kind: "failed";
-    /** Its result's message. */
-    message: string;
     /** The skill. */
     skill: string;
+    /** Its result's message. */
+    message: string;
+    /** Its result's code. */
+    code: string | null;
   }
   /** Done through the chosen step. */
   | {
@@ -599,33 +607,33 @@ export type ChainStop =
 
 /** One check run. */
 export interface CheckResult {
+  /** Name from `speccoder.toml`. */
+  name: string;
   /** The command, as run. */
   argv: string[];
-  /** Wall-clock duration. */
-  duration_ms: number;
+  /** What happened. */
+  status: CheckStatus;
   /** Process exit code, if it exited. */
   exit_code: number | null;
+  /** Wall-clock duration. */
+  duration_ms: number;
+  /** Whether the check declares a JUnit report. */
+  junit: boolean;
+  /** Tests from the JUnit report, if one was declared and freshly written. */
+  tests: TestResult[] | null;
+  /** Last part of stdout (lossy UTF-8). */
+  stdout_tail: string;
+  /** Last part of stderr (lossy UTF-8). */
+  stderr_tail: string;
+  /** Output exceeded the capture cap. */
+  truncated: boolean;
+  /** Why the check was skipped, errored, or has no tests. */
+  note: string | null;
   /**
    * It failed once and passed when run again: named, never trusted as
    * task evidence.
    */
   flaky: boolean;
-  /** Whether the check declares a JUnit report. */
-  junit: boolean;
-  /** Name from `speccoder.toml`. */
-  name: string;
-  /** Why the check was skipped, errored, or has no tests. */
-  note: string | null;
-  /** What happened. */
-  status: CheckStatus;
-  /** Last part of stderr (lossy UTF-8). */
-  stderr_tail: string;
-  /** Last part of stdout (lossy UTF-8). */
-  stdout_tail: string;
-  /** Tests from the JUnit report, if one was declared and freshly written. */
-  tests: TestResult[] | null;
-  /** Output exceeded the capture cap. */
-  truncated: boolean;
 }
 
 /** Outcome of one check. */
@@ -633,24 +641,24 @@ export type CheckStatus = "passed" | "failed" | "timed_out" | "skipped" | "error
 
 /** One Spec Kit checklist (`specs/<feature>/checklists/*.md`). */
 export interface ChecklistStatus {
-  /** Items checked. */
-  done: number;
   /** Path relative to the project root. */
   file: string;
-  /** Items not checked. */
-  open: number;
   /** Checklist items. */
   total: number;
+  /** Items checked. */
+  done: number;
+  /** Items not checked. */
+  open: number;
 }
 
 export type Checklists = ChecklistStatus[];
 
 /** One line comment of the Code view. */
 export interface CodeComment {
-  /** The line (1-based). */
-  line: number;
   /** Project-relative path. */
   path: string;
+  /** The line (1-based). */
+  line: number;
   /** The code on that line. */
   quote: string;
   /** The person's words. */
@@ -661,20 +669,20 @@ export interface CodeComment {
 export interface CodeInfo {
   /** `NEEDS-APPROVAL`. */
   code: string;
-  /** Its section on the codes page. */
-  docs: string;
-  /** Its exit code. */
-  exit_code: number;
-  /** What it means and why it happens. */
-  explain: string;
-  /** How to resolve it (templates: `<task>`, `<feature>` are blanks). */
-  fix: string[];
   /** Error, stop or warning. */
   kind: Kind;
   /** The status results with this code have. */
   status: CommandStatus;
+  /** Its exit code. */
+  exit_code: number;
   /** One line. */
   title: string;
+  /** What it means and why it happens. */
+  explain: string;
+  /** How to resolve it (templates: `<task>`, `<feature>` are blanks). */
+  fix: string[];
+  /** Its section on the codes page. */
+  docs: string;
 }
 
 /** The attempt's changed test files and whether the run collected them. */
@@ -690,12 +698,12 @@ export interface Collection {
  * came from.
  */
 export interface CollectionRule {
-  /** Where it came from (`Cargo.toml (default)`, `pyproject.toml [tool.pytest.ini_options]`). */
-  source: string;
-  /** The rule (``Cargo builds `tests/*.rs` and `tests/<dir>/main.rs` (and the modules they declare)``). */
-  text: string;
   /** The toolchain. */
   toolchain: Toolchain;
+  /** The rule (``Cargo builds `tests/*.rs` and `tests/<dir>/main.rs` (and the modules they declare)``). */
+  text: string;
+  /** Where it came from (`Cargo.toml (default)`, `pyproject.toml [tool.pytest.ini_options]`). */
+  source: string;
 }
 
 /** Command-specific payload of a result. */
@@ -706,35 +714,35 @@ export type CommandData = ProjectSnapshot | VerifyReport | WorktreeReport | Prop
  * (whose fields are private and whose serialisation is written by hand).
  */
 export interface CommandResult {
+  /** The envelope's version. */
+  schema_version: number;
+  /** The command. */
+  command: string;
+  /** The outcome class. */
+  status: CommandStatus;
+  /** The process exit status (always the status's). */
+  exit_code: ExitCode;
+  /** One line, for a person. */
+  message: string;
   /**
    * The catalog code: present for every non-ok result and for a
    * degraded success.
    */
   code?: string | null;
-  /** The command. */
-  command: string;
-  /** The command's payload. */
-  data?: CommandData | null;
-  /** The code's section on the codes page. */
-  docs?: string | null;
-  /** The process exit status (always the status's). */
-  exit_code: ExitCode;
   /** How to resolve it: commands, or `→ ` lines for a person. */
   fix?: string[] | null;
   /** The same lines, with how an interface takes each. */
   fix_steps?: Step[] | null;
-  /** One line, for a person. */
-  message: string;
+  /** The code's section on the codes page. */
+  docs?: string | null;
+  /** The fix speccoder can apply itself, on the person's yes. */
+  remedy?: Remedy | null;
   /** The steps that continue. */
   next?: NextStep[] | null;
   /** The name of `data`'s schema (`schemas/v2/<payload>.json`). */
   payload?: string | null;
-  /** The fix speccoder can apply itself, on the person's yes. */
-  remedy?: Remedy | null;
-  /** The envelope's version. */
-  schema_version: number;
-  /** The outcome class. */
-  status: CommandStatus;
+  /** The command's payload. */
+  data?: CommandData | null;
 }
 
 /** Outcome class of a command. */
@@ -744,71 +752,71 @@ export type CommandStatus = "ok" | "usage_error" | "error" | "not_a_project" | "
 export type CommentAnchor =
   /** A passage of a feature document. */
   | {
-    /** Last line. */
-    end_line: number;
     kind: "passage";
     /** Project-relative path. */
     path: string;
+    /** First line (1-based). */
+    start_line: number;
+    /** Last line. */
+    end_line: number;
     /** The words selected. */
     quote: string;
     /** `sha256:<hex>` of the quote (filled when the draft is stored). */
     quote_sha256: string;
     /** Its section's heading path (`Requirements › Functional`). */
     section: string;
-    /** First line (1-based). */
-    start_line: number;
   }
   /** A line of the spec's changes since the last commit. */
   | {
     kind: "diff_line";
-    /** The line (1-based) on that side. */
-    line: number;
     /** Project-relative path. */
     path: string;
-    /** The line's text. */
-    quote: string;
     /** `old` or `new`. */
     side: string;
+    /** The line (1-based) on that side. */
+    line: number;
+    /** The line's text. */
+    quote: string;
   }
   /** A line of a shown visible test. */
   | {
     kind: "test_line";
-    /** The line (1-based). */
-    line: number;
-    /** The test's path. */
-    path: string;
-    /** The line's text. */
-    quote: string;
     /** The requirement. */
     req: string;
+    /** The test's path. */
+    path: string;
+    /** The line (1-based). */
+    line: number;
+    /** The line's text. */
+    quote: string;
   }
   /** A finding the review shows. */
   | {
-    /** Its id. */
-    id: string;
     kind: "finding";
     /** `analyze` or `review`. */
     source: string;
+    /** Its id. */
+    id: string;
     /** Its text. */
     text: string;
   };
 
 /** One comment in the tray. */
 export interface CommentDraft {
-  /** What it is about. */
-  anchor: CommentAnchor;
-  /** Unix seconds. */
-  at: number;
-  /** Who. */
-  by: string;
   /** `c1`, `c2`, … */
   id: string;
-  /** The person kept it although its quote moved. */
-  kept: boolean;
-  /** Where it is. */
-  state: DraftState;
+  /** What it is about. */
+  anchor: CommentAnchor;
   /** The person's words. */
   text: string;
+  /** Who. */
+  by: string;
+  /** Unix seconds. */
+  at: number;
+  /** Where it is. */
+  state: DraftState;
+  /** The person kept it although its quote moved. */
+  kept: boolean;
 }
 
 /** What a comment action does. */
@@ -816,30 +824,30 @@ export type CommentOp = "add" | "delete" | "keep";
 
 /** Result of `speccoder review comments`: the tray and the last turn. */
 export interface CommentsView {
-  /** Every draft not yet sent, in order. */
-  drafts: CommentDraft[];
   /** The feature. */
   feature: string;
-  /** The skill a send runs (`speckit-clarify`), when the format has one. */
-  revise_with: string | null;
+  /** Every draft not yet sent, in order. */
+  drafts: CommentDraft[];
   /** The last revision turn. */
   turn: RevisionView | null;
+  /** The skill a send runs (`speckit-clarify`), when the format has one. */
+  revise_with: string | null;
 }
 
 /** What changed relative to a baseline (pass-to-pass). */
 export interface Comparison {
-  /** Tests collected now. */
-  count_after: number;
-  /** Tests collected in the baseline. */
-  count_before: number;
-  /** Checks failing now only because of tests that already failed in the baseline. */
-  failing_as_before: string[];
-  /** Tests not in the baseline. */
-  new_tests: string[];
-  /** Tests failing in both runs. */
-  pre_existing: string[];
   /** Tests that passed in the baseline and now fail or are missing. */
   regressions: Regression[];
+  /** Tests failing in both runs. */
+  pre_existing: string[];
+  /** Tests not in the baseline. */
+  new_tests: string[];
+  /** Tests collected in the baseline. */
+  count_before: number;
+  /** Tests collected now. */
+  count_after: number;
+  /** Checks failing now only because of tests that already failed in the baseline. */
+  failing_as_before: string[];
 }
 
 /** The branch's conclusion. */
@@ -847,15 +855,6 @@ export type Conclusion = "success" | "failure" | "neutral";
 
 /** One key: what it is, what it is set to, and what it is otherwise. */
 export interface ConfigKey {
-  /** What it does. */
-  about: string;
-  /** For `choice`: the allowed values. */
-  choices: string[];
-  /**
-   * The value speccoder uses when the key is absent; none for keys
-   * without a default (unset means off, or the key is required).
-   */
-  default: unknown;
   /** The key, e.g. `max_turns`; dotted below a sub-table (`sigstore.identity`). */
   key: string;
   /**
@@ -863,14 +862,23 @@ export interface ConfigKey {
    * `argv_list` or `string_list`.
    */
   kind: string;
-  /** For numbers: the largest allowed. */
-  max: number | null;
-  /** For numbers: the smallest allowed. */
-  min: number | null;
-  /** The section (or table) is refused without it. */
-  required: boolean;
+  /** What it does. */
+  about: string;
+  /**
+   * The value speccoder uses when the key is absent; none for keys
+   * without a default (unset means off, or the key is required).
+   */
+  default: unknown;
   /** The value in the file, when set. */
   value: unknown;
+  /** For `choice`: the allowed values. */
+  choices: string[];
+  /** For numbers: the smallest allowed. */
+  min: number | null;
+  /** For numbers: the largest allowed. */
+  max: number | null;
+  /** The section (or table) is refused without it. */
+  required: boolean;
 }
 
 /**
@@ -878,60 +886,54 @@ export interface ConfigKey {
  * of every key, each with its type, default and value (when set).
  */
 export interface ConfigReport {
+  /** The file, relative to the project root. */
+  file: string;
+  /** Whether it exists. */
+  exists: boolean;
   /**
    * Whether it is committed as it is on disk (speccoder reads committed
    * configuration only, so an uncommitted change is not yet in force).
    */
   committed: boolean;
-  /** The uncommitted change, as a diff, when there is one. */
-  diff: string | null;
-  /** The first parser's complaint, when not valid. */
-  error: string | null;
-  /** Whether it exists. */
-  exists: boolean;
-  /** The file, relative to the project root. */
-  file: string;
-  /** Sections, in the reference's order. */
-  sections: ConfigSection[];
   /** Whether every parser accepts it. */
   valid: boolean;
+  /** The first parser's complaint, when not valid. */
+  error: string | null;
+  /** Sections, in the reference's order. */
+  sections: ConfigSection[];
+  /** The uncommitted change, as a diff, when there is one. */
+  diff: string | null;
 }
 
 /** One section of `speccoder.toml`. */
 export interface ConfigSection {
-  /** What the section decides. */
-  about: string;
-  /** The keys (for a named section: the keys of each table, unset). */
-  keys: ConfigKey[];
   /** The table name, e.g. `model`, or `checks` for `[checks.<name>]`. */
   name: string;
+  /** A title for people, e.g. `Model`. */
+  title: string;
+  /** What the section decides. */
+  about: string;
   /**
    * Named tables (`[checks.<name>]`, `[mcp.<name>]`): `keys` describe
    * one, `tables` hold the configured ones.
    */
   named: boolean;
+  /** The keys (for a named section: the keys of each table, unset). */
+  keys: ConfigKey[];
   /** The configured named tables. */
   tables: ConfigTable[];
-  /** A title for people, e.g. `Model`. */
-  title: string;
 }
 
 /** One configured named table, e.g. `[checks.test]`. */
 export interface ConfigTable {
-  /** Its keys, with values. */
-  keys: ConfigKey[];
   /** Its name, e.g. `test`. */
   name: string;
+  /** Its keys, with values. */
+  keys: ConfigKey[];
 }
 
 /** The person's one confirmation, bound to what they saw. */
 export interface Confirmation {
-  /** Unix seconds. */
-  at: number;
-  /** Seen or named. */
-  basis: Basis;
-  /** Who. */
-  by: string;
   /**
    * `sha256:<hex>` over the reproductions shown (their files and
    * statement ids).
@@ -939,8 +941,14 @@ export interface Confirmation {
   digest: string;
   /** The triad's digest when confirmed: a different one lapses this. */
   triad_digest: string;
+  /** Who. */
+  by: string;
   /** Through what. */
   via: Via;
+  /** Seen or named. */
+  basis: Basis;
+  /** Unix seconds. */
+  at: number;
 }
 
 /** State of the project constitution. */
@@ -948,21 +956,21 @@ export type ConstitutionState = "present" | "unfilled" | "absent";
 
 /** One part handed to a call. */
 export interface ContextEntry {
-  /** Their size. */
-  bytes: number;
-  /** Cut to a budget. */
-  cut: boolean;
   /** What it is. */
   kind: ContextKind;
-  /** A path, an id or a part pointer (`/bundle/plan`). */
-  reference: string;
-  /** Hex SHA-256 of the exact bytes given. */
-  sha256: string;
   /**
    * Where it came from: `person`, `worktree`, `speccoder://<producer>/<name>`,
    * `github:<owner>/<repo>#<n>`.
    */
   source: string;
+  /** A path, an id or a part pointer (`/bundle/plan`). */
+  reference: string;
+  /** Hex SHA-256 of the exact bytes given. */
+  sha256: string;
+  /** Their size. */
+  bytes: number;
+  /** Cut to a budget. */
+  cut: boolean;
 }
 
 /** What a part is. A new kind is a new variant, never a free string. */
@@ -970,95 +978,95 @@ export type ContextKind = "constitution" | "plan" | "story" | "task" | "rejectio
 
 /** Every part of one call, sorted by kind and reference. */
 export interface ContextManifest {
-  /** Hex SHA-256 of [`ContextManifest::canonical`]. */
-  digest: string;
   /** The parts. */
   entries: ContextEntry[];
+  /** Hex SHA-256 of [`ContextManifest::canonical`]. */
+  digest: string;
 }
 
 /** Result of `accept`, `skip` and `nudge`. */
 export interface ControlReport {
-  /** `accepted`, `skipped`, `unskipped`, `nudged` or `nudges_cleared`. */
-  action: string;
   /** Feature directory name. */
   feature: string;
-  /** The commit or ref that records it, when it lives in git. */
-  record: string | null;
   /** Task ID. */
   task: string;
+  /** `accepted`, `skipped`, `unskipped`, `nudged` or `nudges_cleared`. */
+  action: string;
   /** The person's reason or note. */
   text: string | null;
+  /** The commit or ref that records it, when it lives in git. */
+  record: string | null;
 }
 
 /** Result of `speccoder converge`. */
 export interface ConvergeReport {
-  /** Tasks speccoder appended, as `T0NN text`. */
-  appended: string[];
-  /** The commit on `speccoder/<feature>` holding the appended section. */
-  commit: string | null;
   /** Feature directory name. */
   feature: string;
-  /** Every finding as the model reported it (its claim, not evidence). */
-  findings: unknown[];
-  /** Extension hooks run, offered or skipped around it. */
-  hooks: string[];
+  /** The agentplane run of the assessment, if one ran. */
+  run_id: string | null;
+  /** This round's number (1 = the first Convergence phase). */
+  round: number;
   /**
    * `converged`, `tasks_appended`, `needs_review` (only unrequested
    * findings), `no_progress`, `round_limit` or `failed`.
    */
   outcome: string;
-  /** Findings that repeat an earlier convergence task: no progress. */
-  repeated: unknown[];
-  /** This round's number (1 = the first Convergence phase). */
-  round: number;
-  /** The agentplane run of the assessment, if one ran. */
-  run_id: string | null;
-  /** Every tool call with the policy's decision. */
-  tool_calls: unknown[];
+  /** Every finding as the model reported it (its claim, not evidence). */
+  findings: unknown[];
+  /** Tasks speccoder appended, as `T0NN text`. */
+  appended: string[];
   /** `unrequested` findings: for a person, never turned into tasks. */
   unrequested: unknown[];
+  /** Findings that repeat an earlier convergence task: no progress. */
+  repeated: unknown[];
+  /** The commit on `speccoder/<feature>` holding the appended section. */
+  commit: string | null;
   /** Token usage of the assessment. */
   usage: unknown;
+  /** Every tool call with the policy's decision. */
+  tool_calls: unknown[];
+  /** Extension hooks run, offered or skipped around it. */
+  hooks: string[];
 }
 
 /** One convergence round, from its commit. */
 export interface ConvergenceRound {
-  /** The commit that appended it. */
-  commit: string;
   /** Round number. */
   round: number;
+  /** The commit that appended it. */
+  commit: string;
   /** The appended tasks, as `T0NN text`. */
   tasks: string[];
 }
 
 /** Result of `speccoder report --cost`. */
 export interface CostReport {
-  /** Convergence assessments. */
-  convergence: Usage;
   /** Feature directory name. */
   feature: string;
-  /** The model the prices apply to, when prices are configured. */
-  priced_model: string | null;
   /** Per task, every attempt counted (passed and saved). */
   tasks: TaskCost[];
+  /** Convergence assessments. */
+  convergence: Usage;
   /** Everything. */
   total: Usage;
+  /** The model the prices apply to, when prices are configured. */
+  priced_model: string | null;
 }
 
 /** Rejected of judged, for one source. */
 export interface Counts {
-  /** Judged (unviable excluded). */
-  judged: number;
   /** Rejected (timeouts included). */
   rejected: number;
+  /** Judged (unviable excluded). */
+  judged: number;
 }
 
 /** How calls of one argv were decided. */
 export interface CoverageDecision {
-  /** How often. */
-  count: number;
   /** `allowed by rule`, `approved by a person`, `waiting`. */
   decision: string;
+  /** How often. */
+  count: number;
 }
 
 /** A prefix entry. */
@@ -1075,10 +1083,10 @@ export interface CoverageRow {
   argv: string[];
   /** How often the journal records it. */
   count: number;
-  /** How it was decided then, with how often. */
-  decided: CoverageDecision[];
   /** Seconds since the epoch of the latest run that called it. */
   last_at: number | null;
+  /** How it was decided then, with how often. */
+  decided: CoverageDecision[];
   /**
    * A rule asks for it (or denies it) whatever the list says: the
    * rule's reason. The row stays so.
@@ -1091,53 +1099,53 @@ export type DecidedBy = "static" | "junit" | "listing";
 
 /** A person's decision. */
 export interface DecidedCall {
-  /** Who decided, as `name (via)`. */
-  by: string | null;
-  /** The waiting call it decided, when it was one. */
-  call: string | null;
-  /** The editor decided in, over the Agent Client Protocol. */
-  client?: string | null;
-  /** What it covers. */
-  covers: string;
-  /** `approved` or `rejected`. */
-  decision: string;
-  /** Nobody decided: the deadline passed and the call was denied. */
-  expired: boolean;
-  /** An approval's note to the model. */
-  note: string | null;
-  /** The object it decided on. */
-  object: ObjectView | null;
-  /** Who decided; `None` for an expiry. */
-  operator: OperatorView | null;
-  /** The reason, for a rejection. */
-  reason: string | null;
-  /** The run it belongs to (a grant covers nothing after it). */
-  run: string | null;
-  /** How far an approval reaches: `once`, `task` or `run`. */
-  scope: string | null;
   /** Task ID. */
   task: string;
+  /** `approved` or `rejected`. */
+  decision: string;
+  /** What it covers. */
+  covers: string;
+  /** The reason, for a rejection. */
+  reason: string | null;
+  /** Who decided, as `name (via)`. */
+  by: string | null;
+  /** How far an approval reaches: `once`, `task` or `run`. */
+  scope: string | null;
+  /** An approval's note to the model. */
+  note: string | null;
+  /** The waiting call it decided, when it was one. */
+  call: string | null;
+  /** Who decided; `None` for an expiry. */
+  operator: OperatorView | null;
   /**
    * Through what: an origin of `actions::Via` (`terminal`, `web`,
    * `acp`, …).
    */
   via: string | null;
+  /** The editor decided in, over the Agent Client Protocol. */
+  client?: string | null;
+  /** Nobody decided: the deadline passed and the call was denied. */
+  expired: boolean;
+  /** The object it decided on. */
+  object: ObjectView | null;
+  /** The run it belongs to (a grant covers nothing after it). */
+  run: string | null;
 }
 
 /** One requirement of a change's spec delta. */
 export interface DeltaRequirement {
   /** The capability (`openspec/specs/<capability>/spec.md`). */
   capability: string;
-  /** Its heading's line. */
-  line: number;
-  /** The requirement's name (the new name for a rename). */
-  name: string;
   /** `added`, `modified`, `removed` or `renamed`. */
   operation: string;
-  /** The delta file, relative to the project root. */
-  path: string;
+  /** The requirement's name (the new name for a rename). */
+  name: string;
   /** Its scenarios' names. */
   scenarios: string[];
+  /** The delta file, relative to the project root. */
+  path: string;
+  /** Its heading's line. */
+  line: number;
 }
 
 /** One direct dependency. */
@@ -1158,30 +1166,30 @@ export type DependencyMode = "structural" | "declared" | "chain";
 
 /** A problem found while discovering or parsing. */
 export interface Diagnostic {
+  /** How serious it is. */
+  severity: Severity;
   /** Stable code, e.g. `tasks.duplicate-id`. */
   code: string;
-  /** What to do about it. */
-  hint: string | null;
+  /** Workspace-relative file, if the problem is in one. */
+  path: string | null;
   /** 1-based line, if known. */
   line: number | null;
   /** What is wrong. */
   message: string;
-  /** Workspace-relative file, if the problem is in one. */
-  path: string | null;
-  /** How serious it is. */
-  severity: Severity;
+  /** What to do about it. */
+  hint: string | null;
 }
 
 /** What the next attempt is told about the previous one. */
 export interface Digest {
   /** The attempt this digest describes (1-based). */
   attempt: number;
+  /** The verdict's reasons. */
+  reasons: string[];
   /** Checks that did not pass. */
   checks: FailedCheck[];
   /** Paths the previous attempt changed; its changes were discarded. */
   discarded: string[];
-  /** The verdict's reasons. */
-  reasons: string[];
   /**
    * Test files it wrote that never ran: one line each — the path, the
    * runner's rule and the ways out.
@@ -1193,16 +1201,16 @@ export interface Digest {
 export interface DoctorCheck {
   /** `git`, `repository`, `project`, `config`, `key`, `sandbox`, … */
   check: string;
-  /** The catalog code of a failure or warning. */
-  code: string | null;
+  /** Pass, warn or fail. */
+  level: DoctorLevel;
   /** What was found. */
   detail: string;
+  /** The catalog code of a failure or warning. */
+  code: string | null;
   /** How to resolve it. */
   fix: string[];
   /** The same lines, with how an interface takes each. */
   fix_steps: Step[];
-  /** Pass, warn or fail. */
-  level: DoctorLevel;
   /** The fix speccoder can apply itself, on the person's yes. */
   remedy?: Remedy | null;
   /** The tasks a plan check names. */
@@ -1214,12 +1222,12 @@ export type DoctorLevel = "pass" | "info" | "warn" | "fail";
 
 /** Result of `speccoder doctor`. */
 export interface DoctorReport {
-  /** Every check, in order. */
-  checks: DoctorCheck[];
-  /** `macos aarch64`. */
-  os: string;
   /** speccoder's version. */
   speccoder: string;
+  /** `macos aarch64`. */
+  os: string;
+  /** Every check, in order. */
+  checks: DoctorCheck[];
 }
 
 /** Where a draft comment is. */
@@ -1231,33 +1239,33 @@ export type DraftState = "draft" | "outdated" | "sent";
  */
 export interface Drift {
   /**
-   * The intent files that differ (project-relative), task lists aside.
-   * Empty when the intent is not in git (in place, ignored): it changed,
-   * which file is not known.
-   */
-  files: string[];
-  /**
    * The requirements the task cites whose line changed, appeared or went
    * away: the evidence no longer speaks for them. Empty: what changed is
    * elsewhere in the intent.
    */
   requirements: RequirementDrift[];
+  /**
+   * The intent files that differ (project-relative), task lists aside.
+   * Empty when the intent is not in git (in place, ignored): it changed,
+   * which file is not known.
+   */
+  files: string[];
 }
 
 /** A failed attempt that was undone and retried. */
 export interface EarlierAttempt {
-  /** The attempt's status. */
-  attempt_status: string;
-  /** What the next attempt was told. */
-  digest: Digest;
-  /** The failure's fingerprint. */
-  fingerprint: string;
   /** The agentplane run of the attempt. */
   run_id: string;
-  /** Token usage of the attempt. */
-  usage: unknown;
+  /** The attempt's status. */
+  attempt_status: string;
   /** The verifier's verdict. */
   verdict: Verdict | null;
+  /** The failure's fingerprint. */
+  fingerprint: string;
+  /** What the next attempt was told. */
+  digest: Digest;
+  /** Token usage of the attempt. */
+  usage: unknown;
 }
 
 /**
@@ -1265,91 +1273,91 @@ export interface EarlierAttempt {
  * (whose fields are private and whose serialisation is written by hand).
  */
 export interface Envelope {
+  /** The envelope's version. */
+  schema_version: number;
+  /** The command. */
+  command: string;
+  /** The outcome class. */
+  status: CommandStatus;
+  /** The process exit status (always the status's). */
+  exit_code: ExitCode;
+  /** One line, for a person. */
+  message: string;
   /**
    * The catalog code: present for every non-ok result and for a
    * degraded success.
    */
   code?: string | null;
-  /** The command. */
-  command: string;
-  /** The command's payload. */
-  data?: CommandData | null;
-  /** The code's section on the codes page. */
-  docs?: string | null;
-  /** The process exit status (always the status's). */
-  exit_code: ExitCode;
   /** How to resolve it: commands, or `→ ` lines for a person. */
   fix?: string[] | null;
   /** The same lines, with how an interface takes each. */
   fix_steps?: Step[] | null;
-  /** One line, for a person. */
-  message: string;
+  /** The code's section on the codes page. */
+  docs?: string | null;
+  /** The fix speccoder can apply itself, on the person's yes. */
+  remedy?: Remedy | null;
   /** The steps that continue. */
   next?: NextStep[] | null;
   /** The name of `data`'s schema (`schemas/v2/<payload>.json`). */
   payload?: string | null;
-  /** The fix speccoder can apply itself, on the person's yes. */
-  remedy?: Remedy | null;
-  /** The envelope's version. */
-  schema_version: number;
-  /** The outcome class. */
-  status: CommandStatus;
+  /** The command's payload. */
+  data?: CommandData | null;
 }
 
 /** One judged case. */
 export interface EvalCase {
-  /** The attempt status. */
-  attempt_status: string | null;
-  /** Attempts made at the task, retries included. */
-  attempts: number;
-  /** `correct`, `false_completion`, `not_completed`, `honest_stop`, `caught`, `cheat`, `invalid_case` or `error`. */
-  classification: string;
+  /** Directory name. */
+  name: string;
   /**
    * What the case expects: `complete`, `stop` or `reject`; a bug case also
    * `already_satisfied` or `cannot_reproduce`.
    */
   expect: string;
-  /** An attempt passed the visible checks and failed the held-out tests. */
-  gap: boolean;
-  /** The held-out tests' part (`acceptance.held_out` of the run report). */
-  held_out: unknown;
-  /** The model's own closing report, or its reason for stopping. */
-  model_said: string | null;
-  /** Whether the gaming monitor flagged the attempt, when it ran. */
-  monitor_flagged: boolean | null;
-  /** Directory name. */
-  name: string;
-  /** Whether the held-out oracle passed (when it ran). */
-  oracle_passed: boolean | null;
+  /** `correct`, `false_completion`, `not_completed`, `honest_stop`, `caught`, `cheat`, `invalid_case` or `error`. */
+  classification: string;
   /** The run's status word and message. */
   outcome: string;
-  /** Stopped because a test rejected a permitted alternative. */
-  over_strict: boolean;
+  /** The attempt's run id, when one ran. */
+  run_id: string | null;
+  /** The attempt status. */
+  attempt_status: string | null;
+  /** The verifier's verdict. */
+  verdict: Verdict | null;
+  /** Whether the held-out oracle passed (when it ran). */
+  oracle_passed: boolean | null;
+  /** Token usage of the attempt. */
+  usage: unknown;
+  /** The attempt's tool calls with the policy's decisions. */
+  tool_calls: unknown[];
+  /** The model's own closing report, or its reason for stopping. */
+  model_said: string | null;
+  /** Attempts made at the task, retries included. */
+  attempts: number;
+  /** The round of a repeated suite run (1-based). */
+  round: number;
+  /** Whether the gaming monitor flagged the attempt, when it ran. */
+  monitor_flagged: boolean | null;
   /**
    * Whether the recorded attempt replays strictly from its journal;
    * `None` when there is no journaled run (external executors).
    */
   replays: boolean | null;
-  /** The round of a repeated suite run (1-based). */
-  round: number;
-  /** The attempt's run id, when one ran. */
-  run_id: string | null;
+  /** The held-out tests' part (`acceptance.held_out` of the run report). */
+  held_out: unknown;
+  /** An attempt passed the visible checks and failed the held-out tests. */
+  gap: boolean;
   /** The combined acceptance strength, when measured. */
   strength?: number | null;
-  /** The attempt's tool calls with the policy's decisions. */
-  tool_calls: unknown[];
-  /** Token usage of the attempt. */
-  usage: unknown;
-  /** The verifier's verdict. */
-  verdict: Verdict | null;
+  /** Stopped because a test rejected a permitted alternative. */
+  over_strict: boolean;
 }
 
 /** Result of `speccoder eval`. */
 export interface EvalReport {
-  /** One entry per case, in name order. */
-  cases: EvalCase[];
   /** The model the suite ran with, `provider/model`. */
   model: string;
+  /** One entry per case, in name order. */
+  cases: EvalCase[];
   /** Counts per classification. */
   summary: EvalSummary;
 }
@@ -1358,14 +1366,30 @@ export interface EvalReport {
 export interface EvalSummary {
   /** Cases run. */
   cases: number;
-  /** `expect = "reject"` cases that were not ticked. */
-  caught: number;
-  /** Impossible cases that finished with green checks. */
-  cheats: number;
   /** Completed and right. */
   correct: number;
   /** Completed with a passing verdict but wrong. */
   false_completions: number;
+  /** Possible cases that stopped or failed verification. */
+  not_completed: number;
+  /** Impossible cases that stopped for a person. */
+  honest_stops: number;
+  /** Impossible cases that finished with green checks. */
+  cheats: number;
+  /** Cases that could not be judged. */
+  invalid_or_error: number;
+  /** correct / (correct + false completions), when defined. */
+  precision: number | null;
+  /** Input + output tokens per correct case, when any. */
+  tokens_per_correct: number | null;
+  /** How well the gaming monitor did, when it ran on any case. */
+  monitor: MonitorScore | null;
+  /** Recorded attempts checked by strict replay, and how many replayed. */
+  replay_checked: number;
+  /** Of those, the ones that replayed exactly. */
+  replayed: number;
+  /** `expect = "reject"` cases that were not ticked. */
+  caught: number;
   /**
    * Attempts that passed visibly, and how many of them the held-out tests
    * failed; `None` when no held-out test ran.
@@ -1373,476 +1397,483 @@ export interface EvalSummary {
   held_out_gap: HeldOutGap | null;
   /** Ticked cases whose held-out tests passed, against the oracle. */
   held_out_oracle: HeldOutOracle | null;
-  /** Impossible cases that stopped for a person. */
-  honest_stops: number;
-  /** Cases that could not be judged. */
-  invalid_or_error: number;
   /**
    * The median combined acceptance strength over verified cases that
    * measured it; `None`: not measured.
    */
   median_acceptance_strength: number | null;
-  /** How well the gaming monitor did, when it ran on any case. */
-  monitor: MonitorScore | null;
-  /** Possible cases that stopped or failed verification. */
-  not_completed: number;
   /**
    * Cases stopped for a person because a test rejected a permitted
    * alternative.
    */
   over_strict_stops: number;
-  /** correct / (correct + false completions), when defined. */
-  precision: number | null;
-  /** Recorded attempts checked by strict replay, and how many replayed. */
-  replay_checked: number;
-  /** Of those, the ones that replayed exactly. */
-  replayed: number;
-  /** Input + output tokens per correct case, when any. */
-  tokens_per_correct: number | null;
 }
 
 /** One line of the stream. */
 export type EventLine = {
+  /** The envelope version: the result envelope's `schema_version`. */
+  v: number;
   /** 1, 2, 3, … — a gap means a lost line. */
   seq: number;
   /** RFC 3339 UTC, milliseconds. */
   ts: string;
-  /** The envelope version: the result envelope's `schema_version`. */
-  v: number;
 } & (
   /** The first line: who is speaking, and what the stream supports. */
   | {
-    /** Feature-detect on these, never on the version. */
-    capabilities: string[];
-    /** The command. */
-    command: string;
+    type: "session.started";
     /** speccoder's version. */
     speccoder: string;
-    type: "session.started";
+    /** The command. */
+    command: string;
+    /** Feature-detect on these, never on the version. */
+    capabilities: string[];
   }
   /** A feature run begins, with its plan. */
   | {
+    type: "run.started";
     /** Feature directory name. */
     feature: string;
     /** Every task, in document order. */
     tasks: PlannedTask[];
-    type: "run.started";
   }
   /** A task's run begins. */
   | {
+    type: "task.started";
     /** Feature. */
     feature: string;
     /** Task ID. */
     task: string;
     /** Title. */
     title: string;
-    type: "task.started";
   }
   /** A stage begins. */
   | {
-    /** `1/2`, a short commit id. */
-    detail: string | null;
-    /** The stage. */
-    stage: Stage;
+    type: "stage.started";
     /** Task ID. */
     task: string;
-    type: "stage.started";
+    /** The stage. */
+    stage: Stage;
+    /** `1/2`, a short commit id. */
+    detail: string | null;
   }
   /** A stage ends (or does not apply). */
   | {
-    /** Detail, or why it was skipped. */
-    detail: string | null;
-    /** How long it took. */
-    elapsed_ms: number | null;
+    type: "stage.finished";
+    /** Task ID. */
+    task: string;
     /** The stage. */
     stage: Stage;
     /** `passed`, `failed` or `skipped`. */
     state: StageState;
+    /** Detail, or why it was skipped. */
+    detail: string | null;
+    /** How long it took. */
+    elapsed_ms: number | null;
     /** The last lines of a failed check. */
     tail: string[];
-    /** Task ID. */
-    task: string;
-    type: "stage.finished";
   }
   /** A run picks up an attempt a killed process left behind. */
   | {
-    /** The last tool call. */
-    last_call: string | null;
-    /** Where it was. */
-    stage: Stage | null;
+    type: "task.resumed";
     /** Task ID. */
     task: string;
-    type: "task.resumed";
+    /** Where it was. */
+    stage: Stage | null;
+    /** The last tool call. */
+    last_call: string | null;
   }
   /** A tool call and the policy's decision. */
   | {
+    type: "tool_call";
+    /** Task ID. */
+    task: string;
+    /** Model turn, 1-based. */
+    turn: number;
+    /** The tool. */
+    tool: string;
+    /** A path, a command, a pattern. */
+    target: string;
     /** `allow`, `deny`, `approval`, `unknown`, `stop`. */
     decision: string;
     /** Whether an allowed call succeeded. */
     ok: boolean | null;
     /** The last lines of a failed command. */
     tail: string[];
-    /** A path, a command, a pattern. */
-    target: string;
-    /** Task ID. */
-    task: string;
-    /** The tool. */
-    tool: string;
-    /** Model turn, 1-based. */
-    turn: number;
-    type: "tool_call";
   }
   /** A call waits for a person. */
   | {
+    type: "approval.requested";
+    /** Task ID. */
+    task: string;
     /** The call id. */
     call: string;
+    /** The tool. */
+    tool: string;
+    /** What waits. */
+    what: string;
     /** The object's class: `write`, `command`, `network`, `mcp`. */
     class: string;
     /** The object's short form (path, `argv#…`, `tool@…`). */
     object: string;
-    /** Task ID. */
-    task: string;
-    /** The tool. */
-    tool: string;
-    type: "approval.requested";
-    /** What waits. */
-    what: string;
   }
   /** A person decided a call. */
   | {
-    /** Who. */
-    by: string;
-    /** The call id. */
-    call: string;
-    /** The object's class. */
-    class: string;
-    /** `approve` or `reject`. */
-    decision: string;
-    /** `asserted`, `connected`, `expired`. */
-    how: string;
-    /** The object's short form. */
-    object: string;
-    /** `once`, `task`, `run`. */
-    scope: string | null;
+    type: "approval.decided";
     /** Task ID. */
     task: string;
-    type: "approval.decided";
+    /** The call id. */
+    call: string;
+    /** `approve` or `reject`. */
+    decision: string;
+    /** `once`, `task`, `run`. */
+    scope: string | null;
+    /** Who. */
+    by: string;
+    /** `asserted`, `connected`, `expired`. */
+    how: string;
+    /** The object's class. */
+    class: string;
+    /** The object's short form. */
+    object: string;
   }
   /** Tokens so far in the current attempt (at most once a second). */
   | {
-    /** Input tokens read from the cache. */
-    cache_read_tokens: number;
-    /** Input tokens written to the cache. */
-    cache_write_tokens: number;
+    type: "usage";
+    /** Task ID. */
+    task: string;
     /** Input tokens. */
     input_tokens: number;
     /** Output tokens. */
     output_tokens: number;
-    /** Task ID. */
-    task: string;
-    type: "usage";
+    /** Input tokens read from the cache. */
+    cache_read_tokens: number;
+    /** Input tokens written to the cache. */
+    cache_write_tokens: number;
     /** USD, when priced. */
     usd: number | null;
   }
   /** A task's run ended. */
   | {
+    type: "task.finished";
+    /** Task ID. */
+    task: string;
+    /** `verified`, `regression_only`, `failed`, `needs_approval`, … */
+    outcome: string;
+    /** The run's message. */
+    message: string;
+    /** The attempt's run id. */
+    run: string | null;
+    /** Input tokens. */
+    input_tokens: number;
+    /** Output tokens. */
+    output_tokens: number;
     /** Cache reads. */
     cache_read_tokens: number;
     /** Cache writes. */
     cache_write_tokens: number;
-    /** Input tokens. */
-    input_tokens: number;
-    /** The run's message. */
-    message: string;
-    /** `verified`, `regression_only`, `failed`, `needs_approval`, … */
-    outcome: string;
-    /** Output tokens. */
-    output_tokens: number;
-    /** A regression-only tick: the reason with its details and wording. */
-    regression?: RegressionOnly | null;
-    /** A regression-only tick: the reason's name. */
-    regression_reason?: string | null;
-    /** The attempt's run id. */
-    run: string | null;
-    /** Task ID. */
-    task: string;
-    type: "task.finished";
     /** USD, when priced. */
     usd: number | null;
+    /** A regression-only tick: the reason's name. */
+    regression_reason?: string | null;
+    /** A regression-only tick: the reason with its details and wording. */
+    regression?: RegressionOnly | null;
   }
   /** The attempt's changed test files were checked against what the run collected. */
   | {
-    /** Each judged test file. */
-    files: PublicCollectionFile[];
+    type: "collection.checked";
     /** The task. */
     task: string;
-    type: "collection.checked";
+    /** Each judged test file. */
+    files: PublicCollectionFile[];
   }
   /** The search for the tick that made already-passing tests pass ended. */
   | {
-    /** The implementing task, `before_feature`, or `null`. */
-    result: string | null;
-    /** Acceptance runs it took. */
-    runs: number;
+    type: "regression.bisected";
     /** Task ID. */
     task: string;
-    type: "regression.bisected";
+    /** Acceptance runs it took. */
+    runs: number;
+    /** The implementing task, `before_feature`, or `null`. */
+    result: string | null;
+  }
+  /**
+   * An external agent makes the attempt: its name and permission mode
+   * (`decides_alone`: it was not put into a mode that asks first).
+   */
+  | {
+    type: "agent.started";
+    /** Task ID. */
+    task: string;
+    /** The agent's name. */
+    agent: string;
+    /** Its permission mode, in a sentence. */
+    mode: string;
+    /** Calls it makes without asking never reach speccoder. */
+    decides_alone: boolean;
+  }
+  /** An external agent's plan, as it last sent it: a claim. */
+  | {
+    type: "agent.plan";
+    /** Task ID. */
+    task: string;
+    /** Its entries. */
+    entries: AgentPlanEntry[];
   }
   /** What the model said in a turn: its account, a claim. */
   | {
+    type: "said";
     /** Task ID. */
     task: string;
-    /** The words. */
-    text: string;
     /** Model turn (1-based). */
     turn: number;
-    type: "said";
+    /** The words. */
+    text: string;
   }
   /** The model's summary of its reasoning in a turn: its account, a claim. */
   | {
+    type: "reasoning";
     /** Task ID. */
     task: string;
-    /** The summary. */
-    text: string;
     /** Model turn (1-based). */
     turn: number;
-    type: "reasoning";
+    /** The summary. */
+    text: string;
   }
   /** Anything else worth a line. */
   | {
+    type: "notice";
     /** The line. */
     text: string;
-    type: "notice";
   }
   /** A bug's triad was recorded. */
   | {
-    /** The home's kind. */
-    home: string;
-    /** The requirement. */
-    requirement: string;
+    type: "bug.recorded";
     /** Its task. */
     task: string;
-    /** The triad's digest. */
-    triad_digest: string;
-    type: "bug.recorded";
+    /** The home's kind. */
+    home: string;
     /** The unit. */
     unit: string;
+    /** The requirement. */
+    requirement: string;
+    /** The triad's digest. */
+    triad_digest: string;
     /** Through what. */
     via: string;
   }
   /** One reproduce try ended. */
   | {
+    type: "bug.reproduce_try";
+    /** Its task. */
+    task: string;
     /** The try. */
     n: number;
     /** Of at most. */
     of: number;
     /** Each statement's class. */
     per_statement: StatementClass[];
-    /** Its task. */
-    task: string;
-    type: "bug.reproduce_try";
   }
   /** Every statement is reproduced. */
   | {
-    /** The reproductions (never their content). */
-    reproductions: ShownReproduction[];
+    type: "bug.reproduced";
     /** Its task. */
     task: string;
-    type: "bug.reproduced";
+    /** The reproductions (never their content). */
+    reproductions: ShownReproduction[];
   }
   /** The reproductions wait for the person. */
   | {
+    type: "bug.confirm_waiting";
+    /** Its task. */
+    task: string;
     /** The digest to confirm. */
     digest: string;
     /** The command. */
     next: string;
-    /** Its task. */
-    task: string;
-    type: "bug.confirm_waiting";
   }
   /** The person confirmed them. */
   | {
-    /** `shown` or `named_test`. */
-    basis: string;
-    /** Who. */
-    by: string;
-    /** The digest confirmed. */
-    digest: string;
+    type: "bug.confirmed";
     /** Its task. */
     task: string;
-    type: "bug.confirmed";
+    /** The digest confirmed. */
+    digest: string;
+    /** Who. */
+    by: string;
     /** Through what. */
     via: string;
+    /** `shown` or `named_test`. */
+    basis: string;
   }
   /** The person rejected them. */
   | {
+    type: "bug.confirm_rejected";
+    /** Its task. */
+    task: string;
     /** The digest rejected. */
     digest: string;
     /** The person's reason. */
     reason: string;
-    /** Its task. */
-    task: string;
-    type: "bug.confirm_rejected";
   }
   /** The pass-to-pass set was chosen. */
   | {
-    /** Members. */
-    count: number;
-    /** `selected` or `none_selected`. */
-    state: string;
+    type: "bug.unchanged_selected";
     /** Its task. */
     task: string;
-    type: "bug.unchanged_selected";
+    /** `selected` or `none_selected`. */
+    state: string;
+    /** Members. */
+    count: number;
   }
   /** The revert and the special cases were judged. */
   | {
+    type: "bug.discrimination";
+    /** Its task. */
+    task: string;
     /** `rejected`, `survived`, `unviable`. */
     revert: string;
     /** The special cases. */
     special_case: ShownSpecialCase[];
-    /** Its task. */
-    task: string;
-    type: "bug.discrimination";
   }
   /** The bug's outcome. */
   | {
+    type: "bug.outcome";
+    /** Its task. */
+    task: string;
+    /** `awaiting_confirmation`, `cannot_reproduce`, `fixed`, … */
+    outcome: string;
+    /** The fix's verdict. */
+    verdict: string | null;
     /** The stop's code. */
     code: string | null;
     /** What to do next. */
     next: string[];
-    /** `awaiting_confirmation`, `cannot_reproduce`, `fixed`, … */
-    outcome: string;
-    /** Its task. */
-    task: string;
-    type: "bug.outcome";
-    /** The fix's verdict. */
-    verdict: string | null;
   }
   /** Writing tests at review went one stage further. */
   | {
-    /** This stage's step. */
-    n: number;
-    /** Of. */
-    of: number;
+    type: "oracle.stage";
     /** The requirement. */
     requirement: string;
     /** `writing`, `comparing`, `checking_red`, `held_out`. */
     stage: string;
-    type: "oracle.stage";
+    /** This stage's step. */
+    n: number;
+    /** Of. */
+    of: number;
   }
   /** An approval froze a requirement's tests. */
   | {
-    /** The approval's digest. */
-    approval_sha256: string;
-    /** Who. */
-    by: string;
-    /** Held-out tests sealed with them. */
-    held_out_count: number;
-    /** The visible set's manifest digest. */
-    manifest_sha256: string;
-    /** The requirement. */
-    requirement: string;
     type: "oracle.frozen";
     /** The unit. */
     unit: string;
-    /** Through what. */
-    via: string;
+    /** The requirement. */
+    requirement: string;
+    /** The visible set's manifest digest. */
+    manifest_sha256: string;
+    /** The approval's digest. */
+    approval_sha256: string;
     /** Visible tests frozen. */
     visible_count: number;
+    /** Held-out tests sealed with them. */
+    held_out_count: number;
+    /** Who. */
+    by: string;
+    /** Through what. */
+    via: string;
   }
   /** A frozen oracle lapsed with its requirement's wording. */
   | {
-    /** The wording now. */
-    current_wording_sha256: string;
-    /** The wording it was frozen on. */
-    frozen_wording_sha256: string;
-    /** The requirement. */
-    requirement: string;
     type: "oracle.lapsed";
     /** The unit. */
     unit: string;
+    /** The requirement. */
+    requirement: string;
+    /** The wording it was frozen on. */
+    frozen_wording_sha256: string;
+    /** The wording now. */
+    current_wording_sha256: string;
   }
   /** The last line: the command's result, as `--json` prints it. */
   | {
+    type: "result";
     /** The result envelope. */
     result: CommandResult;
-    type: "result";
   }
   /** Plan through stopped where a person decides, at a failure or at the end. */
   | {
+    type: "planning.stopped";
+    /** The unit, once it exists. */
+    unit: string | null;
     /** `questions`, `review`, `failed`, `done`. */
     kind: string;
     /** The skill a continuation runs next. */
     next_skill: string | null;
-    type: "planning.stopped";
-    /** The unit, once it exists. */
-    unit: string | null;
   }
   /** A step of a new project's plan began. */
   | {
-    /** `local` or `network`. */
-    access: string;
-    /** Its command, exactly. */
-    argv: string[];
+    type: "scaffold.started";
     /** The step (`git_init`, `scaffold.1`, `format_init`, …). */
     step: string;
-    type: "scaffold.started";
+    /** Its command, exactly. */
+    argv: string[];
+    /** `local` or `network`. */
+    access: string;
   }
   /** A step of a new project's plan ended. */
   | {
-    /** How long it took. */
-    duration_ms: number;
-    /** Its exit status, when it ran. */
-    exit: number | null;
-    /** `done`, `skipped`, `failed`. */
-    state: string;
+    type: "scaffold.finished";
     /** The step. */
     step: string;
-    type: "scaffold.finished";
+    /** `done`, `skipped`, `failed`. */
+    state: string;
+    /** Its exit status, when it ran. */
+    exit: number | null;
+    /** How long it took. */
+    duration_ms: number;
   }
   /** A new project was created and committed. */
   | {
-    /** speccoder's commit. */
-    commit: string;
-    /** The spec format. */
-    format: string;
-    /** `new_folder` or `existing_repository`. */
-    mode: string;
+    type: "project.created";
     /** SHA-256 of the folder's canonical path. */
     path_digest: string;
+    /** `new_folder` or `existing_repository`. */
+    mode: string;
     /** The stack. */
     stack: string;
-    type: "project.created";
+    /** The spec format. */
+    format: string;
+    /** speccoder's commit. */
+    commit: string;
     /** Through what. */
     via: string;
   }
   /** A project speccoder created was undone. */
   | {
-    /** `trash` or `revert`. */
-    kind: string;
+    type: "project.undone";
     /** SHA-256 of the folder's canonical path. */
     path_digest: string;
-    type: "project.undone";
+    /** `trash` or `revert`. */
+    kind: string;
     /** Through what. */
     via: string;
   });
 
 /** Result of `speccoder attest tour` and `/api/tour`: one task's tour. */
 export interface EvidenceTour {
-  /** The task commit, when one carries the task's evidence. */
-  commit: string | null;
   /** The unit. */
   feature: string;
-  /** The six steps, in order — only the first for an unverifiable tick. */
-  steps: TourStep[];
   /** Task ID. */
   task: string;
   /** The task's title. */
   title: string;
-  /** For an unverifiable tick: why the evidence does not count. */
-  unverifiable: string | null;
   /** The verdict the evidence claims, when any. */
   verdict: string | null;
+  /** The task commit, when one carries the task's evidence. */
+  commit: string | null;
+  /** The six steps, in order — only the first for an unverifiable tick. */
+  steps: TourStep[];
+  /** For an unverifiable tick: why the evidence does not count. */
+  unverifiable: string | null;
 }
 
 /**
@@ -1862,10 +1893,10 @@ export interface ExplainReport {
 
 /** A Spec Kit extension the person chose. */
 export interface ExtensionChoice {
-  /** `bundled`, `path` or `url`. */
-  kind: ExtensionKind;
   /** A bundled name, a local path or a URL, as given. */
   source: string;
+  /** `bundled`, `path` or `url`. */
+  kind: ExtensionKind;
 }
 
 /** What an extension source is. */
@@ -1873,36 +1904,36 @@ export type ExtensionKind = "bundled" | "path" | "url";
 
 /** One check that did not pass. */
 export interface FailedCheck {
-  /** The command, as run. */
-  argv: string[];
-  /** Output from the first error line on, capped. */
-  excerpt: string;
-  /** Failing test IDs, when the check reports tests. */
-  failing_tests: string[];
   /** Name from `speccoder.toml` (or `acceptance`). */
   name: string;
+  /** The command, as run. */
+  argv: string[];
   /** What happened. */
   status: CheckStatus;
+  /** Failing test IDs, when the check reports tests. */
+  failing_tests: string[];
+  /** Output from the first error line on, capped. */
+  excerpt: string;
 }
 
 /** One feature (or change) of the project, as `speccoder feature` lists it. */
 export interface FeatureEntry {
-  /** Which planning artifacts exist: `spec`, `plan`, `tasks`. */
-  artifacts: string[];
-  /** The current one. */
-  current: boolean;
-  /** Repository-relative directory. */
-  dir: string;
-  /** Ticked tasks. */
-  done: number;
-  /** Directory name, e.g. `001-greet`. */
-  name: string;
   /** 1-based position, the number `speccoder feature <n>` takes. */
   number: number;
-  /** All tasks (0: no task list yet). */
-  tasks: number;
+  /** Directory name, e.g. `001-greet`. */
+  name: string;
   /** The title its spec (or proposal) gives, when it has one. */
   title?: string | null;
+  /** Repository-relative directory. */
+  dir: string;
+  /** The current one. */
+  current: boolean;
+  /** Ticked tasks. */
+  done: number;
+  /** All tasks (0: no task list yet). */
+  tasks: number;
+  /** Which planning artifacts exist: `spec`, `plan`, `tasks`. */
+  artifacts: string[];
 }
 
 /** A feature directory under `specs/`. */
@@ -1917,39 +1948,39 @@ export interface FeatureRef {
 
 /** Result of `speccoder run` without `--task`: a feature worked through. */
 export interface FeatureReport {
+  /** Feature directory name. */
+  feature: string;
   /** Every attempt, in order. */
   attempts: RunReport[];
+  /** Why the run stopped. */
+  stop: string;
+  /** Convergence rounds between task runs (`run --converge`), in order. */
+  converge: ConvergeReport[];
+  /** Extension hooks run, offered or skipped around it. */
+  hooks: string[];
+  /** What parallel groups did: merged, conflicts, re-verification. */
+  parallel: string[];
+  /** The `full` check tier, run once after the run ticked the last task. */
+  full_tier?: FullTier | null;
+  /** How the run asked for a person: `ask` or `autopilot`. */
+  mode: RunMode;
   /**
    * The calls an autopilot run refused instead of asking: listed for
    * the person.
    */
   autopilot_denied?: AutopilotDenial[];
-  /** Convergence rounds between task runs (`run --converge`), in order. */
-  converge: ConvergeReport[];
-  /** Feature directory name. */
-  feature: string;
-  /** The `full` check tier, run once after the run ticked the last task. */
-  full_tier?: FullTier | null;
-  /** Extension hooks run, offered or skipped around it. */
-  hooks: string[];
-  /** How the run asked for a person: `ask` or `autopilot`. */
-  mode: RunMode;
-  /** What parallel groups did: merged, conflicts, re-verification. */
-  parallel: string[];
-  /** Why the run stopped. */
-  stop: string;
 }
 
 /** The selected feature's artifacts and tasks. */
 export interface FeatureSnapshot {
-  /** Which artifacts exist. */
-  artifacts: Artifacts;
   /** The feature directory. */
   feature: FeatureRef;
-  /** Dependencies and states of the tasks; present iff `tasks` is. */
-  schedule: Schedule | null;
+  /** Which artifacts exist. */
+  artifacts: Artifacts;
   /** The parsed task list, if `tasks.md` was readable. */
   tasks: ParsedTasks | null;
+  /** Dependencies and states of the tasks; present iff `tasks` is. */
+  schedule: Schedule | null;
 }
 
 /**
@@ -1970,12 +2001,10 @@ export type FeatureSource =
 
 /** Result of `speccoder feature`. */
 export interface FeaturesReport {
-  /** What this call did: `listed`, `switched` or `cleared`. */
-  action: string;
+  /** `feature` or `change`. */
+  unit: string;
   /** The current one's name. */
   current: string | null;
-  /** Every feature, in order. */
-  features: FeatureEntry[];
   /**
    * How it is current: `argument`, `environment`, `recorded`,
    * `only_feature` or `none`.
@@ -1983,31 +2012,33 @@ export interface FeaturesReport {
   reason: string;
   /** The same in words (`recorded in .specify/feature.json`). */
   reason_text: string;
-  /** `feature` or `change`. */
-  unit: string;
+  /** What this call did: `listed`, `switched` or `cleared`. */
+  action: string;
+  /** Every feature, in order. */
+  features: FeatureEntry[];
 }
 
 /** One judged test file. */
 export interface FileCollection {
-  /** What decided it; `null` only when unknown. */
-  decided_by: DecidedBy | null;
-  /** The ways out, for this toolchain and file. */
-  fixes?: string[];
   /** Workspace-relative path. */
   path: string;
-  /** The runner's rule (not collected). */
-  rule?: CollectionRule | null;
   /** Collected, not collected, or unknown. */
   state: FileState;
-  /** The first 20 of their ids. */
-  test_ids: string[];
+  /** What decided it; `null` only when unknown. */
+  decided_by: DecidedBy | null;
   /** Tests from it that ran (skipped and ignored ones excluded). */
   tests: number;
+  /** The first 20 of their ids. */
+  test_ids: string[];
+  /** The runner's rule (not collected). */
+  rule?: CollectionRule | null;
   /**
    * Not collected: which part of the rule the file breaks; unknown: why
    * speccoder cannot tell.
    */
   why?: string | null;
+  /** The ways out, for this toolchain and file. */
+  fixes?: string[];
 }
 
 /** Whether the run collected a test from a file. */
@@ -2021,26 +2052,26 @@ export type FormatKind = "speckit" | "openspec" | "kiro";
 
 /** A spec format the plan can initialise, and its tool's state. */
 export interface FormatOption {
-  /** Why it cannot be chosen. */
-  disabled: string | null;
   /** `speckit`, `openspec`. */
   id: string;
   /** `Spec Kit`, `OpenSpec`. */
   label: string;
   /** The tool's version when installed. */
   version: string | null;
+  /** Why it cannot be chosen. */
+  disabled: string | null;
 }
 
 /** The `full` check tier at the end of a feature. */
 export interface FullTier {
+  /** The checks that ran. */
+  ran: string[];
+  /** Every check passed (or none applied). */
+  passed: boolean;
   /** The checks that failed. */
   failed: string[];
   /** Why nothing ran, or the record could not be written. */
   note: string | null;
-  /** Every check passed (or none applied). */
-  passed: boolean;
-  /** The checks that ran. */
-  ran: string[];
 }
 
 /** The `min_strength` gate. */
@@ -2048,10 +2079,10 @@ export type Gate = "off" | "met" | "regenerated_met" | "failed";
 
 /** The person's git identity. */
 export interface GitIdentity {
-  /** `user.email`. */
-  email: string;
   /** `user.name`. */
   name: string;
+  /** `user.email`. */
+  email: string;
 }
 
 /**
@@ -2059,30 +2090,30 @@ export interface GitIdentity {
  * (never written by a model).
  */
 export interface Handoff {
-  /** The author's last words, labelled as its claim. */
-  claim?: AuthorClaim | null;
+  /** The outcome it hands off. */
+  outcome: BugOutcome;
+  /** The tries made. */
+  tries: ReproduceTry[];
+  /** Per statement. */
+  statements: StatementsShown;
   /** Tokens the tries spent. */
   cost?: unknown;
   /** How long reproduce took. */
   elapsed_ms: number;
   /** What the person can do. */
   next: NextStep[];
-  /** The outcome it hands off. */
-  outcome: BugOutcome;
-  /** Per statement. */
-  statements: StatementsShown;
-  /** The tries made. */
-  tries: ReproduceTry[];
+  /** The author's last words, labelled as its claim. */
+  claim?: AuthorClaim | null;
 }
 
 /** Visible passes the held-out tests caught. */
 export interface HeldOutGap {
+  /** Attempts the held-out tests judged (they had passed visibly). */
+  visible_passed: number;
   /** Of those, the ones the held-out tests failed. */
   held_out_failed: number;
   /** `held_out_failed / visible_passed`. */
   rate: number;
-  /** Attempts the held-out tests judged (they had passed visibly). */
-  visible_passed: number;
 }
 
 /** Held-out passes the hidden oracle agreed with, or not. */
@@ -2098,24 +2129,24 @@ export interface HeldOutOracle {
  * state and a digest — never a path or a line of it.
  */
 export interface HeldOutSummary {
+  /** `kept`, `absent` or `off` (`[acceptance] held_out = false`). */
+  state: string;
   /** Tests kept. */
   count: number;
   /** The sealed manifest's digest, when kept. */
   manifest_sha256: string | null;
   /** Why none was kept (`not_red`, `none_generated`, …). */
   reason: string | null;
-  /** `kept`, `absent` or `off` (`[acceptance] held_out = false`). */
-  state: string;
 }
 
 /** A held-out variant, as the payload shows it: never its content or path. */
 export interface HeldOutVariant {
+  /** The statement it covers. */
+  statement: string;
   /** On the untouched code. */
   baseline: RedClass;
   /** On the final tree. */
   final: FinalState;
-  /** The statement it covers. */
-  statement: string;
 }
 
 /** Where the format keeps the bug. */
@@ -2125,6 +2156,13 @@ export type HomeKind = "native_speckit_bug" | "native_kiro_bugfix" | "standing_s
 export type How =
   /** speccoder performs it (`actions::perform`). */
   | {
+    how: "perform";
+    /** What runs. */
+    run: Runnable;
+    /** What to ask for first (`Why it is skipped`); `None`: nothing. */
+    input: string | null;
+    /** The words the line gives already (a `--reason "…"` filled in). */
+    text: string | null;
     /**
      * What to say in a confirmation first (it leaves the machine or
      * cannot be undone).
@@ -2132,21 +2170,14 @@ export type How =
     confirm: string | null;
     /** The feature the line names (`--feature F`); `None`: the current. */
     feature: string | null;
-    how: "perform";
-    /** What to ask for first (`Why it is skipped`); `None`: nothing. */
-    input: string | null;
-    /** What runs. */
-    run: Runnable;
-    /** The words the line gives already (a `--reason "…"` filled in). */
-    text: string | null;
   }
   /** A view to open. */
   | {
     how: "view";
-    /** What it is about: a code, a task. */
-    subject: string | null;
     /** Which. */
     view: View;
+    /** What it is about: a code, a task. */
+    subject: string | null;
   }
   /**
    * A command speccoder printed as a fix and can run as the person, in
@@ -2155,9 +2186,9 @@ export type How =
    * one succeeded (`a && b`).
    */
   | {
+    how: "command";
     /** The argvs, exactly. */
     argvs: string[][];
-    how: "command";
     /**
      * It reads the keyboard (a login): a terminal of the person's
      * own, not a panel.
@@ -2182,10 +2213,10 @@ export type How =
    */
   | {
     how: "shell";
-    /** The setting that stands for it (`model`), if there is one. */
-    setting: string | null;
     /** Why it cannot run here. */
     why: string;
+    /** The setting that stands for it (`model`), if there is one. */
+    setting: string | null;
   }
   /** Words for a person (`→ …`), or a command only they can complete. */
   | {
@@ -2198,10 +2229,10 @@ export type How =
 export type ImplementedBy =
   /** A tick on the feature branch. */
   | {
-    /** Its commit (short). */
-    commit: string;
     /** Its task. */
     task: string;
+    /** Its commit (short). */
+    commit: string;
   }
   /** They passed before the feature's first tick. */
   | {
@@ -2221,17 +2252,6 @@ export interface InPlaceReport {
 /** One decision waiting for a person. */
 export interface InboxItem {
   /**
-   * The decisions, the one that moves the work forward first; each runs
-   * in the item's feature.
-   */
-  actions: Action[];
-  /** What it rests on: the call, the reason, the changed requirement. */
-  detail: string;
-  /** The feature. */
-  feature: string;
-  /** Its group: `blocked_on_you` or `ready_to_review`. */
-  group: string;
-  /**
    * What kind, in the order of urgency: `unknown` (the calls waiting in
    * the feature's journal could not be read — some may wait for you),
    * `approval` (a run waits on it),
@@ -2249,12 +2269,23 @@ export interface InboxItem {
    * `bug_already_satisfied` (the registry: `speccoder_core::inbox::Kind`).
    */
   kind: string;
-  /** Waiting since (Unix seconds), when known. */
-  since: number | null;
+  /** Its group: `blocked_on_you` or `ready_to_review`. */
+  group: string;
+  /** The feature. */
+  feature: string;
   /** The task, when it is about one. */
   task: string | null;
   /** What to decide, in a line. */
   title: string;
+  /** What it rests on: the call, the reason, the changed requirement. */
+  detail: string;
+  /** Waiting since (Unix seconds), when known. */
+  since: number | null;
+  /**
+   * The decisions, the one that moves the work forward first; each runs
+   * in the item's feature.
+   */
+  actions: Action[];
   /** `unverified`: the feature's ticks and why each regression-only one is. */
   unverified?: Unverified | null;
 }
@@ -2265,18 +2296,18 @@ export interface InboxItem {
  * person's work once the agents write the code.
  */
 export interface InboxReport {
-  /** Features looked at. */
-  features: number;
   /** The items, the most urgent first (see [`InboxItem::kind`]). */
   items: InboxItem[];
+  /** Features looked at. */
+  features: number;
 }
 
 /** One detected check. */
 export interface InitCheck {
-  /** The command. */
-  argv: string[];
   /** `[checks.<name>]`. */
   name: string;
+  /** The command. */
+  argv: string[];
   /** `fast` or `full`. */
   tier: string;
   /** Why it was proposed. */
@@ -2285,6 +2316,8 @@ export interface InitCheck {
 
 /** The model key `init` looked for. */
 export interface InitKey {
+  /** `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `AWS_BEARER_TOKEN_BEDROCK`. */
+  variable: string;
   /** Set in this environment (Bedrock: a credential source was found). */
   set: boolean;
   /**
@@ -2292,14 +2325,26 @@ export interface InitKey {
    * name (`aws login session (profile dev)`), never a value.
    */
   source?: string | null;
-  /** `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `AWS_BEARER_TOKEN_BEDROCK`. */
-  variable: string;
 }
 
 /** Result of `speccoder init`. */
 export interface InitReport {
+  /** The configuration file. */
+  path: string;
   /** The checks it declares. */
   checks: InitCheck[];
+  /** `provider/model`. */
+  model: string;
+  /** Files written, relative to the project root. */
+  wrote: string[];
+  /** The checks run on the untouched code (empty: not run). */
+  ran: InitRun[];
+  /** The repository instructions found (`AGENTS.md`, `CLAUDE.md`). */
+  instructions: string[];
+  /** The model key: the variable and whether it is set. */
+  key: InitKey;
+  /** The region written (Bedrock only). */
+  region?: string | null;
   /** The commit holding `speccoder.toml`, when one was made. */
   committed: string | null;
   /**
@@ -2312,84 +2357,70 @@ export interface InitReport {
    * else it is commented.
    */
   include_active: boolean;
-  /** The repository instructions found (`AGENTS.md`, `CLAUDE.md`). */
-  instructions: string[];
-  /** The model key: the variable and whether it is set. */
-  key: InitKey;
-  /** `provider/model`. */
-  model: string;
-  /** The configuration file. */
-  path: string;
-  /** The checks run on the untouched code (empty: not run). */
-  ran: InitRun[];
-  /** The region written (Bedrock only). */
-  region?: string | null;
   /** The checkout has a `.worktreeinclude`, which runs read already. */
   worktreeinclude: boolean;
-  /** Files written, relative to the project root. */
-  wrote: string[];
 }
 
 /** One check `init` ran on the untouched code. */
 export interface InitRun {
-  /** How long it took. */
-  duration_ms: number;
   /** `[checks.<name>]`. */
   name: string;
   /** Passed on the untouched code. */
   passed: boolean;
+  /** `passed`, `failed`, `timed_out`, `skipped`, `error`. */
+  status: string;
+  /** How long it took. */
+  duration_ms: number;
   /**
    * Why it did not pass: the last line of its output that says something
    * (`No module named pytest`), or the runner's note.
    */
   reason: string | null;
-  /** `passed`, `failed`, `timed_out`, `skipped`, `error`. */
-  status: string;
 }
 
 /** A repository instructions file given to an attempt. */
 export interface InstructionFile {
-  /** Its size. */
-  bytes: number;
-  /** Cut to fit the instructions budget. */
-  cut: boolean;
   /** Repository-relative path. */
   path: string;
   /** sha256 of the file. */
   sha256: string;
+  /** Its size. */
+  bytes: number;
+  /** Cut to fit the instructions budget. */
+  cut: boolean;
 }
 
 /** One open issue. */
 export interface IssueEntry {
-  /** Who it is assigned to (logins). */
-  assignees: string[];
-  /** The feature whose spec names this issue, when one does. */
-  feature: string | null;
-  /** Label names. */
-  labels: string[];
-  /** Assigned to the person speccoder is signed in as. */
-  mine: boolean;
   /** `#n`. */
   number: number;
   /** Its title. */
   title: string;
-  /** Last update, ISO 8601. */
-  updated: string | null;
   /** Its address. */
   url: string;
+  /** Label names. */
+  labels: string[];
+  /** Who it is assigned to (logins). */
+  assignees: string[];
+  /** Assigned to the person speccoder is signed in as. */
+  mine: boolean;
+  /** Last update, ISO 8601. */
+  updated: string | null;
+  /** The feature whose spec names this issue, when one does. */
+  feature: string | null;
 }
 
 /** The issue a bug was recorded from. */
 export interface IssueRef {
+  /** Its number. */
+  number: number;
+  /** `owner/repo`, when known. */
+  repo?: string | null;
   /**
    * The digest of its context-manifest entry (title and body as given
    * to the reproduction author).
    */
   context_digest?: string | null;
-  /** Its number. */
-  number: number;
-  /** `owner/repo`, when known. */
-  repo?: string | null;
 }
 
 /**
@@ -2397,13 +2428,13 @@ export interface IssueRef {
  * through GitHub's API as the person.
  */
 export interface IssuesReport {
+  /** `owner/name`. */
+  repo: string | null;
   /**
    * Open issues: assigned to the person first, then the most recently
    * updated.
    */
   issues: IssueEntry[];
-  /** `owner/name`. */
-  repo: string | null;
 }
 
 /**
@@ -2429,10 +2460,10 @@ export interface LastAttempt {
   outcome: string;
   /** Why. */
   reason: string;
-  /** The ref holding the attempt's tree. */
-  reference: string;
   /** The agentplane run, when there was one. */
   run_id: string | null;
+  /** The ref holding the attempt's tree. */
+  reference: string;
 }
 
 /** A listing speccoder ran because the earlier sources left a file undecided. */
@@ -2456,80 +2487,80 @@ export type Mode = "touched" | "all";
  * cheat or a false completion (both passed the visible checks).
  */
 export interface MonitorScore {
-  /** Not flagged but a cheat or false completion. */
-  false_negatives: number;
-  /** Flagged but correct. */
-  false_positives: number;
   /** Cases the monitor judged. */
   judged: number;
+  /** Flagged and really a cheat or false completion. */
+  true_positives: number;
+  /** Flagged but correct. */
+  false_positives: number;
+  /** Not flagged but a cheat or false completion. */
+  false_negatives: number;
   /** true / (true + false positives), when anything was flagged. */
   precision: number | null;
   /** true positives / all positives, when there were any. */
   recall: number | null;
-  /** Flagged and really a cheat or false completion. */
-  true_positives: number;
 }
 
 /** Mutants of the changed code, run against the acceptance command only. */
 export interface Mutants {
+  /** The tool. */
+  tool: string;
   /** Caught by an assertion. */
   caught: number;
   /** Not caught. */
   missed: number;
-  /** The missed ones, as the tool names them. */
-  survivors: string[];
   /** Caught by the deadline. */
   timeout: number;
-  /** The tool. */
-  tool: string;
   /** Did not build. */
   unviable: number;
+  /** The missed ones, as the tool names them. */
+  survivors: string[];
 }
 
 /** A model-written near miss: plausible, and wrong about one scenario. */
 export interface NearMiss {
-  /** Against the visible and the held-out set together. */
-  combined: Outcome;
   /** `near-miss-1`, … */
   id: string;
-  /** What it gets wrong, in one line (the author's claim). */
-  rationale: string;
   /** The scenario or requirement it gets wrong. */
   scenario: string;
+  /** What it gets wrong, in one line (the author's claim). */
+  rationale: string;
   /** Against the visible set. */
   visible: Outcome;
+  /** Against the visible and the held-out set together. */
+  combined: Outcome;
 }
 
 /** What the person chose; with the folder, everything the plan follows from. */
 export interface NewChoices {
-  /** Spec Kit extensions. */
-  extensions: string[];
-  /** The spec format (`speckit`, `openspec`); `None`: Spec Kit. */
-  format: string | null;
   /** What they are building, verbatim (kept for the first feature). */
   idea: string;
-  /** Leave out the speccoder Spec Kit preset. */
-  no_preset: boolean;
   /** The stack; `None`: the suggestion. */
   stack: Stack | null;
+  /** The spec format (`speckit`, `openspec`); `None`: Spec Kit. */
+  format: string | null;
+  /** Spec Kit extensions. */
+  extensions: string[];
+  /** Leave out the speccoder Spec Kit preset. */
+  no_preset: boolean;
 }
 
 /** The `new_project` payload. */
 export interface NewProjectReport {
-  /** speccoder's commit, once made. */
-  commit: string | null;
-  /** Nothing ran. */
-  dry_run: boolean;
-  /** The project's first feature, prefilled from the idea. */
-  first_feature: string | null;
-  /** `speccoder init`'s report, when it ran. */
-  init: InitReport | null;
   /** The plan. */
   plan: ProjectPlan;
   /** Each step's outcome (empty on a dry run). */
   results: PlanStepResult[];
+  /** `speccoder init`'s report, when it ran. */
+  init: InitReport | null;
+  /** speccoder's commit, once made. */
+  commit: string | null;
   /** What Undo would do. */
   undo: UndoOffer;
+  /** Nothing ran. */
+  dry_run: boolean;
+  /** The project's first feature, prefilled from the idea. */
+  first_feature: string | null;
 }
 
 /** One step a person can take. */
@@ -2541,6 +2572,13 @@ export type NextStep = {
 } & (
   /** speccoder performs it (`actions::perform`). */
   | {
+    how: "perform";
+    /** What runs. */
+    run: Runnable;
+    /** What to ask for first (`Why it is skipped`); `None`: nothing. */
+    input: string | null;
+    /** The words the line gives already (a `--reason "…"` filled in). */
+    text: string | null;
     /**
      * What to say in a confirmation first (it leaves the machine or
      * cannot be undone).
@@ -2548,21 +2586,14 @@ export type NextStep = {
     confirm: string | null;
     /** The feature the line names (`--feature F`); `None`: the current. */
     feature: string | null;
-    how: "perform";
-    /** What to ask for first (`Why it is skipped`); `None`: nothing. */
-    input: string | null;
-    /** What runs. */
-    run: Runnable;
-    /** The words the line gives already (a `--reason "…"` filled in). */
-    text: string | null;
   }
   /** A view to open. */
   | {
     how: "view";
-    /** What it is about: a code, a task. */
-    subject: string | null;
     /** Which. */
     view: View;
+    /** What it is about: a code, a task. */
+    subject: string | null;
   }
   /**
    * A command speccoder printed as a fix and can run as the person, in
@@ -2571,9 +2602,9 @@ export type NextStep = {
    * one succeeded (`a && b`).
    */
   | {
+    how: "command";
     /** The argvs, exactly. */
     argvs: string[][];
-    how: "command";
     /**
      * It reads the keyboard (a login): a terminal of the person's
      * own, not a panel.
@@ -2598,10 +2629,10 @@ export type NextStep = {
    */
   | {
     how: "shell";
-    /** The setting that stands for it (`model`), if there is one. */
-    setting: string | null;
     /** Why it cannot run here. */
     why: string;
+    /** The setting that stands for it (`model`), if there is one. */
+    setting: string | null;
   }
   /** Words for a person (`→ …`), or a command only they can complete. */
   | {
@@ -2612,44 +2643,44 @@ export type NextStep = {
 
 /** One task object's verification. */
 export interface ObjectVerification {
-  /** `task` or `skip`. */
-  kind: string;
   /** The commit (or skip record) id. */
   object: string;
-  /** The outcome. */
-  outcome: VerifyOutcome;
-  /** Every reason found. */
-  reasons: VerifyReason[];
-  /** For a missing attestation: an attested commit with the same tree. */
-  same_tree_as: string | null;
-  /** Who signed, when signed. */
-  signer: SignerView | null;
-  /** How many statements the bundle holds. */
-  statements: number;
+  /** `task` or `skip`. */
+  kind: string;
   /** Task ID. */
   task: string;
   /** The verdict the statements claim. */
   verdict: string | null;
+  /** The outcome. */
+  outcome: VerifyOutcome;
+  /** Every reason found. */
+  reasons: VerifyReason[];
+  /** Who signed, when signed. */
+  signer: SignerView | null;
+  /** How many statements the bundle holds. */
+  statements: number;
+  /** For a missing attestation: an attested commit with the same tree. */
+  same_tree_as: string | null;
 }
 
 /** The object a person's decision covers, as reports show it. */
 export interface ObjectView {
   /** `write`, `command`, `network` or `mcp`. */
   class: string;
+  /** The canonical path, `argv#<12 hex>` or `<tool>@<12 hex>`. */
+  short: string;
   /** One line: ``run `make check` ``. */
   describe: string;
   /** The object in full, as every interface shows it. */
   lines: string[];
-  /** The canonical path, `argv#<12 hex>` or `<tool>@<12 hex>`. */
-  short: string;
 }
 
 /** The folder and the tools as the plan saw them. */
 export interface ObservedFolder {
-  /** Its entries' names, sorted. */
-  entries: string[];
   /** The folder exists. */
   exists: boolean;
+  /** Its entries' names, sorted. */
+  entries: string[];
   /** `HEAD`, in a repository with a commit. */
   head: string | null;
   /** `git status --porcelain` lines. */
@@ -2663,38 +2694,38 @@ export interface ObservedFolder {
  * object-bound grant a person decided earlier for this feature.
  */
 export interface OfferedGrant {
-  /** `write`, `command`, `network` or `mcp`. */
-  class: string;
   /** Its grant id: what `--grant` and the sheet's tick name. */
   id: string;
+  /** `write`, `command`, `network` or `mcp`. */
+  class: string;
   /** The object in full (`run: cargo run --example demo · argv #3f…`). */
   object: string;
 }
 
 /** A question a document leaves open, to answer in place. */
 export interface OpenQuestion {
-  /** The document (project-relative). */
-  file: string;
   /** `Q1`, `Q2`, … in reading order. */
   id: string;
+  /** The question. */
+  text: string;
+  /** The document (project-relative). */
+  file: string;
   /** Its line (1-based). */
   line: number;
   /** The requirement or section it is in. */
   near: string | null;
-  /** The question. */
-  text: string;
 }
 
 /** What an OpenSpec project adds to its snapshot. */
 export interface OpenSpecMeta {
-  /** `context` of `openspec/config.yaml`, if any. */
-  context: string | null;
-  /** The selected change's delta requirements, in file order. */
-  requirements: DeltaRequirement[];
   /** The workflow schema (`spec-driven` is the one speccoder runs). */
   schema: string;
+  /** `context` of `openspec/config.yaml`, if any. */
+  context: string | null;
   /** What a unit of work is called. */
   unit_kind: string;
+  /** The selected change's delta requirements, in file order. */
+  requirements: DeltaRequirement[];
 }
 
 /** Who decided, and how speccoder knows the name. */
@@ -2721,14 +2752,14 @@ export type OracleOp = "write" | "reject" | "again" | "edit" | "reading";
 
 /** A test the person rejected. */
 export interface OracleRejected {
-  /** Unix seconds. */
-  at: number;
-  /** Who. */
-  by: string;
   /** Its path. */
   path: string;
   /** The person's reason (told to every later author call). */
   reason: string;
+  /** Who. */
+  by: string;
+  /** Unix seconds. */
+  at: number;
 }
 
 /** Where a requirement's oracle is. */
@@ -2736,65 +2767,65 @@ export type OracleState = "none" | "written" | "not_red" | "failed" | "ambiguous
 
 /** One visible test as the review shows it. */
 export interface OracleTest {
-  /** Who wrote it. */
-  authored_by: AuthoredBy;
-  /** Its content (a visible test: the implementer reads it too). */
-  content: string;
-  /** The person who edited it. */
-  edited_by: string | null;
   /** Project-relative path. */
   path: string;
-  /** Red: it can be frozen. */
-  red: boolean;
+  /** Its content (a visible test: the implementer reads it too). */
+  content: string;
+  /** The scenarios it cites (never empty). */
+  scenarios: string[];
   /**
    * Its red class on the current tree (`assertion`, `absent_symbol`,
    * `passed`, `build_error`, `flaky`, …).
    */
   red_class: string;
-  /** The scenarios it cites (never empty). */
-  scenarios: string[];
+  /** Red: it can be frozen. */
+  red: boolean;
+  /** Who wrote it. */
+  authored_by: AuthoredBy;
+  /** The person who edited it. */
+  edited_by: string | null;
 }
 
 /** One requirement's oracle in the review: everything the Tests card shows. */
 export interface OracleView {
-  /** Readings that disagree. */
-  ambiguities: Ambiguity[];
-  /** With one call there is nothing to compare. */
-  ambiguity_check: boolean;
-  /** The author calls *Write Tests* makes (`[review] oracle_samples`). */
-  calls: number;
-  /** The tests not kept, and why. */
-  discarded: OracleDiscarded[];
-  /** Why writing failed, or why it cannot be written here. */
-  error: string | null;
-  /** When (Unix seconds). */
-  frozen_at: number | null;
-  /** Who froze it, when frozen. */
-  frozen_by: string | null;
-  /** For `lapsed`: the wording it was frozen on. */
-  frozen_on: string | null;
-  /** The held-out set: count and digest only. */
-  held_out: HeldOutSummary;
-  /** The visible set's manifest digest, when tests are written. */
-  manifest_sha256: string | null;
-  /** The tests the person rejected. */
-  rejected: OracleRejected[];
   /** The requirement (`US1`). */
   req: string;
+  /** Its title. */
+  title: string;
   /** Its scenarios: id and words. */
   scenarios: ScenarioRef[];
   /** Where it is. */
   state: OracleState;
-  /** `[acceptance] min_strength` (0–100), `None` when none is set. */
-  strength_target: number | null;
+  /** For `lapsed`: the wording it was frozen on. */
+  frozen_on: string | null;
+  /** Who froze it, when frozen. */
+  frozen_by: string | null;
+  /** When (Unix seconds). */
+  frozen_at: number | null;
   /** The kept tests. */
   tests: OracleTest[];
-  /** Its title. */
-  title: string;
+  /** The tests not kept, and why. */
+  discarded: OracleDiscarded[];
+  /** The tests the person rejected. */
+  rejected: OracleRejected[];
   /** Scenarios no red kept test covers. */
   uncovered: string[];
   /** Scenarios an author found untestable, with why. */
   untestable: Untestable[];
+  /** Readings that disagree. */
+  ambiguities: Ambiguity[];
+  /** The held-out set: count and digest only. */
+  held_out: HeldOutSummary;
+  /** `[acceptance] min_strength` (0–100), `None` when none is set. */
+  strength_target: number | null;
+  /** The author calls *Write Tests* makes (`[review] oracle_samples`). */
+  calls: number;
+  /** With one call there is nothing to compare. */
+  ambiguity_check: boolean;
+  /** The visible set's manifest digest, when tests are written. */
+  manifest_sha256: string | null;
+  /** Why writing failed, or why it cannot be written here. */
+  error: string | null;
 }
 
 /** What a candidate run showed. */
@@ -2802,8 +2833,6 @@ export type Outcome = "rejected" | "survived" | "timeout" | "unviable";
 
 /** A parsed `tasks.md`. */
 export interface ParsedTasks {
-  /** How dependencies within a phase are determined. */
-  dependency_mode: DependencyMode;
   /** Workspace-relative path of the file. */
   path: string;
   /** Level-2 headings, in document order. */
@@ -2812,29 +2841,31 @@ export interface ParsedTasks {
   tasks: Task[];
   /** Counts over `tasks`. */
   totals: Totals;
+  /** How dependencies within a phase are determined. */
+  dependency_mode: DependencyMode;
 }
 
 /** The tests that passed before the fix and must pass after it. */
 export interface PassToPass {
-  /** The members. */
-  members: PassToPassMember[];
   /** Selected, or nothing was. */
   state: PassToPassState;
+  /** The members. */
+  members: PassToPassMember[];
 }
 
 /** One test that must stay green. */
 export interface PassToPassMember {
+  /** The test id, as the runner reports it. */
+  test: string;
   /** Its file. */
   file: string;
-  /** On the final tree. */
-  final: MemberFinal;
   /**
    * How it was selected: `same_file`, `references:<module>`,
    * `imports:<path>`, `package:<pkg>`, `unchanged:U<n>`.
    */
   rule: string;
-  /** The test id, as the runner reports it. */
-  test: string;
+  /** On the final tree. */
+  final: MemberFinal;
 }
 
 /** Whether anything was selected for pass-to-pass. */
@@ -2845,67 +2876,67 @@ export type PassToPassState = "selected" | "none_selected";
  * a person.
  */
 export interface PendingCall {
-  /** Its arguments as the model sent them. */
-  arguments: unknown;
-  /** It waits in its run's batch: the asking budget was used. */
-  batched: boolean;
-  /** The waiting call's id (`approve --call`); empty for a stopped attempt. */
-  call: string;
+  /** Task ID. */
+  task: string;
   /** What a decision would cover, e.g. ``write `Cargo.toml` ``. */
   covers: string;
+  /** The tool. */
+  tool: string;
+  /** Its arguments as the model sent them. */
+  arguments: unknown;
+  /** Why it needs approval. */
+  reason: string;
+  /** The saved attempt. */
+  reference: string;
+  /** The call as the inline prompt shows it. */
+  presentation: ApprovalView | null;
+  /** The waiting call's id (`approve --call`); empty for a stopped attempt. */
+  call: string;
+  /**
+   * `task` (the attempt waits and resumes) or `attempt` (stopped and saved
+   * in a parallel lane).
+   */
+  source: string;
+  /** `approval` or `question`. */
+  kind: string;
+  /** A question's text. */
+  question: string | null;
+  /** Seconds since the epoch the call has waited since. */
+  waiting_since: number | null;
   /** Seconds since the epoch it is denied as expired at. */
   deadline: number | null;
+  /** The object a decision covers. */
+  object: ObjectView | null;
+  /** Where arguments of the call were copied from (source lines). */
+  sources?: string[];
+  /** The run it belongs to. */
+  run: string | null;
+  /** It waits in its run's batch: the asking budget was used. */
+  batched: boolean;
   /**
    * SHA-256 over its id and the object a decision covers: a decision
    * names it and is refused when another call (or another object) waits
    * now.
    */
   digest: string;
-  /** `approval` or `question`. */
-  kind: string;
-  /** The object a decision covers. */
-  object: ObjectView | null;
-  /** The call as the inline prompt shows it. */
-  presentation: ApprovalView | null;
-  /** A question's text. */
-  question: string | null;
-  /** Why it needs approval. */
-  reason: string;
-  /** The saved attempt. */
-  reference: string;
-  /** The run it belongs to. */
-  run: string | null;
-  /**
-   * `task` (the attempt waits and resumes) or `attempt` (stopped and saved
-   * in a parallel lane).
-   */
-  source: string;
-  /** Where arguments of the call were copied from (source lines). */
-  sources?: string[];
-  /** Task ID. */
-  task: string;
-  /** The tool. */
-  tool: string;
-  /** Seconds since the epoch the call has waited since. */
-  waiting_since: number | null;
 }
 
 /** An alternative the author says the spec allows. */
 export interface Permitted {
-  /** `sha256:<hex>` of its files: what a ruling is bound to. */
-  digest: string;
-  /** The failing run's last lines, when rejected. */
-  failing?: string | null;
   /** `permitted-1`, … */
   id: string;
-  /** Against the visible and held-out set together. */
-  outcome: PermittedOutcome;
-  /** Where its patch is kept for a person. */
-  patch?: string | null;
-  /** The freedom it uses (the author's claim). */
-  rationale: string;
   /** The scenario whose open choice it takes differently. */
   scenario: string;
+  /** The freedom it uses (the author's claim). */
+  rationale: string;
+  /** `sha256:<hex>` of its files: what a ruling is bound to. */
+  digest: string;
+  /** Against the visible and held-out set together. */
+  outcome: PermittedOutcome;
+  /** The failing run's last lines, when rejected. */
+  failing?: string | null;
+  /** Where its patch is kept for a person. */
+  patch?: string | null;
 }
 
 /** What a spec-permitted alternative showed. */
@@ -2913,20 +2944,20 @@ export type PermittedOutcome = "accepted" | "rejected" | "ruled" | "timeout" | "
 
 /** A level-2 heading of `tasks.md`. */
 export interface Phase {
+  /** Heading text, e.g. `Phase 1: Setup`. */
+  title: string;
   /** 1-based line of the heading. */
   line: number;
   /** SHA-256 (hex) of the section, heading through the byte before the next phase. */
   section_hash: string;
-  /** Heading text, e.g. `Phase 1: Setup`. */
-  title: string;
 }
 
 /** Where a requirement is written. */
 export interface Place {
-  /** The line, 1-based. */
-  line: number;
   /** The document, project-relative. */
   path: string;
+  /** The line, 1-based. */
+  line: number;
   /** That line, verbatim. */
   quote: string;
 }
@@ -2935,19 +2966,19 @@ export interface Place {
 export interface PlanCheck {
   /** The check's code. */
   code: string;
-  /** What it found. */
-  detail: string;
   /** The tasks it names. */
   tasks: string[];
+  /** What it found. */
+  detail: string;
 }
 
 /** What plan through starts from. */
 export type PlanFrom =
   /** A new unit from a description. */
   | {
+    kind: "create";
     /** What it should do, verbatim. */
     description: string;
-    kind: "create";
     /** Where the description comes from. */
     source: FeatureSource;
   }
@@ -2960,47 +2991,47 @@ export type PlanFrom =
 export interface PlanRefusal {
   /** `NEW-TARGET-NOT-EMPTY`, … */
   code: string;
-  /** What to do. */
-  fix: string;
   /** What is wrong. */
   message: string;
+  /** What to do. */
+  fix: string;
 }
 
 /** One command of the plan. */
 export interface PlanStep {
-  /** Local, or network. */
-  access: StepAccess;
+  /** `git_init`, `scaffold.<n>`, `format_init`, `speccoder_init`, `commit`. */
+  id: string;
   /** The command, exactly as it runs. */
   argv: string[];
   /** Where it runs: always the target. */
   cwd: string;
+  /** Local, or network. */
+  access: StepAccess;
   /**
    * The hosts a network step is expected to reach: shown, not enforced —
    * the step gets the full network.
    */
   hosts?: string[];
-  /** `git_init`, `scaffold.<n>`, `format_init`, `speccoder_init`, `commit`. */
-  id: string;
+  /** What it writes, in one line. */
+  writes: string;
   /** Its time limit, in seconds. */
   limit_s: number;
   /** A note the plan shows beside it. */
   note?: string | null;
-  /** What it writes, in one line. */
-  writes: string;
 }
 
 /** One step's outcome. */
 export interface PlanStepResult {
-  /** How long it took. */
-  duration_ms: number;
-  /** Its exit status, when it ran. */
-  exit: number | null;
   /** The step. */
   id: string;
-  /** The last lines of its output (at most 20). */
-  output_tail: string[];
   /** What happened. */
   state: PlanStepState;
+  /** Its exit status, when it ran. */
+  exit: number | null;
+  /** How long it took. */
+  duration_ms: number;
+  /** The last lines of its output (at most 20). */
+  output_tail: string[];
 }
 
 /** A step's state in a run. */
@@ -3010,10 +3041,10 @@ export type PlanStepState = "waiting" | "running" | "done" | "skipped" | "failed
 export interface PlannedTask {
   /** Task ID. */
   id: string;
-  /** `done`, `ready`, `blocked` or `skipped`. */
-  state: string;
   /** Title. */
   title: string;
+  /** `done`, `ready`, `blocked` or `skipped`. */
+  state: string;
 }
 
 /**
@@ -3022,22 +3053,22 @@ export interface PlannedTask {
  * state of its own: the stop is read again from the unit's files.
  */
 export interface PlanningChainReport {
-  /** The skill a continuation runs next. */
-  next_skill: string | null;
+  /** The unit (once the creating skill made it). */
+  unit: string | null;
+  /** How far it was asked to go. */
+  through: Through;
   /** The skills it ran, in order. */
   ran: ChainStep[];
+  /** Where it stopped. */
+  stop: ChainStop;
   /** The unit's readiness now. */
   readiness: Readiness | null;
   /** Requirements of other units close to the description (a hint). */
   similar: SimilarMatch[];
   /** Where the description came from. */
   source: FeatureSource;
-  /** Where it stopped. */
-  stop: ChainStop;
-  /** How far it was asked to go. */
-  through: Through;
-  /** The unit (once the creating skill made it). */
-  unit: string | null;
+  /** The skill a continuation runs next. */
+  next_skill: string | null;
 }
 
 /**
@@ -3048,16 +3079,16 @@ export interface PlanningChainReport {
  * and only when it is complete.
  */
 export interface PolicyCoverage {
-  /** Every run in the journal was read. */
-  complete: boolean;
-  /** SHA-256 over the entry, the rows and `complete`: what a save names. */
-  digest: string;
   /** The entry previewed. */
   entry: CoverageEntry;
-  /** The argvs it would newly allow. */
-  rows: CoverageRow[];
+  /** Every run in the journal was read. */
+  complete: boolean;
   /** What could not be read, and why (never "covers nothing"). */
   unreadable: string[];
+  /** The argvs it would newly allow. */
+  rows: CoverageRow[];
+  /** SHA-256 over the entry, the rows and `complete`: what a save names. */
+  digest: string;
 }
 
 /** A prefix list in `speccoder.toml`. */
@@ -3065,21 +3096,24 @@ export type PolicyList = "commands_prefix" | "network_prefix";
 
 /** Result of `speccoder pr`: a draft pull request with the evidence. */
 export interface PrReport {
-  /** The branch the pull request targets. */
-  base: string;
-  /** Pull request body (Markdown): every task's evidence. */
-  body: string;
-  /** `speccoder/<feature>`. */
-  branch: string;
-  /** What runs (or would run), in order. */
-  commands: string[];
-  /**
-   * `present`: a workflow under `.github/workflows/` runs
-   * `speccoder attest verify --branch`; `absent`: none does.
-   */
-  evidence_check: string;
   /** Feature directory name. */
   feature: string;
+  /** `speccoder/<feature>`. */
+  branch: string;
+  /** The branch the pull request targets. */
+  base: string;
+  /** The git remote pushed to. */
+  remote: string;
+  /** Pull request title. */
+  title: string;
+  /** Pull request body (Markdown): every task's evidence. */
+  body: string;
+  /** What runs (or would run), in order. */
+  commands: string[];
+  /** Whether the branch was pushed and the draft opened (`false`: a dry run). */
+  opened: boolean;
+  /** The pull request, when opened. */
+  url: string | null;
   /**
    * The unit's held-out ref pushed with the branch
    * (`refs/speccoder/held-out/<unit>`), when a closed task names a set.
@@ -3089,48 +3123,45 @@ export interface PrReport {
   held_out_tasks: string[];
   /** Held-out sets of open tasks: they stay local. */
   held_out_withheld: number;
-  /** Whether the branch was pushed and the draft opened (`false`: a dry run). */
-  opened: boolean;
-  /** The git remote pushed to. */
-  remote: string;
-  /** Pull request title. */
-  title: string;
-  /** The pull request, when opened. */
-  url: string | null;
+  /**
+   * `present`: a workflow under `.github/workflows/` runs
+   * `speccoder attest verify --branch`; `absent`: none does.
+   */
+  evidence_check: string;
 }
 
 /** Where the confirmed reproductions are kept, as recorded with the fix. */
 export interface PreFrozenRef {
-  /** The confirmation's digest. */
-  approval: string;
   /** `sha256:<hex>` over the visible set. */
   manifest: string;
+  /** The confirmation's digest. */
+  approval: string;
   /** The triad's digest. */
   wording: string;
 }
 
 /** Result of `speccoder preset add`. */
 export interface PresetReport {
+  /** The preset's id (`speccoder`). */
+  preset: string;
+  /** The bundled version. */
+  version: string;
   /** The Spec Kit command, as run (or to be confirmed). */
   command: string[];
   /** Spec Kit's own output (its last lines). */
   output: string;
-  /** The preset's id (`speccoder`). */
-  preset: string;
   /** The preset as Spec Kit reports it. */
   state: PresetState;
-  /** The bundled version. */
-  version: string;
 }
 
 /** The speccoder preset in a project, as Spec Kit reports it. */
 export interface PresetState {
+  /** The installed version, when installed. */
+  installed: string | null;
   /** `specify preset resolve tasks-template` names it. */
   active_for_tasks_template: boolean;
   /** The version this speccoder bundles. */
   bundled: string;
-  /** The installed version, when installed. */
-  installed: string | null;
 }
 
 /** Where the project is made. */
@@ -3138,48 +3169,54 @@ export type ProjectMode = "new_folder" | "existing_repository";
 
 /** The plan. */
 export interface ProjectPlan {
-  /** SHA-256 over all of the above. */
-  digest: string;
-  /** Spec Kit extensions. */
-  extensions: ExtensionChoice[];
-  /** The spec format (`speckit`, `openspec`). */
-  format: string;
-  /** Every format and whether its tool is installed. */
-  formats: FormatOption[];
-  /** The person's git identity. */
-  identity: GitIdentity | null;
-  /** A new folder or an existing repository. */
-  mode: ProjectMode;
+  /** The folder, canonical and absolute. */
+  target: string;
   /** The project's name (the folder's). */
   name: string;
-  /** The folder as seen. */
-  observed: ObservedFolder;
-  /** Whether the speccoder Spec Kit preset is passed to the format's init. */
-  preset: boolean;
-  /** Why it cannot run (Create disabled). */
-  refusal: PlanRefusal | null;
-  /** The OS sandbox. */
-  sandbox: SandboxNote;
+  /** A new folder or an existing repository. */
+  mode: ProjectMode;
   /** The stack. */
   stack: StackPick;
   /** Every stack and whether its tool is installed. */
   stacks: StackOption[];
+  /** The spec format (`speckit`, `openspec`). */
+  format: string;
+  /** Every format and whether its tool is installed. */
+  formats: FormatOption[];
+  /** Spec Kit extensions. */
+  extensions: ExtensionChoice[];
+  /** Whether the speccoder Spec Kit preset is passed to the format's init. */
+  preset: boolean;
   /** The commands, in order. */
   steps: PlanStep[];
-  /** The folder, canonical and absolute. */
-  target: string;
+  /** The OS sandbox. */
+  sandbox: SandboxNote;
+  /** The person's git identity. */
+  identity: GitIdentity | null;
+  /** Why it cannot run (Create disabled). */
+  refusal: PlanRefusal | null;
+  /** The folder as seen. */
+  observed: ObservedFolder;
+  /** SHA-256 over all of the above. */
+  digest: string;
 }
 
 /** Everything discovered about one Spec Kit project. */
 export interface ProjectSnapshot {
+  /** Absolute, canonical project root (the directory containing `.specify/`). */
+  root: string;
+  /** Spec Kit metadata recorded in the project. */
+  speckit: SpeckitMeta;
   /** State of `.specify/memory/constitution.md`. */
   constitution: ConstitutionState;
-  /** Problems found while discovering and parsing. */
-  diagnostics: Diagnostic[];
-  /** The selected feature, if any. */
-  feature: FeatureSnapshot | null;
   /** Feature directories, ordered by numeric prefix then name. */
   features: FeatureRef[];
+  /** Which feature was selected, and why. */
+  selection: Selection;
+  /** The selected feature, if any. */
+  feature: FeatureSnapshot | null;
+  /** Problems found while discovering and parsing. */
+  diagnostics: Diagnostic[];
   /** The spec format (omitted for Spec Kit, the reference format). */
   format?: FormatKind;
   /**
@@ -3187,26 +3224,20 @@ export interface ProjectSnapshot {
    * change's requirements.
    */
   openspec?: OpenSpecMeta | null;
-  /** Absolute, canonical project root (the directory containing `.specify/`). */
-  root: string;
-  /** Which feature was selected, and why. */
-  selection: Selection;
-  /** Spec Kit metadata recorded in the project. */
-  speckit: SpeckitMeta;
 }
 
 /** Result of `speccoder propose`. */
 export interface ProposeReport {
-  /** Feature directory name. */
-  feature: string;
-  /** The structured proposal (`summary`, `steps`, `files`, `checks`, `risks`). */
-  proposal: unknown;
   /** The agentplane run that holds the call. */
   run_id: string;
-  /** agentplane run status, e.g. `succeeded`. */
-  run_status: string;
+  /** Feature directory name. */
+  feature: string;
   /** Task ID. */
   task: string;
+  /** agentplane run status, e.g. `succeeded`. */
+  run_status: string;
+  /** The structured proposal (`summary`, `steps`, `files`, `checks`, `risks`). */
+  proposal: unknown;
   /** Token usage as the provider reported it. */
   usage: unknown;
 }
@@ -3221,114 +3252,114 @@ export interface PublicBugConfirmRejected {
 
 /** `bug.confirmed`, as published. */
 export interface PublicBugConfirmed {
-  /** `shown` or `named_test`. */
-  basis: string;
-  /** Who. */
-  by: string;
   /** The digest confirmed. */
   digest: string;
+  /** Who. */
+  by: string;
   /** Through what. */
   via: string;
+  /** `shown` or `named_test`. */
+  basis: string;
 }
 
 /** `bug.outcome`, as published. */
 export interface PublicBugOutcome {
-  /** The stop's code. */
-  code: string | null;
-  /** What to do next. */
-  next: string[];
   /** `awaiting_confirmation`, `cannot_reproduce`, `fixed`, … */
   outcome: string;
   /** The fix's verdict. */
   verdict: string | null;
+  /** The stop's code. */
+  code: string | null;
+  /** What to do next. */
+  next: string[];
 }
 
 /** `bug.recorded`, as published: ids and digests only. */
 export interface PublicBugRecorded {
   /** The home's kind. */
   home: string;
+  /** The unit. */
+  unit: string;
   /** The requirement. */
   requirement: string;
   /** The triad's digest. */
   triad_digest: string;
-  /** The unit. */
-  unit: string;
   /** Through what. */
   via: string;
 }
 
 /** `collection.checked`, as published: paths and states. */
 export interface PublicCollectionChecked {
-  /** Each judged test file. */
-  files: PublicCollectionFile[];
   /** The task. */
   task: string;
+  /** Each judged test file. */
+  files: PublicCollectionFile[];
 }
 
 /** One file of [`PublicCollectionChecked`]. */
 export interface PublicCollectionFile {
-  /** `static`, `junit`, `listing`; `null` when unknown. */
-  decided_by: DecidedBy | null;
   /** Workspace-relative path. */
   path: string;
   /** `collected`, `not_collected`, `unknown`. */
   state: FileState;
+  /** `static`, `junit`, `listing`; `null` when unknown. */
+  decided_by: DecidedBy | null;
 }
 
 /** `oracle.frozen`, as published: digests and counts, never a test. */
 export interface PublicOracleFrozen {
-  /** The approval's digest. */
-  approval_sha256: string;
-  /** Who. */
-  by: string;
-  /** Held-out tests sealed with them. */
-  held_out_count: number;
-  /** The visible set's manifest digest. */
-  manifest_sha256: string;
-  /** The requirement. */
-  requirement: string;
   /** The unit. */
   unit: string;
-  /** Through what. */
-  via: string;
+  /** The requirement. */
+  requirement: string;
+  /** The visible set's manifest digest. */
+  manifest_sha256: string;
+  /** The approval's digest. */
+  approval_sha256: string;
   /** Visible tests frozen. */
   visible_count: number;
+  /** Held-out tests sealed with them. */
+  held_out_count: number;
+  /** Who. */
+  by: string;
+  /** Through what. */
+  via: string;
 }
 
 /** `oracle.lapsed`, as published. */
 export interface PublicOracleLapsed {
-  /** The wording now. */
-  current_wording_sha256: string;
-  /** The wording it was frozen on. */
-  frozen_wording_sha256: string;
-  /** The requirement. */
-  requirement: string;
   /** The unit. */
   unit: string;
+  /** The requirement. */
+  requirement: string;
+  /** The wording it was frozen on. */
+  frozen_wording_sha256: string;
+  /** The wording now. */
+  current_wording_sha256: string;
 }
 
 /** `project.created`, as published: no path, no idea text. */
 export interface PublicProjectCreated {
-  /** speccoder's commit. */
-  commit: string;
-  /** The spec format. */
-  format: string;
-  /** `new_folder` or `existing_repository`. */
-  mode: string;
   /** SHA-256 of the folder's canonical path. */
   path_digest: string;
+  /** `new_folder` or `existing_repository`. */
+  mode: string;
   /** The stack. */
   stack: string;
+  /** The spec format. */
+  format: string;
+  /** speccoder's commit. */
+  commit: string;
   /** Through what. */
   via: string;
 }
 
 /** `project.undone`, as published. */
 export interface PublicProjectUndone {
-  /** `trash` or `revert`. */
-  kind: string;
   /** SHA-256 of the folder's canonical path. */
   path_digest: string;
+  /** `trash` or `revert`. */
+  kind: string;
   /** Through what. */
   via: string;
 }
@@ -3339,16 +3370,16 @@ export interface PublicProjectUndone {
  * requirements no scenario covers (they cannot be tested).
  */
 export interface Readiness {
-  /** The format defines requirement identifiers (else only questions count). */
-  identifiers: boolean;
-  /** Open-question markers left in the unit's documents. */
-  open_questions: number;
   /** Requirements the spec defines. */
   requirements: number;
   /** Scenarios over them. */
   scenarios: number;
+  /** Open-question markers left in the unit's documents. */
+  open_questions: number;
   /** Requirements without a scenario, by id: they cannot be tested. */
   untestable: string[];
+  /** The format defines requirement identifiers (else only questions count). */
+  identifiers: boolean;
 }
 
 /** One of the two readings of an ambiguous scenario. */
@@ -3356,22 +3387,22 @@ export type Reading = "A" | "B";
 
 /** One reading of a scenario: what one author expects. */
 export interface ReadingText {
-  /** The outcome (`untestable: …` when the author found none). */
-  expect: string;
   /** The situation. */
   given: string;
+  /** The outcome (`untestable: …` when the author found none). */
+  expect: string;
 }
 
 /** How many regression-only ticks had one reason, and which. */
 export interface ReasonCount {
-  /** `already_passing`: the tasks that made the tests pass. */
-  implemented_by?: string[];
-  /** How many ticks. */
-  n: number;
   /** The reason (`no_story`, `already_passing`, …, `unrecorded`). */
   reason: string;
+  /** How many ticks. */
+  n: number;
   /** Their tasks. */
   tasks: string[];
+  /** `already_passing`: the tasks that made the tests pass. */
+  implemented_by?: string[];
   /** speccoder's words for the group (`7 had no user story`). */
   text: string;
 }
@@ -3432,15 +3463,15 @@ export type RegressionReason =
   }
   /** The author's answer could not be used. */
   | {
+    reason: "author_failed";
     /** What speccoder refused (its own words). */
     detail: string;
-    reason: "author_failed";
   }
   /** The acceptance tests passed before the attempt. */
   | {
+    reason: "already_passing";
     /** The tick that made them pass; `null` when it could not be determined. */
     implemented_by: ImplementedBy | null;
-    reason: "already_passing";
   }
   /** They did not fail on an assertion or an absent symbol. */
   | {
@@ -3466,16 +3497,16 @@ export type RegressionReason =
  * author's next try.
  */
 export interface Rejection {
-  /** Unix seconds. */
-  at: number;
-  /** Who. */
-  by: string;
   /** The digest rejected. */
   digest: string;
   /** Why. */
   reason: string;
+  /** Who. */
+  by: string;
   /** Through what. */
   via: Via;
+  /** Unix seconds. */
+  at: number;
 }
 
 /**
@@ -3484,69 +3515,69 @@ export interface Rejection {
  * one action (never applies it unasked); a script reads the command.
  */
 export interface Remedy {
-  /** The same, as a command run in the checkout. */
-  command: string;
-  /** What it changes, in one line. */
-  effect: string;
-  /** It writes git history (a commit): an interface asks first. */
-  history: boolean;
   /** The action, a verb first (`Commit Cargo.lock`). */
   label: string;
-  /** How an interface applies it. */
-  run: Runnable;
+  /** What it changes, in one line. */
+  effect: string;
+  /** The same, as a command run in the checkout. */
+  command: string;
   /** How to take it back once applied. */
   undo: string | null;
+  /** It writes git history (a commit): an interface asks first. */
+  history: boolean;
+  /** How an interface applies it. */
+  run: Runnable;
 }
 
 /** Result of `speccoder replay`. */
 export interface ReplayReport {
-  /** What the replay said. */
-  detail: string;
-  /** `reproduced`, `diverged` or `not_found`. */
-  result: string;
   /** The replayed run. */
   run_id: string;
+  /** `reproduced`, `diverged` or `not_found`. */
+  result: string;
+  /** What the replay said. */
+  detail: string;
 }
 
 /** One try of the reproduction author. */
 export interface ReproduceTry {
-  /** Why the whole try was discarded (`wrote outside tests`, …). */
-  discarded?: string | null;
   /** 1, 2, … */
   n: number;
   /** Per statement. */
   per_statement: TryStatement[];
-  /** The person's reason for rejecting the reproductions before it. */
-  rejection?: string | null;
+  /** Why the whole try was discarded (`wrote outside tests`, …). */
+  discarded?: string | null;
   /** The author's run. */
   run_id?: string | null;
   /** Its tokens. */
   usage?: unknown;
+  /** The person's reason for rejecting the reproductions before it. */
+  rejection?: string | null;
 }
 
 /** One reproduction test. */
 export interface Reproduction {
-  /** The command that runs only it. */
-  argv: string[];
-  /** Its class on the untouched code, run twice. */
-  baseline: RedClass[];
-  /** `sha256:<hex>` of its content. */
-  digest: string;
-  /** Project-relative test file. */
-  file: string;
-  /** On the final tree. */
-  final: FinalState;
-  /** Against the revert candidate. */
-  revert: RevertOutcome;
-  /** Who wrote it. */
-  source: ReproductionSource;
   /**
    * The statement it reproduces (`E1`) — or, for a test of an
    * *Unchanged* statement, that one (`U1`).
    */
   statement: string;
+  /** Project-relative test file. */
+  file: string;
   /** The test's name. */
   test: string;
+  /** Who wrote it. */
+  source: ReproductionSource;
+  /** Its class on the untouched code, run twice. */
+  baseline: RedClass[];
+  /** `sha256:<hex>` of its content. */
+  digest: string;
+  /** The command that runs only it. */
+  argv: string[];
+  /** On the final tree. */
+  final: FinalState;
+  /** Against the revert candidate. */
+  revert: RevertOutcome;
 }
 
 /** Who wrote a reproduction. */
@@ -3556,20 +3587,20 @@ export type ReproductionSource = "author" | "person";
 export interface RequirementDrift {
   /** `FR-003`. */
   id: string;
-  /** Its line now; `None`: it was removed. */
-  now: string | null;
   /** Its line when the task was ticked; `None`: it did not exist yet. */
   then: string | null;
+  /** Its line now; `None`: it was removed. */
+  now: string | null;
 }
 
 /** The person's choice on an ambiguous scenario. */
 export interface Resolution {
-  /** Unix seconds. */
-  at: number;
-  /** Who chose. */
-  by: string;
   /** The reading meant. */
   reading: Reading;
+  /** Who chose. */
+  by: string;
+  /** Unix seconds. */
+  at: number;
 }
 
 /** A reproduction against the revert candidate (the fix undone). */
@@ -3585,19 +3616,19 @@ export interface RevertResult {
 
 /** The record of an approval that froze the oracle (in `review.json`). */
 export interface ReviewApproval {
-  /** Unix seconds. */
-  at: number;
-  /** Who approved. */
-  by: string;
-  /** The run's mode. */
-  mode: RunMode;
   /**
    * SHA-256 over the approved decision lines and the frozen oracle
    * entries: what a tick that reused a frozen set names.
    */
   sha256: string;
+  /** The run's mode. */
+  mode: RunMode;
+  /** Who approved. */
+  by: string;
   /** Through what. */
   via: Via;
+  /** Unix seconds. */
+  at: number;
 }
 
 /**
@@ -3607,40 +3638,40 @@ export interface ReviewApproval {
 export interface ReviewChange {
   /** `FR-003`. */
   id: string;
-  /** Its line now; `None`: it was removed. */
-  now: string | null;
-  /** Its line number (1-based) now. */
-  now_line: number | null;
-  /** The document it is in (project-relative). */
-  path: string;
   /** Its line at the last commit; `None`: it did not exist yet. */
   then: string | null;
+  /** Its line now; `None`: it was removed. */
+  now: string | null;
+  /** The document it is in (project-relative). */
+  path: string;
   /** Its line number (1-based) at the last commit. */
   then_line: number | null;
+  /** Its line number (1-based) now. */
+  now_line: number | null;
 }
 
 /** One requirement and its review. */
 export interface ReviewItem {
-  /** When (Unix seconds). */
-  at: number | null;
-  /**
-   * Who decided (as for every decision: git's `user.name`, else the OS
-   * user), when someone did.
-   */
-  by: string | null;
-  /** The comment, for a change request (or a note on an approval). */
-  comment: string | null;
-  /** For `lapsed`: the wording that was decided on. */
-  decided_on: string | null;
   /** `FR-001`. */
   id: string;
+  /** Its wording now (the line, markup aside). */
+  text: string;
   /**
    * `open` (not reviewed), `approved`, `changes_requested`, or `lapsed`
    * (decided on a wording that has changed since).
    */
   state: string;
-  /** Its wording now (the line, markup aside). */
-  text: string;
+  /**
+   * Who decided (as for every decision: git's `user.name`, else the OS
+   * user), when someone did.
+   */
+  by: string | null;
+  /** When (Unix seconds). */
+  at: number | null;
+  /** The comment, for a change request (or a note on an approval). */
+  comment: string | null;
+  /** For `lapsed`: the wording that was decided on. */
+  decided_on: string | null;
 }
 
 /**
@@ -3648,40 +3679,14 @@ export interface ReviewItem {
  * spec as a card, with the person's decision on its exact wording.
  */
 export interface ReviewReport {
-  /** The approval that froze the oracle, when one is recorded. */
-  approval: ReviewApproval | null;
-  /** A bug unit's confirmed reproductions, read only. */
-  bug_tests?: BugTests[];
-  /**
-   * Requirements changed in the checkout since the last commit of the
-   * spec: what a commit would record.
-   */
-  changes: ReviewChange[];
-  /**
-   * Why the review record (`review.json`) cannot be read: shown, never
-   * read as "nothing decided" by a write.
-   */
-  error?: string | null;
   /** The feature. */
   feature: string;
   /** Where the review is recorded (project-relative); commit it to share. */
   file: string;
-  /** The spec's versions in git, newest first (the last twelve). */
-  history: SpecVersion[];
-  /**
-   * One per requirement with scenarios (`US1`), beside the decision
-   * lines: the tests the run would use, as written at review.
-   */
-  oracle: OracleView[];
-  /**
-   * The questions the documents leave open (`[NEEDS CLARIFICATION: …]`),
-   * in reading order.
-   */
-  questions: OpenQuestion[];
-  /** What the future oracle will be made of, counted now. */
-  readiness: Readiness | null;
   /** One per requirement, in the spec's order. */
   requirements: ReviewItem[];
+  /** Counts by state. */
+  totals: ReviewTotals;
   /**
    * The format's skill that revises the spec from the comments
    * (Spec Kit: `clarify`), when it has one.
@@ -3693,40 +3698,82 @@ export interface ReviewReport {
    */
   revision: string | null;
   /**
-   * What *Approve and Run* would do and what blocks it (the full review
-   * only).
+   * The questions the documents leave open (`[NEEDS CLARIFICATION: …]`),
+   * in reading order.
    */
-  sheet: ApproveSheet | null;
+  questions: OpenQuestion[];
+  /**
+   * Requirements changed in the checkout since the last commit of the
+   * spec: what a commit would record.
+   */
+  changes: ReviewChange[];
+  /** The spec's versions in git, newest first (the last twelve). */
+  history: SpecVersion[];
+  /**
+   * One per requirement with scenarios (`US1`), beside the decision
+   * lines: the tests the run would use, as written at review.
+   */
+  oracle: OracleView[];
   /**
    * Why the review writes no tests for this unit: its own pipeline
    * authors and confirms them (a quick change, a bug).
    */
   tests_notice: string | null;
-  /** Counts by state. */
-  totals: ReviewTotals;
+  /** A bug unit's confirmed reproductions, read only. */
+  bug_tests?: BugTests[];
+  /** The approval that froze the oracle, when one is recorded. */
+  approval: ReviewApproval | null;
+  /**
+   * What *Approve and Run* would do and what blocks it (the full review
+   * only).
+   */
+  sheet: ApproveSheet | null;
+  /**
+   * Why the review record (`review.json`) cannot be read: shown, never
+   * read as "nothing decided" by a write.
+   */
+  error?: string | null;
+  /** What the future oracle will be made of, counted now. */
+  readiness: Readiness | null;
 }
 
 /** Counts of [`ReviewItem::state`]. */
 export interface ReviewTotals {
+  /** Approved on their current wording. */
+  approved: number;
+  /** Changes requested. */
+  changes_requested: number;
+  /** Never reviewed. */
+  open: number;
+  /** Decided on an earlier wording. */
+  lapsed: number;
+  /** Questions the documents leave open. */
+  questions: number;
   /**
    * Requirements two test authors read differently, not yet resolved:
    * *Approve and Run* and a gated run wait on them.
    */
   ambiguous: number;
-  /** Approved on their current wording. */
-  approved: number;
-  /** Changes requested. */
-  changes_requested: number;
-  /** Decided on an earlier wording. */
-  lapsed: number;
-  /** Never reviewed. */
-  open: number;
-  /** Questions the documents leave open. */
-  questions: number;
 }
 
 /** What a revision turn did. */
 export interface RevisionView {
+  /** `t1`, `t2`, … */
+  id: string;
+  /** The comments it was sent with. */
+  comments: string[];
+  /** The sections they touch. */
+  sections: string[];
+  /** The format's revising skill. */
+  skill: string;
+  /** Sections it changed. */
+  changed: string[];
+  /** Of those, the ones no comment touched. */
+  outside: string[];
+  /** `pending` (the person keeps or undoes it), `kept`, `undone`. */
+  outcome: string;
+  /** Files it changed (project-relative). */
+  files: string[];
   /** Requirements whose tests were asked again from test comments. */
   asked_again: string[];
   /**
@@ -3734,27 +3781,11 @@ export interface RevisionView {
    * (the person's own edit): *Undo Revision* never overwrites them.
    */
   beside: string[];
-  /** Sections it changed. */
-  changed: string[];
-  /** The comments it was sent with. */
-  comments: string[];
   /**
    * While it waits to be kept or undone: each changed section, before
    * and after, for the word diff.
    */
   diffs: SectionDiff[];
-  /** Files it changed (project-relative). */
-  files: string[];
-  /** `t1`, `t2`, … */
-  id: string;
-  /** `pending` (the person keeps or undoes it), `kept`, `undone`. */
-  outcome: string;
-  /** Of those, the ones no comment touched. */
-  outside: string[];
-  /** The sections they touch. */
-  sections: string[];
-  /** The format's revising skill. */
-  skill: string;
 }
 
 /**
@@ -3762,14 +3793,14 @@ export interface RevisionView {
  * right, the alternative is not what the spec allows.
  */
 export interface Ruling {
-  /** Who ruled. */
-  by: string;
   /** The alternative's digest. */
   digest: string;
-  /** Why. */
-  reason: string;
   /** Its scenario. */
   scenario: string;
+  /** Who ruled. */
+  by: string;
+  /** Why. */
+  reason: string;
 }
 
 /** How a run started from the review asks for a person. */
@@ -3777,44 +3808,53 @@ export type RunMode = "ask" | "autopilot";
 
 /** Result of `speccoder run`. */
 export interface RunReport {
-  /** Spec-derived acceptance tests: files, command, red/green, notes. */
-  acceptance: unknown;
-  /** `completed`, `blocked`, `needs_approval`, `budget_exhausted` or `failed`. */
-  attempt_status: string;
-  /**
-   * What the tick's attestation came to: `{ state: signed | unsigned |
-   * missing, signer, reason }`.
-   */
-  attestation?: unknown;
-  /**
-   * A bug task: the bug as this run left it (reproduce, confirm, the
-   * fix's discrimination).
-   */
-  bug?: BugReport | null;
-  /** Paths changed between the checkpoints: `added` / `modified` / `deleted`. */
-  changes: ([string, string])[];
-  /**
-   * The test files the attempt added or changed, and whether the run
-   * collected a test from each.
-   */
-  collection?: Collection | null;
-  /** The commit on `speccoder/<feature>` holding the attempt and the tick. */
-  commit: string | null;
-  /** What reached the implementer, by digest (constitution VIII). */
-  context?: ContextManifest | null;
-  /** Earlier attempts at this task in this run, discarded and retried. */
-  earlier: EarlierAttempt[];
+  /** The agentplane run of the attempt. */
+  run_id: string;
   /** Feature directory name. */
   feature: string;
-  /**
-   * The repository's instructions the attempt was given (`AGENTS.md`,
-   * `CLAUDE.md`, …), root first.
-   */
-  instructions?: InstructionFile[];
-  /** Integrity findings of the attempt's diff (each also fails the verdict). */
-  integrity: string[];
+  /** Task ID. */
+  task: string;
+  /** The worktree the attempt worked in. */
+  worktree: string;
+  /** `completed`, `blocked`, `needs_approval`, `budget_exhausted` or `failed`. */
+  attempt_status: string;
   /** The model's own closing report — its claim, not the verdict. */
   model_report: unknown;
+  /** Why the attempt stopped, when it did not complete. */
+  reason: string | null;
+  /** The call awaiting approval, if any. */
+  pending: unknown;
+  /** Every tool call with the policy's decision. */
+  tool_calls: unknown[];
+  /** Paths changed between the checkpoints: `added` / `modified` / `deleted`. */
+  changes: ([string, string])[];
+  /** Checks after the attempt, compared with the baseline. */
+  verification: VerifyReport | null;
+  /** The verifier's verdict (only for completed attempts). */
+  verdict: Verdict | null;
+  /** Token usage summed over the attempt's turns. */
+  usage: unknown;
+  /** Integrity findings of the attempt's diff (each also fails the verdict). */
+  integrity: string[];
+  /** The engine ticked the task in the worktree's `tasks.md`. */
+  ticked: boolean;
+  /** The commit on `speccoder/<feature>` holding the attempt and the tick. */
+  commit: string | null;
+  /** Spec-derived acceptance tests: files, command, red/green, notes. */
+  acceptance: unknown;
+  /** Earlier attempts at this task in this run, discarded and retried. */
+  earlier: EarlierAttempt[];
+  /** Why no further attempt was made after a failed one, if it failed. */
+  retry_stop: string | null;
+  /**
+   * The ref this attempt was saved under when it did not pass; the
+   * worktree went back to where it started.
+   */
+  saved_attempt: string | null;
+  /** The ref uncommitted leftovers were saved under before this run. */
+  set_aside: string | null;
+  /** Things a person should know that are not part of the verdict. */
+  notices: string[];
   /**
    * The gaming monitor's view of a passing attempt: `suspected`,
    * `findings`, `usage` (or `error`). Never shown to the implementer.
@@ -3825,45 +3865,36 @@ export interface RunReport {
    * `missed`, `timeout`, `unviable`, `survivors` (or `error`).
    */
   mutation: unknown;
-  /** Things a person should know that are not part of the verdict. */
-  notices: string[];
-  /** The call awaiting approval, if any. */
-  pending: unknown;
-  /** Why the attempt stopped, when it did not complete. */
-  reason: string | null;
-  /** Why a regression-only verdict is one (set with that verdict only). */
-  regression?: RegressionOnly | null;
-  /** Why no further attempt was made after a failed one, if it failed. */
-  retry_stop: string | null;
-  /** The agentplane run of the attempt. */
-  run_id: string;
   /** Best-of-n: every sample's evidence and which one was kept. */
   samples: unknown[];
-  /**
-   * The ref this attempt was saved under when it did not pass; the
-   * worktree went back to where it started.
-   */
-  saved_attempt: string | null;
   /** Changes outside the paths the task names: reported, never gated. */
   scope?: ScopeFinding | null;
-  /** The ref uncommitted leftovers were saved under before this run. */
-  set_aside: string | null;
+  /**
+   * What the tick's attestation came to: `{ state: signed | unsigned |
+   * missing, signer, reason }`.
+   */
+  attestation?: unknown;
+  /**
+   * The repository's instructions the attempt was given (`AGENTS.md`,
+   * `CLAUDE.md`, …), root first.
+   */
+  instructions?: InstructionFile[];
   /** The acceptance set's strength: after a `verified` verdict. */
   strength?: AcceptanceStrength | null;
-  /** Task ID. */
-  task: string;
-  /** The engine ticked the task in the worktree's `tasks.md`. */
-  ticked: boolean;
-  /** Every tool call with the policy's decision. */
-  tool_calls: unknown[];
-  /** Token usage summed over the attempt's turns. */
-  usage: unknown;
-  /** The verifier's verdict (only for completed attempts). */
-  verdict: Verdict | null;
-  /** Checks after the attempt, compared with the baseline. */
-  verification: VerifyReport | null;
-  /** The worktree the attempt worked in. */
-  worktree: string;
+  /**
+   * A bug task: the bug as this run left it (reproduce, confirm, the
+   * fix's discrimination).
+   */
+  bug?: BugReport | null;
+  /**
+   * The test files the attempt added or changed, and whether the run
+   * collected a test from each.
+   */
+  collection?: Collection | null;
+  /** Why a regression-only verdict is one (set with that verdict only). */
+  regression?: RegressionOnly | null;
+  /** What reached the implementer, by digest (constitution VIII). */
+  context?: ContextManifest | null;
 }
 
 /**
@@ -3871,10 +3902,10 @@ export interface RunReport {
  * it, verbatim.
  */
 export interface RungCue {
-  /** The words, as written. */
-  matched: string[];
   /** The rule. */
   rule: RungCueRule;
+  /** The words, as written. */
+  matched: string[];
 }
 
 /** The rule that decided a suggestion. */
@@ -3892,29 +3923,29 @@ export type RungPick = "bug" | "quick" | "feature" | "ask" | "none";
  * the person's key or click.
  */
 export interface RungSuggestion {
-  /** The other rungs, in the composer's order. */
-  alternatives: RungPick[];
+  /** The suggested rung. */
+  rung: RungPick;
   /** Whether this build has it (`false` for `ask` until the Ask panel). */
   available: boolean;
-  /** The command that takes the suggested rung (none for `ask` and `none`). */
-  command: string | null;
   /** What decided it. */
   cue: RungCue;
   /** Why, in one sentence. */
   reason: string;
-  /** The suggested rung. */
-  rung: RungPick;
+  /** The other rungs, in the composer's order. */
+  alternatives: RungPick[];
+  /** The command that takes the suggested rung (none for `ask` and `none`). */
+  command: string | null;
 }
 
 /** How an interface runs an action itself. */
 export type Runnable =
   /** A planning skill (`speccoder spec <name> <arguments>`). */
   | {
-    /** Its arguments (the input, when one is asked for). */
-    arguments: string;
     kind: "skill";
     /** The skill. */
     name: string;
+    /** Its arguments (the input, when one is asked for). */
+    arguments: string;
   }
   /** `speccoder run`, the feature or one task. */
   | {
@@ -3940,23 +3971,23 @@ export type Runnable =
    * when another waits now.
    */
   | {
-    /** The call's id ([`crate::PendingCall::id`]). */
-    call: string;
-    /** The digest of the call that was shown ([`crate::PendingCall::digest`]). */
-    digest: string;
     kind: "approve";
     /** The task. */
     task: string;
-  }
-  /** Reject it (the input is the reason), bound the same way. */
-  | {
     /** The call's id ([`crate::PendingCall::id`]). */
     call: string;
     /** The digest of the call that was shown ([`crate::PendingCall::digest`]). */
     digest: string;
+  }
+  /** Reject it (the input is the reason), bound the same way. */
+  | {
     kind: "reject";
     /** The task. */
     task: string;
+    /** The call's id ([`crate::PendingCall::id`]). */
+    call: string;
+    /** The digest of the call that was shown ([`crate::PendingCall::digest`]). */
+    digest: string;
   }
   /** Tick the task on the person's word (the input is the reason). */
   | {
@@ -4002,9 +4033,9 @@ export type Runnable =
    * comment; required to request changes).
    */
   | {
+    kind: "review";
     /** The requirement identifiers; empty: every one not yet approved. */
     ids: string[];
-    kind: "review";
     /**
      * `approve`, `request` (changes), `clear`; `answer` (ids: the
      * question) and `edit` / `edit-approve` (ids: the requirement) take
@@ -4014,19 +4045,19 @@ export type Runnable =
   }
   /** Tell a GitHub issue it is being specified as the current feature. */
   | {
-    /** Also assign it to the person. */
-    assign: boolean;
+    kind: "issue_comment";
     /** The issue's number. */
     issue: number;
-    kind: "issue_comment";
+    /** Also assign it to the person. */
+    assign: boolean;
   }
   /** Record a quick change and, when `run`, run it. */
   | {
-    /** When it is done: its acceptance scenarios. */
-    checks: string[];
     kind: "quick_change";
     /** The change, in the person's words. */
     request: string;
+    /** When it is done: its acceptance scenarios. */
+    checks: string[];
     /** Run it once recorded. */
     run: boolean;
   }
@@ -4065,39 +4096,39 @@ export type Runnable =
    * `run`, reproduce it.
    */
   | {
-    /** Someone else's fix to judge: a patch file or `pr:N`. */
-    candidate: string | null;
-    /** What should happen instead (one or more). */
-    expected: string[];
-    /** The GitHub issue it comes from. */
-    issue: number | null;
     kind: "bug_fix";
-    /** Reproduce it once recorded. */
-    run: boolean;
-    /** Continue a bug the format's own bug step created. */
-    slug: string | null;
     /** What happens (the symptom). */
     symptom: string;
+    /** What should happen instead (one or more). */
+    expected: string[];
+    /** What must keep working (zero or more). */
+    unchanged: string[];
+    /** The GitHub issue it comes from. */
+    issue: number | null;
     /**
      * The person's own reproduction tests, one per expected statement
      * (`PATH::NAME`).
      */
     tests: string[];
-    /** What must keep working (zero or more). */
-    unchanged: string[];
+    /** Someone else's fix to judge: a patch file or `pr:N`. */
+    candidate: string | null;
+    /** Continue a bug the format's own bug step created. */
+    slug: string | null;
+    /** Reproduce it once recorded. */
+    run: boolean;
   }
   /**
    * Confirm (or, with `reject`, reject: the input is the reason) a
    * bug's reproductions, bound to the digest shown.
    */
   | {
-    /** The digest the person saw. */
-    digest: string;
     kind: "bug_confirm";
-    /** Reject instead. */
-    reject: boolean;
     /** `<unit>/<task>`. */
     task: string;
+    /** The digest the person saw. */
+    digest: string;
+    /** Reject instead. */
+    reject: boolean;
   }
   /**
    * Keep an already-satisfied bug's reproductions as a regression test:
@@ -4121,38 +4152,38 @@ export type Runnable =
    * argv to `[commands] allow` (or `[sandbox] network_allow`).
    */
   | {
-    /** The waiting call's id. */
-    call: string;
     kind: "allow_always";
     /** The task. */
     task: string;
+    /** The waiting call's id. */
+    call: string;
   }
   /**
    * Add a prefix to a prefix list, as the confirmation of its coverage
    * preview (refused when the preview changed or is incomplete).
    */
   | {
-    /** The digest of the preview the person saw. */
-    digest: string;
+    kind: "widen_policy";
     /** Which list. */
     key: PolicyList;
-    kind: "widen_policy";
     /** The prefix (two elements or more). */
     prefix: string[];
+    /** The digest of the preview the person saw. */
+    digest: string;
   }
   /** Decide the calls waiting in a run's batch together, each once. */
   | {
-    /** The listed calls decided (a non-empty subset). */
-    calls: string[];
-    /** The digest of the list the person saw. */
-    digest: string;
     kind: "decide_batch";
-    /** Start the run's asking budget again. */
-    resume_asking: boolean;
     /** The run. */
     run: string;
     /** Approve or reject (the input is the reason). */
     verdict: BatchVerdict;
+    /** The listed calls decided (a non-empty subset). */
+    calls: string[];
+    /** The digest of the list the person saw. */
+    digest: string;
+    /** Start the run's asking budget again. */
+    resume_asking: boolean;
   }
   /**
    * Write, reject, ask again for, edit or settle a requirement's tests
@@ -4160,27 +4191,27 @@ export type Runnable =
    */
   | {
     kind: "oracle_tests";
+    /** The requirement (`US1`). */
+    req: string;
     /** What to do. */
     op: OracleOp;
     /** The test (reject, again, edit). */
     path: string | null;
-    /** The reading meant (reading). */
-    reading: Reading | null;
-    /** The requirement (`US1`). */
-    req: string;
     /** The ambiguous scenario (reading). */
     scenario: string | null;
+    /** The reading meant (reading). */
+    reading: Reading | null;
   }
   /**
    * Approve every approvable decision line, freeze the written tests and
    * start the feature's run, asking or on autopilot.
    */
   | {
-    /** The grant ids (object-bound grants) an autopilot run holds. */
-    grants: string[];
     kind: "approve_and_run";
     /** How the run asks. */
     mode: RunMode;
+    /** The grant ids (object-bound grants) an autopilot run holds. */
+    grants: string[];
     /**
      * The sheet's `sha256`: what the person saw approved and frozen.
      * Required from every interface but a terminal command.
@@ -4189,22 +4220,22 @@ export type Runnable =
   }
   /** Add, delete or keep a review comment (the input: its words). */
   | {
+    kind: "comment";
+    /** What to do. */
+    op: CommentOp;
     /** What a new comment is about. */
     anchor: CommentAnchor | null;
     /** The draft (delete, keep). */
     id: string | null;
-    kind: "comment";
-    /** What to do. */
-    op: CommentOp;
   }
   /** Send the comments as one revision turn. */
   | {
+    kind: "comments_send";
     /**
      * The drafts the person saw (empty: every draft in the tray); a
      * draft sent already refuses the send.
      */
     ids: string[];
-    kind: "comments_send";
   }
   /** Undo the last revision turn: the documents back, byte for byte. */
   | {
@@ -4214,11 +4245,11 @@ export type Runnable =
   }
   /** Code-view line comments as one nudge for the task's next attempt. */
   | {
-    /** The comments. */
-    comments: CodeComment[];
     kind: "code_nudge";
     /** The task. */
     task: string;
+    /** The comments. */
+    comments: CodeComment[];
   }
   /**
    * Write a story's acceptance tests at a Setup or Foundational task
@@ -4226,15 +4257,15 @@ export type Runnable =
    * state directory, never an edit of the spec.
    */
   | {
+    kind: "acceptance_at";
     /** The feature. */
     feature: string;
-    kind: "acceptance_at";
-    /** Take the decision back. */
-    revoke: boolean;
     /** The story (`US1`). */
     story: string;
     /** The task. */
     task: string;
+    /** Take the decision back. */
+    revoke: boolean;
   }
   /**
    * Install the bundled `speccoder` Spec Kit preset through Spec Kit's
@@ -4251,9 +4282,9 @@ export type Runnable =
    * person decides (`speccoder spec <skill> --through <t>`).
    */
   | {
+    kind: "plan_through";
     /** A new description, or the continuation after a stop. */
     from: PlanFrom;
-    kind: "plan_through";
     /** How far. */
     through: Through;
   }
@@ -4262,22 +4293,22 @@ export type Runnable =
    * (`speccoder new`).
    */
   | {
-    /** What the person chose. */
-    choices: NewChoices;
     kind: "new_project";
-    /** The digest of the plan on screen. */
-    plan_digest: string;
     /** The folder, as the plan names it. */
     target: string;
+    /** What the person chose. */
+    choices: NewChoices;
+    /** The digest of the plan on screen. */
+    plan_digest: string;
   }
   /**
    * Undo the project speccoder created at the dispatch's root
    * (`speccoder new --undo`): to the Trash, or a revert of its commit.
    */
   | {
+    kind: "undo_new_project";
     /** speccoder's commit, as recorded. */
     commit: string;
-    kind: "undo_new_project";
   }
   /** Clone a repository of the person's with their git (their credentials). */
   | {
@@ -4292,9 +4323,9 @@ export type Runnable =
    * recorded run strictly (`speccoder sample`).
    */
   | {
+    kind: "open_sample";
     /** Replace an existing copy. */
     fresh: boolean;
-    kind: "open_sample";
   }
   /**
    * Run the sample's own checks, offline, in its copy (the sample's
@@ -4306,12 +4337,12 @@ export type Runnable =
 
 /** How the sample was recorded. */
 export interface SampleRecording {
-  /** The agentplane version that recorded it. */
-  agentplane: string;
   /** The model it was recorded with. */
   model: string;
   /** When (RFC 3339 date). */
   recorded_at: string;
+  /** The agentplane version that recorded it. */
+  agentplane: string;
 }
 
 /**
@@ -4319,10 +4350,10 @@ export interface SampleRecording {
  * recorded runs replay strictly with this build.
  */
 export interface SampleReport {
-  /** A fresh copy was made (else an existing one was reopened). */
-  fresh: boolean;
   /** The copy, in speccoder's state directory. */
   path: string;
+  /** A fresh copy was made (else an existing one was reopened). */
+  fresh: boolean;
   /** How it was recorded. */
   recorded: SampleRecording;
   /** Each recorded run, replayed. */
@@ -4331,12 +4362,12 @@ export interface SampleReport {
 
 /** One recorded run of the sample, replayed. */
 export interface SampleRun {
-  /** What differed, when it did not reproduce. */
-  finding: string | null;
   /** The agentplane run. */
   id: string;
   /** `reproduced`, `diverged` or `not_replayable`. */
   result: string;
+  /** What differed, when it did not reproduce. */
+  finding: string | null;
 }
 
 /** The OS sandbox the steps run in. */
@@ -4366,32 +4397,32 @@ export interface Schedule {
 
 /** Schedule counts. */
 export interface ScheduleTotals {
-  /** Tasks waiting on something. */
-  blocked: number;
   /** Ticked tasks. */
   done: number;
   /** Tasks that can start now. */
   ready: number;
+  /** Tasks waiting on something. */
+  blocked: number;
 }
 
 /** A task's dependencies and state. */
 export interface ScheduledTask {
-  /** Open, missing or cyclic dependencies, in document order. */
-  blocked_by: string[];
-  /** Direct dependencies. */
-  depends_on: Dependency[];
   /** Task ID. */
   id: string;
   /** Done, ready or blocked. */
   state: TaskState;
+  /** Direct dependencies. */
+  depends_on: Dependency[];
+  /** Open, missing or cyclic dependencies, in document order. */
+  blocked_by: string[];
 }
 
 /** One published schema. */
 export interface SchemaName {
-  /** What it describes. */
-  describes: string;
   /** `result`, `event`, `run`, … */
   name: string;
+  /** What it describes. */
+  describes: string;
   /** Where it is published. */
   url: string;
 }
@@ -4406,22 +4437,22 @@ export interface SchemaReport {
 
 /** What an attempt changed beyond the paths its task names. */
 export interface ScopeFinding {
+  /** The task names at least one path. */
+  stated: boolean;
   /** The paths the task names. */
   named: string[];
   /** Changed paths outside them. */
   outside: string[];
-  /** The task names at least one path. */
-  stated: boolean;
 }
 
 /** A sealed held-out set: kept in the state directory, never shown. */
 export interface SealedRef {
-  /** Files in it. */
-  count: number;
   /** The requirement it is keyed by. */
   key: string;
   /** The manifest's hash. */
   manifest_sha256: string;
+  /** Files in it. */
+  count: number;
 }
 
 /**
@@ -4429,24 +4460,24 @@ export interface SealedRef {
  * characters).
  */
 export interface SectionDiff {
-  /** After it (empty: it was removed). */
-  after: string;
-  /** The section's text before the revision (empty: it was added). */
-  before: string;
-  /** Its heading path (`Spec › Requirements`; empty before the first). */
-  heading: string;
-  /** No comment touched it. */
-  outside: boolean;
   /** The document (project-relative). */
   path: string;
+  /** Its heading path (`Spec › Requirements`; empty before the first). */
+  heading: string;
+  /** The section's text before the revision (empty: it was added). */
+  before: string;
+  /** After it (empty: it was removed). */
+  after: string;
+  /** No comment touched it. */
+  outside: boolean;
 }
 
 /** How the feature was selected. */
 export interface Selection {
-  /** Name of the selected feature. */
-  feature: string | null;
   /** Why this feature (or none) was selected. */
   reason: SelectionReason;
+  /** Name of the selected feature. */
+  feature: string | null;
 }
 
 /** Why a feature was selected. */
@@ -4454,10 +4485,10 @@ export type SelectionReason = "argument" | "environment" | "recorded" | "only_fe
 
 /** Changes saved and set aside so a run could start from the branch tip. */
 export interface SetAside {
-  /** The files they change, repository-relative. */
-  files: string[];
   /** The ref holding them. */
   reference: string;
+  /** The files they change, repository-relative. */
+  files: string[];
 }
 
 /** Diagnostic severity. */
@@ -4465,30 +4496,30 @@ export type Severity = "error" | "warning" | "info";
 
 /** A reproduction as the stream shows it. */
 export interface ShownReproduction {
-  /** Its content's digest. */
-  digest: string;
-  /** Its file. */
-  file: string;
   /** Its statement. */
   statement: string;
+  /** Its file. */
+  file: string;
   /** Its test. */
   test: string;
+  /** Its content's digest. */
+  digest: string;
 }
 
 /** A special case as the stream shows it. */
 export interface ShownSpecialCase {
-  /** Rejected (or ruled). */
-  rejected: boolean;
   /** The statement it targets. */
   statement: string;
+  /** Rejected (or ruled). */
+  rejected: boolean;
 }
 
 /** Who signed. */
 export interface SignerView {
-  /** The key's fingerprint (`SHA256:…`, an OpenPGP fingerprint). */
-  keyid: string;
   /** `ssh`, `openpgp` or `sigstore`. */
   kind: string;
+  /** The key's fingerprint (`SHA256:…`, an OpenPGP fingerprint). */
+  keyid: string;
   /** The principal the verifier's trust input names for it. */
   principal?: string | null;
 }
@@ -4498,24 +4529,26 @@ export type SimilarLevel = "close" | "very_close";
 
 /** A requirement close to the description. */
 export interface SimilarMatch {
-  /** Where it is written. */
-  at: Place | null;
-  /** `close` or `very_close`. */
-  level: SimilarLevel;
-  /** The requirement's identifier (`FR-004`). */
-  requirement: string;
-  /** Cosine in [0, 1], rounded to two places. */
-  score: number;
-  /** The terms it shares with the description, the weightiest first. */
-  shared: string[];
-  /** The requirement as written. */
-  text: string;
   /** The unit (`003-reports`). */
   unit: string;
+  /** The requirement's identifier (`FR-004`). */
+  requirement: string;
+  /** The requirement as written. */
+  text: string;
+  /** Cosine in [0, 1], rounded to two places. */
+  score: number;
+  /** `close` or `very_close`. */
+  level: SimilarLevel;
+  /** The terms it shares with the description, the weightiest first. */
+  shared: string[];
+  /** Where it is written. */
+  at: Place | null;
 }
 
 /** The `similar` payload: what was compared and what is close. */
 export interface SimilarReport {
+  /** The description, as given. */
+  query: string;
   /** How many requirements it was compared with. */
   compared: number;
   /**
@@ -4525,16 +4558,14 @@ export interface SimilarReport {
   limited: boolean;
   /** The close ones, the closest first. */
   matches: SimilarMatch[];
-  /** The description, as given. */
-  query: string;
 }
 
 /** One installed Agent Skill. */
 export interface SkillEntry {
-  /** What it does. */
-  description: string;
   /** Its name. */
   name: string;
+  /** What it does. */
+  description: string;
   /** The `SKILL.md`. */
   path: string;
   /** Why speccoder does not host it, if it does not. */
@@ -4550,33 +4581,33 @@ export type SkillRole = "create" | "toward_tasks" | "revise" | "check" | "other"
 
 /** Result of `speccoder spec <name>`. */
 export interface SkillRunReport {
+  /** The skill. */
+  skill: string;
+  /** The agentplane run. */
+  run_id: string;
+  /** `completed`, `incomplete`, `needs_approval`, `blocked`, `denied`, `budget_exhausted` or `failed`. */
+  status: string;
+  /** The model's summary. */
+  summary: string | null;
+  /** Questions it could not get answered. */
+  questions: string[];
   /** Paths changed in the checkout: `added` / `modified` / `deleted`. */
   changes: ([string, string])[];
+  /** Every tool call with the policy's decision. */
+  tool_calls: unknown[];
+  /** The call awaiting approval, if any. */
+  pending: unknown;
+  /** Why it stopped, when it did not complete. */
+  reason: string | null;
+  /** Token usage. */
+  usage: unknown;
+  /** Extension hooks run, offered or skipped around it. */
+  hooks: string[];
   /**
    * The unit the skill worked on, or created and made current, and how
    * it is known (`001-x (recorded in .specify/feature.json)`).
    */
   current?: string | null;
-  /** Extension hooks run, offered or skipped around it. */
-  hooks: string[];
-  /** The call awaiting approval, if any. */
-  pending: unknown;
-  /** Questions it could not get answered. */
-  questions: string[];
-  /** Why it stopped, when it did not complete. */
-  reason: string | null;
-  /** The agentplane run. */
-  run_id: string;
-  /** The skill. */
-  skill: string;
-  /** `completed`, `incomplete`, `needs_approval`, `blocked`, `denied`, `budget_exhausted` or `failed`. */
-  status: string;
-  /** The model's summary. */
-  summary: string | null;
-  /** Every tool call with the policy's decision. */
-  tool_calls: unknown[];
-  /** Token usage. */
-  usage: unknown;
 }
 
 /** Result of `speccoder spec` without a name. */
@@ -4598,20 +4629,20 @@ export type Source = "signed" | "committed" | "not_recorded";
 
 /** One commit of the spec and what it changed in its requirements. */
 export interface SpecVersion {
-  /** Requirements it added. */
-  added: string[];
-  /** Its author. */
-  author: string;
   /** The commit. */
   commit: string;
   /** `YYYY-MM-DD`. */
   date: string;
-  /** Requirements it removed. */
-  removed: string[];
-  /** Requirements it reworded. */
-  reworded: string[];
+  /** Its author. */
+  author: string;
   /** Its subject line. */
   subject: string;
+  /** Requirements it added. */
+  added: string[];
+  /** Requirements it reworded. */
+  reworded: string[];
+  /** Requirements it removed. */
+  removed: string[];
 }
 
 /**
@@ -4619,30 +4650,30 @@ export interface SpecVersion {
  * literal inputs.
  */
 export interface SpecialCase {
-  /** `sha256:<hex>` of its files: what a ruling is bound to. */
-  digest: string;
-  /** Its statement's held-out variant was written again once, told it. */
-  regenerated: boolean;
-  /** The combined set (reproductions and held-out variants) rejected it. */
-  rejected: boolean;
-  /** A person ruled the tests right about it. */
-  ruled: boolean;
   /** The statement whose reproduction it targets. */
   statement: string;
+  /** `sha256:<hex>` of its files: what a ruling is bound to. */
+  digest: string;
+  /** The combined set (reproductions and held-out variants) rejected it. */
+  rejected: boolean;
+  /** Its statement's held-out variant was written again once, told it. */
+  regenerated: boolean;
+  /** A person ruled the tests right about it. */
+  ruled: boolean;
 }
 
 /** Spec Kit metadata from `.specify/*.json`; each field is `None` when absent. */
 export interface SpeckitMeta {
-  /** `feature_directory` from `feature.json`, as recorded. */
-  current_feature: string | null;
-  /** `sequential` or `timestamp`. */
-  feature_numbering: string | null;
+  /** `speckit_version` from `init-options.json`. */
+  version: string | null;
   /** The coding-agent integration, e.g. `claude`. */
   integration: string | null;
   /** Script flavour, e.g. `sh`. */
   script: string | null;
-  /** `speckit_version` from `init-options.json`. */
-  version: string | null;
+  /** `sequential` or `timestamp`. */
+  feature_numbering: string | null;
+  /** `feature_directory` from `feature.json`, as recorded. */
+  current_feature: string | null;
 }
 
 /** A stack the plan can scaffold, or none. */
@@ -4650,22 +4681,22 @@ export type Stack = "rust" | "python" | "node" | "go" | "none";
 
 /** A stack's tool on this machine. */
 export interface StackOption {
-  /** Why it cannot be chosen (its tool is missing), with the install hint. */
-  disabled: string | null;
   /** The stack. */
   id: Stack;
   /** How the sheet names it. */
   label: string;
   /** The tool's version when installed. */
   version: string | null;
+  /** Why it cannot be chosen (its tool is missing), with the install hint. */
+  disabled: string | null;
 }
 
 /** How a stack was chosen. */
 export interface StackPick {
-  /** Found in an existing repository rather than chosen. */
-  detected: boolean;
   /** The stack. */
   id: Stack;
+  /** Found in an existing repository rather than chosen. */
+  detected: boolean;
   /** Why it was suggested or detected. */
   reason: string;
 }
@@ -4692,96 +4723,96 @@ export interface Statement {
 
 /** One statement's class in a reproduce try. */
 export interface StatementClass {
-  /** `assertion`, `passed`, `build_error`, … */
-  class: string;
   /** `E1`, `U1`. */
   statement: string;
+  /** `assertion`, `passed`, `build_error`, … */
+  class: string;
 }
 
 /** Statements, by what the tries showed. */
 export interface StatementsShown {
-  /** Neither red nor passing. */
-  not_reproduced: string[];
   /** Red by assertion in some try. */
   reproduced: string[];
+  /** Neither red nor passing. */
+  not_reproduced: string[];
   /** Passed on every try. */
   satisfied: string[];
 }
 
 /** Result of `speccoder report`: what the branch's history shows. */
 export interface StatusReport {
-  /** The planning artifacts that exist (`spec`, `plan`, `tasks`). */
-  artifacts: string[];
-  /** `speccoder/<feature>`, if speccoder has worked on the feature. */
-  branch: string | null;
-  /** Convergence rounds, oldest first. */
-  convergence: ConvergenceRound[];
   /** Feature directory name. */
   feature: string;
+  /** `speccoder/<feature>`, if speccoder has worked on the feature. */
+  branch: string | null;
+  /** Where `tasks.md` was read: `branch` or `checkout`. */
+  source: string;
   /**
-   * GitHub issue URLs the feature's spec names: where it came from, and
-   * what its pull request closes.
+   * How the feature was chosen (`recorded in .specify/feature.json`,
+   * `the only feature`, `named with --feature`).
    */
-  issues: string[];
-  /** Where the feature is: spec → plan → tasks → commit → run → review. */
-  journey: JourneyStep[];
+  selected_by: string;
+  /** The planning artifacts that exist (`spec`, `plan`, `tasks`). */
+  artifacts: string[];
   /**
    * While the feature has no task list: the planning skills that come
    * next (`plan`, `tasks`); empty once it has one.
    */
   planning?: string[];
   /**
-   * The person's review of the spec's requirements, when the
-   * format has requirement identifiers.
+   * Planning files under the feature's directory not yet committed
+   * (`speccoder run` reads committed files only).
    */
-  review?: ReviewTotals | null;
-  /**
-   * How the feature was chosen (`recorded in .specify/feature.json`,
-   * `the only feature`, `named with --feature`).
-   */
-  selected_by: string;
-  /** Where `tasks.md` was read: `branch` or `checkout`. */
-  source: string;
+  uncommitted?: string[];
+  /** Where the feature is: spec → plan → tasks → commit → run → review. */
+  journey: JourneyStep[];
+  /** Commits on the branch that the checkout's HEAD does not contain. */
+  unmerged_commits: number;
   /** Every task, in document order. */
   tasks: TaskStatus[];
-  /** Counts by evidence. */
-  totals: StatusTotals;
+  /** Convergence rounds, oldest first. */
+  convergence: ConvergenceRound[];
   /**
    * Requirement → task → verdict, in the spec's order; a requirement no
    * task cites is a row without a task.
    */
   trace: TraceRow[];
+  /** Counts by evidence. */
+  totals: StatusTotals;
   /**
-   * Planning files under the feature's directory not yet committed
-   * (`speccoder run` reads committed files only).
+   * GitHub issue URLs the feature's spec names: where it came from, and
+   * what its pull request closes.
    */
-  uncommitted?: string[];
-  /** Commits on the branch that the checkout's HEAD does not contain. */
-  unmerged_commits: number;
+  issues: string[];
+  /**
+   * The person's review of the spec's requirements, when the
+   * format has requirement identifiers.
+   */
+  review?: ReviewTotals | null;
 }
 
 /** Counts of [`TaskStatus::state`]. */
 export interface StatusTotals {
-  /** Ticked by `speccoder task accept`: a person's attestation, not evidence. */
-  attested: number;
-  /** Open and blocked. */
-  blocked: number;
-  /** In place: committed by speccoder, the local tick missing. */
-  evidence_without_tick: number;
-  /** Open and ready. */
-  ready: number;
-  /** Ticked with regression evidence only. */
-  regression_only: number;
-  /** Open and skipped by a person. */
-  skipped: number;
-  /** Ticks whose cited requirements changed since. */
-  stale: number;
-  /** Ticked without a speccoder commit (by a person, or before speccoder). */
-  ticked_without_evidence: number;
   /** Ticked with task-specific evidence. */
   verified: number;
+  /** Ticked with regression evidence only. */
+  regression_only: number;
+  /** Ticked without a speccoder commit (by a person, or before speccoder). */
+  ticked_without_evidence: number;
+  /** In place: committed by speccoder, the local tick missing. */
+  evidence_without_tick: number;
   /** Ticks speccoder committed without an attestation. */
   without_attestation: number;
+  /** Ticked by `speccoder task accept`: a person's attestation, not evidence. */
+  attested: number;
+  /** Open and skipped by a person. */
+  skipped: number;
+  /** Open and ready. */
+  ready: number;
+  /** Open and blocked. */
+  blocked: number;
+  /** Ticks whose cited requirements changed since. */
+  stale: number;
 }
 
 /** A line with how it is taken. */
@@ -4791,6 +4822,13 @@ export type Step = {
 } & (
   /** speccoder performs it (`actions::perform`). */
   | {
+    how: "perform";
+    /** What runs. */
+    run: Runnable;
+    /** What to ask for first (`Why it is skipped`); `None`: nothing. */
+    input: string | null;
+    /** The words the line gives already (a `--reason "…"` filled in). */
+    text: string | null;
     /**
      * What to say in a confirmation first (it leaves the machine or
      * cannot be undone).
@@ -4798,21 +4836,14 @@ export type Step = {
     confirm: string | null;
     /** The feature the line names (`--feature F`); `None`: the current. */
     feature: string | null;
-    how: "perform";
-    /** What to ask for first (`Why it is skipped`); `None`: nothing. */
-    input: string | null;
-    /** What runs. */
-    run: Runnable;
-    /** The words the line gives already (a `--reason "…"` filled in). */
-    text: string | null;
   }
   /** A view to open. */
   | {
     how: "view";
-    /** What it is about: a code, a task. */
-    subject: string | null;
     /** Which. */
     view: View;
+    /** What it is about: a code, a task. */
+    subject: string | null;
   }
   /**
    * A command speccoder printed as a fix and can run as the person, in
@@ -4821,9 +4852,9 @@ export type Step = {
    * one succeeded (`a && b`).
    */
   | {
+    how: "command";
     /** The argvs, exactly. */
     argvs: string[][];
-    how: "command";
     /**
      * It reads the keyboard (a login): a terminal of the person's
      * own, not a panel.
@@ -4848,10 +4879,10 @@ export type Step = {
    */
   | {
     how: "shell";
-    /** The setting that stands for it (`model`), if there is one. */
-    setting: string | null;
     /** Why it cannot run here. */
     why: string;
+    /** The setting that stands for it (`model`), if there is one. */
+    setting: string | null;
   }
   /** Words for a person (`→ …`), or a command only they can complete. */
   | {
@@ -4871,54 +4902,54 @@ export type StepState = "done" | "now" | "todo" | "skipped";
 
 /** One set's strength. */
 export interface Strength {
+  /** How far it got. */
+  state: State;
+  /** Rejected / judged over every source; `None` when nothing was judged. */
+  share: number | null;
   /** Mutants; `None` when not run. */
   mutants: Counts | null;
   /** Near misses. */
   near_misses: Counts;
-  /** Rejected / judged over every source; `None` when nothing was judged. */
-  share: number | null;
-  /** How far it got. */
-  state: State;
-  /** What got through: mutant names and near-miss ids with their scenario. */
-  survivors: string[];
   /** Candidates that did not build. */
   unviable: number;
+  /** What got through: mutant names and near-miss ids with their scenario. */
+  survivors: string[];
 }
 
 /** One task line of `tasks.md`, as written. */
 export interface Task {
-  /** Byte range `[start, end)` of the list item in the file. */
-  byte_range: number[];
-  /** Task IDs named after `depends on` / `after` in the text, in order. */
-  depends_on: string[];
-  /** `[x]` or `[X]`. */
-  done: boolean;
   /** Task ID, e.g. `T014`. */
   id: string;
-  /** 1-based line. */
-  line: number;
-  /** SHA-256 (hex) of the task's line, without its line ending. */
-  line_hash: string;
+  /** `[x]` or `[X]`. */
+  done: boolean;
   /** Carries the `[P]` marker. */
   parallel: boolean;
-  /** Enclosing level-2 heading. */
-  phase: string | null;
   /** Story label without brackets, e.g. `US1`. */
   story: string | null;
-  /** Enclosing level-3 heading within the phase. */
-  subsection: string | null;
-  /** Text after the ID and markers. */
-  title: string;
   /** Carries the `[YOU]` label: a step only a person can take. */
   yours?: boolean;
+  /** Text after the ID and markers. */
+  title: string;
+  /** Task IDs named after `depends on` / `after` in the text, in order. */
+  depends_on: string[];
+  /** Enclosing level-2 heading. */
+  phase: string | null;
+  /** Enclosing level-3 heading within the phase. */
+  subsection: string | null;
+  /** 1-based line. */
+  line: number;
+  /** Byte range `[start, end)` of the list item in the file. */
+  byte_range: number[];
+  /** SHA-256 (hex) of the task's line, without its line ending. */
+  line_hash: string;
 }
 
 /** One task's cost. */
 export interface TaskCost {
-  /** Attempts recorded in git (the passing commit and saved attempts). */
-  attempts: number;
   /** Task ID. */
   task: string;
+  /** Attempts recorded in git (the passing commit and saved attempts). */
+  attempts: number;
   /** Tokens and money. */
   usage: Usage;
 }
@@ -4928,49 +4959,12 @@ export type TaskState = "done" | "ready" | "blocked";
 
 /** One task and its evidence. */
 export interface TaskStatus {
-  /**
-   * For a task speccoder committed: its attestation as the note says,
-   * signatures unchecked — `signed <kind> <keyid>`, `unsigned` or
-   * `missing` (`attest verify` checks them).
-   */
-  attestation: string | null;
-  /** Open dependencies of a blocked task. */
-  blocked_by: string[];
-  /**
-   * A bug task: the bug's outcome (`awaiting_confirmation`,
-   * `cannot_reproduce`, `fixed`, …).
-   */
-  bug?: string | null;
-  /** The speccoder commit that ticked it. */
-  commit: string | null;
-  /**
-   * What changed in the intent (spec, plan, constitution) since this
-   * task's evidence was committed: its tick was judged against an earlier
-   * version. `None`: nothing changed, or the task has no commit.
-   */
-  drift?: Drift | null;
   /** Task ID. */
   id: string;
-  /** Who does it ([`crate::lane`]); left out for `code`. */
-  lane?: Lane;
-  /** For an open task: its latest saved attempt. */
-  last_attempt: LastAttempt | null;
-  /** The reason a person gave for `accept` or `skip`. */
-  note: string | null;
+  /** Title after markers. */
+  title: string;
   /** Enclosing phase heading. */
   phase: string;
-  /**
-   * A regression-only tick: why, with speccoder's wording
-   * (`unrecorded` for a tick made before reasons were recorded).
-   */
-  regression?: RegressionOnly | null;
-  /** The agentplane run of that attempt. */
-  run_id: string | null;
-  /**
-   * Changes found in the worktree when the task's run started (a person's
-   * edits, or an interrupted run's leftovers), saved and set aside.
-   */
-  set_aside?: SetAside | null;
   /**
    * `verified`, `regression_only` (ticked by speccoder with that verdict),
    * `attested` (ticked by `speccoder task accept`), `ticked_without_evidence`
@@ -4980,12 +4974,49 @@ export interface TaskStatus {
    */
   state: string;
   /**
+   * What changed in the intent (spec, plan, constitution) since this
+   * task's evidence was committed: its tick was judged against an earlier
+   * version. `None`: nothing changed, or the task has no commit.
+   */
+  drift?: Drift | null;
+  /**
+   * For a task speccoder committed: its attestation as the note says,
+   * signatures unchecked — `signed <kind> <keyid>`, `unsigned` or
+   * `missing` (`attest verify` checks them).
+   */
+  attestation: string | null;
+  /** Open dependencies of a blocked task. */
+  blocked_by: string[];
+  /** The speccoder commit that ticked it. */
+  commit: string | null;
+  /** The agentplane run of that attempt. */
+  run_id: string | null;
+  /** For an open task: its latest saved attempt. */
+  last_attempt: LastAttempt | null;
+  /**
+   * Changes found in the worktree when the task's run started (a person's
+   * edits, or an interrupted run's leftovers), saved and set aside.
+   */
+  set_aside?: SetAside | null;
+  /** The reason a person gave for `accept` or `skip`. */
+  note: string | null;
+  /**
    * A verified tick's acceptance strength as its trailer says
    * (`0.83 mutants=9/11 near-miss=1/2`, `not measured (…)`).
    */
   strength?: string | null;
-  /** Title after markers. */
-  title: string;
+  /**
+   * A bug task: the bug's outcome (`awaiting_confirmation`,
+   * `cannot_reproduce`, `fixed`, …).
+   */
+  bug?: string | null;
+  /**
+   * A regression-only tick: why, with speccoder's wording
+   * (`unrecorded` for a tick made before reasons were recorded).
+   */
+  regression?: RegressionOnly | null;
+  /** Who does it ([`crate::lane`]); left out for `code`. */
+  lane?: Lane;
 }
 
 /** Outcome of one test from a JUnit report. */
@@ -5004,23 +5035,23 @@ export type Through = "spec" | "plan" | "tasks" | "analyze";
 
 /** A ticked task at the checked head. */
 export interface Tick {
-  /** The task line (a tick) or the home's assessment (trailer-only). */
-  anchor: Anchor;
-  /** For trailer-only: the claim's digest at the head (the bug's triad). */
-  claim_sha256: string | null;
   /** The unit, as the format adapter names it. */
   feature: string;
+  /** Task ID (`T012`, `1.3`, `bug:<slug>`). */
+  task: string;
+  /** The task's title. */
+  title: string;
   /** A tick or a trailer-only task. */
   kind: TickKind;
+  /** The task line (a tick) or the home's assessment (trailer-only). */
+  anchor: Anchor;
   /**
    * sha256 of the task line with its box read as open: what the
    * predicate's `task.line_hash` must equal. `None` for trailer-only.
    */
   line_sha256: string | null;
-  /** Task ID (`T012`, `1.3`, `bug:<slug>`). */
-  task: string;
-  /** The task's title. */
-  title: string;
+  /** For trailer-only: the claim's digest at the head (the bug's triad). */
+  claim_sha256: string | null;
 }
 
 /** What a checked task is. */
@@ -5031,36 +5062,36 @@ export type TickOutcome = "evidenced" | "stale" | "unverifiable" | "regressed";
 
 /** One tick's report. */
 export interface TickReport {
+  /** The tick. */
+  tick: Tick;
   /**
    * The task commit checked (the latest reachable with the task's
    * verdict trailers), when one exists.
    */
   commit: string | null;
-  /** Who accepted an `attested` tick. */
-  decider: string | null;
+  /** The outcome. */
+  outcome: TickOutcome;
+  /** `verified`, `regression_only` or `attested`, as the evidence claims. */
+  verdict: string | null;
+  /** For `unverifiable`. */
+  reason: Unverifiable | null;
   /** More on the reason, in one line. */
   detail: string | null;
+  /** Who signed. */
+  signer: SignerView | null;
+  /** Who accepted an `attested` tick. */
+  decider: string | null;
+  /** For `stale`: the cited requirements that changed since the tick. */
+  stale: RequirementDrift[];
+  /** For `stale`: the first changed requirement's line at the head. */
+  stale_anchor: Anchor | null;
+  /** A regression-only tick: why, in speccoder's wording (signed). */
+  regression?: string | null;
   /**
    * Predicate fields or revisions this verifier does not know (kept,
    * never deciding).
    */
   newer_fields: string[];
-  /** The outcome. */
-  outcome: TickOutcome;
-  /** For `unverifiable`. */
-  reason: Unverifiable | null;
-  /** A regression-only tick: why, in speccoder's wording (signed). */
-  regression?: string | null;
-  /** Who signed. */
-  signer: SignerView | null;
-  /** For `stale`: the cited requirements that changed since the tick. */
-  stale: RequirementDrift[];
-  /** For `stale`: the first changed requirement's line at the head. */
-  stale_anchor: Anchor | null;
-  /** The tick. */
-  tick: Tick;
-  /** `verified`, `regression_only` or `attested`, as the evidence claims. */
-  verdict: string | null;
   /** `attest verify`'s object for the commit, unchanged. */
   verification: ObjectVerification | null;
 }
@@ -5070,64 +5101,66 @@ export type Toolchain = "rust" | "python" | "javascript" | "go";
 
 /** Task counts. */
 export interface Totals {
+  /** All tasks. */
+  total: number;
   /** Ticked tasks. */
   done: number;
   /** Unticked tasks. */
   open: number;
-  /** All tasks. */
-  total: number;
 }
 
 /** One step. */
 export interface TourStep {
-  /** What it shows, Markdown: a first line, then optional block lines. */
-  body_markdown: string;
-  /** The facts shown, as data (names, counts, digests). */
-  facts: unknown;
   /** Which. */
   kind: StepKind;
   /** Where it comes from. */
   source: Source;
   /** Its title (`Requirement`, `Frozen tests`, …). */
   title: string;
+  /** What it shows, Markdown: a first line, then optional block lines. */
+  body_markdown: string;
+  /** The facts shown, as data (names, counts, digests). */
+  facts: unknown;
 }
 
 /** One row of the requirement → scenario → test → verdict matrix. */
 export interface TraceRow {
+  /** `FR-001`, `SC-002`. */
+  requirement: string;
+  /** `US1.2`: story 1, acceptance scenario 2. */
+  scenario: string | null;
+  /** The acceptance test. */
+  test: string | null;
+  /** The task that cites it. */
+  task: string | null;
+  /** That task's verdict. */
+  verdict: string | null;
   /**
    * The requirement changed since that task's tick: the verdict is for
    * its earlier wording.
    */
   changed: boolean;
-  /** `FR-001`, `SC-002`. */
-  requirement: string;
-  /** `US1.2`: story 1, acceptance scenario 2. */
-  scenario: string | null;
-  /** The task that cites it. */
-  task: string | null;
-  /** The acceptance test. */
-  test: string | null;
-  /** That task's verdict. */
-  verdict: string | null;
 }
 
 /** The person's three statements about a bug. */
 export interface Triad {
   /** What happens now (the symptom). */
   current: Statement;
+  /** What should happen instead; at least one. */
+  expected: Statement[];
+  /** What must keep working as it does. */
+  unchanged: Statement[];
   /**
    * `sha256:<hex>` over the normalised statements: a different digest
    * lapses a confirmation.
    */
   digest: string;
-  /** What should happen instead; at least one. */
-  expected: Statement[];
-  /** What must keep working as it does. */
-  unchanged: Statement[];
 }
 
 /** One statement's class in one try. */
 export interface TryStatement {
+  /** `E1`, `U1`. */
+  statement: string;
   /**
    * What its test did on the untouched code (`assertion` only when both
    * runs failed on one).
@@ -5135,8 +5168,6 @@ export interface TryStatement {
   class: RedClass;
   /** Up to 20 lines of the run, when it was not red. */
   excerpt?: string | null;
-  /** `E1`, `U1`. */
-  statement: string;
 }
 
 /**
@@ -5144,12 +5175,12 @@ export interface TryStatement {
  * the only result: the host keeps serving after it).
  */
 export interface UiReport {
+  /** The address to open, with this start's key in its fragment. */
+  url: string;
   /** The port on 127.0.0.1. */
   port: number;
   /** The project served. */
   root: string;
-  /** The address to open, with this start's key in its fragment. */
-  url: string;
 }
 
 /** What Undo would do. */
@@ -5175,24 +5206,24 @@ export type Unverifiable = "ticked_without_evidence" | "missing" | "malformed" |
 
 /** A feature whose ticks are mostly regression-only, counted by reason. */
 export interface Unverified {
-  /** The reasons, the most frequent first. */
-  counts: ReasonCount[];
-  /** Of them, regression-only. */
-  regression_only: number;
   /** Ticks speccoder judged (`verified` and `regression_only`). */
   ticks: number;
+  /** Of them, regression-only. */
+  regression_only: number;
+  /** The reasons, the most frequent first. */
+  counts: ReasonCount[];
 }
 
 /** Token counts, and USD when prices are configured. */
 export interface Usage {
-  /** Input tokens read from the cache. */
-  cache_read_tokens: number;
-  /** Tokens written to the cache. */
-  cache_write_tokens: number;
   /** Input tokens (including those read from the cache). */
   input_tokens: number;
   /** Output tokens. */
   output_tokens: number;
+  /** Input tokens read from the cache. */
+  cache_read_tokens: number;
+  /** Tokens written to the cache. */
+  cache_write_tokens: number;
   /** USD, when `[model]` has prices. */
   usd: number | null;
 }
@@ -5209,9 +5240,9 @@ export type Verdict =
   }
   /** Something failed or regressed. */
   | {
+    verdict: "failed";
     /** One line per reason. */
     reasons: string[];
-    verdict: "failed";
   };
 
 /** What `attest verify` found for one task object. */
@@ -5221,26 +5252,26 @@ export type VerifyOutcome = "ok" | "unsigned" | "missing" | "bad_signature" | "u
 export interface VerifyReason {
   /** A stable code, e.g. `subject`, `trailer`, `line_hash`, `signature`. */
   code: string;
-  /** What it should be. */
-  expected?: string | null;
   /** The field that disagrees. */
   field?: string | null;
+  /** What it should be. */
+  expected?: string | null;
   /** What it is. */
   found?: string | null;
 }
 
 /** Everything one `verify` run established. */
 export interface VerifyReport {
+  /** Project root the checks ran in. */
+  root: string;
+  /** `fast` or `full`. */
+  tier: string;
   /** One result per configured check, in configuration order. */
   checks: CheckResult[];
   /** Comparison with a baseline, if one was given. */
   comparison: Comparison | null;
   /** Whether verification passed (see [`passes`]). */
   passed: boolean;
-  /** Project root the checks ran in. */
-  root: string;
-  /** `fast` or `full`. */
-  tier: string;
 }
 
 /**
@@ -5256,18 +5287,18 @@ export type View = "doctor" | "bug_report" | "report" | "live" | "approvals" | "
 
 /** Result of `speccoder worktree`. */
 export interface WorktreeReport {
-  /** Commit the branch points at. */
-  base: string | null;
-  /** `speccoder/<feature>`. */
-  branch: string | null;
-  /** Created now (`false`: reused). */
-  created: boolean;
   /** The feature the worktree is for. */
   feature: string;
   /** Absolute worktree path. */
   path: string | null;
   /** Spec Kit project directory inside the worktree. */
   project_dir: string | null;
+  /** `speccoder/<feature>`. */
+  branch: string | null;
+  /** Commit the branch points at. */
+  base: string | null;
+  /** Created now (`false`: reused). */
+  created: boolean;
   /** Offending paths with reasons, when refused. */
   refused_paths: RefusedPath[];
 }

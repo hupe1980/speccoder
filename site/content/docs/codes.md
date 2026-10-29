@@ -41,7 +41,7 @@ Every result that is not plainly `ok` names a code — `error[CODE]`, `stopped[C
 | [`FEATURE-UNKNOWN`](#feature-unknown) | error | 12 | no feature has that name or number |
 | [`CONFIG`](#config) | error | 13 | the configuration or the environment is not usable |
 | [`NO-STATE-DIR`](#no-state-dir) | error | 13 | speccoder has nowhere to keep its state |
-| [`EXECUTOR-LOGIN`](#executor-login) | error | 23 | the external agent needs signing in |
+| [`EXECUTOR-LOGIN`](#executor-login) | stop | 23 | the external agent needs signing in |
 | [`SANDBOX-UNAVAILABLE`](#sandbox-unavailable) | error | 13 | the OS sandbox is not available and the project requires it |
 | [`GITHUB-AUTH`](#github-auth) | error | 1 | not signed in to GitHub |
 | [`GITHUB-FAILED`](#github-failed) | error | 1 | the GitHub API could not do it |
