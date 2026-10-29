@@ -185,12 +185,15 @@ fn an_allowed_call_goes_ahead_and_the_verdict_is_speccoders() {
             { "plan": [{ "content": "Add login", "status": "in_progress" }] },
             permission("execute", json!({ "command": ["grep", "-q", "fn ok", "src/lib.rs"] })),
             permission("read", json!({ "path": "src/lib.rs" })),
+            permission("execute", json!({ "command": ["grep", "-q", "fn ok", "src/lib.rs"] })),
             { "edit": "src/lib.rs", "content": EDIT },
             { "say": "Added login." },
         ] }),
         "",
     );
-    let res = p.run();
+    // A command the agent runs itself asks you, even one a check allows
+    // (it runs outside the sandbox); "for this task" holds for that argv.
+    let res = p.run_asking(vec![Answer::approve(Scope::Task, None, None)]);
     assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
     let rep = report(&res);
     assert!(rep.run_id.starts_with("external_acp_"), "{}", rep.run_id);
@@ -204,15 +207,24 @@ fn an_allowed_call_goes_ahead_and_the_verdict_is_speccoders() {
     let answers = p.answers();
     assert_eq!(chosen(&answers[0]), Some("allow"));
     assert_eq!(chosen(&answers[1]), Some("allow"));
+    assert_eq!(chosen(&answers[2]), Some("allow"));
     let calls = &rep.tool_calls;
     assert_eq!(calls[0]["tool"], "run_command");
+    assert_eq!(
+        (
+            calls[0]["executed_by"].as_str(),
+            calls[0]["sandboxed"].as_bool()
+        ),
+        (Some("agent"), Some(false))
+    );
+    assert_eq!(calls[2]["scope"], "task-grant", "{}", calls[2]);
     assert_eq!(
         calls[0]["arguments"]["argv"],
         json!(["grep", "-q", "fn ok", "src/lib.rs"])
     );
     assert_eq!(
         (calls[0]["decision"].as_str(), calls[0]["by"].as_str()),
-        (Some("allow"), Some("rule"))
+        (Some("allow"), Some("person"))
     );
     // The prompt is the one every executor gets.
     let prompt = p
@@ -774,4 +786,34 @@ fn plain_reads_in_a_shell_line_are_reads_and_secrets_stay_refused() {
             .collect::<Vec<_>>(),
         ["read_file", "list_files", "read_file"]
     );
+}
+
+#[test]
+fn a_call_no_rule_covers_is_approved_once_and_holds_next_run() {
+    let ask = json!({ "steps": [
+        permission("other", json!({ "something": true })),
+        { "edit": "src/lib.rs", "content": EDIT },
+        { "say": "Done." },
+    ] });
+    let p = Project::new(&ask, "");
+    let first = p.run();
+    assert_eq!(
+        report(&first).attempt_status,
+        "needs_approval",
+        "{}",
+        first.message()
+    );
+    assert!(report(&first).pending.as_ref().unwrap()["object"].is_object());
+    let ok = decide_with(
+        p.dir.path(),
+        None,
+        Verb::Approve("T005"),
+        p.state.path(),
+        speccoder_core::actions::Via::Terminal,
+    );
+    assert_eq!(ok.status(), CommandStatus::Ok, "{}", ok.message());
+    p.script(&ask);
+    let second = p.run();
+    assert_eq!(second.status(), CommandStatus::Ok, "{}", second.message());
+    assert_eq!(chosen(&p.answers()[0]), Some("allow"));
 }

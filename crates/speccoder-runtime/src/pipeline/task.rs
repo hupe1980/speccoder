@@ -733,6 +733,9 @@ fn run_task_once(
     //    from the checkout, and the worktree's dependency folders (Node,
     //    uv) installed, once per lockfile. In place, the checkout has its own.
     let mut prepare_notes: Vec<String> = Vec::new();
+    // Files copied from the checkout: an external agent's own read of one
+    // cannot be masked, so it is refused one.
+    let mut copied_files: Vec<String> = Vec::new();
     if options.session.is_none() {
         match crate::include::copy(
             &wt_root,
@@ -741,6 +744,7 @@ fn run_task_once(
             &worktree_config.include,
         ) {
             Ok(c) => {
+                copied_files.clone_from(&c.files);
                 if !c.now.is_empty() {
                     prepare_notes.push(format!(
                         "copied from your checkout ([worktree] include): {}",
@@ -1665,6 +1669,7 @@ fn run_task_once(
                                 run_approved: run_approved.clone(),
                                 approved_once: approved_once.clone(),
                                 progress: Some((task.to_owned(), Arc::clone(&live))),
+                                copied: copied_files.clone(),
                             },
                         ));
                         let a = external::run_acp(

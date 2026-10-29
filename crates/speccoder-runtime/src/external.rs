@@ -327,13 +327,35 @@ pub struct AcpOutcome {
 /// what was allowed, what waited for a person, what was refused.
 #[must_use]
 pub fn tally(log: &[Value]) -> Value {
-    let decided: Vec<&Value> = log.iter().filter(|e| e["decision"] != "reported").collect();
-    let n = |f: &dyn Fn(&Value) -> bool| decided.iter().filter(|e| f(e)).count();
+    // One count per request: a permission request's several decisions
+    // (`cat a; ls b`) are one; a file or command call is its own.
+    let mut groups: Vec<(Value, Vec<&Value>)> = Vec::new();
+    for (i, e) in log
+        .iter()
+        .enumerate()
+        .filter(|(_, e)| e["decision"] != "reported")
+    {
+        let key = if e["request"].is_null() {
+            json!(i)
+        } else {
+            e["request"].clone()
+        };
+        match groups.iter_mut().find(|(k, _)| *k == key) {
+            Some((_, g)) => g.push(e),
+            None => groups.push((key, vec![e])),
+        }
+    }
+    let person = |e: &&Value| {
+        (e["by"] == "person" && !e["scope"].as_str().is_some_and(|s| s.ends_with("-grant")))
+            || e["decision"] == "approval"
+    };
+    let refused = |g: &Vec<&Value>| g.iter().any(|e| e["decision"] == "deny");
+    let waiting = |g: &Vec<&Value>| g.iter().any(|e| e["decision"] == "approval");
     json!({
-        "asked": decided.len(),
-        "allowed": n(&|e| e["decision"] == "allow"),
-        "waited": n(&|e| e["by"] == "person" && !e["scope"].as_str().is_some_and(|s| s.ends_with("-grant")) || e["decision"] == "approval"),
-        "refused": n(&|e| e["decision"] == "deny"),
+        "asked": groups.len(),
+        "allowed": groups.iter().filter(|(_, g)| !refused(g) && !waiting(g)).count(),
+        "waited": groups.iter().filter(|(_, g)| g.iter().any(person)).count(),
+        "refused": groups.iter().filter(|(_, g)| refused(g)).count(),
         "reported": log.iter().filter(|e| e["decision"] == "reported").count(),
     })
 }
@@ -395,7 +417,9 @@ pub fn run_acp(
         agent: agent.clone(),
         argv: agent.command(agent::on_path),
         cwd: governor.root().to_path_buf(),
-        prompt: prompt.to_owned(),
+        prompt: format!(
+            "{prompt}\n# Commands\n\nRun commands through the client's terminal where you can: speccoder runs them in its sandbox. A command you run with your own tools runs outside it, so the person is asked about each one first.\n"
+        ),
         model: exec.model.clone(),
         timeout: exec.timeout,
         runner: runner.clone(),

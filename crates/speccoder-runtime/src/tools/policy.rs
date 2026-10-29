@@ -701,6 +701,12 @@ impl Policy {
         decision
     }
 
+    /// A person's rejection of exactly `object`, if one holds.
+    #[must_use]
+    pub fn rejection(&self, object: &Object) -> Option<&Rejection> {
+        self.rejected.iter().find(|r| r.object == *object)
+    }
+
     /// The person's rejections and approvals, for the changed-object line.
     #[must_use]
     pub fn approved(&self) -> &[Object] {
