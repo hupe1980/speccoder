@@ -519,6 +519,12 @@ pub fn outside(argv: &[String]) -> Option<String> {
         ["git", "worktree", "remove", path] => Some(format!(
             "removes the worktree at {path}, outside the project"
         )),
+        ["brew", "install", .., package] => {
+            Some(format!("installs {package} on this machine with Homebrew"))
+        }
+        ["npm", "install", "-g" | "--global", package] => {
+            Some(format!("installs {package} on this machine with npm"))
+        }
         _ => None,
     }
 }

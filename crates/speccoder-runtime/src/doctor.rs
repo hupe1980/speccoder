@@ -579,7 +579,88 @@ pub fn checks(
 /// when nothing fails).
 #[must_use]
 pub fn run(path: &Path, feature: Option<&str>, look: Option<&str>) -> CommandResult {
+    report(path, feature, look, false)
+}
+
+/// `speccoder doctor --agents`: the checks and every agent's card, each
+/// installed one asked for a session (never a prompt).
+#[must_use]
+pub fn agents(path: &Path, feature: Option<&str>) -> CommandResult {
+    report(path, feature, None, true)
+}
+
+/// The configured `[executor]` agent, if it is an ACP one.
+fn configured_agent(path: &Path) -> Option<crate::acp::agent::Agent> {
+    let text = crate::verify::find_config(path)
+        .and_then(|d| std::fs::read_to_string(d.join(crate::verify::config::FILE)).ok())?;
+    match crate::external::parse(&text).ok()??.kind {
+        crate::external::Kind::Acp(a) => Some(a),
+        crate::external::Kind::Command(_) => None,
+    }
+}
+
+/// The `executor` row: the configured agent's card, as known without
+/// starting it.
+fn executor_check(agent: &crate::acp::agent::Agent) -> DoctorCheck {
+    let on_path = |x: &str| crate::acp::agent::on_path(x);
+    let Some(p) = agent.preset() else {
+        let argv = agent.command(on_path);
+        let runs = argv.first().is_some_and(|a| on_path(a));
+        return if runs {
+            check(
+                "executor",
+                DoctorLevel::Pass,
+                format!(
+                    "{} over ACP · not known whether it asks before it acts",
+                    argv.join(" ")
+                ),
+            )
+        } else {
+            warned(
+                "executor",
+                format!(
+                    "`{}` is not on PATH",
+                    argv.first().map_or("", String::as_str)
+                ),
+                &[],
+            )
+        };
+    };
+    let c = crate::acp::ready::card(p, Some(agent), &on_path, false);
+    let word = |t: &speccoder_core::AgentTick| match t.state {
+        speccoder_core::TickState::Yes => "yes",
+        speccoder_core::TickState::No => "no",
+        speccoder_core::TickState::Unknown => "not known",
+    };
+    let detail = format!(
+        "{} · installed: {} ({}) · signed in: {} ({}) · asks first: {} ({})",
+        c.name,
+        word(&c.installed),
+        c.installed.detail,
+        word(&c.signed_in),
+        c.signed_in.detail,
+        word(&c.asks_first),
+        c.asks_first.detail
+    );
+    let bad = [&c.installed, &c.asks_first]
+        .into_iter()
+        .find(|t| t.state == speccoder_core::TickState::No);
+    match bad {
+        None => check("executor", DoctorLevel::Pass, detail),
+        Some(t) => DoctorCheck {
+            fix: t.fix.clone(),
+            commands: t.commands.clone(),
+            ..warned("executor", detail, &[])
+        },
+    }
+}
+
+fn report(path: &Path, feature: Option<&str>, look: Option<&str>, probe: bool) -> CommandResult {
     let mut checks = checks(path, feature, &|k| std::env::var(k).ok());
+    let chosen = configured_agent(path);
+    if let Some(a) = &chosen {
+        checks.push(executor_check(a));
+    }
     if let Some(look) = look {
         checks.push(check("look", DoctorLevel::Pass, look));
     }
@@ -599,6 +680,11 @@ pub fn run(path: &Path, feature: Option<&str>, look: Option<&str>) -> CommandRes
         speccoder: env!("CARGO_PKG_VERSION").to_owned(),
         os: format!("{} {}", std::env::consts::OS, std::env::consts::ARCH),
         checks: checks.clone(),
+        agents: if probe {
+            crate::acp::ready::cards(chosen.as_ref(), true)
+        } else {
+            Vec::new()
+        },
     };
     let result = match failures.first() {
         None => CommandResult::ok(

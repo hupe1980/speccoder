@@ -247,6 +247,9 @@ pub enum Command {
         /// A redacted Markdown bundle to paste into an issue.
         #[arg(long)]
         bug_report: bool,
+        /// Every agent that can make attempts: installed, signed in, asks first (installed ones are asked for a session, never a prompt).
+        #[arg(long, conflicts_with = "bug_report")]
+        agents: bool,
     },
     /// The web interface: the project in your browser (or a window), on 127.0.0.1 only.
     Ui {

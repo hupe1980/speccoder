@@ -15,5 +15,6 @@ pub mod agent;
 pub mod calls;
 pub mod govern;
 pub mod modes;
+pub mod ready;
 pub mod session;
 pub mod terminal;

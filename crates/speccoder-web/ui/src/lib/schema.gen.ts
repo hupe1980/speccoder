@@ -114,12 +114,43 @@ export interface ActionsReport {
   journey: JourneyStep[];
 }
 
+/**
+ * One agent that can make attempts, and how ready it is: installed,
+ * signed in, asking before it acts — each with its one action.
+ */
+export interface AgentCard {
+  /** `agent = "<id>"` in `[executor]`. */
+  id: string;
+  /** Its name. */
+  name: string;
+  /** It is the configured `[executor]` agent. */
+  chosen: boolean;
+  /** Its command can start. */
+  installed: AgentTick;
+  /** It answers a session without asking for a sign-in. */
+  signed_in: AgentTick;
+  /** speccoder can put it into a mode that asks before it acts. */
+  asks_first: AgentTick;
+}
+
 /** One entry of an external agent's plan. */
 export interface AgentPlanEntry {
   /** Its words. */
   content: string;
   /** `pending`, `in_progress` or `completed`. */
   status: string;
+}
+
+/** One tick of an agent card. */
+export interface AgentTick {
+  /** Yes, no or not known. */
+  state: TickState;
+  /** What was found. */
+  detail: string;
+  /** Its action, as lines. */
+  fix: string[];
+  /** The same lines, with how an interface takes each. */
+  fix_steps: Step[];
 }
 
 /** Two authors read a scenario differently. */
@@ -1228,6 +1259,11 @@ export interface DoctorReport {
   os: string;
   /** Every check, in order. */
   checks: DoctorCheck[];
+  /**
+   * The agents that can make attempts over ACP, each ready or not
+   * (`doctor --agents`; empty otherwise).
+   */
+  agents?: AgentCard[];
 }
 
 /** Where a draft comment is. */
@@ -5100,6 +5136,9 @@ export interface TickReport {
   /** `attest verify`'s object for the commit, unchanged. */
   verification: ObjectVerification | null;
 }
+
+/** Yes, no, or not known (and why). */
+export type TickState = "yes" | "no" | "unknown";
 
 /** A test toolchain speccoder knows how to ask. */
 export type Toolchain = "rust" | "python" | "javascript" | "go";

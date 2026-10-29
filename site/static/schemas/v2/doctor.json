@@ -18,6 +18,13 @@
       "items": {
         "$ref": "#/$defs/DoctorCheck"
       }
+    },
+    "agents": {
+      "description": "The agents that can make attempts over ACP, each ready or not\n(`doctor --agents`; empty otherwise).",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/AgentCard"
+      }
     }
   },
   "required": [
@@ -1908,6 +1915,98 @@
         "undo",
         "history",
         "run"
+      ]
+    },
+    "AgentCard": {
+      "description": "One agent that can make attempts, and how ready it is: installed,\nsigned in, asking before it acts — each with its one action.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "`agent = \"<id>\"` in `[executor]`.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Its name.",
+          "type": "string"
+        },
+        "chosen": {
+          "description": "It is the configured `[executor]` agent.",
+          "type": "boolean"
+        },
+        "installed": {
+          "description": "Its command can start.",
+          "$ref": "#/$defs/AgentTick"
+        },
+        "signed_in": {
+          "description": "It answers a session without asking for a sign-in.",
+          "$ref": "#/$defs/AgentTick"
+        },
+        "asks_first": {
+          "description": "speccoder can put it into a mode that asks before it acts.",
+          "$ref": "#/$defs/AgentTick"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "chosen",
+        "installed",
+        "signed_in",
+        "asks_first"
+      ]
+    },
+    "AgentTick": {
+      "description": "One tick of an agent card.",
+      "type": "object",
+      "properties": {
+        "state": {
+          "description": "Yes, no or not known.",
+          "$ref": "#/$defs/TickState"
+        },
+        "detail": {
+          "description": "What was found.",
+          "type": "string"
+        },
+        "fix": {
+          "description": "Its action, as lines.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "fix_steps": {
+          "description": "The same lines, with how an interface takes each.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Step"
+          }
+        }
+      },
+      "required": [
+        "state",
+        "detail",
+        "fix",
+        "fix_steps"
+      ]
+    },
+    "TickState": {
+      "description": "Yes, no, or not known (and why).",
+      "oneOf": [
+        {
+          "description": "Yes.",
+          "type": "string",
+          "const": "yes"
+        },
+        {
+          "description": "No: its action fixes it.",
+          "type": "string",
+          "const": "no"
+        },
+        {
+          "description": "Not known without running it (its detail says why).",
+          "type": "string",
+          "const": "unknown"
+        }
       ]
     }
   },

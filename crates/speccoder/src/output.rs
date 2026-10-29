@@ -312,6 +312,35 @@ fn human_body(
                     }
                 }
             }
+            if !d.agents.is_empty() {
+                writeln!(out, "Agents")?;
+            }
+            for a in &d.agents {
+                let mark = |t: &speccoder_core::AgentTick| match t.state {
+                    speccoder_core::TickState::Yes => look.cell(Glyph::Verified),
+                    speccoder_core::TickState::No => look.cell(Glyph::Failed),
+                    speccoder_core::TickState::Unknown => look.cell(Glyph::Ready),
+                };
+                let chosen = if a.chosen { " (configured)" } else { "" };
+                writeln!(out, "  {}{chosen}", a.name)?;
+                for (what, t) in [
+                    ("installed", &a.installed),
+                    ("signed in", &a.signed_in),
+                    ("asks first", &a.asks_first),
+                ] {
+                    writeln!(out, "    {} {what:<10} {}", mark(t), t.detail)?;
+                    if t.state != speccoder_core::TickState::Yes {
+                        for f in &t.fix {
+                            let f = f.strip_prefix("→ ").unwrap_or(f);
+                            writeln!(
+                                out,
+                                "        {}",
+                                look.paint(Token::Accent, &format!("fix: {f}"))
+                            )?;
+                        }
+                    }
+                }
+            }
             writeln!(out, "{}", result.message())
         }
         (_, Some(CommandData::Control(_))) => {

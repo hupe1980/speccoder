@@ -307,7 +307,7 @@ fn stop_reason_name(r: StopReason) -> &'static str {
 }
 
 /// The sign-in methods the agent advertised, in its own words.
-fn sign_in_methods(methods: &Value, argv: &[String]) -> Vec<SignIn> {
+pub(super) fn sign_in_methods(methods: &Value, argv: &[String]) -> Vec<SignIn> {
     methods
         .as_array()
         .into_iter()
@@ -347,7 +347,7 @@ fn sign_in_methods(methods: &Value, argv: &[String]) -> Vec<SignIn> {
 
 /// What the client declares: the file system and terminals, served
 /// through speccoder; terminal sign-in, so an agent names its login.
-fn declared() -> ClientCapabilities {
+pub(super) fn declared() -> ClientCapabilities {
     ClientCapabilities::new()
         .fs(FileSystemCapabilities::new()
             .read_text_file(true)
@@ -360,7 +360,7 @@ fn declared() -> ClientCapabilities {
 /// agent in this process's directory, and an adapter resolves its own
 /// configuration and `npx` packages from where it starts — so the command
 /// is started through `sh`, which changes directory and `exec`s it.
-fn in_directory(config: AcpAgentConfig, dir: &std::path::Path) -> AcpAgentConfig {
+pub(super) fn in_directory(config: AcpAgentConfig, dir: &std::path::Path) -> AcpAgentConfig {
     if cfg!(not(unix)) {
         return config;
     }

@@ -495,6 +495,14 @@ async fn doctor(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Json<
     envelope(&s, &r)
 }
 
+/// `doctor --agents`: every agent's card; installed ones are asked for a
+/// session, never a prompt.
+async fn agents(State(s): State<Shared>) -> Json<Value> {
+    let root = s.root.get();
+    let r = off(move || speccoder_runtime::service::doctor::agents(&root, None)).await;
+    envelope(&s, &r)
+}
+
 async fn config(State(s): State<Shared>) -> Json<Value> {
     let root = s.root.get();
     let r = off(move || speccoder_runtime::service::settings::show(&root)).await;
@@ -1119,6 +1127,7 @@ pub fn router(s: Shared) -> Router {
         .route("/api/diff", get(diff))
         .route("/api/documents", get(documents))
         .route("/api/doctor", get(doctor))
+        .route("/api/agents", get(agents))
         .route("/api/job", get(job))
         .route("/api/live", get(live))
         .route("/api/config", get(config).post(config_save))

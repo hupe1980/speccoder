@@ -800,6 +800,131 @@ pub struct DoctorReport {
     pub os: String,
     /// Every check, in order.
     pub checks: Vec<DoctorCheck>,
+    /// The agents that can make attempts over ACP, each ready or not
+    /// (`doctor --agents`; empty otherwise).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub agents: Vec<AgentCard>,
+}
+
+/// One agent that can make attempts, and how ready it is: installed,
+/// signed in, asking before it acts — each with its one action.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct AgentCard {
+    /// `agent = "<id>"` in `[executor]`.
+    pub id: String,
+    /// Its name.
+    pub name: String,
+    /// It is the configured `[executor]` agent.
+    pub chosen: bool,
+    /// Its command can start.
+    pub installed: AgentTick,
+    /// It answers a session without asking for a sign-in.
+    pub signed_in: AgentTick,
+    /// speccoder can put it into a mode that asks before it acts.
+    pub asks_first: AgentTick,
+}
+
+impl AgentCard {
+    /// Every tick is a yes.
+    #[must_use]
+    pub fn ready(&self) -> bool {
+        [&self.installed, &self.signed_in, &self.asks_first]
+            .iter()
+            .all(|t| t.state == TickState::Yes)
+    }
+}
+
+/// Yes, no, or not known (and why).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum TickState {
+    /// Yes.
+    Yes,
+    /// No: its action fixes it.
+    No,
+    /// Not known without running it (its detail says why).
+    Unknown,
+}
+
+/// One tick of an [`AgentCard`]. Serialised with `fix_steps`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AgentTick {
+    /// Yes, no or not known.
+    pub state: TickState,
+    /// What was found.
+    pub detail: String,
+    /// Its action, as lines.
+    pub fix: Vec<String>,
+    /// The person's own commands among them, as built.
+    pub commands: Vec<crate::step::Argvs>,
+}
+
+impl AgentTick {
+    /// A tick in `state` with `detail` and no action.
+    #[must_use]
+    pub fn new(state: TickState, detail: impl Into<String>) -> Self {
+        Self {
+            state,
+            detail: detail.into(),
+            fix: Vec::new(),
+            commands: Vec::new(),
+        }
+    }
+
+    /// With the person's own command as its action.
+    #[must_use]
+    pub fn with_command(mut self, argvs: crate::step::Argvs) -> Self {
+        self.fix.push(crate::step::render(&argvs));
+        self.commands.push(argvs);
+        self
+    }
+
+    /// With words as its action.
+    #[must_use]
+    pub fn with_words(mut self, words: impl Into<String>) -> Self {
+        self.fix.push(format!("→ {}", words.into()));
+        self
+    }
+}
+
+/// One tick of an agent card.
+#[derive(Serialize, schemars::JsonSchema)]
+#[schemars(rename = "AgentTick")]
+struct ShownTick<'a> {
+    /// Yes, no or not known.
+    state: TickState,
+    /// What was found.
+    detail: &'a str,
+    /// Its action, as lines.
+    fix: &'a [String],
+    /// The same lines, with how an interface takes each.
+    fix_steps: Vec<crate::step::Step>,
+}
+
+impl Serialize for AgentTick {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        ShownTick {
+            state: self.state,
+            detail: &self.detail,
+            fix: &self.fix,
+            fix_steps: crate::step::steps_with(
+                &self.fix,
+                &self.commands,
+                crate::step::Context::default(),
+            ),
+        }
+        .serialize(serializer)
+    }
+}
+
+impl schemars::JsonSchema for AgentTick {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "AgentTick".into()
+    }
+
+    fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        ShownTick::json_schema(generator)
+    }
 }
 
 impl CommandData {

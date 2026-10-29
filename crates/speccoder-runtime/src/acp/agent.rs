@@ -30,6 +30,15 @@ pub const PRESETS: &[Preset] = &[
         installed: Some(&["copilot", "--acp"]),
         login: "copilot login",
     },
+    // The registry distributes OpenCode as a binary; there is no `npx`
+    // entry to pin.
+    Preset {
+        id: "opencode",
+        name: "OpenCode",
+        argv: &["opencode", "acp"],
+        installed: None,
+        login: "opencode auth login",
+    },
     Preset {
         id: "claude",
         name: "Claude Code",
@@ -50,15 +59,6 @@ pub const PRESETS: &[Preset] = &[
         argv: &["npx", "-y", "@google/gemini-cli@0.66.0", "--acp"],
         installed: None,
         login: "gemini (sign in when it asks)",
-    },
-    // The registry distributes OpenCode as a binary; there is no `npx`
-    // entry to pin.
-    Preset {
-        id: "opencode",
-        name: "OpenCode",
-        argv: &["opencode", "acp"],
-        installed: None,
-        login: "opencode auth login",
     },
 ];
 

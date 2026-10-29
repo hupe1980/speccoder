@@ -132,7 +132,7 @@ pub mod documents {
 
 /// The machine and the project, checked.
 pub mod doctor {
-    pub use crate::doctor::run;
+    pub use crate::doctor::{agents, run};
 }
 
 /// `speccoder.toml`.
