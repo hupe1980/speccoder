@@ -14,8 +14,11 @@ adheres to [Semantic Versioning](https://semver.org/).
   Client Protocol, its `npx` adapters pinned to exact versions. speccoder
   puts it into its ask-first permission mode, decides every permission
   request with the native policy and approvals (never answering
-  "always"), serves its file and terminal calls through the protected
-  paths, masking and OS sandbox, and judges the attempt as every attempt.
+  "always"; a command the agent runs itself always asks you, as it runs
+  outside the sandbox), serves its file and terminal calls through the
+  protected paths, masking and OS sandbox, and judges the attempt as
+  every attempt. A change the agent makes without asking (an allow rule
+  in its own settings) is reported as *decides alone*.
   The report and the live card show the agent, its plan and what
   speccoder decided (asked · allowed · waited for you · refused), and say
   *decides alone* when no ask-first mode was set. A sign-in it needs stops
@@ -34,6 +37,8 @@ adheres to [Semantic Versioning](https://semver.org/).
   attempted by `speccoder run`; the run asks, or passes it by and ends
   with `TASK-YOURS`. So is a task whose attempt stopped `BLOCKED`, until
   the person answers.
+- An acceptance author's command given as one string
+  (`["cargo test --test acceptance_us1"]`) is that command's words.
 - **No stop is a dead end.** An honest `BLOCKED` stop, or a `[YOU]`
   task, offers **I did it**, **Hint & retry** and **Skip**: one key each
   at a terminal (`d`/`h`/`s`), buttons in Needs You and the inspector,
