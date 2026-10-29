@@ -80,6 +80,12 @@ pub enum How {
         /// It reads the keyboard (a login): a terminal of the person's
         /// own, not a panel.
         interactive: bool,
+        /// What it changes outside the project, for a command that runs
+        /// outside the sandbox by its nature (`changes your global git
+        /// config`); `None`: it runs in the sandbox, writes confined to
+        /// the project and the package caches.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        outside: Option<String>,
         /// The host's proof that it issued exactly these argvs; only a
         /// host that runs commands sets it.
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -392,8 +398,6 @@ const BUILT: &[&str] = &[
     "git status",
     "speccoder spec archive {change} --yes",
     "speccoder config commit",
-    "speccoder config get {key}",
-    "speccoder config unset {key}",
     "speccoder help",
     "speccoder help advanced",
     "speccoder sample --fresh --yes",
@@ -409,6 +413,9 @@ fn templates() -> &'static [Argvs] {
         crate::codes::CATALOG
             .iter()
             .flat_map(|e| e.fix.iter())
+            // A line about another command (`speccoder {command} --help`)
+            // is said, never signed: its slot names any command.
+            .filter(|l| !l.contains("{command}"))
             .chain(BUILT.iter())
             .filter_map(|l| argvs(said(l)))
             .collect()
@@ -491,8 +498,28 @@ fn command(argvs: Argvs) -> How {
     let token = SIGNER.with(|s| s.borrow().as_ref().map(|f| f(&argvs, interactive)));
     How::Command {
         interactive,
+        outside: argvs.iter().find_map(|a| outside(a)),
         argvs,
         token,
+    }
+}
+
+/// What `argv` changes outside the project when it is one of the few
+/// fixes that, by their nature, cannot run confined to it: those run
+/// outside the sandbox, and say so. Every other runs in it.
+#[must_use]
+pub fn outside(argv: &[String]) -> Option<String> {
+    match argv
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>()
+        .as_slice()
+    {
+        ["git", "config", "--global", ..] => Some("changes your global git config".to_owned()),
+        ["git", "worktree", "remove", path] => Some(format!(
+            "removes the worktree at {path}, outside the project"
+        )),
+        _ => None,
     }
 }
 
@@ -895,7 +922,7 @@ fn speccoder(argv: &[String], constant: bool) -> How {
             "The feature",
         ),
         (Some("init"), _) => view(View::Setup, None),
-        (Some("config"), None) => view(View::Settings, None),
+        (Some("config"), None | Some("get" | "unset")) => view(View::Settings, None),
         (Some("config"), Some("set")) if a.iter().any(|w| has_blank(w)) => {
             view(View::Settings, None)
         }
@@ -1178,6 +1205,37 @@ mod tests {
             h("speccoder run --ignore-checklists --feature 001-x"),
             How::Command { .. }
         ));
+    }
+
+    #[test]
+    fn free_slots_and_lines_about_other_commands_are_never_signed() {
+        // `speccoder {command} --help` names any command: said, not run.
+        for line in [
+            "speccoder run --help",
+            "speccoder run --json",
+            "speccoder doctor --events",
+        ] {
+            assert!(!matches!(h(line), How::Command { .. }), "{line}");
+        }
+        // A key is the settings' to show, never a free slot.
+        assert_eq!(
+            view_of("speccoder config get model.region").0,
+            View::Settings
+        );
+        assert_eq!(
+            view_of("speccoder config unset model.base_url").0,
+            View::Settings
+        );
+    }
+
+    #[test]
+    fn what_writes_outside_the_project_says_so() {
+        let global = person(vec![s(&["git", "config", "--global", "gpg.format", "ssh"])]);
+        assert!(
+            matches!(global.how, How::Command { outside: Some(o), .. } if o == "changes your global git config")
+        );
+        let local = person(vec![s(&["npm", "install"])]);
+        assert!(matches!(local.how, How::Command { outside: None, .. }));
     }
 
     #[test]

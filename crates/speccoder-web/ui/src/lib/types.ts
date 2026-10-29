@@ -85,6 +85,8 @@ export interface Project {
   os?: string;
   /** The host serves the desktop window (it can open a terminal). */
   window?: boolean;
+  /** The person's commands run in an OS sandbox here. */
+  sandbox?: boolean;
   features: { current: string | null; reason_text: string; features: FeatureEntry[] } | null;
   /** The format's planning chain, by installed skill name. */
   planning?: { creates: string | null; toward: string[]; checks: string | null; revises: string | null };

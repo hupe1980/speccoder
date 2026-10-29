@@ -15,6 +15,8 @@
   // they were printed in.
   const exact = $derived(s.how.how === "command" ? render(s.how.argvs) : s.command);
   const own = $derived(s.how.how === "command" && ownCommand(s.how.argvs));
+  // A fix that writes outside the project by its nature runs unsandboxed: what it changes.
+  const outside = $derived(s.how.how === "command" ? (s.how.outside ?? null) : null);
   const run = $derived(app.fixRun);
   const running = $derived(!!run && !run.result);
   const ended = $derived(run?.result ?? null);
@@ -56,7 +58,11 @@
           {#if own}
             <p id="p-what">One of speccoder's own commands: it runs here as from your terminal, its run shown as any run is; Cancel asks it to stop.</p>
           {:else}
-            <p id="p-what">speccoder printed it as a fix. It runs as you — your environment, your keys — outside the sandbox, in the project folder: what you would type yourself. Cancel stops it and everything it started.</p>
+            <p id="p-what">speccoder printed it as a fix. It runs as you, in the project folder, with your environment (not your model keys).
+              {#if outside}<strong>It runs unsandboxed: it {outside}.</strong>
+              {:else if !app.project?.sandbox}<strong>It runs unsandboxed: no OS sandbox here.</strong>
+              {:else}It runs in the sandbox, with network: it writes only to the project and the package caches.{/if}
+              Cancel stops it and everything it started.</p>
           {/if}
         {/if}
       </div>

@@ -10,16 +10,9 @@
     ],
     "fix_steps": [
       {
-        "argvs": [
-          [
-            "speccoder",
-            "config",
-            "--help"
-          ]
-        ],
         "command": "speccoder config --help",
-        "how": "command",
-        "interactive": false
+        "how": "words",
+        "why": "it names files or values of this project: run it in your shell"
       }
     ],
     "message": "not a call id",

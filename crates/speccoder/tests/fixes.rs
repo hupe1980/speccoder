@@ -366,3 +366,34 @@ fn speccoders_own_command_runs_as_speccoder() {
     assert_ne!(result["code"], "FIX-FAILED", "{result}");
     assert_ne!(result["command"], "fix", "{result}");
 }
+
+/// A file name is never a pattern: `*.json` adds that file, not every
+/// JSON file of the repository.
+#[test]
+fn a_file_name_is_never_a_pathspec() {
+    let dir = project();
+    let r = dir.path();
+    git(r, &["add", "-A"]);
+    git(r, &["commit", "-q", "-m", "config"]);
+    fs::write(r.join("*.json"), "{}").unwrap();
+    fs::create_dir_all(r.join("secrets")).unwrap();
+    fs::write(r.join("secrets/prod-key.json"), "{\"key\": 1}").unwrap();
+    let host = Host::start(r);
+    let (_, doctor) = http(host.port, "GET", "/api/doctor", &host.auth, "");
+    let step = doctor["data"]["checks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["check"] == "untracked")
+        .map(|c| c["fix_steps"][0].clone())
+        .unwrap_or_else(|| panic!("{doctor}"));
+    let rx = host.events();
+    next(&rx, "hello");
+    let body = json!({ "argvs": step["argvs"], "token": step["token"] }).to_string();
+    let (status, reply) = http(host.port, "POST", "/api/fix/run", &host.auth, &body);
+    assert_eq!(status, 200, "{reply}");
+    let done = next(&rx, "done");
+    assert_eq!(done["result"]["status"], "ok", "{done}");
+    let committed = git(r, &["show", "--name-only", "--format=", "HEAD"]);
+    assert_eq!(committed.trim(), "*.json", "{committed}");
+}

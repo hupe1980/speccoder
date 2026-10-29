@@ -16,7 +16,7 @@ pub mod actions {
 /// The person's own commands, run for them (a fix speccoder printed), and
 /// a terminal at the project.
 pub mod person {
-    pub use crate::person::{Stream, TIMEOUT, open_terminal, run, shown, speccoder};
+    pub use crate::person::{Stream, TIMEOUT, open_terminal, run, sandboxed, shown, speccoder};
 }
 
 /// What went wrong, as a block to copy; the setup as a bug report.

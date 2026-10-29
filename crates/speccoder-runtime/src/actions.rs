@@ -1223,6 +1223,9 @@ mod tests {
             || line.contains("--remote <")
             // Another project's command: run there.
             || line.split_whitespace().any(|w| w == "-C")
+            // A line about a command's own flags (`{command} --help`): said.
+            || line.split_whitespace().any(|w| matches!(w, "--help" | "--json" | "--events"))
+                && line.split_whitespace().count() == 3
     }
 
     /// String literals that start `speccoder ` and are a message's prose,

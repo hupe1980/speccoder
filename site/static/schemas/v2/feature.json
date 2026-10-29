@@ -2204,6 +2204,13 @@
               "description": "It reads the keyboard (a login): a terminal of the person's\nown, not a panel.",
               "type": "boolean"
             },
+            "outside": {
+              "description": "What it changes outside the project, for a command that runs\noutside the sandbox by its nature (`changes your global git\nconfig`); `None`: it runs in the sandbox, writes confined to\nthe project and the package caches.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "token": {
               "description": "The host's proof that it issued exactly these argvs; only a\nhost that runs commands sets it.",
               "type": [

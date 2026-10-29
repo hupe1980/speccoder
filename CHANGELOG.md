@@ -25,8 +25,10 @@ adheres to [Semantic Versioning](https://semver.org/).
   next step that is a speccoder command performs or opens its view
   (doctor, explain, report, …) instead of being copied. The person's own
   fix (`npm install`, `git add … && git commit …`) runs from a card
-  after a yes — as you, outside the sandbox, streamed, cancellable with
-  everything it started — and only as speccoder issued it: built as
+  after a yes — as you, in the OS sandbox with the network on (the
+  few fixes that change something outside the project, and machines
+  without a sandbox, say they run unsandboxed), streamed, cancellable
+  with everything it started — and only as speccoder issued it: built as
   argvs (a file name stays one argument) or a constant fix line, signed
   by the host; speccoder's own commands run as speccoder; sign-ins open a terminal
   (window) or copy (tab); `export` says why it stays in your shell.

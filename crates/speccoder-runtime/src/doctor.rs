@@ -730,7 +730,10 @@ fn untracked_check(root: &Path, feature: Option<&str>) -> Option<DoctorCheck> {
     }
     let list = found.join(" ");
     // The paths are the repository's: argvs, never a line read back.
-    let mut add = vec!["git".to_owned(), "add".to_owned(), "--".to_owned()];
+    // Literal pathspecs: a name like `*.json` or `:(top)x` is that file.
+    let mut add = ["git", "--literal-pathspecs", "add", "--"]
+        .map(str::to_owned)
+        .to_vec();
     add.extend(found.iter().cloned());
     let commit = ["git", "commit", "-m", "Track project config"]
         .map(str::to_owned)

@@ -9,7 +9,7 @@ const host = vi.hoisted(() => ({
   app: {
     job: null as { running: boolean } | null,
     view: "board",
-    project: { root: "/work/app", window: false } as { root: string; window: boolean },
+    project: { root: "/work/app", window: false, sandbox: true } as { root: string; window: boolean; sandbox: boolean },
     personStep: null as unknown,
     fixRun: null as unknown,
     runFix: vi.fn(async () => {}),
@@ -46,11 +46,25 @@ describe("the person's step", () => {
     // What runs, never the line it was printed in.
     expect(text).not.toContain("fill the cache");
     expect(text).toContain("/work/app");
-    expect(text).toContain("outside the sandbox");
+    expect(text).toContain("in the sandbox, with network");
     // One Enter never starts it: the focus is on Copy.
     expect((document.activeElement as HTMLElement | null)?.textContent?.trim()).toBe("Copy");
     button("Run")!.click();
     expect(host.app.runFix).toHaveBeenCalled();
+  });
+
+  it("says when it runs unsandboxed, and what it changes", () => {
+    host.app.personStep = { command: "git config --global gpg.format ssh", how: { how: "command", argvs: [["git", "config", "--global", "gpg.format", "ssh"]], interactive: false, outside: "changes your global git config", token: "t" } };
+    shown = mount(StepSheet, { target: document.body });
+    flushSync();
+    expect(document.body.textContent).toContain("It runs unsandboxed: it changes your global git config.");
+    unmount(shown);
+    host.app.project.sandbox = false;
+    host.app.personStep = { command: "npm install", how: { how: "command", argvs: [["npm", "install"]], interactive: false, token: "t" } };
+    shown = mount(StepSheet, { target: document.body });
+    flushSync();
+    expect(document.body.textContent).toContain("It runs unsandboxed: no OS sandbox here.");
+    host.app.project.sandbox = true;
   });
 
   it("streams the output with Cancel, its links and codes clickable", () => {

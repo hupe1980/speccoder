@@ -308,6 +308,7 @@ async fn project(State(s): State<Shared>) -> Json<Value> {
                 "version": env!("CARGO_PKG_VERSION"),
                 "os": format!("{} {}", std::env::consts::OS, std::env::consts::ARCH),
                 "window": window,
+                "sandbox": speccoder_runtime::service::person::sandboxed(),
                 "planning": speccoder_runtime::service::planning_words(&root),
                 "sample": welcome::sample_of(&root),
             })
@@ -994,7 +995,24 @@ async fn fix_run(State(s): State<Shared>, Json(b): Json<FixBody>) -> Response {
     // person's command runner.
     let started = match b.argvs.as_slice() {
         [one] if one.first().map(String::as_str) == Some("speccoder") => {
-            s.hub.start_speccoder(one[1..].to_vec(), root)
+            let args = one[1..].to_vec();
+            // A slot a constant line leaves free names a unit of this project.
+            if let [spec, archive, change, ..] = args.as_slice()
+                && spec == "spec"
+                && archive == "archive"
+                && !change.starts_with('-')
+            {
+                let (root2, change2) = (root.clone(), change.clone());
+                let known = off(move || unit_exists(&root2, &change2)).await;
+                if !known {
+                    return (
+                        StatusCode::FORBIDDEN,
+                        Json(json!({ "error": format!("`{change}` is no unit of this project") })),
+                    )
+                        .into_response();
+                }
+            }
+            s.hub.start_speccoder(args, root)
         }
         argvs
             if argvs
@@ -1012,6 +1030,14 @@ async fn fix_run(State(s): State<Shared>, Json(b): Json<FixBody>) -> Response {
     match started {
         Ok(id) => Json(json!({ "id": id })).into_response(),
         Err(e) => (StatusCode::CONFLICT, Json(json!({ "error": e }))).into_response(),
+    }
+}
+
+/// Whether `name` is a unit (a feature, a change) of the project at `root`.
+fn unit_exists(root: &Path, name: &str) -> bool {
+    match speccoder_runtime::service::current::list(root, None).data() {
+        Some(CommandData::Features(f)) => f.features.iter().any(|e| e.name == name),
+        _ => false,
     }
 }
 
@@ -1222,6 +1248,20 @@ pub fn serve(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A free slot of a signed speccoder line (`spec archive {change}`)
+    /// takes only a unit the project has.
+    #[test]
+    fn an_archive_names_a_unit_the_project_has() {
+        let dir = tempfile::tempdir().unwrap_or_else(|e| panic!("{e}"));
+        let r = dir.path();
+        std::fs::create_dir_all(r.join(".specify/memory")).unwrap_or_else(|e| panic!("{e}"));
+        std::fs::create_dir_all(r.join("specs/001-x")).unwrap_or_else(|e| panic!("{e}"));
+        std::fs::write(r.join("specs/001-x/spec.md"), "# Spec\n").unwrap_or_else(|e| panic!("{e}"));
+        assert!(unit_exists(r, "001-x"));
+        assert!(!unit_exists(r, "002-other"));
+        assert!(!unit_exists(r, "--yes"));
+    }
 
     fn q(commit: Option<&str>, reference: Option<&str>) -> FeatureQuery {
         FeatureQuery {

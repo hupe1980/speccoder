@@ -10,16 +10,9 @@
     ],
     "fix_steps": [
       {
-        "argvs": [
-          [
-            "speccoder",
-            "sample",
-            "--help"
-          ]
-        ],
         "command": "speccoder sample --help",
-        "how": "command",
-        "interactive": false
+        "how": "words",
+        "why": "it names files or values of this project: run it in your shell"
       }
     ],
     "message": "these are the sample's checks: run them in its copy (speccoder sample)",

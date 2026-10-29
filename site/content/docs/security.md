@@ -122,7 +122,11 @@ With an [`[executor]`](@/docs/integrations.md#external-agents), another agent ma
 
 ## Your own commands from the app
 
-A fix that is your own command (`npm install`) can be run from the [web app](@/docs/web.md#fixes-and-what-went-wrong) after you confirm it. It runs as you, in the project folder, **outside the sandbox**, with your full environment — your model keys among it, as in your own shell — for ten minutes at most; Cancel stops it and everything it started. Only a command speccoder issued runs: built as exact argvs (a file name stays one argument, however it is spelled), or one of speccoder's constant fix lines, and signed by the host for this project. The host refuses anything else — argvs the page composed or changed, a model's suggestion, a sign-in that must run in a terminal. speccoder's own commands run as speccoder, never through this path. Output is masked like every other.
+A fix that is your own command (`npm install`, `git add … && git commit …`) can be run from the [web app](@/docs/web.md#fixes-and-what-went-wrong) after you confirm it. It runs as you, in the project folder, with your environment minus the variables speccoder treats as secret (model keys among them), and **in speccoder's OS sandbox with the network on**: it writes only to the project (its `.git` included), the package caches and a private temporary folder, and your credentials stay unreadable — so an install's own scripts (`postinstall`, a build backend) cannot write elsewhere. Ten minutes at most; Cancel stops it and everything it started. Its program is found on an absolute `PATH` entry outside the project, never one the repository brings.
+
+Two kinds run unsandboxed, and the card says so before **Run**: the few fixes that change something outside the project by their nature (`git config --global …` changes your global git config; removing a worktree elsewhere), and every fix where the OS has no sandbox.
+
+Only a command speccoder issued runs: built as exact argvs (a file name stays one argument and one literal path), or one of speccoder's constant fix lines, and signed by the host for this project. The host refuses anything else — argvs the page composed or changed, a model's suggestion, a sign-in that must run in a terminal. speccoder's own commands run as speccoder, never through this path. Output is masked like every other.
 
 ## What it does not protect against
 

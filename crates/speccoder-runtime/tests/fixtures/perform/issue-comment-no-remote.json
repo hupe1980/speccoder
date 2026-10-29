@@ -34,17 +34,9 @@
         "text": null
       },
       {
-        "argvs": [
-          [
-            "speccoder",
-            "issue",
-            "--feature",
-            "<name>"
-          ]
-        ],
         "command": "speccoder issue --feature <name>",
-        "how": "command",
-        "interactive": false
+        "how": "words",
+        "why": "it names files or values of this project: run it in your shell"
       }
     ],
     "message": "2 features, none selected; 1 errors, 0 warnings",

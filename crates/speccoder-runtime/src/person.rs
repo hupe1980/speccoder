@@ -182,6 +182,87 @@ fn follow(
     }
 }
 
+/// Environment variables, in order.
+type Env = Vec<(String, String)>;
+
+/// The program `name` names: the first executable of that name in an
+/// absolute `PATH` entry outside the project — never one the repository
+/// could bring (`.`, `node_modules/.bin`, a folder of the project).
+fn program(
+    name: &str,
+    root: &Path,
+    env: &[(String, String)],
+) -> Result<std::path::PathBuf, String> {
+    if name.contains('/') {
+        return Err(format!("`{name}` is a path, not a program on PATH"));
+    }
+    let root = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
+    let path = env
+        .iter()
+        .find(|(k, _)| k == "PATH")
+        .map_or("/usr/bin:/bin", |(_, v)| v.as_str());
+    path.split(':')
+        .map(Path::new)
+        .filter(|d| d.is_absolute())
+        .filter_map(|d| std::fs::canonicalize(d).ok())
+        .filter(|d| !d.starts_with(&root))
+        .find_map(|d| {
+            crate::sandbox::resolve_executable(
+                name,
+                &d,
+                &[("PATH".to_owned(), d.display().to_string())],
+            )
+        })
+        .filter(|p| !p.starts_with(&root))
+        .ok_or_else(|| format!("`{name}` is not on PATH outside the project"))
+}
+
+/// How one argv starts: confined by speccoder's OS sandbox — writes to the
+/// project (its `.git` among it), the package caches and a private
+/// temporary folder, credentials unreadable, the network on (a fix is an
+/// install, most often) — unless it is one of the few fixes that write
+/// outside the project by their nature, or there is no sandbox here. The
+/// person's environment, without the variables speccoder treats as secret.
+fn confined(
+    argv: &[String],
+    root: &Path,
+    env: &[(String, String)],
+) -> Result<(Vec<String>, Env), String> {
+    let (name, args) = argv.split_first().ok_or("an empty command")?;
+    let mut full = vec![program(name, root, env)?.display().to_string()];
+    full.extend(args.iter().cloned());
+    let mut env: Vec<(String, String)> = env
+        .iter()
+        .filter(|(k, _)| !crate::verify::process::is_secret(k))
+        .cloned()
+        .collect();
+    if speccoder_core::step::outside(argv).is_some() {
+        return Ok((full, env));
+    }
+    let Ok(backend) = crate::sandbox::backend() else {
+        return Ok((full, env));
+    };
+    let home = env
+        .iter()
+        .find(|(k, _)| k == "HOME")
+        .map(|(_, v)| std::path::PathBuf::from(v));
+    let profile =
+        crate::sandbox::Profile::new(root, &crate::sandbox::Config::default(), home.as_deref())
+            .with_network(crate::sandbox::Network::On);
+    std::fs::create_dir_all(&profile.tmp)
+        .map_err(|e| format!("the sandbox's temporary folder: {e}"))?;
+    let tmp = profile.tmp.display().to_string();
+    env.retain(|(k, _)| !matches!(k.as_str(), "TMPDIR" | "TMP" | "TEMP"));
+    env.extend(["TMPDIR", "TMP", "TEMP"].map(|k| (k.to_owned(), tmp.clone())));
+    Ok((crate::sandbox::wrap(&profile, &backend, &full)?, env))
+}
+
+/// Whether the person's commands run in an OS sandbox here.
+#[must_use]
+pub fn sandboxed() -> bool {
+    crate::sandbox::backend().is_ok()
+}
+
 /// Runs the person's own `argvs` in `root`, one after the other while each
 /// succeeds, each line of output handed to `line` (masked). Ends early, with
 /// everything it started, when `cancel` turns true or after `timeout`.
@@ -193,6 +274,18 @@ pub fn run(
     cancel: &Arc<AtomicBool>,
     line: &dyn Fn(Stream, &str),
 ) -> CommandResult {
+    let env: Vec<(String, String)> = std::env::vars().collect();
+    run_in(root, argvs, &env, timeout, cancel, line)
+}
+
+fn run_in(
+    root: &Path,
+    argvs: &[Vec<String>],
+    env: &[(String, String)],
+    timeout: Duration,
+    cancel: &Arc<AtomicBool>,
+    line: &dyn Fn(Stream, &str),
+) -> CommandResult {
     let what = shown(argvs);
     let failed = |message: String| {
         CommandResult::new("fix", CommandStatus::Error, &crate::secrets::mask(&message))
@@ -200,12 +293,16 @@ pub fn run(
     };
     let deadline = Instant::now() + timeout;
     for argv in argvs {
-        let Some((program, args)) = argv.split_first() else {
+        let one = shown(std::slice::from_ref(argv));
+        let (start, vars) = match confined(argv, root, env) {
+            Ok(x) => x,
+            Err(e) => return failed(format!("`{one}` could not start: {e}")),
+        };
+        let Some((program, args)) = start.split_first() else {
             return failed("an empty command".to_owned());
         };
-        let one = shown(std::slice::from_ref(argv));
         let mut cmd = Command::new(program);
-        cmd.args(args);
+        cmd.args(args).env_clear().envs(vars);
         let mut child = match spawn(cmd, root) {
             Ok(c) => c,
             Err(e) => return failed(format!("`{one}` could not start: {e}")),
@@ -472,6 +569,73 @@ mod tests {
         assert!(!background.is_empty());
         std::thread::sleep(Duration::from_millis(200));
         assert!(!alive(&background), "{background} survived the stop");
+    }
+
+    #[test]
+    fn it_runs_confined_to_the_project_where_there_is_a_sandbox() {
+        if !sandboxed() {
+            return;
+        }
+        let dir = tempfile::tempdir().unwrap_or_else(|e| panic!("{e}"));
+        let outside = tempfile::tempdir().unwrap_or_else(|e| panic!("{e}"));
+        let escaped = outside.path().join("escaped");
+        let r = run(
+            dir.path(),
+            &[s(&[
+                "sh",
+                "-c",
+                &format!("touch inside && touch '{}'", escaped.display()),
+            ])],
+            TIMEOUT,
+            &Arc::new(AtomicBool::new(false)),
+            &|_, _| {},
+        );
+        assert_eq!(r.status(), CommandStatus::Error, "{}", r.message());
+        assert!(dir.path().join("inside").exists());
+        assert!(!escaped.exists(), "a write outside the project got through");
+    }
+
+    #[test]
+    fn its_program_is_never_one_the_project_brings() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let dir = tempfile::tempdir().unwrap_or_else(|e| panic!("{e}"));
+        let bin = dir.path().join("node_modules/.bin");
+        std::fs::create_dir_all(&bin).unwrap_or_else(|e| panic!("{e}"));
+        let fake = bin.join("true");
+        std::fs::write(&fake, "#!/bin/sh\ntouch planted\n").unwrap_or_else(|e| panic!("{e}"));
+        std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755))
+            .unwrap_or_else(|e| panic!("{e}"));
+        std::fs::copy(&fake, dir.path().join("true")).unwrap_or_else(|e| panic!("{e}"));
+        let env = vec![(
+            "PATH".to_owned(),
+            format!(".:node_modules/.bin:{}:/usr/bin:/bin", bin.display()),
+        )];
+        let r = run_in(
+            dir.path(),
+            &[s(&["true"])],
+            &env,
+            TIMEOUT,
+            &Arc::new(AtomicBool::new(false)),
+            &|_, _| {},
+        );
+        assert_eq!(r.status(), CommandStatus::Ok, "{}", r.message());
+        assert!(!dir.path().join("planted").exists());
+        // Only the project's own: refused.
+        let only = vec![("PATH".to_owned(), format!(".:{}", bin.display()))];
+        let r = run_in(
+            dir.path(),
+            &[s(&["true"])],
+            &only,
+            TIMEOUT,
+            &Arc::new(AtomicBool::new(false)),
+            &|_, _| {},
+        );
+        assert!(
+            r.message().contains("not on PATH outside the project"),
+            "{}",
+            r.message()
+        );
+        assert!(!dir.path().join("planted").exists());
     }
 
     #[test]

@@ -2164,6 +2164,13 @@ export type How =
      */
     interactive: boolean;
     /**
+     * What it changes outside the project, for a command that runs
+     * outside the sandbox by its nature (`changes your global git
+     * config`); `None`: it runs in the sandbox, writes confined to
+     * the project and the package caches.
+     */
+    outside?: string | null;
+    /**
      * The host's proof that it issued exactly these argvs; only a
      * host that runs commands sets it.
      */
@@ -2572,6 +2579,13 @@ export type NextStep = {
      * own, not a panel.
      */
     interactive: boolean;
+    /**
+     * What it changes outside the project, for a command that runs
+     * outside the sandbox by its nature (`changes your global git
+     * config`); `None`: it runs in the sandbox, writes confined to
+     * the project and the package caches.
+     */
+    outside?: string | null;
     /**
      * The host's proof that it issued exactly these argvs; only a
      * host that runs commands sets it.
@@ -4815,6 +4829,13 @@ export type Step = {
      * own, not a panel.
      */
     interactive: boolean;
+    /**
+     * What it changes outside the project, for a command that runs
+     * outside the sandbox by its nature (`changes your global git
+     * config`); `None`: it runs in the sandbox, writes confined to
+     * the project and the package caches.
+     */
+    outside?: string | null;
     /**
      * The host's proof that it issued exactly these argvs; only a
      * host that runs commands sets it.
