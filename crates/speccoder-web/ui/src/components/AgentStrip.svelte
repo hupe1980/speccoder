@@ -5,7 +5,7 @@
   // the agent's own words, a claim.
   import Icon from "./Icon.svelte";
 
-  type Agent = { name: string; mode?: string | null; decides_alone: boolean; plan: { content: string; status: string }[]; asked: number; allowed: number; waited: number; refused: number };
+  type Agent = { name: string; mode?: string | null; decides_alone: boolean; known?: boolean; unasked?: number; plan: { content: string; status: string }[]; asked: number; allowed: number; waited: number; refused: number };
   type Filter = "allow" | "approval" | "deny" | null;
   let { agent, dark = false, filter = null, onfilter = null, onfix = null }: { agent: Agent; dark?: boolean; filter?: Filter; onfilter?: ((f: Filter) => void) | null; onfix?: (() => void) | null } = $props();
   // Each count filters the call log to its calls (again: all of them).
@@ -25,12 +25,14 @@
     <strong>{agent.name}</strong>
     {#if agent.decides_alone}
       <span class="alone" title={agent.mode ?? ""}><Icon name="exclaim" size={11} weight={2.4} /> decides alone</span>
+    {:else if agent.known === false}
+      <span class="unknown" title={agent.mode ?? ""}>not known whether it asks</span>
     {:else}
       <span class="asks" title={agent.mode ?? ""}>asks before acting</span>
     {/if}
   </p>
   {#if agent.decides_alone}
-    <p class="mode">{agent.mode ? `${agent.mode} — ` : ""}what it does without asking never reaches speccoder.{#if onfix}{" "}<button class="link" onclick={onfix}>Make it ask first</button>{/if}</p>
+    <p class="mode">{agent.unasked ? `It changed ${agent.unasked === 1 ? "something" : `${agent.unasked} things`} without asking — ` : agent.mode ? `${agent.mode} — ` : ""}what it does without asking never reaches speccoder.{#if onfix}{" "}<button class="link" onclick={onfix}>Make it ask first</button>{/if}</p>
   {/if}
   <p class="tally mono" title="What speccoder decided of the calls the agent asked about, its files and commands">
     {#each counts as [n, what, f], i (what)}
@@ -61,6 +63,7 @@
   .dark .asks { color: rgba(235, 235, 245, 0.6); }
   .alone { display: inline-flex; align-items: center; gap: 0.2rem; padding: 0 0.4rem; border-radius: 6px; font-weight: 650; color: #000; background: #ff9f0a; }
   .mode { color: #ff9f0a; font-size: 0.76rem; }
+  .unknown { padding: 0 0.4rem; border-radius: 6px; font-weight: 600; box-shadow: inset 0 0 0 1px currentColor; color: var(--muted); }
   .tally { color: var(--text-2); font-size: 0.76rem; }
   .count { all: unset; cursor: pointer; border-radius: 4px; padding: 0 0.15rem; }
   .count:hover, .count:focus-visible { background: var(--fill-2); }

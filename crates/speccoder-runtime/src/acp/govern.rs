@@ -67,6 +67,8 @@ pub struct Governor {
     copied: Vec<String>,
     /// Milliseconds a person has spent deciding.
     asking: std::sync::atomic::AtomicU64,
+    /// Since when a person is being asked now.
+    asking_since: Mutex<Option<std::time::Instant>>,
     state: Mutex<State>,
 }
 
@@ -263,6 +265,7 @@ impl Governor {
             progress: s.progress,
             copied: s.copied,
             asking: std::sync::atomic::AtomicU64::new(0),
+            asking_since: Mutex::new(None),
             state: Mutex::new(State {
                 once: s.approved_once,
                 remembered,
@@ -305,7 +308,15 @@ impl Governor {
     /// stands while they do.
     #[must_use]
     pub fn asking(&self) -> std::time::Duration {
-        std::time::Duration::from_millis(self.asking.load(std::sync::atomic::Ordering::SeqCst))
+        let done =
+            std::time::Duration::from_millis(self.asking.load(std::sync::atomic::Ordering::SeqCst));
+        let now = self
+            .asking_since
+            .lock()
+            .ok()
+            .and_then(|s| s.map(|t| t.elapsed()))
+            .unwrap_or_default();
+        done + now
     }
 
     /// The agent's words since its last call.
@@ -338,12 +349,22 @@ impl Governor {
             "call": call.id,
         });
         self.emit(&entry);
-        if let Ok(mut s) = self.state.lock() {
+        let unasked = if let Ok(mut s) = self.state.lock() {
             s.said.clear();
-            if ok && effect && !s.decided.contains(&call.id) {
+            let new = ok && effect && !s.decided.contains(&call.id);
+            if new {
                 s.unasked += 1;
             }
             s.log.push(entry);
+            new.then_some(s.unasked)
+        } else {
+            None
+        };
+        if let Some(calls) = unasked {
+            self.event(Event::AgentUnasked {
+                task: self.task_id(),
+                calls,
+            });
         }
     }
 
@@ -565,11 +586,7 @@ impl Governor {
     /// src`) as speccoder's own reads of those paths; `None` for any other
     /// command — another option, `--`, `-`, a path that is not a plain file
     /// or directory — which is then the agent's own command.
-    fn reads(
-        &self,
-        argv: &[String],
-        cwd: Option<&str>,
-    ) -> Option<Result<Vec<Call>, String>> {
+    fn reads(&self, argv: &[String], cwd: Option<&str>) -> Option<Result<Vec<Call>, String>> {
         let (program, args) = argv.split_first()?;
         let (_, options) = READS.iter().find(|(p, _)| p == program)?;
         let base = self.root.join(cwd.unwrap_or("."));
@@ -917,7 +934,7 @@ impl Governor {
             object: object.cloned(),
             changed,
             risk: risk.to_owned(),
-            claim: crate::approvals::claim(&said),
+            claim: crate::approvals::claim(&crate::secrets::mask(&said)),
             options: crate::approvals::options(risk, object.is_some(), false, kind, risk),
             run: self.run.clone(),
             ..Request::default()
@@ -960,11 +977,17 @@ impl Governor {
             ..self.present.clone()
         };
         let began = std::time::Instant::now();
+        if let Ok(mut s) = self.asking_since.lock() {
+            *s = Some(began);
+        }
         let answer: Answer = approver.ask(&present(&request, &context));
         self.asking.fetch_add(
             u64::try_from(began.elapsed().as_millis()).unwrap_or(u64::MAX),
             std::sync::atomic::Ordering::SeqCst,
         );
+        if let Ok(mut s) = self.asking_since.lock() {
+            *s = None;
+        }
         let by = answer.by.clone();
         let approver_v = serde_json::to_value(&by).unwrap_or(Value::Null);
         let operator = by.as_ref().map(Who::view);

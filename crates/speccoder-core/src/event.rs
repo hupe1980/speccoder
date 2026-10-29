@@ -60,6 +60,7 @@ pub const REGISTRY: &[Name] = &[
     p("task.finished"),
     p("agent.started"),
     p("agent.plan"),
+    p("agent.unasked"),
     p("said"),
     p("reasoning"),
     p("notice"),

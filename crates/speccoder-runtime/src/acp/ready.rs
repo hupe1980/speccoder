@@ -65,7 +65,7 @@ pub fn probe(agent: &Agent, argv: &[String]) -> Probed {
     if agent.mode.is_none()
         && let Some((k, v)) = modes::launch_profile(&agent.id).and_then(|p| p.launch_env)
     {
-        config = config.env(k, v);
+        config = config.env(k, modes::launch_value(v, std::env::var(k).ok().as_deref()));
     }
     let cwd = std::fs::canonicalize(dir.path()).unwrap_or_else(|_| dir.path().to_path_buf());
     let started = AcpAgent::new(super::session::in_directory(config, &cwd));
@@ -133,9 +133,7 @@ async fn open(
     {
         Ok(n) => n,
         Err(e) => {
-            if e.code == agent_client_protocol::ErrorCode::AuthRequired
-                || !init.auth_methods.is_empty()
-            {
+            if e.code == agent_client_protocol::ErrorCode::AuthRequired {
                 p.sign_in = Some(super::session::sign_in_methods(&methods, argv));
             }
             p.error = Some(e.message);
@@ -293,6 +291,14 @@ fn asks(
     advertised: Option<&Advertised>,
 ) -> AgentTick {
     let name = |v: &str| advertised.map_or_else(|| v.to_owned(), |a| a.name_of(v));
+    if profile.is_some_and(|p| !p.recorded)
+        && matches!(plan.why, Why::AskedForAskFirst | Why::AsksAlready)
+    {
+        return AgentTick::new(
+            TickState::Unknown,
+            "its ask-first mode is known from its source only, not recorded: not known whether it asks",
+        );
+    }
     match (plan.why, &plan.request) {
         (Why::AskedForAskFirst, Some(v)) => AgentTick::new(
             TickState::Yes,
@@ -342,6 +348,12 @@ fn recorded(p: &Preset, pin: Option<&str>) -> AgentTick {
             "no recording says which mode asks first",
         );
     };
+    if !profile.recorded {
+        return AgentTick::new(
+            TickState::Unknown,
+            "its ask-first mode is known from its source only, not recorded",
+        );
+    }
     let version = pin.and_then(|x| x.rsplit('@').next());
     match version {
         Some(v) if v != profile.agent_info.1 => AgentTick::new(

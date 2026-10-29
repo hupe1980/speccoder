@@ -575,8 +575,11 @@ class AppState {
         this.agent = null;
         break;
       case "agent_started":
-        this.agent = { name: ev.agent, mode: ev.mode, decides_alone: !!ev.decides_alone, plan: [], asked: 0, allowed: 0, waited: 0, refused: 0 };
+        this.agent = { name: ev.agent, mode: ev.mode, decides_alone: !!ev.decides_alone, known: !!ev.known, unasked: 0, plan: [], asked: 0, allowed: 0, waited: 0, refused: 0 };
         this.calls = [...this.calls.slice(-199), `${ev.agent}: ${ev.mode}`];
+        break;
+      case "agent_unasked":
+        if (this.agent) this.agent = { ...this.agent, decides_alone: true, unasked: ev.calls ?? 0 };
         break;
       case "agent_plan":
         if (this.agent) this.agent = { ...this.agent, plan: ev.entries ?? [] };

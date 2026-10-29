@@ -246,16 +246,21 @@ pub fn lines(event: &Event, seconds: Option<u64>, verbosity: Verbosity) -> Vec<S
         Event::Notice { text } if !quiet => vec![format!("» {text}")],
         // The agent making the attempt, and whether it asks first: an
         // agent that decides alone is said always, quiet or not.
+        // The mode's sentence names the agent and says it once.
         Event::AgentStarted {
-            agent,
             mode,
             decides_alone,
+            known,
             ..
-        } if !quiet || *decides_alone => vec![if *decides_alone {
-            format!("» {agent} decides alone: {mode}")
-        } else {
-            format!("» {agent}: {mode}")
-        }],
+        } if !quiet || *decides_alone || !*known => vec![format!("» {mode}")],
+        Event::AgentUnasked { calls, .. } => vec![format!(
+            "» the agent changed something without asking ({calls} so far): its own settings let it — speccoder never saw {}",
+            if *calls == 1 {
+                "that call"
+            } else {
+                "those calls"
+            }
+        )],
         Event::Bug { step, .. } => vec![format!("» {}", step.line())],
         Event::Project { step } => project_lines(step, false),
         Event::PlanningStopped {
@@ -395,7 +400,9 @@ fn token_of(event: &Event) -> Option<crate::style::Token> {
         Event::AgentStarted {
             decides_alone: true,
             ..
-        } => Token::Attention,
+        }
+        | Event::AgentStarted { known: false, .. }
+        | Event::AgentUnasked { .. } => Token::Attention,
         Event::AgentStarted { .. } => Token::Muted,
         Event::TaskFinished { outcome, .. } => match outcome.as_str() {
             "completed" => Token::Verified,
@@ -482,15 +489,18 @@ pub fn reader_lines(event: &Event, verbosity: Verbosity) -> Vec<String> {
             format!("notice: {message}"),
         ],
         Event::AgentStarted {
-            agent,
             mode,
             decides_alone,
+            known,
             ..
-        } => vec![if *decides_alone {
-            format!("warning: {agent} decides alone: {mode}")
+        } => vec![if *decides_alone || !*known {
+            format!("warning: {mode}")
         } else {
-            format!("agent: {agent}: {mode}")
+            format!("agent: {mode}")
         }],
+        Event::AgentUnasked { calls, .. } => vec![format!(
+            "warning: the agent changed something without asking ({calls} so far)"
+        )],
         Event::Said { text, .. } if !quiet => {
             vec![format!(
                 "model says: {}",
@@ -530,27 +540,38 @@ mod tests {
     use super::*;
 
     #[test]
-    fn an_agent_that_decides_alone_is_said_even_quietly() {
-        let alone = Event::AgentStarted {
+    fn an_agent_that_decides_alone_is_said_even_quietly_and_once() {
+        let event = |mode: &str, decides_alone: bool, known: bool| Event::AgentStarted {
             task: "T1".to_owned(),
             agent: "Codex".to_owned(),
-            mode: "Codex is in Auto review".to_owned(),
-            decides_alone: true,
+            mode: mode.to_owned(),
+            decides_alone,
+            known,
         };
+        let alone = event(
+            "Codex is in Auto review — decides without asking: a reviewer model decides",
+            true,
+            true,
+        );
         assert_eq!(
             lines(&alone, None, Verbosity::Quiet),
-            ["» Codex decides alone: Codex is in Auto review"]
+            ["» Codex is in Auto review — decides without asking: a reviewer model decides"]
         );
-        let asks = Event::AgentStarted {
-            task: "T1".to_owned(),
-            agent: "Codex".to_owned(),
-            mode: "asked Codex to ask before acting — you set no mode".to_owned(),
-            decides_alone: false,
-        };
+        let asks = event(
+            "asked Codex to ask before acting — you set no mode",
+            false,
+            true,
+        );
         assert!(lines(&asks, None, Verbosity::Quiet).is_empty());
+        // Not known is its own words, said also quietly, never "decides alone".
+        let unknown = event("Kimi is in turbo — not known whether it asks", false, false);
+        assert_eq!(
+            lines(&unknown, None, Verbosity::Quiet),
+            ["» Kimi is in turbo — not known whether it asks"]
+        );
         assert_eq!(
             reader_lines(&alone, Verbosity::Normal),
-            ["warning: Codex decides alone: Codex is in Auto review"]
+            ["warning: Codex is in Auto review — decides without asking: a reviewer model decides"]
         );
     }
 

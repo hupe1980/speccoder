@@ -63,7 +63,7 @@ describe("Agents", () => {
     expect(buttons).not.toContain("Use Codex");
     [...document.querySelectorAll("button")].find((b) => b.textContent?.trim() === "Use OpenCode")!.click();
     expect(use).toHaveBeenCalledWith("opencode");
-    expect(text).toContain("What an agent does without asking stays outside");
+    expect(text).toContain("Commands the agent runs itself always ask you");
   });
 });
 
@@ -95,6 +95,16 @@ describe("AgentStrip", () => {
     expect(text).toContain("decides alone");
     expect(text).toContain("Add login");
     expect(document.querySelector(".alone")).not.toBeNull();
+  });
+
+  it("says when it is not known whether an agent asks, and never calls that deciding alone", () => {
+    shown = mount(AgentStrip, {
+      target: document.body,
+      props: { agent: { name: "Kimi", mode: null, decides_alone: false, known: false, plan: [], asked: 0, allowed: 0, waited: 0, refused: 0 } },
+    });
+    flushSync();
+    expect(document.body.textContent).toContain("not known whether it asks");
+    expect(document.querySelector(".alone")).toBeNull();
   });
 
   it("says an agent that asks first asks", () => {

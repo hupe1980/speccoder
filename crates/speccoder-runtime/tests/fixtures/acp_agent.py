@@ -16,9 +16,11 @@ answers `initialize` and `session/new`, and what it does in its one turn:
         {"terminal": "cargo", "args": ["test"]},   # create, wait, output, release
         {"plan": [{"content": "...", "status": "pending"}]},
         {"tool": {"kind": "read", "title": "...", "status": "completed"}},
+        {"update": {"sessionUpdate": "current_mode_update", ...}},
         {"sleep": 5},
         {"exit": 3, "stderr": "out of credits"}],
      "stop": "end_turn",
+     "prompt_error": {"code": -32000, "message": "..."},   # instead of a stop
      "log": "PATH"}
 
 Every answer it got from the client is appended to `log` as a JSON line:
@@ -161,6 +163,8 @@ def turn(session, prompt_id):
         elif "plan" in step:
             notify(session, {"sessionUpdate": "plan", "entries": [
                 dict({"priority": "medium"}, **e) for e in step["plan"]]})
+        elif "update" in step:
+            notify(session, step["update"])
         elif "tool" in step:
             t = dict(step["tool"])
             t.setdefault("toolCallId", "tool-%d" % i)
@@ -177,6 +181,9 @@ def turn(session, prompt_id):
                 sys.stderr.write(step["stderr"] + "\n")
                 sys.stderr.flush()
             sys.exit(step["exit"])
+    if "prompt_error" in SCENARIO and not CANCELLED[0]:
+        reply(prompt_id, error=SCENARIO["prompt_error"])
+        return
     stop = "cancelled" if CANCELLED[0] else SCENARIO.get("stop", "end_turn")
     reply(prompt_id, {"stopReason": stop})
 

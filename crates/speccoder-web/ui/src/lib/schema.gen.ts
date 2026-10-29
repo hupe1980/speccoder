@@ -123,10 +123,17 @@ export interface AgentAttempt {
   /** Its permission mode, in a sentence. */
   mode: string | null;
   /**
-   * It was not put into a mode that asks first: calls it made without
-   * asking never reached speccoder.
+   * It decided some calls without asking — its mode says so, or it was
+   * seen changing something unasked: those never reached speccoder.
    */
   decides_alone: boolean;
+  /** A recording of its version says whether it asks. */
+  known: boolean;
+  /**
+   * Calls it reported changing something (an edit, a command) that
+   * never reached speccoder as a request.
+   */
+  unasked: number;
   /** What speccoder decided of what it asked. */
   tally: PermissionTally;
   /** Its plan as it last sent it (a claim). */
@@ -1673,6 +1680,16 @@ export type EventLine = {
     mode: string;
     /** Calls it makes without asking never reach speccoder. */
     decides_alone: boolean;
+    /** A recording says whether it asks. */
+    known: boolean;
+  }
+  /** An external agent changed something without asking. */
+  | {
+    type: "agent.unasked";
+    /** Task ID. */
+    task: string;
+    /** Calls so far. */
+    calls: number;
   }
   /** An external agent's plan, as it last sent it: a claim. */
   | {

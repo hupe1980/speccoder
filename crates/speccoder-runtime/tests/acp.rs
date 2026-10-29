@@ -728,8 +728,13 @@ fn the_report_carries_the_agent_its_plan_and_the_tally() {
     let calls = &report(&res).tool_calls;
     let a = report(&res).agent.as_ref().unwrap();
     assert_eq!(
-        (a.agent.as_str(), a.preset.as_str(), a.decides_alone),
-        ("scripted", "acp", true)
+        (
+            a.agent.as_str(),
+            a.preset.as_str(),
+            a.decides_alone,
+            a.known
+        ),
+        ("scripted", "acp", false, false)
     );
     assert_eq!(
         (
@@ -752,7 +757,8 @@ fn the_report_carries_the_agent_its_plan_and_the_tally() {
     let (live, _) = speccoder_runtime::progress::read_live(p.dir.path(), p.state.path()).unwrap();
     let agent = live.agent.unwrap();
     assert_eq!(agent.name, "scripted");
-    assert!(agent.decides_alone, "an unprofiled agent may decide alone");
+    // No recording says whether it asks: not known, never "decides alone".
+    assert!(!agent.decides_alone && !agent.known, "{agent:?}");
     assert_eq!(agent.plan[0].content, "Add login");
     assert_eq!(
         (agent.asked, agent.allowed, agent.refused, agent.waited),
@@ -786,6 +792,13 @@ fn plain_reads_in_a_shell_line_are_reads_and_secrets_stay_refused() {
             .collect::<Vec<_>>(),
         ["read_file", "list_files", "read_file"]
     );
+    // One count per request, however many reads one names.
+    let t = report(&res).agent.as_ref().unwrap().tally;
+    assert_eq!(
+        (t.asked, t.allowed, t.refused, t.waited),
+        (4, 1, 2, 1),
+        "{t:?}"
+    );
 }
 
 #[test]
@@ -816,4 +829,193 @@ fn a_call_no_rule_covers_is_approved_once_and_holds_next_run() {
     let second = p.run();
     assert_eq!(second.status(), CommandStatus::Ok, "{}", second.message());
     assert_eq!(chosen(&p.answers()[0]), Some("allow"));
+}
+
+/// Claude Code 0.85.1's set-up answer, in its ask-first mode.
+fn claude_asks() -> Value {
+    let values: Vec<Value> = [
+        "default",
+        "acceptEdits",
+        "plan",
+        "auto",
+        "bypassPermissions",
+    ]
+    .iter()
+    .map(|v| json!({ "value": v, "name": v }))
+    .collect();
+    json!({
+        "init": { "agentInfo": { "name": "@agentclientprotocol/claude-agent-acp", "version": "0.85.1" } },
+        "session": { "configOptions": [{ "id": "mode", "name": "Mode", "category": "mode", "type": "select", "currentValue": "default",
+            "options": values }] },
+    })
+}
+
+#[test]
+fn an_agent_in_an_asking_mode_seen_changing_things_unasked_decides_alone() {
+    let mut s = claude_asks();
+    s["steps"] = json!([
+        { "tool": { "kind": "edit", "title": "Edit src/lib.rs", "status": "completed" } },
+        { "edit": "src/lib.rs", "content": EDIT },
+        { "say": "Done." },
+    ]);
+    let p = Project::new(&s, "");
+    let res = p.run();
+    let rep = report(&res);
+    let a = rep.agent.as_ref().unwrap();
+    // Its own settings (an allow rule) let it edit without a request.
+    assert!(a.known, "{a:?}");
+    assert!(a.decides_alone, "{a:?}");
+    assert_eq!(a.unasked, 1);
+    assert!(
+        rep.notices
+            .iter()
+            .any(|n| n.contains("without asking 1 time")),
+        "{:?}",
+        rep.notices
+    );
+    // Without such a call it asks, and is said to.
+    let mut s = claude_asks();
+    s["steps"] = json!([{ "edit": "src/lib.rs", "content": EDIT }, { "say": "Done." }]);
+    let p = Project::new(&s, "");
+    let a = report(&p.run()).agent.clone().unwrap();
+    assert!(!a.decides_alone && a.known && a.unasked == 0, "{a:?}");
+}
+
+#[test]
+fn an_agent_that_moves_to_a_mode_that_decides_alone_is_stopped() {
+    let mut s = claude_asks();
+    s["steps"] = json!([
+        { "update": { "sessionUpdate": "config_option_update", "configOptions": [{ "id": "mode", "name": "Mode", "category": "mode", "type": "select", "currentValue": "bypassPermissions",
+            "options": [{ "value": "default", "name": "Default" }, { "value": "bypassPermissions", "name": "Bypass" }] }] } },
+        { "sleep": 5 },
+        { "edit": "src/lib.rs", "content": EDIT },
+        { "say": "Done." },
+    ]);
+    let p = Project::new(&s, "");
+    let res = p.run();
+    let rep = report(&res);
+    assert_eq!(rep.attempt_status, "blocked", "{}", res.message());
+    assert!(
+        rep.reason
+            .as_deref()
+            .unwrap_or_default()
+            .contains("moved to bypassPermissions, which decides without asking"),
+        "{:?}",
+        rep.reason
+    );
+    assert!(p.log().iter().any(|e| e["got"] == "session/cancel"));
+    assert!(!rep.ticked);
+}
+
+/// A person who takes their time before saying yes.
+#[derive(Debug)]
+struct Slow;
+
+impl Approver for Slow {
+    fn ask(&self, _: &Presentation) -> Answer {
+        std::thread::sleep(std::time::Duration::from_millis(3500));
+        Answer::approve(Scope::Once, None, None)
+    }
+}
+
+#[test]
+fn a_persons_time_deciding_is_not_the_attempts() {
+    let p = Project::new(
+        &json!({ "steps": [
+            permission("execute", json!({ "command": "make lint" })),
+            { "edit": "src/lib.rs", "content": EDIT },
+            { "say": "Done." },
+        ] }),
+        "",
+    );
+    let toml = fs::read_to_string(p.dir.path().join("speccoder.toml")).unwrap();
+    fs::write(
+        p.dir.path().join("speccoder.toml"),
+        format!("{toml}timeout_secs = 2\n"),
+    )
+    .unwrap();
+    git(p.dir.path(), &["commit", "-qam", "timeout"]);
+    let d: Arc<dyn ModelProvider> = FakeProvider::new();
+    let res = speccoder_runtime::run_with_approver(
+        p.dir.path(),
+        None,
+        "T005",
+        p.state.path(),
+        d,
+        None,
+        Arc::new(Slow),
+    );
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+}
+
+#[test]
+fn only_an_auth_error_means_signing_in_and_a_sign_out_mid_attempt_keeps_the_attempt() {
+    let methods = json!([{ "id": "login", "name": "Log in", "description": "Run `agent login`" }]);
+    // Another failure while it offers ways to sign in: not a sign-in.
+    let p = Project::new(
+        &json!({ "init": { "authMethods": methods }, "new_error": { "code": -32603, "message": "out of disk" } }),
+        "",
+    );
+    let res = p.run();
+    assert_ne!(
+        res.code().map(|c| c.name),
+        Some("EXECUTOR-LOGIN"),
+        "{}",
+        res.message()
+    );
+    assert!(res.message().contains("out of disk"), "{}", res.message());
+    // Signed out after it worked: the attempt is kept and judged as failed.
+    let p = Project::new(
+        &json!({
+            "init": { "authMethods": methods },
+            "steps": [{ "edit": "src/lib.rs", "content": EDIT }],
+            "prompt_error": { "code": -32000, "message": "Authentication required" },
+        }),
+        "",
+    );
+    let res = p.run();
+    assert_ne!(
+        res.code().map(|c| c.name),
+        Some("EXECUTOR-LOGIN"),
+        "{}",
+        res.message()
+    );
+    let rep = report(&res);
+    assert_eq!(rep.attempt_status, "failed");
+    assert!(
+        rep.reason.as_deref().unwrap_or_default().contains("again"),
+        "{:?}",
+        rep.reason
+    );
+    assert!(rep.saved_attempt.is_some(), "the attempt's work is saved");
+}
+
+#[test]
+fn a_copied_secret_never_reaches_the_report_through_the_agents_words() {
+    let long = "y".repeat(20_000);
+    let p = Project::new(
+        &json!({ "steps": [
+            { "plan": [{ "content": format!("use {TOKEN}"), "status": "pending" }] },
+            { "tool": { "kind": "edit", "title": "Write", "status": "completed",
+                        "rawInput": { "path": "src/x.rs", "content": format!("{TOKEN}{long}") } } },
+            { "edit": "src/lib.rs", "content": EDIT },
+            { "say": format!("Done; the token is {TOKEN}.") },
+        ] }),
+        "",
+    );
+    let res = p.run();
+    let rep = report(&res);
+    let all = serde_json::to_string(rep).unwrap();
+    assert!(!all.contains(TOKEN), "a copied value in the report");
+    let own = rep
+        .tool_calls
+        .iter()
+        .find(|c| c["decision"] == "reported")
+        .unwrap();
+    assert!(own["arguments"]["content"].as_str().unwrap().len() < 5000);
+    assert!(
+        rep.agent.as_ref().unwrap().plan[0]
+            .content
+            .starts_with("use ")
+    );
 }

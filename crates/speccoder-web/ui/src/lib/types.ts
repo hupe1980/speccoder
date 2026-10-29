@@ -237,6 +237,10 @@ export interface LiveAgent {
   name: string;
   mode: string;
   decides_alone: boolean;
+  /** A recording says whether it asks. */
+  known?: boolean;
+  /** Calls it made without asking. */
+  unasked?: number;
   plan: { content: string; status: string }[];
   asked: number;
   allowed: number;

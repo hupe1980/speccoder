@@ -251,6 +251,16 @@ pub enum Body {
         mode: String,
         /// Calls it makes without asking never reach speccoder.
         decides_alone: bool,
+        /// A recording says whether it asks.
+        known: bool,
+    },
+    /// An external agent changed something without asking.
+    #[serde(rename = "agent.unasked")]
+    AgentUnasked {
+        /// Task ID.
+        task: String,
+        /// Calls so far.
+        calls: u32,
     },
     /// An external agent's plan, as it last sent it: a claim.
     #[serde(rename = "agent.plan")]
@@ -995,11 +1005,17 @@ pub fn body(event: &Event) -> Body {
             agent,
             mode,
             decides_alone,
+            known,
         } => Body::AgentStarted {
             task: clean(task),
             agent: clean(agent),
             mode: clean(mode),
             decides_alone: *decides_alone,
+            known: *known,
+        },
+        Event::AgentUnasked { task, calls } => Body::AgentUnasked {
+            task: clean(task),
+            calls: *calls,
         },
         Event::AgentPlan { task, entries } => Body::AgentPlan {
             task: clean(task),

@@ -91,6 +91,7 @@ impl Terminals {
             .map_err(|e| format!("could not start `{}`: {e}", argv.join(" ")))?;
         let pgid = i32::try_from(child.id()).ok().map(Pid::from_raw);
         let shared: Arc<(Mutex<Shared>, Condvar)> = Arc::default();
+        let finished_reading = Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let readers: Vec<std::thread::JoinHandle<()>> = [
             child
                 .stdout
@@ -105,6 +106,7 @@ impl Terminals {
         .flatten()
         .map(|mut stream| {
             let shared = Arc::clone(&shared);
+            let finished = Arc::clone(&finished_reading);
             std::thread::spawn(move || {
                 let mut buf = [0u8; 8192];
                 while let Ok(n) = stream.read(&mut buf) {
@@ -122,6 +124,7 @@ impl Terminals {
                         }
                     }
                 }
+                finished.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             })
         })
         .collect();
@@ -141,9 +144,17 @@ impl Terminals {
             };
             // Stragglers that outlived the leader go too.
             kill(pgid);
-            for r in readers {
-                let _ = r.join();
+            // Its output, as far as it comes within a moment: a process
+            // that left the group (`setsid`) may hold the pipes open for
+            // ever, and never keeps the exit from being said.
+            let n = readers.len();
+            let read_until = Instant::now() + Duration::from_secs(2);
+            while finished_reading.load(std::sync::atomic::Ordering::SeqCst) < n
+                && Instant::now() < read_until
+            {
+                std::thread::sleep(Duration::from_millis(10));
             }
+            drop(readers);
             let exit = {
                 #[cfg(unix)]
                 let signal = status
@@ -314,5 +325,40 @@ mod tests {
         assert_eq!(exit.code, None);
         assert!(t.release(&id).is_ok());
         assert!(t.output(&id).is_err());
+    }
+
+    #[test]
+    fn a_process_that_leaves_the_group_never_keeps_the_exit_from_being_said() {
+        let t = Terminals::default();
+        let env: Vec<(String, String)> = std::env::vars().collect();
+        // Its child starts a session of its own and holds stdout open.
+        let argv = [
+            "python3",
+            "-c",
+            "import os, time\nif os.fork() == 0:\n    os.setsid()\n    time.sleep(30)\nprint('done')",
+        ]
+        .map(str::to_owned);
+        let began = Instant::now();
+        let id = t
+            .create(
+                &crate::sandbox::Runner::Plain,
+                &argv,
+                std::env::temp_dir(),
+                env,
+                None,
+                Duration::from_secs(60),
+            )
+            .unwrap_or_default();
+        let exit = t.wait(&id).unwrap_or(Exit {
+            code: None,
+            signal: None,
+        });
+        assert_eq!(exit.code, Some(0));
+        assert!(
+            began.elapsed() < Duration::from_secs(10),
+            "{:?}",
+            began.elapsed()
+        );
+        assert!(t.output(&id).unwrap_or_default().0.contains("done"));
     }
 }

@@ -360,6 +360,16 @@ pub fn tally(log: &[Value]) -> Value {
     })
 }
 
+/// The agent's login, in one line: the command it names, else its words,
+/// else the preset's.
+fn login_line(ways: &[crate::acp::session::SignIn], agent: &Agent) -> String {
+    ways.iter()
+        .find_map(|w| w.command.clone().map(|c| format!("`{c}`")))
+        .or_else(|| ways.iter().find_map(|w| w.description.clone()))
+        .or_else(|| agent.preset().map(|p| format!("`{}`", p.login)))
+        .unwrap_or_else(|| "its own login".to_owned())
+}
+
 /// The report's account of an ACP attempt, from its output.
 #[must_use]
 pub fn agent_attempt(output: &Value) -> Option<speccoder_core::AgentAttempt> {
@@ -379,6 +389,11 @@ pub fn agent_attempt(output: &Value) -> Option<speccoder_core::AgentAttempt> {
                 .unwrap_or_default()
         }),
         decides_alone: a["decides_alone"] == true,
+        known: a["known"] == true,
+        unasked: a["unasked"]
+            .as_u64()
+            .and_then(|n| u32::try_from(n).ok())
+            .unwrap_or(0),
         tally: speccoder_core::PermissionTally {
             asked: n("asked"),
             allowed: n("allowed"),
@@ -430,8 +445,16 @@ pub fn run_acp(
     let shown = f.agent_name.clone().unwrap_or_else(|| agent.name.clone());
     let log = governor.log();
     let pending = governor.pending();
-    let mut output = if let Some(p) = &pending {
+    let mut output = if let Some(why) = &f.left {
+        // An honest stop for the person: what it would do next would never
+        // reach speccoder.
+        json!({ "status": "blocked", "reason": format!("{why}; its turn was cancelled") })
+    } else if let Some(p) = &pending {
         json!({ "status": "needs_approval", "pending": p })
+    } else if f.sign_in.is_some() && f.prompted {
+        // Signed out mid-attempt: the attempt happened, and is judged as
+        // every failed one (its log and its diff are kept).
+        json!({ "status": "failed", "reason": format!("{} — sign {shown} in again: {}", f.error.clone().unwrap_or_default(), login_line(f.sign_in.as_deref().unwrap_or_default(), agent)) })
     } else if f.sign_in.is_some() {
         json!({ "status": "failed", "reason": f.error.clone().unwrap_or_default() })
     } else if f.timed_out {
@@ -479,21 +502,31 @@ pub fn run_acp(
     output["tool_calls"] = json!(log);
     output["usage"] = f.usage.clone().unwrap_or(Value::Null);
     output["asked"] = json!(governor.asked());
+    let mut notices = f.notices.clone();
+    if governor.unasked() > 0 {
+        notices.push(format!(
+            "{shown} changed something without asking {} time(s): its own settings let it decide those calls, which never reached speccoder",
+            governor.unasked()
+        ));
+    }
     output["acp"] = json!({
         "agent": shown,
         "preset": agent.id,
         "mode": f.mode,
-        "decides_alone": f.mode.as_ref().is_some_and(|m| m.asks() != Some(true)),
+        "decides_alone": f.mode.as_ref().is_some_and(|m| m.asks() == Some(false)) || governor.unasked() > 0,
+        "known": f.mode.as_ref().is_some_and(|m| m.asks().is_some()),
+        "unasked": governor.unasked(),
         "tally": tally(&log),
         "plan": f.plan,
-        "notices": f.notices,
+        "notices": notices,
     });
     AcpOutcome {
         outcome: Outcome {
             run_id: format!("external_{}_{stamp}", agent.id),
             output,
         },
-        sign_in: f.sign_in,
+        // Before any prompt: nothing was attempted, the task stops for it.
+        sign_in: f.sign_in.filter(|_| !f.prompted),
         agent: shown,
     }
 }

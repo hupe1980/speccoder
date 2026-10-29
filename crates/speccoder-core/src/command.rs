@@ -1470,9 +1470,14 @@ pub struct AgentAttempt {
     pub preset: String,
     /// Its permission mode, in a sentence.
     pub mode: Option<String>,
-    /// It was not put into a mode that asks first: calls it made without
-    /// asking never reached speccoder.
+    /// It decided some calls without asking — its mode says so, or it was
+    /// seen changing something unasked: those never reached speccoder.
     pub decides_alone: bool,
+    /// A recording of its version says whether it asks.
+    pub known: bool,
+    /// Calls it reported changing something (an edit, a command) that
+    /// never reached speccoder as a request.
+    pub unasked: u32,
     /// What speccoder decided of what it asked.
     pub tally: PermissionTally,
     /// Its plan as it last sent it (a claim).

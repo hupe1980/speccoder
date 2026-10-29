@@ -114,6 +114,11 @@ pub struct Finished {
     pub stderr: Vec<String>,
     /// The agent's plan as it last sent it: `{content, status}` each.
     pub plan: Vec<Value>,
+    /// The agent moved to a mode that decides without asking: its turn
+    /// was cancelled, and why.
+    pub left: Option<String>,
+    /// The prompt was sent: whatever stopped it, the attempt happened.
+    pub prompted: bool,
 }
 
 /// The agent's words, kept for the narration and the final message.
@@ -142,6 +147,65 @@ struct Shared {
     runner: crate::sandbox::Runner,
     progress: Option<(String, Arc<dyn Progress>)>,
     deadline: Instant,
+    /// Raised to end the turn (a call waits, the agent left its mode).
+    stop: Arc<Notify>,
+    /// The mode as set up, to tell a move away from it.
+    watch: Mutex<Option<Watch>>,
+    /// Why the turn was ended: the agent moved to a mode that decides
+    /// without asking.
+    left: Mutex<Option<String>>,
+}
+
+/// What a session's mode is read against once it is set up.
+struct Watch {
+    agent: String,
+    profile: &'static modes::ModeProfile,
+    advertised: Option<Advertised>,
+}
+
+impl Shared {
+    /// A move of the agent's mode (`value`) or of its config options: one
+    /// that decides without asking ends the turn — what it would do next
+    /// would never reach speccoder.
+    fn moved(&self, value: Option<String>, options: Option<&Value>) {
+        let Ok(watch) = self.watch.lock() else { return };
+        let Some(w) = watch.as_ref() else { return };
+        let mut why = None;
+        if let Some(v) = &value {
+            let (reading, decides) = w.profile.reading(v);
+            if reading == modes::Reading::DecidesWithoutYou {
+                let name = w
+                    .advertised
+                    .as_ref()
+                    .map_or_else(|| v.clone(), |a| a.name_of(v));
+                why = Some(format!(
+                    "{} moved to {name}, which decides without asking ({})",
+                    w.agent,
+                    decides.unwrap_or_default()
+                ));
+            }
+        }
+        if let (Some((id, asks)), Some(o)) = (w.profile.guard, options)
+            && let Some(now) = modes::current_of(o, id)
+            && now != asks
+        {
+            why = Some(format!(
+                "{} turned {id} to {now}: it decides without asking",
+                w.agent
+            ));
+        }
+        drop(watch);
+        if let Some(why) = why {
+            if let Ok(mut l) = self.left.lock() {
+                l.get_or_insert(why.clone());
+            }
+            self.governor.stop();
+            self.stop.notify_one();
+            self.event(Event::Notice {
+                text: format!("{why}: its turn was cancelled"),
+            });
+        }
+    }
 }
 
 impl Shared {
@@ -165,7 +229,7 @@ impl Shared {
             self.event(Event::Reasoning {
                 task: task.clone(),
                 turn,
-                text: crate::approvals::present::escape(thinking.trim())
+                text: crate::approvals::present::escape(&crate::secrets::mask(thinking.trim()))
                     .chars()
                     .take(4000)
                     .collect(),
@@ -176,7 +240,7 @@ impl Shared {
             self.event(Event::Said {
                 task,
                 turn,
-                text: crate::approvals::present::escape(said.trim())
+                text: crate::approvals::present::escape(&crate::secrets::mask(said.trim()))
                     .chars()
                     .take(2000)
                     .collect(),
@@ -250,7 +314,7 @@ impl Shared {
                 let entries: Vec<Value> = p
                     .entries
                     .iter()
-                    .map(|e| json!({ "content": e.content, "status": wire(&e.status).unwrap_or_else(|| "pending".to_owned()) }))
+                    .map(|e| json!({ "content": crate::secrets::mask(&e.content), "status": wire(&e.status).unwrap_or_else(|| "pending".to_owned()) }))
                     .collect();
                 if let Ok(mut w) = self.words.lock() {
                     w.plan.clone_from(&entries);
@@ -281,6 +345,20 @@ impl Shared {
                 {
                     w.usage_usd = Some(c.amount);
                 }
+            }
+            SessionUpdate::CurrentModeUpdate(m) => {
+                self.moved(Some(m.current_mode_id.to_string()), None);
+            }
+            SessionUpdate::ConfigOptionUpdate(u) => {
+                let options = serde_json::to_value(&u.config_options).unwrap_or_default();
+                let value = self.watch.lock().ok().and_then(|w| {
+                    let w = w.as_ref()?;
+                    match w.advertised.as_ref().map(|a| &a.via) {
+                        Some(modes::Via::Config(id)) => modes::current_of(&options, id),
+                        _ => None,
+                    }
+                });
+                self.moved(value, Some(&options));
             }
             _ => {}
         }
@@ -387,7 +465,11 @@ pub fn run(attempt: &Attempt, governor: Arc<Governor>) -> Finished {
             };
         }
     };
-    rt.block_on(drive(attempt, governor))
+    let finished = rt.block_on(drive(attempt, governor));
+    // A person still being asked (the agent withdrew the request, or the
+    // turn ended) holds a blocking task: the attempt does not wait for it.
+    rt.shutdown_timeout(Duration::from_millis(200));
+    finished
 }
 
 async fn drive(attempt: &Attempt, governor: Arc<Governor>) -> Finished {
@@ -404,7 +486,7 @@ async fn drive(attempt: &Attempt, governor: Arc<Governor>) -> Finished {
     if attempt.agent.mode.is_none()
         && let Some((k, v)) = modes::launch_profile(&attempt.agent.id).and_then(|p| p.launch_env)
     {
-        config = config.env(k, v);
+        config = config.env(k, modes::launch_value(v, std::env::var(k).ok().as_deref()));
     }
     let lines = Arc::clone(&stderr);
     let agent = AcpAgent::new(in_directory(config, &attempt.cwd)).with_debug(move |line, dir| {
@@ -430,8 +512,11 @@ async fn drive(attempt: &Attempt, governor: Arc<Governor>) -> Finished {
         runner: attempt.runner.clone(),
         progress: attempt.progress.clone(),
         deadline: Instant::now() + attempt.timeout,
+        stop: Arc::new(Notify::new()),
+        watch: Mutex::new(None),
+        left: Mutex::new(None),
     });
-    let stop = Arc::new(Notify::new());
+    let stop = Arc::clone(&shared.stop);
     let result: Arc<Mutex<Finished>> = Arc::default();
 
     let (s1, s2, s3, s4, s5, s6, s7, s8) = (
@@ -683,6 +768,9 @@ async fn drive(attempt: &Attempt, governor: Arc<Governor>) -> Finished {
     if let Ok(w) = shared.words.lock() {
         finished.plan.clone_from(&w.plan);
     }
+    if let Ok(l) = shared.left.lock() {
+        finished.left.clone_from(&l);
+    }
     if let Ok(w) = shared.words.lock()
         && let Some(usd) = w.usage_usd
     {
@@ -749,8 +837,7 @@ async fn session(
         Err(e) => {
             // An agent that needs signing in says so, or fails while it
             // advertises ways to sign in: its own ways are named.
-            let needs = e.code == agent_client_protocol::ErrorCode::AuthRequired
-                || !init.auth_methods.is_empty();
+            let needs = e.code == agent_client_protocol::ErrorCode::AuthRequired;
             if needs {
                 finished.sign_in = Some(sign_in_methods(&auth_methods, &attempt.argv));
             }
@@ -812,9 +899,17 @@ async fn session(
             .unwrap_or_default(),
         agent: shown.clone(),
         mode: statement.sentence(),
-        decides_alone: statement.asks() != Some(true),
+        decides_alone: statement.asks() == Some(false),
+        known: statement.asks().is_some(),
     });
     finished.mode = Some(statement);
+    if let (Some(p), Ok(mut w)) = (profile, shared.watch.lock()) {
+        *w = Some(Watch {
+            agent: shown.clone(),
+            profile: p,
+            advertised: advertised.clone(),
+        });
+    }
 
     // The model, where the agent offers a choice of it.
     if let Some(model) = &attempt.model {
@@ -830,13 +925,20 @@ async fn session(
         ))
         .block_task();
     tokio::pin!(turn);
-    let left = shared.deadline.saturating_duration_since(Instant::now());
-    let ended = tokio::select! {
-        r = &mut turn => Some(r),
-        () = stop.notified() => None,
-        () = tokio::time::sleep(left) => {
-            finished.timed_out = true;
-            None
+    finished.prompted = true;
+    // The attempt's clock stands while a person decides.
+    let ended = loop {
+        let until = shared.deadline + shared.governor.asking();
+        let left = until.saturating_duration_since(Instant::now());
+        tokio::select! {
+            r = &mut turn => break Some(r),
+            () = stop.notified() => break None,
+            () = tokio::time::sleep(left) => {
+                if Instant::now() >= shared.deadline + shared.governor.asking() {
+                    finished.timed_out = true;
+                    break None;
+                }
+            }
         }
     };
     let response = match ended {
@@ -892,7 +994,7 @@ fn last_words(shared: &Shared) -> String {
     shared
         .words
         .lock()
-        .map(|w| w.last.trim().to_owned())
+        .map(|w| crate::secrets::mask(w.last.trim()))
         .unwrap_or_default()
 }
 

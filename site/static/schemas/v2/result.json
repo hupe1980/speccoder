@@ -4059,8 +4059,18 @@
           ]
         },
         "decides_alone": {
-          "description": "It was not put into a mode that asks first: calls it made without\nasking never reached speccoder.",
+          "description": "It decided some calls without asking — its mode says so, or it was\nseen changing something unasked: those never reached speccoder.",
           "type": "boolean"
+        },
+        "known": {
+          "description": "A recording of its version says whether it asks.",
+          "type": "boolean"
+        },
+        "unasked": {
+          "description": "Calls it reported changing something (an edit, a command) that\nnever reached speccoder as a request.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
         },
         "tally": {
           "description": "What speccoder decided of what it asked.",
@@ -4079,6 +4089,8 @@
         "preset",
         "mode",
         "decides_alone",
+        "known",
+        "unasked",
         "tally",
         "plan"
       ]

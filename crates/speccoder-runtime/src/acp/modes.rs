@@ -58,6 +58,9 @@ pub struct ModeProfile {
     /// and its value) when the person configured no mode: an agent whose
     /// modes do not govern permissions.
     pub launch_env: Option<(&'static str, &'static str)>,
+    /// Its values were recorded from the adapter's own output; `false`
+    /// (built from its source): what they decide is not known.
+    pub recorded: bool,
 }
 
 impl ModeProfile {
@@ -75,6 +78,9 @@ impl ModeProfile {
     #[must_use]
     pub fn reading(&self, value: &str) -> (Reading, Option<String>) {
         match self.values.iter().find(|(v, _)| *v == value) {
+            // Built from source, not recorded: a value that would ask is
+            // not known to; one that decides is said as such.
+            Some((_, None)) if !self.recorded => (Reading::NotKnown, None),
             Some((_, None)) => (Reading::Asks, None),
             Some((_, Some(what))) => (Reading::DecidesWithoutYou, Some((*what).to_owned())),
             None => (Reading::NotKnown, None),
@@ -92,7 +98,35 @@ impl ModeProfile {
 
 /// OpenCode's permission rules, every one set to ask (its modes say what it
 /// works on, not whether it asks).
-const OPENCODE_ASKS: &str = r#"{"permission":{"read":"ask","edit":"ask","bash":"ask","webfetch":"ask","websearch":"ask","external_directory":"ask"}}"#;
+/// Every tool OpenCode asks about, at the top level and for its agents
+/// (whose own rules would otherwise win).
+pub const OPENCODE_ASKS: &str = r#"{"permission":{"read":"ask","edit":"ask","bash":"ask","webfetch":"ask","websearch":"ask","codesearch":"ask","external_directory":"ask","glob":"ask","grep":"ask","list":"ask","task":"ask","lsp":"ask"},"agent":{"build":{"permission":{"read":"ask","edit":"ask","bash":"ask","webfetch":"ask","websearch":"ask","codesearch":"ask","external_directory":"ask","glob":"ask","grep":"ask","list":"ask","task":"ask","lsp":"ask"}},"plan":{"permission":{"read":"ask","edit":"ask","bash":"ask","webfetch":"ask","websearch":"ask","codesearch":"ask","external_directory":"ask","glob":"ask","grep":"ask","list":"ask","task":"ask","lsp":"ask"}}}}"#;
+
+/// A launch variable's value: ours merged over what the person's
+/// environment already sets (`existing`, JSON), ours winning — so their
+/// other settings stay and every permission still asks.
+#[must_use]
+pub fn launch_value(ours: &str, existing: Option<&str>) -> String {
+    fn merge(base: &mut serde_json::Value, over: &serde_json::Value) {
+        match (base, over) {
+            (serde_json::Value::Object(b), serde_json::Value::Object(o)) => {
+                for (k, v) in o {
+                    merge(b.entry(k.clone()).or_insert(serde_json::Value::Null), v);
+                }
+            }
+            (b, o) => *b = o.clone(),
+        }
+    }
+    let Some(mut base) = existing
+        .and_then(|e| serde_json::from_str::<serde_json::Value>(e).ok())
+        .filter(serde_json::Value::is_object)
+    else {
+        return ours.to_owned();
+    };
+    let over: serde_json::Value = serde_json::from_str(ours).unwrap_or_default();
+    merge(&mut base, &over);
+    base.to_string()
+}
 
 /// One profile per recorded adapter version, each value taken from that
 /// version's own advertisement (`tests/fixtures/acp/`).
@@ -121,6 +155,7 @@ pub const PROFILES: &[ModeProfile] = &[
         ],
         guard: Some(("allow_all", "off")),
         launch_env: None,
+        recorded: true,
     },
     // Recorded here 2026-10-28 (2.1.4, again on 2.2.0): in `build` it ran a
     // command and wrote a file without asking; with every permission rule
@@ -134,6 +169,7 @@ pub const PROFILES: &[ModeProfile] = &[
         values: &[("build", None), ("plan", None)],
         guard: None,
         launch_env: Some(("OPENCODE_CONFIG_CONTENT", OPENCODE_ASKS)),
+        recorded: true,
     },
     // claude-agent-acp passes `default` to Claude Code when no
     // `permissions.defaultMode` is set, so any other start was configured.
@@ -152,6 +188,7 @@ pub const PROFILES: &[ModeProfile] = &[
         ],
         guard: None,
         launch_env: None,
+        recorded: true,
     },
     // codex-acp starts every session in `agent` (Auto review, where a
     // reviewer model answers approvals) unless `INITIAL_AGENT_MODE` is set.
@@ -169,6 +206,8 @@ pub const PROFILES: &[ModeProfile] = &[
         ],
         guard: None,
         launch_env: None,
+        // Built from codex-acp's source (devplane): not recorded live.
+        recorded: false,
     },
     // Gemini CLI advertises session modes only.
     ModeProfile {
@@ -184,6 +223,8 @@ pub const PROFILES: &[ModeProfile] = &[
         ],
         guard: None,
         launch_env: None,
+        // Built from Gemini CLI's source (devplane): not recorded live.
+        recorded: false,
     },
 ];
 
@@ -492,10 +533,16 @@ impl Statement {
             Why::AskedForAskFirst if self.reading == Reading::Asks => {
                 format!("asked {agent} to ask before acting — you set no mode")
             }
+            Why::AskedForAskFirst if self.reading == Reading::NotKnown => format!(
+                "asked {agent} to ask before acting ({mode}); not known whether it does — no recording of this version"
+            ),
             Why::AskedForAskFirst => {
                 format!("asked {agent} to ask before acting — it is in {mode}{tail}")
             }
             Why::AsksAlready if deciding => format!("{agent} is in {mode}{tail}"),
+            Why::AsksAlready if self.reading == Reading::NotKnown => format!(
+                "{agent} is in {mode}; not known whether it asks — no recording of this version"
+            ),
             Why::AsksAlready => format!("{agent} asks before acting: {mode}"),
             Why::YouChose if self.reading == Reading::NotKnown => {
                 format!("you chose {mode} — not known whether {agent} asks")
@@ -671,7 +718,12 @@ mod tests {
                     plan.request
                 );
                 if let Some(r) = &plan.request {
-                    assert_eq!(profile.reading(r).0, Reading::Asks);
+                    let read = profile.reading(r).0;
+                    assert!(
+                        read == Reading::Asks || (!profile.recorded && read == Reading::NotKnown),
+                        "{}: {r} reads {read:?}",
+                        profile.agent
+                    );
                 }
             }
         }
@@ -789,6 +841,29 @@ mod tests {
             .asks(),
             None
         );
+    }
+
+    #[test]
+    fn opencode_asks_at_every_level_and_keeps_your_other_settings() {
+        let v: serde_json::Value =
+            serde_json::from_str(&launch_value(OPENCODE_ASKS, Some(r#"{"model":"x/y","permission":{"bash":"allow"},"agent":{"build":{"permission":{"edit":"allow"}}}}"#)))
+                .unwrap_or_default();
+        assert_eq!(v["model"], "x/y");
+        assert_eq!(v["permission"]["bash"], "ask");
+        assert_eq!(v["agent"]["build"]["permission"]["edit"], "ask");
+        assert_eq!(v["agent"]["plan"]["permission"]["grep"], "ask");
+        // Not JSON, or none: ours alone.
+        assert_eq!(launch_value(OPENCODE_ASKS, Some("nope")), OPENCODE_ASKS);
+        assert_eq!(launch_value(OPENCODE_ASKS, None), OPENCODE_ASKS);
+    }
+
+    #[test]
+    fn a_profile_built_from_source_does_not_say_its_agent_asks() {
+        let codex = profile("codex");
+        assert!(!codex.recorded);
+        assert_eq!(codex.reading("read-only").0, Reading::NotKnown);
+        assert_eq!(codex.reading("agent").0, Reading::DecidesWithoutYou);
+        assert_eq!(profile("claude").reading("default").0, Reading::Asks);
     }
 
     /// Every value a profile names is in its adapter's recorded set-up.

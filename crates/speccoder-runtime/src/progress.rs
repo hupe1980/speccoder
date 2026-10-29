@@ -204,8 +204,19 @@ pub enum Event {
         agent: String,
         /// Its permission mode, in a sentence.
         mode: String,
-        /// It was not put into a mode that asks first.
+        /// It is in a mode that decides some calls without asking.
         decides_alone: bool,
+        /// A recording of its version says whether it asks (`false`: not
+        /// known, and said so).
+        known: bool,
+    },
+    /// An external agent changed something without asking (its own
+    /// settings let it): the count so far.
+    AgentUnasked {
+        /// Task ID.
+        task: String,
+        /// Calls it reported making without a request of speccoder's.
+        calls: u32,
     },
     /// An external agent's plan for its attempt, as it last sent it: its
     /// claim of what it will do, never evidence.
@@ -624,8 +635,15 @@ pub struct LiveAgent {
     pub name: String,
     /// Its permission mode, in a sentence.
     pub mode: String,
-    /// It was not put into a mode that asks first.
+    /// It decides some calls without asking (its mode, or calls it was
+    /// seen to make unasked).
     pub decides_alone: bool,
+    /// A recording says whether it asks.
+    #[serde(default)]
+    pub known: bool,
+    /// Calls it made without asking.
+    #[serde(default)]
+    pub unasked: u32,
     /// Its plan, as it last sent it.
     #[serde(default)]
     pub plan: Vec<PlanEntry>,
@@ -774,14 +792,22 @@ impl Progress for Live {
                     agent,
                     mode,
                     decides_alone,
+                    known,
                     ..
                 } => {
                     s.agent = Some(LiveAgent {
                         name: agent.clone(),
                         mode: mode.clone(),
                         decides_alone: *decides_alone,
+                        known: *known,
                         ..LiveAgent::default()
                     });
+                }
+                Event::AgentUnasked { calls, .. } => {
+                    if let Some(a) = s.agent.as_mut() {
+                        a.unasked = *calls;
+                        a.decides_alone = true;
+                    }
                 }
                 Event::AgentPlan { entries, .. } => {
                     if let Some(a) = s.agent.as_mut() {
