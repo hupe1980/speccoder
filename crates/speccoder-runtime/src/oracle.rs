@@ -1333,12 +1333,7 @@ fn keep(
             why: r.why.to_owned(),
         })
         .collect();
-    let set_argv: Vec<String> = answer["argv"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(|v| v.as_str().map(str::to_owned))
-        .collect();
+    let set_argv: Vec<String> = crate::pipeline::acceptance::argv_of(&answer["argv"]);
     let layout = crate::layout::detect(&bench.project, &crate::verify::check_argvs(&ctx.root));
     let mut kept = Vec::new();
     for f in valid {

@@ -1096,12 +1096,7 @@ fn seal_variants(
             .flatten()
             .filter_map(|s| s.as_str().map(str::to_owned))
             .collect();
-        let argv: Vec<String> = f["argv"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(|s| s.as_str().map(str::to_owned))
-            .collect();
+        let argv: Vec<String> = super::acceptance::argv_of(&f["argv"]);
         let Ok(rel) = tools::paths::normalise(path) else {
             discarded.push(held_out::Discarded {
                 path: path.to_owned(),

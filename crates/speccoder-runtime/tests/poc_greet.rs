@@ -257,3 +257,42 @@ fn the_poc_s_dead_test_files_fail_and_every_tick_says_why() {
         ]
     );
 }
+
+/// The author gave its command as one string — the line its prompt shows
+/// (`["cargo test --test acceptance_us1"]`, a real answer of 2026-10-29):
+/// it is that command's words, and the acceptance tests run.
+#[test]
+fn an_acceptance_command_given_as_one_string_runs() {
+    if !has("cargo-nextest") {
+        eprintln!("skipped: cargo-nextest is not installed");
+        return;
+    }
+    let r = poc();
+    let state = tempfile::tempdir().unwrap();
+    for task in ["T001", "T002", "T003", "T004"] {
+        let f = FakeProvider::new();
+        if task == "T003" {
+            f.will_call_tool(
+                "c1",
+                "write_file",
+                json!({ "path": "src/lib.rs", "content": GREET }),
+            );
+        }
+        f.will_structure(done("done"));
+        let _ = run(r.path(), state.path(), task, f);
+    }
+    let f = FakeProvider::new();
+    f.will_structure(json!({
+        "files": [{ "path": "tests/acceptance_us1.rs", "content": TEST, "scenarios": ["US1-1"] }],
+        "argv": ["cargo test --test acceptance_us1"],
+        "notes": []
+    }));
+    f.will_structure(done("nothing to add"));
+    let t005 = run(r.path(), state.path(), "T005", f);
+    let acceptance = report(&t005).acceptance.clone().unwrap();
+    assert!(acceptance.get("skipped").is_none(), "{acceptance}");
+    assert_eq!(
+        acceptance["argv"],
+        json!(["cargo", "test", "--test", "acceptance_us1"])
+    );
+}

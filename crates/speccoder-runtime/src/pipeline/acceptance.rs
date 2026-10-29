@@ -175,12 +175,7 @@ pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance 
             base,
         );
     }
-    let argv: Vec<String> = answer["argv"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(|v| v.as_str().map(str::to_owned))
-        .collect();
+    let argv: Vec<String> = argv_of(&answer["argv"]);
     let paths: Vec<&str> = planned.iter().map(|(p, _)| p.as_str()).collect();
     if !test_command_allowed(a.policy, a.layout, &argv, &paths) {
         return skipped_by(
@@ -373,6 +368,33 @@ pub(crate) struct RefusedFile {
     pub(crate) message: String,
 }
 
+/// The command an author's answer gives: its argv — or, given as one
+/// string (`["cargo test --test acceptance_us1"]`, the line the prompt
+/// shows), that line split into its words when it is a plain command
+/// (anything a shell would read differently stays one word, and is
+/// refused as the command it is not).
+#[must_use]
+pub(crate) fn argv_of(v: &serde_json::Value) -> Vec<String> {
+    let argv: Vec<String> = v
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|v| v.as_str().map(str::to_owned))
+        .collect();
+    match argv.as_slice() {
+        [line] if line.split_ascii_whitespace().count() > 1 => {
+            let words = crate::acp::govern::argv_of_line(line);
+            // A line a shell would read: left whole, never guessed at.
+            if words.len() == 3 && words[0] == "sh" && words[1] == "-c" && words[2] == line.trim() {
+                argv
+            } else {
+                words
+            }
+        }
+        _ => argv,
+    }
+}
+
 /// Whether the author's `argv` may run: the policy allows it, or it is
 /// the layout's command that runs only one of `files` (what the prompt
 /// names).
@@ -486,12 +508,7 @@ pub(crate) fn validate_with(
             .filter(|id| scenarios.iter().any(|s| s.id == *id))
             .map(str::to_owned)
             .collect();
-        let argv: Vec<String> = f["argv"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(|v| v.as_str().map(str::to_owned))
-            .collect();
+        let argv: Vec<String> = argv_of(&f["argv"]);
         valid.push(ValidFile {
             path: rel,
             content: content.to_owned(),
@@ -698,12 +715,7 @@ pub(crate) fn prepare_held_out(
             .flatten()
             .filter_map(|s| s.as_str().map(str::to_owned))
             .collect();
-        let argv: Vec<String> = f["argv"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(|s| s.as_str().map(str::to_owned))
-            .collect();
+        let argv: Vec<String> = argv_of(&f["argv"]);
         let rel = match tools::paths::normalise(path) {
             Ok(r) => r,
             Err(_) => {
@@ -996,12 +1008,7 @@ pub(crate) fn strengthen(
     if planned.is_empty() {
         return Err("the test author added no tests".to_owned());
     }
-    let argv: Vec<String> = answer["argv"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(|v| v.as_str().map(str::to_owned))
-        .collect();
+    let argv: Vec<String> = argv_of(&answer["argv"]);
     let paths: Vec<&str> = planned
         .iter()
         .map(|(p, _): &(String, String)| p.as_str())
@@ -1085,6 +1092,31 @@ pub(crate) fn story_checkpoint(
         .rfind(|t| t.story.as_deref() == Some(label))
         .map(|t| t.id.as_str());
     last == Some(task) && scenarios.len() >= 2
+}
+
+#[cfg(test)]
+mod argv_tests {
+    use super::argv_of;
+    use serde_json::json;
+
+    /// The sample's real answer (2026-10-29): the command as one string.
+    #[test]
+    fn a_command_given_as_one_string_is_its_words() {
+        assert_eq!(
+            argv_of(&json!(["cargo test --test acceptance_us1"])),
+            ["cargo", "test", "--test", "acceptance_us1"]
+        );
+        assert_eq!(
+            argv_of(&json!(["cargo", "test", "--test", "acceptance_us1"])),
+            ["cargo", "test", "--test", "acceptance_us1"]
+        );
+        // A shell line stays one word: refused as the command it is not.
+        assert_eq!(
+            argv_of(&json!(["cargo test; rm -rf ."])),
+            ["cargo test; rm -rf ."]
+        );
+        assert_eq!(argv_of(&json!(["pytest"])), ["pytest"]);
+    }
 }
 
 #[cfg(test)]
