@@ -1,10 +1,11 @@
 {
-  "head": "init",
   "result": {
-    "code": "CONFIG",
+    "schema_version": 2,
     "command": "job",
-    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#config",
+    "status": "config_error",
     "exit_code": 13,
+    "message": "no state directory",
+    "code": "CONFIG",
     "fix": [
       "speccoder init"
     ],
@@ -12,14 +13,13 @@
       {
         "command": "speccoder init",
         "how": "view",
-        "subject": null,
-        "view": "setup"
+        "view": "setup",
+        "subject": null
       }
     ],
-    "message": "no state directory",
-    "schema_version": 2,
-    "status": "config_error"
+    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#config"
   },
-  "review": null,
-  "status": ""
+  "head": "init",
+  "status": "",
+  "review": null
 }

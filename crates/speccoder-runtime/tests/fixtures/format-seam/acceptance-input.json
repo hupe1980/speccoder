@@ -1,31 +1,31 @@
 {
+  "instructions": [],
   "bundle": {
-    "constitution": "# Constitution\n\n### I. Tested\nEvery public function has unit tests for the examples in its specification.\n\n### II. Honest\nA requirement that cannot be met as written is reported, never worked around.\n",
-    "dependencies": [
-      {
-        "done": true,
-        "id": "T001",
-        "title": "Create the crate"
-      }
-    ],
     "feature": "001-calc-add",
+    "constitution": "# Constitution\n\n### I. Tested\nEvery public function has unit tests for the examples in its specification.\n\n### II. Honest\nA requirement that cannot be met as written is reported, never worked around.\n",
     "plan": "# Plan\n\nRust 2024 library crate without dependencies. The function lives in src/lib.rs with unit tests in a `#[cfg(test)] mod tests` in the same file.\n",
     "story": "### User Story 1 - Add numbers (Priority: P1)\n\nA caller adds two signed 64-bit integers and gets their sum.\n\n**Acceptance**: `add(2, 3) == 5`; `add(-4, 4) == 0`.",
     "task": {
       "id": "T002",
-      "parallel": false,
+      "title": "Implement `pub fn add(a: i64, b: i64) -> i64` in src/lib.rs with a unit test `adds_two_numbers`",
       "phase": "Phase 2: User Story 1 - Add numbers (Priority: P1)",
-      "story": "US1",
       "subsection": "",
-      "title": "Implement `pub fn add(a: i64, b: i64) -> i64` in src/lib.rs with a unit test `adds_two_numbers`"
-    }
+      "story": "US1",
+      "parallel": false
+    },
+    "dependencies": [
+      {
+        "id": "T001",
+        "title": "Create the crate",
+        "done": true
+      }
+    ]
   },
-  "instructions": [],
+  "scenarios": [],
   "project": {
     "files": [
       "src/lib.rs"
     ],
     "manifest": "Cargo.toml:\n[package]"
-  },
-  "scenarios": []
+  }
 }

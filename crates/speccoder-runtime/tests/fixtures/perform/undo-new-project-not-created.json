@@ -1,10 +1,11 @@
 {
-  "head": "init",
   "result": {
-    "code": "NEW-UNDO-REFUSED",
+    "schema_version": 2,
     "command": "new",
-    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#new-undo-refused",
+    "status": "git_precondition",
     "exit_code": 14,
+    "message": "speccoder did not create <root>; nothing was moved",
+    "code": "NEW-UNDO-REFUSED",
     "fix": [
       "→ undo it yourself; nothing was moved"
     ],
@@ -15,10 +16,9 @@
         "why": null
       }
     ],
-    "message": "speccoder did not create <root>; nothing was moved",
-    "schema_version": 2,
-    "status": "git_precondition"
+    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#new-undo-refused"
   },
-  "review": null,
-  "status": ""
+  "head": "init",
+  "status": "",
+  "review": null
 }

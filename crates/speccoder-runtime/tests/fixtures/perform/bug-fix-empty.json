@@ -1,10 +1,11 @@
 {
-  "head": "spec(002-quick-changes): quick change: Log every sign-in",
   "result": {
-    "code": "BUG-NO-EXPECTED",
+    "schema_version": 2,
     "command": "bug",
-    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#bug-no-expected",
+    "status": "usage_error",
     "exit_code": 2,
+    "message": "say what should happen instead: `--expected \"…\"` (one per behaviour)",
+    "code": "BUG-NO-EXPECTED",
     "fix": [
       "speccoder bug \"<what happens>\" --expected \"<what should>\""
     ],
@@ -12,34 +13,33 @@
       {
         "command": "speccoder bug \"<what happens>\" --expected \"<what should>\"",
         "how": "view",
-        "subject": null,
-        "view": "bug"
+        "view": "bug",
+        "subject": null
       }
     ],
-    "message": "say what should happen instead: `--expected \"…\"` (one per behaviour)",
-    "schema_version": 2,
-    "status": "usage_error"
+    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#bug-no-expected"
   },
+  "head": "spec(002-quick-changes): quick change: Log every sign-in",
+  "status": " M specs/001-graph/spec.md\n",
   "review": {
     "requirements": {
       "FR-001": {
-        "at": 0,
-        "by": "Dana Example",
-        "comment": "looks right",
+        "verdict": "approved",
         "line": "- **FR-001**: Users MUST log in with a passkey.",
         "sha256": "sha256:<hex>",
-        "verdict": "approved",
-        "via": "web"
+        "by": "Dana Example",
+        "via": "web",
+        "at": 0,
+        "comment": "looks right"
       },
       "FR-002": {
-        "at": 0,
-        "by": "Dana Example",
+        "verdict": "approved",
         "line": "- **FR-002**: Sessions MUST expire after thirty minutes.",
         "sha256": "sha256:<hex>",
-        "verdict": "approved",
-        "via": "web"
+        "by": "Dana Example",
+        "via": "web",
+        "at": 0
       }
     }
-  },
-  "status": " M specs/001-graph/spec.md\n"
+  }
 }

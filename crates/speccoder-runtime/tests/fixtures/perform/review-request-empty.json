@@ -1,10 +1,11 @@
 {
-  "head": "init",
   "result": {
-    "code": "USAGE",
+    "schema_version": 2,
     "command": "review",
-    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#usage",
+    "status": "usage_error",
     "exit_code": 2,
+    "message": "a change request needs a comment: what should the requirement say?",
+    "code": "USAGE",
     "fix": [
       "speccoder review --help"
     ],
@@ -12,25 +13,24 @@
       {
         "command": "speccoder review --help",
         "how": "view",
-        "subject": null,
-        "view": "review"
+        "view": "review",
+        "subject": null
       }
     ],
-    "message": "a change request needs a comment: what should the requirement say?",
-    "schema_version": 2,
-    "status": "usage_error"
+    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#usage"
   },
+  "head": "init",
+  "status": " M specs/001-graph/spec.md\n?? specs/001-graph/review.json\n",
   "review": {
     "requirements": {
       "FR-002": {
-        "at": 0,
-        "by": "Dana Example",
+        "verdict": "approved",
         "line": "- **FR-002**: Sessions MUST expire after thirty minutes.",
         "sha256": "sha256:<hex>",
-        "verdict": "approved",
-        "via": "web"
+        "by": "Dana Example",
+        "via": "web",
+        "at": 0
       }
     }
-  },
-  "status": " M specs/001-graph/spec.md\n?? specs/001-graph/review.json\n"
+  }
 }

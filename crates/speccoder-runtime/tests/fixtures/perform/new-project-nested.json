@@ -1,104 +1,96 @@
 {
-  "head": "init",
   "result": {
-    "code": "NEW-NESTED-REPOSITORY",
+    "schema_version": 2,
     "command": "new",
+    "status": "git_precondition",
+    "exit_code": 14,
+    "message": "<root>/sub/app is inside the repository <root>",
+    "code": "NEW-NESTED-REPOSITORY",
+    "fix": [
+      "→ choose a folder outside it, or use <root> itself"
+    ],
+    "fix_steps": [
+      {
+        "command": "→ choose a folder outside it, or use <root> itself",
+        "how": "words",
+        "why": null
+      }
+    ],
+    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#new-nested-repository",
+    "payload": "new_project",
     "data": {
-      "commit": null,
-      "dry_run": false,
-      "first_feature": null,
-      "init": null,
       "plan": {
-        "digest": "sha256:<hex>",
-        "extensions": [],
-        "format": "speckit",
-        "formats": [
-          {
-            "disabled": "<machine>",
-            "id": "speckit",
-            "label": "Spec Kit",
-            "version": "<machine>"
-          },
-          {
-            "disabled": "<machine>",
-            "id": "openspec",
-            "label": "OpenSpec",
-            "version": "<machine>"
-          }
-        ],
-        "identity": {
-          "email": "d@example.com",
-          "name": "Dana Example"
-        },
-        "mode": "new_folder",
+        "target": "<root>/sub/app",
         "name": "app",
-        "observed": {
-          "entries": [],
-          "exists": false,
-          "head": null,
-          "porcelain": [],
-          "tools": "<machine>"
-        },
-        "preset": true,
-        "refusal": {
-          "code": "NEW-NESTED-REPOSITORY",
-          "fix": "→ choose a folder outside it, or use <root> itself",
-          "message": "<root>/sub/app is inside the repository <root>"
-        },
-        "sandbox": {
-          "backend": "<machine>"
-        },
+        "mode": "new_folder",
         "stack": {
-          "detected": false,
           "id": "none",
+          "detected": false,
           "reason": "chosen"
         },
         "stacks": [
           {
-            "disabled": "<machine>",
             "id": "rust",
             "label": "Rust (cargo)",
-            "version": "<machine>"
+            "version": "<machine>",
+            "disabled": "<machine>"
           },
           {
-            "disabled": "<machine>",
             "id": "python",
             "label": "Python (uv)",
-            "version": "<machine>"
+            "version": "<machine>",
+            "disabled": "<machine>"
           },
           {
-            "disabled": "<machine>",
             "id": "node",
             "label": "TypeScript (npm + vitest)",
-            "version": "<machine>"
+            "version": "<machine>",
+            "disabled": "<machine>"
           },
           {
-            "disabled": "<machine>",
             "id": "go",
             "label": "Go",
-            "version": "<machine>"
+            "version": "<machine>",
+            "disabled": "<machine>"
           },
           {
-            "disabled": "<machine>",
             "id": "none",
             "label": "I'll add code myself",
-            "version": "<machine>"
+            "version": "<machine>",
+            "disabled": "<machine>"
           }
         ],
+        "format": "speckit",
+        "formats": [
+          {
+            "id": "speckit",
+            "label": "Spec Kit",
+            "version": "<machine>",
+            "disabled": "<machine>"
+          },
+          {
+            "id": "openspec",
+            "label": "OpenSpec",
+            "version": "<machine>",
+            "disabled": "<machine>"
+          }
+        ],
+        "extensions": [],
+        "preset": true,
         "steps": [
           {
-            "access": "local",
+            "id": "git_init",
             "argv": [
               "git",
               "init"
             ],
             "cwd": "<root>/sub/app",
-            "id": "git_init",
-            "limit_s": 120,
-            "writes": ".git/"
+            "access": "local",
+            "writes": ".git/",
+            "limit_s": 120
           },
           {
-            "access": "local",
+            "id": "format_init",
             "argv": [
               "specify",
               "init",
@@ -114,25 +106,25 @@
               "<state>/presets/speccoder-<version>"
             ],
             "cwd": "<root>/sub/app",
-            "id": "format_init",
+            "access": "local",
+            "writes": ".specify/, .claude/skills/speckit-*/",
             "limit_s": 120,
-            "note": "with the speccoder preset: tasks that plan for evidence",
-            "writes": ".specify/, .claude/skills/speckit-*/"
+            "note": "with the speccoder preset: tasks that plan for evidence"
           },
           {
-            "access": "local",
+            "id": "speccoder_init",
             "argv": [
               "speccoder",
               "init",
               "--yes"
             ],
             "cwd": "<root>/sub/app",
-            "id": "speccoder_init",
-            "limit_s": 120,
-            "writes": "speccoder.toml (its checks run on the untouched code)"
+            "access": "local",
+            "writes": "speccoder.toml (its checks run on the untouched code)",
+            "limit_s": 120
           },
           {
-            "access": "local",
+            "id": "commit",
             "argv": [
               "git",
               "commit",
@@ -140,36 +132,44 @@
               "new project: app"
             ],
             "cwd": "<root>/sub/app",
-            "id": "commit",
-            "limit_s": 120,
-            "writes": "one commit as Dana Example <d@example.com>"
+            "access": "local",
+            "writes": "one commit as Dana Example <d@example.com>",
+            "limit_s": 120
           }
         ],
-        "target": "<root>/sub/app"
+        "sandbox": {
+          "backend": "<machine>"
+        },
+        "identity": {
+          "name": "Dana Example",
+          "email": "d@example.com"
+        },
+        "refusal": {
+          "code": "NEW-NESTED-REPOSITORY",
+          "message": "<root>/sub/app is inside the repository <root>",
+          "fix": "→ choose a folder outside it, or use <root> itself"
+        },
+        "observed": {
+          "exists": false,
+          "entries": [],
+          "head": null,
+          "porcelain": [],
+          "tools": "<machine>"
+        },
+        "digest": "sha256:<hex>"
       },
       "results": [],
+      "init": null,
+      "commit": null,
       "undo": {
         "available": false,
         "kind": "none"
-      }
-    },
-    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#new-nested-repository",
-    "exit_code": 14,
-    "fix": [
-      "→ choose a folder outside it, or use <root> itself"
-    ],
-    "fix_steps": [
-      {
-        "command": "→ choose a folder outside it, or use <root> itself",
-        "how": "words",
-        "why": null
-      }
-    ],
-    "message": "<root>/sub/app is inside the repository <root>",
-    "payload": "new_project",
-    "schema_version": 2,
-    "status": "git_precondition"
+      },
+      "dry_run": false,
+      "first_feature": null
+    }
   },
-  "review": null,
-  "status": ""
+  "head": "init",
+  "status": "",
+  "review": null
 }

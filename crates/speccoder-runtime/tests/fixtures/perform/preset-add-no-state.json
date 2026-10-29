@@ -1,10 +1,11 @@
 {
-  "head": "bug: signing in twice logs out",
   "result": {
-    "code": "CONFIG",
+    "schema_version": 2,
     "command": "job",
-    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#config",
+    "status": "config_error",
     "exit_code": 13,
+    "message": "no state directory",
+    "code": "CONFIG",
     "fix": [
       "speccoder init"
     ],
@@ -12,34 +13,33 @@
       {
         "command": "speccoder init",
         "how": "view",
-        "subject": null,
-        "view": "setup"
+        "view": "setup",
+        "subject": null
       }
     ],
-    "message": "no state directory",
-    "schema_version": 2,
-    "status": "config_error"
+    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#config"
   },
+  "head": "bug: signing in twice logs out",
+  "status": " M speccoder.toml\n M specs/001-graph/spec.md\n?? .specify/feature.json\n",
   "review": {
     "requirements": {
       "FR-001": {
-        "at": 0,
-        "by": "Dana Example",
-        "comment": "looks right",
+        "verdict": "approved",
         "line": "- **FR-001**: Users MUST log in with a passkey.",
         "sha256": "sha256:<hex>",
-        "verdict": "approved",
-        "via": "web"
+        "by": "Dana Example",
+        "via": "web",
+        "at": 0,
+        "comment": "looks right"
       },
       "FR-002": {
-        "at": 0,
-        "by": "Dana Example",
+        "verdict": "approved",
         "line": "- **FR-002**: Sessions MUST expire after thirty minutes.",
         "sha256": "sha256:<hex>",
-        "verdict": "approved",
-        "via": "web"
+        "by": "Dana Example",
+        "via": "web",
+        "at": 0
       }
     }
-  },
-  "status": " M speccoder.toml\n M specs/001-graph/spec.md\n?? .specify/feature.json\n"
+  }
 }

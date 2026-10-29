@@ -1,20 +1,20 @@
 {
-  "head": "init",
   "result": {
+    "schema_version": 2,
     "command": "nudge",
-    "data": {
-      "action": "nudged",
-      "feature": "001-graph",
-      "record": null,
-      "task": "T008",
-      "text": "use the existing session type"
-    },
+    "status": "ok",
     "exit_code": 0,
     "message": "T008's next attempts will read: use the existing session type",
     "payload": "control",
-    "schema_version": 2,
-    "status": "ok"
+    "data": {
+      "feature": "001-graph",
+      "task": "T008",
+      "action": "nudged",
+      "text": "use the existing session type",
+      "record": null
+    }
   },
-  "review": null,
-  "status": ""
+  "head": "init",
+  "status": "",
+  "review": null
 }

@@ -1,20 +1,20 @@
 {
-  "head": "init",
   "result": {
+    "schema_version": 2,
     "command": "skip",
-    "data": {
-      "action": "skipped",
-      "feature": "001-graph",
-      "record": "refs/speccoder/skipped/001-graph/T007",
-      "task": "T007",
-      "text": "not this release"
-    },
+    "status": "ok",
     "exit_code": 0,
     "message": "T007 skipped: runs pass it by, and tasks depending on it stay blocked (`skip --task T007 --undo` to take it back); attestation unsigned: no signing key is configured in git (user.signingKey)",
     "payload": "control",
-    "schema_version": 2,
-    "status": "ok"
+    "data": {
+      "feature": "001-graph",
+      "task": "T007",
+      "action": "skipped",
+      "text": "not this release",
+      "record": "refs/speccoder/skipped/001-graph/T007"
+    }
   },
-  "review": null,
-  "status": ""
+  "head": "init",
+  "status": "",
+  "review": null
 }

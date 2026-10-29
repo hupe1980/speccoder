@@ -1,85 +1,85 @@
 {
-  "head": "init",
   "result": {
+    "schema_version": 2,
     "command": "review",
+    "status": "ok",
+    "exit_code": 0,
+    "message": "answered Q1 in specs/001-graph/spec.md — 0/2 requirements approved; 2 to review",
+    "payload": "review",
     "data": {
-      "approval": null,
+      "feature": "001-graph",
+      "file": "specs/001-graph/review.json",
+      "requirements": [
+        {
+          "id": "FR-001",
+          "text": "Users MUST log in.",
+          "state": "open",
+          "by": null,
+          "at": null,
+          "comment": null,
+          "decided_on": null
+        },
+        {
+          "id": "FR-002",
+          "text": "Sessions MUST expire after thirty minutes.",
+          "state": "open",
+          "by": null,
+          "at": null,
+          "comment": null,
+          "decided_on": null
+        }
+      ],
+      "totals": {
+        "approved": 0,
+        "changes_requested": 0,
+        "open": 2,
+        "lapsed": 0,
+        "questions": 0,
+        "ambiguous": 0
+      },
+      "revise_with": null,
+      "revision": null,
+      "questions": [],
       "changes": [
         {
           "id": "FR-002",
-          "now": "- **FR-002**: Sessions MUST expire after thirty minutes.",
-          "now_line": 10,
-          "path": "specs/001-graph/spec.md",
           "then": "- **FR-002**: Sessions MUST expire after [NEEDS CLARIFICATION: how long?].",
-          "then_line": 10
+          "now": "- **FR-002**: Sessions MUST expire after thirty minutes.",
+          "path": "specs/001-graph/spec.md",
+          "then_line": 10,
+          "now_line": 10
         }
       ],
-      "feature": "001-graph",
-      "file": "specs/001-graph/review.json",
       "history": [
         {
+          "commit": "<hex>",
+          "date": "<date>",
+          "author": "Dana Example",
+          "subject": "init",
           "added": [
             "FR-001",
             "FR-002"
           ],
-          "author": "Dana Example",
-          "commit": "<hex>",
-          "date": "<date>",
-          "removed": [],
           "reworded": [],
-          "subject": "init"
+          "removed": []
         }
       ],
       "oracle": [],
-      "questions": [],
+      "tests_notice": null,
+      "approval": null,
+      "sheet": null,
       "readiness": {
-        "identifiers": true,
-        "open_questions": 0,
         "requirements": 2,
         "scenarios": 0,
+        "open_questions": 0,
         "untestable": [
           "US1"
-        ]
-      },
-      "requirements": [
-        {
-          "at": null,
-          "by": null,
-          "comment": null,
-          "decided_on": null,
-          "id": "FR-001",
-          "state": "open",
-          "text": "Users MUST log in."
-        },
-        {
-          "at": null,
-          "by": null,
-          "comment": null,
-          "decided_on": null,
-          "id": "FR-002",
-          "state": "open",
-          "text": "Sessions MUST expire after thirty minutes."
-        }
-      ],
-      "revise_with": null,
-      "revision": null,
-      "sheet": null,
-      "tests_notice": null,
-      "totals": {
-        "ambiguous": 0,
-        "approved": 0,
-        "changes_requested": 0,
-        "lapsed": 0,
-        "open": 2,
-        "questions": 0
+        ],
+        "identifiers": true
       }
-    },
-    "exit_code": 0,
-    "message": "answered Q1 in specs/001-graph/spec.md — 0/2 requirements approved; 2 to review",
-    "payload": "review",
-    "schema_version": 2,
-    "status": "ok"
+    }
   },
-  "review": null,
-  "status": " M specs/001-graph/spec.md\n"
+  "head": "init",
+  "status": " M specs/001-graph/spec.md\n",
+  "review": null
 }

@@ -1,40 +1,40 @@
 {
-  "head": "bug: signing in twice logs out",
   "result": {
+    "schema_version": 2,
     "command": "nudge",
-    "data": {
-      "action": "nudged",
-      "feature": "001-graph",
-      "record": null,
-      "task": "T008",
-      "text": "src/lib.rs:1 \"pub fn ok() {}\" — name it"
-    },
+    "status": "ok",
     "exit_code": 0,
     "message": "nudge saved — the next attempt of T008 reads 1 comment(s)",
     "payload": "control",
-    "schema_version": 2,
-    "status": "ok"
+    "data": {
+      "feature": "001-graph",
+      "task": "T008",
+      "action": "nudged",
+      "text": "src/lib.rs:1 \"pub fn ok() {}\" — name it",
+      "record": null
+    }
   },
+  "head": "bug: signing in twice logs out",
+  "status": " M speccoder.toml\n M specs/001-graph/spec.md\n?? .specify/feature.json\n",
   "review": {
     "requirements": {
       "FR-001": {
-        "at": 0,
-        "by": "Dana Example",
-        "comment": "looks right",
+        "verdict": "approved",
         "line": "- **FR-001**: Users MUST log in with a passkey.",
         "sha256": "sha256:<hex>",
-        "verdict": "approved",
-        "via": "web"
+        "by": "Dana Example",
+        "via": "web",
+        "at": 0,
+        "comment": "looks right"
       },
       "FR-002": {
-        "at": 0,
-        "by": "Dana Example",
+        "verdict": "approved",
         "line": "- **FR-002**: Sessions MUST expire after thirty minutes.",
         "sha256": "sha256:<hex>",
-        "verdict": "approved",
-        "via": "web"
+        "by": "Dana Example",
+        "via": "web",
+        "at": 0
       }
     }
-  },
-  "status": " M speccoder.toml\n M specs/001-graph/spec.md\n?? .specify/feature.json\n"
+  }
 }

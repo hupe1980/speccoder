@@ -1,10 +1,11 @@
 {
-  "head": "init",
   "result": {
-    "code": "REVIEW-PENDING",
+    "schema_version": 2,
     "command": "review",
-    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#review-pending",
+    "status": "needs_human",
     "exit_code": 23,
+    "message": "1 open question(s) first: Q1 — answer (`speccoder review answer Q1 \"…\"`) or reword",
+    "code": "REVIEW-PENDING",
     "fix": [
       "speccoder review",
       "speccoder review approve",
@@ -14,38 +15,37 @@
       {
         "command": "speccoder review",
         "how": "view",
-        "subject": null,
-        "view": "review"
+        "view": "review",
+        "subject": null
       },
       {
         "command": "speccoder review approve",
-        "confirm": null,
-        "feature": null,
         "how": "perform",
-        "input": null,
         "run": {
-          "ids": [],
           "kind": "review",
+          "ids": [],
           "verdict": "approve"
         },
-        "text": null
+        "input": null,
+        "text": null,
+        "confirm": null,
+        "feature": null
       },
       {
+        "command": "git commit",
+        "how": "command",
         "argvs": [
           [
             "git",
             "commit"
           ]
         ],
-        "command": "git commit",
-        "how": "command",
         "interactive": true
       }
     ],
-    "message": "1 open question(s) first: Q1 — answer (`speccoder review answer Q1 \"…\"`) or reword",
-    "schema_version": 2,
-    "status": "needs_human"
+    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#review-pending"
   },
-  "review": null,
-  "status": ""
+  "head": "init",
+  "status": "",
+  "review": null
 }

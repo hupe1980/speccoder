@@ -1,10 +1,11 @@
 {
-  "head": "spec(002-quick-changes): quick change: Log every sign-in",
   "result": {
-    "code": "FEATURE-SELECTION",
+    "schema_version": 2,
     "command": "pr",
-    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#feature-selection",
+    "status": "selection_needed",
     "exit_code": 12,
+    "message": "2 features and none is current (001-graph, 002-quick-changes)",
+    "code": "FEATURE-SELECTION",
     "fix": [
       "speccoder feature",
       "speccoder feature <name>",
@@ -13,62 +14,61 @@
     "fix_steps": [
       {
         "command": "speccoder feature",
-        "confirm": null,
-        "feature": null,
         "how": "perform",
-        "input": "The feature",
         "run": {
           "kind": "feature"
         },
-        "text": null
+        "input": "The feature",
+        "text": null,
+        "confirm": null,
+        "feature": null
       },
       {
         "command": "speccoder feature <name>",
-        "confirm": null,
-        "feature": null,
         "how": "perform",
-        "input": "The feature",
         "run": {
           "kind": "feature"
         },
-        "text": null
+        "input": "The feature",
+        "text": null,
+        "confirm": null,
+        "feature": null
       },
       {
         "command": "speccoder pr --feature <name>",
-        "confirm": "Push the feature's speccoder branch and its attestation notes to `origin`, and open (or update) its draft pull request on GitHub, as you (your token).",
-        "feature": null,
         "how": "perform",
-        "input": null,
         "run": {
           "kind": "pull_request"
         },
-        "text": null
+        "input": null,
+        "text": null,
+        "confirm": "Push the feature's speccoder branch and its attestation notes to `origin`, and open (or update) its draft pull request on GitHub, as you (your token).",
+        "feature": null
       }
     ],
-    "message": "2 features and none is current (001-graph, 002-quick-changes)",
-    "schema_version": 2,
-    "status": "selection_needed"
+    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#feature-selection"
   },
+  "head": "spec(002-quick-changes): quick change: Log every sign-in",
+  "status": " M specs/001-graph/spec.md\n",
   "review": {
     "requirements": {
       "FR-001": {
-        "at": 0,
-        "by": "Dana Example",
-        "comment": "looks right",
+        "verdict": "approved",
         "line": "- **FR-001**: Users MUST log in with a passkey.",
         "sha256": "sha256:<hex>",
-        "verdict": "approved",
-        "via": "web"
+        "by": "Dana Example",
+        "via": "web",
+        "at": 0,
+        "comment": "looks right"
       },
       "FR-002": {
-        "at": 0,
-        "by": "Dana Example",
+        "verdict": "approved",
         "line": "- **FR-002**: Sessions MUST expire after thirty minutes.",
         "sha256": "sha256:<hex>",
-        "verdict": "approved",
-        "via": "web"
+        "by": "Dana Example",
+        "via": "web",
+        "at": 0
       }
     }
-  },
-  "status": " M specs/001-graph/spec.md\n"
+  }
 }

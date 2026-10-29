@@ -1,35 +1,11 @@
 {
-  "head": "init",
   "result": {
-    "code": "THROUGH-QUESTIONS",
+    "schema_version": 2,
     "command": "spec",
-    "data": {
-      "next_skill": null,
-      "ran": [],
-      "readiness": {
-        "identifiers": true,
-        "open_questions": 1,
-        "requirements": 2,
-        "scenarios": 0,
-        "untestable": [
-          "US1"
-        ]
-      },
-      "similar": [],
-      "source": {
-        "kind": "description"
-      },
-      "stop": {
-        "kind": "questions",
-        "questions": [
-          "Q1"
-        ]
-      },
-      "through": "tasks",
-      "unit": "001-graph"
-    },
-    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#through-questions",
+    "status": "needs_human",
     "exit_code": 23,
+    "message": "1 open question in 001-graph: answer it, then review the spec",
+    "code": "THROUGH-QUESTIONS",
     "fix": [
       "speccoder review"
     ],
@@ -37,15 +13,39 @@
       {
         "command": "speccoder review",
         "how": "view",
-        "subject": null,
-        "view": "review"
+        "view": "review",
+        "subject": null
       }
     ],
-    "message": "1 open question in 001-graph: answer it, then review the spec",
+    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#through-questions",
     "payload": "planning_chain",
-    "schema_version": 2,
-    "status": "needs_human"
+    "data": {
+      "unit": "001-graph",
+      "through": "tasks",
+      "ran": [],
+      "stop": {
+        "kind": "questions",
+        "questions": [
+          "Q1"
+        ]
+      },
+      "readiness": {
+        "requirements": 2,
+        "scenarios": 0,
+        "open_questions": 1,
+        "untestable": [
+          "US1"
+        ],
+        "identifiers": true
+      },
+      "similar": [],
+      "source": {
+        "kind": "description"
+      },
+      "next_skill": null
+    }
   },
-  "review": null,
-  "status": ""
+  "head": "init",
+  "status": "",
+  "review": null
 }

@@ -1,81 +1,81 @@
 {
-  "head": "bug: signing in twice logs out",
   "result": {
+    "schema_version": 2,
     "command": "feature",
-    "data": {
-      "action": "switched",
-      "current": "001-graph",
-      "features": [
-        {
-          "artifacts": [
-            "spec",
-            "tasks"
-          ],
-          "current": true,
-          "dir": "specs/001-graph",
-          "done": 6,
-          "name": "001-graph",
-          "number": 1,
-          "tasks": 11,
-          "title": "Spec"
-        },
-        {
-          "artifacts": [
-            "spec",
-            "tasks"
-          ],
-          "current": false,
-          "dir": "specs/002-quick-changes",
-          "done": 0,
-          "name": "002-quick-changes",
-          "number": 2,
-          "tasks": 1,
-          "title": "Quick Changes"
-        },
-        {
-          "artifacts": [
-            "spec",
-            "tasks"
-          ],
-          "current": false,
-          "dir": "specs/003-bugfixes",
-          "done": 0,
-          "name": "003-bugfixes",
-          "number": 3,
-          "tasks": 1,
-          "title": "Bug Fixes"
-        }
-      ],
-      "reason": "recorded",
-      "reason_text": "recorded in .specify/feature.json",
-      "unit": "feature"
-    },
+    "status": "ok",
     "exit_code": 0,
     "message": "switched to 001-graph, 6/11 tasks done (recorded in .specify/feature.json: Spec Kit's scripts and the /speckit-* commands in your editor read it too)",
     "payload": "features",
-    "schema_version": 2,
-    "status": "ok"
+    "data": {
+      "unit": "feature",
+      "current": "001-graph",
+      "reason": "recorded",
+      "reason_text": "recorded in .specify/feature.json",
+      "action": "switched",
+      "features": [
+        {
+          "number": 1,
+          "name": "001-graph",
+          "title": "Spec",
+          "dir": "specs/001-graph",
+          "current": true,
+          "done": 6,
+          "tasks": 11,
+          "artifacts": [
+            "spec",
+            "tasks"
+          ]
+        },
+        {
+          "number": 2,
+          "name": "002-quick-changes",
+          "title": "Quick Changes",
+          "dir": "specs/002-quick-changes",
+          "current": false,
+          "done": 0,
+          "tasks": 1,
+          "artifacts": [
+            "spec",
+            "tasks"
+          ]
+        },
+        {
+          "number": 3,
+          "name": "003-bugfixes",
+          "title": "Bug Fixes",
+          "dir": "specs/003-bugfixes",
+          "current": false,
+          "done": 0,
+          "tasks": 1,
+          "artifacts": [
+            "spec",
+            "tasks"
+          ]
+        }
+      ]
+    }
   },
+  "head": "bug: signing in twice logs out",
+  "status": " M specs/001-graph/spec.md\n?? .specify/feature.json\n",
   "review": {
     "requirements": {
       "FR-001": {
-        "at": 0,
-        "by": "Dana Example",
-        "comment": "looks right",
+        "verdict": "approved",
         "line": "- **FR-001**: Users MUST log in with a passkey.",
         "sha256": "sha256:<hex>",
-        "verdict": "approved",
-        "via": "web"
+        "by": "Dana Example",
+        "via": "web",
+        "at": 0,
+        "comment": "looks right"
       },
       "FR-002": {
-        "at": 0,
-        "by": "Dana Example",
+        "verdict": "approved",
         "line": "- **FR-002**: Sessions MUST expire after thirty minutes.",
         "sha256": "sha256:<hex>",
-        "verdict": "approved",
-        "via": "web"
+        "by": "Dana Example",
+        "via": "web",
+        "at": 0
       }
     }
-  },
-  "status": " M specs/001-graph/spec.md\n?? .specify/feature.json\n"
+  }
 }

@@ -1,10 +1,11 @@
 {
-  "head": "init",
   "result": {
-    "code": "CALL-CHANGED",
+    "schema_version": 2,
     "command": "approve",
-    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#call-changed",
+    "status": "usage_error",
     "exit_code": 2,
+    "message": "the call changed since it was shown; see `speccoder report --approvals` for the one waiting now",
+    "code": "CALL-CHANGED",
     "fix": [
       "speccoder report --approvals"
     ],
@@ -12,14 +13,13 @@
       {
         "command": "speccoder report --approvals",
         "how": "view",
-        "subject": null,
-        "view": "approvals"
+        "view": "approvals",
+        "subject": null
       }
     ],
-    "message": "the call changed since it was shown; see `speccoder report --approvals` for the one waiting now",
-    "schema_version": 2,
-    "status": "usage_error"
+    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#call-changed"
   },
-  "review": null,
-  "status": ""
+  "head": "init",
+  "status": "",
+  "review": null
 }

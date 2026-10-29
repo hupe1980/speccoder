@@ -1,32 +1,32 @@
 {
-  "head": "spec(001-graph): review.json",
   "result": {
-    "command": "fix",
-    "exit_code": 0,
-    "message": "nothing in the setup stops a run",
     "schema_version": 2,
-    "status": "ok"
+    "command": "fix",
+    "status": "ok",
+    "exit_code": 0,
+    "message": "nothing in the setup stops a run"
   },
+  "head": "spec(001-graph): review.json",
+  "status": " M specs/001-graph/spec.md\n",
   "review": {
     "requirements": {
       "FR-001": {
-        "at": 0,
-        "by": "Dana Example",
-        "comment": "looks right",
+        "verdict": "approved",
         "line": "- **FR-001**: Users MUST log in with a passkey.",
         "sha256": "sha256:<hex>",
-        "verdict": "approved",
-        "via": "web"
+        "by": "Dana Example",
+        "via": "web",
+        "at": 0,
+        "comment": "looks right"
       },
       "FR-002": {
-        "at": 0,
-        "by": "Dana Example",
+        "verdict": "approved",
         "line": "- **FR-002**: Sessions MUST expire after thirty minutes.",
         "sha256": "sha256:<hex>",
-        "verdict": "approved",
-        "via": "web"
+        "by": "Dana Example",
+        "via": "web",
+        "at": 0
       }
     }
-  },
-  "status": " M specs/001-graph/spec.md\n"
+  }
 }

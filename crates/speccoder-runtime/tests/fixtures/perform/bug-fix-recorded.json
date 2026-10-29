@@ -1,34 +1,35 @@
 {
-  "head": "bug: signing in twice logs out",
   "result": {
+    "schema_version": 2,
     "command": "bug",
+    "status": "ok",
+    "exit_code": 0,
+    "message": "recorded \"signing in twice logs out\" as FR-001 and T001 in 003-bugfixes (Spec Kit without the `bug` extension: the standing bug-fix unit); reproduce it: speccoder bug run --task 003-bugfixes/T001",
+    "next": [
+      {
+        "command": "speccoder bug run --task 003-bugfixes/T001",
+        "why": "reproduce it",
+        "how": "perform",
+        "run": {
+          "kind": "bug_run",
+          "slug": null,
+          "task": "003-bugfixes/T001"
+        },
+        "input": null,
+        "text": null,
+        "confirm": null,
+        "feature": null
+      }
+    ],
+    "payload": "bug",
     "data": {
-      "acceptance": null,
-      "candidate": null,
-      "code": null,
-      "commit": null,
-      "confirm_digest": null,
-      "confirmation": null,
-      "handoff": null,
-      "held_out": [],
-      "held_out_sealed": null,
       "home": {
         "kind": "standing_speckit",
         "location": "specs/003-bugfixes",
         "reason": "Spec Kit without the `bug` extension: the standing bug-fix unit"
       },
-      "issue": null,
-      "max_tries": 3,
-      "outcome": "recorded",
-      "pass_to_pass": null,
-      "recorded_commit": "<hex>",
-      "rejections": [],
-      "reproductions": [],
+      "unit": "003-bugfixes",
       "requirement": "FR-001",
-      "revert": null,
-      "run_id": null,
-      "special_case": [],
-      "stage": "reproduce",
       "task": "T001",
       "title": "signing in twice logs out",
       "triad": {
@@ -36,7 +37,6 @@
           "id": "C",
           "text": "signing in twice logs out"
         },
-        "digest": "sha256:<hex>",
         "expected": [
           {
             "id": "E1",
@@ -48,54 +48,54 @@
             "id": "U1",
             "text": "signing out ends the session"
           }
-        ]
+        ],
+        "digest": "sha256:<hex>"
       },
+      "stage": "reproduce",
+      "outcome": "recorded",
+      "verdict": null,
+      "code": null,
+      "reproductions": [],
+      "held_out": [],
+      "held_out_sealed": null,
+      "confirm_digest": null,
+      "confirmation": null,
+      "rejections": [],
+      "acceptance": null,
+      "pass_to_pass": null,
+      "revert": null,
+      "special_case": [],
       "tries": [],
-      "unit": "003-bugfixes",
-      "verdict": null
-    },
-    "exit_code": 0,
-    "message": "recorded \"signing in twice logs out\" as FR-001 and T001 in 003-bugfixes (Spec Kit without the `bug` extension: the standing bug-fix unit); reproduce it: speccoder bug run --task 003-bugfixes/T001",
-    "next": [
-      {
-        "command": "speccoder bug run --task 003-bugfixes/T001",
-        "confirm": null,
-        "feature": null,
-        "how": "perform",
-        "input": null,
-        "run": {
-          "kind": "bug_run",
-          "slug": null,
-          "task": "003-bugfixes/T001"
-        },
-        "text": null,
-        "why": "reproduce it"
-      }
-    ],
-    "payload": "bug",
-    "schema_version": 2,
-    "status": "ok"
+      "max_tries": 3,
+      "handoff": null,
+      "issue": null,
+      "candidate": null,
+      "recorded_commit": "<hex>",
+      "commit": null,
+      "run_id": null
+    }
   },
+  "head": "bug: signing in twice logs out",
+  "status": " M specs/001-graph/spec.md\n",
   "review": {
     "requirements": {
       "FR-001": {
-        "at": 0,
-        "by": "Dana Example",
-        "comment": "looks right",
+        "verdict": "approved",
         "line": "- **FR-001**: Users MUST log in with a passkey.",
         "sha256": "sha256:<hex>",
-        "verdict": "approved",
-        "via": "web"
+        "by": "Dana Example",
+        "via": "web",
+        "at": 0,
+        "comment": "looks right"
       },
       "FR-002": {
-        "at": 0,
-        "by": "Dana Example",
+        "verdict": "approved",
         "line": "- **FR-002**: Sessions MUST expire after thirty minutes.",
         "sha256": "sha256:<hex>",
-        "verdict": "approved",
-        "via": "web"
+        "by": "Dana Example",
+        "via": "web",
+        "at": 0
       }
     }
-  },
-  "status": " M specs/001-graph/spec.md\n"
+  }
 }

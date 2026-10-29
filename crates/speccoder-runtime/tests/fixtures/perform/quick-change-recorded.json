@@ -1,47 +1,47 @@
 {
-  "head": "spec(002-quick-changes): quick change: Log every sign-in",
   "result": {
+    "schema_version": 2,
     "command": "do",
+    "status": "ok",
     "exit_code": 0,
     "message": "recorded \"Log every sign-in\" as FR-001 and T001 in 002-quick-changes; run it: speccoder run --feature 002-quick-changes --task T001",
     "next": [
       {
         "command": "speccoder run --feature 002-quick-changes --task T001",
-        "confirm": null,
-        "feature": "002-quick-changes",
+        "why": "the change, judged on evidence",
         "how": "perform",
-        "input": null,
         "run": {
           "kind": "run",
           "task": "T001"
         },
+        "input": null,
         "text": null,
-        "why": "the change, judged on evidence"
+        "confirm": null,
+        "feature": "002-quick-changes"
       }
-    ],
-    "schema_version": 2,
-    "status": "ok"
+    ]
   },
+  "head": "spec(002-quick-changes): quick change: Log every sign-in",
+  "status": " M specs/001-graph/spec.md\n",
   "review": {
     "requirements": {
       "FR-001": {
-        "at": 0,
-        "by": "Dana Example",
-        "comment": "looks right",
+        "verdict": "approved",
         "line": "- **FR-001**: Users MUST log in with a passkey.",
         "sha256": "sha256:<hex>",
-        "verdict": "approved",
-        "via": "web"
+        "by": "Dana Example",
+        "via": "web",
+        "at": 0,
+        "comment": "looks right"
       },
       "FR-002": {
-        "at": 0,
-        "by": "Dana Example",
+        "verdict": "approved",
         "line": "- **FR-002**: Sessions MUST expire after thirty minutes.",
         "sha256": "sha256:<hex>",
-        "verdict": "approved",
-        "via": "web"
+        "by": "Dana Example",
+        "via": "web",
+        "at": 0
       }
     }
-  },
-  "status": " M specs/001-graph/spec.md\n"
+  }
 }

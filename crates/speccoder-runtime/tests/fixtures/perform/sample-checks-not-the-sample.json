@@ -1,10 +1,11 @@
 {
-  "head": "init",
   "result": {
-    "code": "USAGE",
+    "schema_version": 2,
     "command": "sample",
-    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#usage",
+    "status": "usage_error",
     "exit_code": 2,
+    "message": "these are the sample's checks: run them in its copy (speccoder sample)",
+    "code": "USAGE",
     "fix": [
       "speccoder sample --help"
     ],
@@ -15,10 +16,9 @@
         "why": "it names files or values of this project: run it in your shell"
       }
     ],
-    "message": "these are the sample's checks: run them in its copy (speccoder sample)",
-    "schema_version": 2,
-    "status": "usage_error"
+    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#usage"
   },
-  "review": null,
-  "status": ""
+  "head": "init",
+  "status": "",
+  "review": null
 }

@@ -1,10 +1,11 @@
 {
-  "head": "spec(002-quick-changes): quick change: Log every sign-in",
   "result": {
-    "code": "FEATURE-SELECTION",
+    "schema_version": 2,
     "command": "issue",
-    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#feature-selection",
+    "status": "selection_needed",
     "exit_code": 12,
+    "message": "2 features, none selected; 1 errors, 0 warnings",
+    "code": "FEATURE-SELECTION",
     "fix": [
       "speccoder feature",
       "speccoder feature <name>",
@@ -13,25 +14,25 @@
     "fix_steps": [
       {
         "command": "speccoder feature",
-        "confirm": null,
-        "feature": null,
         "how": "perform",
-        "input": "The feature",
         "run": {
           "kind": "feature"
         },
-        "text": null
+        "input": "The feature",
+        "text": null,
+        "confirm": null,
+        "feature": null
       },
       {
         "command": "speccoder feature <name>",
-        "confirm": null,
-        "feature": null,
         "how": "perform",
-        "input": "The feature",
         "run": {
           "kind": "feature"
         },
-        "text": null
+        "input": "The feature",
+        "text": null,
+        "confirm": null,
+        "feature": null
       },
       {
         "command": "speccoder issue --feature <name>",
@@ -39,30 +40,29 @@
         "why": "it names files or values of this project: run it in your shell"
       }
     ],
-    "message": "2 features, none selected; 1 errors, 0 warnings",
-    "schema_version": 2,
-    "status": "selection_needed"
+    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#feature-selection"
   },
+  "head": "spec(002-quick-changes): quick change: Log every sign-in",
+  "status": " M specs/001-graph/spec.md\n",
   "review": {
     "requirements": {
       "FR-001": {
-        "at": 0,
-        "by": "Dana Example",
-        "comment": "looks right",
+        "verdict": "approved",
         "line": "- **FR-001**: Users MUST log in with a passkey.",
         "sha256": "sha256:<hex>",
-        "verdict": "approved",
-        "via": "web"
+        "by": "Dana Example",
+        "via": "web",
+        "at": 0,
+        "comment": "looks right"
       },
       "FR-002": {
-        "at": 0,
-        "by": "Dana Example",
+        "verdict": "approved",
         "line": "- **FR-002**: Sessions MUST expire after thirty minutes.",
         "sha256": "sha256:<hex>",
-        "verdict": "approved",
-        "via": "web"
+        "by": "Dana Example",
+        "via": "web",
+        "at": 0
       }
     }
-  },
-  "status": " M specs/001-graph/spec.md\n"
+  }
 }

@@ -1,25 +1,11 @@
 {
-  "head": "bug: signing in twice logs out",
   "result": {
-    "code": "USAGE",
+    "schema_version": 2,
     "command": "config",
-    "data": {
-      "complete": false,
-      "digest": "<hex>",
-      "entry": {
-        "key": "commands.allow_prefix",
-        "prefix": [
-          "npm",
-          "run"
-        ]
-      },
-      "rows": [],
-      "unreadable": [
-        "the journal: another process holds the journal in <state>/<hex> alone (a speccoder build that does not share it): Database already open. Cannot acquire lock."
-      ]
-    },
-    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#usage",
+    "status": "usage_error",
     "exit_code": 2,
+    "message": "the preview is incomplete: the journal: another process holds the journal in <state>/<hex> alone (a speccoder build that does not share it): Database already open. Cannot acquire lock.; try again when the journal can be read",
+    "code": "USAGE",
     "fix": [
       "speccoder config --help"
     ],
@@ -30,31 +16,45 @@
         "why": "it names files or values of this project: run it in your shell"
       }
     ],
-    "message": "the preview is incomplete: the journal: another process holds the journal in <state>/<hex> alone (a speccoder build that does not share it): Database already open. Cannot acquire lock.; try again when the journal can be read",
+    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#usage",
     "payload": "policy_coverage",
-    "schema_version": 2,
-    "status": "usage_error"
+    "data": {
+      "entry": {
+        "key": "commands.allow_prefix",
+        "prefix": [
+          "npm",
+          "run"
+        ]
+      },
+      "complete": false,
+      "unreadable": [
+        "the journal: another process holds the journal in <state>/<hex> alone (a speccoder build that does not share it): Database already open. Cannot acquire lock."
+      ],
+      "rows": [],
+      "digest": "<hex>"
+    }
   },
+  "head": "bug: signing in twice logs out",
+  "status": " M specs/001-graph/spec.md\n?? .specify/feature.json\n",
   "review": {
     "requirements": {
       "FR-001": {
-        "at": 0,
-        "by": "Dana Example",
-        "comment": "looks right",
+        "verdict": "approved",
         "line": "- **FR-001**: Users MUST log in with a passkey.",
         "sha256": "sha256:<hex>",
-        "verdict": "approved",
-        "via": "web"
+        "by": "Dana Example",
+        "via": "web",
+        "at": 0,
+        "comment": "looks right"
       },
       "FR-002": {
-        "at": 0,
-        "by": "Dana Example",
+        "verdict": "approved",
         "line": "- **FR-002**: Sessions MUST expire after thirty minutes.",
         "sha256": "sha256:<hex>",
-        "verdict": "approved",
-        "via": "web"
+        "by": "Dana Example",
+        "via": "web",
+        "at": 0
       }
     }
-  },
-  "status": " M specs/001-graph/spec.md\n?? .specify/feature.json\n"
+  }
 }

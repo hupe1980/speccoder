@@ -1,10 +1,11 @@
 {
-  "head": "bug: signing in twice logs out",
   "result": {
-    "code": "USAGE",
+    "schema_version": 2,
     "command": "review",
-    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#usage",
+    "status": "usage_error",
     "exit_code": 2,
+    "message": "src/lib.rs is not one of 001-graph's documents: a comment is anchored to the feature's documents, its changes, its shown tests or its findings",
+    "code": "USAGE",
     "fix": [
       "speccoder review --help"
     ],
@@ -12,34 +13,33 @@
       {
         "command": "speccoder review --help",
         "how": "view",
-        "subject": null,
-        "view": "review"
+        "view": "review",
+        "subject": null
       }
     ],
-    "message": "src/lib.rs is not one of 001-graph's documents: a comment is anchored to the feature's documents, its changes, its shown tests or its findings",
-    "schema_version": 2,
-    "status": "usage_error"
+    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#usage"
   },
+  "head": "bug: signing in twice logs out",
+  "status": " M speccoder.toml\n M specs/001-graph/spec.md\n?? .specify/feature.json\n",
   "review": {
     "requirements": {
       "FR-001": {
-        "at": 0,
-        "by": "Dana Example",
-        "comment": "looks right",
+        "verdict": "approved",
         "line": "- **FR-001**: Users MUST log in with a passkey.",
         "sha256": "sha256:<hex>",
-        "verdict": "approved",
-        "via": "web"
+        "by": "Dana Example",
+        "via": "web",
+        "at": 0,
+        "comment": "looks right"
       },
       "FR-002": {
-        "at": 0,
-        "by": "Dana Example",
+        "verdict": "approved",
         "line": "- **FR-002**: Sessions MUST expire after thirty minutes.",
         "sha256": "sha256:<hex>",
-        "verdict": "approved",
-        "via": "web"
+        "by": "Dana Example",
+        "via": "web",
+        "at": 0
       }
     }
-  },
-  "status": " M speccoder.toml\n M specs/001-graph/spec.md\n?? .specify/feature.json\n"
+  }
 }
