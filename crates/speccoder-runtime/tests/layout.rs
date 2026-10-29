@@ -1,4 +1,4 @@
-//! One acceptance file per story, grown by additions (spec 102, US3): two
+//! One acceptance file per story, grown by additions: two
 //! tasks of one story write one `tests/acceptance_us1.rs`, the second as a
 //! section added to the first's, red only by what it adds — both verified.
 
@@ -296,7 +296,7 @@ fn a_held_out_file_the_runner_would_not_collect_is_discarded_at_authoring() {
     );
 }
 
-/// H6 (spec 102 review): an already-passing section is searched alone — the
+/// An already-passing section is searched alone — the
 /// story's earlier sections (failing at earlier ticks) never name a later task.
 #[test]
 fn an_already_passing_section_names_the_task_that_made_it_pass() {
@@ -350,7 +350,7 @@ fn an_already_passing_section_names_the_task_that_made_it_pass() {
     );
 }
 
-/// H7 (spec 102 review): a later task's author cannot insert lines among
+/// A later task's author cannot insert lines among
 /// an earlier task's tests (an `#[ignore]` above them), nor skip any.
 #[test]
 fn a_section_may_only_be_appended_and_never_skips_a_test() {

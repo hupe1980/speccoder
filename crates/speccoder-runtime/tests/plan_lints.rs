@@ -1,4 +1,4 @@
-//! The plan checked for an oracle before it runs (spec 102, US4): the
+//! The plan checked for an oracle before it runs: the
 //! POC's task list predicts its outcome, a format without phases gets only
 //! the format-independent check, a run is never stopped by them, and the
 //! person's `acceptance_at` decision turns a Foundational implementation

@@ -174,7 +174,7 @@ impl OracleRequirement {
     }
 }
 
-/// What a new project asks of the format's own init (spec 101).
+/// What a new project asks of the format's own init.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FormatInit {
     /// Extensions the person chose (Spec Kit).
@@ -353,7 +353,7 @@ pub trait Adapter: Send + Sync + std::fmt::Debug {
     }
 
     /// The commands of the format's own init that make a folder a project
-    /// of it (spec 101's New Project); empty: speccoder cannot initialise
+    /// of it (New Project); empty: speccoder cannot initialise
     /// this format, the person does ([`Messages::make_project`]).
     fn init_steps(&self, _choices: &FormatInit) -> Vec<InitStep> {
         Vec::new()

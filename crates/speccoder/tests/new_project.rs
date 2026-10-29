@@ -206,7 +206,7 @@ fn a_rust_spec_kit_project_is_made_by_its_own_tools_and_committed_once_as_the_pe
             "--ignore-agent-tools"
         ]
     );
-    // The speccoder preset is Spec Kit's own `--preset`, from spec 102's extraction.
+    // The speccoder preset is Spec Kit's own `--preset`.
     assert_eq!(specify[10], "--preset");
     assert!(specify[11].ends_with(&format!("presets/speccoder-{}", env!("CARGO_PKG_VERSION"))));
     assert!(steps.iter().all(|s| s["access"] == "local"));
@@ -299,7 +299,7 @@ fn a_rust_spec_kit_project_is_made_by_its_own_tools_and_committed_once_as_the_pe
         )),
         "{next:?}"
     );
-    // Tests have a place the runner collects (spec 102's layout).
+    // Tests have a place the runner collects.
     let layout =
         speccoder_runtime::layout::detect(&root, &[vec!["cargo".to_owned(), "test".to_owned()]]);
     assert!(

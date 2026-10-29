@@ -1,4 +1,4 @@
-//! The speccoder Spec Kit preset (spec 102, US5): installed by Spec Kit's
+//! The speccoder Spec Kit preset: installed by Spec Kit's
 //! own `specify preset add --dev`, resolved for the tasks template, and a
 //! plan written to it raises no plan check while the default template's
 //! raises three.

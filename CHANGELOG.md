@@ -9,69 +9,53 @@ adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 
 - **Agents as executors, governed call by call.** `[executor] agent =
-  "copilot"` (or `opencode`, `claude`, `codex`, `gemini`; any other ACP
-  agent with `kind = "acp"` and `argv`) runs the agent over the Agent
-  Client Protocol, its `npx` adapters pinned to exact versions. speccoder
-  puts it into its ask-first permission mode, decides every permission
-  request with the native policy and approvals (never answering
-  "always"; everything the agent does itself, outside the sandbox, asks
-  you — you can allow its plain reads for the task), serves its file and terminal calls through the
-  protected paths, masking and OS sandbox, and judges the attempt as
-  every attempt. A change the agent makes without asking (an allow rule
-  in its own settings) is reported as *decides alone*.
-  The report and the live card show the agent, its plan and what
-  speccoder decided (asked · allowed · waited for you · refused), and say
-  *decides alone* when no ask-first mode was set. A sign-in it needs stops
-  the task with `EXECUTOR-LOGIN` and the agent's own login as a step.
-- **Pick an agent for one run.** `speccoder run --agent opencode`, and
-  the app's Run ▾ menu; `speccoder doctor --agents` and Settings ›
-  Executor show each agent as installed, signed in and asks first, with
-  the one step that fixes a missing tick; a failed task an agent
-  attempted offers Try with the next one.
-
+  "copilot"` (or `opencode`, `claude`, `codex`, `gemini`; any ACP agent
+  with `kind = "acp"` and `argv`) runs the agent over the Agent Client
+  Protocol. speccoder puts it into its ask-first mode and decides every
+  permission request itself: everything the agent does on its own asks
+  you (you can allow its plain reads for the task), and its file and
+  terminal calls go through speccoder's protected paths, masking and
+  sandbox. A change it makes without asking is reported as *decides
+  alone*; a missing sign-in stops with `EXECUTOR-LOGIN` and the agent's
+  own login as a step.
+- **Pick an agent.** `speccoder run --agent opencode` and the app's Run ▾
+  menu for one run; `doctor --agents` and Settings › Executor show each
+  agent as installed, signed in and asks first; the live card shows its
+  plan and the tally (asked · allowed · waited · refused); a failed task
+  offers Try with the next agent.
 - **Every task finds its doer.** A task naming only paths in its
-  feature's folder is planning work: it runs with planning rights —
-  design documents there, never `spec.md`, `tasks.md`, `review.json`,
-  checklists or the constitution — and ticks `regression_only` with the
-  new reason `planning_work`; one that changes code runs again as code. A `[YOU]` task (Spec Kit) is never
-  attempted by `speccoder run`; the run asks, or passes it by and ends
-  with `TASK-YOURS`. So is a task whose attempt stopped `BLOCKED`, until
-  the person answers.
-- An acceptance author's command given as one string
-  (`["cargo test --test acceptance_us1"]`) is that command's words.
-- **No stop is a dead end.** An honest `BLOCKED` stop, or a `[YOU]`
-  task, offers **I did it**, **Hint & retry** and **Skip**: one key each
-  at a terminal (`d`/`h`/`s`), buttons in Needs You and the inspector,
-  and `speccoder task done T` / `speccoder task hint T "…"` on the
-  command line.
-- **Run it here, copy what went wrong.** In the web app a fix line or
-  next step that is a speccoder command performs or opens its view
-  (doctor, explain, report, …) instead of being copied. The person's own
-  fix (`npm install`, `git add … && git commit …`) runs from a card
-  after a yes — as you, in the OS sandbox with the network on (the
-  few fixes that change something outside the project, and machines
-  without a sandbox, say they run unsandboxed), streamed, cancellable
-  with everything it started — and only as speccoder issued it: built as
-  argvs (a file name stays one argument) or a constant fix line, signed
-  by the host; speccoder's own commands run as speccoder; sign-ins open a terminal
-  (window) or copy (tab); `export` says why it stays in your shell.
-  Every error has **Copy** (one masked block: code, message, fixes,
-  docs, version · OS · run) and **Copy Bug Report**; `--copy` does the
-  same at the CLI. Results carry `fix_steps`, next steps and actions a
-  `how`. New code `FIX-FAILED`.
-- **Who does what, before you run.** `doctor --feature`, the app's
-  preflight and the start of a run say which tasks are planning work or
-  yours; the board and `report` mark them. The speccoder preset's tasks
-  template states both rules.
+  feature's folder is planning work: it may write design documents there,
+  never `spec.md`, `tasks.md`, `review.json` or the constitution, and
+  ticks `regression_only` (`planning_work`). A `[YOU]` task, or one that
+  stopped `BLOCKED`, waits for you; the board and *Before you run* show
+  who does what.
+- **No stop is a dead end.** A `BLOCKED` stop offers **I did it**,
+  **Hint & retry** and **Skip**: one key at a terminal (`d`/`h`/`s`),
+  buttons in the app, `task done` / `task hint` on the command line.
+- **Run it here.** In the app, a fix that is a speccoder command runs or
+  opens its view; your own fix (`npm install`, `git add … && git commit`)
+  runs from a card after a yes, in the OS sandbox with network, only as
+  speccoder built it. Sign-ins open a terminal. Every error has **Copy**
+  (masked) and **Copy Bug Report**; `--copy` at the CLI.
 
 ### Changed
 
 - **`[executor] kind = "claude"` and `"codex"` are gone**: write
-  `agent = "claude"` / `agent = "codex"` (they run over ACP now).
-  `kind = "command"` stays.
+  `agent = "claude"` / `agent = "codex"`. `kind = "command"` stays.
 - A task line's leading `/` (`/specs/001-x/plan.md`) names the
   repository root.
-- `BLOCKED`'s next steps are `task done`, `task hint` and `task skip`.
+
+### Fixed
+
+- An acceptance author's command given as one string
+  (`["cargo test --test acceptance_us1"]`) was refused, so new projects'
+  tasks ticked `regression_only`; it is now that command's words.
+
+### Upgrading
+
+- `speccoder replay` of a run recorded before 0.5.0 reports a divergence
+  (model calls are recorded with a different key order); ticks and
+  attempts in git are unaffected.
 
 ## [0.4.0] - 2026-10-28
 

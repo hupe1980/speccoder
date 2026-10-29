@@ -1,4 +1,4 @@
-//! Amazon Bedrock as the model provider (spec 103): the POC fixture under
+//! Amazon Bedrock as the model provider: the POC fixture under
 //! `provider = "bedrock"` with a scripted model — the prompts it is handed,
 //! the verdict, redaction, strict replay and a refused session's renewal —
 //! and, by hand, one real task (`SPECCODER_REAL_BEDROCK=1`).

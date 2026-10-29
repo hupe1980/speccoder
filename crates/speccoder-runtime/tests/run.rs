@@ -3850,7 +3850,7 @@ fn the_model_s_commentary_is_what_it_said() {
     assert_eq!(kept, expected);
 }
 
-// ── tests where the runner finds them (spec 102, US1) ────────────────
+// ── tests where the runner finds them ────────────────
 
 /// A Cargo manifest for the fixture, so its `.rs` test files have Cargo's rule.
 const CARGO: (&str, &str) = (
@@ -3974,7 +3974,7 @@ fn a_test_file_speccoder_cannot_tell_about_stops_for_a_person() {
     assert!(rep.earlier.is_empty(), "never retried");
 }
 
-// ── every regression-only tick says why (spec 102, US2) ──────────────
+// ── every regression-only tick says why ──────────────
 
 fn last_message(worktree: &str) -> String {
     let out = Command::new("git")
@@ -4205,7 +4205,7 @@ fn nothing_of_spec_102_adds_a_model_call_or_passes_a_failure() {
     );
 }
 
-/// M2 (spec 102 review): a listing runs the project's code; a tree it
+/// A listing runs the project's code; a tree it
 /// changed is never committed, and the attempt is not retried.
 #[test]
 fn a_listing_that_changes_the_tree_fails_the_attempt() {
@@ -4229,7 +4229,7 @@ fn a_listing_that_changes_the_tree_fails_the_attempt() {
     assert!(!rep.ticked && rep.earlier.is_empty());
 }
 
-/// H3 (spec 102 review): red that only failed to build has no count; a
+/// Red that only failed to build has no count; a
 /// green that then collects nothing is still no evidence.
 #[test]
 fn a_green_run_that_collects_nothing_never_verifies() {
@@ -4274,7 +4274,7 @@ fn a_green_run_that_collects_nothing_never_verifies() {
     );
 }
 
-/// M7 (spec 102 review): accepting a task that stopped on
+/// Accepting a task that stopped on
 /// TESTS-COLLECTION-UNKNOWN ticks the attempt's code, never the undone tree.
 #[test]
 fn accepting_a_collection_unknown_stop_ticks_the_attempt_s_code() {

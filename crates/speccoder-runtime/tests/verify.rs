@@ -274,7 +274,7 @@ fn output_is_capped_and_marked() {
     assert!(out.stdout.truncated());
 }
 
-/// M1 (spec 102 review): a report planted before the check — or dated after
+/// A report planted before the check — or dated after
 /// it ended — is never read as the run's.
 #[test]
 fn a_planted_or_future_dated_report_is_not_the_run_s() {

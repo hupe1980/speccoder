@@ -1,4 +1,4 @@
-//! The POC replayed (spec 102): the one-function Rust feature whose
+//! The POC replayed: the one-function Rust feature whose
 //! fourteen ticks were all regression-only with nothing saying why. A real
 //! Cargo crate judged by `cargo nextest` with its JUnit report; a scripted
 //! model plays the POC's tasks: T001–T002 (Setup), T003–T004 (Foundational;
@@ -173,7 +173,7 @@ fn the_poc_s_dead_test_files_fail_and_every_tick_says_why() {
         t004.message()
     );
 
-    // T005 (US1): its acceptance tests already pass; its own test goes to
+    // T005: its acceptance tests already pass; its own test goes to
     // `tests/unit/`, which Cargo never builds — then, told the rule, to
     // `tests/greet_name.rs`.
     let f = FakeProvider::new();

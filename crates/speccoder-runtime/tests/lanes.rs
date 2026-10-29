@@ -1,4 +1,4 @@
-//! Every task finds its doer (spec 106): a planning task runs with the
+//! Every task finds its doer: a planning task runs with the
 //! planning-task profile and ticks `regression_only` (`planning_work`); a
 //! `[YOU]` task is never attempted. The owner's POC shape: T002 names only
 //! `/specs/001-x/contracts/`.

@@ -260,7 +260,7 @@ fn unit_facts(root: &Path, feature: Option<&str>) -> Option<(String, bool, bool)
     Some((f.feature.name.clone(), f.artifacts.plan, f.artifacts.tasks))
 }
 
-/// The plan checks of the unit's task list (spec 102), as the stop carries them.
+/// The plan checks of the unit's task list, as the stop carries them.
 fn plan_checks(root: &Path, unit: &str) -> Vec<PlanCheck> {
     let Ok(o) = crate::format::open(root, Some(unit)) else {
         return Vec::new();
