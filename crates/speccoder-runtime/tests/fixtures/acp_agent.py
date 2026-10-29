@@ -187,7 +187,8 @@ def main():
         msg = read()
         method = msg.get("method")
         if method == "initialize":
-            log({"got": method, "params": msg.get("params")})
+            log({"got": method, "params": msg.get("params"),
+                 "opencode_config": os.environ.get("OPENCODE_CONFIG_CONTENT")})
             result = {"protocolVersion": 1,
                       "agentCapabilities": {"loadSession": False},
                       "agentInfo": {"name": "scripted", "version": "1.0.0"},

@@ -9,6 +9,9 @@ import type { Envelope, FeatureEntry, IssueEntry as GitHubIssue } from "./schema
 
 export type {
   Action,
+  AgentAttempt,
+  AgentCard,
+  AgentTick,
   ApproveSheet,
   BugReport,
   CodeComment,
@@ -219,6 +222,7 @@ export interface LiveRun {
     finished: string | null;
     started_at: number;
     updated_at: number;
+    agent?: LiveAgent | null;
   } | null;
   running?: boolean;
   own?: boolean;
@@ -226,3 +230,16 @@ export interface LiveRun {
   now?: number;
 }
 
+
+/** An external agent's attempt as it goes (live.json's `agent`, and the
+ *  app's own job from its events): its mode, plan and what speccoder decided. */
+export interface LiveAgent {
+  name: string;
+  mode: string;
+  decides_alone: boolean;
+  plan: { content: string; status: string }[];
+  asked: number;
+  allowed: number;
+  waited: number;
+  refused: number;
+}

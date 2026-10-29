@@ -8,6 +8,7 @@
   import { get, post } from "../lib/api";
   import type { Reply, Step } from "../lib/types";
   import FixSteps from "./FixSteps.svelte";
+  import Agents from "./Agents.svelte";
   import Icon from "./Icon.svelte";
 
   interface Check { check: string; level: string; detail: string; fix: string[]; fix_steps?: Step[] }
@@ -28,6 +29,8 @@
   let committed = $state<string | null>(null);
   let idea = $state("");
   let error = $state<string | null>(null);
+  /** The agents are asked about only once the person opens them. */
+  let agentsOpen = $state(false);
 
   // Once shown, the assistant stays until it is finished or left: committing
   // the configuration must not take it away before the first feature.
@@ -152,6 +155,11 @@
         <p class="note"><Icon name="key" size={14} /> Set the key where you start speccoder: <button class="fix mono" onclick={() => copy(`export ${keyVar}=…`)}>export {keyVar}=…</button> You can finish setting up first.</p>
       {/if}
       <p class="muted small">Local models (Ollama, vLLM, LM Studio) are set in Settings › Model after setup.</p>
+      <details class="agents-step" bind:open={agentsOpen}>
+        <summary>Or let an agent you already use make the attempts — Copilot, OpenCode, Claude Code, Codex, Gemini</summary>
+        <p class="muted small">speccoder decides each call it asks about and judges every attempt the same way; the model above still writes the acceptance tests. Choose one in Settings › Executor once this project is set up.</p>
+        {#if agentsOpen}<Agents compact />{/if}
+      </details>
     {:else if step === 2}
       <h1>Checks</h1>
       <p class="lead">They decide whether a change broke anything. speccoder found these for your project and will run them on the untouched code first.</p>
@@ -223,6 +231,8 @@
 </section>
 
 <style>
+  .agents-step { margin-top: 0.8rem; }
+  .agents-step summary { cursor: pointer; font-size: 0.85rem; color: var(--accent); }
   .assistant { display: grid; place-items: start center; padding-top: 3vh; }
   .card { width: min(720px, 100%); border-radius: 26px; background: var(--glass-strong); box-shadow: var(--shadow-lg), var(--glass-edge); padding: 2rem 2.4rem 1.5rem; display: grid; gap: 1rem; animation: in 420ms var(--spring); }
   @keyframes in { from { transform: translateY(10px) scale(0.98); opacity: 0; } }

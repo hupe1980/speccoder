@@ -10,6 +10,7 @@
   import { offer } from "../lib/actions";
   import Icon from "./Icon.svelte";
   import Diff from "./Diff.svelte";
+  import Agents from "./Agents.svelte";
 
   let report = $state<ConfigReport | null>(null);
   let pick = $state("model");
@@ -100,6 +101,18 @@
     if (same) delete next[path];
     else next[path] = { key: path, value };
     draft = next;
+  }
+  /** An agent chosen from its card: `[executor] agent`, and no `kind` or
+   *  `argv` beside it (they name another executor). */
+  function useAgent(id: string) {
+    const keys = section?.keys ?? [];
+    const k = (name: string) => keys.find((x) => x.key === name);
+    const agent = k("agent");
+    if (agent) set("executor.agent", agent, id);
+    for (const other of ["kind", "argv"]) {
+      const x = k(other);
+      if (x && x.value !== undefined && x.value !== null) reset(`executor.${other}`, x);
+    }
   }
   function reset(path: string, k: ConfigKey) {
     const next = { ...draft };
@@ -364,6 +377,10 @@
       {:else}
         {#if section.name === "model" && source}
           <p class="muted small source"><Icon name="key" size={12} /> Credentials: {source}</p>
+        {/if}
+        {#if section.name === "executor"}
+          <Agents use={useAgent} />
+          <h3 class="sub">Settings</h3>
         {/if}
         <div class="grouped">
           {#each shown(section) as k (k.key)}{@render row(`${section.name}.${k.key}`, k)}{/each}

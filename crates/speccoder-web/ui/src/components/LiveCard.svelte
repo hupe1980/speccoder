@@ -5,6 +5,7 @@
   import { app } from "../lib/app.svelte";
   import { offer } from "../lib/actions";
   import Icon from "./Icon.svelte";
+  import AgentStrip from "./AgentStrip.svelte";
   let { onclose }: { onclose: () => void } = $props();
   const r = $derived(app.live?.live ?? null);
   const interrupted = $derived(app.interrupted);
@@ -49,6 +50,7 @@
         <p class="meta">{r.feature} · {r.stage ?? "starting"}{#if r.stage_detail}{" "}{r.stage_detail}{/if} · {interrupted ? `stopped ${since(r.updated_at)} ago` : since(r.started_at)}</p>
       </div>
     </header>
+    {#if r.agent}<AgentStrip agent={r.agent} />{/if}
     {#if r.last_call}<p class="row"><Icon name="terminal" size={12} /><span class="mono">{r.last_call}</span></p>{/if}
     {#if r.thinking}<p class="row thought"><span class="therefore" aria-hidden="true">∴</span><span>{r.thinking}</span></p>{/if}
     {#if r.said}<p class="row said">“{r.said}”</p>{/if}

@@ -4,7 +4,7 @@
 import { get, post, q, listen } from "./api";
 import { KINDS, kindOf, offer, type Offer } from "./actions";
 import { copyBlock, labelOf, render, shown, type Wrong } from "./steps";
-import type { Action, Reply, Inbox, LiveRun, Project, Report, PendingCall, Presentation, Runnable, Document, Remedy, PlanningChainReport, PlanStepResult, Through, WelcomeView, How, Step, View } from "./types";
+import type { Action, AgentCard, LiveAgent, Reply, Inbox, LiveRun, Project, Report, PendingCall, Presentation, Runnable, Document, Remedy, PlanningChainReport, PlanStepResult, Through, WelcomeView, How, Step, View } from "./types";
 
 export interface StageView {
   stage: string;
@@ -105,6 +105,11 @@ class AppState {
   calls = $state<string[]>([]);
   /** What the model said last, its first line: a claim. */
   said = $state<string | null>(null);
+  /** The external agent making this job's attempt, when one is. */
+  agent = $state<LiveAgent | null>(null);
+  /** Every agent's card (`doctor --agents`); `probed`: installed ones were
+   *  asked for a session. */
+  agents = $state<{ cards: AgentCard[]; probed: boolean } | null>(null);
   /** The project's current run from any process (a terminal's included). */
   live = $state<LiveRun | null>(null);
   /** Another process runs this project now: it holds the worktree. */
@@ -198,6 +203,15 @@ class AppState {
     } finally {
       this.loading = false;
     }
+  }
+
+  /** The agents' cards: what is known without starting them, then (with
+   *  `probe`) after asking each installed one for a session. */
+  async loadAgents(probe: boolean) {
+    if (this.agents?.probed || (!probe && this.agents)) return this.agents?.cards ?? [];
+    const r = await get<Reply<{ agents?: AgentCard[] }>>(`/api/agents${q({ probe: String(probe) })}`);
+    this.agents = { cards: r.data?.agents ?? [], probed: probe };
+    return this.agents.cards;
   }
 
   async selectFeature(name: string) {
@@ -525,6 +539,17 @@ class AppState {
       case "task_started":
         this.task = { id: ev.task, title: ev.title };
         this.stages = [];
+        this.agent = null;
+        break;
+      case "agent_started":
+        this.agent = { name: ev.agent, mode: ev.mode, decides_alone: !!ev.decides_alone, plan: [], asked: 0, allowed: 0, waited: 0, refused: 0 };
+        this.calls = [...this.calls.slice(-199), `${ev.agent}: ${ev.mode}`];
+        break;
+      case "agent_plan":
+        if (this.agent) this.agent = { ...this.agent, plan: ev.entries ?? [] };
+        break;
+      case "approval_requested":
+        if (this.agent) this.agent = { ...this.agent, waited: this.agent.waited + 1 };
         break;
       case "stage": {
         const row = { stage: ev.stage, state: ev.state, detail: ev.detail ?? null, elapsed_ms: ev.elapsed_ms ?? null };
@@ -551,6 +576,10 @@ class AppState {
         break;
       }
       case "tool_call":
+        if (this.agent && ev.decision !== "reported") {
+          const a = this.agent;
+          this.agent = { ...a, asked: a.asked + 1, allowed: a.allowed + (ev.decision === "allow" ? 1 : 0), refused: a.refused + (ev.decision === "deny" ? 1 : 0) };
+        }
         this.calls = [...this.calls.slice(-199), `turn ${ev.turn}  ${ev.tool} ${ev.target}  ${ev.decision}${ev.ok === false ? "  failed" : ""}`];
         // A skill writing the documents: show them as they are written.
         if (this.following && /write|edit/.test(String(ev.tool))) this.#soon();

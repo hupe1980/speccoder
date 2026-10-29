@@ -5,6 +5,7 @@
   // while a job runs, and the end of one until it is put away.
   import { app } from "../lib/app.svelte";
   import Icon from "./Icon.svelte";
+  import AgentStrip from "./AgentStrip.svelte";
 
   let open = $state(false);
   let dismissed = $state<number | null>(null);
@@ -51,7 +52,7 @@
       </span>
       <span class="what">
         {#if waiting}<strong>Needs you</strong>
-        {:else if running}<strong>{app.task?.id ?? "Working"}</strong>{#if current}<span class="dim">{current}</span>{/if}
+        {:else if running}<strong>{app.task?.id ?? "Working"}</strong>{#if current}<span class="dim">{current}</span>{/if}{#if app.agent}<span class="dim" class:alone={app.agent.decides_alone} title={app.agent.mode}>· {app.agent.name}{app.agent.decides_alone ? " (decides alone)" : ""}</span>{/if}
         {:else}<strong>{ok ? "Done" : "Ended"}</strong><span class="dim">{app.job.result?.message ?? ""}</span>{/if}
       </span>
       {#if running}
@@ -66,6 +67,7 @@
           <code>{app.job.command}</code>
           {#if app.task}<span class="task">{app.task.title}</span>{/if}
         </div>
+        {#if app.agent}<AgentStrip agent={app.agent} dark />{/if}
         {#if app.thinking}<p class="thinking" class:live={app.job?.running} title="Where the model's reasoning landed — its account, not evidence"><span class="therefore" aria-hidden="true">∴</span> {app.thinking}</p>{/if}
         {#if app.said}<p class="now" title="What the model says it is doing — its account, not evidence">“{app.said}”</p>{/if}
         <ol class="pipeline" aria-label="Pipeline">
@@ -133,6 +135,7 @@
   @keyframes spin { to { transform: rotate(360deg); } }
   .what { flex: 1; min-width: 0; display: flex; gap: 0.5rem; align-items: baseline; overflow: hidden; white-space: nowrap; }
   .what strong { font-weight: 650; }
+  .what .alone { color: #ffb340; }
   .waiting .what strong { color: #ffb340; }
   .dim { color: rgba(235, 235, 245, 0.6); overflow: hidden; text-overflow: ellipsis; font-size: 0.88rem; }
   .progress { width: 56px; height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.15); overflow: hidden; flex: none; }

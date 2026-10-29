@@ -821,7 +821,9 @@ fn main() {
         Command::Fix { dry_run: false } => speccoder_runtime::code::fix_setup(path, feature),
         Command::Worktree => speccoder_runtime::worktree(path, feature),
         Command::Propose { task } => speccoder_runtime::propose(path, feature, task),
-        Command::Doctor { agents: true, .. } => speccoder_runtime::doctor::agents(path, feature),
+        Command::Doctor { agents: true, .. } => {
+            speccoder_runtime::doctor::agents(path, feature, true)
+        }
         Command::Doctor { bug_report, .. } => {
             let report = speccoder_runtime::doctor::run(path, feature, Some(&look_line()));
             if *bug_report && !machine {

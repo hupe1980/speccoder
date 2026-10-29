@@ -579,14 +579,14 @@ pub fn checks(
 /// when nothing fails).
 #[must_use]
 pub fn run(path: &Path, feature: Option<&str>, look: Option<&str>) -> CommandResult {
-    report(path, feature, look, false)
+    report(path, feature, look, None)
 }
 
-/// `speccoder doctor --agents`: the checks and every agent's card, each
-/// installed one asked for a session (never a prompt).
+/// `speccoder doctor --agents`: the checks and every agent's card; with
+/// `probe`, each installed one is asked for a session (never a prompt).
 #[must_use]
-pub fn agents(path: &Path, feature: Option<&str>) -> CommandResult {
-    report(path, feature, None, true)
+pub fn agents(path: &Path, feature: Option<&str>, probe: bool) -> CommandResult {
+    report(path, feature, None, Some(probe))
 }
 
 /// The configured `[executor]` agent, if it is an ACP one.
@@ -655,7 +655,12 @@ fn executor_check(agent: &crate::acp::agent::Agent) -> DoctorCheck {
     }
 }
 
-fn report(path: &Path, feature: Option<&str>, look: Option<&str>, probe: bool) -> CommandResult {
+fn report(
+    path: &Path,
+    feature: Option<&str>,
+    look: Option<&str>,
+    cards: Option<bool>,
+) -> CommandResult {
     let mut checks = checks(path, feature, &|k| std::env::var(k).ok());
     let chosen = configured_agent(path);
     if let Some(a) = &chosen {
@@ -680,11 +685,9 @@ fn report(path: &Path, feature: Option<&str>, look: Option<&str>, probe: bool) -
         speccoder: env!("CARGO_PKG_VERSION").to_owned(),
         os: format!("{} {}", std::env::consts::OS, std::env::consts::ARCH),
         checks: checks.clone(),
-        agents: if probe {
-            crate::acp::ready::cards(chosen.as_ref(), true)
-        } else {
-            Vec::new()
-        },
+        agents: cards.map_or_else(Vec::new, |probe| {
+            crate::acp::ready::cards(chosen.as_ref(), probe)
+        }),
     };
     let result = match failures.first() {
         None => CommandResult::ok(

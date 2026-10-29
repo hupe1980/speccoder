@@ -1286,3 +1286,122 @@ fn each_test_has_a_state_directory_of_its_own_a() {
 fn each_test_has_a_state_directory_of_its_own_b() {
     a_state_directory_of_its_own("b", "a");
 }
+
+/// `run --agent <id>`: that agent makes this run's attempt — here a
+/// scripted ACP agent standing in for OpenCode on PATH — and
+/// `speccoder.toml` is untouched.
+#[test]
+fn run_agent_picks_the_agent_for_this_run_only() {
+    let dir = tempfile::tempdir().unwrap();
+    let fixture = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../speccoder-speckit/tests/fixtures/graph");
+    assert!(
+        std::process::Command::new("cp")
+            .arg("-R")
+            .arg(fixture.join("."))
+            .arg(dir.path())
+            .status()
+            .unwrap()
+            .success()
+    );
+    let r = dir.path();
+    std::fs::write(
+        r.join("specs/001-graph/spec.md"),
+        "# Spec\n\n### User Story 1 - Login\n\nUsers log in.\n",
+    )
+    .unwrap();
+    std::fs::create_dir_all(r.join("src")).unwrap();
+    std::fs::write(r.join("src/lib.rs"), "pub fn ok() {}\n").unwrap();
+    let config = "[model]\nprovider = \"openai\"\nmodel = \"gpt-5.4-mini\"\n[checks.has-ok]\nargv = [\"grep\", \"-q\", \"fn ok\", \"src/lib.rs\"]\n[budget]\nmax_attempts = 1\n";
+    std::fs::write(r.join("speccoder.toml"), config).unwrap();
+    git(r, &["init", "-q", "-b", "main"]);
+    git(r, &["add", "-A"]);
+    git(r, &["commit", "-q", "-m", "init"]);
+    // `opencode` on PATH is the scripted agent.
+    let bin = tempfile::tempdir().unwrap();
+    let side = tempfile::tempdir().unwrap();
+    let scenario = side.path().join("scenario.json");
+    std::fs::write(
+        &scenario,
+        serde_json::json!({ "steps": [
+            { "edit": "src/lib.rs", "content": "pub fn ok() {}\npub fn login() {}\n" },
+            { "say": "Added login." },
+        ], "log": side.path().join("log.jsonl") })
+        .to_string(),
+    )
+    .unwrap();
+    let agent = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../speccoder-runtime/tests/fixtures/acp_agent.py");
+    let opencode = bin.path().join("opencode");
+    std::fs::write(
+        &opencode,
+        format!(
+            "#!/bin/sh\nexec python3 -I '{}' '{}'\n",
+            agent.display(),
+            scenario.display()
+        ),
+    )
+    .unwrap();
+    use std::os::unix::fs::PermissionsExt as _;
+    std::fs::set_permissions(&opencode, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let path = format!(
+        "{}:{}",
+        bin.path().display(),
+        std::env::var("PATH").unwrap_or_default()
+    );
+    let state = tempfile::tempdir().unwrap();
+    let out = speccoder()
+        .current_dir(r)
+        .env("SPECCODER_STATE_DIR", state.path())
+        .env("PATH", &path)
+        .env("OPENAI_API_KEY", "sk-test-not-used")
+        .args([
+            "--json",
+            "run",
+            "--task",
+            "T005",
+            "--agent",
+            "opencode",
+            "--no-prompt",
+        ])
+        .output()
+        .unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap_or_default();
+    assert_eq!(
+        v["status"],
+        "ok",
+        "{v}\n{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        v["data"]["run_id"]
+            .as_str()
+            .unwrap()
+            .starts_with("external_opencode_"),
+        "{v}"
+    );
+    assert_eq!(v["data"]["agent"]["preset"], "opencode", "{v}");
+    // OpenCode was started with every permission rule set to ask.
+    let log = std::fs::read_to_string(side.path().join("log.jsonl")).unwrap();
+    assert!(log.contains("session/prompt"), "{log}");
+    let init: serde_json::Value = serde_json::from_str(log.lines().next().unwrap()).unwrap();
+    assert!(
+        init["opencode_config"]
+            .as_str()
+            .unwrap()
+            .contains("\"bash\":\"ask\""),
+        "{init}"
+    );
+    assert_eq!(
+        std::fs::read_to_string(r.join("speccoder.toml")).unwrap(),
+        config
+    );
+    // An agent speccoder does not know is refused before anything runs.
+    let bad = speccoder()
+        .current_dir(r)
+        .env("SPECCODER_STATE_DIR", state.path())
+        .args(["run", "--task", "T005", "--agent", "gpt"])
+        .output()
+        .unwrap();
+    assert!(!bad.status.success());
+}

@@ -48,8 +48,13 @@
     e.preventDefault();
     const x = e.clientX;
     const y = e.clientY;
-    const actions = await get<Action[]>(`/api/actions${q({ feature: app.feature ?? undefined, task: t.id })}`).catch(() => [] as Action[]);
+    const [actions, agents] = await Promise.all([
+      get<Action[]>(`/api/actions${q({ feature: app.feature ?? undefined, task: t.id })}`).catch(() => [] as Action[]),
+      app.loadAgents(false).catch(() => []),
+    ]);
     const mine = ofTask(actions, t.id);
+    // Run with …: this run only, the configuration untouched.
+    const others = t.state === "ready" ? agents.filter((a) => a.installed.state === "yes" && !a.chosen) : [];
     const copy = (text: string, what: string) => () => {
       void navigator.clipboard?.writeText(text);
       app.toast({ tone: "ok", text: `Copied ${what}`, detail: text });
@@ -61,6 +66,13 @@
       items: [
         { label: "Show Evidence", icon: "shield", act: () => void app.selectTask(t.id) },
         ...mine.map((a) => ({ label: KINDS[a.id.kind].verb + (a.input ? "…" : ""), icon: KINDS[a.id.kind].icon, disabled: a.blocked ?? (app.job?.running ? "a job is running" : null), hint: `$ ${a.command}`, act: () => void app.perform(a) })),
+        ...others.map((a) => ({
+          label: `Run with ${a.name}`,
+          icon: "play",
+          disabled: app.job?.running ? "a job is running" : null,
+          hint: `$ speccoder run --task ${t.id} --agent ${a.id}`,
+          act: () => void app.perform(offer({ kind: "run", task: t.id, agent: a.id }, { group: "work", label: `run ${t.id} with ${a.name}`, why: "this run only; speccoder.toml is unchanged", command: `speccoder run --task ${t.id} --agent ${a.id}` })),
+        })),
         { label: "Copy Task ID", icon: "copy", act: copy(t.id, "the task ID") },
         { label: "Copy the Run Command", icon: "terminal", act: copy(`speccoder run --task ${t.id}`, "the command") },
       ],

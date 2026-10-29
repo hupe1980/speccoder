@@ -495,11 +495,22 @@ async fn doctor(State(s): State<Shared>, Query(q): Query<FeatureQuery>) -> Json<
     envelope(&s, &r)
 }
 
-/// `doctor --agents`: every agent's card; installed ones are asked for a
-/// session, never a prompt.
-async fn agents(State(s): State<Shared>) -> Json<Value> {
+#[derive(Debug, Deserialize)]
+struct AgentsQuery {
+    /// Ask each installed agent for a session (never a prompt); `false`:
+    /// what is known without starting one.
+    #[serde(default = "yes")]
+    probe: bool,
+}
+
+fn yes() -> bool {
+    true
+}
+
+/// `doctor --agents`: every agent's card.
+async fn agents(State(s): State<Shared>, Query(q): Query<AgentsQuery>) -> Json<Value> {
     let root = s.root.get();
-    let r = off(move || speccoder_runtime::service::doctor::agents(&root, None)).await;
+    let r = off(move || speccoder_runtime::service::doctor::agents(&root, None, q.probe)).await;
     envelope(&s, &r)
 }
 
