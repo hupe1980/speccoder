@@ -1670,6 +1670,7 @@ fn run_task_once(
                                 approved_once: approved_once.clone(),
                                 progress: Some((task.to_owned(), Arc::clone(&live))),
                                 copied: copied_files.clone(),
+                                agent: agent.id.clone(),
                             },
                         ));
                         let a = external::run_acp(

@@ -385,7 +385,7 @@ pub fn agent_attempt(output: &Value) -> Option<speccoder_core::AgentAttempt> {
         preset: a["preset"].as_str().unwrap_or_default().to_owned(),
         mode: a["mode"].is_object().then(|| {
             serde_json::from_value::<crate::acp::modes::Statement>(a["mode"].clone())
-                .map(|s| s.sentence())
+                .map(|s| crate::secrets::mask(&s.sentence()))
                 .unwrap_or_default()
         }),
         decides_alone: a["decides_alone"] == true,
@@ -520,6 +520,7 @@ pub fn run_acp(
         "plan": f.plan,
         "notices": notices,
     });
+    crate::secrets::mask_json(&mut output);
     AcpOutcome {
         outcome: Outcome {
             run_id: format!("external_{}_{stamp}", agent.id),

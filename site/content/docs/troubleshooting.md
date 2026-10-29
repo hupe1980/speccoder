@@ -40,7 +40,7 @@ Every failure names a [code](@/docs/codes.md) and the command that fixes it; `sp
 | `stopped[EXECUTOR-LOGIN]` (23) | The `[executor]` agent needs signing in; nothing was attempted. Run the login the fix names in your terminal (the app opens one: Open Terminal here), e.g. `copilot login` or `opencode auth login`, then run again. `speccoder doctor --agents` shows every agent's ticks. |
 | `[executor]: kind = "claude" is now agent = "claude"` | Agents run over ACP now: write `agent = "claude"` (or `"codex"`). |
 | The run says an agent *decides alone* | It is in a mode that decides without asking, or it changed something without asking (an allow rule in its own settings, e.g. Claude Code's `permissions.allow`): those calls never reached speccoder. Remove the rule or set its ask-first mode in its own settings. *Not known whether it asks*: no recording of this version says. |
-| Every command the agent runs asks you | A command the agent runs itself runs outside the sandbox, so it always needs your decision; choose *for this task* to let that exact command run on. Agents that use speccoder's terminal get the command policy instead. |
+| Every command or edit the agent makes asks you | What the agent does itself — outside the sandbox — needs your decision, except a plain read of one file; choose *for this task* to let that exact command or those files go on. Agents that use speccoder's terminal and file access get the command policy and protected paths instead. |
 | A run seems stuck | `speccoder report --live` from another terminal shows the step and the last tool call. |
 
 ## Getting help

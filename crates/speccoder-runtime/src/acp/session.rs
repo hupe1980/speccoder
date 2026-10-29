@@ -173,7 +173,13 @@ impl Shared {
         let mut why = None;
         if let Some(v) = &value {
             let (reading, decides) = w.profile.reading(v);
-            if reading == modes::Reading::DecidesWithoutYou {
+            // A value no recording knows is not trusted to ask.
+            let decides = decides.or_else(|| {
+                (reading == modes::Reading::NotKnown
+                    && !w.profile.values.iter().any(|(x, _)| x == v))
+                .then(|| "a mode no recording of this version knows".to_owned())
+            });
+            if reading == modes::Reading::DecidesWithoutYou || decides.is_some() {
                 let name = w
                     .advertised
                     .as_ref()
@@ -580,10 +586,23 @@ async fn drive(attempt: &Attempt, governor: Arc<Governor>) -> Finished {
                         })
                         .collect();
                     let governor = Arc::clone(&shared.governor);
-                    let answer =
-                        tokio::task::spawn_blocking(move || governor.permission(&call, &options))
-                            .await
-                            .unwrap_or(None);
+                    let reject = options
+                        .iter()
+                        .find(|o| o.kind.starts_with("reject"))
+                        .map(|o| o.id.clone());
+                    let asked = call.clone();
+                    // A decision that fails (a panic) is a refusal.
+                    let answer = match tokio::task::spawn_blocking(move || {
+                        governor.permission(&call, &options)
+                    })
+                    .await
+                    {
+                        Ok(a) => a,
+                        Err(_) => {
+                            shared.governor.abandon(&asked);
+                            reject
+                        }
+                    };
                     if shared.governor.stopped() {
                         stop.notify_one();
                     }
@@ -756,6 +775,12 @@ async fn drive(attempt: &Attempt, governor: Arc<Governor>) -> Finished {
         .lock()
         .map(|l| l.iter().cloned().collect())
         .unwrap_or_default();
+    // Everything the agent or its connection said, masked.
+    finished.error = finished.error.as_deref().map(crate::secrets::mask);
+    finished.agent_name = finished.agent_name.as_deref().map(crate::secrets::mask);
+    for n in &mut finished.notices {
+        *n = crate::secrets::mask(n);
+    }
     if let Err(e) = connected
         && finished.error.is_none()
         && finished.stop_reason.is_none()
@@ -868,6 +893,14 @@ async fn session(
     let advertised = Advertised::read(&setup["configOptions"], &setup["modes"], profile);
     let preference = attempt.agent.mode.as_deref();
     let plan = ModePlan::of(profile, advertised.as_ref(), preference);
+    // Watched from here on: a move while the mode is being set counts too.
+    if let (Some(p), Ok(mut w)) = (profile, shared.watch.lock()) {
+        *w = Some(Watch {
+            agent: shown.clone(),
+            profile: p,
+            advertised: advertised.clone(),
+        });
+    }
     let mut options = setup["configOptions"].clone();
     let outcome = match (&plan.request, &advertised) {
         (Some(value), Some(ad)) => {
@@ -897,25 +930,27 @@ async fn session(
             .as_ref()
             .map(|(t, _)| t.clone())
             .unwrap_or_default(),
-        agent: shown.clone(),
-        mode: statement.sentence(),
+        agent: crate::secrets::mask(&shown),
+        mode: crate::secrets::mask(&statement.sentence()),
         decides_alone: statement.asks() == Some(false),
         known: statement.asks().is_some(),
     });
     finished.mode = Some(statement);
-    if let (Some(p), Ok(mut w)) = (profile, shared.watch.lock()) {
-        *w = Some(Watch {
-            agent: shown.clone(),
-            profile: p,
-            advertised: advertised.clone(),
-        });
-    }
 
     // The model, where the agent offers a choice of it.
     if let Some(model) = &attempt.model {
-        finished
-            .notices
-            .push(choose_model(connection, &session_id, &options, model, &shown).await);
+        let (said, now) = choose_model(connection, &session_id, &options, model, &shown).await;
+        finished.notices.push(crate::secrets::mask(&said));
+        // The answer lists every option as it is now: the mode too.
+        if let Some(now) = now {
+            let value = shared.watch.lock().ok().and_then(|w| {
+                match w.as_ref()?.advertised.as_ref().map(|a| &a.via) {
+                    Some(modes::Via::Config(id)) => modes::current_of(&now, id),
+                    _ => None,
+                }
+            });
+            shared.moved(value, Some(&now));
+        }
     }
 
     let turn = connection
@@ -1054,15 +1089,16 @@ async fn choose_model(
     options: &Value,
     model: &str,
     agent: &str,
-) -> String {
+) -> (String, Option<Value>) {
     let option = options
         .as_array()
         .into_iter()
         .flatten()
         .find(|o| o["category"] == "model" && o["type"] == "select");
     let Some(option) = option else {
-        return format!(
-            "model `{model}`: {agent} offers no choice of model over ACP; it uses its own"
+        return (
+            format!("model `{model}`: {agent} offers no choice of model over ACP; it uses its own"),
+            None,
         );
     };
     let id = option["id"].as_str().unwrap_or("model").to_owned();
@@ -1080,13 +1116,16 @@ async fn choose_model(
     if !values.iter().any(|v| v == model) {
         let mut offered = values.clone();
         offered.dedup();
-        return format!(
-            "model `{model}` is not offered by {agent} (it offers {}); it uses {current}",
-            offered.join(", ")
+        return (
+            format!(
+                "model `{model}` is not offered by {agent} (it offers {}); it uses {current}",
+                offered.join(", ")
+            ),
+            None,
         );
     }
     if current == model {
-        return format!("model: {model}");
+        return (format!("model: {model}"), None);
     }
     let asked = connection
         .send_request(SetSessionConfigOptionRequest::new(
@@ -1096,12 +1135,21 @@ async fn choose_model(
         ))
         .block_task();
     match tokio::time::timeout(MODE_GRACE, asked).await {
-        Ok(Ok(_)) => format!("model: {model}"),
-        Ok(Err(e)) => format!(
-            "model `{model}`: {agent} refused it ({}); it uses {current}",
-            e.message
+        Ok(Ok(r)) => (
+            format!("model: {model}"),
+            serde_json::to_value(&r.config_options).ok(),
         ),
-        Err(_) => format!("model `{model}`: {agent} did not answer; it uses {current}"),
+        Ok(Err(e)) => (
+            format!(
+                "model `{model}`: {agent} refused it ({}); it uses {current}",
+                e.message
+            ),
+            None,
+        ),
+        Err(_) => (
+            format!("model `{model}`: {agent} did not answer; it uses {current}"),
+            None,
+        ),
     }
 }
 

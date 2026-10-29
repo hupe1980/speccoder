@@ -82,9 +82,12 @@ def handle_side(msg):
         params = msg.get("params", {})
         log({"got": method, "params": params})
         options = SCENARIO.get("session", {}).get("configOptions", [])
+        also = SCENARIO.get("on_set", {}).get(params.get("configId"), {})
         for o in options:
             if o.get("id") == params.get("configId"):
                 o["currentValue"] = params.get("value")
+            if o.get("id") in also:
+                o["currentValue"] = also[o["id"]]
         reply(msg["id"], {"configOptions": options})
     elif method is not None and "id" in msg:
         log({"got": method, "params": msg.get("params")})

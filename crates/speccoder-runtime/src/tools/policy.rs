@@ -35,6 +35,8 @@ pub enum Class {
     Network,
     /// One MCP tool as defined now.
     Mcp,
+    /// One action an external agent takes itself.
+    Agent,
 }
 
 impl Class {
@@ -46,6 +48,7 @@ impl Class {
             Self::Command => "command",
             Self::Network => "network",
             Self::Mcp => "mcp",
+            Self::Agent => "agent",
         }
     }
 }
@@ -85,6 +88,22 @@ pub enum Object {
         /// agentplane's digest over the tool's definition.
         digest: String,
     },
+    /// An external agent's own action, in its own process: exactly these
+    /// commands and paths — never covered by a grant of speccoder's own
+    /// calls, nor covering one.
+    Agent {
+        /// The agent (its preset id).
+        agent: String,
+        /// `execute`, `edit`, `read`, … as the agent declared it.
+        call: String,
+        /// The commands it runs, exactly.
+        argvs: Vec<Vec<String>>,
+        /// The worktree paths it names, canonical.
+        paths: Vec<String>,
+        /// A digest of what else it carries, when that decides (a call
+        /// speccoder cannot read); empty otherwise.
+        input: String,
+    },
 }
 
 /// What an executable that cannot be found is recorded as.
@@ -116,6 +135,12 @@ pub fn unasked(pending: &Value, decide: &str) -> String {
             );
         }
         return format!("`{shown}` needs approval: {reason} — {decide}");
+    }
+    // An external agent's own action: what it is, in words.
+    if let Ok(o @ Object::Agent { .. }) =
+        serde_json::from_value::<Object>(pending["object"].clone())
+    {
+        return format!("{} needs approval: {reason} — {decide}", o.describe());
     }
     let object = arguments["path"]
         .as_str()
@@ -149,6 +174,22 @@ impl PartialEq for Object {
             (Self::Tool { name: a, digest: x }, Self::Tool { name: b, digest: y }) => {
                 a == b && x == y
             }
+            (
+                Self::Agent {
+                    agent: a1,
+                    call: a2,
+                    argvs: a3,
+                    paths: a4,
+                    input: a5,
+                },
+                Self::Agent {
+                    agent: b1,
+                    call: b2,
+                    argvs: b3,
+                    paths: b4,
+                    input: b5,
+                },
+            ) => a1 == b1 && a2 == b2 && a3 == b3 && a4 == b4 && a5 == b5,
             _ => false,
         }
     }
@@ -192,6 +233,7 @@ impl Object {
             Self::Command { network: true, .. } => Class::Network,
             Self::Command { .. } => Class::Command,
             Self::Tool { .. } => Class::Mcp,
+            Self::Agent { .. } => Class::Agent,
         }
     }
 
@@ -212,6 +254,20 @@ impl Object {
                 format!("run `{}`{place}{net}", argv.join(" "))
             }
             Self::Tool { name, digest } => format!("use `{name}`@{}", first12(digest)),
+            Self::Agent {
+                agent,
+                call: kind,
+                argvs,
+                paths,
+                ..
+            } => {
+                let what: Vec<String> = argvs
+                    .iter()
+                    .map(|a| format!("`{}`", a.join(" ")))
+                    .chain(paths.iter().map(|p| format!("`{p}`")))
+                    .collect();
+                format!("{agent} itself: {kind} {}", what.join(", "))
+            }
         }
     }
 
@@ -234,6 +290,15 @@ impl Object {
                 "executable": executable, "network": network,
             }),
             Self::Tool { name, digest } => serde_json::json!({ "tool": name, "digest": digest }),
+            Self::Agent {
+                agent,
+                call,
+                argvs,
+                paths,
+                input,
+            } => {
+                serde_json::json!({ "agent": agent, "call": call, "argvs": argvs, "paths": paths, "input": input })
+            }
         };
         let hex: String = Sha256::digest(identity.to_string().as_bytes())
             .iter()
@@ -251,6 +316,9 @@ impl Object {
             Self::Path { canonical, .. } => canonical.clone(),
             Self::Command { argv_sha256, .. } => format!("argv#{}", first12(argv_sha256)),
             Self::Tool { name, digest } => format!("{name}@{}", first12(digest)),
+            Self::Agent { agent, call, .. } => {
+                format!("{agent}:{call}#{}", first12(&self.grant_id()))
+            }
         }
     }
 

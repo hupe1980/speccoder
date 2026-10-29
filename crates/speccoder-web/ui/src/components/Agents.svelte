@@ -57,7 +57,7 @@
     {/each}
   </ul>
   {#if !compact}
-    <p class="muted small note"><Icon name="shield" size={11} /> speccoder decides every call an agent asks about, and the files and commands it runs through speccoder. Commands the agent runs itself always ask you: they run outside the sandbox. What it does without asking — an allow rule in its own settings — stays outside, and the run says so when it sees it.</p>
+    <p class="muted small note"><Icon name="shield" size={11} /> speccoder decides every call an agent asks about, and the files and commands it runs through speccoder. What the agent does itself — commands, edits — asks you, except reading one plain file: it runs outside the sandbox. What it does without asking — an allow rule in its own settings — stays outside, and the run says so when it sees it.</p>
   {/if}
 </section>
 

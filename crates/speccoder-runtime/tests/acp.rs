@@ -209,7 +209,6 @@ fn an_allowed_call_goes_ahead_and_the_verdict_is_speccoders() {
     assert_eq!(chosen(&answers[1]), Some("allow"));
     assert_eq!(chosen(&answers[2]), Some("allow"));
     let calls = &rep.tool_calls;
-    assert_eq!(calls[0]["tool"], "run_command");
     assert_eq!(
         (
             calls[0]["executed_by"].as_str(),
@@ -219,7 +218,7 @@ fn an_allowed_call_goes_ahead_and_the_verdict_is_speccoders() {
     );
     assert_eq!(calls[2]["scope"], "task-grant", "{}", calls[2]);
     assert_eq!(
-        calls[0]["arguments"]["argv"],
+        calls[0]["object"]["argvs"][0],
         json!(["grep", "-q", "fn ok", "src/lib.rs"])
     );
     assert_eq!(
@@ -279,8 +278,8 @@ fn a_call_that_needs_a_person_waits_and_continues_after_task_approve() {
     let rep = report(&first);
     assert_eq!(rep.attempt_status, "needs_approval");
     assert_eq!(
-        rep.pending.as_ref().unwrap()["arguments"]["argv"],
-        json!(["make", "lint"])
+        rep.pending.as_ref().unwrap()["object"]["argvs"],
+        json!([["make", "lint"]])
     );
     assert!(
         first.message().contains("speccoder task approve T005"),
@@ -770,7 +769,7 @@ fn the_report_carries_the_agent_its_plan_and_the_tally() {
 fn plain_reads_in_a_shell_line_are_reads_and_secrets_stay_refused() {
     let p = Project::new(
         &json!({ "steps": [
-            permission("execute", json!({ "command": "cat src/lib.rs; ls src && head -n 5 config.txt" })),
+            permission("execute", json!({ "command": "head -n 5 src/lib.rs" })),
             permission("execute", json!({ "command": "cat .env" })),
             permission("execute", json!({ "command": "cat ../outside" })),
             permission("execute", json!({ "command": "cat src/lib.rs | sh" })),
@@ -785,14 +784,8 @@ fn plain_reads_in_a_shell_line_are_reads_and_secrets_stay_refused() {
     // A pipe is a shell's: a person decides.
     assert_eq!(a[3]["result"]["outcome"]["outcome"], "cancelled");
     let calls = &report(&res).tool_calls;
-    assert_eq!(
-        calls[..3]
-            .iter()
-            .map(|c| c["tool"].as_str().unwrap())
-            .collect::<Vec<_>>(),
-        ["read_file", "list_files", "read_file"]
-    );
-    // One count per request, however many reads one names.
+    assert_eq!(calls[0]["tool"], "read_file");
+    // One count per request.
     let t = report(&res).agent.as_ref().unwrap().tally;
     assert_eq!(
         (t.asked, t.allowed, t.refused, t.waited),
@@ -1018,4 +1011,46 @@ fn a_copied_secret_never_reaches_the_report_through_the_agents_words() {
             .content
             .starts_with("use ")
     );
+}
+
+#[test]
+fn a_mode_no_recording_knows_and_a_move_in_an_answer_stop_the_turn() {
+    // A value the profile does not know is not trusted to ask.
+    let mut s = claude_asks();
+    s["steps"] = json!([
+        { "update": { "sessionUpdate": "config_option_update", "configOptions": [{ "id": "mode", "name": "Mode", "category": "mode", "type": "select", "currentValue": "yolo",
+            "options": [{ "value": "default", "name": "Default" }, { "value": "yolo", "name": "Yolo" }] }] } },
+        { "sleep": 5 },
+        { "edit": "src/lib.rs", "content": EDIT },
+    ]);
+    let p = Project::new(&s, "");
+    let rep = report(&p.run()).clone();
+    assert_eq!(rep.attempt_status, "blocked", "{:?}", rep.reason);
+    assert!(
+        rep.reason
+            .as_deref()
+            .unwrap_or_default()
+            .contains("no recording"),
+        "{:?}",
+        rep.reason
+    );
+    // Choosing the model moved the mode: seen in the answer, the turn stopped.
+    let mut s = claude_asks();
+    s["session"]["configOptions"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({ "id": "model", "name": "Model", "category": "model", "type": "select", "currentValue": "m1",
+            "options": [{ "value": "m1", "name": "M1" }, { "value": "m2", "name": "M2" }] }));
+    s["on_set"] = json!({ "model": { "mode": "bypassPermissions" } });
+    s["steps"] = json!([{ "sleep": 5 }, { "edit": "src/lib.rs", "content": EDIT }]);
+    let p = Project::new(&s, "");
+    let toml = fs::read_to_string(p.dir.path().join("speccoder.toml")).unwrap();
+    fs::write(
+        p.dir.path().join("speccoder.toml"),
+        format!("{toml}model = \"m2\"\n"),
+    )
+    .unwrap();
+    git(p.dir.path(), &["commit", "-qam", "model"]);
+    let rep = report(&p.run()).clone();
+    assert_eq!(rep.attempt_status, "blocked", "{:?}", rep.reason);
 }

@@ -63,7 +63,7 @@ describe("Agents", () => {
     expect(buttons).not.toContain("Use Codex");
     [...document.querySelectorAll("button")].find((b) => b.textContent?.trim() === "Use OpenCode")!.click();
     expect(use).toHaveBeenCalledWith("opencode");
-    expect(text).toContain("Commands the agent runs itself always ask you");
+    expect(text).toContain("What the agent does itself — commands, edits — asks you");
   });
 });
 

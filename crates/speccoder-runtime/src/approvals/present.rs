@@ -170,6 +170,25 @@ pub fn object_lines(object: Option<&Object>, changed: Option<&str>) -> Vec<Strin
         Some(Object::Tool { name, digest }) => {
             out.push(format!("tool  {}  @{}", escape(name), first12(digest)));
         }
+        Some(Object::Agent {
+            agent,
+            call,
+            argvs,
+            paths,
+            ..
+        }) => {
+            out.push(format!(
+                "{} itself ({}), outside speccoder's sandbox",
+                escape(agent),
+                escape(call)
+            ));
+            for a in argvs {
+                out.push(format!("runs  {}", escape(&shell_quote(a))));
+            }
+            for p in paths {
+                out.push(format!("file  {}", escape(p)));
+            }
+        }
         None => {}
     }
     if let Some(c) = changed {
