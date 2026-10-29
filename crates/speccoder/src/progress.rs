@@ -244,6 +244,18 @@ pub fn lines(event: &Event, seconds: Option<u64>, verbosity: Verbosity) -> Vec<S
                 .collect()
         }
         Event::Notice { text } if !quiet => vec![format!("» {text}")],
+        // The agent making the attempt, and whether it asks first: an
+        // agent that decides alone is said always, quiet or not.
+        Event::AgentStarted {
+            agent,
+            mode,
+            decides_alone,
+            ..
+        } if !quiet || *decides_alone => vec![if *decides_alone {
+            format!("» {agent} decides alone: {mode}")
+        } else {
+            format!("» {agent}: {mode}")
+        }],
         Event::Bug { step, .. } => vec![format!("» {}", step.line())],
         Event::Project { step } => project_lines(step, false),
         Event::PlanningStopped {
@@ -380,6 +392,11 @@ fn token_of(event: &Event) -> Option<crate::style::Token> {
             _ => Token::Muted,
         },
         Event::Resumed { .. } | Event::ApprovalRequested { .. } => Token::Attention,
+        Event::AgentStarted {
+            decides_alone: true,
+            ..
+        } => Token::Attention,
+        Event::AgentStarted { .. } => Token::Muted,
         Event::TaskFinished { outcome, .. } => match outcome.as_str() {
             "completed" => Token::Verified,
             "blocked" | "needs_approval" | "denied" | "not_demonstrated" | "incomplete"
@@ -464,6 +481,16 @@ pub fn reader_lines(event: &Event, verbosity: Verbosity) -> Vec<String> {
             ),
             format!("notice: {message}"),
         ],
+        Event::AgentStarted {
+            agent,
+            mode,
+            decides_alone,
+            ..
+        } => vec![if *decides_alone {
+            format!("warning: {agent} decides alone: {mode}")
+        } else {
+            format!("agent: {agent}: {mode}")
+        }],
         Event::Said { text, .. } if !quiet => {
             vec![format!(
                 "model says: {}",
@@ -501,6 +528,31 @@ pub fn reader_lines(event: &Event, verbosity: Verbosity) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_agent_that_decides_alone_is_said_even_quietly() {
+        let alone = Event::AgentStarted {
+            task: "T1".to_owned(),
+            agent: "Codex".to_owned(),
+            mode: "Codex is in Auto review".to_owned(),
+            decides_alone: true,
+        };
+        assert_eq!(
+            lines(&alone, None, Verbosity::Quiet),
+            ["» Codex decides alone: Codex is in Auto review"]
+        );
+        let asks = Event::AgentStarted {
+            task: "T1".to_owned(),
+            agent: "Codex".to_owned(),
+            mode: "asked Codex to ask before acting — you set no mode".to_owned(),
+            decides_alone: false,
+        };
+        assert!(lines(&asks, None, Verbosity::Quiet).is_empty());
+        assert_eq!(
+            reader_lines(&alone, Verbosity::Normal),
+            ["warning: Codex decides alone: Codex is in Auto review"]
+        );
+    }
 
     #[test]
     fn lines_read_like_a_log() {
