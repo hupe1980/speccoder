@@ -218,6 +218,7 @@ pub(crate) fn bare_report(
         saved_attempt: None,
         set_aside: None,
         notices: Vec::new(),
+        agent: None,
         monitor: None,
         mutation: None,
         samples: Vec::new(),

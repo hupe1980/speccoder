@@ -493,7 +493,12 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
                 agent: None,
             });
             again.blocked = retry_blocked(r, &waiting);
+            let other = try_with(&t.id, a, &flag, crate::acp::agent::on_path);
             actions.push(again);
+            if let Some(mut other) = other {
+                other.blocked = retry_blocked(r, &waiting);
+                actions.push(other);
+            }
         }
         actions.extend([nudge(t, &flag), skip(t, &flag), accept(t, &flag)]);
         out.push(item(
@@ -1359,4 +1364,66 @@ fn accept(t: &speccoder_core::TaskStatus, flag: &dyn Fn(String) -> String) -> Ac
         Runnable::Accept { task: t.id.clone() },
         flag,
     )
+}
+
+/// The same task with the next agent that can start here: one attempt,
+/// judged as every attempt is. Offered after an external agent's attempt
+/// (its run is `external_<agent>_…`), never after a native one.
+fn try_with(
+    task: &str,
+    last: &speccoder_core::LastAttempt,
+    flag: &dyn Fn(String) -> String,
+    on_path: impl Fn(&str) -> bool,
+) -> Option<Action> {
+    let current = last
+        .run_id
+        .as_deref()
+        .and_then(|r| r.strip_prefix("external_"))
+        .and_then(|r| r.split('_').next())
+        .filter(|a| *a != "command")?;
+    let next = crate::acp::ready::next_after(Some(current), &on_path)?;
+    Some(
+        action(
+            "work",
+            format!("try {task} with {}", next.name),
+            "the same task, another agent: one attempt, judged the same way",
+            flag(format!("speccoder run --task {task} --agent {}", next.id)),
+        )
+        .with_run(Runnable::Run {
+            task: Some(task.to_owned()),
+            agent: Some(next.id.to_owned()),
+        }),
+    )
+}
+
+#[cfg(test)]
+mod try_with_tests {
+    use super::*;
+
+    #[test]
+    fn a_failed_agent_attempt_offers_the_next_agent_and_a_native_one_does_not() {
+        let t = "T005";
+        let last = |run: &str| speccoder_core::LastAttempt {
+            outcome: "verification_failed".to_owned(),
+            reason: String::new(),
+            run_id: Some(run.to_owned()),
+            reference: String::new(),
+        };
+        let flag = |c: String| c;
+        let both = |x: &str| x == "copilot" || x == "opencode";
+        let a = try_with(t, &last("external_copilot_1"), &flag, both)
+            .unwrap_or_else(|| panic!("offered"));
+        assert_eq!(a.command, "speccoder run --task T005 --agent opencode");
+        assert_eq!(
+            a.run,
+            Some(Runnable::Run {
+                task: Some("T005".to_owned()),
+                agent: Some("opencode".to_owned())
+            })
+        );
+        assert!(try_with(t, &last("run_01ABC"), &flag, both).is_none());
+        assert!(try_with(t, &last("external_command_1"), &flag, both).is_none());
+        let alone = |x: &str| x == "copilot";
+        assert!(try_with(t, &last("external_copilot_1"), &flag, alone).is_none());
+    }
 }

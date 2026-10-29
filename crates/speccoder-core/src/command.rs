@@ -1461,6 +1461,48 @@ pub struct MonitorScore {
     pub recall: Option<f64>,
 }
 
+/// An external agent's attempt, as the report keeps it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct AgentAttempt {
+    /// Its name, as it gave it.
+    pub agent: String,
+    /// The preset (`copilot`, …) or `acp` for an `argv` of the person's.
+    pub preset: String,
+    /// Its permission mode, in a sentence.
+    pub mode: Option<String>,
+    /// It was not put into a mode that asks first: calls it made without
+    /// asking never reached speccoder.
+    pub decides_alone: bool,
+    /// What speccoder decided of what it asked.
+    pub tally: PermissionTally,
+    /// Its plan as it last sent it (a claim).
+    pub plan: Vec<AgentPlanStep>,
+}
+
+/// What speccoder decided of an external agent's calls.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct PermissionTally {
+    /// Calls decided (its permission requests, files and commands).
+    pub asked: u32,
+    /// Of them, allowed (by a rule or a person's grant).
+    pub allowed: u32,
+    /// Of them, decided by a person (or waiting for one).
+    pub waited: u32,
+    /// Of them, refused.
+    pub refused: u32,
+    /// Calls it reported making without asking.
+    pub unasked: u32,
+}
+
+/// One step of an external agent's plan.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct AgentPlanStep {
+    /// Its words.
+    pub content: String,
+    /// `pending`, `in_progress` or `completed`.
+    pub status: String,
+}
+
 /// Result of `speccoder run`.
 #[derive(Debug, Clone, PartialEq, Serialize, schemars::JsonSchema)]
 pub struct RunReport {
@@ -1509,6 +1551,10 @@ pub struct RunReport {
     pub set_aside: Option<String>,
     /// Things a person should know that are not part of the verdict.
     pub notices: Vec<String>,
+    /// The external agent that made the attempt over ACP: its mode, its
+    /// plan (a claim) and what speccoder decided of what it asked.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<AgentAttempt>,
     /// The gaming monitor's view of a passing attempt: `suspected`,
     /// `findings`, `usage` (or `error`). Never shown to the implementer.
     pub monitor: Option<serde_json::Value>,

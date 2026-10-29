@@ -1992,6 +1992,16 @@ fn run_task_once(
             } else {
                 "failed".to_owned()
             };
+            // An external agent that ended its turn without a change and
+            // without saying why stopped, in effect: the person decides
+            // (I did it, a hint and a new attempt, or skip).
+            if attempt_status == "completed" && changes.is_empty() && output.get("acp").is_some() {
+                attempt_status = "blocked".to_owned();
+                output["reason"] = serde_json::json!(format!(
+                    "{} ended its turn without changing anything",
+                    output["acp"]["agent"].as_str().unwrap_or("the agent")
+                ));
+            }
             let mut report = RunReport {
                 run_id: run_id.clone(),
                 model_report: output.get("report").cloned(),
@@ -2004,6 +2014,7 @@ fn run_task_once(
                 acceptance: acceptance.as_ref().map(|a| a.report.clone()),
                 set_aside: set_aside.clone(),
                 notices: notices.clone(),
+                agent: external::agent_attempt(&output),
                 ..bare_report(&feature_name, task, &wt_path, &attempt_status)
             };
             if let Err(e) = record_inline_approvals(

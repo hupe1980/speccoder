@@ -680,3 +680,70 @@ fn the_old_claude_kind_is_refused_with_its_replacement() {
         res.message()
     );
 }
+
+#[test]
+fn a_turn_that_changes_nothing_is_a_stop_for_the_person() {
+    let p = Project::new(&json!({ "steps": [{ "say": "All good." }] }), "");
+    let res = p.run();
+    assert_eq!(res.status(), CommandStatus::NeedsHuman, "{}", res.message());
+    let rep = report(&res);
+    assert_eq!(rep.attempt_status, "blocked");
+    assert!(
+        rep.reason
+            .as_deref()
+            .unwrap_or_default()
+            .contains("ended its turn without changing anything"),
+        "{:?}",
+        rep.reason
+    );
+}
+
+#[test]
+fn the_report_carries_the_agent_its_plan_and_the_tally() {
+    let p = Project::new(
+        &json!({ "steps": [
+            { "plan": [{ "content": "Add login", "status": "in_progress" }] },
+            permission("read", json!({ "path": "src/lib.rs" })),
+            permission("fetch", json!({ "url": "https://example.com" })),
+            { "tool": { "kind": "read", "title": "Viewing src/lib.rs", "status": "completed" } },
+            { "edit": "src/lib.rs", "content": EDIT },
+            { "say": "Done." },
+        ] }),
+        "",
+    );
+    let res = p.run();
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    let calls = &report(&res).tool_calls;
+    let a = report(&res).agent.as_ref().unwrap();
+    assert_eq!(
+        (a.agent.as_str(), a.preset.as_str(), a.decides_alone),
+        ("scripted", "acp", true)
+    );
+    assert_eq!(
+        (
+            a.tally.asked,
+            a.tally.allowed,
+            a.tally.refused,
+            a.tally.waited,
+            a.tally.unasked
+        ),
+        (2, 1, 1, 0, 1)
+    );
+    assert_eq!(a.plan[0].status, "in_progress");
+    // What it did without asking is listed as its own report.
+    let own = calls.iter().find(|c| c["decision"] == "reported").unwrap();
+    assert_eq!(
+        (own["tool"].as_str(), own["by"].as_str()),
+        (Some("agent:read"), Some("agent"))
+    );
+    // The live state: the agent, its plan, what speccoder decided.
+    let (live, _) = speccoder_runtime::progress::read_live(p.dir.path(), p.state.path()).unwrap();
+    let agent = live.agent.unwrap();
+    assert_eq!(agent.name, "scripted");
+    assert!(agent.decides_alone, "an unprofiled agent may decide alone");
+    assert_eq!(agent.plan[0].content, "Add login");
+    assert_eq!(
+        (agent.asked, agent.allowed, agent.refused, agent.waited),
+        (2, 1, 1, 0)
+    );
+}

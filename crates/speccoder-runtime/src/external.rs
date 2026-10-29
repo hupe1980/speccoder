@@ -338,6 +338,44 @@ pub fn tally(log: &[Value]) -> Value {
     })
 }
 
+/// The report's account of an ACP attempt, from its output.
+#[must_use]
+pub fn agent_attempt(output: &Value) -> Option<speccoder_core::AgentAttempt> {
+    let a = output.get("acp")?;
+    let n = |k: &str| {
+        a["tally"][k]
+            .as_u64()
+            .and_then(|n| u32::try_from(n).ok())
+            .unwrap_or(0)
+    };
+    Some(speccoder_core::AgentAttempt {
+        agent: a["agent"].as_str().unwrap_or_default().to_owned(),
+        preset: a["preset"].as_str().unwrap_or_default().to_owned(),
+        mode: a["mode"].is_object().then(|| {
+            serde_json::from_value::<crate::acp::modes::Statement>(a["mode"].clone())
+                .map(|s| s.sentence())
+                .unwrap_or_default()
+        }),
+        decides_alone: a["decides_alone"] == true,
+        tally: speccoder_core::PermissionTally {
+            asked: n("asked"),
+            allowed: n("allowed"),
+            waited: n("waited"),
+            refused: n("refused"),
+            unasked: n("unasked"),
+        },
+        plan: a["plan"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|e| speccoder_core::AgentPlanStep {
+                content: e["content"].as_str().unwrap_or_default().to_owned(),
+                status: e["status"].as_str().unwrap_or("pending").to_owned(),
+            })
+            .collect(),
+    })
+}
+
 /// Runs one ACP attempt: the agent in `worktree`, its calls decided by
 /// `governor`.
 #[must_use]

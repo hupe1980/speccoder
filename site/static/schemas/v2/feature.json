@@ -214,6 +214,17 @@
             "type": "string"
           }
         },
+        "agent": {
+          "description": "The external agent that made the attempt over ACP: its mode, its\nplan (a claim) and what speccoder decided of what it asked.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AgentAttempt"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "monitor": {
           "description": "The gaming monitor's view of a passing attempt: `suspected`,\n`findings`, `usage` (or `error`). Never shown to the implementer."
         },
@@ -784,6 +795,111 @@
         "status",
         "failing_tests",
         "excerpt"
+      ]
+    },
+    "AgentAttempt": {
+      "description": "An external agent's attempt, as the report keeps it.",
+      "type": "object",
+      "properties": {
+        "agent": {
+          "description": "Its name, as it gave it.",
+          "type": "string"
+        },
+        "preset": {
+          "description": "The preset (`copilot`, …) or `acp` for an `argv` of the person's.",
+          "type": "string"
+        },
+        "mode": {
+          "description": "Its permission mode, in a sentence.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "decides_alone": {
+          "description": "It was not put into a mode that asks first: calls it made without\nasking never reached speccoder.",
+          "type": "boolean"
+        },
+        "tally": {
+          "description": "What speccoder decided of what it asked.",
+          "$ref": "#/$defs/PermissionTally"
+        },
+        "plan": {
+          "description": "Its plan as it last sent it (a claim).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AgentPlanStep"
+          }
+        }
+      },
+      "required": [
+        "agent",
+        "preset",
+        "mode",
+        "decides_alone",
+        "tally",
+        "plan"
+      ]
+    },
+    "PermissionTally": {
+      "description": "What speccoder decided of an external agent's calls.",
+      "type": "object",
+      "properties": {
+        "asked": {
+          "description": "Calls decided (its permission requests, files and commands).",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "allowed": {
+          "description": "Of them, allowed (by a rule or a person's grant).",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "waited": {
+          "description": "Of them, decided by a person (or waiting for one).",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "refused": {
+          "description": "Of them, refused.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "unasked": {
+          "description": "Calls it reported making without asking.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "asked",
+        "allowed",
+        "waited",
+        "refused",
+        "unasked"
+      ]
+    },
+    "AgentPlanStep": {
+      "description": "One step of an external agent's plan.",
+      "type": "object",
+      "properties": {
+        "content": {
+          "description": "Its words.",
+          "type": "string"
+        },
+        "status": {
+          "description": "`pending`, `in_progress` or `completed`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "content",
+        "status"
       ]
     },
     "ScopeFinding": {

@@ -114,6 +114,25 @@ export interface ActionsReport {
   journey: JourneyStep[];
 }
 
+/** An external agent's attempt, as the report keeps it. */
+export interface AgentAttempt {
+  /** Its name, as it gave it. */
+  agent: string;
+  /** The preset (`copilot`, …) or `acp` for an `argv` of the person's. */
+  preset: string;
+  /** Its permission mode, in a sentence. */
+  mode: string | null;
+  /**
+   * It was not put into a mode that asks first: calls it made without
+   * asking never reached speccoder.
+   */
+  decides_alone: boolean;
+  /** What speccoder decided of what it asked. */
+  tally: PermissionTally;
+  /** Its plan as it last sent it (a claim). */
+  plan: AgentPlanStep[];
+}
+
 /**
  * One agent that can make attempts, and how ready it is: installed,
  * signed in, asking before it acts — each with its one action.
@@ -135,6 +154,14 @@ export interface AgentCard {
 
 /** One entry of an external agent's plan. */
 export interface AgentPlanEntry {
+  /** Its words. */
+  content: string;
+  /** `pending`, `in_progress` or `completed`. */
+  status: string;
+}
+
+/** One step of an external agent's plan. */
+export interface AgentPlanStep {
   /** Its words. */
   content: string;
   /** `pending`, `in_progress` or `completed`. */
@@ -2957,6 +2984,20 @@ export interface PendingCall {
   digest: string;
 }
 
+/** What speccoder decided of an external agent's calls. */
+export interface PermissionTally {
+  /** Calls decided (its permission requests, files and commands). */
+  asked: number;
+  /** Of them, allowed (by a rule or a person's grant). */
+  allowed: number;
+  /** Of them, decided by a person (or waiting for one). */
+  waited: number;
+  /** Of them, refused. */
+  refused: number;
+  /** Calls it reported making without asking. */
+  unasked: number;
+}
+
 /** An alternative the author says the spec allows. */
 export interface Permitted {
   /** `permitted-1`, … */
@@ -3891,6 +3932,11 @@ export interface RunReport {
   set_aside: string | null;
   /** Things a person should know that are not part of the verdict. */
   notices: string[];
+  /**
+   * The external agent that made the attempt over ACP: its mode, its
+   * plan (a claim) and what speccoder decided of what it asked.
+   */
+  agent?: AgentAttempt | null;
   /**
    * The gaming monitor's view of a passing attempt: `suspected`,
    * `findings`, `usage` (or `error`). Never shown to the implementer.
