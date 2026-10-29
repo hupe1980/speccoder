@@ -29,6 +29,15 @@ pub struct PlannedTask {
     pub state: String,
 }
 
+/// One entry of an external agent's plan.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlanEntry {
+    /// What it says it will do (its words, escaped, at most 200 characters).
+    pub content: String,
+    /// `pending`, `in_progress` or `completed`.
+    pub status: String,
+}
+
 /// Tool calls `live.json` keeps for watchers (`speccoder tui`).
 pub const RECENT: usize = 12;
 
@@ -184,6 +193,27 @@ pub enum Event {
         runs: u32,
         /// The task that made the tests pass, `before_feature`, or `null`.
         result: Option<String>,
+    },
+    /// An external agent makes the attempt: its name, and what its
+    /// permission mode is (`decides_alone`: calls it makes without asking
+    /// never reach speccoder, so an empty Needs You proves nothing).
+    AgentStarted {
+        /// Task ID.
+        task: String,
+        /// The agent's name.
+        agent: String,
+        /// Its permission mode, in a sentence.
+        mode: String,
+        /// It was not put into a mode that asks first.
+        decides_alone: bool,
+    },
+    /// An external agent's plan for its attempt, as it last sent it: its
+    /// claim of what it will do, never evidence.
+    AgentPlan {
+        /// Task ID.
+        task: String,
+        /// The entries, in its order.
+        entries: Vec<PlanEntry>,
     },
     /// What the model said in a turn, beside its tool calls: its
     /// account of what it is doing — a claim, never evidence. Control
@@ -581,6 +611,32 @@ pub struct LiveState {
     pub started_at: u64,
     /// Unix seconds of the last event.
     pub updated_at: u64,
+    /// The external agent making the attempt, when one is.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<LiveAgent>,
+}
+
+/// An external agent's attempt as it goes: its plan, and what speccoder
+/// decided of what it asked.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LiveAgent {
+    /// Its name.
+    pub name: String,
+    /// Its permission mode, in a sentence.
+    pub mode: String,
+    /// It was not put into a mode that asks first.
+    pub decides_alone: bool,
+    /// Its plan, as it last sent it.
+    #[serde(default)]
+    pub plan: Vec<PlanEntry>,
+    /// Calls speccoder decided.
+    pub asked: u32,
+    /// Of them, allowed.
+    pub allowed: u32,
+    /// Of them, waited for a person.
+    pub waited: u32,
+    /// Of them, refused.
+    pub refused: u32,
 }
 
 fn now() -> u64 {
@@ -714,10 +770,30 @@ impl Progress for Live {
                         .find(|l| !l.trim().is_empty())
                         .map(|l| l.chars().take(160).collect());
                 }
-                Event::Stage { .. }
-                | Event::Resumed { .. }
-                | Event::ApprovalRequested { .. }
-                | Event::ApprovalDecided { .. } => {}
+                Event::AgentStarted {
+                    agent,
+                    mode,
+                    decides_alone,
+                    ..
+                } => {
+                    s.agent = Some(LiveAgent {
+                        name: agent.clone(),
+                        mode: mode.clone(),
+                        decides_alone: *decides_alone,
+                        ..LiveAgent::default()
+                    });
+                }
+                Event::AgentPlan { entries, .. } => {
+                    if let Some(a) = s.agent.as_mut() {
+                        a.plan.clone_from(entries);
+                    }
+                }
+                Event::ApprovalRequested { .. } => {
+                    if let Some(a) = s.agent.as_mut() {
+                        a.waited += 1;
+                    }
+                }
+                Event::Stage { .. } | Event::Resumed { .. } | Event::ApprovalDecided { .. } => {}
                 Event::ToolCall {
                     turn,
                     tool,
@@ -725,6 +801,16 @@ impl Progress for Live {
                     decision,
                     ..
                 } => {
+                    if let Some(a) = s.agent.as_mut()
+                        && decision != "reported"
+                    {
+                        a.asked += 1;
+                        match decision.as_str() {
+                            "allow" => a.allowed += 1,
+                            "deny" => a.refused += 1,
+                            _ => {}
+                        }
+                    }
                     let call = format!("{tool} {target} ({decision})");
                     s.recent.push(format!("turn {turn}  {call}"));
                     if s.recent.len() > RECENT {

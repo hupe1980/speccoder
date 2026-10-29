@@ -252,6 +252,9 @@ pub struct RunOptions {
     /// `Autopilot` — nothing asks, a call that would is refused for the run
     /// unless a grant in `run_grants` (the ones the person ticked) covers it.
     pub mode: speccoder_core::oracle::RunMode,
+    /// This run's agent (`run --agent <id>`): an ACP preset, or `native`
+    /// for speccoder's own loop; `speccoder.toml` is untouched.
+    pub agent: Option<String>,
 }
 
 /// Where a task runs, as `worktree` reports it: speccoder's worktree, or in

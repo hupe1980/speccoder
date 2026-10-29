@@ -112,6 +112,8 @@ pub struct Finished {
     pub usage: Option<Value>,
     /// The last lines the agent wrote to stderr.
     pub stderr: Vec<String>,
+    /// The agent's plan as it last sent it: `{content, status}` each.
+    pub plan: Vec<Value>,
 }
 
 /// The agent's words, kept for the narration and the final message.
@@ -130,6 +132,7 @@ struct Words {
     /// Model turns so far (a call ends one).
     turn: u32,
     usage_usd: Option<f64>,
+    plan: Vec<Value>,
 }
 
 struct Shared {
@@ -242,6 +245,35 @@ impl Shared {
                     &serde_json::to_value(&t.fields).unwrap_or_default(),
                 );
                 self.call(&report);
+            }
+            SessionUpdate::Plan(p) => {
+                let entries: Vec<Value> = p
+                    .entries
+                    .iter()
+                    .map(|e| json!({ "content": e.content, "status": wire(&e.status).unwrap_or_else(|| "pending".to_owned()) }))
+                    .collect();
+                if let Ok(mut w) = self.words.lock() {
+                    w.plan.clone_from(&entries);
+                }
+                self.event(Event::AgentPlan {
+                    task: self
+                        .progress
+                        .as_ref()
+                        .map(|(t, _)| t.clone())
+                        .unwrap_or_default(),
+                    entries: entries
+                        .iter()
+                        .map(|e| crate::progress::PlanEntry {
+                            content: crate::approvals::present::escape(
+                                e["content"].as_str().unwrap_or_default(),
+                            )
+                            .chars()
+                            .take(200)
+                            .collect(),
+                            status: e["status"].as_str().unwrap_or("pending").to_owned(),
+                        })
+                        .collect(),
+                });
             }
             SessionUpdate::UsageUpdate(u) => {
                 if let (Some(c), Ok(mut w)) = (u.cost.as_ref(), self.words.lock())
@@ -450,7 +482,9 @@ async fn drive(attempt: &Attempt, governor: Arc<Governor>) -> Finished {
                                 ..ToolRequest::default()
                             });
                         c.merge(&report);
-                        c.clone()
+                        let c = c.clone();
+                        w.last.clear();
+                        c
                     };
                     let options: Vec<PermissionOption> = request
                         .options
@@ -646,6 +680,9 @@ async fn drive(attempt: &Attempt, governor: Arc<Governor>) -> Finished {
             None => e.to_string(),
         });
     }
+    if let Ok(w) = shared.words.lock() {
+        finished.plan.clone_from(&w.plan);
+    }
     if let Ok(w) = shared.words.lock()
         && let Some(usd) = w.usage_usd
     {
@@ -767,6 +804,16 @@ async fn session(
     finished
         .notices
         .push(format!("permission mode: {}", statement.sentence()));
+    shared.event(Event::AgentStarted {
+        task: shared
+            .progress
+            .as_ref()
+            .map(|(t, _)| t.clone())
+            .unwrap_or_default(),
+        agent: shown.clone(),
+        mode: statement.sentence(),
+        decides_alone: statement.asks() != Some(true),
+    });
     finished.mode = Some(statement);
 
     // The model, where the agent offers a choice of it.

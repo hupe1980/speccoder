@@ -667,6 +667,7 @@ struct RunJob {
     fresh_acceptance: bool,
     allow_failing_baseline: bool,
     in_place: bool,
+    agent: Option<String>,
 }
 
 impl RunJob {
@@ -687,6 +688,7 @@ impl RunJob {
             fresh_acceptance: self.fresh_acceptance,
             allow_failing_baseline: self.allow_failing_baseline,
             in_place: self.in_place,
+            agent: self.agent.clone(),
             ..speccoder_runtime::RunOptions::default()
         };
         let result = match &self.task {
@@ -842,6 +844,7 @@ fn main() {
             fresh_acceptance,
             allow_failing_baseline,
             in_place,
+            agent,
             return_: _,
         } => {
             let job = RunJob {
@@ -855,6 +858,7 @@ fn main() {
                 fresh_acceptance: *fresh_acceptance,
                 allow_failing_baseline: *allow_failing_baseline,
                 in_place: *in_place,
+                agent: agent.clone(),
             };
             if dashboard(&cli) {
                 // The dashboard hosts the run: progress and questions go to it.

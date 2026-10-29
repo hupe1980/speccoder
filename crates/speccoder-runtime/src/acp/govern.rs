@@ -379,10 +379,10 @@ impl Governor {
                 "fetching from the network: an attempt's commands run without it".to_owned(),
             ),
             "think" => Subject::Allow("no effect outside the session"),
-            "switch_mode" => Subject::Deny(
-                "speccoder keeps the agent in the mode that asks before acting".to_owned(),
-            ),
-            _ => Subject::Person("speccoder cannot tell what this call does".to_owned()),
+            "switch_mode" => {
+                Subject::Deny("the agent is kept in the mode that asks before acting".to_owned())
+            }
+            _ => Subject::Person("no rule can tell what this call does".to_owned()),
         }
     }
 

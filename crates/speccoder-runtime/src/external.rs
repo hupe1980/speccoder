@@ -1,15 +1,18 @@
-//! External executors: another coding
-//! agent — Claude Code (`claude -p`), Codex (`codex exec`) or any command —
-//! makes the attempt; speccoder keeps everything around it.
+//! External executors: another coding agent makes the attempt; speccoder
+//! keeps everything around it.
 //!
-//! Guarantees are diff-level, not action-level: the agent edits the worktree
-//! with its own tools and its own permission system, so speccoder cannot
-//! classify each call. What it still does: the isolated worktree, frozen and
+//! An ACP agent (`agent = "copilot"`, …, or `kind = "acp"` with `argv`)
+//! is driven over the Agent Client Protocol ([`crate::acp`]): each
+//! permission request it sends, and every file and command it runs through
+//! speccoder, is decided by speccoder's policy and approvals. What it does
+//! without asking stays outside speccoder. A `kind = "command"` program
+//! gets the prompt on stdin and is judged from its diff alone.
+//!
+//! Either way speccoder keeps the isolated worktree, frozen and
 //! spec-derived acceptance tests written before the attempt, the integrity
 //! audit of the diff (protected files, deleted or weakened tests), the
 //! checks and the verdict, retries with the verifier's digest, the gaming
-//! monitor, ticking and committing. Where the agent has a permission system,
-//! speccoder's command allowances are passed to it.
+//! monitor, ticking and committing.
 
 use std::path::Path;
 use std::time::Duration;
@@ -17,15 +20,26 @@ use std::time::Duration;
 use serde::Deserialize;
 use serde_json::{Value, json};
 
+use crate::acp::agent::{self, Agent};
+
 /// Which agent.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Kind {
-    /// Claude Code: `claude -p --output-format json`.
-    Claude,
-    /// Codex: `codex exec --sandbox workspace-write`.
-    Codex,
+    /// An ACP agent: a preset, or `argv`.
+    Acp(Agent),
     /// Any program: the prompt on stdin, the summary on stdout.
     Command(Vec<String>),
+}
+
+impl Kind {
+    /// Its name in reports: the preset's id, `acp` or `command`.
+    #[must_use]
+    pub fn name(&self) -> &str {
+        match self {
+            Self::Acp(a) => &a.id,
+            Self::Command(_) => "command",
+        }
+    }
 }
 
 /// `[executor]` in `speccoder.toml`.
@@ -42,11 +56,37 @@ pub struct Executor {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Raw {
-    kind: String,
+    #[serde(default)]
+    kind: Option<String>,
+    #[serde(default)]
+    agent: Option<String>,
     #[serde(default)]
     argv: Vec<String>,
     model: Option<String>,
+    mode: Option<String>,
     timeout_secs: Option<u64>,
+}
+
+/// The executor for `id` (a preset), for one run (`run --agent`).
+///
+/// # Errors
+///
+/// No such preset.
+pub fn for_agent(id: &str, configured: Option<&Executor>) -> Result<Executor, String> {
+    let p = agent::preset(id)
+        .ok_or_else(|| format!("no agent `{id}` ({}, or `native`)", agent::ids()))?;
+    let same = configured.filter(|e| e.kind.name() == id);
+    Ok(Executor {
+        kind: Kind::Acp(Agent::of(
+            p,
+            same.and_then(|e| match &e.kind {
+                Kind::Acp(a) => a.mode.clone(),
+                Kind::Command(_) => None,
+            }),
+        )),
+        model: same.and_then(|e| e.model.clone()),
+        timeout: configured.map_or(Duration::from_secs(1800), |e| e.timeout),
+    })
 }
 
 /// Reads `[executor]`; `None` (or `kind = "native"`) is speccoder's own loop.
@@ -59,22 +99,48 @@ pub fn parse(text: &str) -> Result<Option<Executor>, String> {
         .clone()
         .try_into()
         .map_err(|e| format!("[executor]: {e}"))?;
-    let kind = match raw.kind.as_str() {
-        "native" => return Ok(None),
-        "claude" => Kind::Claude,
-        "codex" => Kind::Codex,
-        "command" => {
-            if raw.argv.first().is_none_or(String::is_empty) {
-                return Err("[executor]: kind = \"command\" needs `argv`".to_owned());
-            }
-            Kind::Command(raw.argv)
-        }
-        other => {
+    let kind = match (raw.kind.as_deref(), raw.agent.as_deref()) {
+        (Some("native"), None) => return Ok(None),
+        (Some(old @ ("claude" | "codex")), None) => {
             return Err(format!(
-                "[executor]: kind = \"{other}\" (native, claude, codex or command)"
+                "[executor]: kind = \"{old}\" is now agent = \"{old}\" (it runs over ACP)"
+            ));
+        }
+        (None | Some("acp"), Some(id)) => {
+            if !raw.argv.is_empty() {
+                return Err(
+                    "[executor]: `agent` and `argv` exclusive: an agent of your own is kind = \"acp\" with `argv`".to_owned(),
+                );
+            }
+            let p = agent::preset(id)
+                .ok_or_else(|| format!("[executor]: agent = \"{id}\" ({})", agent::ids()))?;
+            Kind::Acp(Agent::of(p, raw.mode.clone()))
+        }
+        (Some(k @ ("acp" | "command")), None) => {
+            if raw.argv.first().is_none_or(String::is_empty) {
+                return Err(format!("[executor]: kind = \"{k}\" needs `argv`"));
+            }
+            if k == "acp" {
+                Kind::Acp(Agent::custom(raw.argv, raw.mode.clone()))
+            } else {
+                Kind::Command(raw.argv)
+            }
+        }
+        (None, None) => {
+            return Err(format!(
+                "[executor]: say which agent: agent = \"…\" ({}), or kind = \"acp\" / \"command\" with `argv`",
+                agent::ids()
+            ));
+        }
+        (Some(other), _) => {
+            return Err(format!(
+                "[executor]: kind = \"{other}\" (native, acp or command; an agent is agent = \"…\")"
             ));
         }
     };
+    if raw.mode.is_some() && matches!(kind, Kind::Command(_)) {
+        return Err("[executor]: `mode` is an ACP agent's permission mode".to_owned());
+    }
     Ok(Some(Executor {
         kind,
         model: raw.model,
@@ -138,164 +204,67 @@ pub struct Outcome {
     pub output: Value,
 }
 
-/// The argv for an executor; `allow` are the commands speccoder allows
-/// (checks and `[commands] allow`), passed to agents with a permission system;
-/// `withheld` is a directory the agent is told not to read (the held-out
-/// tests) — withheld, not sealed: only Claude Code takes such a rule.
+/// Reads a command's final message from its stdout: `BLOCKED:` is an
+/// honest stop, `FAILED:` a failure, anything else the agent's summary.
 #[must_use]
-pub fn argv(
-    exec: &Executor,
-    worktree: &Path,
-    last_message: &Path,
-    allow: &[Vec<String>],
-    withheld: Option<&Path>,
-) -> Vec<String> {
-    match &exec.kind {
-        Kind::Claude => {
-            let mut tools = vec!["Read", "Edit", "Write", "MultiEdit", "Glob", "Grep", "LS"]
-                .into_iter()
-                .map(str::to_owned)
-                .collect::<Vec<_>>();
-            // Exact commands, as speccoder allows them: Claude Code reads
-            // `Bash(cmd:*)` as a prefix, `Bash(cmd)` as the command alone.
-            tools.extend(allow.iter().map(|p| format!("Bash({})", p.join(" "))));
-            let mut a = vec![
-                "claude".to_owned(),
-                "-p".to_owned(),
-                "--output-format".to_owned(),
-                "json".to_owned(),
-                "--permission-mode".to_owned(),
-                "acceptEdits".to_owned(),
-                "--allowedTools".to_owned(),
-                tools.join(","),
-                "--disallowedTools".to_owned(),
-                match withheld {
-                    Some(dir) => format!("WebFetch,WebSearch,Read({}/**)", dir.display()),
-                    None => "WebFetch,WebSearch".to_owned(),
-                },
-            ];
-            if let Some(m) = &exec.model {
-                a.extend(["--model".to_owned(), m.clone()]);
-            }
-            a
-        }
-        Kind::Codex => {
-            let mut a = vec![
-                "codex".to_owned(),
-                "exec".to_owned(),
-                "--sandbox".to_owned(),
-                "workspace-write".to_owned(),
-                "--skip-git-repo-check".to_owned(),
-                "-C".to_owned(),
-                worktree.display().to_string(),
-                "-o".to_owned(),
-                last_message.display().to_string(),
-            ];
-            if let Some(m) = &exec.model {
-                a.extend(["-m".to_owned(), m.clone()]);
-            }
-            a.push("-".to_owned());
-            a
-        }
-        Kind::Command(argv) => argv.clone(),
-    }
-}
-
-/// Reads an agent's final message and usage from its stdout (and, for
-/// Codex, its last-message file).
-#[must_use]
-pub fn interpret(
-    exec: &Executor,
-    exit: Option<i32>,
-    stdout: &str,
-    last_message: Option<&str>,
-) -> Value {
-    let (message, usage) = match &exec.kind {
-        Kind::Claude => match serde_json::from_str::<Value>(stdout.trim()) {
-            Ok(v) => {
-                let u = &v["usage"];
-                let n = |k: &str| u[k].as_u64().unwrap_or(0);
-                let usage = json!({
-                    "input_tokens": n("input_tokens") + n("cache_read_input_tokens") + n("cache_creation_input_tokens"),
-                    "output_tokens": n("output_tokens"),
-                    "cache_read_tokens": n("cache_read_input_tokens"),
-                    "cache_write_tokens": n("cache_creation_input_tokens"),
-                    "cost_usd": v["total_cost_usd"],
-                });
-                let failed = v["is_error"] == true;
-                (
-                    if failed {
-                        format!(
-                            "FAILED: {}",
-                            v["result"]
-                                .as_str()
-                                .unwrap_or("the agent reported an error")
-                        )
-                    } else {
-                        v["result"].as_str().unwrap_or_default().to_owned()
-                    },
-                    Some(usage),
-                )
-            }
-            Err(_) => (stdout.to_owned(), None),
-        },
-        Kind::Codex => (last_message.unwrap_or(stdout).to_owned(), None),
-        Kind::Command(_) => (stdout.to_owned(), None),
-    };
-    let message = message.trim().to_owned();
+pub fn interpret(exit: Option<i32>, stdout: &str) -> Value {
+    let message = stdout.trim().to_owned();
     let summary: String = message.chars().take(2000).collect();
     let (status, extra) = if exit != Some(0) {
         (
             "failed",
             json!({ "reason": format!("the agent exited {}: {}", exit.map_or("by signal".to_owned(), |c| c.to_string()), summary.chars().take(500).collect::<String>()) }),
         )
-    } else if let Some(reason) = message.strip_prefix("BLOCKED:") {
-        ("blocked", json!({ "reason": reason.trim() }))
-    } else if message.starts_with("FAILED:") {
-        ("failed", json!({ "reason": summary }))
     } else {
-        (
-            "completed",
-            json!({ "report": { "summary": summary, "status": "done", "files_changed": [], "checks_run": [], "notes": ["external executor"] } }),
-        )
+        return judged(&message);
     };
-    let mut out =
-        json!({ "status": status, "tool_calls": [], "usage": usage.unwrap_or(Value::Null) });
+    let mut out = json!({ "status": status, "tool_calls": [], "usage": Value::Null });
     if let (Some(o), Some(e)) = (out.as_object_mut(), extra.as_object()) {
         o.extend(e.clone());
     }
     out
 }
 
-/// Runs one attempt with `exec` in `worktree`.
+/// An agent's final message after a turn it finished.
+#[must_use]
+pub fn judged(message: &str) -> Value {
+    let message = message.trim();
+    let summary: String = message.chars().take(2000).collect();
+    let mut out = json!({ "tool_calls": [], "usage": Value::Null });
+    if let Some(reason) = message.strip_prefix("BLOCKED:") {
+        out["status"] = json!("blocked");
+        out["reason"] = json!(reason.trim());
+    } else if message.starts_with("FAILED:") {
+        out["status"] = json!("failed");
+        out["reason"] = json!(summary);
+    } else {
+        out["status"] = json!("completed");
+        out["report"] = json!({ "summary": summary, "status": "done", "files_changed": [], "checks_run": [], "notes": ["external executor"] });
+    }
+    out
+}
+
+/// Runs one `kind = "command"` attempt with `argv` in `worktree`.
 #[must_use]
 pub fn run(
-    exec: &Executor,
+    argv: &[String],
+    timeout: Duration,
     worktree: &Path,
     prompt: &str,
-    allow: &[Vec<String>],
     tmp: &Path,
-    withheld: Option<&Path>,
 ) -> Outcome {
     use crate::verify::process::{CommandRunner as _, Invocation, LocalRunner, OUTPUT_CAP};
     let _ = std::fs::create_dir_all(tmp);
     let stamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_secs());
-    let last = tmp.join(format!("external-{stamp}.txt"));
     let prompt_file = tmp.join(format!("external-{stamp}.prompt"));
     let _ = std::fs::write(&prompt_file, prompt);
-    let agent = match &exec.kind {
-        Kind::Claude => "claude",
-        Kind::Codex => "codex",
-        Kind::Command(_) => "command",
-    };
     // The prompt arrives on stdin (a shell redirect keeps the runner's
     // closed-stdin rule for everything else); the agent keeps the person's
     // environment, because it needs its own credentials.
-    let mut inner = argv(exec, worktree, &last, allow, withheld);
-    let quoted: Vec<String> = inner
-        .drain(..)
+    let quoted: Vec<String> = argv
+        .iter()
         .map(|a| format!("'{}'", a.replace('\'', "'\\''")))
         .collect();
     let script = format!(
@@ -307,12 +276,11 @@ pub fn run(
         argv: vec!["sh".to_owned(), "-c".to_owned(), script],
         cwd: worktree.to_path_buf(),
         env: std::env::vars().collect(),
-        timeout: exec.timeout,
+        timeout,
         output_cap: OUTPUT_CAP,
     });
-    let last_message = std::fs::read_to_string(&last).ok();
     let stdout = String::from_utf8_lossy(&out.stdout.kept);
-    let mut output = interpret(exec, out.exit_code, &stdout, last_message.as_deref());
+    let mut output = interpret(out.exit_code, &stdout);
     // A failing agent often explains itself only on stderr.
     if out.exit_code != Some(0) && stdout.trim().is_empty() {
         let stderr = String::from_utf8_lossy(&out.stderr.kept);
@@ -333,14 +301,138 @@ pub fn run(
         output["status"] = json!("failed");
         output["reason"] = json!(format!(
             "the agent did not finish within {} s",
-            exec.timeout.as_secs()
+            timeout.as_secs()
         ));
     }
     let _ = std::fs::remove_file(&prompt_file);
-    let _ = std::fs::remove_file(&last);
     Outcome {
-        run_id: format!("external_{agent}_{stamp}"),
+        run_id: format!("external_command_{stamp}"),
         output,
+    }
+}
+
+/// What an ACP attempt came to: the native-shaped outcome, and the
+/// agent's own sign-in methods when it needs signing in.
+#[derive(Debug, Clone)]
+pub struct AcpOutcome {
+    /// As a native attempt's.
+    pub outcome: Outcome,
+    /// The agent needs signing in: its ways (the attempt made nothing).
+    pub sign_in: Option<Vec<crate::acp::session::SignIn>>,
+    /// The agent's name, as it gave it.
+    pub agent: String,
+}
+
+/// The permission tally of an attempt's log: what the agent asked,
+/// what was allowed, what waited for a person, what was refused.
+#[must_use]
+pub fn tally(log: &[Value]) -> Value {
+    let decided: Vec<&Value> = log.iter().filter(|e| e["decision"] != "reported").collect();
+    let n = |f: &dyn Fn(&Value) -> bool| decided.iter().filter(|e| f(e)).count();
+    json!({
+        "asked": decided.len(),
+        "allowed": n(&|e| e["decision"] == "allow"),
+        "waited": n(&|e| e["by"] == "person" && !e["scope"].as_str().is_some_and(|s| s.ends_with("-grant")) || e["decision"] == "approval"),
+        "refused": n(&|e| e["decision"] == "deny"),
+        "unasked": log.iter().filter(|e| e["decision"] == "reported").count(),
+    })
+}
+
+/// Runs one ACP attempt: the agent in `worktree`, its calls decided by
+/// `governor`.
+#[must_use]
+pub fn run_acp(
+    exec: &Executor,
+    agent: &Agent,
+    worktree: &Path,
+    prompt: &str,
+    runner: &crate::sandbox::Runner,
+    governor: std::sync::Arc<crate::acp::govern::Governor>,
+    progress: Option<(String, std::sync::Arc<dyn crate::progress::Progress>)>,
+) -> AcpOutcome {
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
+    let attempt = crate::acp::session::Attempt {
+        agent: agent.clone(),
+        argv: agent.command(agent::on_path),
+        cwd: governor.root().to_path_buf(),
+        prompt: prompt.to_owned(),
+        model: exec.model.clone(),
+        timeout: exec.timeout,
+        runner: runner.clone(),
+        progress,
+    };
+    let _ = worktree;
+    let f = crate::acp::session::run(&attempt, std::sync::Arc::clone(&governor));
+    let shown = f.agent_name.clone().unwrap_or_else(|| agent.name.clone());
+    let log = governor.log();
+    let pending = governor.pending();
+    let mut output = if let Some(p) = &pending {
+        json!({ "status": "needs_approval", "pending": p })
+    } else if f.sign_in.is_some() {
+        json!({ "status": "failed", "reason": f.error.clone().unwrap_or_default() })
+    } else if f.timed_out {
+        json!({ "status": "failed", "reason": format!("{shown} did not finish within {} s; its turn was cancelled", exec.timeout.as_secs()) })
+    } else {
+        match (f.stop_reason.as_deref(), &f.error) {
+            (Some("end_turn"), _) => judged(&f.message),
+            (Some("max_tokens" | "max_turn_requests"), _) => {
+                let mut o = judged(&f.message);
+                if o["status"] == "completed" {
+                    o["status"] = json!("incomplete");
+                    o["report"]["status"] = json!("incomplete");
+                    o["report"]["notes"] = json!([format!(
+                        "{shown} stopped at its own limit ({})",
+                        f.stop_reason.as_deref().unwrap_or_default()
+                    )]);
+                }
+                o
+            }
+            (Some("refusal"), _) => {
+                json!({ "status": "failed", "reason": format!("{shown} refused the task: {}", f.message.chars().take(500).collect::<String>()) })
+            }
+            (Some(other), _) => {
+                json!({ "status": "failed", "reason": format!("{shown} ended its turn: {other}") })
+            }
+            (None, Some(e)) => json!({ "status": "failed", "reason": e }),
+            (None, None) => {
+                json!({ "status": "failed", "reason": format!("{shown} ended without an answer") })
+            }
+        }
+    };
+    // A failure the agent explained only on stderr.
+    if output["status"] == "failed"
+        && let Some(line) = f.stderr.last()
+        && !output["reason"]
+            .as_str()
+            .unwrap_or_default()
+            .contains(line.as_str())
+    {
+        output["reason"] = json!(format!(
+            "{} — {shown} said: {line}",
+            output["reason"].as_str().unwrap_or_default()
+        ));
+    }
+    output["tool_calls"] = json!(log);
+    output["usage"] = f.usage.clone().unwrap_or(Value::Null);
+    output["asked"] = json!(governor.asked());
+    output["acp"] = json!({
+        "agent": shown,
+        "preset": agent.id,
+        "mode": f.mode,
+        "decides_alone": f.mode.as_ref().is_some_and(|m| m.asks() != Some(true)),
+        "tally": tally(&log),
+        "plan": f.plan,
+        "notices": f.notices,
+    });
+    AcpOutcome {
+        outcome: Outcome {
+            run_id: format!("external_{}_{stamp}", agent.id),
+            output,
+        },
+        sign_in: f.sign_in,
+        agent: shown,
     }
 }
 
@@ -348,79 +440,78 @@ pub fn run(
 mod tests {
     use super::*;
 
+    fn kind(text: &str) -> Result<Option<Kind>, String> {
+        parse(text).map(|e| e.map(|e| e.kind))
+    }
+
     #[test]
-    fn executors_parse_and_claude_gets_the_allowances() {
-        assert!(parse("").unwrap_or_default().is_none());
-        assert!(
-            parse("[executor]\nkind = \"native\"\n")
-                .unwrap_or_default()
-                .is_none()
+    fn an_executor_is_an_agent_an_acp_argv_or_a_command() {
+        assert_eq!(kind(""), Ok(None));
+        assert_eq!(kind("[executor]\nkind = \"native\"\n"), Ok(None));
+        let Ok(Some(Kind::Acp(a))) = kind("[executor]\nagent = \"copilot\"\nmode = \"x\"\n") else {
+            panic!("copilot")
+        };
+        assert_eq!((a.id.as_str(), a.mode.as_deref()), ("copilot", Some("x")));
+        for id in ["claude", "codex", "gemini", "opencode"] {
+            assert!(
+                matches!(
+                    kind(&format!("[executor]\nagent = \"{id}\"\n")),
+                    Ok(Some(Kind::Acp(_)))
+                ),
+                "{id}"
+            );
+        }
+        let Ok(Some(Kind::Acp(own))) =
+            kind("[executor]\nkind = \"acp\"\nargv = [\"my-agent\", \"--acp\"]\n")
+        else {
+            panic!("argv")
+        };
+        assert_eq!((own.id.as_str(), own.argv.len()), ("acp", 2));
+        assert!(matches!(
+            kind("[executor]\nkind = \"command\"\nargv = [\"x\"]\n"),
+            Ok(Some(Kind::Command(_)))
+        ));
+        assert!(kind("[executor]\nkind = \"command\"\n").is_err());
+        assert!(kind("[executor]\nagent = \"gpt\"\n").is_err());
+        assert!(kind("[executor]\nagent = \"copilot\"\nargv = [\"x\"]\n").is_err());
+        assert!(kind("[executor]\nkind = \"command\"\nargv = [\"x\"]\nmode = \"y\"\n").is_err());
+        assert!(kind("[executor]\n").is_err());
+    }
+
+    #[test]
+    fn the_old_claude_and_codex_kinds_name_their_replacement() {
+        for old in ["claude", "codex"] {
+            let e = kind(&format!("[executor]\nkind = \"{old}\"\n"))
+                .err()
+                .unwrap_or_default();
+            assert!(e.contains(&format!("agent = \"{old}\"")), "{e}");
+        }
+    }
+
+    #[test]
+    fn one_run_can_take_another_agent() {
+        let configured =
+            parse("[executor]\nagent = \"copilot\"\nmodel = \"m\"\ntimeout_secs = 60\n")
+                .ok()
+                .flatten();
+        let e = for_agent("opencode", configured.as_ref()).unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(
+            (e.kind.name(), e.model, e.timeout.as_secs()),
+            ("opencode", None, 60)
         );
-        let c = parse("[executor]\nkind = \"claude\"\nmodel = \"sonnet\"\n")
-            .unwrap_or_default()
-            .unwrap_or_else(|| panic!("claude"));
-        let a = argv(
-            &c,
-            Path::new("/w"),
-            Path::new("/t/last"),
-            &[vec!["cargo".to_owned(), "test".to_owned()]],
-            None,
-        );
-        assert!(
-            a.contains(&"Read,Edit,Write,MultiEdit,Glob,Grep,LS,Bash(cargo test)".to_owned()),
-            "{a:?}"
-        );
-        assert!(a.ends_with(&["--model".to_owned(), "sonnet".to_owned()]));
-        let held = argv(
-            &c,
-            Path::new("/w"),
-            Path::new("/t/last"),
-            &[],
-            Some(Path::new("/s/held-out/f/T1")),
-        );
-        assert!(
-            held.contains(&"WebFetch,WebSearch,Read(/s/held-out/f/T1/**)".to_owned()),
-            "{held:?}"
-        );
-        let x = parse("[executor]\nkind = \"codex\"\n")
-            .unwrap_or_default()
-            .unwrap_or_else(|| panic!("codex"));
-        let a = argv(&x, Path::new("/w"), Path::new("/t/last"), &[], None);
-        assert_eq!(&a[..4], ["codex", "exec", "--sandbox", "workspace-write"]);
-        assert!(parse("[executor]\nkind = \"command\"\n").is_err());
-        assert!(parse("[executor]\nkind = \"gpt\"\n").is_err());
+        let same = for_agent("copilot", configured.as_ref()).unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(same.model.as_deref(), Some("m"));
+        assert!(for_agent("nope", None).is_err());
     }
 
     #[test]
     fn final_messages_become_statuses() {
-        let c = Executor {
-            kind: Kind::Claude,
-            model: None,
-            timeout: Duration::from_secs(1),
-        };
-        let ok = interpret(
-            &c,
-            Some(0),
-            r#"{"type":"result","is_error":false,"result":"Implemented add.","total_cost_usd":0.01,"usage":{"input_tokens":10,"cache_read_input_tokens":90,"output_tokens":5}}"#,
-            None,
-        );
-        assert_eq!(ok["status"], "completed");
-        assert_eq!(ok["usage"]["input_tokens"], 100);
-        let blocked = interpret(
-            &c,
-            Some(0),
-            r#"{"is_error":false,"result":"BLOCKED: the test asserts 2+2=5"}"#,
-            None,
-        );
+        assert_eq!(judged("Implemented add.")["status"], "completed");
+        let blocked = judged("BLOCKED: the test asserts 2+2=5");
         assert_eq!(
             (blocked["status"].as_str(), blocked["reason"].as_str()),
             (Some("blocked"), Some("the test asserts 2+2=5"))
         );
-        let cmd = Executor {
-            kind: Kind::Command(vec!["x".to_owned()]),
-            model: None,
-            timeout: Duration::from_secs(1),
-        };
-        assert_eq!(interpret(&cmd, Some(2), "boom", None)["status"], "failed");
+        assert_eq!(interpret(Some(2), "boom")["status"], "failed");
     }
 }

@@ -47,6 +47,15 @@ pub struct PlannedTask {
     pub state: String,
 }
 
+/// One entry of an external agent's plan.
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct AgentPlanEntry {
+    /// Its words.
+    pub content: String,
+    /// `pending`, `in_progress` or `completed`.
+    pub status: String,
+}
+
 /// The event, by `type`.
 #[derive(Debug, Serialize, JsonSchema)]
 #[serde(tag = "type")]
@@ -229,6 +238,27 @@ pub enum Body {
         runs: u32,
         /// The implementing task, `before_feature`, or `null`.
         result: Option<String>,
+    },
+    /// An external agent makes the attempt: its name and permission mode
+    /// (`decides_alone`: it was not put into a mode that asks first).
+    #[serde(rename = "agent.started")]
+    AgentStarted {
+        /// Task ID.
+        task: String,
+        /// The agent's name.
+        agent: String,
+        /// Its permission mode, in a sentence.
+        mode: String,
+        /// Calls it makes without asking never reach speccoder.
+        decides_alone: bool,
+    },
+    /// An external agent's plan, as it last sent it: a claim.
+    #[serde(rename = "agent.plan")]
+    AgentPlan {
+        /// Task ID.
+        task: String,
+        /// Its entries.
+        entries: Vec<AgentPlanEntry>,
     },
     /// What the model said in a turn: its account, a claim.
     #[serde(rename = "said")]
@@ -959,6 +989,27 @@ pub fn body(event: &Event) -> Body {
             task: clean(task),
             runs: *runs,
             result: result.clone(),
+        },
+        Event::AgentStarted {
+            task,
+            agent,
+            mode,
+            decides_alone,
+        } => Body::AgentStarted {
+            task: clean(task),
+            agent: clean(agent),
+            mode: clean(mode),
+            decides_alone: *decides_alone,
+        },
+        Event::AgentPlan { task, entries } => Body::AgentPlan {
+            task: clean(task),
+            entries: entries
+                .iter()
+                .map(|e| AgentPlanEntry {
+                    content: clean(&e.content),
+                    status: clean(&e.status),
+                })
+                .collect(),
         },
         Event::Said { task, turn, text } => Body::Said {
             task: clean(task),

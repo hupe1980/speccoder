@@ -554,6 +554,15 @@ fn run_task_once(
                 .with_code("CONFIG-INVALID");
         }
     };
+    // `run --agent`: this run's agent, the configuration untouched.
+    let executor = match options.agent.as_deref() {
+        None => executor,
+        Some("native") => None,
+        Some(id) => match external::for_agent(id, executor.as_ref()) {
+            Ok(e) => Some(e),
+            Err(e) => return refuse(CommandStatus::UsageError, e),
+        },
+    };
     // Every command this task starts runs confined to the worktree.
     let sandbox_config = match sandbox::parse(&config_text) {
         Ok(c) => c,
@@ -1613,7 +1622,74 @@ fn run_task_once(
                 {
                     notices.push("held-out set withheld from the external agent, not sealed: it runs with your permissions; a copied held-out literal stops the tick".to_owned());
                 }
-                let o = external::run(exec, &wt_root, &prompt, &allow, &tmp, withheld);
+                let _ = allow;
+                let o = match &exec.kind {
+                    external::Kind::Command(argv) => {
+                        external::run(argv, exec.timeout, &wt_root, &prompt, &tmp)
+                    }
+                    external::Kind::Acp(agent) => {
+                        // The agent's calls are decided by the policy a native
+                        // attempt's are, from the same settings.
+                        let policy = match substrate::attempt::policy_of(
+                            &input.peek()["settings"],
+                            format.rules(),
+                        ) {
+                            Ok(p) => p,
+                            Err(e) => return fail(CommandStatus::RunFailed, e.to_string()),
+                        };
+                        let tools = match tools::WorkspaceTools::new(&wt_root, policy.clone()) {
+                            Ok(t) => t.with_runner(runner.clone()),
+                            Err(e) => {
+                                return fail(
+                                    CommandStatus::Error,
+                                    format!("{}: {e}", wt_root.display()),
+                                );
+                            }
+                        };
+                        let governor = Arc::new(crate::acp::govern::Governor::new(
+                            crate::acp::govern::Setup {
+                                root: std::fs::canonicalize(&wt_root)
+                                    .unwrap_or_else(|_| wt_root.clone()),
+                                tools,
+                                policy,
+                                // A lane stops for a person; every other attempt asks.
+                                approver: approver.clone().filter(|_| options.lane.is_none()),
+                                present: present.clone(),
+                                task: format!("{feature_name}/{task}"),
+                                task_title: parsed_task
+                                    .as_ref()
+                                    .map(|t| t.title.clone())
+                                    .unwrap_or_default(),
+                                run: Some(this_run.to_string()),
+                                frozen_additions: run_config.frozen_additions,
+                                run_approved: run_approved.clone(),
+                                approved_once: approved_once.clone(),
+                                progress: Some((task.to_owned(), Arc::clone(&live))),
+                            },
+                        ));
+                        let a = external::run_acp(
+                            exec,
+                            agent,
+                            &wt_root,
+                            &prompt,
+                            &runner,
+                            governor,
+                            Some((task.to_owned(), Arc::clone(&live))),
+                        );
+                        if let Some(ways) = &a.sign_in {
+                            return login(fail, &a.agent, agent, ways);
+                        }
+                        for n in a.outcome.output["acp"]["notices"]
+                            .as_array()
+                            .into_iter()
+                            .flatten()
+                            .filter_map(serde_json::Value::as_str)
+                        {
+                            notices.push(format!("{}: {n}", a.agent));
+                        }
+                        a.outcome
+                    }
+                };
                 (o.run_id, true, o.output)
             } else {
                 // The same key as an interrupted attempt resumes it.
@@ -3018,11 +3094,7 @@ fn run_task_once(
                     "network": format!("{:?}", sandbox_config.network).to_lowercase(),
                 }),
                 executor: serde_json::json!({
-                    "kind": if bug_candidate.is_some() { "candidate".to_owned() } else { executor.as_ref().map_or_else(|| "native".to_owned(), |e| match &e.kind {
-                        external::Kind::Claude => "claude".to_owned(),
-                        external::Kind::Codex => "codex".to_owned(),
-                        external::Kind::Command(_) => "command".to_owned(),
-                    }) },
+                    "kind": if bug_candidate.is_some() { "candidate".to_owned() } else { executor.as_ref().map_or_else(|| "native".to_owned(), |e| e.kind.name().to_owned()) },
                     "candidate": bug_candidate.as_ref().map(|(_, c)| serde_json::json!({ "origin": c.origin, "digest": c.digest, "head_sha": c.head_sha })),
                 }),
                 model: serde_json::json!({ "provider": s.model.provider, "model": s.model.model }),
@@ -3453,4 +3525,51 @@ pub fn broken(c: &speccoder_core::verify::CheckResult) -> Option<String> {
             Some(first)
         }
     }
+}
+
+/// The task stops for the agent's sign-in: its own ways, a command one
+/// names as a step of the person's own (a terminal of theirs: it reads the
+/// keyboard). Nothing was attempted.
+fn login(
+    fail: impl FnOnce(CommandStatus, String) -> CommandResult,
+    shown: &str,
+    agent: &crate::acp::agent::Agent,
+    ways: &[crate::acp::session::SignIn],
+) -> CommandResult {
+    let words: Vec<String> = ways
+        .iter()
+        .filter(|w| w.command.is_none())
+        .map(|w| {
+            format!(
+                "→ {}",
+                w.description.clone().unwrap_or_else(|| w.name.clone())
+            )
+        })
+        .collect();
+    let mut commands: Vec<Vec<String>> = ways
+        .iter()
+        .filter_map(|w| w.command.as_deref())
+        .map(|c| c.split_whitespace().map(str::to_owned).collect())
+        .collect();
+    if words.is_empty()
+        && commands.is_empty()
+        && let Some(p) = agent.preset()
+    {
+        commands.push(p.login.split_whitespace().map(str::to_owned).collect());
+    }
+    commands.dedup();
+    let argvs: Vec<speccoder_core::step::Argvs> = commands.into_iter().map(|c| vec![c]).collect();
+    let mut fix: Vec<String> = argvs
+        .iter()
+        .map(|a| speccoder_core::step::render(a))
+        .collect();
+    fix.extend(words);
+    fix.push("speccoder doctor".to_owned());
+    fail(
+        CommandStatus::NeedsHuman,
+        format!("{shown} needs signing in before it can make the attempt; nothing was attempted"),
+    )
+    .with_code("EXECUTOR-LOGIN")
+    .with_fix(fix)
+    .with_commands(argvs)
 }

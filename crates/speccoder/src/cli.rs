@@ -404,6 +404,9 @@ pub enum Command {
         /// worktree (intent may be git-ignored); switches back at the end.
         #[arg(long)]
         in_place: bool,
+        /// Let this agent make this run's attempts (copilot, opencode, claude, codex, gemini; native: speccoder's own); speccoder.toml is unchanged.
+        #[arg(long, value_name = "AGENT", value_parser = ["native", "copilot", "opencode", "claude", "codex", "gemini"])]
+        agent: Option<String>,
         /// With --in-place: leave an interrupted in-place run — save its work
         /// under an attempt ref and switch back to the original branch.
         #[arg(long = "return", requires = "in_place", conflicts_with_all = ["task", "converge", "max_tasks"])]
@@ -519,8 +522,8 @@ pub enum Command {
         /// Run the suite this many times (results vary between runs).
         #[arg(long, default_value_t = 1, value_parser = clap::value_parser!(u16).range(1..=100))]
         repeat: u16,
-        /// Let another agent make the attempts (claude, codex; default: native).
-        #[arg(long, value_name = "KIND", value_parser = ["native", "claude", "codex"])]
+        /// Let another agent make the attempts (copilot, opencode, claude, codex, gemini; default: native).
+        #[arg(long, value_name = "AGENT", value_parser = ["native", "copilot", "opencode", "claude", "codex", "gemini"])]
         executor: Option<String>,
     },
     /// Public benchmarks as evaluation cases.

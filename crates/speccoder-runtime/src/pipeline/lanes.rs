@@ -43,6 +43,7 @@ pub(crate) fn run_lanes(
                     session: None,
                     bug_home: None,
                     mode: options.mode,
+                    agent: options.agent.clone(),
                 };
                 let provider = std::sync::Arc::clone(provider);
                 scope.spawn(move || {

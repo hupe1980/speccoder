@@ -136,7 +136,7 @@ pub fn run_suite(
 }
 
 /// [`run_suite`] with every case's attempts made by an external executor
-/// (`claude`, `codex`), to compare it with the native loop on the
+/// (an ACP agent's preset id), to compare it with the native loop on the
 /// same cases and oracles.
 pub fn run_suite_as(
     dir: &Path,
@@ -153,7 +153,7 @@ pub fn run_suite_as(
         Err(e) => return config_error(e),
     };
     if let Some(kind) = executor.filter(|k| *k != "native") {
-        let table = format!("\n[executor]\nkind = \"{kind}\"\n");
+        let table = format!("\n[executor]\nagent = \"{kind}\"\n");
         if let Err(e) = crate::external::parse(&table) {
             return config_error(e);
         }
@@ -168,8 +168,7 @@ pub fn run_suite_as(
         .ok()
         .flatten()
         .map(|e| match e.kind {
-            crate::external::Kind::Claude => "claude".to_owned(),
-            crate::external::Kind::Codex => "codex".to_owned(),
+            crate::external::Kind::Acp(a) => a.id,
             crate::external::Kind::Command(a) => a.join(" "),
         });
     let model = match crate::substrate::model_config::parse(&suite) {

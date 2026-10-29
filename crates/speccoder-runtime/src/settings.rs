@@ -651,19 +651,33 @@ pub const CATALOGUE: &[Section] = &[
     Section {
         name: "executor",
         title: "Executor",
-        about: "Who makes the attempts: speccoder's own loop or an external agent.",
+        about: "Who makes the attempts: speccoder's own loop, or an external agent over ACP whose calls speccoder decides.",
         named: false,
         keys: &[
-            Key {
-                key: "kind",
-                kind: Kind::Choice(&["native", "claude", "codex", "command"]),
-                default: None,
-                // Without [executor] speccoder's own loop runs; with it, the
-                // section must say which.
-                required: true,
-                about: "native, Claude Code, Codex, or any command",
-            },
-            k("model", Kind::Str, None, "The agent's model"),
+            k(
+                "agent",
+                Kind::Choice(&["copilot", "opencode", "claude", "codex", "gemini"]),
+                None,
+                "GitHub Copilot, OpenCode, Claude Code, Codex or Gemini CLI, over ACP",
+            ),
+            k(
+                "kind",
+                Kind::Choice(&["native", "acp", "command"]),
+                None,
+                "Without an agent: native, any ACP agent (acp) or any command, by argv",
+            ),
+            k(
+                "model",
+                Kind::Str,
+                None,
+                "The agent's model, where it offers a choice",
+            ),
+            k(
+                "mode",
+                Kind::Str,
+                None,
+                "The agent's own permission mode; unset, speccoder asks for the one that asks first",
+            ),
             k(
                 "timeout_secs",
                 Kind::Int(1, 86_400),
@@ -674,7 +688,7 @@ pub const CATALOGUE: &[Section] = &[
                 "argv",
                 Kind::Argv,
                 None,
-                "For command: the program, which reads the task on stdin",
+                "For acp: the agent's command; for command: the program, which reads the task on stdin",
             ),
         ],
     },
@@ -1480,6 +1494,17 @@ mod tests {
                     changes.insert(0, set("mutation.tool", json!("cargo-mutants")));
                 }
             }
+        }
+        // An executor names its agent; `kind` and `argv` stand without one.
+        if section.name == "executor" && !["agent", "kind", "argv"].contains(&key.key) {
+            changes.insert(
+                0,
+                ConfigChange {
+                    key: "executor.agent".into(),
+                    value: Some(json!("copilot")),
+                    append: None,
+                },
+            );
         }
         if section.name == "executor" && key.key == "argv" {
             changes.retain(|c| c.key != "executor.kind");

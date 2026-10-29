@@ -456,6 +456,53 @@ fn decisions_of<T: serde::de::DeserializeOwned>(
     }
 }
 
+/// The policy an attempt's journaled settings decide by: the checks, the
+/// allow lists, the frozen tests, the person's decisions, the MCP tools,
+/// the network rules, in place and autopilot. An external agent's attempt
+/// is decided by the same one.
+pub(crate) fn policy_of(
+    settings: &Value,
+    rules: &'static crate::format::Rules,
+) -> Result<Policy, SkillError> {
+    let frozen: Vec<String> = settings["frozen"]
+        .as_array()
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_str().map(str::to_owned))
+                .collect()
+        })
+        .unwrap_or_default();
+    let approved: Vec<Object> = decisions_of(settings, "approved")?;
+    let rejected: Vec<crate::tools::policy::Rejection> = decisions_of(settings, "rejected")?;
+    let mcp: Vec<crate::mcp::McpTool> =
+        serde_json::from_value(settings["mcp"].clone()).unwrap_or_default();
+    let policy = Policy::new(&argvs(&settings["checks"]), &argvs(&settings["allow"]))
+        .with_prefixes(argvs(&settings["allow_prefix"]))
+        .with_network_prefixes(argvs(&settings["network_allow_prefix"]))
+        .rules(rules)
+        .with_frozen(frozen)
+        .with_decisions(approved, rejected)
+        .with_mcp(mcp.iter().map(|t| (t.name.clone(), t.decision.clone())))
+        .with_network(argvs(&settings["network_allow"]))
+        .with_hidden(
+            serde_json::from_value::<Vec<String>>(settings["hidden"].clone()).unwrap_or_default(),
+        );
+    let policy = if settings["in_place"] == true {
+        policy.in_place()
+    } else {
+        policy
+    };
+    let policy = if settings["autopilot"] == true {
+        policy.autopilot()
+    } else {
+        policy
+    };
+    Ok(match settings["planning"].as_str() {
+        Some(dir) => policy.planning(dir),
+        None => policy,
+    })
+}
+
 #[async_trait]
 impl Skill for Attempt {
     fn descriptor(&self) -> SkillDescriptor {
@@ -478,46 +525,12 @@ impl Skill for Attempt {
                 .as_str()
                 .unwrap_or_default()
         );
-        let frozen: Vec<String> = settings["frozen"]
-            .as_array()
-            .map(|a| {
-                a.iter()
-                    .filter_map(|v| v.as_str().map(str::to_owned))
-                    .collect()
-            })
-            .unwrap_or_default();
-        let approved: Vec<Object> = decisions_of(&settings, "approved")?;
         let rejected: Vec<crate::tools::policy::Rejection> = decisions_of(&settings, "rejected")?;
-        let told = rejected.clone();
+        let told = rejected;
         let mcp: Vec<crate::mcp::McpTool> =
             serde_json::from_value(settings["mcp"].clone()).unwrap_or_default();
-        let policy = Policy::new(&argvs(&settings["checks"]), &argvs(&settings["allow"]))
-            .with_prefixes(argvs(&settings["allow_prefix"]))
-            .with_network_prefixes(argvs(&settings["network_allow_prefix"]))
-            .rules(self.format.rules())
-            .with_frozen(frozen)
-            .with_decisions(approved, rejected)
-            .with_mcp(mcp.iter().map(|t| (t.name.clone(), t.decision.clone())))
-            .with_network(argvs(&settings["network_allow"]))
-            .with_hidden(
-                serde_json::from_value::<Vec<String>>(settings["hidden"].clone())
-                    .unwrap_or_default(),
-            );
-        let policy = if settings["in_place"] == true {
-            policy.in_place()
-        } else {
-            policy
-        };
-        let policy = if settings["autopilot"] == true {
-            policy.autopilot()
-        } else {
-            policy
-        };
         let planning = settings["planning"].as_str().map(str::to_owned);
-        let policy = match &planning {
-            Some(dir) => policy.planning(dir),
-            None => policy,
-        };
+        let policy = policy_of(&settings, self.format.rules())?;
         let max_turns = settings["max_turns"]
             .as_u64()
             .map_or(30, |n| u32::try_from(n).unwrap_or(u32::MAX))
