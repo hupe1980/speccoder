@@ -181,7 +181,7 @@ speccoder gives its model the repository's [`AGENTS.md`](https://agents.md) file
 - At most 32 KiB: the nearest files whole, farther ones cut, and the report says so.
 - They are read from the commit the attempt starts from; the run summary (`Guided by  AGENTS.md, services/api/AGENTS.md`) and the attestation name them with each file's hash.
 - Changing an `AGENTS.md` during an attempt needs your approval.
-- External agents (Claude Code, Codex) read their own files; speccoder does not add them twice. Other file names, such as `CLAUDE.md`, are a [setting](@/docs/configuration.md#context).
+- [External agents](@/docs/integrations.md#external-agents) read their own files; speccoder does not add them twice. Other file names, such as `CLAUDE.md`, are a [setting](@/docs/configuration.md#context).
 
 ## The dashboard
 

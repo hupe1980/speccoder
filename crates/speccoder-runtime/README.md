@@ -1,6 +1,6 @@
 # speccoder-runtime
 
-The application services of [speccoder](https://github.com/hupe1980/speccoder), a spec-driven coding agent: the only crate that executes anything. Model and tool calls run through the embedded [agentplane](https://crates.io/crates/agentplane) runtime (journaled, resumable, strictly replayable); commands run in an OS sandbox; every tool call is classified before it runs; the verdict comes from the project's checks, spec-derived acceptance tests and a diff audit.
+The application services of [speccoder](https://github.com/hupe1980/speccoder), a spec-driven coding agent: the only crate that executes anything. Model and tool calls run through the embedded [agentplane](https://crates.io/crates/agentplane) runtime (journaled, resumable, strictly replayable), or an agent makes the attempt over the Agent Client Protocol with each of its permission requests decided here; commands run in an OS sandbox; every tool call is classified before it runs; the verdict comes from the project's checks, spec-derived acceptance tests and a diff audit.
 
 Entry points:
 

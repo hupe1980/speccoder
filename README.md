@@ -31,7 +31,7 @@
 Coding agents are good at writing code and too good at declaring victory. speccoder separates the two: a model proposes, and code decides.
 
 - 🧪 **Evidence decides.** The spec's acceptance examples become tests that must fail before the attempt and pass after it; your checks must not regress; the diff is audited for weakened tests; and plausible wrong versions of the change must fail the tests (the acceptance strength on every tick).
-- 🔒 **Isolated and sandboxed.** Work happens on `speccoder/<feature>` in a worktree of its own. Every command runs in an OS sandbox (Seatbelt on macOS, Landlock and seccomp on Linux): writes only to the worktree, no credentials, no network beyond loopback.
+- 🔒 **Isolated and sandboxed.** Work happens on `speccoder/<feature>` in a worktree of its own. Every command runs in an OS sandbox (Seatbelt on macOS, Landlock and seccomp on Linux): writes only to the worktree, no credentials, no network beyond loopback unless you allow it.
 - 🚦 **Every call governed.** Each tool call is allowed, sent to you, or denied before it runs. An approval covers exactly what you saw — that file, that command, that tool — and ends with the run. Every decision records who made it.
 - 💾 **Durable and replayable.** Every model and tool call is journaled. A killed run resumes without repeating finished calls; a recorded run replays offline.
 - 🧾 **Proof a maintainer can check.** Every tick leaves signed in-toto statements in git. `speccoder attest verify --branch` (no model, no network) checks each `[X]` against them, and its GitHub Action posts the result as the `speccoder / evidence` check ([proof in pull requests](https://hupe1980.github.io/speccoder/docs/verifier/)).

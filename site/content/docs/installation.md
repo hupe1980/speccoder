@@ -57,7 +57,7 @@ Every release lists `SHA256SUMS` and carries a [build-provenance attestation](ht
 
 ```sh
 shasum -a 256 -c SHA256SUMS --ignore-missing
-gh attestation verify speccoder-0.4.0-aarch64-apple-darwin.tar.gz --repo hupe1980/speccoder
+gh attestation verify speccoder-0.5.0-aarch64-apple-darwin.tar.gz --repo hupe1980/speccoder
 ```
 
 ## The branch check
@@ -82,4 +82,4 @@ Use a key with a spending limit. A local model needs no key; see [`[model]`](@/d
 | `cargo-mutants` | [Mutation evidence](@/docs/evidence.md#mutation-testing). |
 | `gh` | The installer's `--verify-attestation` and `gh attestation verify` (`speccoder pr` does not need it; see [GitHub](@/docs/github.md#sign-in)). |
 | `specify` (Spec Kit CLI) | Creating projects and running [Spec Kit workflows](@/docs/planning.md#spec-kit-workflows). |
-| `claude`, `codex` | Claude Code or Codex as [external agents](@/docs/integrations.md#external-agents). |
+| `copilot`, `opencode`, `npx` | An agent as the [executor](@/docs/integrations.md#external-agents) (`npx` starts Claude Code, Codex and Gemini CLI). |

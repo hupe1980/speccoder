@@ -2260,9 +2260,9 @@ export type How =
     subject: string | null;
   }
   /**
-   * A command speccoder printed as a fix and can run as the person, in
-   * the project folder, outside the sandbox — never one composed
-   * elsewhere. Several argvs run in order, each only after the last
+   * A command speccoder printed as a fix and can run for the person, in
+   * the project folder and the OS sandbox (see `outside`) — never one
+   * composed elsewhere. Several argvs run in order, each only after the last
    * one succeeded (`a && b`).
    */
   | {
@@ -2676,9 +2676,9 @@ export type NextStep = {
     subject: string | null;
   }
   /**
-   * A command speccoder printed as a fix and can run as the person, in
-   * the project folder, outside the sandbox — never one composed
-   * elsewhere. Several argvs run in order, each only after the last
+   * A command speccoder printed as a fix and can run for the person, in
+   * the project folder and the OS sandbox (see `outside`) — never one
+   * composed elsewhere. Several argvs run in order, each only after the last
    * one succeeded (`a && b`).
    */
   | {
@@ -4950,9 +4950,9 @@ export type Step = {
     subject: string | null;
   }
   /**
-   * A command speccoder printed as a fix and can run as the person, in
-   * the project folder, outside the sandbox — never one composed
-   * elsewhere. Several argvs run in order, each only after the last
+   * A command speccoder printed as a fix and can run for the person, in
+   * the project folder and the OS sandbox (see `outside`) — never one
+   * composed elsewhere. Several argvs run in order, each only after the last
    * one succeeded (`a && b`).
    */
   | {

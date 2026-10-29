@@ -1,6 +1,6 @@
 +++
 title = "Integrations"
-description = "Use speccoder from Zed and JetBrains over the Agent Client Protocol, give it MCP tools, let Claude Code or Codex make the attempts, run it in CI, and as a Spec Kit workflow step."
+description = "Use speccoder from Zed and JetBrains over the Agent Client Protocol, give it MCP tools, let Copilot, OpenCode, Claude Code, Codex or Gemini CLI make the attempts, run it in CI, and as a Spec Kit workflow step."
 weight = 80
 
 [extra]
@@ -68,11 +68,22 @@ agent = "copilot"    # or "opencode", "claude", "codex", "gemini"
 - `model` selects the agent's model where it offers a choice; `mode` keeps a permission mode of your choosing; `timeout_secs` (default `1800`) bounds one attempt — then speccoder cancels the turn and stops the agent.
 - `speccoder run --agent opencode` (and the app's Run ▾ menu) picks the agent for one run; `speccoder.toml` is unchanged. `speccoder doctor --agents` and Settings › Executor show each agent as *installed*, *signed in* and *asks first*, with the one step that fixes a missing tick. speccoder never signs an agent in: a sign-in it needs stops the task with [`EXECUTOR-LOGIN`](@/docs/codes.md#executor-login) and the agent's own login command.
 
-**What speccoder governs.** Before the first prompt speccoder puts the agent into its own ask-first permission mode (recorded per adapter version; OpenCode is started with every permission rule set to ask, merged into an `OPENCODE_CONFIG_CONTENT` of yours), unless you set `mode`. Every permission request the agent sends is decided on every command and path it names. A credential, a protected file or a place outside the worktree is refused. **Everything else the agent does itself asks you** — reads, commands (they run outside the sandbox), edits, searches, directories, and any request carrying something speccoder does not know. *For this task* covers exactly that request again (the same kind, input and locations). On the first read it offers **plain reads for this task** instead: from then on a `read`, or a lone `cat`/`head`/`tail`/`wc`, of one regular file inside the worktree goes ahead — no symlink, no hard link, nothing under `.git/` or speccoder's own files, nothing git-ignored or copied from your checkout, no credential name or credential-looking content, nothing that would be masked. Any other read still asks. These grants are the agent's own; a grant for speccoder's sandboxed commands never covers them, nor the other way round. A fetch is refused. Allowed calls get the agent's *allow once*, never *always*; a call that needs you waits at the terminal, in Needs You, or for `task approve`. Files and commands the agent runs through speccoder's file and terminal access go through the workspace tools, the protected paths, the secret masking, the command policy and the OS sandbox. A person's time deciding does not count against `timeout_secs`.
+**What speccoder governs.**
 
-**What stays outside.** The agent runs as its own process with your environment, outside speccoder's sandbox. What it does without asking never reaches speccoder: some agents read files unasked, and **an allow rule in the agent's own settings** (Claude Code's `permissions.allow`, also in a repository's `.claude/settings.json`; Gemini's `tools.allowed`; Copilot's allowed tools) lets it skip asking even in its ask-first mode. speccoder checks afterwards: an edit or command the agent reports as done without an allowed request marks the run *decides alone*, with the count. A move to a mode that decides alone, or that no recording knows, cancels the turn. When no recording says whether this version asks, the run says *not known whether it asks*.
+- Before the first prompt it puts the agent into its ask-first mode, unless you set `mode`. OpenCode starts with every permission rule set to ask (merged into your `OPENCODE_CONFIG_CONTENT`).
+- A request naming a credential, a protected file or a place outside the worktree is refused; so is a fetch.
+- **Everything else the agent does itself asks you**: reads, edits, searches and commands (they run outside the sandbox). *For this task* allows exactly that request again.
+- On the first read you can allow **plain reads for this task**: one regular file in the worktree, by `read` or a lone `cat`/`head`/`tail`/`wc`. Not a link, nothing under `.git/` or git-ignored, no credential and nothing that would be masked.
+- speccoder answers *allow once*, never *always*. A call that needs you waits at the terminal, in Needs You or for `task approve`; that time does not count against `timeout_secs`.
+- Files and commands the agent runs through speccoder's file and terminal access get the protected paths, masking, the command policy and the OS sandbox.
 
-**What no client can see.** Decisions are made on what the agent declares: what it runs may differ from what it asked (between the decision and its own execution, with its own `PATH`, directory and shell state); a call it labels as another kind is judged by that label; a call it never reports is not seen at all. The worktree, the acceptance tests written before the attempt (by the model in `[model]`), the diff audit, the checks and the verdict, retries, the monitor, ticking and committing are the same as for every attempt. A final message starting with `BLOCKED:`, or a turn that changed nothing, is an honest stop. See [security](@/docs/security.md#external-agents).
+**What stays outside.**
+
+- The agent is its own process with your environment. What it does without asking never reaches speccoder: some agents read files unasked, and an allow rule in its own settings (Claude Code's `permissions.allow`, also in a repository's `.claude/settings.json`; Gemini's `tools.allowed`; Copilot's allowed tools) skips asking.
+- speccoder checks afterwards: an edit or command reported done without an allowed request marks the run *decides alone*. A switch to a mode that decides alone, or one no recording knows, cancels the turn; an agent version no recording knows says *not known whether it asks*.
+- Decisions rest on what the agent declares: what it runs may differ from what it asked, and a call it never reports is not seen.
+
+The worktree, the acceptance tests, the diff audit, the checks, the verdict, retries and committing are the same as for every attempt. A final message starting with `BLOCKED:`, or a turn that changed nothing, is an honest stop. See [security](@/docs/security.md#external-agents).
 
 ## CI and scripting
 

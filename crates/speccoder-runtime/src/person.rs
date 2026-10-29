@@ -1,10 +1,9 @@
 //! Commands run for a person from an interface that confirmed them.
 //!
 //! - [`run`]: the person's own command, a fix speccoder printed (`npm
-//!   install`, `git add … && git commit …`). It runs as the person, in the
-//!   project folder, with their full environment (their model keys among
-//!   it, as in their own shell) and outside the sandbox — what they would
-//!   type — for ten minutes at most.
+//!   install`, `git add … && git commit …`). It runs in the project folder,
+//!   in the OS sandbox with the network on and without the variables
+//!   speccoder treats as secret, for ten minutes at most.
 //! - [`speccoder`]: one of speccoder's own commands that has no action of
 //!   its own (`speccoder run --ignore-checklists`): this binary, with no
 //!   time limit, its result read back as the job's.

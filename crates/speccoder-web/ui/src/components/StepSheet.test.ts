@@ -1,5 +1,5 @@
-// The person's own step: the exact command, the folder, that it runs as
-// them outside the sandbox; Run streams its output with Cancel. A command
+// The person's own step: the exact command, the folder, that it runs in
+// the sandbox (or what it changes outside); Run streams its output with Cancel. A command
 // that asks questions goes to a terminal; `export` stays in the shell.
 
 import { afterEach, describe, expect, it, vi } from "vitest";

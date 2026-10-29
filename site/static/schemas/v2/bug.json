@@ -1312,7 +1312,7 @@
           ]
         },
         {
-          "description": "A command speccoder printed as a fix and can run as the person, in\nthe project folder, outside the sandbox — never one composed\nelsewhere. Several argvs run in order, each only after the last\none succeeded (`a && b`).",
+          "description": "A command speccoder printed as a fix and can run for the person, in\nthe project folder and the OS sandbox (see `outside`) — never one\ncomposed elsewhere. Several argvs run in order, each only after the last\none succeeded (`a && b`).",
           "type": "object",
           "properties": {
             "how": {
