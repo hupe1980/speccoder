@@ -14,8 +14,8 @@ adheres to [Semantic Versioning](https://semver.org/).
   Client Protocol, its `npx` adapters pinned to exact versions. speccoder
   puts it into its ask-first permission mode, decides every permission
   request with the native policy and approvals (never answering
-  "always"; what the agent does itself, outside the sandbox, asks you
-  once — only a plain read of one plain file does not), serves its file and terminal calls through the
+  "always"; everything the agent does itself, outside the sandbox, asks
+  you — you can allow its plain reads for the task), serves its file and terminal calls through the
   protected paths, masking and OS sandbox, and judges the attempt as
   every attempt. A change the agent makes without asking (an allow rule
   in its own settings) is reported as *decides alone*.
