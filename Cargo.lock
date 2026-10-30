@@ -60,9 +60,9 @@ dependencies = [
 
 [[package]]
 name = "agentplane"
-version = "0.56.0"
+version = "0.56.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3d3ad908a4ae74ac7a2c3a9512bfc0c5d78167a3f8a2da8c4fd6823967607fb9"
+checksum = "f817357134eb8ec5423ab9cc39887d265504c5d92f00ad2f2fc77a63679485f1"
 dependencies = [
  "async-trait",
  "aws-config",
