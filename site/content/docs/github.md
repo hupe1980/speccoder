@@ -109,7 +109,7 @@ The description is the author's account; the **`speccoder / evidence`** check is
      evidence:
        runs-on: ubuntu-latest
        steps:
-         - uses: hupe1980/speccoder/packaging/speccoder-verify-action@v0.5.2
+         - uses: hupe1980/speccoder/packaging/speccoder-verify-action@v0.6.0
    ```
 
    No checkout: the action fetches the head and its notes as git objects into a scratch repository. A `pull_request` run from a **fork** gets a read-only token: the action then writes the summary and annotations to the job, says the named check was not published, and the **job**'s status carries the outcome. Require the job, or use the fork workflow below.
@@ -122,7 +122,7 @@ The description is the author's account; the **`speccoder / evidence`** check is
 
 | Input | Default | |
 |---|---|---|
-| `version` | the action's release (`0.5.2`) | the `speccoder` release to download (provenance and sha256 checked) |
+| `version` | the action's release (`0.6.0`) | the `speccoder` release to download (provenance and sha256 checked) |
 | `allowed-signers` | `.github/speccoder/allowed_signers` | read from the trusted commit (above), never the checked one |
 | `certificate-identity`, `certificate-oidc-issuer` | — | Sigstore trust; installs `cosign` |
 | `require-signed` | `true` | unsigned ticks are unverifiable |

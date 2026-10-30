@@ -1,8 +1,8 @@
 //! `speccoder shape`: a person's words made into a requirement, a bug line,
-//! a quick change or a note — optional help for people who find writing
-//! hard. One model call proposes; code decides what the proposal added,
-//! dropped and assumed (`speccoder_core::shape`). Nothing is written: the
-//! field's own sheet or command writes what the person accepts.
+//! a quick change or a note. One model call proposes; code decides what
+//! the proposal added, dropped and assumed (`speccoder_core::shape`).
+//! Nothing is written: the field's own sheet or command writes what the
+//! person accepts.
 
 use std::path::Path;
 use std::sync::Arc;

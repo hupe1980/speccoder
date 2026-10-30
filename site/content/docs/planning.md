@@ -208,7 +208,7 @@ A step with `skill:` (and `args:`) runs a planning skill; with `bug:` (a slug of
 
 ## Shape: help with the words
 
-Writing a testable requirement is hard, more so in a second language. Under the fields whose words become the judge or an instruction — a new feature's description, a quick change, a bug's symptom and expected behaviours, a requirement's rewording, a hint or nudge, an answer to an open question — speccoder shows the **writing check** as you type: words that cannot be tested ("fast", "large", "etc.", "as appropriate"), a requirement without MUST or SHALL, a When without a Then, scenarios with no failure path. Each says why and what to write instead. It needs no model.
+Under the fields whose words become the judge or an instruction — a new feature's description, a quick change, a bug's lines, a requirement's rewording, a hint, an answer — the **writing check** shows as you type what cannot be tested: vague words ("fast", "etc."), a requirement without MUST or SHALL, a When without a Then, no failure path. No model.
 
 **✦ Shape** opens a sheet over the field. The model proposes the words in your spec's format and language; code, not the model, shows what changed:
 

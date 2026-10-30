@@ -57,7 +57,7 @@ Every stop and finish ends with a `Next:` block of commands to copy (`next` in J
 | `speccoder review approve --run ask\|autopilot [--grant ID]… [--list-grants]` | [Approve and Run](@/docs/planning.md#approve-and-run) |
 | `speccoder review request ID… --comment C` | Request changes |
 | `speccoder review answer Q ANSWER` | Answer an open question in place |
-| `speccoder review edit ID WORDING [--approve] [--shape [--accept]]` | Reword a requirement; its approval lapses unless `--approve`. `--shape`: treat WORDING as rough words and show the [proposal](@/docs/planning.md#shape-help-with-the-words); `--accept` applies it only when it adds nothing unexplained, drops nothing and asks nothing |
+| `speccoder review edit ID WORDING [--approve] [--shape [--accept]]` | Reword a requirement; its approval lapses unless `--approve`. `--shape`: [shape](@/docs/planning.md#shape-help-with-the-words) WORDING first; `--accept` applies it only when nothing is unexplained, dropped or asked |
 | `speccoder shape [TEXT] [--field F] [--from FILE] [--check]` | [Shape](@/docs/planning.md#shape-help-with-the-words) rough words into a requirement (`--field requirement`, `feature`, `quick`, `bug-symptom`, `bug-expected`, `bug-unchanged`, `answer`, `note`): the proposal, its assumptions, what it added and dropped, and the writing check (`--check`: that alone, no model). Writes nothing (payload `shape`) |
 | `speccoder review clear ID…` | Remove the decision |
 | `speccoder review tests REQ [--write \| --reject P --reason R \| --again P --comment C \| --edit P --from F \| --reading A\|B SCENARIO]` | [Write and shape a requirement's tests](@/docs/planning.md#review-the-tests) |
@@ -165,7 +165,7 @@ Every output has a JSON Schema (draft 2020-12), generated from the code, at `htt
 With `--events` stdout carries only JSON Lines; stderr stays quiet (an approval prompt still appears at a terminal):
 
 ```jsonl
-{"v":2,"seq":1,"ts":"2026-10-29T10:00:00.000Z","type":"session.started","speccoder":"0.5.2","command":"run","capabilities":["events_v2","approvals_inline"]}
+{"v":2,"seq":1,"ts":"2026-10-29T10:00:00.000Z","type":"session.started","speccoder":"0.6.0","command":"run","capabilities":["events_v2","approvals_inline"]}
 {"v":2,"seq":9,"ts":"…","type":"tool_call","task":"T001","turn":3,"tool":"run_command","target":"cargo test","decision":"allow","ok":true,"tail":[]}
 {"v":2,"seq":15,"ts":"…","type":"result","result":{ …what --json prints… }}
 ```

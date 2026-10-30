@@ -6,16 +6,14 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-30
+
 ### Added
 
-- **Shape.** Under the fields whose words become the judge or an
-  instruction: a writing check as you type (vague words, no MUST/SHALL,
-  a When without a Then, no failure path; no model) and **✦ Shape**, which
-  proposes the words in the spec's format and language. Code marks what
-  it added and dropped; each value it introduced is kept, asked about or
-  removed, and each sentence of yours it left out is added back or
-  dropped, before the words are used. `speccoder shape`,
-  `review edit --shape`. A reason you give is never shaped.
+- **Shape.** A writing check as you type (no model) and **✦ Shape**,
+  which proposes testable words; code marks what it added and dropped,
+  and you decide each before the words are used. `speccoder shape`,
+  `review edit --shape`.
 - **Needs You by what it means:** *Blocked on you* (oldest first), *Ready
   to review* (riskiest evidence first, its reasons as chips), *Working*,
   *Idle* — in the app and `speccoder inbox` (`--json`: `groups`,
@@ -441,7 +439,8 @@ cannot produce or edit.
 
 - Name reservation placeholder for `speccoder` on crates.io.
 
-[Unreleased]: https://github.com/hupe1980/speccoder/compare/v0.5.2...HEAD
+[Unreleased]: https://github.com/hupe1980/speccoder/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/hupe1980/speccoder/compare/v0.5.2...v0.6.0
 [0.5.2]: https://github.com/hupe1980/speccoder/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/hupe1980/speccoder/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/hupe1980/speccoder/compare/v0.4.0...v0.5.0

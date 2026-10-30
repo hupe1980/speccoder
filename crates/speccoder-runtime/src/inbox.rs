@@ -1,9 +1,7 @@
-//! `speccoder inbox`: every decision that waits for a person,
-//! across the project's features, the most urgent first. When agents write
-//! the code, this is the person's work: approve or refuse a call, rule on
-//! tests, look at a suspected shortcut, settle a changed spec, decide what
-//! to do with a task that did not pass, commit a plan, hand off a branch.
-//! Read-only; every item carries the actions that decide it.
+//! `speccoder inbox`: what waits for a person across the project's
+//! features — blocked on them (oldest first), ready to review (riskiest
+//! evidence first), working, idle. Read-only; every item carries the
+//! actions that decide it.
 
 use std::path::Path;
 

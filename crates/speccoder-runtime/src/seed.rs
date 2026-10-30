@@ -1,14 +1,11 @@
 //! A new lane's build folders, cloned from its feature's worktree.
 //!
-//! A lane starts as a fresh worktree: `target/` empty, `node_modules/` not
-//! installed. Where the feature's worktree has them for the same lockfile,
-//! they are cloned copy-on-write (APFS `clonefile`, a reflink on Btrfs or
-//! XFS): the lane's own files, nothing shared or linked, at almost no cost
-//! in time or disk. Where the filesystem cannot clone, nothing is copied
-//! and the lane builds or installs as before. Cargo keys a package's build
-//! by its path, so the project's own crates are built again in the lane;
-//! only the dependencies are reused. `.venv/` is never cloned (it holds
-//! absolute paths; `uv sync` from the cache is as fast).
+//! Where the feature's worktree has `target/` or `node_modules/` for the
+//! same lockfile, they are cloned copy-on-write (APFS `clonefile`, a
+//! reflink on Btrfs or XFS): the lane's own files, nothing linked. Where
+//! the filesystem cannot clone, nothing is copied. Cargo keys a build by
+//! its path, so only the dependencies are reused. `.venv/` is never cloned
+//! (it holds absolute paths).
 
 use std::path::Path;
 use std::process::Command;
