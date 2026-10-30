@@ -98,7 +98,7 @@
               "key": "max_run_tokens",
               "kind": "integer",
               "about": "Tokens per attempt",
-              "default": 200000,
+              "default": 500000,
               "value": null,
               "choices": [],
               "min": 1.0,

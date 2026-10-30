@@ -6,6 +6,11 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- `[model] max_run_tokens` defaults to 500000 (was 200000): an attempt's
+  30 turns resend a growing conversation and ran out of tokens first.
+
 ### Fixed
 
 - `list_files` and `search_code` given `"."` (or `"./"`, `""`) list the

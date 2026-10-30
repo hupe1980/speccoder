@@ -67,7 +67,7 @@ The commands that decide whether nothing regressed. A check's command up to its 
 | `region` | — | Required for `bedrock`, refused otherwise: the AWS region calls go to (the journal records it) |
 | `reasoning_summary` | `true` | Show the model's summary of its reasoning, as its account (never evidence); providers without one give none |
 | `max_output_tokens` | `4096` | Output tokens per model turn |
-| `max_run_tokens` | `200000` | Tokens per attempt |
+| `max_run_tokens` | `500000` | Tokens per attempt, every turn counted |
 | `cache_ttl` | `"5m"` | Anthropic's prompt-cache lifetime: `5m` or `1h` |
 | `base_url` | — | Required for `openai-compatible` (e.g. `http://localhost:11434/v1`); for `openai`, a gateway in front of the Responses API; refused for `bedrock` |
 | `api_key_env` | — | `openai-compatible` only: the variable holding the server's key, if it needs one |

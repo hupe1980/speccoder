@@ -159,7 +159,7 @@ pub const CATALOGUE: &[Section] = &[
             k(
                 "max_run_tokens",
                 Kind::Int(1, 100_000_000),
-                Some("200000"),
+                Some("500000"),
                 "Tokens per attempt",
             ),
             k(

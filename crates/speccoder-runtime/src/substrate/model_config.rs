@@ -461,7 +461,7 @@ pub fn parse(text: &str) -> Result<Option<ModelConfig>, String> {
         model: raw.model,
         reasoning_summary: raw.reasoning_summary.unwrap_or(true),
         max_output_tokens: raw.max_output_tokens.unwrap_or(4096),
-        max_run_tokens: raw.max_run_tokens.unwrap_or(200_000),
+        max_run_tokens: raw.max_run_tokens.unwrap_or(500_000),
         cache_ttl: raw.cache_ttl.unwrap_or(CacheTtl::FiveMinutes),
         // Prices are the user's to state (they change, and differ by
         // contract); without input and output prices, cost is tokens only.
