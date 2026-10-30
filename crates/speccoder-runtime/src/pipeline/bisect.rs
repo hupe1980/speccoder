@@ -285,6 +285,7 @@ fn prepared(
     runner: sandbox::Runner,
 ) -> Option<sandbox::Runner> {
     crate::include::copy(dir, project, s.checkout, &s.worktree.include).ok()?;
+    crate::seed::seed(s.repo, &s.repo.join(s.prefix), dir, project);
     if !s.worktree.prepare || !crate::prepare::needed(project) {
         return Some(runner);
     }

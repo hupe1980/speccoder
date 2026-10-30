@@ -54,7 +54,7 @@ A worktree holds only what is committed, and `node_modules/` or `.venv/` never a
 
 It runs once per lockfile; later tasks reuse it. An attempt that changes the lockfile is installed again before its checks, so they and the tick are about the lockfile committed. A workspace member whose lockfile sits above it is installed where that lockfile is. Go and Rust need no step.
 
-A package the cache lacks stops the task with `error[PREPARE-FAILED]`: run the install once in your checkout, or let its online form reach the network (`[sandbox] network_allow = [["npm", "ci"]]`). A project `speccoder new` made installs from the cache its own steps filled. Lane and bisection worktrees are prepared the same way; in-place runs use your checkout's own folders; `[worktree] prepare = "off"` skips the step.
+A package the cache lacks stops the task with `error[PREPARE-FAILED]`: run the install once in your checkout, or let its online form reach the network (`[sandbox] network_allow = [["npm", "ci"]]`). A project `speccoder new` made installs from the cache its own steps filled. Lane and bisection worktrees are prepared the same way, and start with the feature worktree's `target/` and Node folders cloned copy-on-write when their lockfile is the same, each lane its own copy (APFS, Btrfs, XFS; elsewhere they build and install as before). In-place runs use your checkout's own folders; `[worktree] prepare = "off"` skips the step.
 
 ## Copied files
 

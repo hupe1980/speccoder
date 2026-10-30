@@ -6,6 +6,14 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- A parallel lane or a bisection worktree starts with the feature
+  worktree's `target/` and Node folders cloned copy-on-write when the
+  lockfile is the same, instead of building and installing from nothing
+  (APFS, Btrfs, XFS; measured: a Rust lane's first `cargo test` 6.3 s →
+  0.2 s). Each lane gets its own files; `.venv/` is never cloned.
+
 ## [0.5.2] - 2026-10-30
 
 ### Fixed
