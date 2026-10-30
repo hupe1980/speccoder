@@ -889,6 +889,11 @@ pub fn target(tool: &str, args: &serde_json::Value) -> String {
             })
             .unwrap_or_default(),
         "search_code" => args["pattern"].as_str().unwrap_or_default().to_owned(),
+        "report_blocked" => format!(
+            "{}: {}",
+            args["kind"].as_str().unwrap_or("?"),
+            args["evidence"].as_str().unwrap_or_default()
+        ),
         // An MCP tool: its first string argument, whatever it is called.
         name if name.starts_with(crate::mcp::PREFIX) => args
             .as_object()

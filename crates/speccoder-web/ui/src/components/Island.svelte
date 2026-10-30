@@ -111,7 +111,7 @@
           {/each}
         </ol>
         <div class="log mono" bind:this={log} aria-live="polite">
-          {#each calls as c}<div class:said={c.startsWith("“")} class:thought={c.startsWith("∴")} class:deny={c.includes(" deny")} class:ask={c.includes(" approval")}>{c}</div>{:else}<div class="dim">No tool calls yet.</div>{/each}
+          {#each calls as c}<div class:said={c.startsWith("“")} class:thought={c.startsWith("∴")} class:deny={c.includes(" deny")} class:ask={c.includes(" approval") || c.endsWith(" challenged")}>{c}</div>{:else}<div class="dim">No tool calls yet.</div>{/each}
         </div>
         <div class="foot">
           {#if app.usage.in || app.usage.out}<span class="usage mono">{app.usage.in.toLocaleString()} in · {app.usage.out.toLocaleString()} out{#if app.usage.usd != null}{" · "}${app.usage.usd.toFixed(4)}{/if}</span>{/if}

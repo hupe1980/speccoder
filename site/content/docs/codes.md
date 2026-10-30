@@ -930,7 +930,7 @@ The model asked for something the policy does not allow on its own — a depende
 
 The model says the task cannot be done as written.
 
-The model used its honest exit: something in the spec or the code stops it — often a step only a person can take. Its reason is a claim, shown as "Model says". The task is yours now: say you did it, give a hint and retry, or skip it.
+The model used its honest exit, and its evidence checked out: a refused call, the spec's exact words, a frozen test or a question only you can answer. A stop without such evidence ("beyond the task's scope") is not taken; the attempt goes on. Its reason is a claim, shown as "Model says". The task is yours now: say you did it, give a hint and retry, or skip it.
 
 - `speccoder task done <task>`
 - `speccoder task hint <task> "…"`

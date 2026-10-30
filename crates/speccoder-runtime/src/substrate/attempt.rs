@@ -36,8 +36,8 @@ task, and run the project's checks with run_command to see whether it works. Sta
 the task's scope: the task's paths are the plan's guess — where they differ from the code, \
 use the module that holds it; a change elsewhere that the task or its acceptance tests need \
 (an entry point they run, a module they import) is in scope and shown to the reviewer, never \
-a reason to stop. You cannot edit the spec ({intent}), the checks' configuration or \
-.git; such calls are refused. Some commands need a person's approval and will end the \
+a reason to stop: an entry point that bypasses the task's module is rewired to it. You \
+cannot edit the spec ({intent}), the checks' configuration or .git; such calls are refused. Some commands need a person's approval and will end the \
 attempt — prefer configured checks. If the task cannot be done as written — it \
 contradicts the spec, needs information or access you lack, or a test is wrong — call \
 report_blocked with the reason instead of working around it. Test files that existed \
@@ -75,14 +75,89 @@ pub fn report_schema() -> Value {
 fn report_blocked() -> ToolDeclaration {
     ToolDeclaration::new(
         REPORT_BLOCKED,
-        "Stop the attempt because the task cannot be done as written; a person will look at the reason.",
+        "Stop the attempt because the task cannot be done as written; a person will look at the \
+reason. `kind`, with the `evidence` speccoder checks: `refused` — a call the task needs was \
+refused (the call); `spec_conflict` — the spec contradicts the task (its exact words); \
+`wrong_test` — a frozen test asserts the wrong thing (its path); `needs_information` — only a \
+person knows (the question). Scope is never a kind: when the tests run code that bypasses the \
+task's module (an entry point, a caller), wiring that code to it is part of the task.",
         json!({
             "type": "object",
-            "properties": { "reason": { "type": "string" } },
-            "required": ["reason"],
+            "properties": {
+                "kind": { "type": "string", "enum": ["refused", "spec_conflict", "wrong_test", "needs_information"] },
+                "evidence": { "type": "string" },
+                "reason": { "type": "string" },
+            },
+            "required": ["kind", "evidence", "reason"],
             "additionalProperties": false,
         }),
     )
+}
+
+/// What a `report_blocked` call is checked against: its evidence must be
+/// there, never the model's word alone.
+#[derive(Default)]
+pub(crate) struct StopGate {
+    /// The spec text the prompt carried: what a `spec_conflict` quotes.
+    pub spec: String,
+    /// The tests frozen when the attempt started: what a `wrong_test` names.
+    pub frozen: Vec<String>,
+    /// A person rejected a call for this task before.
+    pub rejected: bool,
+}
+
+/// What speccoder does with a `report_blocked` call.
+#[derive(Debug, PartialEq, Eq)]
+enum Stop {
+    /// The evidence is not there: the attempt goes on, told why.
+    Refused(String),
+    /// Asked once before stopping, with the turns left.
+    Asked(String),
+    /// The attempt stops; the reason the person reads.
+    Stopped(String),
+}
+
+/// Judges a stop by its evidence: a refused call stops at once; a quote,
+/// a frozen test or a question is asked about once first.
+fn judge_stop(
+    gate: &StopGate,
+    arguments: &Value,
+    refused: bool,
+    asked: bool,
+    turns_left: u32,
+) -> Stop {
+    let text = |k: &str| arguments[k].as_str().unwrap_or_default().trim();
+    let (kind, evidence, reason) = (text("kind"), text("evidence"), text("reason"));
+    let words = |t: &str| t.split_whitespace().collect::<Vec<_>>().join(" ");
+    let checked = match kind {
+        "refused" if refused => format!("refused call `{evidence}`"),
+        "refused" => return Stop::Refused("not stopped: no call in this attempt was refused or rejected".to_owned()),
+        "spec_conflict" if evidence.chars().count() >= 12 && words(&gate.spec).contains(&words(evidence)) => {
+            format!("the spec says “{evidence}”")
+        }
+        "spec_conflict" => {
+            return Stop::Refused("not stopped: the evidence must be the spec's exact words, at least a phrase; these are not in it".to_owned());
+        }
+        "wrong_test" if gate.frozen.iter().any(|f| f == evidence.trim_start_matches("./")) => {
+            format!("frozen test `{evidence}`")
+        }
+        "wrong_test" => return Stop::Refused("not stopped: the evidence must be the path of a test that existed when the attempt started".to_owned()),
+        "needs_information" if !evidence.is_empty() => format!("question: {evidence}"),
+        _ => return Stop::Refused("not stopped: `kind` is one of refused, spec_conflict, wrong_test, needs_information, with its `evidence`".to_owned()),
+    };
+    // The model's reason first, then what speccoder checked.
+    let said = match reason {
+        "" => checked,
+        r if r == evidence => r.to_owned(),
+        r => format!("{r} — {checked}"),
+    };
+    // Asked once only, and never on the last turn: no answer could follow.
+    if kind == "refused" || asked || turns_left == 0 {
+        return Stop::Stopped(said);
+    }
+    Stop::Asked(format!(
+        "Not stopped yet: speccoder asks once before a stop. {turns_left} turns are left. The task's paths are the plan's guess: wiring an entry point, caller or import the tests run to the task's module is part of the task, and a failing check is a reason to keep going. If the task still cannot be done as written, call report_blocked again."
+    ))
 }
 
 /// The question tool a hosted skill may use.
@@ -531,6 +606,22 @@ impl Skill for Attempt {
         );
         let rejected: Vec<crate::tools::policy::Rejection> = decisions_of(&settings, "rejected")?;
         let told = rejected;
+        let bundle = &input.peek()["bundle"];
+        let stop = StopGate {
+            spec: ["story", "plan", "constitution"]
+                .iter()
+                .filter_map(|k| bundle[*k].as_str())
+                .chain(bundle["task"]["title"].as_str())
+                .collect::<Vec<_>>()
+                .join("\n"),
+            frozen: settings["frozen"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|v| v.as_str().map(str::to_owned))
+                .collect(),
+            rejected: !told.is_empty(),
+        };
         let mcp: Vec<crate::mcp::McpTool> =
             serde_json::from_value(settings["mcp"].clone()).unwrap_or_default();
         let planning = settings["planning"].as_str().map(str::to_owned);
@@ -751,6 +842,7 @@ impl Skill for Attempt {
                     .iter()
                     .map(|t| (t.name.clone(), t.digest.clone()))
                     .collect(),
+                stop,
                 observer: self.progress.clone().map(|p| {
                     (
                         task_name.rsplit('/').next().unwrap_or_default().to_owned(),
@@ -987,6 +1079,8 @@ pub(crate) struct LoopSpec {
     pub parts: Vec<crate::approvals::derived::Part>,
     /// MCP tools' digests by model-facing name: their objects.
     pub mcp_digests: std::collections::BTreeMap<String, String>,
+    /// What a `report_blocked` call's evidence is checked against.
+    pub stop: StopGate,
 }
 
 /// A run's asking budget as an attempt sees it (all journaled).
@@ -1041,6 +1135,7 @@ pub(crate) async fn tool_loop(
         asking,
         mut parts,
         mcp_digests,
+        stop,
     } = spec;
     // Objects allowed without asking: this run's, then what a person
     // answered "for the task" or "for this run" in this attempt.
@@ -1056,6 +1151,8 @@ pub(crate) async fn tool_loop(
     let mut conversation: Label = prompt.label().clone();
     let mut calls = 0u32;
     let mut denied_in_a_row = 0u32;
+    // Whether the model was asked once before a stop.
+    let mut asked_to_stop = false;
     // Whether this attempt registered the `approval` obligation yet.
     let mut obligation = false;
     let mut usage = agentplane::model::Usage::default();
@@ -1238,21 +1335,40 @@ pub(crate) async fn tool_loop(
                 continue;
             }
             if asked.name == REPORT_BLOCKED && tools.iter().any(|t| t.name == REPORT_BLOCKED) {
-                let reason = asked.arguments["reason"]
-                    .as_str()
-                    .unwrap_or("no reason given")
-                    .to_owned();
-                let entry = json!({ "tool": REPORT_BLOCKED, "arguments": asked.arguments, "decision": "stop" });
-                emit(observer.as_ref(), turn + 1, &entry);
-                log.push(entry);
-                return end(
-                    "blocked",
-                    json!({ "reason": reason }),
-                    &log,
-                    usage,
-                    &conversation,
-                    prompted,
-                );
+                let refused = stop.rejected || log.iter().any(|e| e["decision"] == "deny");
+                let left = max_turns - turn - 1;
+                match judge_stop(&stop, &asked.arguments, refused, asked_to_stop, left) {
+                    Stop::Stopped(reason) => {
+                        let entry = json!({ "tool": REPORT_BLOCKED, "arguments": asked.arguments, "decision": "stop" });
+                        emit(observer.as_ref(), turn + 1, &entry);
+                        log.push(entry);
+                        return end(
+                            "blocked",
+                            json!({ "reason": reason }),
+                            &log,
+                            usage,
+                            &conversation,
+                            prompted,
+                        );
+                    }
+                    Stop::Asked(text) => {
+                        asked_to_stop = true;
+                        let entry = json!({ "tool": REPORT_BLOCKED, "arguments": asked.arguments, "decision": "challenged" });
+                        emit(observer.as_ref(), turn + 1, &entry);
+                        log.push(entry);
+                        transcript.answered(
+                            asked,
+                            &Tainted::trusted(json!({ "stopped": false, "note": text })),
+                        );
+                    }
+                    Stop::Refused(text) => {
+                        let entry = json!({ "tool": REPORT_BLOCKED, "arguments": asked.arguments, "decision": "unproven", "reason": text });
+                        emit(observer.as_ref(), turn + 1, &entry);
+                        log.push(entry);
+                        transcript.failed(asked, Tainted::trusted(text));
+                    }
+                }
+                continue;
             }
             let declared = tools.iter().any(|t| t.name == asked.name);
             let target = catalog
@@ -1780,5 +1896,73 @@ mod tests {
         let mut none = json!({ "path": "/etc/passwd" });
         relativise(&mut none, None);
         assert_eq!(none["path"], "/etc/passwd");
+    }
+
+    /// A stop is its evidence: what speccoder cannot check goes on, the
+    /// rest is asked once, a refused call stops at once.
+    #[test]
+    fn a_stop_stands_on_evidence_speccoder_checks() {
+        let gate = StopGate {
+            spec: "Rows are sorted\n  ascending by name.".to_owned(),
+            frozen: vec!["tests/test_us3.py".to_owned()],
+            rejected: false,
+        };
+        let call = |kind: &str, evidence: &str| json!({ "kind": kind, "evidence": evidence, "reason": "why" });
+        let judge =
+            |args: &Value, refused: bool, asked: bool| judge_stop(&gate, args, refused, asked, 5);
+        let unproven = |s: Stop| matches!(s, Stop::Refused(_));
+
+        // The T018 stop: scope is no kind, an entry point is no evidence.
+        assert!(unproven(judge(
+            &json!({ "reason": "beyond the task's module scope" }),
+            false,
+            false
+        )));
+        assert!(unproven(judge(&call("scope", "src/cli"), false, false)));
+        assert!(unproven(judge(
+            &call("wrong_test", "tests/new_test.py"),
+            false,
+            false
+        )));
+        assert!(unproven(judge(
+            &call("spec_conflict", "sorted descending by name"),
+            false,
+            false
+        )));
+        assert!(unproven(judge(
+            &call("spec_conflict", "sorted"),
+            false,
+            false
+        )));
+        assert!(unproven(judge(
+            &call("refused", "cargo add x"),
+            false,
+            false
+        )));
+
+        // Checked evidence is asked about once, with the turns left; the
+        // second call stops, its reason first.
+        let quote = call("spec_conflict", "sorted ascending by name");
+        assert!(
+            matches!(judge(&quote, false, false), Stop::Asked(t) if t.contains("5 turns are left"))
+        );
+        assert_eq!(
+            judge(&quote, false, true),
+            Stop::Stopped("why — the spec says “sorted ascending by name”".to_owned())
+        );
+        assert_eq!(
+            judge(&call("wrong_test", "./tests/test_us3.py"), false, true),
+            Stop::Stopped("why — frozen test `./tests/test_us3.py`".to_owned())
+        );
+        // A refused call needs no second word, nor does the last turn.
+        assert!(matches!(
+            judge(&call("refused", "cargo add x"), true, false),
+            Stop::Stopped(_)
+        ));
+        let q = call("needs_information", "which locale?");
+        assert!(matches!(
+            judge_stop(&gate, &q, false, false, 0),
+            Stop::Stopped(_)
+        ));
     }
 }

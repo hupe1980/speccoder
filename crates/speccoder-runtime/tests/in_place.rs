@@ -789,11 +789,8 @@ fn i_did_it_at_an_in_place_stop_ticks_the_checkout() {
     let r = repo("");
     let state = tempfile::tempdir().unwrap();
     let (f, d) = fake();
-    f.will_call_tool(
-        "c1",
-        "report_blocked",
-        json!({ "reason": "needs a GitHub repository" }),
-    );
+    f.will_call_tool("c1", "report_blocked", json!({ "kind": "needs_information", "evidence": "needs a GitHub repository", "reason": "needs a GitHub repository" }));
+    f.will_call_tool("c1.again", "report_blocked", json!({ "kind": "needs_information", "evidence": "needs a GitHub repository", "reason": "needs a GitHub repository" }));
     let options = RunOptions {
         max_tasks: Some(1),
         approver: Some(Arc::new(SaysDone)),

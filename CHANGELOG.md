@@ -6,6 +6,13 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- An agent's stop must carry evidence speccoder checks: a refused call,
+  the spec's exact words, a frozen test or a question. A stop without it
+  ("beyond the task's scope") is answered and the attempt goes on; a
+  checked one is asked about once before it stands.
+
 ## [0.6.1] - 2026-10-30
 
 ### Changed

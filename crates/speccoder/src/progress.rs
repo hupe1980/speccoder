@@ -393,7 +393,7 @@ fn token_of(event: &Event) -> Option<crate::style::Token> {
         },
         Event::ToolCall { decision, ok, .. } => match (decision.as_str(), ok) {
             ("deny" | "unknown", _) | (_, Some(false)) => Token::Danger,
-            ("approval" | "stop", _) => Token::Attention,
+            ("approval" | "stop" | "challenged", _) => Token::Attention,
             _ => Token::Muted,
         },
         Event::Resumed { .. } | Event::ApprovalRequested { .. } => Token::Attention,

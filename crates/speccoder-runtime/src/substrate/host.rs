@@ -163,6 +163,7 @@ impl Skill for Host {
                 asking: super::attempt::Asking::default(),
                 parts: Vec::new(),
                 mcp_digests: std::collections::BTreeMap::new(),
+                stop: super::attempt::StopGate::default(),
                 observer: self.progress.clone().map(|p| (skill.clone(), p)),
                 finish: |report| {
                     if report["status"] == "incomplete" {

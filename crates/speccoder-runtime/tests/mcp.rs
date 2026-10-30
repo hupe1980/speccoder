@@ -313,7 +313,16 @@ fn an_allowed_tool_its_server_changed_needs_approval_again() {
     let run_once = |state: &Path| {
         let f = FakeProvider::new();
         f.will_call_tool("c1", "mcp__notes__list_notes", json!({}));
-        f.will_call_tool("c2", "report_blocked", json!({ "reason": "stop here" }));
+        f.will_call_tool(
+            "c2",
+            "report_blocked",
+            json!({ "kind": "needs_information", "evidence": "stop here", "reason": "stop here" }),
+        );
+        f.will_call_tool(
+            "c2.again",
+            "report_blocked",
+            json!({ "kind": "needs_information", "evidence": "stop here", "reason": "stop here" }),
+        );
         let d: Arc<dyn ModelProvider> = f;
         speccoder_runtime::run_with(r.path(), None, "T005", state, d, None)
     };

@@ -259,6 +259,7 @@ impl Skill for Converge {
                 asking: super::attempt::Asking::default(),
                 parts: Vec::new(),
                 mcp_digests: std::collections::BTreeMap::new(),
+                stop: super::attempt::StopGate::default(),
                 observer: None,
                 routes: Vec::new(),
                 root: None,

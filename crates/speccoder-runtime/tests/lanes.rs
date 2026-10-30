@@ -270,7 +270,9 @@ impl speccoder_runtime::approvals::Approver for Person {
 }
 
 fn blocked(f: &FakeProvider, id: &str, why: &str) {
-    f.will_call_tool(id, "report_blocked", json!({ "reason": why }));
+    let stop = json!({ "kind": "needs_information", "evidence": why, "reason": why });
+    f.will_call_tool(id, "report_blocked", stop.clone());
+    f.will_call_tool(format!("{id}.again"), "report_blocked", stop);
 }
 
 fn options(person: &Arc<Person>) -> RunOptions {

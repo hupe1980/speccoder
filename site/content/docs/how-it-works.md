@@ -23,7 +23,7 @@ If the task's user story has acceptance examples, a **separate model call with n
 
 ## 4. The attempt
 
-The implementing model works in the worktree with a small set of tools: read, list, search, write, edit, run a command, git status and diff. Every call is classified before it runs as allowed, needing a person ([approvals](@/docs/approvals.md)) or denied ([the policy](@/docs/security.md#the-policy)). Three denied calls in a row end the attempt. Every command runs in the [OS sandbox](@/docs/security.md#the-os-sandbox). If the task cannot be done as written (the spec contradicts itself, a test is wrong), the model stops with a reason (`blocked`) instead of bending the code.
+The implementing model works in the worktree with a small set of tools: read, list, search, write, edit, run a command, git status and diff. Every call is classified before it runs as allowed, needing a person ([approvals](@/docs/approvals.md)) or denied ([the policy](@/docs/security.md#the-policy)). Three denied calls in a row end the attempt. Every command runs in the [OS sandbox](@/docs/security.md#the-os-sandbox). If the task cannot be done as written, the model stops with a reason (`blocked`) instead of bending the code. The stop needs evidence speccoder checks: a refused call, the spec's exact words, a frozen test or a question for you. Without it ("beyond the task's scope") the attempt goes on; with it, the model is asked once more before the stop stands.
 
 ## 5. Judgement
 

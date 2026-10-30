@@ -377,16 +377,32 @@ fn report_blocked_ends_the_attempt_honestly() {
     let r = repo("");
     let state = tempfile::tempdir().unwrap();
     let (f, d) = fake();
-    f.will_call_tool(
-        "c1",
-        "report_blocked",
-        json!({ "reason": "T005 contradicts FR-002" }),
-    );
+    f.will_call_tool("c1", "report_blocked", json!({ "kind": "needs_information", "evidence": "T005 contradicts FR-002", "reason": "T005 contradicts FR-002" }));
+    f.will_call_tool("c1.again", "report_blocked", json!({ "kind": "needs_information", "evidence": "T005 contradicts FR-002", "reason": "T005 contradicts FR-002" }));
     let res = run(r.path(), state.path(), "T005", d);
     assert_eq!(res.status(), CommandStatus::NeedsHuman);
     let rep = report(&res);
     assert_eq!(rep.attempt_status, "blocked");
     assert_eq!(rep.reason.as_deref(), Some("T005 contradicts FR-002"));
+}
+
+/// The T018 stop: "beyond the task's scope" is no evidence, so the
+/// attempt is told so and goes on — the model keeps the turn.
+#[test]
+fn a_stop_without_evidence_is_answered_and_the_attempt_goes_on() {
+    let r = repo("");
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_call_tool(
+        "c1",
+        "report_blocked",
+        json!({ "reason": "the CLI is beyond the task's module scope" }),
+    );
+    f.will_structure(json!({ "summary": "wired the CLI", "status": "incomplete", "files_changed": [], "checks_run": [], "notes": [] }));
+    let res = run(r.path(), state.path(), "T005", d);
+    let rep = report(&res);
+    assert_eq!(rep.attempt_status, "incomplete");
+    assert_eq!(rep.tool_calls[0]["decision"], "unproven");
 }
 
 #[test]
@@ -1357,7 +1373,8 @@ fn integrity_findings_and_self_stops_are_not_retried() {
     let r = repo("");
     let state = tempfile::tempdir().unwrap();
     let (f, d) = fake();
-    f.will_call_tool("b", "report_blocked", json!({ "reason": "contradiction" }));
+    f.will_call_tool("b", "report_blocked", json!({ "kind": "needs_information", "evidence": "contradiction", "reason": "contradiction" }));
+    f.will_call_tool("b.again", "report_blocked", json!({ "kind": "needs_information", "evidence": "contradiction", "reason": "contradiction" }));
     let res = run(r.path(), state.path(), "T005", d);
     let rep = report(&res);
     assert_eq!(rep.attempt_status, "blocked");
@@ -1532,7 +1549,16 @@ fn leftovers_of_an_interrupted_run_are_set_aside_before_the_next() {
     let state = tempfile::tempdir().unwrap();
     // A first run creates the worktree; then a "crash" leaves edits behind.
     let (f, d) = fake();
-    f.will_call_tool("b", "report_blocked", json!({ "reason": "first" }));
+    f.will_call_tool(
+        "b",
+        "report_blocked",
+        json!({ "kind": "needs_information", "evidence": "first", "reason": "first" }),
+    );
+    f.will_call_tool(
+        "b.again",
+        "report_blocked",
+        json!({ "kind": "needs_information", "evidence": "first", "reason": "first" }),
+    );
     let first = run(r.path(), state.path(), "T005", d);
     let wt = PathBuf::from(&report(&first).worktree);
     fs::write(
@@ -1599,12 +1625,30 @@ fn a_conflicting_set_aside_change_is_refused_and_nothing_moves() {
     let r = repo("");
     let state = tempfile::tempdir().unwrap();
     let (f, d) = fake();
-    f.will_call_tool("b", "report_blocked", json!({ "reason": "first" }));
+    f.will_call_tool(
+        "b",
+        "report_blocked",
+        json!({ "kind": "needs_information", "evidence": "first", "reason": "first" }),
+    );
+    f.will_call_tool(
+        "b.again",
+        "report_blocked",
+        json!({ "kind": "needs_information", "evidence": "first", "reason": "first" }),
+    );
     let first = run(r.path(), state.path(), "T005", d);
     let wt = PathBuf::from(&report(&first).worktree);
     fs::write(wt.join("src/lib.rs"), "pub fn mine() {}\n").unwrap();
     let (f2, d2) = fake();
-    f2.will_call_tool("b", "report_blocked", json!({ "reason": "second" }));
+    f2.will_call_tool(
+        "b",
+        "report_blocked",
+        json!({ "kind": "needs_information", "evidence": "second", "reason": "second" }),
+    );
+    f2.will_call_tool(
+        "b.again",
+        "report_blocked",
+        json!({ "kind": "needs_information", "evidence": "second", "reason": "second" }),
+    );
     let res = run(r.path(), state.path(), "T005", d2);
     let aside = report(&res).set_aside.clone().expect("set aside");
     // The branch moves on with its own, conflicting, line.
@@ -1644,7 +1688,16 @@ fn an_uncommitted_lockfile_stops_the_run_with_its_fix_until_committed() {
     let r = repo("");
     let state = tempfile::tempdir().unwrap();
     let (f, d) = fake();
-    f.will_call_tool("b", "report_blocked", json!({ "reason": "first" }));
+    f.will_call_tool(
+        "b",
+        "report_blocked",
+        json!({ "kind": "needs_information", "evidence": "first", "reason": "first" }),
+    );
+    f.will_call_tool(
+        "b.again",
+        "report_blocked",
+        json!({ "kind": "needs_information", "evidence": "first", "reason": "first" }),
+    );
     let first = run(r.path(), state.path(), "T005", d);
     let wt = PathBuf::from(&report(&first).worktree);
     // What `cargo` would leave in the worktree.
@@ -1687,7 +1740,16 @@ fn an_uncommitted_lockfile_stops_the_run_with_its_fix_until_committed() {
     );
     assert!(git_out(r.path(), &["ls-files", "Cargo.lock"]).contains("Cargo.lock"));
     let (f3, d3) = fake();
-    f3.will_call_tool("b", "report_blocked", json!({ "reason": "third" }));
+    f3.will_call_tool(
+        "b",
+        "report_blocked",
+        json!({ "kind": "needs_information", "evidence": "third", "reason": "third" }),
+    );
+    f3.will_call_tool(
+        "b.again",
+        "report_blocked",
+        json!({ "kind": "needs_information", "evidence": "third", "reason": "third" }),
+    );
     let res = run(r.path(), state.path(), "T005", d3);
     assert_ne!(
         res.status(),
@@ -1704,7 +1766,16 @@ fn set_aside_changes_can_be_discarded() {
     let r = repo("");
     let state = tempfile::tempdir().unwrap();
     let (f, d) = fake();
-    f.will_call_tool("b", "report_blocked", json!({ "reason": "first" }));
+    f.will_call_tool(
+        "b",
+        "report_blocked",
+        json!({ "kind": "needs_information", "evidence": "first", "reason": "first" }),
+    );
+    f.will_call_tool(
+        "b.again",
+        "report_blocked",
+        json!({ "kind": "needs_information", "evidence": "first", "reason": "first" }),
+    );
     let first = run(r.path(), state.path(), "T005", d);
     let wt = PathBuf::from(&report(&first).worktree);
     fs::write(
@@ -1713,7 +1784,16 @@ fn set_aside_changes_can_be_discarded() {
     )
     .unwrap();
     let (f2, d2) = fake();
-    f2.will_call_tool("b", "report_blocked", json!({ "reason": "second" }));
+    f2.will_call_tool(
+        "b",
+        "report_blocked",
+        json!({ "kind": "needs_information", "evidence": "second", "reason": "second" }),
+    );
+    f2.will_call_tool(
+        "b.again",
+        "report_blocked",
+        json!({ "kind": "needs_information", "evidence": "second", "reason": "second" }),
+    );
     let res = run(r.path(), state.path(), "T005", d2);
     let aside = report(&res).set_aside.clone().expect("set aside");
     let tip = git_out(r.path(), &["rev-parse", "speccoder/001-graph"]);
@@ -2109,7 +2189,16 @@ fn a_nudge_reaches_the_next_attempt_and_can_be_cleared() {
     assert_eq!(n.status(), CommandStatus::Ok, "{}", n.message());
     // Each attempt stops honestly, so the task stays open for the next one.
     let (f, d) = fake();
-    f.will_call_tool("b1", "report_blocked", json!({ "reason": "waiting" }));
+    f.will_call_tool(
+        "b1",
+        "report_blocked",
+        json!({ "kind": "needs_information", "evidence": "waiting", "reason": "waiting" }),
+    );
+    f.will_call_tool(
+        "b1.again",
+        "report_blocked",
+        json!({ "kind": "needs_information", "evidence": "waiting", "reason": "waiting" }),
+    );
     run(r.path(), state.path(), "T005", d);
     let prompt = serde_json::to_string(&f.asked()[0].prompt).unwrap();
     assert!(
@@ -2119,7 +2208,16 @@ fn a_nudge_reaches_the_next_attempt_and_can_be_cleared() {
 
     speccoder_runtime::controls::nudge_with(r.path(), None, "T005", None, state.path());
     let (f2, d2) = fake();
-    f2.will_call_tool("b2", "report_blocked", json!({ "reason": "waiting" }));
+    f2.will_call_tool(
+        "b2",
+        "report_blocked",
+        json!({ "kind": "needs_information", "evidence": "waiting", "reason": "waiting" }),
+    );
+    f2.will_call_tool(
+        "b2.again",
+        "report_blocked",
+        json!({ "kind": "needs_information", "evidence": "waiting", "reason": "waiting" }),
+    );
     run(r.path(), state.path(), "T005", d2);
     let prompt = serde_json::to_string(&f2.asked()[0].prompt).unwrap();
     assert!(!prompt.contains("Notes from a person"));
@@ -3148,7 +3246,8 @@ fn failed_and_blocked_runs_replay_as_reproduced() {
     let r = repo("");
     let state = tempfile::tempdir().unwrap();
     let (f, d) = fake();
-    f.will_call_tool("b", "report_blocked", json!({ "reason": "contradiction" }));
+    f.will_call_tool("b", "report_blocked", json!({ "kind": "needs_information", "evidence": "contradiction", "reason": "contradiction" }));
+    f.will_call_tool("b.again", "report_blocked", json!({ "kind": "needs_information", "evidence": "contradiction", "reason": "contradiction" }));
     let blocked = run(r.path(), state.path(), "T005", d);
     let id = report(&blocked).run_id.clone();
     let replayed = speccoder_runtime::replay_with(r.path(), &id, state.path());
