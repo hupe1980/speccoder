@@ -1184,7 +1184,7 @@ pub(crate) async fn tool_loop(
             if calls > max_tool_calls {
                 return end(
                     "budget_exhausted",
-                    json!({ "reason": format!("more than {max_tool_calls} tool calls") }),
+                    json!({ "reason": format!("more than {max_tool_calls} tool calls (`[budget] max_tool_calls`)") }),
                     &log,
                     usage,
                     &conversation,
@@ -1724,7 +1724,7 @@ pub(crate) async fn tool_loop(
     }
     end(
         "budget_exhausted",
-        json!({ "reason": format!("more than {max_turns} model turns") }),
+        json!({ "reason": format!("more than {max_turns} model turns (`[budget] max_turns`)") }),
         &log,
         usage,
         &conversation,

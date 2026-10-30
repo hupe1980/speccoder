@@ -959,9 +959,9 @@ Its closing report says part of the task is left undone; so the attempt is not t
 
 The attempt ran out of turns, calls or tokens.
 
-The attempt reached a limit of `[budget]` before finishing. The work so far is saved under the attempt's ref.
+The attempt reached a limit before finishing: `[budget]` max_turns or max_tool_calls, or `[model]` max_run_tokens. The work so far is saved under the attempt's ref.
 
-- Raise the limit in speccoder.toml [budget]
+- Raise the limit the stop names in speccoder.toml
 
 ### NOT-DEMONSTRATED
 

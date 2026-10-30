@@ -952,10 +952,10 @@ pub const CATALOG: &[Entry] = &[
         P,
         S::NeedsHuman,
         "the attempt ran out of turns, calls or tokens",
-        "The attempt reached a limit of `[budget]` before finishing. The work so far is saved under the attempt's ref.",
+        "The attempt reached a limit before finishing: `[budget]` max_turns or max_tool_calls, or `[model]` max_run_tokens. The work so far is saved under the attempt's ref.",
         [
             "speccoder task nudge {task} --note \"…\"",
-            "→ raise the limit in speccoder.toml [budget]"
+            "→ raise the limit the stop names in speccoder.toml"
         ]
     ),
     entry!(
