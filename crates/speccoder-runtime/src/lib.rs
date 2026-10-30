@@ -61,6 +61,7 @@ pub mod review;
 pub mod sample;
 pub mod sandbox;
 pub mod secrets;
+pub mod seed;
 pub mod service;
 pub mod settings;
 pub mod skills;

@@ -6,16 +6,21 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- A parallel lane or a bisection worktree starts with the feature
+  worktree's `target/` and Node folders cloned copy-on-write when the
+  lockfile is the same, instead of building and installing from nothing
+  (APFS, Btrfs, XFS; measured: a Rust lane's first `cargo test` 6.3 s →
+  0.2 s). Each lane gets its own files; `.venv/` is never cloned.
+- Built on agentplane 0.56.
+
 ### Fixed
 
 - When the acceptance tests or another author's answer cannot be used,
   the stop says why in the provider's words (e.g. `'openai/gpt-5.4-mini'
   returned an unusable answer: … not JSON: trailing characters …`)
   instead of `generation did not succeed: failed`.
-
-### Changed
-
-- Built on agentplane 0.56.
 
 ### Upgrading
 

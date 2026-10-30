@@ -428,7 +428,7 @@ pub fn load(worktree: &Path) -> Record {
         .unwrap_or_default()
 }
 
-fn store(worktree: &Path, record: &Record) -> Result<(), Failure> {
+pub(crate) fn store(worktree: &Path, record: &Record) -> Result<(), Failure> {
     let path = record_path(worktree);
     let tmp = path.with_extension("json.tmp");
     serde_json::to_string_pretty(record)
@@ -579,7 +579,7 @@ fn prepare_roots(
 
 /// Whether an installed folder is still the worktree's own: a directory,
 /// not a link, reached without one.
-fn holds(worktree: &Path, folder: &Path) -> bool {
+pub(crate) fn holds(worktree: &Path, folder: &Path) -> bool {
     confined(worktree, folder).is_ok()
         && std::fs::symlink_metadata(folder).is_ok_and(|m| m.is_dir())
 }
@@ -671,7 +671,7 @@ fn lexical(p: &Path) -> PathBuf {
 /// Where `folder` really lies, when that is inside the worktree and its
 /// parent is reached without a symlink on the way; else why not. Nothing
 /// is removed or linked at a folder that is not.
-fn confined(worktree: &Path, folder: &Path) -> Result<PathBuf, String> {
+pub(crate) fn confined(worktree: &Path, folder: &Path) -> Result<PathBuf, String> {
     let root =
         std::fs::canonicalize(worktree).map_err(|e| format!("{}: {e}", worktree.display()))?;
     let (Some(parent), Some(name)) = (folder.parent(), folder.file_name()) else {

@@ -311,6 +311,12 @@ pub(crate) fn lane_worktree(
         .strip_prefix(wt_path)
         .map(Path::to_path_buf)
         .unwrap_or_default();
+    crate::seed::seed(
+        Path::new(wt_path),
+        Path::new(project_dir),
+        &l.path,
+        &l.path.join(&rel),
+    );
     Ok((
         l.path.display().to_string(),
         l.path.join(rel).display().to_string(),
