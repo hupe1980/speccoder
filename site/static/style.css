@@ -326,3 +326,18 @@ body.docs .docs-layout:not(:has(.toc)) { grid-template-columns: 230px minmax(0, 
   :root:not([data-theme="light"]) .app-shot .shot-light { display: none; }
   :root:not([data-theme="light"]) .app-shot .shot-dark { display: block; }
 }
+
+/* A screenshot, enlarged. */
+.shot img, .app-shot img { cursor: zoom-in; transition: transform .2s ease; }
+.shot img:hover, .app-shot img:hover { transform: scale(1.005); }
+.shot img:focus-visible, .app-shot img:focus-visible { outline: 3px solid var(--accent, #3b82f6); outline-offset: 4px; }
+.zoom { width: min(96vw, 1680px); max-width: none; max-height: 96vh; padding: 0; border: 0; background: transparent; overflow: visible; cursor: zoom-out; }
+.zoom::backdrop { background: rgb(8 8 16 / 82%); backdrop-filter: blur(6px); }
+.zoom figure { margin: 0; display: grid; gap: .7rem; justify-items: center; }
+.zoom img { display: block; max-width: 100%; max-height: calc(96vh - 3rem); width: auto; height: auto; border-radius: 12px; box-shadow: 0 30px 80px rgb(0 0 0 / 45%); }
+.zoom figcaption { color: #e8e8f0; font-size: .9rem; text-align: center; max-width: 70ch; }
+.zoom-close { position: fixed; top: 1rem; right: 1.2rem; width: 2.4rem; height: 2.4rem; border: 0; border-radius: 50%; background: rgb(255 255 255 / 14%); color: #fff; font-size: 1.5rem; line-height: 1; cursor: pointer; }
+.zoom-close:hover { background: rgb(255 255 255 / 24%); }
+.zoom[open] img { animation: zoom-in .22s ease; }
+@keyframes zoom-in { from { transform: scale(.97); } }
+@media (prefers-reduced-motion: reduce) { .zoom[open] img { animation: none; } .shot img, .app-shot img { transition: none; } }

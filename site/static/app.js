@@ -110,3 +110,32 @@
     else if ((e.key === "/" && !typing) || (e.key === "k" && (e.metaKey || e.ctrlKey))) { e.preventDefault(); open(); }
   });
 })();
+
+// Screenshots open larger: a click (or Enter) shows the one in the reader's
+// theme nearly full-window; a click anywhere, Esc or Close puts it away.
+(() => {
+  const shots = [...document.querySelectorAll(".shot img, .app-shot img")];
+  if (!shots.length) return;
+  const zoom = document.createElement("dialog");
+  zoom.className = "zoom";
+  zoom.innerHTML = '<figure><img alt=""><figcaption></figcaption></figure><button type="button" class="zoom-close" aria-label="Close">×</button>';
+  document.body.append(zoom);
+  const img = zoom.querySelector("img");
+  const caption = zoom.querySelector("figcaption");
+  shots.forEach((s) => {
+    s.tabIndex = 0;
+    s.setAttribute("role", "button");
+    s.setAttribute("aria-label", `Enlarge: ${s.alt}`);
+    const open = () => {
+      img.src = s.currentSrc || s.src;
+      img.alt = s.alt;
+      caption.textContent = s.closest("figure")?.querySelector("figcaption")?.textContent || s.alt;
+      zoom.showModal();
+    };
+    s.addEventListener("click", open);
+    s.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); }
+    });
+  });
+  zoom.addEventListener("click", () => zoom.close());
+})();
