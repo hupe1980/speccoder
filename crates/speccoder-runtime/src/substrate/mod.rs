@@ -32,7 +32,7 @@ use self::propose::{CAPABILITY, Propose};
 
 /// The agentplane release speccoder is built against (the exact pin in the
 /// workspace `Cargo.toml`), named in every verification summary.
-pub const AGENTPLANE_VERSION: &str = "0.55.0";
+pub const AGENTPLANE_VERSION: &str = "0.56.0";
 
 /// The journal file inside a project's state directory.
 pub const JOURNAL: &str = "journal.redb";
@@ -328,14 +328,10 @@ pub fn open_reader(dir: &Path) -> Result<Option<Arc<RedbStore>>, PlaneError> {
         ))),
         // A writer that died without closing it (killed, Ctrl-C, a closed
         // terminal) leaves it to be repaired, which only a writer does.
-        // agentplane reports that as unreadable; redb's wording tells it
-        // from damage (agentplane has no error of its own for it).
-        Err(agentplane::core::StoreError::Unreadable(e)) if needs_repair(&e) => {
-            Err(PlaneError(format!(
-                "the last run ended without closing its journal in {}; the next run or decision repairs it ({e})",
-                dir.display()
-            )))
-        }
+        Err(agentplane::core::StoreError::NeedsRepair(e)) => Err(PlaneError(format!(
+            "the last run ended without closing its journal in {}; the next run or decision repairs it ({e})",
+            dir.display()
+        ))),
         Err(e) => Err(PlaneError(format!(
             "cannot read the journal in {}: {e}",
             dir.display()
@@ -362,13 +358,6 @@ fn holds_a_pre_054_decision(value: &Value) -> bool {
 /// What a run that failed on a decision speccoder 0.2.0 recorded is told.
 pub const PRE_054_DECISION: &str = "this attempt waited on a decision recorded by speccoder 0.2.0, which this build cannot read (agentplane 0.54 records a decision as a verdict); the attempt is set aside — run the task again to start it afresh";
 
-/// Whether an unreadable journal only needs the repair a writer makes on
-/// open: redb's "repair aborted", which a read-only open reports for a file
-/// its last writer did not close.
-fn needs_repair(detail: &str) -> bool {
-    detail.to_lowercase().contains("repair aborted")
-}
-
 /// What a model provider refused, from a run's failure: the text after
 /// agentplane's "refused the request:" — a refusal, which no retry changes.
 #[must_use]
@@ -380,6 +369,33 @@ pub fn provider_refusal(failure: &str) -> Option<String> {
         .or_else(|| rest.rfind(')'))
         .unwrap_or(rest.len());
     Some(rest[..end].trim_end_matches(['"', ')']).trim().to_owned())
+}
+
+/// Why a run did not succeed, for a person: a failure in its own words,
+/// without agentplane's effect key and attempt count (`'openai/gpt-5.4-mini'
+/// returned an unusable answer: …`), cut at 300 characters; else the
+/// status (`suspended`, `exhausted`, …).
+#[must_use]
+pub fn why_not(status: &RunStatus) -> String {
+    let RunStatus::Failed(failure) = status else {
+        return status.as_str().to_owned();
+    };
+    let said = ["consumed resources and failed: ", "failed: "]
+        .iter()
+        .find_map(|m| failure.find(m).map(|i| &failure[i + m.len()..]))
+        .or_else(|| {
+            failure
+                .split_once(" of ")
+                .and_then(|(_, r)| r.split_once(": "))
+                .map(|(_, r)| r)
+        })
+        .unwrap_or(failure);
+    let cut: String = said.chars().take(300).collect();
+    if cut.len() < said.len() {
+        format!("{cut}…")
+    } else {
+        cut
+    }
 }
 
 /// The first run in the journal at `dir` that ended on a provider refusing
@@ -1263,6 +1279,19 @@ mod tests {
             "credit_balance_exhausted: You have no credits remaining. Add credits at https://platform.openai.com/settings/organization/billing/."
         );
         assert_eq!(provider_refusal("Failed(\"timeout\")"), None);
+    }
+
+    #[test]
+    fn a_failed_run_says_why_in_the_failure_s_own_words() {
+        let unusable = RunStatus::Failed("effect ek:774b failed on attempt 1 of 1: effect consumed resources and failed: 'openai/gpt-5.4-mini' returned an unusable answer: a schema was required and the answer is not JSON: trailing characters at line 1 column 2531".to_owned());
+        assert_eq!(
+            why_not(&unusable),
+            "'openai/gpt-5.4-mini' returned an unusable answer: a schema was required and the answer is not JSON: trailing characters at line 1 column 2531"
+        );
+        let timeout =
+            RunStatus::Failed("effect ek:9 failed on attempt 2 of 2: timed out".to_owned());
+        assert_eq!(why_not(&timeout), "timed out");
+        assert_eq!(why_not(&RunStatus::Succeeded), "succeeded");
     }
 
     #[test]

@@ -272,6 +272,7 @@ fn an_account_the_provider_refuses_stops_the_suite() {
         model: agentplane::model::ModelId::new("openai", "gpt-5.4-mini"),
         detail: "credit_balance_exhausted: You have no credits remaining.".to_owned(),
         code: Some("insufficient_quota".to_owned()),
+        account: true,
     });
     let driver: Arc<dyn ModelProvider> = fake.clone();
     let r = run_suite(&suite(), None, &driver, None, None, 3);
@@ -288,8 +289,8 @@ fn an_account_the_provider_refuses_stops_the_suite() {
     assert_eq!(e.cases.len(), 1, "the other cases were not run");
 }
 
-/// A refusal of one request — or one without a code — does not stop the
-/// suite, whatever words its message has: the provider's code decides.
+/// A refusal of one request does not stop the suite, whatever words its
+/// message has: the driver's verdict decides.
 #[test]
 fn a_refused_request_does_not_stop_the_suite_whatever_its_words() {
     for code in [Some("invalid_request_error"), None] {
@@ -298,6 +299,7 @@ fn a_refused_request_does_not_stop_the_suite_whatever_its_words() {
             model: agentplane::model::ModelId::new("openai", "gpt-5.4-mini"),
             detail: "the credit card field is not a quota: request too large".to_owned(),
             code: code.map(str::to_owned),
+            account: false,
         });
         let driver: Arc<dyn ModelProvider> = fake.clone();
         let r = run_suite(&suite(), Some("calc-add"), &driver, None, None, 2);

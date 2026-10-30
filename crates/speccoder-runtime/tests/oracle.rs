@@ -534,6 +534,7 @@ fn edge_cases_refuse_with_their_codes() {
         model: agentplane::model::ModelId::new("openai", "gpt-5.4-mini"),
         detail: "down".to_owned(),
         code: None,
+        account: false,
     });
     let res = write(r.path(), state.path(), d);
     assert_eq!(

@@ -140,7 +140,7 @@ pub(crate) fn prepare_acceptance(a: &AcceptanceSetup<'_>) -> PreparedAcceptance 
     if !matches!(outcome.status, agentplane::prelude::RunStatus::Succeeded) || answer.is_null() {
         let status = format!("{:?}", outcome.status);
         let why = substrate::provider_refusal(&status).map_or_else(
-            || format!("generation did not succeed: {}", outcome.status.as_str()),
+            || format!("generation failed: {}", substrate::why_not(&outcome.status)),
             |r| format!("the model provider refused the request: {r}"),
         );
         return failed(why, base);
@@ -987,7 +987,7 @@ pub(crate) fn strengthen(
     if !matches!(outcome.status, agentplane::prelude::RunStatus::Succeeded) || answer.is_null() {
         return Err(format!(
             "the test author did not answer ({})",
-            outcome.status.as_str()
+            substrate::why_not(&outcome.status)
         ));
     }
     let protected = a.policy.protected();

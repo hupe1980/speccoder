@@ -29,7 +29,7 @@ sha2 = "0.11"
 base64 = "0.22"
 toml = { version = "1", features = ["preserve_order"] }
 quick-xml = "0.42"
-agentplane = { version = "=0.55.0", default-features = false, features = ["embed", "bedrock"] }
+agentplane = { version = "=0.56.0", default-features = false, features = ["embed", "bedrock"] }
 async-trait = "0.1"
 # The Agent Client Protocol's official crate: the executor drives agents with it.
 agent-client-protocol = { version = "2.2", features = ["unstable_end_turn_token_usage"] }

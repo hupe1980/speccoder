@@ -6,6 +6,22 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- When the acceptance tests or another author's answer cannot be used,
+  the stop says why in the provider's words (e.g. `'openai/gpt-5.4-mini'
+  returned an unusable answer: … not JSON: trailing characters …`)
+  instead of `generation did not succeed: failed`.
+
+### Changed
+
+- Built on agentplane 0.56.
+
+### Upgrading
+
+- `speccoder replay` of a run recorded before this release reports a
+  divergence (model-call arguments are written differently).
+
 ## [0.5.2] - 2026-10-30
 
 ### Fixed

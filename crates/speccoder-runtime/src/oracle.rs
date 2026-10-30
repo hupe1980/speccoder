@@ -1130,7 +1130,7 @@ impl<'a> Author<'a> {
                 || {
                     format!(
                         "the test author did not answer: {}",
-                        outcome.status.as_str()
+                        substrate::why_not(&outcome.status)
                     )
                 },
                 |r| format!("the model provider refused the request: {r}"),

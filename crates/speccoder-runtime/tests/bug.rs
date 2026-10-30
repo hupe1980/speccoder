@@ -456,6 +456,7 @@ fn a_fix_the_provider_refuses_the_account_for_is_provider_refused_with_its_fix()
         model: agentplane::model::ModelId::new("anthropic", "claude-sonnet-5-5"),
         detail: "invalid x-api-key".to_owned(),
         code: Some("authentication_error".to_owned()),
+        account: true,
     });
     let res = bug::run_with(
         r.path(),

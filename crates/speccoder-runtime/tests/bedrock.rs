@@ -204,6 +204,7 @@ fn a_bedrock_api_key_never_reaches_a_message_or_an_event() {
         model: agentplane::model::ModelId::new("bedrock", CLAUDE),
         detail: format!("UnrecognizedClientException: The security token {KEY} is invalid"),
         code: Some("UnrecognizedClientException".to_owned()),
+        account: true,
     });
     let res = run(r.path(), state.path(), &f, Some(KEY));
     assert_ne!(res.status(), CommandStatus::Ok, "{}", res.message());
@@ -303,6 +304,7 @@ fn refused_session_child() {
             "AccessDeniedException: You don't have access to the model with the specified model ID."
                 .to_owned(),
         code: Some("AccessDeniedException".to_owned()),
+        account: true,
     });
     let res = run(r.path(), state.path(), &f, None);
     assert_eq!(res.status(), CommandStatus::RunFailed, "{}", res.message());
@@ -336,6 +338,7 @@ fn a_model_the_region_does_not_offer_names_the_region_and_the_model() {
         model: agentplane::model::ModelId::new("bedrock", "anthropic.claude-sonnet-5-5"),
         detail: "ValidationException: The provided model identifier is invalid.".to_owned(),
         code: Some("ValidationException".to_owned()),
+        account: false,
     });
     let res = run(r.path(), state.path(), &f, None);
     assert_eq!(res.status(), CommandStatus::RunFailed, "{}", res.message());

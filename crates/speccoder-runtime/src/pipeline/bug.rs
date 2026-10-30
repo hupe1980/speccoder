@@ -465,7 +465,7 @@ fn author(
     if !matches!(outcome.status, agentplane::prelude::RunStatus::Succeeded) || answer.is_null() {
         return Err(format!(
             "the author did not answer ({})",
-            outcome.status.as_str()
+            crate::substrate::why_not(&outcome.status)
         ));
     }
     let notes = answer["notes"].as_array().map(|n| {
@@ -1514,7 +1514,7 @@ pub(crate) fn judge(c: &Ctx<'_>, fix: &mut Fix, j: &Judging<'_>) -> Result<Judge
                     {
                         special_error = Some(format!(
                             "the special-case author did not answer ({})",
-                            o.status.as_str()
+                            crate::substrate::why_not(&o.status)
                         ));
                         Vec::new()
                     } else {
