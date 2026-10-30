@@ -130,7 +130,13 @@ jobs:
             gh release create "$tag" --draft --verify-tag --title "speccoder $VERSION" --notes-file notes.md "${flags[@]}"
           fi
           cp packaging/install.sh dist/speccoder-installer.sh
-          gh release upload "$tag" dist/*.tar.gz dist/*.sha256 dist/SHA256SUMS dist/speccoder-installer.sh --clobber
+          # An upload GitHub took but did not answer is retried by gh and refused
+          # as "already exists"; a second pass with --clobber replaces it.
+          for attempt in 1 2 3; do
+            gh release upload "$tag" dist/*.tar.gz dist/*.sha256 dist/SHA256SUMS dist/speccoder-installer.sh --clobber && break
+            [ "$attempt" = 3 ] && exit 1
+            sleep 10
+          done
           gh release edit "$tag" --draft=false
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
