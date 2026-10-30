@@ -263,6 +263,23 @@ pub enum Command {
         #[arg(long)]
         window: bool,
     },
+    /// Ask about the project — specs, code, runs, evidence: an answer whose sources speccoder checks. Changes nothing.
+    Ask {
+        /// Your question (default: read from stdin).
+        question: Option<String>,
+        /// Continue a conversation: its id, or the newest when none is given.
+        #[arg(long = "continue", value_name = "ID", num_args = 0..=1, default_missing_value = "")]
+        resume: Option<String>,
+        /// Give a task as context (`T004`); repeatable.
+        #[arg(long, value_name = "TASK")]
+        task: Vec<String>,
+        /// Give a file, or lines of it, as context (`src/x.rs:10-40`); repeatable.
+        #[arg(long, value_name = "PATH[:A-B]")]
+        file: Vec<String>,
+        /// List the conversations instead.
+        #[arg(long, conflicts_with_all = ["question", "resume"])]
+        list: bool,
+    },
     /// A small change, judged like any other: `do "make the login button blue"` records and runs it.
     Do {
         /// The change, in your words.
@@ -320,6 +337,7 @@ pub enum Command {
         task: Option<String>,
     },
     /// GitHub: sign in with a short code in your browser, see who speccoder is there, sign out.
+    #[command(hide = true)]
     Auth {
         #[command(subcommand)]
         action: Option<AuthAction>,

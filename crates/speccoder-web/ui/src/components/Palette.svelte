@@ -3,6 +3,7 @@
   // selection in the accent, the command it runs shown below. Enter runs
   // it (or copies a command that would leave the machine).
   import { app } from "../lib/app.svelte";
+  import { ask } from "../lib/ask.svelte";
   import { key as keyOf, offer, type Offer } from "../lib/actions";
   import type { Action } from "../lib/types";
   import Icon from "./Icon.svelte";
@@ -18,6 +19,8 @@
     ["theme.auto", "appearance: automatic", "follow the system"],
     ["view.sidebar", "toggle the sidebar"],
     ["view.statusbar", "toggle the status bar"],
+    ["view.ask", "open Ask", "a read-only conversation about the project (⌘L)"],
+    ["edit.addToAsk", "add the selected task to Ask", "as context for the next question (⌘⇧L)"],
     ["file.bug", "report a bug", "reproduced, confirmed by you once, fixed on evidence"],
     ["file.new_feature", "new feature", "the spec tool writes the spec; you review it, then it is planned"],
     ["file.new_project", "new project", "the stack's and the spec format's own tools, then one commit"],
@@ -41,7 +44,13 @@
     if (f.length < 6) return null;
     return offer(null, { group: "work", label: `quick change: "${f}"`, why: "recorded as a story, a requirement and a task; judged on evidence", command: `speccoder do "${f.replaceAll('"', '\\"')}"` });
   });
-  const items = $derived(quick ? [...matched, quick] : matched);
+  // Words that read as a question are offered to Ask first.
+  const question = $derived.by((): Entry | null => {
+    const f = filter.trim();
+    if (f.length < 6 || !(f.endsWith("?") || /^(what|why|how|where|which|when|who|is|are|does|do|can|should)\b/i.test(f))) return null;
+    return offer(null, { group: "page", label: `ask: "${f}"`, why: "a read-only answer whose sources are checked; changes nothing", command: `speccoder ask "${f.replaceAll('"', '\\"')}"` });
+  });
+  const items = $derived([...(question ? [question] : []), ...matched, ...(quick ? [quick] : [])]);
   const pick = (a?: Entry) => {
     if (!a || a.blocked) return;
     if (isMenu(a)) {
@@ -54,6 +63,12 @@
     if ("role" in a && a.role === "create") {
       app.palette = false;
       app.newFeature = { text: filter.trim().length >= 6 ? filter.trim() : "" };
+      return;
+    }
+    if (a === question) {
+      app.palette = false;
+      ask.toggle(true);
+      void ask.send(filter.trim());
       return;
     }
     if (a === quick) {

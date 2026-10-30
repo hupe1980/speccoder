@@ -9,6 +9,7 @@ pub mod acceptance_at;
 pub mod acp;
 pub mod actions;
 pub mod approvals;
+pub mod ask;
 pub mod attempts;
 pub mod attest;
 pub mod aws;

@@ -414,6 +414,42 @@ pub enum Body {
         /// The result envelope.
         result: CommandResult,
     },
+    /// An Ask turn read something.
+    #[serde(rename = "ask.step")]
+    AskStep {
+        /// The conversation.
+        conversation: String,
+        /// The turn.
+        turn: u32,
+        /// The tool.
+        tool: String,
+        /// What it read.
+        target: String,
+        /// It failed or was refused.
+        refused: bool,
+    },
+    /// An Ask turn's answer as it is written.
+    #[serde(rename = "ask.text")]
+    AskText {
+        /// The conversation.
+        conversation: String,
+        /// The turn.
+        turn: u32,
+        /// The next words.
+        delta: String,
+    },
+    /// An Ask turn ended.
+    #[serde(rename = "ask.done")]
+    AskDone {
+        /// The conversation.
+        conversation: String,
+        /// The turn.
+        turn: u32,
+        /// `answered`, `budget`, `failed`.
+        end: String,
+        /// Citations to what this turn read.
+        sources: usize,
+    },
     /// Plan through stopped where a person decides, at a failure or at the end.
     #[serde(rename = "planning.stopped")]
     PlanningStopped {
@@ -1050,6 +1086,43 @@ pub fn body(event: &Event) -> Body {
             next_skill: next_skill.as_deref().map(clean),
         },
         Event::Project { step } => project_body(step),
+        Event::AskStep {
+            conversation,
+            turn,
+            tool,
+            target,
+            refused,
+            ..
+        } => Body::AskStep {
+            conversation: conversation.clone(),
+            turn: *turn,
+            tool: tool.clone(),
+            target: clean(target),
+            refused: *refused,
+        },
+        Event::AskText {
+            conversation,
+            turn,
+            delta,
+        } => Body::AskText {
+            conversation: conversation.clone(),
+            turn: *turn,
+            delta: clean(delta),
+        },
+        Event::AskDone { report } => Body::AskDone {
+            conversation: report.conversation.clone(),
+            turn: report.turn,
+            end: report.end.clone(),
+            sources: report
+                .citations
+                .iter()
+                .filter(|c| c.state == "read")
+                .count(),
+        },
+        // Internal to the Ask plane; never on a stream.
+        Event::AskTurnEnded { .. } => Body::Notice {
+            text: String::new(),
+        },
     }
 }
 

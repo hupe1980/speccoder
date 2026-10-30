@@ -1,5 +1,6 @@
 <script lang="ts">
   import { app } from "../lib/app.svelte";
+  import { ask } from "../lib/ask.svelte";
   import { phaseLabel as short, symbol, word } from "../lib/marks";
   import { get, q } from "../lib/api";
   import { KINDS, offer, ofTask } from "../lib/actions";
@@ -60,6 +61,7 @@
       title: `${t.id} · ${word(laneOf(t))}`,
       items: [
         { label: "Show Evidence", icon: "shield", act: () => void app.selectTask(t.id) },
+        { label: "Add to Ask", icon: "bubble", hint: "⌘⇧L", act: () => ask.add({ kind: "task", reference: { task: t.id, feature: app.feature }, label: `${t.id} ${t.title}` }) },
         ...mine.map((a) => ({ label: KINDS[a.id.kind].verb + (a.input ? "…" : ""), icon: KINDS[a.id.kind].icon, disabled: a.blocked ?? (app.job?.running ? "a job is running" : null), hint: `$ ${a.command}`, act: () => void app.perform(a) })),
         { label: "Copy Task ID", icon: "copy", act: copy(t.id, "the task ID") },
         { label: "Copy the Run Command", icon: "terminal", act: copy(`speccoder run --task ${t.id}`, "the command") },

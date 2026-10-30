@@ -193,6 +193,12 @@ pub enum CommandData {
     Inbox(Box<InboxReport>),
     /// `shape`: a person's words made into a requirement, and what changed.
     Shape(Box<ShapeReport>),
+    /// `ask`: one turn of a read-only conversation.
+    Ask(Box<crate::ask::AskReport>),
+    /// `ask --list`: the conversations.
+    AskConversations(Box<crate::ask::AskConversations>),
+    /// One conversation with its turns.
+    AskThread(Box<crate::ask::AskThread>),
     /// `review`: the feature's requirements and the person's review of each.
     Review(Box<ReviewReport>),
     /// `auth`: who speccoder is on a GitHub host.
@@ -1067,6 +1073,9 @@ impl CommandData {
             Self::Issues(_) => "issues",
             Self::Inbox(_) => "inbox",
             Self::Shape(_) => "shape",
+            Self::Ask(_) => "ask",
+            Self::AskConversations(_) => "ask_conversations",
+            Self::AskThread(_) => "ask_thread",
             Self::Review(_) => "review",
             Self::Auth(_) => "auth",
             Self::BranchVerify(_) => "branch_verify",
@@ -1118,6 +1127,9 @@ pub const PAYLOADS: &[&str] = &[
     "issues",
     "inbox",
     "shape",
+    "ask",
+    "ask_conversations",
+    "ask_thread",
     "review",
     "auth",
     "branch_verify",

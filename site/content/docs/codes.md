@@ -107,6 +107,9 @@ Every result that is not plainly `ok` names a code — `error[CODE]`, `stopped[C
 | [`BLOCKED`](#blocked) | stop | 23 | the model says the task cannot be done as written |
 | [`TASK-YOURS`](#task-yours) | stop | 23 | the next task is a step only a person can take |
 | [`ATTEMPT-INCOMPLETE`](#attempt-incomplete) | stop | 23 | the model says the task is not finished |
+| [`ASK-NO-MODEL`](#ask-no-model) | error | 13 | no model is set up to answer a question |
+| [`ASK-BUDGET`](#ask-budget) | stop | 23 | the Ask budget for this turn or today is spent |
+| [`ASK-FULL`](#ask-full) | stop | 23 | the conversation is too long for another turn |
 | [`BUDGET-EXHAUSTED`](#budget-exhausted) | stop | 23 | the attempt ran out of turns, calls or tokens |
 | [`NOT-DEMONSTRATED`](#not-demonstrated) | stop | 23 | the evidence the task needs could not be produced |
 | [`TESTS-COLLECTION-UNKNOWN`](#tests-collection-unknown) | stop | 23 | speccoder cannot tell whether the runner ran a test file |
@@ -954,6 +957,31 @@ Its closing report says part of the task is left undone; so the attempt is not t
 
 - `speccoder task nudge <task> --note "…"`
 - `speccoder run --task <task>`
+
+### ASK-NO-MODEL
+
+No model is set up to answer a question.
+
+Ask answers with `[ask] model` or, without one, `[model]`; neither is configured, so no question can be answered. "Make this a…" still works without a model.
+
+- `speccoder init`
+- Set up a model in Setup
+
+### ASK-BUDGET
+
+The Ask budget for this turn or today is spent.
+
+Ask stops before a model call that would go past `[ask] max_turn_tokens` (one turn) or `[ask] daily_tokens` (the UTC day). Runs are untouched: their budget is their own. What was answered so far is kept.
+
+- Raise the limit the stop names in speccoder.toml, or ask again tomorrow
+
+### ASK-FULL
+
+The conversation is too long for another turn.
+
+Ask never summarises a conversation: when its history alone would fill a turn, it ends. A new conversation starts with the same context chips.
+
+- Start a new conversation (⌥⌘N); its chips come along
 
 ### BUDGET-EXHAUSTED
 

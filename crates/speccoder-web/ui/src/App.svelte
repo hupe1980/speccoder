@@ -35,6 +35,9 @@
   import Keys from "./components/Keys.svelte";
   import StepSheet from "./components/StepSheet.svelte";
   import HelpSheet from "./components/HelpSheet.svelte";
+  import AskPanel from "./components/AskPanel.svelte";
+  import ProposalSheet from "./components/ProposalSheet.svelte";
+  import { ask } from "./lib/ask.svelte";
   import { typing as inField } from "./lib/start";
 
   let theme = $state<string>(localStorage.getItem("speccoder-theme") ?? "auto");
@@ -71,6 +74,12 @@
       e.preventDefault();
       app.palette = !app.palette;
       return;
+    }
+    // Ask: ⌘L opens it (and focuses the question), ⌘⇧L adds the selected
+    // task to its context. Not over a decision or a sheet.
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "l" && !app.waiting && !app.welcome) {
+      e.preventDefault();
+      return command(e.shiftKey ? "edit.addToAsk" : "view.ask");
     }
     // Review › Write Tests (⌘⇧T) and Send Comments (⌘⇧↵), as the menu bar.
     if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key.toLowerCase() === "t" || e.key === "Enter")) {
@@ -110,6 +119,12 @@
       case "view.sidebar": app.sidebar = !app.sidebar; return;
       case "view.statusbar": app.statusbar = !app.statusbar; return;
       case "view.actions": app.palette = true; return;
+      case "view.ask": return ask.toggle(!ask.open || !document.activeElement?.closest(".ask"));
+      case "edit.addToAsk": {
+        if (!app.selected) return app.toast({ tone: "warn", text: "Select a task to add it to Ask (click its card)" });
+        const t = app.report?.data?.tasks.find((x) => x.id === app.selected);
+        return ask.add({ kind: "task", reference: { task: app.selected, feature: app.report?.data?.feature ?? null }, label: t ? `${t.id} ${t.title}` : app.selected });
+      }
       case "theme.light": case "theme.dark": case "theme.auto": theme = id.slice(6); return;
       case "file.new":
         if (app.welcome) app.newProject = {};
@@ -229,7 +244,7 @@
 
 <svelte:window onkeydown={keydown} />
 
-<div class="shell" class:nosidebar={!app.sidebar || !!app.welcome} class:nostatus={!app.statusbar || !!app.welcome}>
+<div class="shell" class:nosidebar={!app.sidebar || !!app.welcome} class:nostatus={!app.statusbar || !!app.welcome} class:asking={ask.open && !app.welcome} style="--ask-w:{ask.width}px">
   <header class="toolbar glass">
     <div class="brand">
       <svg viewBox="0 0 64 64" width="24" height="24" aria-hidden="true">
@@ -255,6 +270,9 @@
     <div class="right">
       {#if !app.welcome}
         <button class="btn icon ghost" title="New… — a change, a bug, a feature (N)" aria-label="New…" onclick={() => (app.composer = {})}><Icon name="plus" size={17} /></button>
+      {/if}
+      {#if !app.welcome}
+        <button class="btn icon ghost" class:onv={ask.open} title="Ask about the project (⌘L)" aria-label="Ask" aria-pressed={ask.open} onclick={() => ask.toggle()}><Icon name="bubble" size={17} /></button>
       {/if}
       <button class="search" onclick={() => (app.palette = true)} aria-label="Actions">
         <Icon name="search" size={15} /><span>Actions</span><kbd>⌘K</kbd>
@@ -309,6 +327,8 @@
 {#if app.clone}<Clone />{/if}
 {#if app.keys}<Keys />{/if}
 {#if app.help}<HelpSheet />{/if}
+{#if ask.open && !app.welcome}<AskPanel />{/if}
+{#if ask.sheet}<ProposalSheet />{/if}
 {#if app.personStep}<StepSheet />{/if}
 <!-- Over the sheet whose field it shapes. -->
 {#if app.shape}<ShapeSheet />{/if}
@@ -375,6 +395,12 @@
   @keyframes blink { 50% { opacity: 0.35; } }
 
   main { grid-area: main; overflow: auto; padding: 2rem 2.5rem 7rem; scroll-padding-top: 1rem; }
+  /* Ask beside the view: the view makes room on a wide window, and the
+     inspector moves left of it; on a narrow one Ask floats over. */
+  @media (min-width: 1181px) {
+    .shell.asking main { margin-right: calc(var(--ask-w) + 10px); }
+    .shell.asking :global(.inspector) { right: calc(var(--ask-w) + 20px); }
+  }
   .loading { display: grid; place-items: center; height: 60vh; }
   .spinner { width: 22px; height: 22px; border-radius: 50%; border: 2.5px solid var(--fill-2); border-top-color: var(--muted); animation: spin 800ms linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }

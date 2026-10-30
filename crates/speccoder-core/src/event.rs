@@ -84,6 +84,9 @@ pub const REGISTRY: &[Name] = &[
     p("scaffold.started"),
     p("scaffold.finished"),
     p("planning.stopped"),
+    p("ask.step"),
+    p("ask.text"),
+    p("ask.done"),
 ];
 
 /// The registered name `name`.

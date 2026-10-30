@@ -794,3 +794,29 @@ mod tests {
         assert_eq!(speccoder_runtime::progress::tail(&printed), tail);
     }
 }
+
+/// An Ask turn's steps on stderr, one dim line each, as they happen.
+#[derive(Debug)]
+pub struct AskSteps;
+
+impl speccoder_runtime::progress::Progress for AskSteps {
+    fn event(&self, event: &speccoder_runtime::progress::Event) {
+        if let speccoder_runtime::progress::Event::AskStep {
+            tool,
+            target,
+            refused,
+            ..
+        } = event
+        {
+            let look = crate::style::err();
+            let mark = if *refused { "✗" } else { "·" };
+            eprintln!(
+                "{}",
+                look.paint(
+                    crate::style::Token::Muted,
+                    &format!("  {mark} {tool} {target}")
+                )
+            );
+        }
+    }
+}

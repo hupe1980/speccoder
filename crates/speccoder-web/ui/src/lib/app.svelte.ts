@@ -5,6 +5,7 @@ import { get, post, q, listen } from "./api";
 import { KINDS, kindOf, offer, type Offer } from "./actions";
 import { copyBlock, labelOf, render, shown, type Wrong } from "./steps";
 import type { Action, AgentCard, LiveAgent, Reply, Inbox, LiveRun, Project, Report, PendingCall, Presentation, Runnable, Document, Remedy, PlanningChainReport, PlanStepResult, Through, WelcomeView, How, Step, View } from "./types";
+import { ask } from "./ask.svelte";
 
 export interface StageView {
   stage: string;
@@ -363,6 +364,7 @@ class AppState {
       case "setup": this.view = "setup"; return;
       case "bug": this.bugSheet = {}; return;
       case "quick_change": this.quick = true; return;
+      case "ask": return ask.toggle(true);
       case "new_feature": this.newFeature = {}; return;
       case "new_project": this.newProject = {}; return;
       case "github":
@@ -594,6 +596,7 @@ class AppState {
   }
 
   #progress(ev: any) {
+    if (String(ev.event).startsWith("ask_")) return ask.event(ev);
     switch (ev.event) {
       case "task_started":
         this.task = { id: ev.task, title: ev.title };

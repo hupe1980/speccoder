@@ -6,6 +6,15 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Ask** (⌘L, `speccoder ask`): a read-only conversation about the
+  project. Sources are checked against what was read in the turn; a
+  suggested change is a sheet you confirm, never run. One agentplane run
+  per conversation; its budget is `[ask]`'s.
+- The composer's *Just ask* rung, and questions typed in the palette, go
+  to Ask.
+
 ### Changed
 
 - An agent's stop must carry evidence speccoder checks: a refused call,

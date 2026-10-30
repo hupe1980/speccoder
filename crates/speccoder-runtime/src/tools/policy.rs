@@ -854,6 +854,10 @@ impl Policy {
             "write_file" | "edit_file" => self.write(args),
             "run_command" => self.with_network_rule(args, self.command(args)),
             "git_status" | "git_diff" => Decision::Allow,
+            // Ask's readers (offered only on the Ask plane): history,
+            // accounts, evidence, codes — reading through runtime functions.
+            "git_log" | "git_show" | "journal_account" | "task_evidence" | "report" | "inbox"
+            | "explain" => Decision::Allow,
             other => Decision::Deny(format!("unknown tool `{other}`")),
         }
     }

@@ -948,6 +948,30 @@ pub const CATALOG: &[Entry] = &[
         ]
     ),
     entry!(
+        "ASK-NO-MODEL",
+        E,
+        S::ConfigError,
+        "no model is set up to answer a question",
+        "Ask answers with `[ask] model` or, without one, `[model]`; neither is configured, so no question can be answered. \"Make this a…\" still works without a model.",
+        ["speccoder init", "→ set up a model in Setup"]
+    ),
+    entry!(
+        "ASK-BUDGET",
+        P,
+        S::NeedsHuman,
+        "the Ask budget for this turn or today is spent",
+        "Ask stops before a model call that would go past `[ask] max_turn_tokens` (one turn) or `[ask] daily_tokens` (the UTC day). Runs are untouched: their budget is their own. What was answered so far is kept.",
+        ["→ raise the limit the stop names in speccoder.toml, or ask again tomorrow"]
+    ),
+    entry!(
+        "ASK-FULL",
+        P,
+        S::NeedsHuman,
+        "the conversation is too long for another turn",
+        "Ask never summarises a conversation: when its history alone would fill a turn, it ends. A new conversation starts with the same context chips.",
+        ["→ start a new conversation (⌥⌘N); its chips come along"]
+    ),
+    entry!(
         "BUDGET-EXHAUSTED",
         P,
         S::NeedsHuman,

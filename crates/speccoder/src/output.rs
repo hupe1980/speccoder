@@ -377,6 +377,20 @@ fn human_body(
             }
             writeln!(out, "{}", result.message())
         }
+        (_, Some(CommandData::Ask(r))) => {
+            let look = crate::style::out();
+            for line in crate::human::ask(r, &look) {
+                writeln!(out, "{line}")?;
+            }
+            Ok(())
+        }
+        (_, Some(CommandData::AskConversations(r))) => {
+            let look = crate::style::out();
+            for line in crate::human::ask_conversations(r, &look) {
+                writeln!(out, "{line}")?;
+            }
+            writeln!(out, "{}", result.message())
+        }
         (_, Some(CommandData::Shape(r))) => {
             let look = crate::style::out();
             for line in crate::human::shape(r, &look) {

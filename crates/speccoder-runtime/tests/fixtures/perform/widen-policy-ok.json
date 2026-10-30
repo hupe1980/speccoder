@@ -700,6 +700,48 @@
           "tables": []
         },
         {
+          "name": "ask",
+          "title": "Ask",
+          "about": "The read-only conversation beside every view: its model and its limits.",
+          "named": false,
+          "keys": [
+            {
+              "key": "model",
+              "kind": "string",
+              "about": "Ask's model; [model]'s when unset (same provider)",
+              "default": null,
+              "value": null,
+              "choices": [],
+              "min": null,
+              "max": null,
+              "required": false
+            },
+            {
+              "key": "max_turn_tokens",
+              "kind": "integer",
+              "about": "Tokens one question may use, cache reads apart",
+              "default": 100000,
+              "value": null,
+              "choices": [],
+              "min": 1000.0,
+              "max": 10000000.0,
+              "required": false
+            },
+            {
+              "key": "daily_tokens",
+              "kind": "integer",
+              "about": "Tokens Ask may use in a UTC day; runs are never counted",
+              "default": 1000000,
+              "value": null,
+              "choices": [],
+              "min": 0.0,
+              "max": 1000000000.0,
+              "required": false
+            }
+          ],
+          "tables": []
+        },
+        {
           "name": "converge",
           "title": "Convergence",
           "about": "How often a feature may be brought back to its spec.",

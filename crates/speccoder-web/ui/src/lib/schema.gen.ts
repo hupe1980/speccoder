@@ -328,6 +328,56 @@ export interface Artifacts {
   checklists: boolean;
 }
 
+/** `ask --list` / `GET /api/ask/conversations`. */
+export interface AskConversations {
+  /** Newest first. */
+  conversations: Conversation[];
+}
+
+/** One Ask turn: the question, what was read, the answer and its sources. */
+export interface AskReport {
+  /** The conversation (`c-…`). */
+  conversation: string;
+  /** The turn's number in the conversation, from 1. */
+  turn: number;
+  /** The person's words. */
+  question: string;
+  /** What was on screen or added as context. */
+  chips: Chip[];
+  /** What the model read, in order. */
+  reads: Read[];
+  /** The model's words (a claim), citation markers included. */
+  answer: string;
+  /** Every marker in the answer, checked. */
+  citations: Citation[];
+  /** A change the model suggests; nothing ran. */
+  proposal?: Proposal | null;
+  /** Tokens the turn used (input and output, cache reads apart). */
+  usage: AskUsage;
+  /** How the turn ended: `answered`, `stopped`, `budget`, `full` or `failed`. */
+  end: string;
+  /** Why it ended so, when it did not answer. */
+  reason?: string | null;
+}
+
+/** One conversation with its turns. */
+export interface AskThread {
+  /** The conversation. */
+  conversation: Conversation;
+  /** Its turns, in order. */
+  turns: AskReport[];
+}
+
+/** Tokens a turn used. */
+export interface AskUsage {
+  /** Input tokens, cache reads not counted. */
+  input: number;
+  /** Output tokens. */
+  output: number;
+  /** Input read from the provider's cache. */
+  cache_read: number;
+}
+
 /** What the assistant says it introduced. */
 export interface Assumption {
   /** The proposal's words that carry it (`up to 10 000 rows`). */
@@ -728,6 +778,43 @@ export interface ChecklistStatus {
 
 export type Checklists = ChecklistStatus[];
 
+/** Something on screen given to the model as context. */
+export interface Chip {
+  /** Its id in the turn (`c1`…), citable like a read. */
+  id: string;
+  /**
+   * `feature`, `task`, `file_range`, `requirement`, `question`,
+   * `inbox_item`, `evidence_row`, `diff_hunk`, `report_row`, `finding`.
+   */
+  kind: string;
+  /** What a person reads on the chip. */
+  label: string;
+  /** Where it points: `feature`, `task`, `path`, `start`, `end`, … */
+  reference: unknown;
+  /** The content's digest when it was sent. */
+  digest: string;
+  /** The current view's subject, attached by itself. */
+  from_view: boolean;
+  /** Its content changed since it was added; the current one was sent. */
+  changed: boolean;
+}
+
+/** A citation marker in the answer, checked against the turn's reads. */
+export interface Citation {
+  /** The marker as written (`[r3:12-20]`). */
+  marker: string;
+  /** The read or chip it names. */
+  id: string;
+  /** The lines it narrows to. */
+  lines?: [number, number] | null;
+  /** `read`: it names what this turn read; `not_read`: it does not. */
+  state: string;
+  /** The file, when it names one. */
+  path?: string | null;
+  /** What a person reads for it ("crates/x.rs 12–20"). */
+  label: string;
+}
+
 /** One line comment of the Code view. */
 export interface CodeComment {
   /** Project-relative path. */
@@ -782,7 +869,7 @@ export interface CollectionRule {
 }
 
 /** Command-specific payload of a result. */
-export type CommandData = ProjectSnapshot | VerifyReport | WorktreeReport | ProposeReport | ReplayReport | RunReport | EvalReport | FeatureReport | ConvergeReport | StatusReport | ApprovalsReport | ControlReport | CostReport | PrReport | BenchReport | InitReport | SkillsReport | SkillRunReport | ChecklistStatus[] | ArchiveReport | InPlaceReport | AttestReport | ExplainReport | SchemaReport | DoctorReport | FeaturesReport | UiReport | ConfigReport | IssuesReport | InboxReport | ShapeReport | ReviewReport | AuthReport | BranchReport | EvidenceTour | ActionsReport | BugReport | PolicyCoverage | CommentsView | PresetReport | NewProjectReport | SampleReport | SimilarReport | RungSuggestion | PlanningChainReport;
+export type CommandData = ProjectSnapshot | VerifyReport | WorktreeReport | ProposeReport | ReplayReport | RunReport | EvalReport | FeatureReport | ConvergeReport | StatusReport | ApprovalsReport | ControlReport | CostReport | PrReport | BenchReport | InitReport | SkillsReport | SkillRunReport | ChecklistStatus[] | ArchiveReport | InPlaceReport | AttestReport | ExplainReport | SchemaReport | DoctorReport | FeaturesReport | UiReport | ConfigReport | IssuesReport | InboxReport | ShapeReport | AskReport | AskConversations | AskThread | ReviewReport | AuthReport | BranchReport | EvidenceTour | ActionsReport | BugReport | PolicyCoverage | CommentsView | PresetReport | NewProjectReport | SampleReport | SimilarReport | RungSuggestion | PlanningChainReport;
 
 /**
  * The envelope as it is serialised — the schema of [`CommandResult`]
@@ -1112,6 +1199,22 @@ export interface ConvergenceRound {
   commit: string;
   /** The appended tasks, as `T0NN text`. */
   tasks: string[];
+}
+
+/** One conversation in a list. */
+export interface Conversation {
+  /** `c-…`. */
+  id: string;
+  /** The feature it was about, when one was current. */
+  feature?: string | null;
+  /** Its first question. */
+  title: string;
+  /** When its last turn ended (seconds since the epoch). */
+  at: number;
+  /** How many turns it has. */
+  turns: number;
+  /** Whether it takes another turn (`false`: ended, idle or full). */
+  open: boolean;
 }
 
 /** Result of `speccoder report --cost`. */
@@ -1909,6 +2012,42 @@ export type EventLine = {
     type: "result";
     /** The result envelope. */
     result: CommandResult;
+  }
+  /** An Ask turn read something. */
+  | {
+    type: "ask.step";
+    /** The conversation. */
+    conversation: string;
+    /** The turn. */
+    turn: number;
+    /** The tool. */
+    tool: string;
+    /** What it read. */
+    target: string;
+    /** It failed or was refused. */
+    refused: boolean;
+  }
+  /** An Ask turn's answer as it is written. */
+  | {
+    type: "ask.text";
+    /** The conversation. */
+    conversation: string;
+    /** The turn. */
+    turn: number;
+    /** The next words. */
+    delta: string;
+  }
+  /** An Ask turn ended. */
+  | {
+    type: "ask.done";
+    /** The conversation. */
+    conversation: string;
+    /** The turn. */
+    turn: number;
+    /** `answered`, `budget`, `failed`. */
+    end: string;
+    /** Citations to what this turn read. */
+    sources: number;
   }
   /** Plan through stopped where a person decides, at a failure or at the end. */
   | {
@@ -3398,6 +3537,46 @@ export interface ProjectSnapshot {
   openspec?: OpenSpecMeta | null;
 }
 
+/** A change the model suggests, as code made it a person's action. */
+export interface Proposal {
+  /** `quick_change`, `bug_fix`, `nudge`, `answer` or `start_spec`. */
+  kind: string;
+  /** One line. */
+  title: string;
+  /** The editable words, by kind. */
+  fields: ProposalFields;
+  /** What confirming performs; `None` when it cannot be done now. */
+  runnable?: Runnable | null;
+  /** The words the action records (the input of a nudge or an answer). */
+  input?: string | null;
+  /** Why it cannot be done now. */
+  blocked?: string | null;
+  /** The same action as a command. */
+  command: string;
+}
+
+/** A proposal's words; which ones a kind uses is the kind's. */
+export interface ProposalFields {
+  /** The task (nudge) or question (answer) it is about. */
+  target?: string | null;
+  /** A quick change, in the person's words. */
+  request?: string | null;
+  /** When a quick change is done. */
+  checks?: string[];
+  /** A nudge's note. */
+  note?: string | null;
+  /** A question's answer. */
+  answer?: string | null;
+  /** A new spec's description. */
+  description?: string | null;
+  /** A bug's current behaviour. */
+  symptom?: string | null;
+  /** What should happen instead. */
+  expected?: string[];
+  /** What must stay as it is. */
+  unchanged?: string[];
+}
+
 /** Result of `speccoder propose`. */
 export interface ProposeReport {
   /** The agentplane run that holds the call. */
@@ -3534,6 +3713,24 @@ export interface PublicProjectUndone {
   kind: string;
   /** Through what. */
   via: string;
+}
+
+/** A read the engine issued for a tool call. */
+export interface Read {
+  /** `r1`, `r2`, … across the conversation. */
+  id: string;
+  /** The tool. */
+  tool: string;
+  /** What it read, in one line. */
+  target: string;
+  /** The file it read, when it read one. */
+  path?: string | null;
+  /** The first line it returned. */
+  start?: number | null;
+  /** The last line it returned. */
+  end?: number | null;
+  /** The digest of what it returned. */
+  digest: string;
 }
 
 /**
@@ -4116,7 +4313,7 @@ export type RungPick = "bug" | "quick" | "feature" | "ask" | "none";
 export interface RungSuggestion {
   /** The suggested rung. */
   rung: RungPick;
-  /** Whether this build has it (`false` for `ask` until the Ask panel). */
+  /** Whether this build has it. */
   available: boolean;
   /** What decided it. */
   cue: RungCue;
@@ -4124,7 +4321,7 @@ export interface RungSuggestion {
   reason: string;
   /** The other rungs, in the composer's order. */
   alternatives: RungPick[];
-  /** The command that takes the suggested rung (none for `ask` and `none`). */
+  /** The command that takes the suggested rung (none for `none`). */
   command: string | null;
 }
 
@@ -5540,7 +5737,7 @@ export interface VerifyReport {
 export type Via = "terminal" | "web" | "window" | "acp" | "phone" | "ci" | "mcp";
 
 /** A read-only place an interface opens instead of running a command. */
-export type View = "doctor" | "bug_report" | "report" | "live" | "approvals" | "explain" | "review" | "settings" | "setup" | "bug" | "quick_change" | "new_feature" | "new_project" | "github" | "task";
+export type View = "doctor" | "bug_report" | "report" | "live" | "approvals" | "explain" | "review" | "settings" | "setup" | "bug" | "quick_change" | "new_feature" | "new_project" | "github" | "task" | "ask";
 
 /** A run in progress, this host's or another speccoder process's. */
 export interface WorkingRun {

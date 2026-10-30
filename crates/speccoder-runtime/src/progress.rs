@@ -282,6 +282,43 @@ pub enum Event {
         /// What happened.
         step: ProjectEvent,
     },
+    /// An Ask turn read something (`ask.step`).
+    AskStep {
+        /// The conversation.
+        conversation: String,
+        /// The turn.
+        turn: u32,
+        /// The tool.
+        tool: String,
+        /// What it read, in one line.
+        target: String,
+        /// The read id the answer may cite, when it returned something.
+        read: Option<String>,
+        /// It failed or was refused.
+        refused: bool,
+    },
+    /// An Ask turn's answer as it is written (`ask.text`).
+    AskText {
+        /// The conversation.
+        conversation: String,
+        /// The turn.
+        turn: u32,
+        /// The next words.
+        delta: String,
+    },
+    /// Inside the Ask plane: a turn's raw end, which `ask::turn` turns
+    /// into [`Event::AskDone`]; never forwarded.
+    AskTurnEnded {
+        /// `ask:<conversation>#<turn>`.
+        tag: String,
+        /// The loop's output.
+        output: Box<serde_json::Value>,
+    },
+    /// An Ask turn ended (`ask.done`).
+    AskDone {
+        /// The turn as shown.
+        report: Box<speccoder_core::ask::AskReport>,
+    },
 }
 
 /// A new project's step, its creation or its undo.
@@ -864,7 +901,11 @@ impl Progress for Live {
                 | Event::CollectionChecked { .. }
                 | Event::RegressionBisected { .. }
                 | Event::PlanningStopped { .. }
-                | Event::Project { .. } => {}
+                | Event::Project { .. }
+                | Event::AskStep { .. }
+                | Event::AskText { .. }
+                | Event::AskTurnEnded { .. }
+                | Event::AskDone { .. } => {}
             }
             s.updated_at = now();
             self.write(&s);

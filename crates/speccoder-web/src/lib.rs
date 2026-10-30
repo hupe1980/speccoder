@@ -534,6 +534,76 @@ async fn config_save(State(s): State<Shared>, Json(b): Json<ConfigBody>) -> Json
     envelope(&s, &r)
 }
 
+/// One Ask turn: read-only, streamed as `ask_step` / `ask_text` /
+/// `ask_done`; it writes only the Ask plane's journal and thread.
+async fn ask(
+    State(s): State<Shared>,
+    Json(b): Json<speccoder_runtime::service::ask::Request>,
+) -> Json<Value> {
+    let root = s.root.get();
+    let sink = s.hub.progress();
+    let r = off(move || speccoder_runtime::service::ask::turn(&root, &b, None, Some(sink))).await;
+    envelope(&s, &r)
+}
+
+#[derive(Debug, Deserialize)]
+struct AskQuery {
+    id: Option<String>,
+    feature: Option<String>,
+}
+
+async fn ask_conversations(State(s): State<Shared>, Query(q): Query<AskQuery>) -> Json<Value> {
+    let root = s.root.get();
+    let r = off(move || {
+        speccoder_runtime::service::ask::conversations(&root, None, q.feature.as_deref())
+    })
+    .await;
+    envelope(&s, &r)
+}
+
+async fn ask_conversation(State(s): State<Shared>, Query(q): Query<AskQuery>) -> Json<Value> {
+    let root = s.root.get();
+    let r = off(move || {
+        speccoder_runtime::service::ask::thread(&root, None, q.id.as_deref().unwrap_or_default())
+    })
+    .await;
+    envelope(&s, &r)
+}
+
+/// A chip resolved now: its label, digest and words; records nothing.
+async fn ask_chip(
+    State(s): State<Shared>,
+    Json(b): Json<speccoder_runtime::service::ask::ChipRef>,
+) -> Json<Value> {
+    let root = s.root.get();
+    Json(
+        off(
+            move || match speccoder_runtime::service::ask::chip(&root, "c0", &b) {
+                Ok((chip, text)) => {
+                    json!({ "chip": chip, "preview": text.chars().take(400).collect::<String>() })
+                }
+                Err(e) => json!({ "error": e }),
+            },
+        )
+        .await,
+    )
+}
+
+#[derive(Debug, Deserialize)]
+struct ProposalBody {
+    proposal: speccoder_core::ask::Proposal,
+    feature: Option<String>,
+}
+
+/// A proposal as the person edited it, checked again now.
+async fn ask_proposal(State(s): State<Shared>, Json(b): Json<ProposalBody>) -> Json<Value> {
+    let root = s.root.get();
+    Json(
+        off(move || json!({ "proposal": speccoder_runtime::service::ask::proposal(&root, b.feature.as_deref(), &b.proposal) }))
+            .await,
+    )
+}
+
 #[derive(Debug, Deserialize)]
 struct ShapeBody {
     field: String,
@@ -1172,6 +1242,11 @@ pub fn router(s: Shared) -> Router {
         .route("/api/report", get(report))
         .route("/api/actions", get(actions))
         .route("/api/inbox", get(inbox))
+        .route("/api/ask", post(ask))
+        .route("/api/ask/conversations", get(ask_conversations))
+        .route("/api/ask/conversation", get(ask_conversation))
+        .route("/api/ask/chip", post(ask_chip))
+        .route("/api/ask/proposal", post(ask_proposal))
         .route("/api/shape", post(shape))
         .route("/api/shape/check", post(shape_check))
         .route("/api/shape/judge", post(shape_judge))

@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ask --list: the conversations, newest first",
+  "description": "`ask --list` / `GET /api/ask/conversations`.",
+  "type": "object",
+  "properties": {
+    "conversations": {
+      "description": "Newest first.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Conversation"
+      }
+    }
+  },
+  "required": [
+    "conversations"
+  ],
+  "$defs": {
+    "Conversation": {
+      "description": "One conversation in a list.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "`c-…`.",
+          "type": "string"
+        },
+        "feature": {
+          "description": "The feature it was about, when one was current.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "description": "Its first question.",
+          "type": "string"
+        },
+        "at": {
+          "description": "When its last turn ended (seconds since the epoch).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "turns": {
+          "description": "How many turns it has.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "open": {
+          "description": "Whether it takes another turn (`false`: ended, idle or full).",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "at",
+        "turns",
+        "open"
+      ]
+    }
+  },
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/ask_conversations.json"
+}

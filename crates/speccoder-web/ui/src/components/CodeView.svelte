@@ -2,6 +2,7 @@
   // The feature's code: what its branch changed — by commit (one per task,
   // with its verdict) and by file — and its files, browsable and readable.
   import { app } from "../lib/app.svelte";
+  import { ask } from "../lib/ask.svelte";
   import { offer } from "../lib/actions";
   import { get, latest, q } from "../lib/api";
   import { symbol, word } from "../lib/marks";
@@ -357,6 +358,11 @@
                 </div>
               {/if}
               <span class="muted">{lines.length} lines</span>
+              <button class="ask-this" title="Add {app.codeLine ? `lines around ${app.codeLine}` : "this file"} to Ask (⌘⇧L)" onclick={() => {
+                const n = app.codeLine;
+                const [a, b] = n ? [Math.max(1, n - 20), Math.min(lines.length, n + 20)] : [1, lines.length];
+                ask.add({ kind: "file_range", reference: { path: open, start: a, end: b }, label: n ? `${open} ${a}–${b}` : String(open) });
+              }}><Icon name="bubble" size={12} /> Ask</button>
               {#if !(text.html !== undefined && preview)}
                 <button class="btn small icon" title="Find (⌘F)" aria-label="Find in file" onclick={() => { finding = true; void tick().then(() => findInput?.focus()); }}><Icon name="search" size={12} /></button>
               {/if}
@@ -399,6 +405,8 @@
 </section>
 
 <style>
+  .ask-this { display: inline-flex; align-items: center; gap: 0.25rem; border: 0; border-radius: 6px; padding: 0.15rem 0.45rem; background: var(--fill); color: var(--text-2); font-size: 0.74rem; cursor: pointer; }
+  .ask-this:hover { background: var(--fill-2); color: var(--text); }
   .disk { display: flex; align-items: center; gap: 0.5rem; width: 100%; border: 0; background: none; padding: 0.35rem 0.25rem; margin: 0.15rem 0 0.25rem; cursor: pointer; font: inherit; font-size: 0.8rem; color: var(--text-2); border-radius: 8px; }
   .disk:hover { background: var(--fill); }
   .disk .muted { margin-left: auto; }

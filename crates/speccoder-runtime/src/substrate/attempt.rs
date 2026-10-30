@@ -824,7 +824,9 @@ impl Skill for Attempt {
                 max_turns,
                 max_tool_calls,
                 reasoning: settings["reasoning"] == true,
-                schema: report_schema(),
+                schema: Some(report_schema()),
+                max_tokens: None,
+                reads: None,
                 routes,
                 root: settings["root"].as_str().map(str::to_owned),
                 frozen_additions: settings["frozen_additions"] == true,
@@ -1049,8 +1051,8 @@ pub(crate) struct LoopSpec {
     pub max_tool_calls: u32,
     /// Ask each turn for the model's reasoning summary.
     pub reasoning: bool,
-    /// The closing answer's schema.
-    pub schema: Value,
+    /// The closing answer's schema; `None`: a text answer ends the turn.
+    pub schema: Option<Value>,
     /// Declared tools served elsewhere: (name, server, tool) — MCP.
     pub routes: Vec<(String, String, String)>,
     /// The workspace's absolute path, from the journaled input: absolute
@@ -1081,6 +1083,10 @@ pub(crate) struct LoopSpec {
     pub mcp_digests: std::collections::BTreeMap<String, String>,
     /// What a `report_blocked` call's evidence is checked against.
     pub stop: StopGate,
+    /// Tokens a turn may use (Ask); `None`: the plane's budget alone.
+    pub max_tokens: Option<u64>,
+    /// The first read id to issue (`r<n>`), when the answer cites reads.
+    pub reads: Option<u32>,
 }
 
 /// A run's asking budget as an attempt sees it (all journaled).
@@ -1116,6 +1122,20 @@ pub(crate) async fn tool_loop(
     prompt: &Tainted<Value>,
     spec: LoopSpec,
 ) -> Result<Outcome, SkillError> {
+    // What the conversation has read, with its labels: agentplane checks
+    // every model call against the join.
+    let mut transcript = Transcript::new(prompt);
+    tool_turn(cx, prompt, spec, &mut transcript).await
+}
+
+/// [`tool_loop`] continuing a conversation the caller holds: Ask's turns
+/// share one transcript, each person's message told before the turn.
+pub(crate) async fn tool_turn(
+    cx: &mut StepCtx<'_>,
+    prompt: &Tainted<Value>,
+    spec: LoopSpec,
+    transcript: &mut Transcript,
+) -> Result<Outcome, SkillError> {
     let LoopSpec {
         tools,
         policy,
@@ -1136,7 +1156,12 @@ pub(crate) async fn tool_loop(
         mut parts,
         mcp_digests,
         stop,
+        max_tokens,
+        reads,
     } = spec;
+    // The next read id this turn issues, when reads are cited.
+    let mut next_read = reads;
+    let mut proposed = false;
     // Objects allowed without asking: this run's, then what a person
     // answered "for the task" or "for this run" in this attempt.
     let mut remembered: Vec<(Object, &'static str)> =
@@ -1145,10 +1170,7 @@ pub(crate) async fn tool_loop(
     let mut told_budget = false;
     let catalog = crate::tools::catalog();
 
-    // What the conversation has read, with its labels: agentplane checks
-    // every model call against the join.
-    let mut transcript = Transcript::new(prompt);
-    let mut conversation: Label = prompt.label().clone();
+    let mut conversation: Label = transcript.label().clone();
     let mut calls = 0u32;
     let mut denied_in_a_row = 0u32;
     // Whether the model was asked once before a stop.
@@ -1185,18 +1207,32 @@ pub(crate) async fn tool_loop(
     };
 
     for turn in 0..max_turns {
+        // A turn's own token limit, checked before each call.
+        if let Some(max) = max_tokens
+            && usage.input_tokens + usage.output_tokens >= max
+        {
+            return end(
+                "budget",
+                json!({ "reason": format!("this turn used {} of its {max} tokens", usage.input_tokens + usage.output_tokens) }),
+                &log,
+                usage,
+                &conversation,
+                prompted,
+            );
+        }
         // The prompt was built from labelled parts (`/system` is speccoder's
         // constant instruction); what the conversation read since rides in
         // the transcript, so the request is labelled by its real sources.
         let tools_now = tools.clone();
         let schema_now = schema.clone();
-        let read_so_far = &transcript;
+        let read_so_far = &*transcript;
         let completion = cx
             .complete_with(prompt, move |call| {
-                let call = call
-                    .with_tools(tools_now)
-                    .continuing(read_so_far)
-                    .expecting(schema_now);
+                let call = call.with_tools(tools_now).continuing(read_so_far);
+                let call = match schema_now {
+                    Some(schema) => call.expecting(schema),
+                    None => call,
+                };
                 if reasoning {
                     call.with_reasoning_summary()
                 } else {
@@ -1253,6 +1289,16 @@ pub(crate) async fn tool_loop(
                 turn: turn + 1,
                 text,
             });
+        }
+        if asked_calls.is_empty() && schema.is_none() {
+            return end(
+                "answered",
+                json!({ "text": completion.peek().text }),
+                &log,
+                usage,
+                &conversation,
+                prompted,
+            );
         }
         if asked_calls.is_empty() {
             let report = completion
@@ -1367,6 +1413,24 @@ pub(crate) async fn tool_loop(
                         log.push(entry);
                         transcript.failed(asked, Tainted::trusted(text));
                     }
+                }
+                continue;
+            }
+            if asked.name == crate::ask::PROPOSE && tools.iter().any(|t| t.name == asked.name) {
+                // A suggestion for the person: nothing runs, one per turn.
+                let entry = json!({ "tool": asked.name, "arguments": asked.arguments, "decision": if proposed { "deny" } else { "proposed" } });
+                emit(observer.as_ref(), turn + 1, &entry);
+                log.push(entry);
+                if proposed {
+                    transcript.failed(
+                        asked,
+                        Tainted::trusted(
+                            "one proposal per turn; this one was not shown".to_owned(),
+                        ),
+                    );
+                } else {
+                    proposed = true;
+                    transcript.answered(asked, &Tainted::trusted(json!({ "shown": true, "note": "shown to the person as a sheet; nothing ran, and only the person can confirm it" })));
                 }
                 continue;
             }
@@ -1758,6 +1822,26 @@ pub(crate) async fn tool_loop(
                     let mut entry = with_person(
                         json!({ "tool": asked.name, "arguments": asked.arguments, "decision": "allow", "ok": ok }),
                     );
+                    // A read the answer may cite: its id rides on the result.
+                    let result = match next_read.as_mut() {
+                        Some(n) if ok => {
+                            let id = format!("r{n}");
+                            *n += 1;
+                            entry["read"] = json!(crate::ask::read_of(
+                                &id,
+                                &asked.name,
+                                &asked.arguments,
+                                &output
+                            ));
+                            result.map(|mut v| {
+                                if let Some(o) = v.as_object_mut() {
+                                    o.insert("read".to_owned(), json!(id));
+                                }
+                                v
+                            })
+                        }
+                        _ => result,
+                    };
                     if let Some(changed) = output["object_changed"].as_object() {
                         entry["decision"] = json!("refused_changed");
                         entry["expected"] = changed.get("expected").cloned().unwrap_or(Value::Null);

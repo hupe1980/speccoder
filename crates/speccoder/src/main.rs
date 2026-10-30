@@ -1235,6 +1235,21 @@ fn main() {
             }
             result
         }
+        Command::Ask {
+            question,
+            resume,
+            task,
+            file,
+            list,
+        } => ask_command(
+            path,
+            feature,
+            question.as_deref(),
+            resume.as_deref(),
+            task,
+            file,
+            *list,
+        ),
         Command::Shape {
             text,
             field,
@@ -2185,6 +2200,7 @@ fn command_name(command: Option<&Command>) -> &'static str {
             C::Auth { .. } => "auth",
             C::Review { .. } => "review",
             C::Shape { .. } => "shape",
+            C::Ask { .. } => "ask",
             C::Run { .. } => "run",
             C::Task { action } => match action {
                 cli::TaskAction::AcceptanceAt { .. } => "task acceptance-at",
@@ -2225,6 +2241,91 @@ fn command_name(command: Option<&Command>) -> &'static str {
 
 /// `speccoder shape`: the words from the argument, a file or stdin; the
 /// writing check alone with `--check`.
+/// `speccoder ask`: one turn, its steps live on a terminal, then the
+/// answer with its checked sources.
+fn ask_command(
+    path: &std::path::Path,
+    feature: Option<&str>,
+    question: Option<&str>,
+    resume: Option<&str>,
+    tasks: &[String],
+    files: &[String],
+    list: bool,
+) -> speccoder_core::CommandResult {
+    use speccoder_core::{CommandData, CommandResult, CommandStatus};
+    use speccoder_runtime::service::ask;
+    if list {
+        return ask::conversations(path, None, None);
+    }
+    let words = match question {
+        Some(q) => q.to_owned(),
+        None => {
+            use std::io::{IsTerminal, Read};
+            let mut t = String::new();
+            if std::io::stdin().is_terminal() || std::io::stdin().read_to_string(&mut t).is_err() {
+                return CommandResult::new(
+                    "ask",
+                    CommandStatus::UsageError,
+                    "ask a question: `speccoder ask \"…\"`, or on stdin",
+                );
+            }
+            t
+        }
+    };
+    let conversation = match resume {
+        None => None,
+        Some("") => match ask::conversations(path, None, None).data() {
+            Some(CommandData::AskConversations(c)) => match c.conversations.first() {
+                Some(c) => Some(c.id.clone()),
+                None => {
+                    return CommandResult::new(
+                        "ask",
+                        CommandStatus::NotFound,
+                        "no conversation to continue yet",
+                    )
+                    .with_code("NOT-FOUND");
+                }
+            },
+            _ => None,
+        },
+        Some(id) => Some(id.to_owned()),
+    };
+    let mut chips: Vec<ask::ChipRef> = tasks
+        .iter()
+        .map(|t| ask::ChipRef {
+            kind: "task".to_owned(),
+            reference: serde_json::json!({ "task": t, "feature": feature }),
+            label: None,
+            text: None,
+            digest: None,
+            from_view: false,
+        })
+        .collect();
+    for f in files {
+        let (p, range) = f.split_once(':').unwrap_or((f.as_str(), ""));
+        let (a, b) = range.split_once('-').unwrap_or((range, range));
+        chips.push(ask::ChipRef {
+            kind: "file_range".to_owned(),
+            reference: serde_json::json!({ "path": p, "start": a.parse::<u64>().ok(), "end": b.parse::<u64>().ok() }),
+            label: None,
+            text: None,
+            digest: None,
+            from_view: false,
+        });
+    }
+    let request = ask::Request {
+        conversation,
+        text: words,
+        chips,
+        feature: feature.map(str::to_owned),
+    };
+    let sink = std::io::IsTerminal::is_terminal(&std::io::stderr()).then(|| {
+        std::sync::Arc::new(crate::progress::AskSteps)
+            as std::sync::Arc<dyn speccoder_runtime::progress::Progress>
+    });
+    ask::turn(path, &request, None, sink)
+}
+
 fn shape_command(
     path: &std::path::Path,
     text: Option<&str>,

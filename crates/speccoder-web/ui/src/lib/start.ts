@@ -15,8 +15,8 @@ export const RUNGS: { rung: Exclude<RungPick, "none">; label: string; ceremony: 
   { rung: "ask", label: "Just ask", ceremony: "a read-only answer, nothing changes", keys: "⌘⏎" },
 ];
 
-/** Whether this build has the rung: Ask arrives with the Ask panel. */
-export const available = (r: RungPick): boolean => r === "bug" || r === "quick" || r === "feature";
+/** Whether this build has the rung. */
+export const available = (r: RungPick): boolean => r !== "none";
 
 /** What ⏎ with modifiers takes in the composer: a rung, the selected row
  *  (`selected`), or nothing. */
@@ -55,6 +55,7 @@ export function composerCommand(rung: RungPick | null, text: string, createSkill
     case "bug": return `speccoder bug ${t}`;
     case "quick": return `speccoder do ${t}`;
     case "feature": return createSkill ? `speccoder spec ${short(createSkill)} ${t}` : null;
+    case "ask": return `speccoder ask ${t}`;
     default: return null;
   }
 }

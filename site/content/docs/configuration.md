@@ -148,6 +148,16 @@ speccoder config set commands.allow_prefix npm run          # shows it, then: ty
 | `[git] commit` | `"per-task"` | `per-task` commits each passed task; `none` leaves changes uncommitted |
 | `[format] argv` | — | A formatter run after each attempt (e.g. `["cargo", "fmt"]`); its changes are part of the attempt and audited |
 
+## `[ask]`
+
+[Ask](@/docs/web.md#ask) answers questions about the project read-only; its budget is its own, never a run's.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `[ask] model` | `[model]`'s | Ask's model (same provider as `[model]`) |
+| `[ask] max_turn_tokens` | `100000` | Tokens one question may use, cache reads apart (`ASK-BUDGET`) |
+| `[ask] daily_tokens` | `1000000` | Tokens Ask may use in a UTC day (`ASK-BUDGET`) |
+
 ## `[bug]`
 
 [`speccoder bug`](@/docs/bugs.md). Project settings only: the same keys in your user config are ignored, with a warning naming them.

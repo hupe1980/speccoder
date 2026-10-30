@@ -163,10 +163,10 @@ impl RungPick {
         }
     }
 
-    /// Whether this build has the rung (Ask arrives with the Ask panel).
+    /// Whether this build has the rung.
     #[must_use]
     pub const fn available(self) -> bool {
-        matches!(self, Self::Bug | Self::Quick | Self::Feature)
+        matches!(self, Self::Bug | Self::Quick | Self::Feature | Self::Ask)
     }
 }
 
@@ -203,7 +203,7 @@ pub struct RungCue {
 pub struct RungSuggestion {
     /// The suggested rung.
     pub rung: RungPick,
-    /// Whether this build has it (`false` for `ask` until the Ask panel).
+    /// Whether this build has it.
     pub available: bool,
     /// What decided it.
     pub cue: RungCue,
@@ -211,7 +211,7 @@ pub struct RungSuggestion {
     pub reason: String,
     /// The other rungs, in the composer's order.
     pub alternatives: Vec<RungPick>,
-    /// The command that takes the suggested rung (none for `ask` and `none`).
+    /// The command that takes the suggested rung (none for `none`).
     pub command: Option<String>,
 }
 
@@ -393,7 +393,8 @@ pub fn command_for(rung: RungPick, text: &str, create_skill: Option<&str>) -> Op
         RungPick::Bug => Some(format!("speccoder bug {q}")),
         RungPick::Quick => Some(format!("speccoder do {q}")),
         RungPick::Feature => create_skill.map(|s| format!("speccoder spec {s} {q}")),
-        RungPick::Ask | RungPick::None => None,
+        RungPick::Ask => Some(format!("speccoder ask {q}")),
+        RungPick::None => None,
     }
 }
 
@@ -443,7 +444,7 @@ pub fn suggest(text: &str) -> RungSuggestion {
             .join(", ")
     };
     let reason = match rule {
-        RungCueRule::Question => "This reads like a question; Ask arrives with the Ask panel — pick a rung to make it a change".to_owned(),
+        RungCueRule::Question => "Why \"Just ask\": it reads like a question — Ask answers it from what it reads and changes nothing.".to_owned(),
         RungCueRule::WrongResult => format!(
             "Why \"Bug fix\": the text names a wrong result ({}) of existing behaviour.",
             shown(&matched)

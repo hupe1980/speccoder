@@ -46,6 +46,14 @@ pub mod shape {
     pub use crate::shape::{FIELDS, findings, judge, shape};
 }
 
+/// Ask: a read-only conversation; a turn writes only the Ask plane's
+/// journal and the conversation's thread.
+pub mod ask {
+    pub use crate::ask::chips::{ChipRef, resolve as chip};
+    pub use crate::ask::proposal::revalidate as proposal;
+    pub use crate::ask::{Request, conversations, thread, turn};
+}
+
 /// The next steps a result names.
 pub mod next {
     pub use crate::next::attach;

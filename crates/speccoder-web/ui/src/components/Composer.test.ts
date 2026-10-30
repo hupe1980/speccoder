@@ -18,8 +18,10 @@ const host = vi.hoisted(() => ({
     toast: vi.fn(),
   },
   get: vi.fn(),
+  ask: { toggle: vi.fn(), send: vi.fn(async () => {}) },
 }));
 vi.mock("../lib/app.svelte", () => ({ app: host.app }));
+vi.mock("../lib/ask.svelte", () => ({ ask: host.ask }));
 vi.mock("../lib/api", async (actual) => ({ ...(await actual<typeof import("../lib/api")>()), get: host.get }));
 
 import Composer from "./Composer.svelte";
@@ -53,12 +55,12 @@ afterEach(() => {
 });
 
 describe("Composer", () => {
-  it("is a dialog with the four rungs, Just ask disabled until the Ask panel", async () => {
+  it("is a dialog with the four rungs", async () => {
     const d = document.querySelector('[role="dialog"]')!;
     expect(d.getAttribute("aria-modal")).toBe("true");
     const rows = [...document.querySelectorAll('[role="radio"]')];
     expect(rows.map((r) => r.querySelector(".label")?.textContent)).toEqual(["Bug fix", "Quick change", "Feature", "Just ask"]);
-    expect(rows[3]!.getAttribute("aria-disabled")).toBe("true");
+    expect(rows[3]!.getAttribute("aria-disabled")).toBe("false");
     expect(rows.some((r) => r.getAttribute("aria-checked") === "true")).toBe(false);
     expect(await violations()).toEqual([]);
   });
@@ -93,15 +95,16 @@ describe("Composer", () => {
     expect(host.app.newFeature).toEqual({ text: "export reports as CSV and remember the columns" });
   });
 
-  it("selects nothing for a question and takes nothing with ⌘⏎ while Ask is not built", async () => {
-    suggest("ask", false, "This reads like a question; Ask arrives with the Ask panel — pick a rung to make it a change");
+  it("asks a question with ⏎ when the host suggests Ask, and with ⌘⏎", async () => {
+    suggest("ask", true, 'Why "Just ask": it reads like a question — Ask answers it from what it reads and changes nothing.');
     type(field(), "why does the build take ten minutes?");
     await wait();
-    expect(document.querySelector('[aria-checked="true"]')).toBeNull();
-    expect(document.body.textContent).toContain("pick a rung");
+    expect(document.querySelector('[aria-checked="true"] .label')?.textContent).toBe("Just ask");
+    expect(document.body.textContent).toContain('speccoder ask "why does the build take ten minutes?"');
     press("Enter", { metaKey: true }, field());
-    press("Enter", {}, field());
-    expect(host.app.composer).toEqual({});
+    expect(host.app.composer).toBeNull();
+    expect(host.ask.toggle).toHaveBeenCalledWith(true);
+    expect(host.ask.send).toHaveBeenCalledWith("why does the build take ten minutes?");
   });
 
   it("says what is missing on an empty ⏎ and closes on Esc", async () => {
@@ -120,6 +123,7 @@ describe("Composer", () => {
     expect(document.querySelector('[aria-checked="true"] .label')?.textContent).toBe("Quick change");
     press("ArrowUp", {}, field());
     press("ArrowUp", {}, field());
-    expect(document.querySelector('[aria-checked="true"] .label')?.textContent).toBe("Feature");
+    // Ask is a rung too: up from the first wraps to it.
+    expect(document.querySelector('[aria-checked="true"] .label')?.textContent).toBe("Just ask");
   });
 });

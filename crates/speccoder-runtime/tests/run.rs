@@ -2315,6 +2315,10 @@ fn a_run_reports_its_steps_live_and_status_reads_them() {
             Event::RegressionBisected { .. } => "bisected".to_owned(),
             Event::PlanningStopped { .. } => "planning".to_owned(),
             Event::Project { .. } => "project".to_owned(),
+            Event::AskStep { .. }
+            | Event::AskText { .. }
+            | Event::AskTurnEnded { .. }
+            | Event::AskDone { .. } => "ask".to_owned(),
             Event::AgentStarted { .. } => "agent_started".to_owned(),
             Event::AgentPlan { .. } => "agent_plan".to_owned(),
             Event::AgentUnasked { .. } => "agent_unasked".to_owned(),

@@ -1219,6 +1219,113 @@
       ]
     },
     {
+      "description": "An Ask turn read something.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "ask.step"
+        },
+        "conversation": {
+          "description": "The conversation.",
+          "type": "string"
+        },
+        "turn": {
+          "description": "The turn.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "tool": {
+          "description": "The tool.",
+          "type": "string"
+        },
+        "target": {
+          "description": "What it read.",
+          "type": "string"
+        },
+        "refused": {
+          "description": "It failed or was refused.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "type",
+        "conversation",
+        "turn",
+        "tool",
+        "target",
+        "refused"
+      ]
+    },
+    {
+      "description": "An Ask turn's answer as it is written.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "ask.text"
+        },
+        "conversation": {
+          "description": "The conversation.",
+          "type": "string"
+        },
+        "turn": {
+          "description": "The turn.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "delta": {
+          "description": "The next words.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "conversation",
+        "turn",
+        "delta"
+      ]
+    },
+    {
+      "description": "An Ask turn ended.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "ask.done"
+        },
+        "conversation": {
+          "description": "The conversation.",
+          "type": "string"
+        },
+        "turn": {
+          "description": "The turn.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "end": {
+          "description": "`answered`, `budget`, `failed`.",
+          "type": "string"
+        },
+        "sources": {
+          "description": "Citations to what this turn read.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "type",
+        "conversation",
+        "turn",
+        "end",
+        "sources"
+      ]
+    },
+    {
       "description": "Plan through stopped where a person decides, at a failure or at the end.",
       "type": "object",
       "properties": {
@@ -3886,6 +3993,11 @@
           "description": "A task's drawer (`subject`: its id).",
           "type": "string",
           "const": "task"
+        },
+        {
+          "description": "`ask`: the Ask panel.",
+          "type": "string",
+          "const": "ask"
         }
       ]
     },
@@ -4245,6 +4357,18 @@
         {
           "description": "`shape`: a person's words made into a requirement, and what changed.",
           "$ref": "#/$defs/ShapeReport"
+        },
+        {
+          "description": "`ask`: one turn of a read-only conversation.",
+          "$ref": "#/$defs/AskReport"
+        },
+        {
+          "description": "`ask --list`: the conversations.",
+          "$ref": "#/$defs/AskConversations"
+        },
+        {
+          "description": "One conversation with its turns.",
+          "$ref": "#/$defs/AskThread"
         },
         {
           "description": "`review`: the feature's requirements and the person's review of each.",
@@ -12593,6 +12717,473 @@
         "fix"
       ]
     },
+    "AskReport": {
+      "description": "One Ask turn: the question, what was read, the answer and its sources.",
+      "type": "object",
+      "properties": {
+        "conversation": {
+          "description": "The conversation (`c-…`).",
+          "type": "string"
+        },
+        "turn": {
+          "description": "The turn's number in the conversation, from 1.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "question": {
+          "description": "The person's words.",
+          "type": "string"
+        },
+        "chips": {
+          "description": "What was on screen or added as context.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Chip"
+          }
+        },
+        "reads": {
+          "description": "What the model read, in order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Read"
+          }
+        },
+        "answer": {
+          "description": "The model's words (a claim), citation markers included.",
+          "type": "string"
+        },
+        "citations": {
+          "description": "Every marker in the answer, checked.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Citation"
+          }
+        },
+        "proposal": {
+          "description": "A change the model suggests; nothing ran.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Proposal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "usage": {
+          "description": "Tokens the turn used (input and output, cache reads apart).",
+          "$ref": "#/$defs/AskUsage"
+        },
+        "end": {
+          "description": "How the turn ended: `answered`, `stopped`, `budget`, `full` or `failed`.",
+          "type": "string"
+        },
+        "reason": {
+          "description": "Why it ended so, when it did not answer.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "conversation",
+        "turn",
+        "question",
+        "chips",
+        "reads",
+        "answer",
+        "citations",
+        "usage",
+        "end"
+      ]
+    },
+    "Chip": {
+      "description": "Something on screen given to the model as context.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "Its id in the turn (`c1`…), citable like a read.",
+          "type": "string"
+        },
+        "kind": {
+          "description": "`feature`, `task`, `file_range`, `requirement`, `question`,\n`inbox_item`, `evidence_row`, `diff_hunk`, `report_row`, `finding`.",
+          "type": "string"
+        },
+        "label": {
+          "description": "What a person reads on the chip.",
+          "type": "string"
+        },
+        "reference": {
+          "description": "Where it points: `feature`, `task`, `path`, `start`, `end`, …"
+        },
+        "digest": {
+          "description": "The content's digest when it was sent.",
+          "type": "string"
+        },
+        "from_view": {
+          "description": "The current view's subject, attached by itself.",
+          "type": "boolean",
+          "default": false
+        },
+        "changed": {
+          "description": "Its content changed since it was added; the current one was sent.",
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "label",
+        "reference",
+        "digest",
+        "from_view",
+        "changed"
+      ]
+    },
+    "Read": {
+      "description": "A read the engine issued for a tool call.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "`r1`, `r2`, … across the conversation.",
+          "type": "string"
+        },
+        "tool": {
+          "description": "The tool.",
+          "type": "string"
+        },
+        "target": {
+          "description": "What it read, in one line.",
+          "type": "string"
+        },
+        "path": {
+          "description": "The file it read, when it read one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "start": {
+          "description": "The first line it returned.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "end": {
+          "description": "The last line it returned.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "digest": {
+          "description": "The digest of what it returned.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "tool",
+        "target",
+        "digest"
+      ]
+    },
+    "Citation": {
+      "description": "A citation marker in the answer, checked against the turn's reads.",
+      "type": "object",
+      "properties": {
+        "marker": {
+          "description": "The marker as written (`[r3:12-20]`).",
+          "type": "string"
+        },
+        "id": {
+          "description": "The read or chip it names.",
+          "type": "string"
+        },
+        "lines": {
+          "description": "The lines it narrows to.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "prefixItems": [
+            {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            }
+          ],
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "state": {
+          "description": "`read`: it names what this turn read; `not_read`: it does not.",
+          "type": "string"
+        },
+        "path": {
+          "description": "The file, when it names one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "label": {
+          "description": "What a person reads for it (\"crates/x.rs 12–20\").",
+          "type": "string"
+        }
+      },
+      "required": [
+        "marker",
+        "id",
+        "state",
+        "label"
+      ]
+    },
+    "Proposal": {
+      "description": "A change the model suggests, as code made it a person's action.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "description": "`quick_change`, `bug_fix`, `nudge`, `answer` or `start_spec`.",
+          "type": "string"
+        },
+        "title": {
+          "description": "One line.",
+          "type": "string"
+        },
+        "fields": {
+          "description": "The editable words, by kind.",
+          "$ref": "#/$defs/ProposalFields"
+        },
+        "runnable": {
+          "description": "What confirming performs; `None` when it cannot be done now.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Runnable"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "input": {
+          "description": "The words the action records (the input of a nudge or an answer).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "blocked": {
+          "description": "Why it cannot be done now.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "command": {
+          "description": "The same action as a command.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "title",
+        "fields",
+        "command"
+      ]
+    },
+    "ProposalFields": {
+      "description": "A proposal's words; which ones a kind uses is the kind's.",
+      "type": "object",
+      "properties": {
+        "target": {
+          "description": "The task (nudge) or question (answer) it is about.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "request": {
+          "description": "A quick change, in the person's words.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "checks": {
+          "description": "When a quick change is done.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "note": {
+          "description": "A nudge's note.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "answer": {
+          "description": "A question's answer.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "description": {
+          "description": "A new spec's description.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "symptom": {
+          "description": "A bug's current behaviour.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "expected": {
+          "description": "What should happen instead.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "unchanged": {
+          "description": "What must stay as it is.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "AskUsage": {
+      "description": "Tokens a turn used.",
+      "type": "object",
+      "properties": {
+        "input": {
+          "description": "Input tokens, cache reads not counted.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "output": {
+          "description": "Output tokens.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "cache_read": {
+          "description": "Input read from the provider's cache.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "input",
+        "output",
+        "cache_read"
+      ]
+    },
+    "AskConversations": {
+      "description": "`ask --list` / `GET /api/ask/conversations`.",
+      "type": "object",
+      "properties": {
+        "conversations": {
+          "description": "Newest first.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Conversation"
+          }
+        }
+      },
+      "required": [
+        "conversations"
+      ]
+    },
+    "Conversation": {
+      "description": "One conversation in a list.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "`c-…`.",
+          "type": "string"
+        },
+        "feature": {
+          "description": "The feature it was about, when one was current.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "description": "Its first question.",
+          "type": "string"
+        },
+        "at": {
+          "description": "When its last turn ended (seconds since the epoch).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "turns": {
+          "description": "How many turns it has.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "open": {
+          "description": "Whether it takes another turn (`false`: ended, idle or full).",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "at",
+        "turns",
+        "open"
+      ]
+    },
+    "AskThread": {
+      "description": "One conversation with its turns.",
+      "type": "object",
+      "properties": {
+        "conversation": {
+          "description": "The conversation.",
+          "$ref": "#/$defs/Conversation"
+        },
+        "turns": {
+          "description": "Its turns, in order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AskReport"
+          }
+        }
+      },
+      "required": [
+        "conversation",
+        "turns"
+      ]
+    },
     "ReviewReport": {
       "description": "Result of `speccoder review`: every requirement of the feature's\nspec as a card, with the person's decision on its exact wording.",
       "type": "object",
@@ -15537,7 +16128,7 @@
           "$ref": "#/$defs/RungPick"
         },
         "available": {
-          "description": "Whether this build has it (`false` for `ask` until the Ask panel).",
+          "description": "Whether this build has it.",
           "type": "boolean"
         },
         "cue": {
@@ -15556,7 +16147,7 @@
           }
         },
         "command": {
-          "description": "The command that takes the suggested rung (none for `ask` and `none`).",
+          "description": "The command that takes the suggested rung (none for `none`).",
           "type": [
             "string",
             "null"

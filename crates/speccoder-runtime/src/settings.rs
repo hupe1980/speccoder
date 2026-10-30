@@ -446,6 +446,32 @@ pub const CATALOGUE: &[Section] = &[
         ],
     },
     Section {
+        name: "ask",
+        title: "Ask",
+        about: "The read-only conversation beside every view: its model and its limits.",
+        named: false,
+        keys: &[
+            k(
+                "model",
+                Kind::Str,
+                None,
+                "Ask's model; [model]'s when unset (same provider)",
+            ),
+            k(
+                "max_turn_tokens",
+                Kind::Int(1_000, 10_000_000),
+                Some("100000"),
+                "Tokens one question may use, cache reads apart",
+            ),
+            k(
+                "daily_tokens",
+                Kind::Int(0, 1_000_000_000),
+                Some("1000000"),
+                "Tokens Ask may use in a UTC day; runs are never counted",
+            ),
+        ],
+    },
+    Section {
         name: "converge",
         title: "Convergence",
         about: "How often a feature may be brought back to its spec.",

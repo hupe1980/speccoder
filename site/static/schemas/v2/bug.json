@@ -2972,6 +2972,11 @@
           "description": "A task's drawer (`subject`: its id).",
           "type": "string",
           "const": "task"
+        },
+        {
+          "description": "`ask`: the Ask panel.",
+          "type": "string",
+          "const": "ask"
         }
       ]
     },

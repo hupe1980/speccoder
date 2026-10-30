@@ -122,13 +122,16 @@ fn a_bug_names_its_cue_verbatim() {
 }
 
 #[test]
-fn a_question_is_ask_and_not_available_yet() {
+fn a_question_is_ask() {
     let s = suggest("why does the build take ten minutes?");
     assert_eq!(s.rung, RungPick::Ask);
-    assert!(!s.available);
+    assert!(s.available);
     assert_eq!(s.cue.rule, RungCueRule::Question);
-    assert!(s.reason.contains("pick a rung"), "{}", s.reason);
-    assert_eq!(command_for(s.rung, "x", Some("specify")), None);
+    assert!(s.reason.contains("changes nothing"), "{}", s.reason);
+    assert_eq!(
+        command_for(s.rung, "x", Some("specify")).as_deref(),
+        Some("speccoder ask \"x\"")
+    );
 }
 
 #[test]

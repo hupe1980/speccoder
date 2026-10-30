@@ -4,6 +4,7 @@
   // never applied without the person's key or click. Taking a rung opens
   // that rung's own sheet with the text; the composer performs nothing.
   import { app } from "../lib/app.svelte";
+  import { ask as panel } from "../lib/ask.svelte";
   import { get, q } from "../lib/api";
   import { RUNGS, available, composerCommand, debounce, move, rungForKey } from "../lib/start";
   import { trap } from "../lib/sheet";
@@ -56,6 +57,10 @@
       app.quickDraft = t;
       app.quick = true;
     } else if (rung === "feature") app.newFeature = { text: t };
+    else if (rung === "ask") {
+      panel.toggle(true);
+      void panel.send(t);
+    }
   }
 
   function key(e: KeyboardEvent) {
@@ -114,7 +119,7 @@
           class:on
           class:off
           tabindex={on || (!selected && r.rung === "bug") ? 0 : -1}
-          title={off ? "Ask arrives with the Ask panel" : `${r.label} (${r.keys})`}
+          title={off ? `${r.label} is not in this build` : `${r.label} (${r.keys})`}
           onclick={() => {
             if (off) return;
             touched = true;
@@ -125,7 +130,7 @@
         >
           <span class="dot" aria-hidden="true">{on ? "●" : "○"}</span>
           <span class="label">{r.label}</span>
-          <span class="ceremony">{off ? "arrives with the Ask panel" : r.ceremony}</span>
+          <span class="ceremony">{r.ceremony}</span>
           <kbd>{suggestion?.rung === r.rung && suggestion.available ? `⏎ ${r.keys}` : r.keys}</kbd>
           {#if off}<span class="sr-only">(disabled)</span>{/if}
         </button>

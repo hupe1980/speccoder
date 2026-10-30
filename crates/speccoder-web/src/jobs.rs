@@ -84,6 +84,13 @@ impl Hub {
         let _ = self.events.send(v.to_string());
     }
 
+    /// A progress sink onto the page's event stream, for work that is not
+    /// a job (an Ask turn).
+    #[must_use]
+    pub fn progress(self: &Arc<Self>) -> Arc<dyn Progress> {
+        Arc::new(Stream(Arc::clone(self)))
+    }
+
     /// The job, if one ran since the host started.
     #[must_use]
     pub fn job(&self) -> Option<JobView> {
@@ -330,6 +337,16 @@ impl Hub {
             }
         });
         Ok(id)
+    }
+}
+
+/// Progress onto the page's stream.
+#[derive(Debug)]
+struct Stream(Arc<Hub>);
+
+impl Progress for Stream {
+    fn event(&self, event: &Event) {
+        self.0.send(&json!({ "type": "progress", "event": event }));
     }
 }
 

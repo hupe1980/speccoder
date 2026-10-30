@@ -2021,3 +2021,115 @@ pub fn branch_verify(
     }
     writeln!(out, "{message}")
 }
+
+/// An Ask turn: the model's words with its checked sources numbered, a
+/// proposal with its command, and how to go on.
+pub fn ask(r: &speccoder_core::ask::AskReport, look: &crate::style::Look) -> Vec<String> {
+    use crate::style::Token;
+    let read: Vec<&speccoder_core::ask::Citation> =
+        r.citations.iter().filter(|c| c.state == "read").collect();
+    let mut answer = r.answer.clone();
+    for c in &r.citations {
+        let to = match read.iter().position(|x| x.marker == c.marker) {
+            Some(i) => look.paint(Token::Accent, &format!("[{}]", i + 1)),
+            None => look.paint(Token::Danger, "[?]"),
+        };
+        answer = answer.replace(&c.marker, &to);
+    }
+    let mut out = Vec::new();
+    if !answer.is_empty() {
+        out.push(look.paint(Token::Muted, "The model says:"));
+        out.extend(answer.lines().map(|l| format!("  {l}")));
+    }
+    if read.is_empty() && !answer.is_empty() {
+        out.push(look.paint(Token::Muted, "  No sources — the model's words only."));
+    }
+    if !r.citations.is_empty() {
+        out.push(String::new());
+        out.push(look.paint(Token::Accent, "Sources"));
+        for (i, c) in read.iter().enumerate() {
+            out.push(format!("  [{}] {}", i + 1, c.label));
+        }
+        for c in r.citations.iter().filter(|c| c.state != "read") {
+            out.push(look.paint(
+                Token::Danger,
+                &format!("  [?] {} — not among what was read", c.marker),
+            ));
+        }
+    }
+    if let Some(p) = &r.proposal {
+        let kind = match p.kind.as_str() {
+            "quick_change" => "Quick change",
+            "bug_fix" => "Bug fix",
+            "nudge" => "Nudge",
+            "answer" => "Answer",
+            "start_spec" => "Start a spec",
+            other => other,
+        };
+        out.push(String::new());
+        out.push(look.paint(
+            Token::Attention,
+            &format!("Proposal · {kind} — {}", p.title),
+        ));
+        let f = &p.fields;
+        let field = |out: &mut Vec<String>, name: &str, v: &Option<String>| {
+            if let Some(v) = v {
+                out.push(format!("  {name:<10} {v}"));
+            }
+        };
+        field(&mut out, "task", &f.target);
+        field(&mut out, "request", &f.request);
+        field(&mut out, "symptom", &f.symptom);
+        field(&mut out, "note", &f.note);
+        field(&mut out, "answer", &f.answer);
+        field(&mut out, "spec", &f.description);
+        for (name, list) in [
+            ("check", &f.checks),
+            ("expected", &f.expected),
+            ("unchanged", &f.unchanged),
+        ] {
+            for v in list {
+                out.push(format!("  {name:<10} {v}"));
+            }
+        }
+        match &p.blocked {
+            Some(why) => out.push(look.paint(Token::Danger, &format!("  cannot now: {why}"))),
+            None => out.push(format!(
+                "  {} {}",
+                look.paint(Token::Muted, "record it:"),
+                look.paint(Token::Accent, &p.command)
+            )),
+        }
+    }
+    out.push(String::new());
+    out.push(look.paint(
+        Token::Muted,
+        &format!(
+            "{} · turn {} · {} tokens · go on: speccoder ask --continue \"…\"",
+            r.conversation,
+            r.turn,
+            r.usage.billed()
+        ),
+    ));
+    out
+}
+
+/// The conversations, newest first.
+pub fn ask_conversations(
+    r: &speccoder_core::ask::AskConversations,
+    look: &crate::style::Look,
+) -> Vec<String> {
+    use crate::style::Token;
+    r.conversations
+        .iter()
+        .map(|c| {
+            let state = if c.open { "" } else { " (ended)" };
+            format!(
+                "  {}  {}  {}",
+                look.paint(Token::Muted, &c.id),
+                c.title,
+                look.paint(Token::Muted, &format!("{} turns{state}", c.turns))
+            )
+        })
+        .collect()
+}

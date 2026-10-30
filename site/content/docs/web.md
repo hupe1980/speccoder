@@ -106,6 +106,12 @@ A running job floats at the bottom of the page (task, stage, time; orange when i
 
 A run that stops on uncommitted setup shows a card with the fix, its command and undo, and **Commit and Run Again**. A `speccoder run` from a terminal shows as a pill in the status bar (*interrupted*, with **Resume**, when that process died); a run started here meanwhile is refused.
 
+### Ask
+
+**Ask** (⌘L, the toolbar's speech bubble, or a question typed in the palette or the composer) opens a conversation beside the view. It answers from what it reads — files, history, a run's account, a task's evidence, Needs You, the codes — and changes nothing. Its sources are numbered only where speccoder checked the model read them in that turn; a citation to anything else is marked *not read*. Click a source to open it at its lines.
+
+The view's subject (the selected task, else the feature) rides along as a chip; **Add to Ask** (⌘⇧L, a task card's menu, the code viewer's **Ask**) adds more. A suggested change — a quick change, a bug fix, a nudge, an answer, a new spec — is a card: **Review…** opens a sheet with every word editable and the command it records, and only **Confirm** performs it. Conversations are kept per project (the list button); a long one ends rather than being summarised, and a new one keeps its chips. Its budget is [`[ask]`](@/docs/configuration.md#ask)'s, never a run's.
+
 ### Bug sheet
 
 Opened by **Report a Bug…** (⇧⌘B, `⇧B`), a bug's row in Needs You, or **Fix as Bug** on an issue. It takes the [triad](@/docs/bugs.md#the-triad) (one line per expected behaviour; **Record** needs one) and optionally the issue, your own failing test or a fix to judge; then **Record** or **Record and Reproduce**. The stage strip (Record → Reproduce → Confirm → Unchanged → Fix → Ship) follows the host's state, so a reload resumes; reproductions are confirmed with **Confirm and Fix** or **Reject with Reason**.
@@ -128,7 +134,7 @@ A small project and a run of it recorded with a real model, copied into speccode
 
 ## New… and New Feature
 
-**New…** (⌘N in the window, `N` in a tab, the toolbar's **+**) opens the composer: one field — *Describe a change, a bug, a feature, or a question* — and the rungs beside it: **Bug fix**, **Quick change**, **Feature**, **Just ask**. The host suggests one from the words alone — a wrong result of existing behaviour, a question, two or more capabilities or a long description, else a quick change — and says why; ⏎ takes it, ↑ ↓ move, ⌃⏎ bug fix, ⌥⏎ quick change, ⇧⏎ feature, ⌘⏎ ask. Taking a rung opens its own sheet with your text; the footer shows the command (`speccoder bug "…"`, `speccoder do "…"`, `speccoder spec specify "…"`). *Just ask* arrives with the Ask panel; a question selects no rung.
+**New…** (⌘N in the window, `N` in a tab, the toolbar's **+**) opens the composer: one field — *Describe a change, a bug, a feature, or a question* — and the rungs beside it: **Bug fix**, **Quick change**, **Feature**, **Just ask**. The host suggests one from the words alone — a wrong result of existing behaviour, a question, two or more capabilities or a long description, else a quick change — and says why; ⏎ takes it, ↑ ↓ move, ⌃⏎ bug fix, ⌥⏎ quick change, ⇧⏎ feature, ⌘⏎ ask. Taking a rung opens its own sheet with your text; the footer shows the command (`speccoder bug "…"`, `speccoder do "…"`, `speccoder spec specify "…"`). *Just ask* opens the [Ask panel](#ask) with your question.
 
 The **New Feature** sheet opens from the composer, the **+** beside the features in the sidebar, the Overview, the palette, File ▸ New Feature…, **Start Feature** on a GitHub issue (the issue's description, *Start from: issue #42*, its origin recorded for the new unit) and the setup assistant. It shows the description, *Plan it* (*spec only*, *spec → plan → tasks*, *… → analyze* where the format has a check), the skills that will run, the folder they write, what these skills cost in your earlier runs (or *cost: unknown until it runs*), and the exact command. A requirement of another feature close to the description is shown with **Extend 003 instead**, which makes that feature current and drafts your description as a comment on its requirement — sent by you, as one revision of the spec. **Start** (⌘⏎) runs [plan through](@/docs/planning.md#plan-through); it is disabled without a model key or while a job runs, and says so. Under the description — and under the quick change, the bug's lines, a requirement's rewording, hints and answers — the writing check shows what cannot be tested yet, and **✦ Shape** offers [help with the words](@/docs/planning.md#shape-help-with-the-words).
 
@@ -154,10 +160,11 @@ A call that needs a person opens as a sheet with what the [inline prompt](@/docs
 | `?` | Every key |
 | `,` | Settings |
 | ⌘K / Ctrl+K | The palette: every action, filtered as you type |
+| ⌘L / ⇧⌘L | Ask / add the selected task to Ask |
 | ⇧⌘T / ⇧⌘↵ | Write Tests / send the comments |
 | `Esc` | Close the task |
 
-In `speccoder ui --window`, the menus (speccoder, File, Edit, View, Run, Review, Window, Help) offer the same actions as the buttons — File has New…, New Feature…, Quick Change…, Report a Bug…, Start from a GitHub Issue…, New Project…, Open Project… and Try the Sample — saying why when one cannot run now, with these shortcuts: New… ⌘N, Open Project… ⌘O, Quick Change ⇧⌘N, Report a Bug ⇧⌘B, Settings ⌘,, Toggle Sidebar ⌥⌘S, Toggle Status Bar ⌥⌘B, Actions ⌘K, Run the Feature ⌘R, Run the Selected Task ⇧⌘R, Show the Selected Task's Evidence ⌘I, Stop ⌘., Needs You ⇧⌘I, Review the Spec ⌥⌘R, Write Tests ⇧⌘T, Send Comments ⇧⌘↵. **Help** opens the documentation, the quickstart, the app's page, the error codes and a new issue in your browser.
+In `speccoder ui --window`, the menus (speccoder, File, Edit, View, Run, Review, Window, Help) offer the same actions as the buttons — File has New…, New Feature…, Quick Change…, Report a Bug…, Start from a GitHub Issue…, New Project…, Open Project… and Try the Sample — saying why when one cannot run now, with these shortcuts: New… ⌘N, Open Project… ⌘O, Quick Change ⇧⌘N, Report a Bug ⇧⌘B, Settings ⌘,, Toggle Sidebar ⌥⌘S, Toggle Status Bar ⌥⌘B, Actions ⌘K, Ask ⌘L, Add to Ask ⇧⌘L, Run the Feature ⌘R, Run the Selected Task ⇧⌘R, Show the Selected Task's Evidence ⌘I, Stop ⌘., Needs You ⇧⌘I, Review the Spec ⌥⌘R, Write Tests ⇧⌘T, Send Comments ⇧⌘↵. **Help** opens the documentation, the quickstart, the app's page, the error codes and a new issue in your browser.
 
 An action that leaves your machine (a push, a pull request, an issue comment) first shows what it would do and waits for your yes. The page follows the system's light or dark, increased-contrast and reduced-motion settings. The address follows what you look at (`?view=code&mode=files&file=src/lib.rs&line=42`, `?task=T003`), so reload, Back and bookmarks work while the host runs.
 

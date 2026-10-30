@@ -1,0 +1,1948 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ask: one conversation with its turns",
+  "description": "One conversation with its turns.",
+  "type": "object",
+  "properties": {
+    "conversation": {
+      "description": "The conversation.",
+      "$ref": "#/$defs/Conversation"
+    },
+    "turns": {
+      "description": "Its turns, in order.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/AskReport"
+      }
+    }
+  },
+  "required": [
+    "conversation",
+    "turns"
+  ],
+  "$defs": {
+    "Conversation": {
+      "description": "One conversation in a list.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "`c-…`.",
+          "type": "string"
+        },
+        "feature": {
+          "description": "The feature it was about, when one was current.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "description": "Its first question.",
+          "type": "string"
+        },
+        "at": {
+          "description": "When its last turn ended (seconds since the epoch).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "turns": {
+          "description": "How many turns it has.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "open": {
+          "description": "Whether it takes another turn (`false`: ended, idle or full).",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "at",
+        "turns",
+        "open"
+      ]
+    },
+    "AskReport": {
+      "description": "One Ask turn: the question, what was read, the answer and its sources.",
+      "type": "object",
+      "properties": {
+        "conversation": {
+          "description": "The conversation (`c-…`).",
+          "type": "string"
+        },
+        "turn": {
+          "description": "The turn's number in the conversation, from 1.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "question": {
+          "description": "The person's words.",
+          "type": "string"
+        },
+        "chips": {
+          "description": "What was on screen or added as context.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Chip"
+          }
+        },
+        "reads": {
+          "description": "What the model read, in order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Read"
+          }
+        },
+        "answer": {
+          "description": "The model's words (a claim), citation markers included.",
+          "type": "string"
+        },
+        "citations": {
+          "description": "Every marker in the answer, checked.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Citation"
+          }
+        },
+        "proposal": {
+          "description": "A change the model suggests; nothing ran.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Proposal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "usage": {
+          "description": "Tokens the turn used (input and output, cache reads apart).",
+          "$ref": "#/$defs/AskUsage"
+        },
+        "end": {
+          "description": "How the turn ended: `answered`, `stopped`, `budget`, `full` or `failed`.",
+          "type": "string"
+        },
+        "reason": {
+          "description": "Why it ended so, when it did not answer.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "conversation",
+        "turn",
+        "question",
+        "chips",
+        "reads",
+        "answer",
+        "citations",
+        "usage",
+        "end"
+      ]
+    },
+    "Chip": {
+      "description": "Something on screen given to the model as context.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "Its id in the turn (`c1`…), citable like a read.",
+          "type": "string"
+        },
+        "kind": {
+          "description": "`feature`, `task`, `file_range`, `requirement`, `question`,\n`inbox_item`, `evidence_row`, `diff_hunk`, `report_row`, `finding`.",
+          "type": "string"
+        },
+        "label": {
+          "description": "What a person reads on the chip.",
+          "type": "string"
+        },
+        "reference": {
+          "description": "Where it points: `feature`, `task`, `path`, `start`, `end`, …"
+        },
+        "digest": {
+          "description": "The content's digest when it was sent.",
+          "type": "string"
+        },
+        "from_view": {
+          "description": "The current view's subject, attached by itself.",
+          "type": "boolean",
+          "default": false
+        },
+        "changed": {
+          "description": "Its content changed since it was added; the current one was sent.",
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "label",
+        "reference",
+        "digest",
+        "from_view",
+        "changed"
+      ]
+    },
+    "Read": {
+      "description": "A read the engine issued for a tool call.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "`r1`, `r2`, … across the conversation.",
+          "type": "string"
+        },
+        "tool": {
+          "description": "The tool.",
+          "type": "string"
+        },
+        "target": {
+          "description": "What it read, in one line.",
+          "type": "string"
+        },
+        "path": {
+          "description": "The file it read, when it read one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "start": {
+          "description": "The first line it returned.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "end": {
+          "description": "The last line it returned.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "digest": {
+          "description": "The digest of what it returned.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "tool",
+        "target",
+        "digest"
+      ]
+    },
+    "Citation": {
+      "description": "A citation marker in the answer, checked against the turn's reads.",
+      "type": "object",
+      "properties": {
+        "marker": {
+          "description": "The marker as written (`[r3:12-20]`).",
+          "type": "string"
+        },
+        "id": {
+          "description": "The read or chip it names.",
+          "type": "string"
+        },
+        "lines": {
+          "description": "The lines it narrows to.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "prefixItems": [
+            {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            }
+          ],
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "state": {
+          "description": "`read`: it names what this turn read; `not_read`: it does not.",
+          "type": "string"
+        },
+        "path": {
+          "description": "The file, when it names one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "label": {
+          "description": "What a person reads for it (\"crates/x.rs 12–20\").",
+          "type": "string"
+        }
+      },
+      "required": [
+        "marker",
+        "id",
+        "state",
+        "label"
+      ]
+    },
+    "Proposal": {
+      "description": "A change the model suggests, as code made it a person's action.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "description": "`quick_change`, `bug_fix`, `nudge`, `answer` or `start_spec`.",
+          "type": "string"
+        },
+        "title": {
+          "description": "One line.",
+          "type": "string"
+        },
+        "fields": {
+          "description": "The editable words, by kind.",
+          "$ref": "#/$defs/ProposalFields"
+        },
+        "runnable": {
+          "description": "What confirming performs; `None` when it cannot be done now.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Runnable"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "input": {
+          "description": "The words the action records (the input of a nudge or an answer).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "blocked": {
+          "description": "Why it cannot be done now.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "command": {
+          "description": "The same action as a command.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "title",
+        "fields",
+        "command"
+      ]
+    },
+    "ProposalFields": {
+      "description": "A proposal's words; which ones a kind uses is the kind's.",
+      "type": "object",
+      "properties": {
+        "target": {
+          "description": "The task (nudge) or question (answer) it is about.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "request": {
+          "description": "A quick change, in the person's words.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "checks": {
+          "description": "When a quick change is done.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "note": {
+          "description": "A nudge's note.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "answer": {
+          "description": "A question's answer.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "description": {
+          "description": "A new spec's description.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "symptom": {
+          "description": "A bug's current behaviour.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "expected": {
+          "description": "What should happen instead.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "unchanged": {
+          "description": "What must stay as it is.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "Runnable": {
+      "description": "How an interface runs an action itself.",
+      "oneOf": [
+        {
+          "description": "A planning skill (`speccoder spec <name> <arguments>`).",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "skill"
+            },
+            "name": {
+              "description": "The skill.",
+              "type": "string"
+            },
+            "arguments": {
+              "description": "Its arguments (the input, when one is asked for).",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "name",
+            "arguments"
+          ]
+        },
+        {
+          "description": "`speccoder run`, the feature or one task.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "run"
+            },
+            "task": {
+              "description": "One task, or the feature's ready tasks.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "agent": {
+              "description": "This run's agent (`--agent`): an ACP preset or `native`; `None`\nis the configured executor.",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "task"
+          ]
+        },
+        {
+          "description": "`speccoder run --converge`: the ready tasks, then the assessment of\nthe code against the spec as it is now, appending what remains.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "converge"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "description": "Commit exactly these planning files.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "commit"
+            },
+            "paths": {
+              "description": "Repository-relative paths.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "paths"
+          ]
+        },
+        {
+          "description": "Approve the task's waiting call: the one that was shown, refused\nwhen another waits now.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "approve"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            },
+            "call": {
+              "description": "The call's id ([`crate::PendingCall::id`]).",
+              "type": "string"
+            },
+            "digest": {
+              "description": "The digest of the call that was shown ([`crate::PendingCall::digest`]).",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task",
+            "call",
+            "digest"
+          ]
+        },
+        {
+          "description": "Reject it (the input is the reason), bound the same way.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "reject"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            },
+            "call": {
+              "description": "The call's id ([`crate::PendingCall::id`]).",
+              "type": "string"
+            },
+            "digest": {
+              "description": "The digest of the call that was shown ([`crate::PendingCall::digest`]).",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task",
+            "call",
+            "digest"
+          ]
+        },
+        {
+          "description": "Tick the task on the person's word (the input is the reason).",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "accept"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task"
+          ]
+        },
+        {
+          "description": "Skip the task (the input is the reason).",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "skip"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task"
+          ]
+        },
+        {
+          "description": "Leave a note for the task's next attempts (the input is the note).",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "nudge"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task"
+          ]
+        },
+        {
+          "description": "I did it: tick a step the person took on their word (`attested`;\nthe input, when given, is the reason).",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "done"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task"
+          ]
+        },
+        {
+          "description": "Hint & retry: a note for the task (the input), then a new attempt.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "hint"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task"
+          ]
+        },
+        {
+          "description": "Rule that a held attempt's tests are right (the input is the reason).",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "rule"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task"
+          ]
+        },
+        {
+          "description": "Record the person's review of requirements (the input is the\ncomment; required to request changes).",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "review"
+            },
+            "ids": {
+              "description": "The requirement identifiers; empty: every one not yet approved.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "verdict": {
+              "description": "`approve`, `request` (changes), `clear`; `answer` (ids: the\nquestion) and `edit` / `edit-approve` (ids: the requirement) take\nthe input as the words.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "ids",
+            "verdict"
+          ]
+        },
+        {
+          "description": "Tell a GitHub issue it is being specified as the current feature.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "issue_comment"
+            },
+            "issue": {
+              "description": "The issue's number.",
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "assign": {
+              "description": "Also assign it to the person.",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "kind",
+            "issue",
+            "assign"
+          ]
+        },
+        {
+          "description": "Record a quick change and, when `run`, run it.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "quick_change"
+            },
+            "request": {
+              "description": "The change, in the person's words.",
+              "type": "string"
+            },
+            "checks": {
+              "description": "When it is done: its acceptance scenarios.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "run": {
+              "description": "Run it once recorded.",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "kind",
+            "request",
+            "checks",
+            "run"
+          ]
+        },
+        {
+          "description": "Commit the changes set aside before the task's run onto the\nfeature's branch, as the person's own.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "keep_set_aside"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task"
+          ]
+        },
+        {
+          "description": "Discard them.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "drop_set_aside"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task"
+          ]
+        },
+        {
+          "description": "Commit the setup a run stops on (an uncommitted lockfile, build\noutput not ignored) in the checkout.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "fix_setup"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "description": "Pick the current feature.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "feature"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "description": "Push the feature's branch and open (or update) its draft pull request.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "pull_request"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "description": "Record a bug in the person's words (`speccoder bug`) and, when\n`run`, reproduce it.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "bug_fix"
+            },
+            "symptom": {
+              "description": "What happens (the symptom).",
+              "type": "string"
+            },
+            "expected": {
+              "description": "What should happen instead (one or more).",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "unchanged": {
+              "description": "What must keep working (zero or more).",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "issue": {
+              "description": "The GitHub issue it comes from.",
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "tests": {
+              "description": "The person's own reproduction tests, one per expected statement\n(`PATH::NAME`).",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "candidate": {
+              "description": "Someone else's fix to judge: a patch file or `pr:N`.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "slug": {
+              "description": "Continue a bug the format's own bug step created.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "run": {
+              "description": "Reproduce it once recorded.",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "kind",
+            "symptom",
+            "expected",
+            "unchanged",
+            "issue",
+            "tests",
+            "candidate",
+            "slug",
+            "run"
+          ]
+        },
+        {
+          "description": "Confirm (or, with `reject`, reject: the input is the reason) a\nbug's reproductions, bound to the digest shown.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "bug_confirm"
+            },
+            "task": {
+              "description": "`<unit>/<task>`.",
+              "type": "string"
+            },
+            "digest": {
+              "description": "The digest the person saw.",
+              "type": "string"
+            },
+            "reject": {
+              "description": "Reject instead.",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "kind",
+            "task",
+            "digest",
+            "reject"
+          ]
+        },
+        {
+          "description": "Keep an already-satisfied bug's reproductions as a regression test:\ncommitted, the task attested (the input is the reason).",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "bug_keep"
+            },
+            "task": {
+              "description": "`<unit>/<task>`.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task"
+          ]
+        },
+        {
+          "description": "Continue a bug: reproduce again, or run its confirmed fix.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "bug_run"
+            },
+            "slug": {
+              "description": "A bug of the format's own bug structure, by slug.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "task": {
+              "description": "Or `<unit>/<task>`.",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "slug",
+            "task"
+          ]
+        },
+        {
+          "description": "Always Allow: approve the waiting command once and add exactly its\nargv to `[commands] allow` (or `[sandbox] network_allow`).",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "allow_always"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            },
+            "call": {
+              "description": "The waiting call's id.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task",
+            "call"
+          ]
+        },
+        {
+          "description": "Add a prefix to a prefix list, as the confirmation of its coverage\npreview (refused when the preview changed or is incomplete).",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "widen_policy"
+            },
+            "key": {
+              "description": "Which list.",
+              "$ref": "#/$defs/PolicyList"
+            },
+            "prefix": {
+              "description": "The prefix (two elements or more).",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "digest": {
+              "description": "The digest of the preview the person saw.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "key",
+            "prefix",
+            "digest"
+          ]
+        },
+        {
+          "description": "Decide the calls waiting in a run's batch together, each once.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "decide_batch"
+            },
+            "run": {
+              "description": "The run.",
+              "type": "string"
+            },
+            "verdict": {
+              "description": "Approve or reject (the input is the reason).",
+              "$ref": "#/$defs/BatchVerdict"
+            },
+            "calls": {
+              "description": "The listed calls decided (a non-empty subset).",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "digest": {
+              "description": "The digest of the list the person saw.",
+              "type": "string"
+            },
+            "resume_asking": {
+              "description": "Start the run's asking budget again.",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "kind",
+            "run",
+            "verdict",
+            "calls",
+            "digest",
+            "resume_asking"
+          ]
+        },
+        {
+          "description": "Write, reject, ask again for, edit or settle a requirement's tests\nat review (the input: the reason, the comment or the content).",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "oracle_tests"
+            },
+            "req": {
+              "description": "The requirement (`US1`).",
+              "type": "string"
+            },
+            "op": {
+              "description": "What to do.",
+              "$ref": "#/$defs/OracleOp"
+            },
+            "path": {
+              "description": "The test (reject, again, edit).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "scenario": {
+              "description": "The ambiguous scenario (reading).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "reading": {
+              "description": "The reading meant (reading).",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Reading"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "req",
+            "op",
+            "path",
+            "scenario",
+            "reading"
+          ]
+        },
+        {
+          "description": "Approve every approvable decision line, freeze the written tests and\nstart the feature's run, asking or on autopilot.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "approve_and_run"
+            },
+            "mode": {
+              "description": "How the run asks.",
+              "$ref": "#/$defs/RunMode"
+            },
+            "grants": {
+              "description": "The grant ids (object-bound grants) an autopilot run holds.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "sheet": {
+              "description": "The sheet's `sha256`: what the person saw approved and frozen.\nRequired from every interface but a terminal command.",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "mode",
+            "grants"
+          ]
+        },
+        {
+          "description": "Add, delete or keep a review comment (the input: its words).",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "comment"
+            },
+            "op": {
+              "description": "What to do.",
+              "$ref": "#/$defs/CommentOp"
+            },
+            "anchor": {
+              "description": "What a new comment is about.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CommentAnchor"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "id": {
+              "description": "The draft (delete, keep).",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "op",
+            "anchor",
+            "id"
+          ]
+        },
+        {
+          "description": "Send the comments as one revision turn.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "comments_send"
+            },
+            "ids": {
+              "description": "The drafts the person saw (empty: every draft in the tray); a\ndraft sent already refuses the send.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "ids"
+          ]
+        },
+        {
+          "description": "Undo the last revision turn: the documents back, byte for byte.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "revision_undo"
+            },
+            "turn": {
+              "description": "The turn the person saw.",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "turn"
+          ]
+        },
+        {
+          "description": "Code-view line comments as one nudge for the task's next attempt.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "code_nudge"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            },
+            "comments": {
+              "description": "The comments.",
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/CodeComment"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "task",
+            "comments"
+          ]
+        },
+        {
+          "description": "Write a story's acceptance tests at a Setup or Foundational task\n(`revoke`: take the decision back) — a decision recorded in the\nstate directory, never an edit of the spec.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "acceptance_at"
+            },
+            "feature": {
+              "description": "The feature.",
+              "type": "string"
+            },
+            "story": {
+              "description": "The story (`US1`).",
+              "type": "string"
+            },
+            "task": {
+              "description": "The task.",
+              "type": "string"
+            },
+            "revoke": {
+              "description": "Take the decision back.",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "kind",
+            "feature",
+            "story",
+            "task",
+            "revoke"
+          ]
+        },
+        {
+          "description": "Install the bundled `speccoder` Spec Kit preset through Spec Kit's\nown `specify preset add` (`update`: the installed one, replaced).",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "preset_add"
+            },
+            "update": {
+              "description": "Replace an installed older version.",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "kind",
+            "update"
+          ]
+        },
+        {
+          "description": "Plan a new feature through the format's own skills — the creating\nskill, then toward the task list, then the check — stopping where a\nperson decides (`speccoder spec <skill> --through <t>`).",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "plan_through"
+            },
+            "from": {
+              "description": "A new description, or the continuation after a stop.",
+              "$ref": "#/$defs/PlanFrom"
+            },
+            "through": {
+              "description": "How far.",
+              "$ref": "#/$defs/Through"
+            }
+          },
+          "required": [
+            "kind",
+            "from",
+            "through"
+          ]
+        },
+        {
+          "description": "Make `target` a project: the plan the person saw, bound to its digest\n(`speccoder new`).",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "new_project"
+            },
+            "target": {
+              "description": "The folder, as the plan names it.",
+              "type": "string"
+            },
+            "choices": {
+              "description": "What the person chose.",
+              "$ref": "#/$defs/NewChoices"
+            },
+            "plan_digest": {
+              "description": "The digest of the plan on screen.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "target",
+            "choices",
+            "plan_digest"
+          ]
+        },
+        {
+          "description": "Undo the project speccoder created at the dispatch's root\n(`speccoder new --undo`): to the Trash, or a revert of its commit.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "undo_new_project"
+            },
+            "commit": {
+              "description": "speccoder's commit, as recorded.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "commit"
+          ]
+        },
+        {
+          "description": "Clone a repository of the person's with their git (their credentials).",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "clone_repository"
+            },
+            "repo": {
+              "description": "`owner/repo`.",
+              "type": "string"
+            },
+            "target": {
+              "description": "The destination folder.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "repo",
+            "target"
+          ]
+        },
+        {
+          "description": "Copy the bundled sample into the state directory and replay its\nrecorded run strictly (`speccoder sample`).",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "open_sample"
+            },
+            "fresh": {
+              "description": "Replace an existing copy.",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "kind",
+            "fresh"
+          ]
+        },
+        {
+          "description": "Run the sample's own checks, offline, in its copy (the sample's\nend card, *Run the checks yourself*).",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "sample_checks"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        }
+      ]
+    },
+    "PolicyList": {
+      "description": "A prefix list in `speccoder.toml`.",
+      "oneOf": [
+        {
+          "description": "`[commands] allow_prefix`.",
+          "type": "string",
+          "const": "commands_prefix"
+        },
+        {
+          "description": "`[sandbox] network_allow_prefix`.",
+          "type": "string",
+          "const": "network_prefix"
+        }
+      ]
+    },
+    "BatchVerdict": {
+      "description": "A batch decision.",
+      "oneOf": [
+        {
+          "description": "Each listed call once.",
+          "type": "string",
+          "const": "approve"
+        },
+        {
+          "description": "Each listed call, with one reason.",
+          "type": "string",
+          "const": "reject"
+        }
+      ]
+    },
+    "OracleOp": {
+      "description": "What a change to a requirement's tests does.",
+      "oneOf": [
+        {
+          "description": "Write the tests (the author calls, the comparison, the red check,\nthe held-out set).",
+          "type": "string",
+          "const": "write"
+        },
+        {
+          "description": "Drop one test (the input is the reason, required).",
+          "type": "string",
+          "const": "reject"
+        },
+        {
+          "description": "Write one test again (the input is the person's comment).",
+          "type": "string",
+          "const": "again"
+        },
+        {
+          "description": "Replace one test's content with the person's (the input).",
+          "type": "string",
+          "const": "edit"
+        },
+        {
+          "description": "Say which reading of an ambiguous scenario is meant.",
+          "type": "string",
+          "const": "reading"
+        }
+      ]
+    },
+    "Reading": {
+      "description": "One of the two readings of an ambiguous scenario.",
+      "oneOf": [
+        {
+          "description": "The first author's.",
+          "type": "string",
+          "const": "A"
+        },
+        {
+          "description": "The second author's.",
+          "type": "string",
+          "const": "B"
+        }
+      ]
+    },
+    "RunMode": {
+      "description": "How a run started from the review asks for a person.",
+      "oneOf": [
+        {
+          "description": "*Ask on Risky Calls*: a call the policy asks about is asked inline,\nas a run from the interface does.",
+          "type": "string",
+          "const": "ask"
+        },
+        {
+          "description": "*Autopilot*: nothing asks; a call the policy would ask about and no\nticked grant covers is refused for the run and listed afterwards.",
+          "type": "string",
+          "const": "autopilot"
+        }
+      ]
+    },
+    "CommentOp": {
+      "description": "What a comment action does.",
+      "oneOf": [
+        {
+          "description": "A new draft.",
+          "type": "string",
+          "const": "add"
+        },
+        {
+          "description": "Remove a draft.",
+          "type": "string",
+          "const": "delete"
+        },
+        {
+          "description": "Keep an outdated draft.",
+          "type": "string",
+          "const": "keep"
+        }
+      ]
+    },
+    "CommentAnchor": {
+      "description": "What an anchored comment points at.",
+      "oneOf": [
+        {
+          "description": "A passage of a feature document.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "passage"
+            },
+            "path": {
+              "description": "Project-relative path.",
+              "type": "string"
+            },
+            "start_line": {
+              "description": "First line (1-based).",
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "end_line": {
+              "description": "Last line.",
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "quote": {
+              "description": "The words selected.",
+              "type": "string"
+            },
+            "quote_sha256": {
+              "description": "`sha256:<hex>` of the quote (filled when the draft is stored).",
+              "type": "string",
+              "default": ""
+            },
+            "section": {
+              "description": "Its section's heading path (`Requirements › Functional`).",
+              "type": "string",
+              "default": ""
+            }
+          },
+          "required": [
+            "kind",
+            "path",
+            "start_line",
+            "end_line",
+            "quote",
+            "quote_sha256",
+            "section"
+          ]
+        },
+        {
+          "description": "A line of the spec's changes since the last commit.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "diff_line"
+            },
+            "path": {
+              "description": "Project-relative path.",
+              "type": "string"
+            },
+            "side": {
+              "description": "`old` or `new`.",
+              "type": "string"
+            },
+            "line": {
+              "description": "The line (1-based) on that side.",
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "quote": {
+              "description": "The line's text.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "path",
+            "side",
+            "line",
+            "quote"
+          ]
+        },
+        {
+          "description": "A line of a shown visible test.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "test_line"
+            },
+            "req": {
+              "description": "The requirement.",
+              "type": "string"
+            },
+            "path": {
+              "description": "The test's path.",
+              "type": "string"
+            },
+            "line": {
+              "description": "The line (1-based).",
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "quote": {
+              "description": "The line's text.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "req",
+            "path",
+            "line",
+            "quote"
+          ]
+        },
+        {
+          "description": "A finding the review shows.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "finding"
+            },
+            "source": {
+              "description": "`analyze` or `review`.",
+              "type": "string"
+            },
+            "id": {
+              "description": "Its id.",
+              "type": "string"
+            },
+            "text": {
+              "description": "Its text.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "source",
+            "id",
+            "text"
+          ]
+        }
+      ]
+    },
+    "CodeComment": {
+      "description": "One line comment of the Code view.",
+      "type": "object",
+      "properties": {
+        "path": {
+          "description": "Project-relative path.",
+          "type": "string"
+        },
+        "line": {
+          "description": "The line (1-based).",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "quote": {
+          "description": "The code on that line.",
+          "type": "string"
+        },
+        "text": {
+          "description": "The person's words.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "line",
+        "quote",
+        "text"
+      ]
+    },
+    "PlanFrom": {
+      "description": "What plan through starts from.",
+      "oneOf": [
+        {
+          "description": "A new unit from a description.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "create"
+            },
+            "description": {
+              "description": "What it should do, verbatim.",
+              "type": "string"
+            },
+            "source": {
+              "description": "Where the description comes from.",
+              "$ref": "#/$defs/FeatureSource"
+            }
+          },
+          "required": [
+            "kind",
+            "description",
+            "source"
+          ]
+        },
+        {
+          "description": "The next skill after a stop, derived from the unit's files.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "continue"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        }
+      ]
+    },
+    "FeatureSource": {
+      "description": "Where a new feature's description comes from. Later rungs add theirs\n(an Explore brief, a promoted quick change) when they are built.",
+      "oneOf": [
+        {
+          "description": "The person's own words.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "description"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "description": "A GitHub issue's description, verbatim.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "issue"
+            },
+            "number": {
+              "description": "Its number.",
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "kind",
+            "number"
+          ]
+        }
+      ]
+    },
+    "Through": {
+      "description": "How far plan through goes.",
+      "oneOf": [
+        {
+          "description": "The spec only.",
+          "type": "string",
+          "const": "spec"
+        },
+        {
+          "description": "The spec and the plan.",
+          "type": "string",
+          "const": "plan"
+        },
+        {
+          "description": "The spec, the plan and the tasks.",
+          "type": "string",
+          "const": "tasks"
+        },
+        {
+          "description": "Then the format's check of the planning files.",
+          "type": "string",
+          "const": "analyze"
+        }
+      ]
+    },
+    "NewChoices": {
+      "description": "What the person chose; with the folder, everything the plan follows from.",
+      "type": "object",
+      "properties": {
+        "idea": {
+          "description": "What they are building, verbatim (kept for the first feature).",
+          "type": "string"
+        },
+        "stack": {
+          "description": "The stack; `None`: the suggestion.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Stack"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "format": {
+          "description": "The spec format (`speckit`, `openspec`); `None`: Spec Kit.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "extensions": {
+          "description": "Spec Kit extensions.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "no_preset": {
+          "description": "Leave out the speccoder Spec Kit preset.",
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "required": [
+        "idea",
+        "stack",
+        "format",
+        "extensions",
+        "no_preset"
+      ]
+    },
+    "Stack": {
+      "description": "A stack the plan can scaffold, or none.",
+      "oneOf": [
+        {
+          "description": "Rust with cargo.",
+          "type": "string",
+          "const": "rust"
+        },
+        {
+          "description": "Python with uv and pytest.",
+          "type": "string",
+          "const": "python"
+        },
+        {
+          "description": "TypeScript with npm and vitest.",
+          "type": "string",
+          "const": "node"
+        },
+        {
+          "description": "Go modules.",
+          "type": "string",
+          "const": "go"
+        },
+        {
+          "description": "No scaffold: the person adds code.",
+          "type": "string",
+          "const": "none"
+        }
+      ]
+    },
+    "AskUsage": {
+      "description": "Tokens a turn used.",
+      "type": "object",
+      "properties": {
+        "input": {
+          "description": "Input tokens, cache reads not counted.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "output": {
+          "description": "Output tokens.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "cache_read": {
+          "description": "Input read from the provider's cache.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "input",
+        "output",
+        "cache_read"
+      ]
+    }
+  },
+  "$id": "https://hupe1980.github.io/speccoder/schemas/v2/ask_thread.json"
+}

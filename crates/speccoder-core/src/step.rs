@@ -43,6 +43,8 @@ pub enum View {
     GitHub,
     /// A task's drawer (`subject`: its id).
     Task,
+    /// `ask`: the Ask panel.
+    Ask,
 }
 
 /// How an interface takes a line.
@@ -181,6 +183,7 @@ pub const SUBCOMMANDS: &[&str] = &[
     "acp",
     "actions",
     "approvals",
+    "ask",
     "attest",
     "auth",
     "bench",
@@ -915,6 +918,7 @@ fn speccoder(argv: &[String], constant: bool) -> How {
         },
         (Some("bug"), _) => view(View::Bug, None),
         (Some("do"), _) => view(View::QuickChange, None),
+        (Some("ask"), _) => view(View::Ask, None),
         (Some("pr"), _) if flag(a, "--remote").is_some() => {
             words(Some("name the remote it pushes to"))
         }

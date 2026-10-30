@@ -41,7 +41,6 @@ Every stop and finish ends with a `Next:` block of commands to copy (`next` in J
 | `speccoder config set KEY VALUE… [--yes]` | Set a key, comments kept; a prefix list only after its preview is confirmed |
 | `speccoder config coverage KEY PREFIX…` | What a prefix would newly allow ([prefix lists](@/docs/configuration.md#prefix-lists)) |
 | `speccoder config commit` | Commit `speccoder.toml` alone |
-| `speccoder auth [login [--with-token] \| status \| logout] [--host H]` | Sign in to GitHub (a device code, or a token on stdin), show the account, sign out ([GitHub](@/docs/github.md#sign-in)) |
 
 ## Plan
 
@@ -97,6 +96,7 @@ Every stop and finish ends with a `Next:` block of commands to copy (`next` in J
 | Command | What it does |
 |---|---|
 | `speccoder inbox` | What waits, in every feature (or `--feature`): *Blocked on you* (oldest first), *Ready to review* (riskiest first, with its reasons), *Working*, *Idle*; each item with its command |
+| `speccoder ask "QUESTION" [--task T]… [--file PATH[:A-B]]… [--continue [ID]] [--list]` | [Ask](@/docs/web.md#ask) about the project: a read-only answer with numbered sources speccoder checked against what was read; a suggested change is printed with its command, never run (payload `ask`) |
 | `speccoder report` | Every task and the evidence behind its tick, the requirement trace, and what is open |
 | `speccoder report --live` | What the current or last run is doing, from another terminal |
 | `speccoder report --approvals` | Calls waiting for a person, and the decisions made |
@@ -109,6 +109,7 @@ Every stop and finish ends with a `Next:` block of commands to copy (`next` in J
 
 | Command | What it does |
 |---|---|
+| `speccoder auth [login [--with-token] \| status \| logout] [--host H]` | Sign in to GitHub (a device code, or a token on stdin), show the account, sign out ([GitHub](@/docs/github.md#sign-in)) |
 | `speccoder suggest TEXT…` | The rung a description suggests — bug fix, quick change, feature or a question — and the cue that decided it (payload `rung_suggestion`); no model |
 | `speccoder preset add [--yes]` | Install or update the [speccoder Spec Kit preset](@/docs/planning.md#the-speccoder-preset) with `specify preset add --dev` |
 | `speccoder actions [--task T]` | What you can do now, as every interface offers it: each action's command, why it is blocked, what it asks for (payload `actions`) |

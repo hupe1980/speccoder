@@ -649,6 +649,18 @@ const WRITES_WITHOUT_A_KIND: &[(&str, &str)] = &[
         "marks the new project's idea as offered once (speccoder's state)",
     ),
     (
+        "ask",
+        "a read-only turn: it writes only the Ask plane's journal and the conversation's thread; a proposal is performed through /api/run",
+    ),
+    (
+        "ask_chip",
+        "a body, not a write: resolves a chip and records nothing",
+    ),
+    (
+        "ask_proposal",
+        "a body, not a write: checks an edited proposal again",
+    ),
+    (
         "shape",
         "a body, not a write: one model call proposes, the field's own action writes what the person accepts",
     ),

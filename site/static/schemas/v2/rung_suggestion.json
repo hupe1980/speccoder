@@ -9,7 +9,7 @@
       "$ref": "#/$defs/RungPick"
     },
     "available": {
-      "description": "Whether this build has it (`false` for `ask` until the Ask panel).",
+      "description": "Whether this build has it.",
       "type": "boolean"
     },
     "cue": {
@@ -28,7 +28,7 @@
       }
     },
     "command": {
-      "description": "The command that takes the suggested rung (none for `ask` and `none`).",
+      "description": "The command that takes the suggested rung (none for `none`).",
       "type": [
         "string",
         "null"
