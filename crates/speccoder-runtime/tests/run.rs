@@ -401,6 +401,54 @@ fn the_tool_call_limit_is_enforced() {
     assert_eq!(res.status(), CommandStatus::NeedsHuman);
 }
 
+/// The plane's token ceiling is the same stop as the turn and call limits:
+/// a person raises it or splits the task, in words, never `Exhausted(..)`.
+#[test]
+fn the_token_budget_is_a_budget_stop_in_words() {
+    let r = repo("");
+    let config = r.path().join("speccoder.toml");
+    let text = fs::read_to_string(&config).unwrap().replacen(
+        "[model]\n",
+        "[model]\nmax_run_tokens = 20000\n",
+        1,
+    );
+    fs::write(&config, text).unwrap();
+    git(r.path(), &["commit", "-qam", "a small budget"]);
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    // A turn as a real model reports it: `will_call_tool` counts nothing.
+    for i in 0..4 {
+        f.will_answer(agentplane::model::Completion {
+            tool_calls: vec![agentplane::model::ToolCall {
+                id: format!("c{i}"),
+                name: "list_files".to_owned(),
+                arguments: json!({}),
+            }],
+            usage: agentplane::model::Usage {
+                input_tokens: 9_000,
+                output_tokens: 100,
+                ..Default::default()
+            },
+            text: String::new(),
+            model: None,
+            stop_reason: Some("tool_use".to_owned()),
+            truncated: false,
+            structured: None,
+            continuation: None,
+            reasoning: None,
+            commentary: None,
+            compacted: None,
+        });
+    }
+    let res = run(r.path(), state.path(), "T005", d);
+    assert_eq!(res.status(), CommandStatus::NeedsHuman, "{}", res.message());
+    let rep = report(&res);
+    assert_eq!(rep.attempt_status, "budget_exhausted");
+    let reason = rep.reason.as_deref().unwrap_or_default();
+    assert!(reason.contains("max_run_tokens"), "{reason}");
+    assert!(!reason.contains("Exhausted("), "{reason}");
+}
+
 // ── US3 ────────────────────────────────────────────────────────────────────
 
 #[test]

@@ -877,12 +877,7 @@ impl Policy {
     }
 
     fn read(&self, args: &Value) -> Decision {
-        // No path, `.`, `./` or "": the whole workspace (models pass all of them).
-        let Some(path) = args
-            .get("path")
-            .and_then(Value::as_str)
-            .filter(|p| !matches!(p.trim(), "" | "." | "./"))
-        else {
+        let Some(path) = super::below_root(args.get("path").and_then(Value::as_str)) else {
             return Decision::Allow; // list/search over the whole workspace
         };
         match normalise(path) {

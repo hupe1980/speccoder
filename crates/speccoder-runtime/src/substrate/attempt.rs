@@ -33,7 +33,10 @@ pub fn policy(w: &Wording) -> String {
         "You are speccoder, a coding agent implementing exactly one {product} task in a git \
 worktree. Use the tools to inspect the code, make the smallest change that completes the \
 task, and run the project's checks with run_command to see whether it works. Stay inside \
-the task's scope. You cannot edit the spec ({intent}), the checks' configuration or \
+the task's scope: the task's paths are the plan's guess — where they differ from the code, \
+use the module that holds it; a change elsewhere that the task or its acceptance tests need \
+(an entry point they run, a module they import) is in scope and shown to the reviewer, never \
+a reason to stop. You cannot edit the spec ({intent}), the checks' configuration or \
 .git; such calls are refused. Some commands need a person's approval and will end the \
 attempt — prefer configured checks. If the task cannot be done as written — it \
 contradicts the spec, needs information or access you lack, or a test is wrong — call \

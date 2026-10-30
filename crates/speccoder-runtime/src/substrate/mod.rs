@@ -375,6 +375,22 @@ pub fn provider_refusal(failure: &str) -> Option<String> {
     Some(rest[..end].trim_end_matches(['"', ')']).trim().to_owned())
 }
 
+/// A plane budget that stopped an attempt, in words, with the setting
+/// that raises it.
+#[must_use]
+pub fn exhausted(limit: &agentplane::core::BudgetExceeded) -> String {
+    let said = match limit {
+        agentplane::core::BudgetExceeded::Recorded { limit, .. } => limit.clone(),
+        other => other.to_string(),
+    };
+    let raise = if said.starts_with("token") {
+        "; raise `[model] max_run_tokens`, or split the task"
+    } else {
+        ""
+    };
+    format!("the attempt's budget ran out: {said}{raise}")
+}
+
 /// Why a run did not succeed, for a person: a failure in its own words,
 /// without agentplane's effect key and attempt count (`'openai/gpt-5.4-mini'
 /// returned an unusable answer: …`), cut at 300 characters; else the

@@ -1835,8 +1835,17 @@ fn run_task_once(
                     // the fix, not left as a decoding error.
                     let reason = if rt.block_on(plane.holds_a_pre_054_decision(outcome.run_id)) {
                         substrate::PRE_054_DECISION.to_owned()
+                    } else if let agentplane::prelude::RunStatus::Exhausted(limit) = &outcome.status
+                    {
+                        // The plane's ceiling, not the skill's: the same stop.
+                        output["status"] = serde_json::json!("budget_exhausted");
+                        substrate::exhausted(limit)
+                    } else if let agentplane::prelude::RunStatus::Quarantined(why) = &outcome.status
+                    {
+                        output["status"] = serde_json::json!("quarantined");
+                        why.clone()
                     } else {
-                        format!("{:?}", outcome.status)
+                        substrate::why_not(&outcome.status)
                     };
                     output["reason"] = serde_json::Value::String(redact(&reason, secret));
                 }
@@ -1982,10 +1991,7 @@ fn run_task_once(
             // A resumed attempt that was killed while a command ran: nobody
             // can know whether the command finished, so agentplane did not
             // run it again. The attempt is saved and undone below.
-            let quarantined = !succeeded
-                && output["reason"]
-                    .as_str()
-                    .is_some_and(|r| r.starts_with("Quarantined("));
+            let quarantined = !succeeded && output["status"] == "quarantined";
             if quarantined {
                 output["reason"] = serde_json::Value::String(
                     "the attempt was interrupted while a tool call was running; whether it finished cannot be known, so it was not run again. The attempt is saved and undone; run again to start a fresh attempt".to_owned(),
@@ -1995,6 +2001,8 @@ fn run_task_once(
                 output["status"].as_str().unwrap_or("failed").to_owned()
             } else if quarantined {
                 "interrupted".to_owned()
+            } else if output["status"] == "budget_exhausted" {
+                "budget_exhausted".to_owned()
             } else {
                 "failed".to_owned()
             };

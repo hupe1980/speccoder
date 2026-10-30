@@ -122,6 +122,18 @@ fn list_and_search_respect_gitignore_and_skip_secrets() {
     let rs = call(&t, "list_files", json!({"path": "src", "glob": "**/*.rs"}));
     assert_eq!(rs["files"], json!(["src/lib.rs", "src/util.rs"]));
 
+    // `.` is the workspace root, as models pass it.
+    for root in [".", "./", ""] {
+        let all = call(&t, "list_files", json!({"path": root, "glob": "src/*.rs"}));
+        assert_eq!(
+            all["files"],
+            json!(["src/lib.rs", "src/util.rs"]),
+            "{root:?}"
+        );
+        let found = call(&t, "search_code", json!({"pattern": "TODO", "path": root}));
+        assert_eq!(found["total"], 1, "{root:?}");
+    }
+
     let found = call(&t, "search_code", json!({"pattern": "TODO"}));
     assert_eq!(found["matches"], json!(["src/lib.rs:3: // TODO: c"]));
     assert!(err(&call(&t, "search_code", json!({"pattern": "("}))).contains("invalid pattern"));
@@ -773,4 +785,52 @@ fn a_copied_value_at_a_cut_is_masked_before_it() {
             &v.to_string()[v.to_string().len().saturating_sub(300)..]
         );
     }
+}
+
+/// What the policy allows (or a person may approve), the tool carries out: the spellings models
+/// send for a directory or a file (`.`, `./src/`, `src//lib.rs`, none) are
+/// one rule for both, never allowed by one and refused by the other.
+#[test]
+fn every_spelling_the_policy_allows_the_tool_carries_out() {
+    use speccoder_runtime::tools::policy::Decision;
+    let w = worktree();
+    let t = tools(w.path());
+    let p = Policy::new(&[], &[vec!["echo".to_owned()]]);
+    let dirs = [
+        None,
+        Some(""),
+        Some("."),
+        Some("./"),
+        Some("src"),
+        Some("src/"),
+        Some("./src"),
+        Some("./src/"),
+    ];
+    let mut calls = Vec::new();
+    for d in dirs {
+        let with = |mut args: Value, key: &str| {
+            if let Some(d) = d {
+                args[key] = json!(d);
+            }
+            args
+        };
+        calls.push(("list_files", with(json!({}), "path")));
+        calls.push(("search_code", with(json!({"pattern": "fn"}), "path")));
+        calls.push(("run_command", with(json!({"argv": ["echo", "hi"]}), "cwd")));
+    }
+    for f in ["src/lib.rs", "./src/lib.rs", "src//lib.rs", "src/./lib.rs"] {
+        calls.push(("read_file", json!({"path": f})));
+    }
+    let mut checked = 0;
+    for (tool, args) in calls {
+        if !matches!(p.classify(tool, &args, None), Decision::Deny(_)) {
+            let out = call(&t, tool, args.clone());
+            assert_eq!(out["ok"], true, "{tool} {args}: allowed but refused: {out}");
+            checked += 1;
+        }
+    }
+    assert!(
+        checked >= 25,
+        "the policy allowed only {checked} of the calls"
+    );
 }

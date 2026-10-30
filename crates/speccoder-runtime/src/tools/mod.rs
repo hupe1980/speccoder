@@ -309,6 +309,12 @@ fn removes_tests(path: &str, before: &str, after: &str) -> Option<Value> {
     )))
 }
 
+/// A directory argument below the root, or `None` for the root itself:
+/// `.`, `./` and an empty string mean the workspace root (models pass them).
+pub(crate) fn below_root(dir: Option<&str>) -> Option<&str> {
+    dir.filter(|d| !matches!(d.trim(), "" | "." | "./"))
+}
+
 fn failure(error: impl Into<String>) -> Value {
     json!({ "ok": false, "error": error.into() })
 }
@@ -440,7 +446,7 @@ impl WorkspaceTools {
     }
 
     fn walk(&self, dir: Option<&str>, glob: Option<&str>) -> Result<Vec<PathBuf>, Value> {
-        let base = match dir {
+        let base = match below_root(dir) {
             Some(d) => resolve_existing(&self.root, d).map_err(|e| failure(e.0))?,
             None => self.root.clone(),
         };
@@ -540,8 +546,7 @@ impl WorkspaceTools {
 
     /// The directory a command runs in.
     pub(crate) fn command_cwd(&self, cwd: Option<&str>) -> Result<PathBuf, Value> {
-        // `.`, `./` and an empty string mean the workspace root (models pass them).
-        match cwd.filter(|d| !matches!(d.trim(), "" | "." | "./")) {
+        match below_root(cwd) {
             None => Ok(self.root.clone()),
             Some(d) => match resolve_existing(&self.root, d) {
                 Ok(p) if p.is_dir() => Ok(p),
