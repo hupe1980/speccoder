@@ -8,54 +8,44 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- **Shape: help with the words.** Under the fields whose words become the
-  judge or an instruction, a writing check as you type (vague words, no
-  MUST/SHALL, a When without a Then, no failure path; no model) and
-  **✦ Shape**: the model proposes the words in the spec's format and
-  language; code marks what it added and what of yours it dropped; every
-  value it introduced is an assumption to keep, ask about or remove, and
-  every sentence of yours that landed nowhere is added back or dropped on
-  purpose before the words can be used. `speccoder shape`,
-  `review edit --shape [--accept]`. A reason you give is never shaped.
-
-- **Needs You by what it means.** *Blocked on you* first (the oldest
-  first), then *Ready to review* with the riskiest evidence first, each
-  row's reasons as chips (regression-only, attested, below strength
-  target, stale, outside scope, by an agent), then *Working* and *Idle* —
-  in the app and in `speccoder inbox` (`--json`: `groups`, `working`,
-  `idle`, each item's `risk`).
-- Approvals of one tool are decided together: tick them, **Approve N** or
-  **Reject N…**; `speccoder task approve T1 T2 …`. Each stays its own
-  decision on its own object.
+- **Shape.** Under the fields whose words become the judge or an
+  instruction: a writing check as you type (vague words, no MUST/SHALL,
+  a When without a Then, no failure path; no model) and **✦ Shape**, which
+  proposes the words in the spec's format and language. Code marks what
+  it added and dropped; each value it introduced is kept, asked about or
+  removed, and each sentence of yours it left out is added back or
+  dropped, before the words are used. `speccoder shape`,
+  `review edit --shape`. A reason you give is never shaped.
+- **Needs You by what it means:** *Blocked on you* (oldest first), *Ready
+  to review* (riskiest evidence first, its reasons as chips), *Working*,
+  *Idle* — in the app and `speccoder inbox` (`--json`: `groups`,
+  `working`, `idle`, `risk`).
+- Approvals of one tool decided together: **Approve N** / **Reject N…**,
+  `speccoder task approve T1 T2 …`; each still its own decision.
 - A tick made by an external agent carries `Executor: <preset>`.
 
 ### Changed
 
-- Notifications come only when something blocks work: a call waiting or
-  a task that did not pass, named by the task's title ("T004 Handle
-  Unicode — cargo add x?"). A finished feature and a stall no longer
-  notify; add `"feature_done"`, `"stalled"` to `[ui.notify] on` for them.
-  The sidebar and Dock badges count only *Blocked on you*.
-
-- A parallel lane or a bisection worktree starts with the feature
+- Notifications only when something blocks work (a call waiting, a task
+  that did not pass), named by the task's title. The sidebar and Dock
+  badges count only *Blocked on you*.
+- A parallel lane or bisection worktree starts with the feature
   worktree's `target/` and Node folders cloned copy-on-write when the
-  lockfile is the same, instead of building and installing from nothing
-  (APFS, Btrfs, XFS; measured: a Rust lane's first `cargo test` 6.3 s →
-  0.2 s). Each lane gets its own files; `.venv/` is never cloned.
+  lockfile is the same (APFS, Btrfs, XFS): a Rust lane's first build went
+  from 6.3 s to 0.2 s. `.venv/` is never cloned.
 - Built on agentplane 0.56.1.
 
 ### Fixed
 
-- An OpenAI model that sends its structured answer as two messages no
-  longer stops the task with `ACCEPTANCE-UNWRITTEN` ("not JSON: trailing
-  characters"): each message is read on its own (agentplane 0.56.1).
-- When the acceptance tests or another author's answer cannot be used,
-  the stop says why in the provider's words (e.g. `'openai/gpt-5.4-mini'
-  returned an unusable answer: … not JSON: trailing characters …`)
-  instead of `generation did not succeed: failed`.
+- An OpenAI model sending its structured answer as two messages no longer
+  stops the task with `ACCEPTANCE-UNWRITTEN` (agentplane 0.56.1).
+- An author's answer that cannot be used says why, in the provider's
+  words, instead of `generation did not succeed: failed`.
 
 ### Upgrading
 
+- A finished feature and a stall no longer notify: add `"feature_done"`,
+  `"stalled"` to `[ui.notify] on` to keep them.
 - `speccoder replay` of a run recorded before this release reports a
   divergence (model-call arguments are written differently).
 
