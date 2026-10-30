@@ -39,7 +39,7 @@ pub(crate) fn saved_outcome(
     };
     let reason = match &report.verdict {
         _ if suspected => monitor_summary(report.monitor.as_ref()),
-        Some(Verdict::Failed { reasons }) => reasons.join("; "),
+        Some(Verdict::Failed { reasons }) => failed_because(report, reasons),
         _ => report
             .reason
             .clone()
@@ -98,7 +98,7 @@ pub(crate) fn status_and_message(
         ),
         (Some(Verdict::Failed { reasons }), _) => (
             CommandStatus::VerificationFailed,
-            format!("verdict: failed — {}", reasons.join("; ")),
+            format!("verdict: failed — {}", failed_because(report, reasons)),
         ),
         (Some(v), _) => (CommandStatus::Ok, format!("verdict: {}", verdict_word(v))),
         // A call nobody could ask about: named, with how to let it run.
@@ -141,6 +141,33 @@ pub(crate) fn status_and_message(
             ),
         ),
     }
+}
+
+/// The verdict's reasons, a failed check's with what it said first
+/// (``check `acceptance` failed: No module named pytest``).
+fn failed_because(report: &RunReport, reasons: &[String]) -> String {
+    let checks = report
+        .verification
+        .as_ref()
+        .map(|v| v.checks.as_slice())
+        .unwrap_or_default();
+    reasons
+        .iter()
+        .map(|r| {
+            let named = r
+                .strip_prefix("check `")
+                .and_then(|n| n.split_once('`'))
+                .map(|(n, _)| n);
+            match named
+                .and_then(|n| checks.iter().find(|c| c.name == n))
+                .and_then(speccoder_core::retry::first_cause)
+            {
+                Some(cause) => format!("{r}: {cause}"),
+                None => r.clone(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("; ")
 }
 
 /// What the model's closing report says is missing — its notes, else its
@@ -285,6 +312,40 @@ pub(crate) fn undemonstrated_why(acceptance: Option<&super::PreparedAcceptance>)
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn a_failed_check_says_what_it_said_first() {
+        use speccoder_core::verify::{CheckResult, CheckStatus, VerifyReport};
+        let mut report = bare_report("f", "T007", "w", "completed");
+        report.verification = Some(VerifyReport {
+            root: String::new(),
+            tier: "fast".to_owned(),
+            checks: vec![CheckResult {
+                name: "acceptance".to_owned(),
+                argv: vec!["python3".to_owned()],
+                status: CheckStatus::Failed,
+                exit_code: Some(1),
+                duration_ms: 0,
+                junit: false,
+                tests: None,
+                stdout_tail: String::new(),
+                stderr_tail: "/usr/bin/python3: No module named pytest\n".to_owned(),
+                truncated: false,
+                note: None,
+                flaky: false,
+            }],
+            comparison: None,
+            passed: false,
+        });
+        let reasons = [
+            "check `acceptance` failed".to_owned(),
+            "regression: t is failed".to_owned(),
+        ];
+        assert_eq!(
+            failed_because(&report, &reasons),
+            "check `acceptance` failed: /usr/bin/python3: No module named pytest; regression: t is failed"
+        );
+    }
 
     #[test]
     fn an_incomplete_attempt_quotes_what_the_model_says_is_missing() {

@@ -6,6 +6,15 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- A Python project's acceptance tests run with its own pytest (the
+  check's command, e.g. `uv run python -m pytest`), not `python3 -m
+  pytest`, which fails where the system Python has no pytest.
+- A failed verdict says what the failing check said first
+  (``check `acceptance` failed: No module named pytest``), at the stop
+  and in `task show`.
+
 ## [0.5.1] - 2026-10-30
 
 ### Fixed

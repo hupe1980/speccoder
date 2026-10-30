@@ -57,6 +57,10 @@ pub struct TestLayout {
     pub runners: Vec<RunnerLayout>,
     /// SHA-256 of the runners' canonical JSON.
     pub digest: String,
+    /// How the project starts pytest: a check's words up to `pytest`
+    /// (`uv run python -m pytest`), else `python3 -m pytest`.
+    #[serde(skip)]
+    pub pytest: Vec<String>,
 }
 
 fn parent(p: &str) -> &str {
@@ -347,7 +351,22 @@ pub fn detect(root: &Path, check_argvs: &[Vec<String>]) -> TestLayout {
     TestLayout {
         digest: crate::integrity::sha256_hex(canonical.as_bytes()),
         runners,
+        pytest: pytest_command(check_argvs),
     }
+}
+
+/// The first check that runs pytest, cut after its `pytest` word (its own
+/// flags and selection dropped); `python3 -m pytest` when none does.
+fn pytest_command(check_argvs: &[Vec<String>]) -> Vec<String> {
+    check_argvs
+        .iter()
+        .find_map(|a| {
+            let at = a
+                .iter()
+                .position(|w| w == "pytest" || w.ends_with("/pytest"))?;
+            Some(a[..=at].to_vec())
+        })
+        .unwrap_or_else(|| ["python3", "-m", "pytest"].map(str::to_owned).to_vec())
 }
 
 /// The layout's text for the project at `root`, its checks read from its
@@ -390,7 +409,7 @@ impl TestLayout {
         let stem = file.rsplit('/').next()?.split('.').next()?.to_owned();
         Some(match r.toolchain {
             Toolchain::Rust => format!("cargo test --test {stem}"),
-            Toolchain::Python => format!("python3 -m pytest {file}"),
+            Toolchain::Python => format!("{} {file}", self.pytest.join(" ")),
             Toolchain::JavaScript => format!("npx vitest run {file}"),
             Toolchain::Go => format!("go test ./{}", parent(file)),
         })
@@ -517,6 +536,48 @@ mod tests {
         );
         // Same checkout, same bytes.
         assert_eq!(detect(d.path(), &[]), l);
+    }
+
+    #[test]
+    fn a_python_acceptance_file_runs_with_the_project_s_pytest() {
+        let d = tempfile::tempdir().unwrap_or_else(|e| panic!("{e}"));
+        write(
+            d.path(),
+            &[
+                ("pytest.ini", "[pytest]\n"),
+                ("tests/test_a.py", "def test_a(): pass\n"),
+            ],
+        );
+        let argv = |s: &str| s.split(' ').map(str::to_owned).collect::<Vec<_>>();
+        let file = "tests/test_acceptance_us1.py";
+        let uv = detect(
+            d.path(),
+            &[argv(
+                "uv run --locked --offline python -m pytest -q --junitxml=.speccoder/junit.xml",
+            )],
+        );
+        assert_eq!(
+            uv.command_for(file).as_deref(),
+            Some("uv run --locked --offline python -m pytest tests/test_acceptance_us1.py")
+        );
+        assert!(uv.runs_only(
+            &argv("uv run --locked --offline python -m pytest tests/test_acceptance_us1.py"),
+            &[file]
+        ));
+        assert!(!uv.runs_only(
+            &argv("python3 -m pytest tests/test_acceptance_us1.py"),
+            &[file]
+        ));
+        assert_eq!(
+            detect(d.path(), &[argv(".venv/bin/pytest -q")])
+                .command_for(file)
+                .as_deref(),
+            Some(".venv/bin/pytest tests/test_acceptance_us1.py")
+        );
+        assert_eq!(
+            detect(d.path(), &[]).command_for(file).as_deref(),
+            Some("python3 -m pytest tests/test_acceptance_us1.py")
+        );
     }
 
     #[test]

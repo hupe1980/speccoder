@@ -124,6 +124,42 @@ pub fn digest(
     }
 }
 
+/// What a failed check says first, for a person: its failing tests by
+/// name, else the first error line of its output (rules of `=` or `_`
+/// skipped), cut at 160 characters. `None`: it said nothing.
+#[must_use]
+pub fn first_cause(c: &crate::verify::CheckResult) -> Option<String> {
+    let failing: Vec<&str> = c
+        .tests
+        .iter()
+        .flatten()
+        .filter(|t| t.outcome.is_failing())
+        .map(|t| t.id.as_str())
+        .collect();
+    let said = match failing.as_slice() {
+        [] => {
+            let text = output(&c.stderr_tail, &c.stdout_tail);
+            let lines = || {
+                text.lines()
+                    .map(str::trim)
+                    .filter(|l| !l.is_empty() && !l.starts_with("===") && !l.starts_with("___"))
+            };
+            lines()
+                .find(|l| is_error_line(l))
+                .or_else(|| lines().next())?
+                .to_owned()
+        }
+        [one] => format!("{one} fails"),
+        [first, rest @ ..] => format!("{first} and {} more fail", rest.len()),
+    };
+    let cut: String = said.chars().take(160).collect();
+    Some(if cut.len() < said.len() {
+        format!("{cut}…")
+    } else {
+        cut
+    })
+}
+
 /// The failure's identity: failing checks by name, each with its first
 /// error line, numbers normalised. Equal fingerprints mean the same failure.
 #[must_use]
