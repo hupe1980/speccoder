@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crates/*"]
 
 [workspace.package]
-version = "0.5.1"
+version = "0.5.2"
 edition = "2024"
 rust-version = "1.99"
 license = "MIT OR Apache-2.0"
@@ -14,11 +14,11 @@ keywords = ["spec-kit", "coding-agent", "spec-driven", "llm", "cli"]
 categories = ["command-line-utilities", "development-tools"]
 
 [workspace.dependencies]
-speccoder-core = { path = "crates/speccoder-core", version = "0.5.1" }
-speccoder-speckit = { path = "crates/speccoder-speckit", version = "0.5.1" }
-speccoder-openspec = { path = "crates/speccoder-openspec", version = "0.5.1" }
-speccoder-runtime = { path = "crates/speccoder-runtime", version = "0.5.1" }
-speccoder-web = { path = "crates/speccoder-web", version = "0.5.1" }
+speccoder-core = { path = "crates/speccoder-core", version = "0.5.2" }
+speccoder-speckit = { path = "crates/speccoder-speckit", version = "0.5.2" }
+speccoder-openspec = { path = "crates/speccoder-openspec", version = "0.5.2" }
+speccoder-runtime = { path = "crates/speccoder-runtime", version = "0.5.2" }
+speccoder-web = { path = "crates/speccoder-web", version = "0.5.2" }
 
 clap = { version = "4.6", features = ["derive", "env"] }
 serde = { version = "1", features = ["derive"] }

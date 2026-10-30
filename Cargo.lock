@@ -5781,7 +5781,7 @@ dependencies = [
 
 [[package]]
 name = "speccoder"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "assert_cmd",
  "base64 0.22.1",
@@ -5804,7 +5804,7 @@ dependencies = [
 
 [[package]]
 name = "speccoder-core"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "proptest",
  "schemars 1.2.3",
@@ -5815,7 +5815,7 @@ dependencies = [
 
 [[package]]
 name = "speccoder-openspec"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "proptest",
  "pulldown-cmark",
@@ -5830,7 +5830,7 @@ dependencies = [
 
 [[package]]
 name = "speccoder-runtime"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "agent-client-protocol",
  "agentplane",
@@ -5867,7 +5867,7 @@ dependencies = [
 
 [[package]]
 name = "speccoder-speckit"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "pulldown-cmark",
  "serde",
@@ -5879,7 +5879,7 @@ dependencies = [
 
 [[package]]
 name = "speccoder-web"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "axum",
  "futures-util",
