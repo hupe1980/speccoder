@@ -69,7 +69,9 @@ pub struct Notify {
 impl Default for Notify {
     fn default() -> Self {
         Self {
-            on: Signal::ALL.to_vec(),
+            // Only what blocks work: a call waiting, a task that did not
+            // pass. A finished feature or a stall notifies when listed.
+            on: vec![Signal::Approval, Signal::TaskFailed],
             unfocused_only: true,
             method: Method::Auto,
             stall_after: Duration::from_secs(15 * 60),

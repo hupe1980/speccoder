@@ -79,8 +79,8 @@ Every stop and finish ends with a `Next:` block of commands to copy (`next` in J
 | `speccoder bug confirm UNIT/TASK [--digest D] [--reject --reason R] [--no-run]` | Confirm a bug's reproductions (bound to the digest shown), or reject them |
 | `speccoder bug keep UNIT/TASK --reason R` | An already-fixed bug: commit its reproductions as a regression test, attest the task |
 | `speccoder bug run (--task UNIT/TASK \| --slug S) [--no-prompt]` | Reproduce a bug again, or run its confirmed fix |
-| `speccoder task approve [T] [--call ID] [--all] [--scope once\|task\|run] [--note N]` | Approve a waiting call (default scope `task`; [approvals](@/docs/approvals.md#later)). `--all` without `T`: every waiting call of the feature |
-| `speccoder task reject [T] [--call ID] [--all] --reason R` | Reject it; the model is told why |
+| `speccoder task approve [T…] [--call ID] [--all] [--scope once\|task\|run] [--note N]` | Approve a waiting call (default scope `task`; [approvals](@/docs/approvals.md#later)); several tasks: each one's call on its own, exit 23 unless every one was decided. `--all` without `T`: every waiting call of the feature |
+| `speccoder task reject [T…] [--call ID] [--all] --reason R` | Reject it; the model is told why |
 | `speccoder task accept T --reason R [--in-place]` | Tick a task on your word (`attested`) |
 | `speccoder task skip T (--reason R \| --undo)` | Skip a task, or take the skip back; its dependents stay blocked |
 | `speccoder task done T [--reason R]` | I did it: tick a step you took on your word (`attested`; the reason defaults to "I did it") |
@@ -95,7 +95,7 @@ Every stop and finish ends with a `Next:` block of commands to copy (`next` in J
 
 | Command | What it does |
 |---|---|
-| `speccoder inbox` | Every decision waiting, in every feature (or `--feature`), most urgent first, with its command |
+| `speccoder inbox` | What waits, in every feature (or `--feature`): *Blocked on you* (oldest first), *Ready to review* (riskiest first, with its reasons), *Working*, *Idle*; each item with its command |
 | `speccoder report` | Every task and the evidence behind its tick, the requirement trace, and what is open |
 | `speccoder report --live` | What the current or last run is doing, from another terminal |
 | `speccoder report --approvals` | Calls waiting for a person, and the decisions made |

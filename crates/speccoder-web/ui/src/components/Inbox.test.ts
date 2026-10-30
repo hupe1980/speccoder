@@ -101,5 +101,63 @@ describe("Inbox", () => {
     done.click();
     expect(host.app.perform).toHaveBeenCalledWith(expect.objectContaining({ run: { kind: "done", task: "T019" } }));
   });
-});
 
+  const item = (kind: string, group: string, feature: string, extra: Record<string, unknown> = {}) => ({
+    kind, group, feature, task: null, title: `${kind} in ${feature}`, detail: "", since: null, actions: [], unverified: null, ...extra,
+  });
+  const approval = (task: string, tool: string) => {
+    const act = (kind: string, input: string | null) => ({ ...action(kind, `speccoder task ${kind} ${task}`, kind), id: { kind, subject: task }, input, run: { kind, task } });
+    return item("approval", "blocked_on_you", "001-x", { task, tool, title: `${task} waits for your approval`, actions: [act("approve", null), act("reject", "Why (the model is told)")] });
+  };
+
+  it("puts what blocks work first, the riskiest review next, then working and idle", () => {
+    host.app.inbox = {
+      data: {
+        features: 3,
+        groups: [],
+        working: [{ feature: "002-run", task: "T003", started: Math.floor(Date.now() / 1000) - 600, pid: 7, state: "running" }],
+        idle: ["003-quiet"],
+        items: [
+          item("question", "blocked_on_you", "001-x"),
+          item("brand_new_kind", "blocked_on_you", "001-x"),
+          item("unverified", "ready_to_review", "001-x", { risk: [{ reason: "regression_only", count: 3, text: "3 regression-only" }, { reason: "attested", count: 1, text: "1 attested" }] }),
+          item("handoff", "ready_to_review", "004-strong"),
+        ],
+      },
+    };
+    shown = mount(Inbox, { target: document.body });
+    flushSync();
+    const headings = [...document.querySelectorAll("h2 .gtitle")].map((h) => h.textContent);
+    expect(headings).toEqual(["Blocked on you", "Ready to review"]);
+    const text = document.body.textContent ?? "";
+    // A kind is a row's label; one the page does not know keeps its name.
+    expect(text).toContain("Open Questions");
+    expect(text).toContain("brand new kind");
+    expect([...document.querySelectorAll(".risk")].map((r) => r.textContent?.trim())).toEqual(["3 regression-only", "1 attested", "verified"]);
+    expect(text).toContain("T003");
+    expect(text).toContain("working · 10 min");
+    const idle = [...document.querySelectorAll(".idle button")].map((b) => b.textContent);
+    expect(idle).toEqual(["quiet"]);
+    expect(document.querySelector(".sub")?.textContent?.replace(/\s+/g, " ").trim()).toBe("2 blocked on you · 2 ready to review · 1 working");
+  });
+
+  it("decides several approvals of one tool, each on its own", async () => {
+    host.app.perform.mockClear();
+    host.app.inbox = { data: { features: 1, groups: [], working: [], idle: [], items: [approval("T1", "run_command"), approval("T2", "run_command"), approval("T3", "write_file")] } };
+    shown = mount(Inbox, { target: document.body });
+    flushSync();
+    const pick = (t: string) => (document.querySelector(`input[aria-label="Select ${t}"]`) as HTMLInputElement).click();
+    pick("T1");
+    pick("T3");
+    flushSync();
+    expect(document.querySelector(".batch")?.textContent).toContain("One kind of call at a time");
+    pick("T3");
+    pick("T2");
+    flushSync();
+    const approve = [...document.querySelectorAll(".batch button")].find((b) => b.textContent === "Approve 2") as HTMLButtonElement;
+    approve.click();
+    await vi.waitFor(() => expect(host.app.perform).toHaveBeenCalledTimes(2));
+    expect(host.app.perform).toHaveBeenNthCalledWith(1, expect.objectContaining({ run: { kind: "approve", task: "T1" } }), undefined);
+    expect(host.app.perform).toHaveBeenNthCalledWith(2, expect.objectContaining({ run: { kind: "approve", task: "T2" } }), undefined);
+  });
+});

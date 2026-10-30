@@ -6,7 +6,26 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Needs You by what it means.** *Blocked on you* first (the oldest
+  first), then *Ready to review* with the riskiest evidence first, each
+  row's reasons as chips (regression-only, attested, below strength
+  target, stale, outside scope, by an agent), then *Working* and *Idle* —
+  in the app and in `speccoder inbox` (`--json`: `groups`, `working`,
+  `idle`, each item's `risk`).
+- Approvals of one tool are decided together: tick them, **Approve N** or
+  **Reject N…**; `speccoder task approve T1 T2 …`. Each stays its own
+  decision on its own object.
+- A tick made by an external agent carries `Executor: <preset>`.
+
 ### Changed
+
+- Notifications come only when something blocks work: a call waiting or
+  a task that did not pass, named by the task's title ("T004 Handle
+  Unicode — cargo add x?"). A finished feature and a stall no longer
+  notify; add `"feature_done"`, `"stalled"` to `[ui.notify] on` for them.
+  The sidebar and Dock badges count only *Blocked on you*.
 
 - A parallel lane or a bisection worktree starts with the feature
   worktree's `target/` and Node folders cloned copy-on-write when the

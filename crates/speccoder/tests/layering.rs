@@ -950,7 +950,7 @@ fn needs_you_has_a_place_for_every_kind_the_inbox_lists() {
     )
     .unwrap();
     let sections = page
-        .split("const sections")
+        .split("const kinds")
         .nth(1)
         .and_then(|s| s.split("\n  };").next())
         .unwrap();
@@ -961,9 +961,9 @@ fn needs_you_has_a_place_for_every_kind_the_inbox_lists() {
         .collect();
     assert!(
         missing.is_empty(),
-        "Inbox.svelte has no section for {missing:?} (they show under Other until it does)"
+        "Inbox.svelte has no label for {missing:?} (they show under their raw name until it does)"
     );
-    assert!(page.contains("\"other\""), "no fallback section");
+    assert!(page.contains("kinds[i.kind] ??"), "no fallback label");
 }
 
 /// The allow lists an approval would widen: only the runtime's action arms

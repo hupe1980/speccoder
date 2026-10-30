@@ -2207,6 +2207,49 @@ fn command_name(command: Option<&Command>) -> &'static str {
     }
 }
 
+/// `decide` for each of `tasks` (none: `--all`'s feature-wide form), each
+/// on its own: one task's result as it is; several, every task's line,
+/// `ok` only when each was decided.
+fn each_task(
+    command: &str,
+    tasks: &[String],
+    call: Option<&str>,
+    decide: impl Fn(Option<&str>) -> speccoder_core::CommandResult,
+) -> speccoder_core::CommandResult {
+    use speccoder_core::{CommandResult, CommandStatus};
+    match tasks {
+        [] => decide(None),
+        [one] => decide(Some(one)),
+        _ if call.is_some() => CommandResult::new(
+            command,
+            CommandStatus::UsageError,
+            "--call names one waiting call: give one task with it",
+        ),
+        many => {
+            let results: Vec<CommandResult> = many.iter().map(|t| decide(Some(t))).collect();
+            let decided = results
+                .iter()
+                .filter(|r| r.status() == CommandStatus::Ok)
+                .count();
+            let lines: Vec<String> = many
+                .iter()
+                .zip(&results)
+                .map(|(t, r)| format!("{t}: {}", r.message()))
+                .collect();
+            let status = if decided == many.len() {
+                CommandStatus::Ok
+            } else {
+                CommandStatus::NeedsHuman
+            };
+            CommandResult::new(
+                command,
+                status,
+                &format!("{decided} of {} decided\n{}", many.len(), lines.join("\n")),
+            )
+        }
+    }
+}
+
 /// `speccoder task <verb> TASK`.
 fn task_action(
     action: &cli::TaskAction,
@@ -2217,46 +2260,50 @@ fn task_action(
     use speccoder_runtime::approvals::{Choice, Scope, Verb, decide};
     match action {
         T::Approve {
-            task,
+            tasks,
             call,
             all,
             scope,
             note,
-        } => decide(
-            path,
-            feature,
-            Verb::Decide(Choice {
-                task: task.as_deref(),
-                call: call.as_deref(),
-                all: *all,
-                approve: true,
-                scope: (*scope).into(),
-                note: note.as_deref(),
-                reason: None,
-                digest: None,
-            }),
-            speccoder_core::actions::Via::Terminal,
-        ),
+        } => each_task("task approve", tasks, call.as_deref(), |task| {
+            decide(
+                path,
+                feature,
+                Verb::Decide(Choice {
+                    task,
+                    call: call.as_deref(),
+                    all: *all,
+                    approve: true,
+                    scope: (*scope).into(),
+                    note: note.as_deref(),
+                    reason: None,
+                    digest: None,
+                }),
+                speccoder_core::actions::Via::Terminal,
+            )
+        }),
         T::Reject {
-            task,
+            tasks,
             call,
             all,
             reason,
-        } => decide(
-            path,
-            feature,
-            Verb::Decide(Choice {
-                task: task.as_deref(),
-                call: call.as_deref(),
-                all: *all,
-                approve: false,
-                scope: Scope::Task,
-                note: None,
-                reason: Some(reason),
-                digest: None,
-            }),
-            speccoder_core::actions::Via::Terminal,
-        ),
+        } => each_task("task reject", tasks, call.as_deref(), |task| {
+            decide(
+                path,
+                feature,
+                Verb::Decide(Choice {
+                    task,
+                    call: call.as_deref(),
+                    all: *all,
+                    approve: false,
+                    scope: Scope::Task,
+                    note: None,
+                    reason: Some(reason),
+                    digest: None,
+                }),
+                speccoder_core::actions::Via::Terminal,
+            )
+        }),
         T::Accept {
             task,
             reason,
@@ -2636,4 +2683,49 @@ fn copy(text: &str) -> bool {
             })
             .is_some_and(|s| s.success())
     })
+}
+
+#[cfg(test)]
+mod each_task_tests {
+    use super::each_task;
+    use speccoder_core::{CommandResult, CommandStatus};
+
+    #[test]
+    fn several_tasks_are_decided_each_and_say_which_were_not() {
+        let decide = |task: Option<&str>| match task {
+            Some("T2") => CommandResult::new(
+                "task approve",
+                CommandStatus::NotFound,
+                "T2 waits for nothing",
+            ),
+            Some(t) => {
+                CommandResult::new("task approve", CommandStatus::Ok, &format!("approved {t}"))
+            }
+            None => CommandResult::new("task approve", CommandStatus::Ok, "every call"),
+        };
+        let tasks = |t: &[&str]| t.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>();
+        let r = each_task("task approve", &tasks(&["T1", "T2", "T3"]), None, decide);
+        assert_eq!(r.status(), CommandStatus::NeedsHuman);
+        assert_eq!(
+            r.message(),
+            "2 of 3 decided\nT1: approved T1\nT2: T2 waits for nothing\nT3: approved T3"
+        );
+        assert_eq!(
+            each_task("task approve", &tasks(&["T1", "T3"]), None, decide).status(),
+            CommandStatus::Ok
+        );
+        // One task, or none (`--all`), is that decision's own result.
+        assert_eq!(
+            each_task("task approve", &tasks(&["T2"]), None, decide).status(),
+            CommandStatus::NotFound
+        );
+        assert_eq!(
+            each_task("task approve", &[], None, decide).message(),
+            "every call"
+        );
+        assert_eq!(
+            each_task("task approve", &tasks(&["T1", "T3"]), Some("c1"), decide).status(),
+            CommandStatus::UsageError
+        );
+    }
 }

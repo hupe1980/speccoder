@@ -182,7 +182,10 @@ class AppState {
         get<Document[]>(`/api/documents${q({ feature: f })}`),
       ]);
       void get<Reply<Inbox>>("/api/inbox")
-        .then((i) => (this.inbox = i))
+        .then((i) => {
+          this.inbox = i;
+          this.#entered(i.data?.items ?? []);
+        })
         .catch(() => {});
       void get<Reply<{ checks: { check: string; level: string; detail: string; fix: string[]; code?: string | null }[] }>>(`/api/doctor${q({ feature: f })}`)
         .then((d) => {
@@ -546,6 +549,26 @@ class AppState {
         break;
       }
     }
+  }
+
+  /** How many items block work: the sidebar's badge. */
+  get blocked(): number {
+    return (this.inbox?.data?.items ?? []).filter((i) => i.group !== "ready_to_review").length;
+  }
+
+  #seen: Set<string> | null = null;
+  /** An item that has just become blocked on the person calls them (once;
+   *  what was there when the page opened does not). */
+  #entered(items: { kind: string; group: string; feature: string; task?: string | null; title: string; detail: string }[]) {
+    const key = (i: (typeof items)[number]) => `${i.kind}/${i.feature}/${i.task ?? ""}`;
+    const blocked = items.filter((i) => i.group !== "ready_to_review");
+    if (this.#seen) {
+      // This app's own run asks through its sheet and calls already.
+      const fresh = blocked.filter((i) => !this.#seen!.has(key(i)) && !(this.waiting && i.task === this.task?.id));
+      const first = fresh[0];
+      if (first) this.#call(fresh.length === 1 ? first.title : `${fresh.length} things need you`, fresh.length === 1 ? first.detail : fresh.map((i) => i.title).join(" · "));
+    }
+    this.#seen = new Set(blocked.map(key));
   }
 
   /** A run that waits for a person while they look elsewhere calls them:

@@ -1477,48 +1477,120 @@ pub fn config(c: &speccoder_core::ConfigReport) -> Vec<String> {
 pub fn inbox(r: &speccoder_core::InboxReport, look: &crate::style::Look) -> Vec<String> {
     use crate::style::{Glyph, Token};
     let mut out = Vec::new();
-    for i in &r.items {
-        let g = match i.kind.as_str() {
-            "unknown" | "approval" | "ruling" | "gaming" | "stale" | "aside" => Glyph::Attention,
-            "stuck" => Glyph::Failed,
-            "handoff" => Glyph::Verified,
-            "unverified" => Glyph::of_state("regression_only"),
-            _ => Glyph::Ready,
-        };
-        let place = match &i.task {
-            Some(t) => format!("{} {t}", i.feature),
-            None => i.feature.clone(),
-        };
-        out.push(format!(
-            "{} {:<9} {}  {}",
-            look.cell(g),
-            i.kind,
-            look.paint(Token::Muted, &place),
-            i.title
-        ));
-        if let Some(u) = &i.unverified {
-            // One line per reason, its tasks after it.
-            for c in &u.counts {
-                out.push(format!("            {} · {}", c.text, c.tasks.join(" ")));
-            }
-        } else if !i.detail.is_empty() {
-            out.push(format!("            {}", shorten(&i.detail, 100)));
+    let heading = |out: &mut Vec<String>, title: &str, n: usize| {
+        if !out.is_empty() {
+            out.push(String::new());
         }
-        if let Some((first, rest)) = i.actions.split_first() {
-            out.push(format!(
-                "            {}",
-                look.paint(Token::Accent, &format!("→ {}", first.command))
-            ));
-            let others: Vec<&str> = rest
-                .iter()
-                .map(|a| a.label.split(' ').next().unwrap_or_default())
-                .collect();
-            if !others.is_empty() {
-                out.push(format!("            or: {}", others.join(", ")));
+        out.push(look.paint(Token::Accent, &format!("{title} ({n})")));
+    };
+    for g in &r.groups {
+        let items: Vec<&speccoder_core::InboxItem> =
+            r.items.iter().filter(|i| i.group == g.group).collect();
+        match g.group.as_str() {
+            "working" if !r.working.is_empty() => {
+                heading(&mut out, &g.title, r.working.len());
+                for w in &r.working {
+                    let place = match &w.task {
+                        Some(t) => format!("{} {t}", w.feature),
+                        None => w.feature.clone(),
+                    };
+                    let state = match w.state.as_str() {
+                        "running" => format!("running for {} (pid {})", elapsed(w.started), w.pid),
+                        _ => format!("state unknown: pid {} is gone and it did not finish", w.pid),
+                    };
+                    out.push(format!(
+                        "{} {place}  {}",
+                        look.cell(Glyph::Ready),
+                        look.paint(Token::Muted, &state)
+                    ));
+                }
             }
+            "idle" if !r.idle.is_empty() => {
+                heading(&mut out, &g.title, r.idle.len());
+                out.push(format!(
+                    "  {}",
+                    look.paint(Token::Muted, &r.idle.join(", "))
+                ));
+            }
+            _ if !items.is_empty() => {
+                heading(&mut out, &g.title, items.len());
+                for i in items {
+                    inbox_item(&mut out, i, look);
+                }
+            }
+            _ => {}
         }
     }
     out
+}
+
+/// One Needs You item: its line, what it rests on, its decisions.
+fn inbox_item(out: &mut Vec<String>, i: &speccoder_core::InboxItem, look: &crate::style::Look) {
+    use crate::style::{Glyph, Token};
+    let g = match i.kind.as_str() {
+        "unknown" | "approval" | "ruling" | "gaming" | "stale" | "aside" => Glyph::Attention,
+        "stuck" => Glyph::Failed,
+        "handoff" if i.risk.is_empty() => Glyph::Verified,
+        "handoff" | "unverified" => Glyph::of_state("regression_only"),
+        _ => Glyph::Ready,
+    };
+    let place = match &i.task {
+        Some(t) => format!("{} {t}", i.feature),
+        None => i.feature.clone(),
+    };
+    out.push(format!(
+        "{} {:<9} {}  {}",
+        look.cell(g),
+        i.kind,
+        look.paint(Token::Muted, &place),
+        i.title
+    ));
+    if !i.risk.is_empty() {
+        let chips: Vec<&str> = i.risk.iter().map(|r| r.text.as_str()).collect();
+        out.push(format!(
+            "            {}",
+            look.paint(Token::Attention, &chips.join(" · "))
+        ));
+    } else if i.kind == "handoff" {
+        out.push(format!(
+            "            {}",
+            look.paint(Token::Muted, "verified")
+        ));
+    }
+    if let Some(u) = &i.unverified {
+        // One line per reason, its tasks after it.
+        for c in &u.counts {
+            out.push(format!("            {} · {}", c.text, c.tasks.join(" ")));
+        }
+    } else if !i.detail.is_empty() {
+        out.push(format!("            {}", shorten(&i.detail, 100)));
+    }
+    if let Some((first, rest)) = i.actions.split_first() {
+        out.push(format!(
+            "            {}",
+            look.paint(Token::Accent, &format!("→ {}", first.command))
+        ));
+        let others: Vec<&str> = rest
+            .iter()
+            .map(|a| a.label.split(' ').next().unwrap_or_default())
+            .collect();
+        if !others.is_empty() {
+            out.push(format!("            or: {}", others.join(", ")));
+        }
+    }
+}
+
+/// How long ago `at` (Unix seconds) was: `just now`, `12 min`, `3 h`, `2 d`.
+fn elapsed(at: u64) -> String {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
+    match now.saturating_sub(at) / 60 {
+        0 => "just now".to_owned(),
+        m @ 1..60 => format!("{m} min"),
+        m @ 60..1440 => format!("{} h", m / 60),
+        m => format!("{} d", m / 1440),
+    }
 }
 
 /// `review`: one card per requirement — its state, its wording, who

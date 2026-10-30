@@ -246,7 +246,7 @@
       <span class="thumb" aria-hidden="true"></span>
       {#each views as x, i (x.v)}
         <button bind:this={tabs[i]} role="tab" aria-selected={app.view === x.v} class:on={app.view === x.v} onclick={() => go(x.v)} title="{x.label} ({x.key})" aria-label={x.label}>
-          <Icon name={x.icon} size={15} /><span class="label">{x.label}</span>{#if x.v === "inbox" && app.inbox?.data?.items.length}<span class="badge" aria-label="{app.inbox.data.items.length} waiting">{app.inbox.data.items.length}</span>{/if}
+          <Icon name={x.icon} size={15} /><span class="label">{x.label}</span>{#if x.v === "inbox" && app.blocked}<span class="badge" aria-label="{app.blocked} blocked on you">{app.blocked}</span>{/if}
         </button>
       {/each}
     </div>

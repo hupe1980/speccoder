@@ -22,7 +22,7 @@ Six views, in the toolbar and on `1`–`6`:
 
 | View | Shows |
 |---|---|
-| **Needs You** | The start page: every decision waiting, in every feature, most urgent first |
+| **Needs You** | The start page: what blocks work, what is ready to review (riskiest first), what runs and what is idle |
 | **Overview** | Every feature at a glance, and the repository's open GitHub issues |
 | **Board** | The feature's tasks in lanes by verdict |
 | **Code** | What the feature's branch changed, and its files |
@@ -37,9 +37,11 @@ A project without `speccoder.toml` opens in the **setup assistant**: what was fo
 
 <figure class="shot"><img class="shot-light" src="../../screenshots/inbox-light.webp" alt="Needs You: a call waiting for approval, an open question and requirements to review, across two features" width="1440" height="900" loading="lazy" decoding="async"><img class="shot-dark" src="../../screenshots/inbox-dark.webp" alt="Needs You: a call waiting for approval, an open question and requirements to review, across two features" width="1440" height="900" loading="lazy" decoding="async"></figure>
 
-- Groups, in order: Waiting for Approval; the bug stops (Confirm a Bug's Reproduction, Could Not Reproduce, Unchanged Does Not Hold, Reproduction Too Weak, Already Fixed); Calls Waiting Together (the [batch](@/docs/approvals.md#the-asking-budget)); Rule on the Tests; Suspected Shortcuts; Little Was Verified (most ticks regression-only, the reasons by count, each task a button); The Spec Changed; Read Two Ways; Open Questions; Review the Spec; Change Requests; Yours to Do (a `[YOU]` task or an honest stop: the agent's reason as its claim, **I Did It**, **Hint & Retry** with the note inline, **Skip…**); Refused on Autopilot; Did Not Pass; Changes Set Aside; Plans to Commit; Ready to Hand Off.
+- **Blocked on you** first: what nothing moves without — calls waiting, questions, rulings, bug stops, tasks that did not pass, steps only you can take — the oldest first. **Ready to review** next: work done or held, the riskiest evidence first, each row's reasons as chips (*3 regression-only*, *1 attested*, *below strength target*, *stale*, *outside scope*, *by an agent*; strong work says *verified*). The kind ("Waiting for Approval", "Rule on the Tests", "Yours to Do") is each row's label.
+- **Working** above them: the project's run in progress, in this app or in a terminal, with **Watch**. **Idle** below: features with nothing running and nothing waiting.
+- Approvals of one tool can be ticked and decided together: **Approve 3** or **Reject 3…** (one reason, told to each); each is still its own decision on its own exact object.
 - Each row decides in place; **Open** shows it with its evidence (a bug's row opens the [Bug sheet](#bug-sheet)). A disabled button says why on hover.
-- The tab and the page title carry the count. **Quick Change** (`q`) opens a sheet for a [quick change](@/docs/running.md#quick-changes). The terminal's equivalent is `speccoder inbox`.
+- The sidebar and Dock badges count only *Blocked on you*; a desktop notification comes when something new lands there. **Quick Change** (`q`) opens a sheet for a [quick change](@/docs/running.md#quick-changes). The terminal's equivalent is `speccoder inbox`.
 
 ### Overview
 

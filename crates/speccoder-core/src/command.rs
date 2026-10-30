@@ -461,6 +461,55 @@ pub struct InboxReport {
     pub items: Vec<InboxItem>,
     /// Features looked at.
     pub features: usize,
+    /// Every group with its count, in the order Needs You shows them:
+    /// `blocked_on_you`, `ready_to_review`, `working`, `idle`.
+    #[serde(default)]
+    pub groups: Vec<GroupCount>,
+    /// Runs in progress (or whose state is unknown).
+    #[serde(default)]
+    pub working: Vec<WorkingRun>,
+    /// Features with nothing running and nothing waiting.
+    #[serde(default)]
+    pub idle: Vec<String>,
+}
+
+/// A group of Needs You and how much is in it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct GroupCount {
+    /// `blocked_on_you`, `ready_to_review`, `working` or `idle`.
+    pub group: String,
+    /// As people read it.
+    pub title: String,
+    /// Items, runs or features in it.
+    pub count: usize,
+}
+
+/// A run in progress, this host's or another speccoder process's.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct WorkingRun {
+    /// The feature.
+    pub feature: String,
+    /// The task it works on, when known.
+    pub task: Option<String>,
+    /// Started (Unix seconds).
+    pub started: u64,
+    /// The process.
+    pub pid: u32,
+    /// `running`, or `unknown`: its process is gone and it did not finish.
+    pub state: String,
+}
+
+/// One reason finished work needs a closer look, with how many ticks.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct RiskReason {
+    /// `regression_only`, `attested`, `strength_below_target`, `stale`,
+    /// `scope_outside` or `external_executor`, the riskiest first
+    /// (`speccoder_core::inbox::Risk`).
+    pub reason: String,
+    /// Ticks with it.
+    pub count: usize,
+    /// The chip (`2 regression-only`).
+    pub text: String,
 }
 
 /// One decision waiting for a person.
@@ -484,6 +533,14 @@ pub struct InboxItem {
     pub kind: String,
     /// Its group: `blocked_on_you` or `ready_to_review`.
     pub group: String,
+    /// Ready to review: what the evidence leaves to the person, the
+    /// riskiest first; none for strong verified work.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub risk: Vec<RiskReason>,
+    /// An approval: the tool its call is for (approvals of one tool can be
+    /// decided together, each on its own object).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool: Option<String>,
     /// The feature.
     pub feature: String,
     /// The task, when it is about one.

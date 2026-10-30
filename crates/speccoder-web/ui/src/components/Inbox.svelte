@@ -1,7 +1,8 @@
 <script lang="ts">
-  // Needs You: every decision waiting for the person, across the
-  // project's features, the most urgent first — the person's work once the
-  // agents write the code. Each row decides in place; Open shows the task.
+  // Needs You: what the work needs from the person, by what it means —
+  // Blocked on you (nothing moves until you decide), Ready to review (the
+  // riskiest evidence first), Working, Idle. A kind is a row's label; each
+  // row decides in place; Open shows it with its evidence.
   import { app } from "../lib/app.svelte";
   import { KINDS, key } from "../lib/actions";
   import type { Action, InboxItem } from "../lib/types";
@@ -9,7 +10,7 @@
   import Icon from "./Icon.svelte";
   import StopCard from "./StopCard.svelte";
 
-  const sections: Record<string, { title: string; icon: string; tone: string; why: string }> = {
+  const kinds: Record<string, { title: string; icon: string; tone: string; why: string }> = {
     unknown: { title: "Could Not Be Read", icon: "exclaim", tone: "needs_approval", why: "Another speccoder holds the journal — calls may be waiting for you that cannot be listed now." },
     approval: { title: "Waiting for Approval", icon: "hand", tone: "needs_approval", why: "A run is paused until you decide." },
     bug_confirm: { title: "Confirm a Bug's Reproduction", icon: "exclaim", tone: "needs_approval", why: "It fails on the untouched code by an assertion — does it show the bug? Nothing is fixed before you say so." },
@@ -33,13 +34,45 @@
     commit: { title: "Plans to Commit", icon: "doc", tone: "ready", why: "A run reads committed files only." },
     handoff: { title: "Ready to Hand Off", icon: "arrowup", tone: "verified", why: "Every task is done — review the branch." },
   };
-  // A kind the page has no section for is shown, never dropped.
-  const other = { title: "Other", icon: "info", tone: "ready", why: "Something speccoder waits on that this page does not group yet." };
-  const order = [...Object.keys(sections), "other"];
+  // A kind the page does not know is shown under its own name, never dropped.
+  const kindOf = (i: InboxItem) => kinds[i.kind] ?? { title: i.kind.replace(/_/g, " "), icon: "info", tone: "needs_approval", why: "" };
+  const groupWhy: Record<string, string> = {
+    blocked_on_you: "Nothing moves until you decide — the oldest first.",
+    ready_to_review: "Done or held — the riskiest evidence first.",
+  };
   const items = $derived(app.inbox?.data?.items ?? []);
-  const sectionOf = (i: InboxItem) => (i.kind in sections ? i.kind : "other");
-  const groups = $derived(order.map((k) => ({ k, ...(sections[k] ?? other), items: items.filter((i) => sectionOf(i) === k) })).filter((g) => g.items.length));
+  const groups = $derived((["blocked_on_you", "ready_to_review"] as const).map((g) => ({
+    g,
+    title: app.inbox?.data?.groups?.find((x) => x.group === g)?.title ?? (g === "blocked_on_you" ? "Blocked on you" : "Ready to review"),
+    items: items.filter((i) => (i.group === "ready_to_review" ? "ready_to_review" : "blocked_on_you") === g),
+  })).filter((x) => x.items.length));
+  const working = $derived(app.inbox?.data?.working ?? []);
+  const idle = $derived(app.inbox?.data?.idle ?? []);
+  const blocked = $derived(items.filter((i) => i.group !== "ready_to_review").length);
+  const ready = $derived(items.length - blocked);
   const features = $derived(new Set(items.map((i) => i.feature)).size);
+
+  // Several approvals of one tool, decided together — each on its own
+  // exact object, as one at a time would.
+  const id = (i: InboxItem) => `${i.feature}/${i.task ?? ""}`;
+  let picked = $state<string[]>([]);
+  let why = $state("");
+  let rejecting = $state(false);
+  const chosen = $derived(items.filter((i) => i.kind === "approval" && i.tool && picked.includes(id(i))));
+  const tools = $derived(new Set(chosen.map((i) => i.tool)));
+  const toggle = (i: InboxItem) => (picked = picked.includes(id(i)) ? picked.filter((x) => x !== id(i)) : [...picked, id(i)]);
+  async function decideAll(approve: boolean) {
+    const each = chosen.slice();
+    for (const i of each) {
+      const a = i.actions.find((x) => x.id.kind === (approve ? "approve" : "reject"));
+      if (!a) continue;
+      if (app.feature !== i.feature) await app.selectFeature(i.feature);
+      await app.perform(a, approve ? undefined : why.trim());
+    }
+    picked = [];
+    why = "";
+    rejecting = false;
+  }
 
   const ago = (s: number | null) => {
     if (!s) return "";
@@ -64,6 +97,10 @@
     app.view = "board";
     void app.selectTask(task);
   }
+  async function openFeature(feature: string, view: "board" | "overview") {
+    if (app.feature !== feature) await app.selectFeature(feature);
+    app.view = view;
+  }
   async function open(i: InboxItem) {
     if (i.kind.startsWith("bug_") && i.task) {
       app.bugSheet = { key: `${i.feature}/${i.task}` };
@@ -84,9 +121,25 @@
   <header>
     <div class="titlebar"><h1 id="inbox-title">Needs You</h1><button class="btn small tinted" onclick={() => (app.quick = true)} title="A small change, judged like any other (q)"><Icon name="sparkle" size={11} weight={2.2} /> Quick Change</button></div>
     <p class="sub">
-      {#if items.length}{items.length} {items.length === 1 ? "decision" : "decisions"}{#if features > 1}{" "}across {features} features{/if} — the most urgent first.{:else}Every decision the agents wait on lands here.{/if}
+      {#if items.length}
+        {#if blocked}<strong class="lead">{blocked} blocked on you</strong>{:else}Nothing is blocked on you{/if}{#if ready}{" · "}{ready} ready to review{/if}{#if working.length}{" · "}{working.length} working{/if}
+      {:else}Every decision the agents wait on lands here.{/if}
     </p>
   </header>
+
+  {#if working.length}
+    <ul class="strip" aria-label="Working">
+      {#each working as w (w.feature + w.pid)}
+        <li class="run" class:unknown={w.state !== "running"}>
+          <span class="pulse" aria-hidden="true"></span>
+          <span class="feat">{w.feature.replace(/^\d+-/, "")}</span>
+          {#if w.task}<span class="mono task">{w.task}</span>{/if}
+          <span class="muted">{w.state === "running" ? `working · ${ago(w.started)}` : "state unknown — it stopped without finishing"}</span>
+          <button class="btn small ghost" onclick={() => openFeature(w.feature, "board")}>Watch <Icon name="chevron" size={10} weight={2.6} /></button>
+        </li>
+      {/each}
+    </ul>
+  {/if}
 
   {#if !app.inbox}
     <div class="center"><span class="spinner"></span></div>
@@ -98,25 +151,37 @@
       {#if app.primary}<button class="btn primary" disabled={!!app.job?.running} onclick={() => app.primary && app.perform(app.primary)}>{app.primary.label.charAt(0).toUpperCase() + app.primary.label.slice(1)}</button>{/if}
     </div>
   {:else}
-    {#each groups as g (g.k)}
-      <section class="group" aria-label={g.title}>
-        <h2 class="s-{g.tone}"><span class="gi"><Icon name={g.icon} size={13} weight={2.2} /></span>{g.title}<span class="count">{g.items.length}</span><span class="why">{g.why}</span></h2>
+    {#each groups as g (g.g)}
+      <section class="group {g.g}" aria-label={g.title}>
+        <h2><span class="gtitle">{g.title}</span><span class="count">{g.items.length}</span><span class="why">{groupWhy[g.g]}</span></h2>
         <ul class="grouped">
           {#each g.items as i (i.feature + (i.task ?? "") + i.kind)}
+            {@const k = kindOf(i)}
             {#if i.kind === "yours" && i.task}
               <li class="yours">
-                {#if features > 1 || items.some((x) => x.feature !== i.feature)}<span class="feat">{i.feature.replace(/^\d+-/, "")}</span>{/if}
+                <span class="where"><span class="kind s-{k.tone}"><Icon name={k.icon} size={10} weight={2.4} />{k.title}</span>{#if features > 1}<span class="feat">{i.feature.replace(/^\d+-/, "")}</span>{/if}</span>
                 <StopCard task={i.task} claim={i.detail || null} actions={i.actions} />
               </li>
             {:else}
-            <li>
+            <li class:picked={picked.includes(id(i))}>
+              {#if i.kind === "approval" && i.tool}
+                <input type="checkbox" class="pick" aria-label="Select {i.task}" checked={picked.includes(id(i))} onchange={() => toggle(i)} />
+              {/if}
               <div class="what">
                 <span class="where">
-                  {#if features > 1 || items.some((x) => x.feature !== i.feature)}<span class="feat">{i.feature.replace(/^\d+-/, "")}</span>{/if}
+                  <span class="kind s-{k.tone}" title={k.why}><Icon name={k.icon} size={10} weight={2.4} />{k.title}</span>
+                  {#if features > 1}<span class="feat">{i.feature.replace(/^\d+-/, "")}</span>{/if}
                   {#if i.task}<span class="mono task">{i.task}</span>{/if}
                   {#if i.since}<span class="age">{ago(i.since)}</span>{/if}
                 </span>
                 <strong>{i.title}</strong>
+                {#if i.group === "ready_to_review" && (i.risk?.length || i.kind === "handoff")}
+                  <span class="risks">
+                    {#each (i.risk ?? []).slice(0, 3) as r (r.reason)}<span class="risk">{r.text}</span>{/each}
+                    {#if (i.risk?.length ?? 0) > 3}<span class="risk more">+{(i.risk?.length ?? 0) - 3}</span>{/if}
+                    {#if !i.risk?.length}<span class="risk verified"><Icon name="check" size={9} weight={2.8} /> verified</span>{/if}
+                  </span>
+                {/if}
                 {#if i.unverified}
                   <ul class="reasons">
                     {#each i.unverified.counts as c (c.reason)}
@@ -135,8 +200,28 @@
             {/if}
           {/each}
         </ul>
+        {#if g.g === "blocked_on_you" && chosen.length}
+          <div class="batch" role="toolbar" aria-label="Decide the selected approvals">
+            {#if tools.size > 1}
+              <span class="muted">One kind of call at a time: the selection mixes {[...tools].join(" and ")}.</span>
+            {:else if rejecting}
+              <input class="reason" placeholder="Why (each model is told)" bind:value={why} onkeydown={(e) => e.key === "Enter" && why.trim() && decideAll(false)} />
+              <button class="btn small danger" disabled={!why.trim() || !!app.job?.running} onclick={() => decideAll(false)}>Reject {chosen.length}</button>
+              <button class="btn small ghost" onclick={() => (rejecting = false)}>Back</button>
+            {:else}
+              <span><strong>{chosen.length}</strong> <span class="mono">{[...tools][0]}</span> {chosen.length === 1 ? "call" : "calls"} — each decided on its own object</span>
+              <button class="btn small primary" disabled={!!app.job?.running} onclick={() => decideAll(true)}>Approve {chosen.length}</button>
+              <button class="btn small" onclick={() => (rejecting = true)}>Reject {chosen.length}…</button>
+              <button class="btn small ghost" onclick={() => (picked = [])}>Clear</button>
+            {/if}
+          </div>
+        {/if}
       </section>
     {/each}
+  {/if}
+
+  {#if idle.length}
+    <p class="idle"><span class="muted">Idle:</span>{#each idle as f (f)}<button class="chip" onclick={() => openFeature(f, "overview")}>{f.replace(/^\d+-/, "")}</button>{/each}</p>
   {/if}
 </section>
 
@@ -145,7 +230,28 @@
   .titlebar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
   h1 { margin: 0; font: 700 1.9rem/1.15 var(--display); letter-spacing: -0.022em; }
   .sub { margin: 0.25rem 0 0; color: var(--text-2); }
+  .lead { color: var(--attention); font-weight: 650; }
   .group { display: grid; gap: 0.45rem; }
+  .gtitle { font: 650 1.02rem/1.2 var(--display); letter-spacing: -0.01em; }
+  .group.blocked_on_you .gtitle { color: var(--attention); }
+  .kind { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.05rem 0.45rem 0.05rem 0.35rem; border-radius: 999px; font-weight: 650; color: var(--fill-c, var(--text-2)); background: color-mix(in srgb, var(--fill-c, var(--muted)) 13%, transparent); }
+  .risks { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.15rem; }
+  .risk { padding: 0.05rem 0.5rem; border-radius: 999px; font: 600 0.72rem/1.5 var(--rounded); color: var(--attention); background: var(--attention-bg); }
+  .risk.verified { color: var(--verified); background: color-mix(in srgb, var(--verified) 12%, transparent); display: inline-flex; align-items: center; gap: 0.2rem; }
+  .risk.more { color: var(--muted); background: var(--fill); }
+  li:has(.pick) { grid-template-columns: auto minmax(0, 1fr) auto; }
+  li.picked { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+  .pick { width: 1rem; height: 1rem; accent-color: var(--accent); }
+  .batch { position: sticky; bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; padding: 0.6rem 0.8rem; border-radius: 14px; background: var(--surface, var(--bg)); box-shadow: 0 8px 28px rgba(0,0,0,0.16), 0 0 0 0.5px var(--separator); font-size: 0.86rem; }
+  .batch > span { flex: 1; min-width: 12rem; }
+  .reason { flex: 1; min-width: 12rem; padding: 0.35rem 0.6rem; border-radius: 8px; border: 1px solid var(--separator); background: transparent; color: inherit; font: inherit; }
+  .strip { display: grid; gap: 0.3rem; }
+  .run { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.9rem; border-radius: 12px; background: var(--fill); font-size: 0.84rem; grid-template-columns: none; }
+  .run .muted { flex: 1; }
+  .pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); animation: pulse 1.6s ease-in-out infinite; }
+  .run.unknown .pulse { background: var(--attention); animation: none; }
+  @keyframes pulse { 50% { opacity: 0.35; transform: scale(0.8); } }
+  .idle { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; margin: 0; font-size: 0.84rem; }
   h2 { display: flex; align-items: center; gap: 0.45rem; margin: 0 0.3rem; font-size: 0.86rem; font-weight: 650; background: none; flex-wrap: wrap; }
   .gi { width: 22px; height: 22px; border-radius: 7px; display: grid; place-items: center; color: #fff; background: var(--fill-c); }
   .count { min-width: 1.4rem; height: 1.2rem; padding: 0 0.4rem; border-radius: 999px; display: grid; place-items: center; background: var(--fill); color: var(--muted); font: 600 0.72rem/1 var(--rounded); }

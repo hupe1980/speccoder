@@ -16,11 +16,38 @@
       "type": "integer",
       "format": "uint",
       "minimum": 0
+    },
+    "groups": {
+      "description": "Every group with its count, in the order Needs You shows them:\n`blocked_on_you`, `ready_to_review`, `working`, `idle`.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/GroupCount"
+      },
+      "default": []
+    },
+    "working": {
+      "description": "Runs in progress (or whose state is unknown).",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/WorkingRun"
+      },
+      "default": []
+    },
+    "idle": {
+      "description": "Features with nothing running and nothing waiting.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
     }
   },
   "required": [
     "items",
-    "features"
+    "features",
+    "groups",
+    "working",
+    "idle"
   ],
   "$defs": {
     "InboxItem": {
@@ -34,6 +61,20 @@
         "group": {
           "description": "Its group: `blocked_on_you` or `ready_to_review`.",
           "type": "string"
+        },
+        "risk": {
+          "description": "Ready to review: what the evidence leaves to the person, the\nriskiest first; none for strong verified work.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RiskReason"
+          }
+        },
+        "tool": {
+          "description": "An approval: the tool its call is for (approvals of one tool can be\ndecided together, each on its own object).",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "feature": {
           "description": "The feature.",
@@ -91,6 +132,31 @@
         "detail",
         "since",
         "actions"
+      ]
+    },
+    "RiskReason": {
+      "description": "One reason finished work needs a closer look, with how many ticks.",
+      "type": "object",
+      "properties": {
+        "reason": {
+          "description": "`regression_only`, `attested`, `strength_below_target`, `stale`,\n`scope_outside` or `external_executor`, the riskiest first\n(`speccoder_core::inbox::Risk`).",
+          "type": "string"
+        },
+        "count": {
+          "description": "Ticks with it.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "text": {
+          "description": "The chip (`2 regression-only`).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "reason",
+        "count",
+        "text"
       ]
     },
     "Action": {
@@ -2268,6 +2334,71 @@
         "n",
         "tasks",
         "text"
+      ]
+    },
+    "GroupCount": {
+      "description": "A group of Needs You and how much is in it.",
+      "type": "object",
+      "properties": {
+        "group": {
+          "description": "`blocked_on_you`, `ready_to_review`, `working` or `idle`.",
+          "type": "string"
+        },
+        "title": {
+          "description": "As people read it.",
+          "type": "string"
+        },
+        "count": {
+          "description": "Items, runs or features in it.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "group",
+        "title",
+        "count"
+      ]
+    },
+    "WorkingRun": {
+      "description": "A run in progress, this host's or another speccoder process's.",
+      "type": "object",
+      "properties": {
+        "feature": {
+          "description": "The feature.",
+          "type": "string"
+        },
+        "task": {
+          "description": "The task it works on, when known.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "started": {
+          "description": "Started (Unix seconds).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "pid": {
+          "description": "The process.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "state": {
+          "description": "`running`, or `unknown`: its process is gone and it did not finish.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "feature",
+        "task",
+        "started",
+        "pid",
+        "state"
       ]
     }
   },

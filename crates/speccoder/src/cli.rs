@@ -583,10 +583,10 @@ pub enum TaskAction {
     },
     /// Approve the call the task stopped for (that object for the rest of the task, by default).
     Approve {
-        /// The task, e.g. T005.
+        /// The task, e.g. T005; several decide each one's waiting call on its own.
         #[arg(required_unless_present = "all")]
-        task: Option<String>,
-        /// One waiting call, by its id or a prefix of it (`report --approvals`).
+        tasks: Vec<String>,
+        /// One waiting call (of one task), by its id or a prefix of it (`report --approvals`).
         #[arg(long)]
         call: Option<String>,
         /// Every waiting call (of the task, or of the feature), each recorded on its own.
@@ -601,10 +601,10 @@ pub enum TaskAction {
     },
     /// Reject the call the task stopped for; the model is told the reason.
     Reject {
-        /// The task, e.g. T005.
+        /// The task, e.g. T005; several decide each one's waiting call on its own.
         #[arg(required_unless_present = "all")]
-        task: Option<String>,
-        /// One waiting call, by its id or a prefix of it.
+        tasks: Vec<String>,
+        /// One waiting call (of one task), by its id or a prefix of it.
         #[arg(long)]
         call: Option<String>,
         /// Every waiting call (of the task, or of the feature), each recorded on its own.

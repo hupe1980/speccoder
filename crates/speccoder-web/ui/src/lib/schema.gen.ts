@@ -2165,6 +2165,16 @@ export interface GitIdentity {
   email: string;
 }
 
+/** A group of Needs You and how much is in it. */
+export interface GroupCount {
+  /** `blocked_on_you`, `ready_to_review`, `working` or `idle`. */
+  group: string;
+  /** As people read it. */
+  title: string;
+  /** Items, runs or features in it. */
+  count: number;
+}
+
 /**
  * The hand-off of a stopped bug, composed by the engine from the journal
  * (never written by a model).
@@ -2351,6 +2361,16 @@ export interface InboxItem {
   kind: string;
   /** Its group: `blocked_on_you` or `ready_to_review`. */
   group: string;
+  /**
+   * Ready to review: what the evidence leaves to the person, the
+   * riskiest first; none for strong verified work.
+   */
+  risk?: RiskReason[];
+  /**
+   * An approval: the tool its call is for (approvals of one tool can be
+   * decided together, each on its own object).
+   */
+  tool?: string | null;
   /** The feature. */
   feature: string;
   /** The task, when it is about one. */
@@ -2380,6 +2400,15 @@ export interface InboxReport {
   items: InboxItem[];
   /** Features looked at. */
   features: number;
+  /**
+   * Every group with its count, in the order Needs You shows them:
+   * `blocked_on_you`, `ready_to_review`, `working`, `idle`.
+   */
+  groups: GroupCount[];
+  /** Runs in progress (or whose state is unknown). */
+  working: WorkingRun[];
+  /** Features with nothing running and nothing waiting. */
+  idle: string[];
 }
 
 /** One detected check. */
@@ -3880,6 +3909,20 @@ export interface RevisionView {
    * and after, for the word diff.
    */
   diffs: SectionDiff[];
+}
+
+/** One reason finished work needs a closer look, with how many ticks. */
+export interface RiskReason {
+  /**
+   * `regression_only`, `attested`, `strength_below_target`, `stale`,
+   * `scope_outside` or `external_executor`, the riskiest first
+   * (`speccoder_core::inbox::Risk`).
+   */
+  reason: string;
+  /** Ticks with it. */
+  count: number;
+  /** The chip (`2 regression-only`). */
+  text: string;
 }
 
 /**
@@ -5391,6 +5434,20 @@ export type Via = "terminal" | "web" | "window" | "acp" | "phone" | "ci" | "mcp"
 
 /** A read-only place an interface opens instead of running a command. */
 export type View = "doctor" | "bug_report" | "report" | "live" | "approvals" | "explain" | "review" | "settings" | "setup" | "bug" | "quick_change" | "new_feature" | "new_project" | "github" | "task";
+
+/** A run in progress, this host's or another speccoder process's. */
+export interface WorkingRun {
+  /** The feature. */
+  feature: string;
+  /** The task it works on, when known. */
+  task: string | null;
+  /** Started (Unix seconds). */
+  started: number;
+  /** The process. */
+  pid: number;
+  /** `running`, or `unknown`: its process is gone and it did not finish. */
+  state: string;
+}
 
 /** Result of `speccoder worktree`. */
 export interface WorktreeReport {

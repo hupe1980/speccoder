@@ -238,7 +238,7 @@ ascii = false          # [ok] [~] [A] … instead of ✓ ~ A …, plain box bord
 screen_reader = false  # labelled plain lines, no dashboard
 
 [ui.notify]
-on = ["approval", "task_failed", "feature_done", "stalled"]   # the default: all four
+on = ["approval", "task_failed"]   # the default: what blocks work; add "feature_done", "stalled"
 when = "unfocused"     # or "always"
 method = "auto"        # auto | osc9 | osc777 | bel | command | off
 command = []           # with method = "command": program and arguments; the message is appended

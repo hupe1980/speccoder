@@ -108,12 +108,24 @@ enum Urgency {
 struct State {
     feature: String,
     task: String,
+    /// The task's title, as the notifications name it.
+    task_title: String,
     stage: String,
     title: Option<(Urgency, String)>,
     last_event: Instant,
     waiting: bool,
     stalled: bool,
     titled: bool,
+}
+
+/// A task as a notification names it: `T004 Handle Unicode` (the title of
+/// the task the run started), else its id.
+fn named(task: &str, s: &State) -> String {
+    if s.task == task && !s.task_title.is_empty() {
+        format!("{task} {}", s.task_title)
+    } else {
+        task.to_owned()
+    }
 }
 
 /// The attention layer: forwards every event to the printer, and notifies.
@@ -157,6 +169,7 @@ impl Attention {
             state: Mutex::new(State {
                 feature: String::new(),
                 task: String::new(),
+                task_title: String::new(),
                 stage: String::new(),
                 title: None,
                 last_event: Instant::now(),
@@ -300,10 +313,15 @@ impl Progress for Attention {
             }
         }
         match event {
-            Event::TaskStarted { feature, task, .. } => {
+            Event::TaskStarted {
+                feature,
+                task,
+                title,
+            } => {
                 if let Ok(mut s) = self.state.lock() {
                     feature.clone_into(&mut s.feature);
                     task.clone_into(&mut s.task);
+                    title.clone_into(&mut s.task_title);
                     s.stage.clear();
                 }
                 self.set_title(Urgency::Running, format!("speccoder ▸ {task}"), true);
@@ -314,9 +332,9 @@ impl Progress for Attention {
                 }
             }
             Event::ApprovalRequested { task, what, .. } => {
-                let feature = self.state.lock().map(|mut s| {
+                let named = self.state.lock().map(|mut s| {
                     s.waiting = true;
-                    s.feature.clone()
+                    named(task, &s)
                 });
                 self.set_title(
                     Urgency::Approval,
@@ -325,10 +343,7 @@ impl Progress for Attention {
                 );
                 self.signal(
                     Signal::Approval,
-                    &format!(
-                        "speccoder {}: {task} needs approval — {what}",
-                        feature.unwrap_or_default()
-                    ),
+                    &format!("speccoder: {} — {what}?", named.unwrap_or_default()),
                 );
             }
             Event::TaskFinished {
@@ -348,10 +363,10 @@ impl Progress for Attention {
                     | "not_demonstrated"
             ) =>
             {
-                let feature = self
+                let named = self
                     .state
                     .lock()
-                    .map(|s| s.feature.clone())
+                    .map(|s| named(task, &s))
                     .unwrap_or_default();
                 self.set_title(Urgency::Failed, format!("speccoder ✗ {task} failed"), true);
                 let why = if matches!(outcome.as_str(), "failed" | "error" | "verification_failed")
@@ -362,7 +377,7 @@ impl Progress for Attention {
                 };
                 self.signal(
                     Signal::TaskFailed,
-                    &format!("speccoder {feature}: {task} failed — {why}"),
+                    &format!("speccoder: {named} did not pass — {why}"),
                 );
             }
             _ => {}
@@ -465,7 +480,7 @@ mod tests {
         Event::TaskStarted {
             feature: "001-x".to_owned(),
             task: "T004".to_owned(),
-            title: "t".to_owned(),
+            title: "Handle Unicode".to_owned(),
         }
     }
 
@@ -527,7 +542,11 @@ mod tests {
         let out = bytes(&rec);
         assert!(out.contains("\x1b]2;speccoder ▸ T004\x07"), "{out:?}");
         assert!(out.contains("\x1b]2;speccoder △ approval T004\x07"));
-        assert!(out.contains("\x1b]9;speccoder 001-x: T004 needs approval — cargo add x\x07"));
+        // The task by its title and the decision, never a branch.
+        assert!(
+            out.contains("\x1b]9;speccoder: T004 Handle Unicode — cargo add x?\x07"),
+            "{out:?}"
+        );
         assert!(out.ends_with("\x1b]2;\x07"), "{out:?}");
     }
 
@@ -581,6 +600,7 @@ mod tests {
     #[test]
     fn a_stall_notifies_once_and_not_while_waiting() {
         let settings = Notify {
+            on: vec![Signal::Approval, Signal::Stalled],
             method: Method::Osc9,
             stall_after: Duration::from_secs(60),
             ..Notify::default()
@@ -594,6 +614,29 @@ mod tests {
         a.event(&needs());
         a.check_stall(Instant::now() + Duration::from_secs(600));
         assert_eq!(bytes(&rec).matches("no progress").count(), 1);
+    }
+
+    #[test]
+    fn by_default_only_what_blocks_work_notifies() {
+        let settings = Notify {
+            method: Method::Osc9,
+            stall_after: Duration::from_secs(60),
+            ..Notify::default()
+        };
+        let (a, rec) = layer(settings, &[]);
+        a.event(&started());
+        a.check_stall(Instant::now() + Duration::from_secs(120));
+        assert!(
+            !bytes(&rec).contains("no progress"),
+            "a stall is not a decision"
+        );
+        a.event(&needs());
+        assert_eq!(
+            bytes(&rec).matches("\x1b]9;").count(),
+            1,
+            "{:?}",
+            bytes(&rec)
+        );
     }
 
     #[test]
@@ -620,6 +663,6 @@ mod tests {
             }
             std::thread::sleep(Duration::from_millis(20));
         }
-        assert_eq!(got, "speccoder 001-x: T004 needs approval — cargo add x");
+        assert_eq!(got, "speccoder: T004 Handle Unicode — cargo add x?");
     }
 }

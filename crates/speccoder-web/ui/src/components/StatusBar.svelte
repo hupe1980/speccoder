@@ -14,7 +14,7 @@
   const stale = $derived(t.stale ?? 0);
   const review = $derived(r?.review ?? null);
   const reviewed = $derived(review ? review.approved + review.open + review.changes_requested + review.lapsed : 0);
-  const waiting = $derived(app.inbox?.data?.items.length ?? 0);
+  const waiting = $derived(app.blocked);
   const check = (name: string) => app.doctor.find((c) => c.check === name);
   const model = $derived(check("model")?.detail.split(" ")[0] ?? null);
   const sandbox = $derived(check("sandbox"));
@@ -83,7 +83,7 @@
     {#if sandbox}
       <button class:warn={sandbox.level !== "pass"} onclick={() => (app.view = "settings")} title="The OS sandbox commands run in: {sandbox.detail}"><Icon name={sandbox.level === "pass" ? "lock" : "exclaim"} size={12} />{sandbox.level === "pass" ? sandbox.detail : "no sandbox"}</button>
     {/if}
-    <button class:attn={waiting > 0} onclick={() => (app.view = "inbox")} title="Decisions waiting for you"><Icon name="bell" size={12} />{waiting}</button>
+    <button class:attn={waiting > 0} onclick={() => (app.view = "inbox")} title="Blocked on you"><Icon name="bell" size={12} />{waiting}</button>
     <span class="conn" class:off={!app.connected} role="status" title={app.connected ? "Connected to the host" : "Reconnecting to the host…"}><span class="dot"></span>{app.connected ? "" : "Reconnecting"}</span>
   </div>
 </footer>

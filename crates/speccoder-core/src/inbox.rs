@@ -12,15 +12,29 @@ pub enum Group {
     BlockedOnYou,
     /// Work is done or held; the person reviews it.
     ReadyToReview,
+    /// A run is in progress.
+    Working,
+    /// Nothing runs and nothing waits.
+    Idle,
 }
 
 impl Group {
+    /// Every group, in the order Needs You shows them.
+    pub const ALL: [Self; 4] = [
+        Self::BlockedOnYou,
+        Self::ReadyToReview,
+        Self::Working,
+        Self::Idle,
+    ];
+
     /// Its recorded name.
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::BlockedOnYou => "blocked_on_you",
             Self::ReadyToReview => "ready_to_review",
+            Self::Working => "working",
+            Self::Idle => "idle",
         }
     }
 
@@ -30,6 +44,69 @@ impl Group {
         match self {
             Self::BlockedOnYou => "Blocked on you",
             Self::ReadyToReview => "Ready to review",
+            Self::Working => "Working",
+            Self::Idle => "Idle",
+        }
+    }
+}
+
+/// What the evidence of finished work leaves to the person, the riskiest
+/// first: read from verdicts, attestations, strength, drift and the tick
+/// commits' trailers — never from what the model said.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, schemars::JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum Risk {
+    /// Ticks the regression checks alone decided.
+    RegressionOnly,
+    /// Ticks accepted on a person's word.
+    Attested,
+    /// Verified ticks whose acceptance strength is below the target.
+    StrengthBelowTarget,
+    /// Evidence that proves an earlier wording of the spec.
+    Stale,
+    /// Changes outside the paths the task names.
+    ScopeOutside,
+    /// Attempts an external agent made.
+    ExternalExecutor,
+}
+
+impl Risk {
+    /// Every reason, the riskiest first.
+    pub const ALL: [Self; 6] = [
+        Self::RegressionOnly,
+        Self::Attested,
+        Self::StrengthBelowTarget,
+        Self::Stale,
+        Self::ScopeOutside,
+        Self::ExternalExecutor,
+    ];
+
+    /// Its recorded name.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::RegressionOnly => "regression_only",
+            Self::Attested => "attested",
+            Self::StrengthBelowTarget => "strength_below_target",
+            Self::Stale => "stale",
+            Self::ScopeOutside => "scope_outside",
+            Self::ExternalExecutor => "external_executor",
+        }
+    }
+
+    /// The chip for `n` ticks with this reason.
+    #[must_use]
+    pub fn chip(self, n: usize) -> String {
+        let ticks = if n == 1 { "tick" } else { "ticks" };
+        match self {
+            Self::RegressionOnly => format!("{n} regression-only"),
+            Self::Attested => format!("{n} attested"),
+            Self::StrengthBelowTarget => format!("{n} below strength target"),
+            Self::Stale => format!("{n} stale"),
+            Self::ScopeOutside => format!("{n} {ticks} outside scope"),
+            Self::ExternalExecutor => format!("{n} by an agent"),
         }
     }
 }
@@ -258,6 +335,15 @@ mod tests {
             ]
         );
         assert_eq!(Kind::BugAlreadySatisfied.group(), Group::ReadyToReview);
+        // A kind is blocking or ready, never working or idle.
+        assert!(
+            Kind::ALL
+                .iter()
+                .all(|k| matches!(k.group(), Group::BlockedOnYou | Group::ReadyToReview))
+        );
+        let mut risks = Risk::ALL.to_vec();
+        risks.sort();
+        assert_eq!(risks, Risk::ALL, "Risk::ALL is the riskiest-first order");
         assert_eq!(Kind::Ambiguous.group(), Group::BlockedOnYou);
         assert_eq!(Kind::AutopilotDenied.group(), Group::ReadyToReview);
         // First of its group: before `stale`.

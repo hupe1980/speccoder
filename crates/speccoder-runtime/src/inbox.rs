@@ -82,25 +82,88 @@ pub fn inbox_with(path: &Path, feature: Option<&str>, state: Option<&Path>) -> C
                 .filter_map(|b| bug_item(b, &|c| c)),
         );
     }
-    let rank = |k: &str| KINDS.iter().position(|x| *x == k).unwrap_or(KINDS.len());
-    items.sort_by(|a, b| {
-        rank(&a.kind)
-            .cmp(&rank(&b.kind))
-            .then(
-                a.since
-                    .unwrap_or(u64::MAX)
-                    .cmp(&b.since.unwrap_or(u64::MAX)),
-            )
-            .then(a.feature.cmp(&b.feature))
-            .then(a.task.cmp(&b.task))
-    });
+    sort(&mut items);
+    let working = working(path, state);
+    let idle: Vec<String> = names
+        .iter()
+        .filter(|n| !items.iter().any(|i| &i.feature == *n))
+        .filter(|n| !working.iter().any(|w| &w.feature == *n))
+        .cloned()
+        .collect();
+    let groups = speccoder_core::inbox::Group::ALL
+        .iter()
+        .map(|g| speccoder_core::GroupCount {
+            group: g.as_str().to_owned(),
+            title: g.title().to_owned(),
+            count: match g {
+                speccoder_core::inbox::Group::Working => working.len(),
+                speccoder_core::inbox::Group::Idle => idle.len(),
+                _ => items.iter().filter(|i| i.group == g.as_str()).count(),
+            },
+        })
+        .collect();
     let message = summary(&items, names.len());
     CommandResult::new("inbox", CommandStatus::Ok, &message).with_data(CommandData::Inbox(
         Box::new(InboxReport {
             items,
             features: names.len(),
+            groups,
+            working,
+            idle,
         }),
     ))
+}
+
+/// Needs You's order: *Blocked on you* first — a journal that could not be
+/// read, then the oldest, then the kind's urgency — then *Ready to review*,
+/// the riskiest first.
+fn sort(items: &mut [InboxItem]) {
+    let rank = |k: &str| KINDS.iter().position(|x| *x == k).unwrap_or(KINDS.len());
+    let blocked = |i: &InboxItem| i.group != "ready_to_review";
+    items.sort_by(|a, b| {
+        let by_group = blocked(b).cmp(&blocked(a));
+        let within = if blocked(a) {
+            (a.kind != "unknown")
+                .cmp(&(b.kind != "unknown"))
+                .then(
+                    a.since
+                        .unwrap_or(u64::MAX)
+                        .cmp(&b.since.unwrap_or(u64::MAX)),
+                )
+                .then(rank(&a.kind).cmp(&rank(&b.kind)))
+        } else {
+            review_rank(a)
+                .cmp(&review_rank(b))
+                .then(rank(&a.kind).cmp(&rank(&b.kind)))
+                .then(
+                    a.since
+                        .unwrap_or(u64::MAX)
+                        .cmp(&b.since.unwrap_or(u64::MAX)),
+                )
+        };
+        by_group
+            .then(within)
+            .then(a.feature.cmp(&b.feature))
+            .then(a.task.cmp(&b.task))
+    });
+}
+
+/// The project's run in progress, or one whose process is gone before it
+/// finished (its state unknown, never idle).
+fn working(path: &Path, state: Option<&Path>) -> Vec<speccoder_core::WorkingRun> {
+    let Some((live, running)) = state.and_then(|s| crate::progress::read_live(path, s)) else {
+        return Vec::new();
+    };
+    if live.finished.is_some() {
+        return Vec::new();
+    }
+    vec![speccoder_core::WorkingRun {
+        feature: live.feature,
+        task: (!live.task.is_empty()).then_some(live.task),
+        started: live.started_at,
+        pid: live.pid,
+        state: if running { "running" } else { "unknown" }.to_owned(),
+    }]
 }
 
 /// `n` with the word for one or for many: `1 tick`, `2 ticks`.
@@ -217,6 +280,8 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
         since: None,
         actions,
         unverified: None,
+        risk: Vec::new(),
+        tool: None,
     };
     let mut out = Vec::new();
     let waiting: Vec<&str> = approvals
@@ -384,6 +449,7 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
             vec![yes, no],
         );
         i.since = p.waiting_since;
+        i.tool = (!question).then(|| p.tool.clone());
         out.push(i);
     }
 
@@ -946,7 +1012,96 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
             vec![pr],
         ));
     }
+    if out.iter().any(|i| EVIDENCED.contains(&i.kind.as_str())) {
+        let risk = risk_of(path, r);
+        for i in out
+            .iter_mut()
+            .filter(|i| EVIDENCED.contains(&i.kind.as_str()))
+        {
+            i.risk.clone_from(&risk);
+        }
+    }
     out
+}
+
+/// The kinds about finished work, whose order follows its evidence.
+const EVIDENCED: [&str; 3] = ["handoff", "unverified", "stale"];
+
+/// What a feature's ticks leave to the person, the riskiest first: their
+/// states, drift and strength from the report, and the tick commits'
+/// `Scope-Outside:` and `Executor:` trailers (one `git show` for all).
+fn risk_of(path: &Path, r: &speccoder_core::StatusReport) -> Vec<speccoder_core::RiskReason> {
+    use speccoder_core::inbox::Risk;
+    let target = crate::oracle::ViewConfig::at(path)
+        .strength_target
+        .map(|t| f64::from(t) / 100.0);
+    let mut n = [0usize; Risk::ALL.len()];
+    let mut bump = |risk: Risk| n[Risk::ALL.iter().position(|x| *x == risk).unwrap_or(0)] += 1;
+    for t in &r.tasks {
+        match t.state.as_str() {
+            "regression_only" => bump(Risk::RegressionOnly),
+            "attested" => bump(Risk::Attested),
+            _ => {}
+        }
+        if t.drift.is_some() {
+            bump(Risk::Stale);
+        }
+        let strength = t
+            .strength
+            .as_deref()
+            .and_then(|s| s.split_whitespace().next())
+            .and_then(|v| v.parse::<f64>().ok());
+        if t.state == "verified"
+            && let (Some(s), Some(min)) = (strength, target)
+            && s < min
+        {
+            bump(Risk::StrengthBelowTarget);
+        }
+    }
+    let commits: Vec<&str> = r.tasks.iter().filter_map(|t| t.commit.as_deref()).collect();
+    if !commits.is_empty() {
+        let mut args = vec![
+            "show",
+            "-s",
+            "--format=%(trailers:key=Scope-Outside,key=Executor,separator=%x01)%x1e",
+        ];
+        args.extend(commits.iter().copied());
+        if let Ok(out) = crate::git::Git::at(path).run(&args) {
+            for block in String::from_utf8_lossy(&out).split('\u{1e}') {
+                if block.contains("Scope-Outside:") {
+                    bump(Risk::ScopeOutside);
+                }
+                if block.contains("Executor:") {
+                    bump(Risk::ExternalExecutor);
+                }
+            }
+        }
+    }
+    Risk::ALL
+        .iter()
+        .zip(n)
+        .filter(|(_, count)| *count > 0)
+        .map(|(risk, count)| speccoder_core::RiskReason {
+            reason: risk.as_str().to_owned(),
+            count,
+            text: risk.chip(count),
+        })
+        .collect()
+}
+
+/// An item's place in *Ready to review*: its riskiest reason; then work
+/// with no evidence to weigh (a spec to review, set-aside changes); strong
+/// verified work last.
+fn review_rank(i: &InboxItem) -> usize {
+    use speccoder_core::inbox::Risk;
+    match i.risk.first() {
+        Some(r) => Risk::ALL
+            .iter()
+            .position(|x| x.as_str() == r.reason)
+            .unwrap_or(0),
+        None if EVIDENCED.contains(&i.kind.as_str()) => Risk::ALL.len() + 1,
+        None => Risk::ALL.len(),
+    }
 }
 
 /// The feature's diagnosis when it has at least 3 speccoder ticks and more
@@ -1239,6 +1394,8 @@ fn bug_item(
         .unwrap_or_else(|| format!("{} — {}", b.title, b.outcome.as_str().replace('_', " ")));
     Some(InboxItem {
         unverified: None,
+        risk: Vec::new(),
+        tool: None,
         kind: kind.as_str().to_owned(),
         group: kind.group().as_str().to_owned(),
         feature: b.unit.clone(),
@@ -1425,5 +1582,73 @@ mod try_with_tests {
         assert!(try_with(t, &last("external_command_1"), &flag, both).is_none());
         let alone = |x: &str| x == "copilot";
         assert!(try_with(t, &last("external_copilot_1"), &flag, alone).is_none());
+    }
+}
+
+#[cfg(test)]
+mod order_tests {
+    use super::*;
+
+    fn at(kind: &str, feature: &str, since: Option<u64>, risk: &[(&str, usize)]) -> InboxItem {
+        InboxItem {
+            kind: kind.to_owned(),
+            group: Kind::named(kind)
+                .map_or("blocked_on_you", |k| k.group().as_str())
+                .to_owned(),
+            feature: feature.to_owned(),
+            task: None,
+            title: String::new(),
+            detail: String::new(),
+            since,
+            actions: Vec::new(),
+            unverified: None,
+            tool: None,
+            risk: risk
+                .iter()
+                .map(|(r, n)| speccoder_core::RiskReason {
+                    reason: (*r).to_owned(),
+                    count: *n,
+                    text: String::new(),
+                })
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn blocked_comes_first_oldest_first_and_review_riskiest_first() {
+        let mut items = vec![
+            at("handoff", "strong", None, &[]),
+            at("review", "spec", None, &[]),
+            at("handoff", "attested", None, &[("attested", 1)]),
+            at("question", "q", Some(20), &[]),
+            at(
+                "unverified",
+                "regression",
+                None,
+                &[("regression_only", 3), ("attested", 1)],
+            ),
+            at("approval", "a", Some(30), &[]),
+            at("stale", "stale", None, &[("stale", 2)]),
+            at("unknown", "unreadable", None, &[]),
+            at("stuck", "s", Some(10), &[]),
+        ];
+        sort(&mut items);
+        let order: Vec<&str> = items.iter().map(|i| i.feature.as_str()).collect();
+        assert_eq!(
+            order,
+            [
+                // Blocked on you: the unreadable journal, then the oldest.
+                "unreadable",
+                "s",
+                "q",
+                "a",
+                // Ready to review: the riskiest reason first, strong verified last.
+                "regression",
+                "attested",
+                "stale",
+                "spec",
+                "strong",
+            ]
+        );
     }
 }

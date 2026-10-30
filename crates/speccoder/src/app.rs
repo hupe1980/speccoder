@@ -3,7 +3,7 @@
 //! else — no IPC on the data path, no other origin, no new windows. The
 //! host runs in this process, so the window follows its jobs directly: when
 //! a run needs the person, the Dock icon asks for attention and the title
-//! says so; after every job the Dock badge counts the decisions waiting in
+//! says so; after every job the Dock badge counts the decisions blocking work in
 //! the inbox.
 
 /// Opens the window on `url` (the host's page with its token) and runs
@@ -180,10 +180,15 @@ fn follow(w: &tauri::WebviewWindow, line: &str, root: &std::path::Path) {
     }
 }
 
-/// The Dock badge: how many decisions wait in the inbox; none, no badge.
+/// The Dock badge: how many decisions block work (*Blocked on you*);
+/// none, no badge. Work ready to review waits without one.
 fn badge(w: &tauri::WebviewWindow, root: &std::path::Path) {
     let n = match speccoder_runtime::inbox::inbox(root, None).data() {
-        Some(speccoder_core::CommandData::Inbox(i)) => i.items.len(),
+        Some(speccoder_core::CommandData::Inbox(i)) => i
+            .items
+            .iter()
+            .filter(|x| x.group == "blocked_on_you")
+            .count(),
         _ => 0,
     };
     let _ = w.set_badge_count((n > 0).then(|| i64::try_from(n).unwrap_or(i64::MAX)));
