@@ -344,6 +344,7 @@ impl Progress for Attention {
                     | "suspected_gaming"
                     | "blocked"
                     | "budget_exhausted"
+                    | "incomplete"
                     | "not_demonstrated"
             ) =>
             {

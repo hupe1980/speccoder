@@ -24,7 +24,7 @@ for case in calc-add impossible-add; do
   keep="$work/$case"
   "$bin" --json eval evals --case "$case" --keep "$keep" > "$work/$case.json" || true
   run_id="$(jq -r '.data.cases[0].run_id // empty' "$work/$case.json")"
-  [ -n "$run_id" ] || { echo "record-journals: $case recorded no run" >&2; exit 1; }
+  [ -n "$run_id" ] || { echo "record-journals: $case recorded no run: $(jq -r '.data.cases[0].outcome // .message' "$work/$case.json" 2>/dev/null)" >&2; exit 1; }
   journal="$(find "$keep/$case/state" -name journal.redb | head -1)"
   [ -n "$journal" ] || { echo "record-journals: $case left no journal" >&2; exit 1; }
   out="$dest/$case"

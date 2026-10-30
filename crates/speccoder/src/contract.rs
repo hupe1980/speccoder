@@ -457,6 +457,7 @@ fn every_next_step_and_fix_is_a_command_that_parses() {
         Outcome::NeedsApproval { task: t() },
         Outcome::Blocked { task: t() },
         Outcome::BudgetExhausted { task: t() },
+        Outcome::Incomplete { task: t() },
         Outcome::VerificationFailed { task: t() },
         Outcome::SuspectedGaming { task: t() },
         Outcome::TestsOverStrict { task: t() },

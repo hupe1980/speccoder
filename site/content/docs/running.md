@@ -108,7 +108,8 @@ speccoder do "Make the login button blue" --no-run      # record it; prints the 
 | `denied` | 23 | Three denied calls in a row | Usually a task that asks for something protected |
 | `not_demonstrated` | 23 | A convergence gap no failing test shows | Decide whether it is real; `task skip` or fix it |
 | `suspected_gaming` | 23 | The monitor suspects a shortcut | Review the saved attempt; `task accept` if it is fine |
-| `budget_exhausted`, `incomplete` | 23 | Out of turns or calls, or the model did not finish | Raise `[budget]`, split the task, or `task nudge` |
+| `budget_exhausted` | 23 | Out of turns or calls | Raise `[budget]`, split the task, or `task nudge` |
+| `incomplete` | 23 | The model says part of the task is left undone; the stop quotes what | `task nudge` with what is missing, or run again |
 | `interrupted` | 23 | Killed while a tool call was running | Run again; see [recovery](@/docs/recovery.md) |
 
 The `task` commands (`approve`, `reject`, `accept`, `done`, `hint`, `skip`, `nudge`, `rule`, `restore`, `drop`, `show`) are in the [CLI reference](@/docs/cli.md#work). `task accept` ticks on your word and shows as `attested`, never `verified`.

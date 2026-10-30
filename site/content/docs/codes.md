@@ -106,6 +106,7 @@ Every result that is not plainly `ok` names a code — `error[CODE]`, `stopped[C
 | [`NEEDS-APPROVAL`](#needs-approval) | stop | 23 | a call waits for a person's decision; nothing ran |
 | [`BLOCKED`](#blocked) | stop | 23 | the model says the task cannot be done as written |
 | [`TASK-YOURS`](#task-yours) | stop | 23 | the next task is a step only a person can take |
+| [`ATTEMPT-INCOMPLETE`](#attempt-incomplete) | stop | 23 | the model says the task is not finished |
 | [`BUDGET-EXHAUSTED`](#budget-exhausted) | stop | 23 | the attempt ran out of turns, calls or tokens |
 | [`NOT-DEMONSTRATED`](#not-demonstrated) | stop | 23 | the evidence the task needs could not be produced |
 | [`TESTS-COLLECTION-UNKNOWN`](#tests-collection-unknown) | stop | 23 | speccoder cannot tell whether the runner ran a test file |
@@ -944,6 +945,15 @@ Its line carries `[YOU]`: the run does not attempt it. Do it, then say so; or gi
 - `speccoder task done <task>`
 - `speccoder task hint <task> "…"`
 - `speccoder task skip <task> --reason "…"`
+
+### ATTEMPT-INCOMPLETE
+
+The model says the task is not finished.
+
+Its closing report says part of the task is left undone; that is believed, and the attempt is not ticked. The stop quotes what the model says is missing (a claim). The work so far is saved under the attempt's ref.
+
+- `speccoder task nudge <task> --note "…"`
+- `speccoder run --task <task>`
 
 ### BUDGET-EXHAUSTED
 

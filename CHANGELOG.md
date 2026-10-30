@@ -6,6 +6,20 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- An attempt the model reports as unfinished stops with
+  `ATTEMPT-INCOMPLETE` and quotes what the model says is missing, instead
+  of `BUDGET-EXHAUSTED` and advice to raise `[budget]`.
+- The attempt is told the configured checks' exact commands, so it runs
+  them instead of guessing (`pytest`, `python -m pytest`) and reporting
+  unfinished work because none ran.
+
+### Upgrading
+
+- `speccoder replay` of a run recorded before this release reports a
+  divergence (the attempt's prompt changed).
+
 ## [0.5.0] - 2026-10-30
 
 ### Added

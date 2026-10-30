@@ -80,7 +80,8 @@ pub(crate) fn status_and_message(
         (_, "incomplete") => (
             CommandStatus::NeedsHuman,
             format!(
-                "attempt incomplete by the model's own account{}",
+                "attempt incomplete — {}{}",
+                incomplete_because(report.model_report.as_ref()),
                 if report.changes.is_empty() {
                     "; no files changed"
                 } else {
@@ -140,6 +141,36 @@ pub(crate) fn status_and_message(
             ),
         ),
     }
+}
+
+/// What the model's closing report says is missing — its notes, else its
+/// summary — quoted as its claim, cut at 400 characters.
+fn incomplete_because(model_report: Option<&Value>) -> String {
+    let report = model_report.unwrap_or(&Value::Null);
+    let notes: Vec<&str> = report["notes"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .map(str::trim)
+        .filter(|n| !n.is_empty())
+        .collect();
+    let said = if notes.is_empty() {
+        report["summary"]
+            .as_str()
+            .unwrap_or_default()
+            .trim()
+            .to_owned()
+    } else {
+        notes.join(" ")
+    };
+    if said.is_empty() {
+        return "the model says it did not finish".to_owned();
+    }
+    let said = crate::approvals::present::escape(&said.replace('\n', " "));
+    let cut: String = said.chars().take(400).collect();
+    let more = if cut.len() < said.len() { "…" } else { "" };
+    format!("the model says: “{cut}{more}”")
 }
 
 /// `verified`, `regression_only` or `failed`.
@@ -247,5 +278,29 @@ pub(crate) fn undemonstrated_why(acceptance: Option<&super::PreparedAcceptance>)
             },
             (None, None) => "its acceptance tests already pass before any change".to_owned(),
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn an_incomplete_attempt_quotes_what_the_model_says_is_missing() {
+        let notes =
+            json!({ "summary": "s", "notes": ["", "pytest is \u{1b}[31mmissing", "so I stopped"] });
+        assert_eq!(
+            incomplete_because(Some(&notes)),
+            "the model says: “pytest is ␛[31mmissing so I stopped”"
+        );
+        let summary = json!({ "summary": "only the plumbing\nso far", "notes": [] });
+        assert_eq!(
+            incomplete_because(Some(&summary)),
+            "the model says: “only the plumbing so far”"
+        );
+        assert_eq!(incomplete_because(None), "the model says it did not finish");
+        let long = json!({ "notes": ["é".repeat(500)] });
+        assert!(incomplete_because(Some(&long)).ends_with("é…”"));
     }
 }

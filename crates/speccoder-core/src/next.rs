@@ -72,8 +72,13 @@ pub enum Outcome {
         /// The task.
         task: String,
     },
-    /// Out of turns or calls, or the model did not finish.
+    /// Out of turns or calls.
     BudgetExhausted {
+        /// The task.
+        task: String,
+    },
+    /// The model's closing report says the task is not finished.
+    Incomplete {
         /// The task.
         task: String,
     },
@@ -182,6 +187,17 @@ pub fn next(outcome: &Outcome, feature: Option<&str>) -> Vec<NextStep> {
                 format!("speccoder task hint {task} \"…\""),
                 "a hint, then a new attempt now",
             ),
+            (
+                format!("speccoder task skip {task} --reason \"…\""),
+                "pass it by; its dependents stay blocked",
+            ),
+        ],
+        O::Incomplete { task } => vec![
+            (
+                format!("speccoder task nudge {task} --note \"…\""),
+                "say what is missing, for the next attempt",
+            ),
+            (format!("speccoder run --task {task}"), "try the task again"),
             (
                 format!("speccoder task skip {task} --reason \"…\""),
                 "pass it by; its dependents stay blocked",
@@ -419,6 +435,14 @@ mod tests {
                 vec![
                     "speccoder task done T004",
                     "speccoder task hint T004 \"…\"",
+                    "speccoder task skip T004 --reason \"…\"",
+                ],
+            ),
+            (
+                Outcome::Incomplete { task: t() },
+                vec![
+                    "speccoder task nudge T004 --note \"…\"",
+                    "speccoder run --task T004",
                     "speccoder task skip T004 --reason \"…\"",
                 ],
             ),

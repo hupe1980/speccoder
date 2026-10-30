@@ -937,6 +937,17 @@ pub const CATALOG: &[Entry] = &[
         ]
     ),
     entry!(
+        "ATTEMPT-INCOMPLETE",
+        P,
+        S::NeedsHuman,
+        "the model says the task is not finished",
+        "Its closing report says part of the task is left undone; that is believed, and the attempt is not ticked. The stop quotes what the model says is missing (a claim). The work so far is saved under the attempt's ref.",
+        [
+            "speccoder task nudge {task} --note \"…\"",
+            "speccoder run --task {task}"
+        ]
+    ),
+    entry!(
         "BUDGET-EXHAUSTED",
         P,
         S::NeedsHuman,

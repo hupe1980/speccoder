@@ -44,7 +44,8 @@ return values copied from tests or examples in place of the specified behaviour 
 constant where the spec asks for a computed, fetched or current value is a cheat): if \
 the specified behaviour is impossible under the stated constraints, call report_blocked. \
 You are not the judge: when you finish, speccoder runs the checks itself and decides. \
-Finish with the requested structured report.",
+Finish with the requested structured report; its status is `incomplete` only when part of \
+the task is left undone — a check you could not run is no reason.",
         product = w.product,
         intent = w.intent_paths,
     )
@@ -598,6 +599,26 @@ impl Skill for Attempt {
                     };
                     let text = format!(
                         "# A planning task\n\nThis task writes design documents, not code: write them under `{dir}/` (the plan, contracts, the data model, research and the like are yours to write there). The requirements, the task list and the person's review stay protected, as does everything else of the spec; change no source code. speccoder runs the checks afterwards.\n"
+                    );
+                    if let Some(content) = p[key][0]["content"].as_array_mut() {
+                        content.push(json!({ "type": kind, "text": text }));
+                    }
+                }
+                // The checks as configured: the commands that run without asking.
+                let checks: Vec<String> = argvs(&input["settings"]["checks"])
+                    .iter()
+                    .map(|argv| format!("- `{}`", json!(argv)))
+                    .collect();
+                if !checks.is_empty() {
+                    let (key, kind) = match style {
+                        PromptStyle::OpenAi => ("input", "input_text"),
+                        PromptStyle::Anthropic | PromptStyle::Chat | PromptStyle::Parts { .. } => {
+                            ("messages", "text")
+                        }
+                    };
+                    let text = format!(
+                        "# The checks\n\nRun them with run_command as these argvs, word for word; they need no approval:\n\n{}\n",
+                        checks.join("\n")
                     );
                     if let Some(content) = p[key][0]["content"].as_array_mut() {
                         content.push(json!({ "type": kind, "text": text }));
