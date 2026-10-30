@@ -5,6 +5,7 @@
   import { app } from "../lib/app.svelte";
   import { offer } from "../lib/actions";
   import Icon from "./Icon.svelte";
+  import WritingHelp from "./WritingHelp.svelte";
 
   let request = $state(app.quickDraft);
   app.quickDraft = "";
@@ -53,6 +54,7 @@
       <!-- svelte-ignore a11y_autofocus -->
       <textarea rows="3" bind:value={request} autofocus placeholder="Show the version number in the footer"></textarea>
     </label>
+    <WritingHelp field="quick" text={request} onshaped={(t) => (request = t)} />
     <div class="field">
       <span>Done when <em>— optional; the tests are written from these</em></span>
       {#each checks as _, i (i)}

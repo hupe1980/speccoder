@@ -1212,6 +1212,8 @@ fn main() {
                     id,
                     wording,
                     approve,
+                    shape: false,
+                    ..
                 }) => review::edit(
                     path,
                     feature,
@@ -1220,12 +1222,25 @@ fn main() {
                     *approve,
                     speccoder_core::actions::Via::Terminal,
                 ),
+                Some(R::Edit {
+                    id,
+                    wording,
+                    approve,
+                    accept,
+                    ..
+                }) => shaped_edit(path, feature, id, wording, *approve, *accept),
             };
             if let Some(a) = &attention {
                 a.finish(&result);
             }
             result
         }
+        Command::Shape {
+            text,
+            field,
+            from,
+            check,
+        } => shape_command(path, text.as_deref(), from.as_deref(), field.name(), *check),
         Command::Issue {
             action: None | Some(cli::IssueAction::List),
         } => speccoder_runtime::github::list(&speccoder_runtime::github::Ctx::from_env(), path),
@@ -2169,6 +2184,7 @@ fn command_name(command: Option<&Command>) -> &'static str {
             C::Actions { .. } => "actions",
             C::Auth { .. } => "auth",
             C::Review { .. } => "review",
+            C::Shape { .. } => "shape",
             C::Run { .. } => "run",
             C::Task { action } => match action {
                 cli::TaskAction::AcceptanceAt { .. } => "task acceptance-at",
@@ -2207,6 +2223,130 @@ fn command_name(command: Option<&Command>) -> &'static str {
     }
 }
 
+/// `speccoder shape`: the words from the argument, a file or stdin; the
+/// writing check alone with `--check`.
+fn shape_command(
+    path: &std::path::Path,
+    text: Option<&str>,
+    from: Option<&std::path::Path>,
+    field: &str,
+    check: bool,
+) -> speccoder_core::CommandResult {
+    use speccoder_core::{CommandResult, CommandStatus};
+    let words = match (text, from) {
+        (Some(t), _) => t.to_owned(),
+        (None, Some(f)) => match std::fs::read_to_string(f) {
+            Ok(t) => t,
+            Err(e) => {
+                return CommandResult::new(
+                    "shape",
+                    CommandStatus::UsageError,
+                    &format!("{}: {e}", f.display()),
+                );
+            }
+        },
+        (None, None) => {
+            use std::io::{IsTerminal, Read};
+            let mut t = String::new();
+            if std::io::stdin().is_terminal() || std::io::stdin().read_to_string(&mut t).is_err() {
+                return CommandResult::new(
+                    "shape",
+                    CommandStatus::UsageError,
+                    "give your words: `speccoder shape \"…\"`, `--from FILE`, or on stdin",
+                );
+            }
+            t
+        }
+    };
+    if check {
+        let found = speccoder_runtime::shape::findings(field, &words);
+        let lines: Vec<String> = found
+            .iter()
+            .map(|f| {
+                let at = if f.words.is_empty() {
+                    String::new()
+                } else {
+                    format!("\"{}\": ", f.words)
+                };
+                format!("  {at}{} — {}", f.reason, f.fix)
+            })
+            .collect();
+        let head = match found.len() {
+            0 => "the writing check finds nothing to fix".to_owned(),
+            n => format!(
+                "the writing check finds {n} thing(s) to fix:\n{}",
+                lines.join("\n")
+            ),
+        };
+        return CommandResult::new("shape", CommandStatus::Ok, &head);
+    }
+    speccoder_runtime::shape::shape(path, field, &words, None)
+}
+
+/// `review edit ID WORDS --shape [--accept]`: the proposal for the
+/// requirement's wording; applied only with `--accept`, and only when it
+/// adds nothing unexplained, drops nothing and asks nothing.
+fn shaped_edit(
+    path: &std::path::Path,
+    feature: Option<&str>,
+    id: &str,
+    words: &str,
+    approve: bool,
+    accept: bool,
+) -> speccoder_core::CommandResult {
+    use speccoder_core::{CommandData, CommandStatus};
+    let shaped = speccoder_runtime::shape::shape(path, "requirement", words, None);
+    let Some(CommandData::Shape(s)) = shaped.data() else {
+        return shaped;
+    };
+    if !accept {
+        return shaped;
+    }
+    let dropped = s.coverage.iter().filter(|c| c.dropped).count();
+    if !s.assumptions.is_empty()
+        || !s.unexplained.is_empty()
+        || dropped > 0
+        || !s.questions.is_empty()
+    {
+        let mut why = Vec::new();
+        if !s.assumptions.is_empty() {
+            let words: Vec<String> = s
+                .assumptions
+                .iter()
+                .map(|a| format!("\"{}\"", a.words))
+                .collect();
+            why.push(format!("it assumes {} — decide each", words.join(", ")));
+        }
+        if !s.unexplained.is_empty() {
+            why.push(format!(
+                "it adds {} without saying why",
+                s.unexplained.join(", ")
+            ));
+        }
+        if dropped > 0 {
+            why.push(format!("it drops {dropped} sentence(s) of yours"));
+        }
+        if !s.questions.is_empty() {
+            why.push(format!("it leaves {} question(s) open", s.questions.len()));
+        }
+        return shaped.reworded(
+            CommandStatus::NeedsHuman,
+            &format!(
+                "not applied: {} — decide in the app's Shape sheet, or edit the wording yourself (`speccoder review edit {id} \"…\"`)",
+                why.join("; ")
+            ),
+        );
+    }
+    speccoder_runtime::review::edit(
+        path,
+        feature,
+        id,
+        &s.proposal,
+        approve,
+        speccoder_core::actions::Via::Terminal,
+    )
+}
+
 /// `decide` for each of `tasks` (none: `--all`'s feature-wide form), each
 /// on its own: one task's result as it is; several, every task's line,
 /// `ok` only when each was decided.
@@ -2226,11 +2366,17 @@ fn each_task(
             "--call names one waiting call: give one task with it",
         ),
         many => {
-            let results: Vec<CommandResult> = many.iter().map(|t| decide(Some(t))).collect();
+            let mut seen = std::collections::BTreeSet::new();
+            let many: Vec<&String> = many.iter().filter(|t| seen.insert(t.as_str())).collect();
+            let mut results: Vec<CommandResult> = many.iter().map(|t| decide(Some(t))).collect();
             let decided = results
                 .iter()
                 .filter(|r| r.status() == CommandStatus::Ok)
                 .count();
+            // Nothing decided: the first failure as it is, its code and exit status.
+            if decided == 0 {
+                return results.swap_remove(0);
+            }
             let lines: Vec<String> = many
                 .iter()
                 .zip(&results)

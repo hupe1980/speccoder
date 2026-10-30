@@ -191,6 +191,8 @@ pub enum CommandData {
     Issues(Box<IssuesReport>),
     /// `inbox`: what waits for a person's decision, across features.
     Inbox(Box<InboxReport>),
+    /// `shape`: a person's words made into a requirement, and what changed.
+    Shape(Box<ShapeReport>),
     /// `review`: the feature's requirements and the person's review of each.
     Review(Box<ReviewReport>),
     /// `auth`: who speccoder is on a GitHub host.
@@ -471,6 +473,50 @@ pub struct InboxReport {
     /// Features with nothing running and nothing waiting.
     #[serde(default)]
     pub idle: Vec<String>,
+}
+
+/// Result of `speccoder shape`: the assistant's proposal for a field, and
+/// what code found it changed — added and dropped words, sentences that
+/// landed nowhere, values introduced without an assumption, and what makes
+/// the text hard to test. Nothing is written anywhere.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct ShapeReport {
+    /// The field it is for: `requirement`, `feature`, `quick`,
+    /// `bug_symptom`, `bug_expected`, `bug_unchanged`, `answer` or `note`.
+    pub field: String,
+    /// The spec format it is written for (`speckit`, `openspec`).
+    pub format: String,
+    /// The person's words, as given (cut at 20 000 characters).
+    pub original: String,
+    /// The person's words were longer and were cut.
+    pub cut: bool,
+    /// The proposal, as it would go into the field.
+    pub proposal: String,
+    /// The person's language, when it is not the spec's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
+    /// The proposal translated back into the person's language (then the
+    /// diff and the coverage are against it).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub back_translation: Option<String>,
+    /// Which words are the person's, added or dropped (by code).
+    pub diff: crate::shape::Diff,
+    /// Values the assistant says it introduced.
+    pub assumptions: Vec<crate::shape::Assumption>,
+    /// Added numbers and terms no assumption explains (by code).
+    pub unexplained: Vec<String>,
+    /// Where each of the person's sentences went (by code).
+    pub coverage: Vec<crate::shape::Coverage>,
+    /// Questions the assistant left open instead of guessing.
+    pub questions: Vec<String>,
+    /// The writing check of the proposal (model-free).
+    pub findings: Vec<crate::shape::Finding>,
+    /// The writing check of the person's own words.
+    pub findings_before: Vec<crate::shape::Finding>,
+    /// The shaping run, when one ran.
+    pub run_id: Option<String>,
+    /// Its tokens.
+    pub usage: Option<serde_json::Value>,
 }
 
 /// A group of Needs You and how much is in it.
@@ -1020,6 +1066,7 @@ impl CommandData {
             Self::Config(_) => "config",
             Self::Issues(_) => "issues",
             Self::Inbox(_) => "inbox",
+            Self::Shape(_) => "shape",
             Self::Review(_) => "review",
             Self::Auth(_) => "auth",
             Self::BranchVerify(_) => "branch_verify",
@@ -1070,6 +1117,7 @@ pub const PAYLOADS: &[&str] = &[
     "config",
     "issues",
     "inbox",
+    "shape",
     "review",
     "auth",
     "branch_verify",

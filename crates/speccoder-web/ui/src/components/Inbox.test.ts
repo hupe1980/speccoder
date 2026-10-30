@@ -13,6 +13,9 @@ const host = vi.hoisted(() => ({
     primary: null,
     quick: false,
     perform: vi.fn(async (_a: unknown) => {}),
+    run: vi.fn(async (_a: unknown, _input?: string) => ({ status: "ok", message: "approved" })),
+    toast: vi.fn(),
+    refresh: vi.fn(async () => {}),
     selectFeature: vi.fn(async (_f: string) => {}),
     selectTask: vi.fn(async (_t: string) => {}),
   },
@@ -142,7 +145,8 @@ describe("Inbox", () => {
   });
 
   it("decides several approvals of one tool, each on its own", async () => {
-    host.app.perform.mockClear();
+    host.app.run.mockClear();
+    host.app.run.mockImplementationOnce(async () => ({ status: "ok", message: "approved" })).mockImplementationOnce(async () => ({ status: "not_found", message: "T2 waits for nothing" }));
     host.app.inbox = { data: { features: 1, groups: [], working: [], idle: [], items: [approval("T1", "run_command"), approval("T2", "run_command"), approval("T3", "write_file")] } };
     shown = mount(Inbox, { target: document.body });
     flushSync();
@@ -156,8 +160,13 @@ describe("Inbox", () => {
     flushSync();
     const approve = [...document.querySelectorAll(".batch button")].find((b) => b.textContent === "Approve 2") as HTMLButtonElement;
     approve.click();
-    await vi.waitFor(() => expect(host.app.perform).toHaveBeenCalledTimes(2));
-    expect(host.app.perform).toHaveBeenNthCalledWith(1, expect.objectContaining({ run: { kind: "approve", task: "T1" } }), undefined);
-    expect(host.app.perform).toHaveBeenNthCalledWith(2, expect.objectContaining({ run: { kind: "approve", task: "T2" } }), undefined);
+    // One after the other, each waited for; the one that failed is said and stays selected.
+    await vi.waitFor(() => expect(host.app.toast).toHaveBeenCalled());
+    expect(host.app.run).toHaveBeenNthCalledWith(1, expect.objectContaining({ run: { kind: "approve", task: "T1" } }), undefined);
+    expect(host.app.run).toHaveBeenNthCalledWith(2, expect.objectContaining({ run: { kind: "approve", task: "T2" } }), undefined);
+    expect(host.app.toast).toHaveBeenCalledWith(expect.objectContaining({ text: "1 not decided", detail: "T2: T2 waits for nothing" }));
+    flushSync();
+    expect((document.querySelector('input[aria-label="Select T2"]') as HTMLInputElement).checked).toBe(true);
+    expect((document.querySelector('input[aria-label="Select T1"]') as HTMLInputElement).checked).toBe(false);
   });
 });

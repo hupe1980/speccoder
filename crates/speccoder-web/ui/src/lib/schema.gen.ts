@@ -328,6 +328,16 @@ export interface Artifacts {
   checklists: boolean;
 }
 
+/** What the assistant says it introduced. */
+export interface Assumption {
+  /** The proposal's words that carry it (`up to 10 000 rows`). */
+  words: string;
+  /** What the person wrote that it reads into, when anything (`fast`). */
+  from: string;
+  /** The question to ask instead of assuming it. */
+  question: string;
+}
+
 /** Result of `speccoder attest verify` and `attest sign`. */
 export interface AttestReport {
   /** Feature directory name. */
@@ -772,7 +782,7 @@ export interface CollectionRule {
 }
 
 /** Command-specific payload of a result. */
-export type CommandData = ProjectSnapshot | VerifyReport | WorktreeReport | ProposeReport | ReplayReport | RunReport | EvalReport | FeatureReport | ConvergeReport | StatusReport | ApprovalsReport | ControlReport | CostReport | PrReport | BenchReport | InitReport | SkillsReport | SkillRunReport | ChecklistStatus[] | ArchiveReport | InPlaceReport | AttestReport | ExplainReport | SchemaReport | DoctorReport | FeaturesReport | UiReport | ConfigReport | IssuesReport | InboxReport | ReviewReport | AuthReport | BranchReport | EvidenceTour | ActionsReport | BugReport | PolicyCoverage | CommentsView | PresetReport | NewProjectReport | SampleReport | SimilarReport | RungSuggestion | PlanningChainReport;
+export type CommandData = ProjectSnapshot | VerifyReport | WorktreeReport | ProposeReport | ReplayReport | RunReport | EvalReport | FeatureReport | ConvergeReport | StatusReport | ApprovalsReport | ControlReport | CostReport | PrReport | BenchReport | InitReport | SkillsReport | SkillRunReport | ChecklistStatus[] | ArchiveReport | InPlaceReport | AttestReport | ExplainReport | SchemaReport | DoctorReport | FeaturesReport | UiReport | ConfigReport | IssuesReport | InboxReport | ShapeReport | ReviewReport | AuthReport | BranchReport | EvidenceTour | ActionsReport | BugReport | PolicyCoverage | CommentsView | PresetReport | NewProjectReport | SampleReport | SimilarReport | RungSuggestion | PlanningChainReport;
 
 /**
  * The envelope as it is serialised — the schema of [`CommandResult`]
@@ -1126,6 +1136,16 @@ export interface Counts {
   judged: number;
 }
 
+/** Where one of the person's sentences went. */
+export interface Coverage {
+  /** The sentence, as the person wrote it. */
+  sentence: string;
+  /** The proposal's lines (0-based) that carry its words. */
+  lines: number[];
+  /** No line carries it. */
+  dropped: boolean;
+}
+
 /** How calls of one argv were decided. */
 export interface CoverageDecision {
   /** `allowed by rule`, `approved by a person`, `waiting`. */
@@ -1243,6 +1263,17 @@ export interface Diagnostic {
   message: string;
   /** What to do about it. */
   hint: string | null;
+}
+
+/**
+ * The proposal's stretches (yours or added) and the person's (yours or
+ * dropped).
+ */
+export interface Diff {
+  /** Over the proposal. */
+  proposal: Span[];
+  /** Over the person's text. */
+  original: Span[];
 }
 
 /** What the next attempt is told about the previous one. */
@@ -2127,6 +2158,21 @@ export type FileState = "collected" | "not_collected" | "unknown";
 /** A reproduction on the final tree. */
 export type FinalState = "passed" | "failed" | "not_run";
 
+/** A writing-check hit. */
+export interface Finding {
+  /**
+   * `vague`, `escape_clause`, `open_ended`, `no_obligation`,
+   * `when_without_then`, `no_failure_path`.
+   */
+  rule: string;
+  /** The words it is about (empty for the whole text). */
+  words: string;
+  /** Why it makes the requirement hard to test, in a line. */
+  reason: string;
+  /** What to write instead. */
+  fix: string;
+}
+
 /** A spec-driven format. */
 export type FormatKind = "speckit" | "openspec" | "kiro";
 
@@ -2936,6 +2982,9 @@ export interface OracleView {
   /** Why writing failed, or why it cannot be written here. */
   error: string | null;
 }
+
+/** Where a stretch of text came from. */
+export type Origin = "yours" | "added" | "dropped";
 
 /** What a candidate run showed. */
 export type Outcome = "rejected" | "survived" | "timeout" | "unviable";
@@ -4641,6 +4690,53 @@ export interface SetAside {
 /** Diagnostic severity. */
 export type Severity = "error" | "warning" | "info";
 
+/**
+ * Result of `speccoder shape`: the assistant's proposal for a field, and
+ * what code found it changed — added and dropped words, sentences that
+ * landed nowhere, values introduced without an assumption, and what makes
+ * the text hard to test. Nothing is written anywhere.
+ */
+export interface ShapeReport {
+  /**
+   * The field it is for: `requirement`, `feature`, `quick`,
+   * `bug_symptom`, `bug_expected`, `bug_unchanged`, `answer` or `note`.
+   */
+  field: string;
+  /** The spec format it is written for (`speckit`, `openspec`). */
+  format: string;
+  /** The person's words, as given (cut at 20 000 characters). */
+  original: string;
+  /** The person's words were longer and were cut. */
+  cut: boolean;
+  /** The proposal, as it would go into the field. */
+  proposal: string;
+  /** The person's language, when it is not the spec's. */
+  language?: string | null;
+  /**
+   * The proposal translated back into the person's language (then the
+   * diff and the coverage are against it).
+   */
+  back_translation?: string | null;
+  /** Which words are the person's, added or dropped (by code). */
+  diff: Diff;
+  /** Values the assistant says it introduced. */
+  assumptions: Assumption[];
+  /** Added numbers and terms no assumption explains (by code). */
+  unexplained: string[];
+  /** Where each of the person's sentences went (by code). */
+  coverage: Coverage[];
+  /** Questions the assistant left open instead of guessing. */
+  questions: string[];
+  /** The writing check of the proposal (model-free). */
+  findings: Finding[];
+  /** The writing check of the person's own words. */
+  findings_before: Finding[];
+  /** The shaping run, when one ran. */
+  run_id: string | null;
+  /** Its tokens. */
+  usage: unknown;
+}
+
 /** A reproduction as the stream shows it. */
 export interface ShownReproduction {
   /** Its statement. */
@@ -4773,6 +4869,17 @@ export interface SkippedTask {
 
 /** Where a step's content comes from. */
 export type Source = "signed" | "committed" | "not_recorded";
+
+/**
+ * A stretch of text and its origin; the stretches of one text, in order,
+ * are that text exactly.
+ */
+export interface Span {
+  /** The text, separators included. */
+  text: string;
+  /** Where it came from. */
+  origin: Origin;
+}
 
 /** One commit of the spec and what it changed in its requirements. */
 export interface SpecVersion {

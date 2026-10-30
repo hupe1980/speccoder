@@ -1060,9 +1060,12 @@ fn risk_of(path: &Path, r: &speccoder_core::StatusReport) -> Vec<speccoder_core:
     }
     let commits: Vec<&str> = r.tasks.iter().filter_map(|t| t.commit.as_deref()).collect();
     if !commits.is_empty() {
+        // One call; a commit that is gone (rebased, squashed, shallow) is
+        // left out, never the reason the others are not read.
         let mut args = vec![
-            "show",
-            "-s",
+            "log",
+            "--no-walk=unsorted",
+            "--ignore-missing",
             "--format=%(trailers:key=Scope-Outside,key=Executor,separator=%x01)%x1e",
         ];
         args.extend(commits.iter().copied());

@@ -61,17 +61,27 @@
   const chosen = $derived(items.filter((i) => i.kind === "approval" && i.tool && picked.includes(id(i))));
   const tools = $derived(new Set(chosen.map((i) => i.tool)));
   const toggle = (i: InboxItem) => (picked = picked.includes(id(i)) ? picked.filter((x) => x !== id(i)) : [...picked, id(i)]);
+  // One job at a time (the host runs one): each waits for the one before,
+  // and the ones that did not go through stay selected.
+  let deciding = $state(false);
   async function decideAll(approve: boolean) {
-    const each = chosen.slice();
-    for (const i of each) {
+    deciding = true;
+    const failed: string[] = [];
+    for (const i of chosen.slice()) {
       const a = i.actions.find((x) => x.id.kind === (approve ? "approve" : "reject"));
       if (!a) continue;
       if (app.feature !== i.feature) await app.selectFeature(i.feature);
-      await app.perform(a, approve ? undefined : why.trim());
+      const r = await app.run(a, approve ? undefined : why.trim());
+      if (r?.status === "ok") picked = picked.filter((x) => x !== id(i));
+      else failed.push(`${i.task}: ${r?.message ?? "not decided"}`);
     }
-    picked = [];
-    why = "";
-    rejecting = false;
+    deciding = false;
+    if (failed.length) app.toast({ tone: "error", text: `${failed.length} not decided`, detail: failed.join("\n") });
+    else {
+      why = "";
+      rejecting = false;
+    }
+    void app.refresh();
   }
 
   const ago = (s: number | null) => {
@@ -206,11 +216,11 @@
               <span class="muted">One kind of call at a time: the selection mixes {[...tools].join(" and ")}.</span>
             {:else if rejecting}
               <input class="reason" placeholder="Why (each model is told)" bind:value={why} onkeydown={(e) => e.key === "Enter" && why.trim() && decideAll(false)} />
-              <button class="btn small danger" disabled={!why.trim() || !!app.job?.running} onclick={() => decideAll(false)}>Reject {chosen.length}</button>
+              <button class="btn small danger" disabled={!why.trim() || deciding || !!app.job?.running} onclick={() => decideAll(false)}>Reject {chosen.length}</button>
               <button class="btn small ghost" onclick={() => (rejecting = false)}>Back</button>
             {:else}
               <span><strong>{chosen.length}</strong> <span class="mono">{[...tools][0]}</span> {chosen.length === 1 ? "call" : "calls"} — each decided on its own object</span>
-              <button class="btn small primary" disabled={!!app.job?.running} onclick={() => decideAll(true)}>Approve {chosen.length}</button>
+              <button class="btn small primary" disabled={deciding || !!app.job?.running} onclick={() => decideAll(true)}>{deciding ? "Deciding…" : `Approve ${chosen.length}`}</button>
               <button class="btn small" onclick={() => (rejecting = true)}>Reject {chosen.length}…</button>
               <button class="btn small ghost" onclick={() => (picked = [])}>Clear</button>
             {/if}

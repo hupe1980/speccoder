@@ -648,6 +648,18 @@ const WRITES_WITHOUT_A_KIND: &[(&str, &str)] = &[
         "first_feature",
         "marks the new project's idea as offered once (speccoder's state)",
     ),
+    (
+        "shape",
+        "a body, not a write: one model call proposes, the field's own action writes what the person accepts",
+    ),
+    (
+        "shape_check",
+        "a body, not a write: the writing check, no model",
+    ),
+    (
+        "shape_judge",
+        "a body, not a write: the changed proposal judged by code",
+    ),
 ];
 
 /// Handlers registered for a writing method, and whether each reaches the

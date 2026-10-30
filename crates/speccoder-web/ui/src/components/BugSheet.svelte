@@ -9,6 +9,9 @@
   import { STAGES, at, blocked, command, outcomeWords } from "../lib/bug";
   import type { BugReport, Reply } from "../lib/types";
   import Icon from "./Icon.svelte";
+  import WritingHelp from "./WritingHelp.svelte";
+  // One behaviour per line, list markers dropped.
+  const lines = (t: string) => t.split("\n").map((l) => l.replace(/^\s*[-*•]\s*/, "").trim()).filter(Boolean);
 
   const opened = app.bugSheet ?? {};
   let symptom = $state(opened.symptom ?? "");
@@ -147,12 +150,14 @@
         <!-- svelte-ignore a11y_autofocus -->
         <textarea rows="2" bind:value={symptom} autofocus placeholder="Saving an empty title crashes"></textarea>
       </label>
+      <WritingHelp field="bug_symptom" text={symptom} onshaped={(t) => (symptom = t)} />
       <div class="field">
         <span>What should happen instead <em>— one per behaviour; each gets its own reproduction</em></span>
         {#each expected as v, i (i)}
           <div class="item"><input value={v} oninput={(e) => (expected = list(expected, i, e.currentTarget.value))} placeholder="An empty title is refused with a message" aria-label="Expected, {i + 1}" />{#if expected.length > 1}<button class="x" aria-label="Remove" onclick={() => (expected = expected.filter((_, j) => j !== i))}><Icon name="xmark" size={10} weight={2.6} /></button>{/if}</div>
         {/each}
         <button class="add" onclick={() => (expected = [...expected, ""])}><Icon name="plus" size={10} weight={2.6} /> Another expected behaviour</button>
+        <WritingHelp field="bug_expected" text={expected.join("\n")} onshaped={(t) => (expected = lines(t))} />
       </div>
       <div class="field">
         <span>What must keep working <em>— optional</em></span>
@@ -160,6 +165,7 @@
           <div class="item"><input value={v} oninput={(e) => (unchanged = list(unchanged, i, e.currentTarget.value))} placeholder="A title is saved as typed" aria-label="Unchanged, {i + 1}" /><button class="x" aria-label="Remove" onclick={() => (unchanged = unchanged.filter((_, j) => j !== i))}><Icon name="xmark" size={10} weight={2.6} /></button></div>
         {/each}
         <button class="add" onclick={() => (unchanged = [...unchanged, ""])}><Icon name="plus" size={10} weight={2.6} /> Something that must not change</button>
+        {#if unchanged.some((u) => u.trim())}<WritingHelp field="bug_unchanged" text={unchanged.join("\n")} onshaped={(t) => (unchanged = lines(t))} />{/if}
       </div>
       <details>
         <summary>Issue, your own test, someone else's fix</summary>

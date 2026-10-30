@@ -205,3 +205,23 @@ A step with `skill:` (and `args:`) runs a planning skill; with `bug:` (a slug of
 - Keep examples deterministic: no clocks, network or randomness in expected results.
 - Name the files a task changes (`… in src/lib.rs`) and keep tasks small enough for one attempt.
 - Mark tasks that can run in parallel `[P]`, and have them touch different files.
+
+## Shape: help with the words
+
+Writing a testable requirement is hard, more so in a second language. Under the fields whose words become the judge or an instruction — a new feature's description, a quick change, a bug's symptom and expected behaviours, a requirement's rewording, a hint or nudge, an answer to an open question — speccoder shows the **writing check** as you type: words that cannot be tested ("fast", "large", "etc.", "as appropriate"), a requirement without MUST or SHALL, a When without a Then, scenarios with no failure path. Each says why and what to write instead. It needs no model.
+
+**✦ Shape** opens a sheet over the field. The model proposes the words in your spec's format and language; code, not the model, shows what changed:
+
+- your words on the left, the proposal on the right; words the assistant **added** tinted, words of yours it **dropped** struck through;
+- every value it introduced (a number, a limit, a format) is an **assumption**: **Keep**, **Ask instead** (it becomes an open question the spec review asks) or **Remove**; an added number or quoted term it did not declare is flagged **Added without saying why**;
+- a sentence of yours that landed nowhere is **Not carried over**: **Add it back** or **Drop it**;
+- written in another language, the proposal comes in the spec's language with a translation back into yours.
+
+**Use It** fills the field once each of these is decided; nothing is saved until the field's own sheet saves. A reason you give — rejecting, skipping, accepting — is never offered for shaping: it stays your words. In the terminal:
+
+```sh
+speccoder shape "export stuff fast, csv probably"          # proposal, what it added and dropped
+speccoder shape --check --field requirement "…"            # the writing check alone, no model
+speccoder review edit FR-003 "…" --shape --accept          # applied only if nothing is unexplained or dropped
+```
+

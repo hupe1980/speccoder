@@ -8,6 +8,16 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Shape: help with the words.** Under the fields whose words become the
+  judge or an instruction, a writing check as you type (vague words, no
+  MUST/SHALL, a When without a Then, no failure path; no model) and
+  **✦ Shape**: the model proposes the words in the spec's format and
+  language; code marks what it added and what of yours it dropped; every
+  value it introduced is an assumption to keep, ask about or remove, and
+  every sentence of yours that landed nowhere is added back or dropped on
+  purpose before the words can be used. `speccoder shape`,
+  `review edit --shape [--accept]`. A reason you give is never shaped.
+
 - **Needs You by what it means.** *Blocked on you* first (the oldest
   first), then *Ready to review* with the riskiest evidence first, each
   row's reasons as chips (regression-only, attested, below strength

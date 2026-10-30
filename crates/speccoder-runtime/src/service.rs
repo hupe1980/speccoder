@@ -40,6 +40,12 @@ pub mod status {
     pub use crate::status::report;
 }
 
+/// Shape: a person's words made into a requirement, judged by code; the
+/// writing check. Writes nothing.
+pub mod shape {
+    pub use crate::shape::{FIELDS, findings, judge, shape};
+}
+
 /// The next steps a result names.
 pub mod next {
     pub use crate::next::attach;

@@ -1524,6 +1524,129 @@ pub fn inbox(r: &speccoder_core::InboxReport, look: &crate::style::Look) -> Vec<
     out
 }
 
+/// `shape`: the proposal with what was added marked `{+…+}`, the person's
+/// words with what was dropped marked `[-…-]`, then the assumptions, the
+/// additions nobody explained, the sentences that landed nowhere, the open
+/// questions and the writing check.
+#[must_use]
+pub fn shape(r: &speccoder_core::ShapeReport, look: &crate::style::Look) -> Vec<String> {
+    use crate::style::Token;
+    use speccoder_core::shape::Origin;
+    let marked = |spans: &[speccoder_core::shape::Span]| -> String {
+        spans
+            .iter()
+            .map(|s| match s.origin {
+                Origin::Yours => s.text.clone(),
+                Origin::Added => {
+                    look.paint(Token::Attention, &format!("{{+{}+}}", s.text.trim_end()))
+                        + &" ".repeat(usize::from(s.text.ends_with(' ')))
+                }
+                Origin::Dropped => {
+                    look.paint(Token::Muted, &format!("[-{}-]", s.text.trim_end()))
+                        + &" ".repeat(usize::from(s.text.ends_with(' ')))
+                }
+            })
+            .collect()
+    };
+    let mut out = Vec::new();
+    let section = |out: &mut Vec<String>, title: &str| {
+        out.push(String::new());
+        out.push(look.paint(Token::Accent, title));
+    };
+    section(&mut out, "Proposed");
+    for line in r.proposal.lines() {
+        out.push(format!("  {line}"));
+    }
+    // The diff is over the back translation when there is one: the person
+    // checks the meaning in their own language.
+    let title = match &r.back_translation {
+        Some(_) => Some(format!(
+            "In your words ({}), what was added marked",
+            r.language.as_deref().unwrap_or("yours")
+        )),
+        None => r
+            .diff
+            .proposal
+            .iter()
+            .any(|s| s.origin == Origin::Added)
+            .then(|| "What was added".to_owned()),
+    };
+    if let Some(title) = title {
+        section(&mut out, &title);
+        for line in marked(&r.diff.proposal).lines() {
+            out.push(format!("  {line}"));
+        }
+    }
+    if r.diff.original.iter().any(|s| s.origin == Origin::Dropped) {
+        section(&mut out, "Your words (dropped marked)");
+        for line in marked(&r.diff.original).lines() {
+            out.push(format!("  {line}"));
+        }
+    }
+    if !r.assumptions.is_empty() {
+        section(&mut out, "Assumed — keep each, or ask instead");
+        for (i, a) in r.assumptions.iter().enumerate() {
+            let from = if a.from.is_empty() {
+                String::new()
+            } else {
+                format!(" (from \"{}\")", a.from)
+            };
+            out.push(format!(
+                "  {}. \"{}\"{from} — or ask: {}",
+                i + 1,
+                a.words,
+                a.question
+            ));
+        }
+    }
+    if !r.unexplained.is_empty() {
+        section(&mut out, "Added without saying why");
+        for u in &r.unexplained {
+            out.push(format!(
+                "  {}",
+                look.paint(Token::Attention, &format!("\"{u}\""))
+            ));
+        }
+    }
+    let dropped: Vec<&str> = r
+        .coverage
+        .iter()
+        .filter(|c| c.dropped)
+        .map(|c| c.sentence.as_str())
+        .collect();
+    if !dropped.is_empty() {
+        section(
+            &mut out,
+            "Not carried over — add it back, or drop it on purpose",
+        );
+        for d in dropped {
+            out.push(format!("  {}", look.paint(Token::Attention, d)));
+        }
+    }
+    if !r.questions.is_empty() {
+        section(&mut out, "Open questions");
+        for q in &r.questions {
+            out.push(format!("  ? {q}"));
+        }
+    }
+    if !r.findings.is_empty() {
+        section(&mut out, "Writing check");
+        for f in &r.findings {
+            let at = if f.words.is_empty() {
+                String::new()
+            } else {
+                format!("\"{}\": ", f.words)
+            };
+            out.push(format!("  {at}{} — {}", f.reason, f.fix));
+        }
+    }
+    if r.cut {
+        out.push(look.paint(Token::Muted, "  (your words were cut at 20 000 characters)"));
+    }
+    out.push(String::new());
+    out
+}
+
 /// One Needs You item: its line, what it rests on, its decisions.
 fn inbox_item(out: &mut Vec<String>, i: &speccoder_core::InboxItem, look: &crate::style::Look) {
     use crate::style::{Glyph, Token};

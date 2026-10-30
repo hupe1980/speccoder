@@ -15,6 +15,7 @@ pub mod near_miss;
 pub mod propose;
 pub mod provenance;
 pub mod run_config;
+pub mod shape;
 
 use std::path::Path;
 use std::sync::Arc;
@@ -71,6 +72,9 @@ pub fn manifest_with(
             spec.capabilities
                 .provides
                 .push(near_miss::CAPABILITY.to_owned());
+            spec.capabilities
+                .provides
+                .push(shape::CAPABILITY.to_owned());
             spec.capabilities.provides.push(host::CAPABILITY.to_owned());
             spec.models = Some(Models {
                 privileged: Some(ModelRef {
@@ -487,6 +491,10 @@ fn builder(
             style: model.prompt_style(),
             cache_ttl: model.cache_ttl,
             format,
+        })
+        .skill(shape::Shape {
+            style: model.prompt_style(),
+            cache_ttl: model.cache_ttl,
         });
     // One process owns the journal (redb locks it): opening it frees the
     // leases a dead process left, so the next run resumes at once.
@@ -879,6 +887,16 @@ impl Plane {
                 "feature",
                 &[CorrelationKey::new("feature", feature.to_owned())],
             ))
+            .run()
+            .await
+            .map_err(|e| PlaneError(e.to_string()))
+    }
+
+    /// Runs `speccoder.shape`: a person's words made into the field's kind
+    /// of text.
+    pub async fn shape(&self, input: Tainted<Value>) -> Result<RunOutcome, PlaneError> {
+        self.runtime
+            .start(shape::CAPABILITY, input)
             .run()
             .await
             .map_err(|e| PlaneError(e.to_string()))

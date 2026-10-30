@@ -19,6 +19,7 @@
   import StatusBar from "./components/StatusBar.svelte";
   import ContextMenu from "./components/ContextMenu.svelte";
   import QuickSheet from "./components/QuickSheet.svelte";
+  import ShapeSheet from "./components/ShapeSheet.svelte";
   import BugSheet from "./components/BugSheet.svelte";
   import Settings from "./components/Settings.svelte";
   import CodeView from "./components/CodeView.svelte";
@@ -77,7 +78,7 @@
       return command(e.key === "Enter" ? "review.send" : "review.tests");
     }
     // A sheet, the palette or a decision has the keys while it is open.
-    const sheet = app.composer || app.newFeature || app.newProject || app.clone || app.quick || app.bugSheet || app.confirming || app.keys || app.personStep || app.help;
+    const sheet = app.shape || app.composer || app.newFeature || app.newProject || app.clone || app.quick || app.bugSheet || app.confirming || app.keys || app.personStep || app.help;
     if (typing || inField(e.target) || app.waiting || app.input || app.palette || sheet) return;
     if (e.key === "?") app.keys = true;
     // `N` (Shift+N): the composer; a browser keeps ⌘N for itself.
@@ -309,6 +310,8 @@
 {#if app.keys}<Keys />{/if}
 {#if app.help}<HelpSheet />{/if}
 {#if app.personStep}<StepSheet />{/if}
+<!-- Over the sheet whose field it shapes. -->
+{#if app.shape}<ShapeSheet />{/if}
 <Toasts />
 
 <style>

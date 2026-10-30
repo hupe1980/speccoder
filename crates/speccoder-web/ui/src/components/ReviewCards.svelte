@@ -12,6 +12,7 @@
   import type { Action, Reply, Review, ReviewItem } from "../lib/types";
   import { diffWords, questions as asks, tokenised } from "../lib/words";
   import Icon from "./Icon.svelte";
+  import WritingHelp from "./WritingHelp.svelte";
   import Code from "./Code.svelte";
   import OracleTests from "./OracleTests.svelte";
   import BugTests from "./BugTests.svelte";
@@ -198,6 +199,7 @@
             <form class="edit" onsubmit={(e) => { e.preventDefault(); void save(i.id, false); }}>
               <!-- svelte-ignore a11y_autofocus -->
               <textarea rows="2" bind:value={draft} autofocus aria-label="{i.id} wording" onkeydown={(e) => { if (e.key === "Escape") editing = null; if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void save(i.id, true); } }}></textarea>
+              <WritingHelp field="requirement" text={draft} onshaped={(t) => (draft = t)} />
               {#if draft.trim() && draft.trim() !== i.text}<p class="preview">{#each diffWords(i.text, draft.trim()) as s, n (n)}<span class={s.kind}>{s.text}</span>{/each}</p>{/if}
               <div class="acts">
                 <button class="btn small primary" type="button" disabled={!draft.trim() || !!app.job?.running} onclick={() => save(i.id, true)} title="⌘↩">Save and Approve</button>

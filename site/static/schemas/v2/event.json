@@ -4243,6 +4243,10 @@
           "$ref": "#/$defs/InboxReport"
         },
         {
+          "description": "`shape`: a person's words made into a requirement, and what changed.",
+          "$ref": "#/$defs/ShapeReport"
+        },
+        {
           "description": "`review`: the feature's requirements and the person's review of each.",
           "$ref": "#/$defs/ReviewReport"
         },
@@ -12333,6 +12337,260 @@
         "started",
         "pid",
         "state"
+      ]
+    },
+    "ShapeReport": {
+      "description": "Result of `speccoder shape`: the assistant's proposal for a field, and\nwhat code found it changed — added and dropped words, sentences that\nlanded nowhere, values introduced without an assumption, and what makes\nthe text hard to test. Nothing is written anywhere.",
+      "type": "object",
+      "properties": {
+        "field": {
+          "description": "The field it is for: `requirement`, `feature`, `quick`,\n`bug_symptom`, `bug_expected`, `bug_unchanged`, `answer` or `note`.",
+          "type": "string"
+        },
+        "format": {
+          "description": "The spec format it is written for (`speckit`, `openspec`).",
+          "type": "string"
+        },
+        "original": {
+          "description": "The person's words, as given (cut at 20 000 characters).",
+          "type": "string"
+        },
+        "cut": {
+          "description": "The person's words were longer and were cut.",
+          "type": "boolean"
+        },
+        "proposal": {
+          "description": "The proposal, as it would go into the field.",
+          "type": "string"
+        },
+        "language": {
+          "description": "The person's language, when it is not the spec's.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "back_translation": {
+          "description": "The proposal translated back into the person's language (then the\ndiff and the coverage are against it).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "diff": {
+          "description": "Which words are the person's, added or dropped (by code).",
+          "$ref": "#/$defs/Diff"
+        },
+        "assumptions": {
+          "description": "Values the assistant says it introduced.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Assumption"
+          }
+        },
+        "unexplained": {
+          "description": "Added numbers and terms no assumption explains (by code).",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "coverage": {
+          "description": "Where each of the person's sentences went (by code).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Coverage"
+          }
+        },
+        "questions": {
+          "description": "Questions the assistant left open instead of guessing.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "findings": {
+          "description": "The writing check of the proposal (model-free).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Finding"
+          }
+        },
+        "findings_before": {
+          "description": "The writing check of the person's own words.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Finding"
+          }
+        },
+        "run_id": {
+          "description": "The shaping run, when one ran.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "usage": {
+          "description": "Its tokens."
+        }
+      },
+      "required": [
+        "field",
+        "format",
+        "original",
+        "cut",
+        "proposal",
+        "diff",
+        "assumptions",
+        "unexplained",
+        "coverage",
+        "questions",
+        "findings",
+        "findings_before",
+        "run_id",
+        "usage"
+      ]
+    },
+    "Diff": {
+      "description": "The proposal's stretches (yours or added) and the person's (yours or\ndropped).",
+      "type": "object",
+      "properties": {
+        "proposal": {
+          "description": "Over the proposal.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Span"
+          }
+        },
+        "original": {
+          "description": "Over the person's text.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Span"
+          }
+        }
+      },
+      "required": [
+        "proposal",
+        "original"
+      ]
+    },
+    "Span": {
+      "description": "A stretch of text and its origin; the stretches of one text, in order,\nare that text exactly.",
+      "type": "object",
+      "properties": {
+        "text": {
+          "description": "The text, separators included.",
+          "type": "string"
+        },
+        "origin": {
+          "description": "Where it came from.",
+          "$ref": "#/$defs/Origin"
+        }
+      },
+      "required": [
+        "text",
+        "origin"
+      ]
+    },
+    "Origin": {
+      "description": "Where a stretch of text came from.",
+      "oneOf": [
+        {
+          "description": "The person wrote it (in the proposal), or it was kept (in theirs).",
+          "type": "string",
+          "const": "yours"
+        },
+        {
+          "description": "The assistant added it.",
+          "type": "string",
+          "const": "added"
+        },
+        {
+          "description": "The person wrote it and the proposal left it out.",
+          "type": "string",
+          "const": "dropped"
+        }
+      ]
+    },
+    "Assumption": {
+      "description": "What the assistant says it introduced.",
+      "type": "object",
+      "properties": {
+        "words": {
+          "description": "The proposal's words that carry it (`up to 10 000 rows`).",
+          "type": "string"
+        },
+        "from": {
+          "description": "What the person wrote that it reads into, when anything (`fast`).",
+          "type": "string",
+          "default": ""
+        },
+        "question": {
+          "description": "The question to ask instead of assuming it.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "words",
+        "from",
+        "question"
+      ]
+    },
+    "Coverage": {
+      "description": "Where one of the person's sentences went.",
+      "type": "object",
+      "properties": {
+        "sentence": {
+          "description": "The sentence, as the person wrote it.",
+          "type": "string"
+        },
+        "lines": {
+          "description": "The proposal's lines (0-based) that carry its words.",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          }
+        },
+        "dropped": {
+          "description": "No line carries it.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "sentence",
+        "lines",
+        "dropped"
+      ]
+    },
+    "Finding": {
+      "description": "A writing-check hit.",
+      "type": "object",
+      "properties": {
+        "rule": {
+          "description": "`vague`, `escape_clause`, `open_ended`, `no_obligation`,\n`when_without_then`, `no_failure_path`.",
+          "type": "string"
+        },
+        "words": {
+          "description": "The words it is about (empty for the whole text).",
+          "type": "string"
+        },
+        "reason": {
+          "description": "Why it makes the requirement hard to test, in a line.",
+          "type": "string"
+        },
+        "fix": {
+          "description": "What to write instead.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "rule",
+        "words",
+        "reason",
+        "fix"
       ]
     },
     "ReviewReport": {

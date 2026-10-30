@@ -25,6 +25,7 @@ pub mod predicate;
 pub mod regression;
 pub mod retry;
 pub mod scope;
+pub mod shape;
 pub mod similar;
 pub mod snapshot;
 pub mod spec;
@@ -50,10 +51,10 @@ pub use command::{
     ObjectView, OpenQuestion, OperatorView, PAYLOADS, PendingCall, PermissionTally, PolicyCoverage,
     PrReport, PresetReport, PresetState, ProposeReport, ReasonCount, RefusedPath, Remedy,
     ReplayReport, RequirementDrift, ReviewChange, ReviewItem, ReviewReport, ReviewTotals,
-    RiskReason, RunReport, SCHEMA_VERSION, SchemaName, SchemaReport, SetAside, SignerView,
-    SkillEntry, SkillRunReport, SkillsReport, SpecVersion, StatusReport, StatusTotals, TaskCost,
-    TaskStatus, TickState, TraceRow, UiReport, Unverified, Usage, VerifyOutcome, VerifyReason,
-    WorkingRun, WorktreeReport,
+    RiskReason, RunReport, SCHEMA_VERSION, SchemaName, SchemaReport, SetAside, ShapeReport,
+    SignerView, SkillEntry, SkillRunReport, SkillsReport, SpecVersion, StatusReport, StatusTotals,
+    TaskCost, TaskStatus, TickState, TraceRow, UiReport, Unverified, Usage, VerifyOutcome,
+    VerifyReason, WorkingRun, WorktreeReport,
 };
 pub use command::{
     ChainStep, ChainStop, PlanCheck, PlanningChainReport, Readiness, SampleRecording, SampleReport,

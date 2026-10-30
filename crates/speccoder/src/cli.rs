@@ -329,6 +329,21 @@ pub enum Command {
         #[command(subcommand)]
         action: Option<ReviewAction>,
     },
+    /// Shape rough words into a requirement (or a bug line, a quick change, a note): the proposal, what it added, assumed and dropped, and the writing check. Writes nothing.
+    #[command(hide = true)]
+    Shape {
+        /// Your words (default: read from stdin).
+        text: Option<String>,
+        /// What it is for.
+        #[arg(long, value_enum, default_value_t = ShapeField::Requirement)]
+        field: ShapeField,
+        /// Read the words from this file.
+        #[arg(long, value_name = "FILE", conflicts_with = "text")]
+        from: Option<std::path::PathBuf>,
+        /// Only the writing check (no model).
+        #[arg(long)]
+        check: bool,
+    },
     /// GitHub issues: list the open ones; `start 42` specifies a feature from one.
     Issue {
         #[command(subcommand)]
@@ -965,6 +980,12 @@ pub enum ReviewAction {
         /// Approve the new wording as you write it.
         #[arg(long)]
         approve: bool,
+        /// Treat WORDING as rough words: shape them and show the proposal (nothing is written without `--accept`).
+        #[arg(long)]
+        shape: bool,
+        /// With `--shape`: apply the proposal, if it adds nothing unexplained and drops nothing you wrote.
+        #[arg(long, requires = "shape")]
+        accept: bool,
     },
     /// Remove the decision on requirements.
     Clear {
@@ -972,6 +993,44 @@ pub enum ReviewAction {
         #[arg(required = true)]
         ids: Vec<String>,
     },
+}
+
+/// What shaped words are for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum ShapeField {
+    /// A requirement's wording.
+    Requirement,
+    /// A new feature's description.
+    Feature,
+    /// A quick change.
+    Quick,
+    /// A bug's symptom.
+    BugSymptom,
+    /// What a bug should do instead.
+    BugExpected,
+    /// What must keep working.
+    BugUnchanged,
+    /// An answer to an open question.
+    Answer,
+    /// A note or hint for the next attempt.
+    Note,
+}
+
+impl ShapeField {
+    /// The field's name for the runtime.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Requirement => "requirement",
+            Self::Feature => "feature",
+            Self::Quick => "quick",
+            Self::BugSymptom => "bug_symptom",
+            Self::BugExpected => "bug_expected",
+            Self::BugUnchanged => "bug_unchanged",
+            Self::Answer => "answer",
+            Self::Note => "note",
+        }
+    }
 }
 
 /// How a run started from the review asks.

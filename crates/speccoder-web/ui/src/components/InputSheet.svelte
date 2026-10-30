@@ -1,6 +1,10 @@
 <script lang="ts">
   import { app } from "../lib/app.svelte";
+  import WritingHelp from "./WritingHelp.svelte";
   const a = $derived(app.input!.action);
+  // Help only where the words become an instruction or an answer; a
+  // reason the person gives (reject, skip, accept) stays their own words.
+  const field = $derived(({ hint: "note", nudge: "note", code_nudge: "note", approve: "answer" } as Record<string, string>)[a.id?.kind ?? ""] ?? null);
   let text = $state("");
   const go = () => text.trim() && app.perform(a, text.trim());
 </script>
@@ -11,6 +15,7 @@
     <h2 id="in-title">{a.input}</h2>
     <!-- svelte-ignore a11y_autofocus -->
     <textarea autofocus rows="5" bind:value={text} onkeydown={(e) => (e.metaKey || e.ctrlKey) && e.key === "Enter" && go()}></textarea>
+    {#if field}<WritingHelp {field} {text} onshaped={(t) => (text = t)} />{/if}
     <p class="cmd mono">{a.command.replace("\"…\"", JSON.stringify(text || "…"))}</p>
     <div class="row">
       <button class="btn" onclick={() => (app.input = null)}>Cancel</button>

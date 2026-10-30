@@ -11,6 +11,7 @@
   import { trap } from "../lib/sheet";
   import type { Reply, SimilarMatch, SimilarReport, Through } from "../lib/types";
   import Icon from "./Icon.svelte";
+  import WritingHelp from "./WritingHelp.svelte";
 
   const opened = app.newFeature ?? {};
   let text = $state(opened.text ?? "");
@@ -171,6 +172,7 @@
       <textarea rows="3" bind:value={text} oninput={edited} placeholder="Users can export a report as CSV, with the columns they chose" aria-invalid={invalid} aria-describedby={invalid ? "nf-need" : undefined} readonly={!create}></textarea>
       {#if invalid}<span id="nf-need" class="d-error">Describe what it should do</span>{/if}
     </label>
+    {#if create}<WritingHelp field="feature" {text} onshaped={(t) => (text = t)} />{/if}
 
     {#if handed}
       <div class="d-field" role="radiogroup" aria-label="Start from">

@@ -65,6 +65,9 @@ class AppState {
   help = $state<{ kind: "doctor" } | { kind: "explain"; code: string } | null>(null);
   /** The quick-change sheet is open. */
   quick = $state(false);
+  /** The Shape sheet over a field: its kind, the words to shape, and what
+   *  takes the words the person accepts. */
+  shape = $state<{ field: string; text: string; accept: (text: string) => void } | null>(null);
   /** What the quick-change sheet opens with (typed in the palette). */
   quickDraft = $state("");
   /** The Bug sheet is open: a new bug (prefilled from an issue), or the

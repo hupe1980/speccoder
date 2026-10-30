@@ -64,6 +64,7 @@ pub mod secrets;
 pub mod seed;
 pub mod service;
 pub mod settings;
+pub mod shape;
 pub mod skills;
 pub mod status;
 pub mod strength;

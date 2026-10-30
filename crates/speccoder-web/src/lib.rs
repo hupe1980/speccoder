@@ -535,6 +535,50 @@ async fn config_save(State(s): State<Shared>, Json(b): Json<ConfigBody>) -> Json
 }
 
 #[derive(Debug, Deserialize)]
+struct ShapeBody {
+    field: String,
+    text: String,
+}
+
+/// Shape the person's words for a field: one model call, judged by code;
+/// nothing is written.
+async fn shape(State(s): State<Shared>, Json(b): Json<ShapeBody>) -> Json<Value> {
+    let root = s.root.get();
+    let r =
+        off(move || speccoder_runtime::service::shape::shape(&root, &b.field, &b.text, None)).await;
+    envelope(&s, &r)
+}
+
+/// The writing check of what the person is typing (no model).
+async fn shape_check(Json(b): Json<ShapeBody>) -> Json<Value> {
+    Json(off(move || json!({ "findings": speccoder_runtime::service::shape::findings(&b.field, &b.text) })).await)
+}
+
+#[derive(Debug, Deserialize)]
+struct JudgeBody {
+    field: String,
+    original: String,
+    proposal: String,
+    #[serde(default)]
+    assumptions: Vec<speccoder_core::shape::Assumption>,
+}
+
+/// The proposal again, as the person changed it in the sheet.
+async fn shape_judge(Json(b): Json<JudgeBody>) -> Json<Value> {
+    Json(
+        off(move || {
+            speccoder_runtime::service::shape::judge(
+                &b.field,
+                &b.original,
+                &b.proposal,
+                &b.assumptions,
+            )
+        })
+        .await,
+    )
+}
+
+#[derive(Debug, Deserialize)]
 struct CoverageQuery {
     /// `commands.allow_prefix` or `sandbox.network_allow_prefix`.
     key: String,
@@ -1128,6 +1172,9 @@ pub fn router(s: Shared) -> Router {
         .route("/api/report", get(report))
         .route("/api/actions", get(actions))
         .route("/api/inbox", get(inbox))
+        .route("/api/shape", post(shape))
+        .route("/api/shape/check", post(shape_check))
+        .route("/api/shape/judge", post(shape_judge))
         .route("/api/bug", get(bug))
         .route("/api/account", get(account))
         .route("/api/review", get(review))
