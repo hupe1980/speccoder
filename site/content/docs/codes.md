@@ -950,7 +950,7 @@ Its line carries `[YOU]`: the run does not attempt it. Do it, then say so; or gi
 
 The model says the task is not finished.
 
-Its closing report says part of the task is left undone; that is believed, and the attempt is not ticked. The stop quotes what the model says is missing (a claim). The work so far is saved under the attempt's ref.
+Its closing report says part of the task is left undone; so the attempt is not ticked. The stop quotes what the model says is missing (its claim); the work so far is saved under the attempt's ref.
 
 - `speccoder task nudge <task> --note "…"`
 - `speccoder run --task <task>`
