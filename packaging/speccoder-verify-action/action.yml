@@ -12,7 +12,7 @@ branding:
 inputs:
   version:
     description: The speccoder release whose `attest verify --branch` runs (verified by build provenance and sha256 before it runs; later than 0.2.0).
-    default: "0.5.0" # the release this action is cut with; scripts/release/bump.sh sets it
+    default: "0.5.1" # the release this action is cut with; scripts/release/bump.sh sets it
   allowed-signers:
     description: >-
       SSH allowed-signers file, read from a commit the checked one did not
