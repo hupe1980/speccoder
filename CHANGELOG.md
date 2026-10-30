@@ -8,20 +8,19 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
-- `[model] max_run_tokens` defaults to 500000 (was 200000): an attempt's
-  30 turns resend a growing conversation and ran out of tokens first.
+- `[model] max_run_tokens` defaults to 500000 (was 200000), enough for
+  an attempt's 30 turns.
 
 ### Fixed
 
-- `list_files` and `search_code` given `"."` (or `"./"`, `""`) list the
-  workspace instead of refusing with `empty path`; an agent no longer
-  takes the project for empty.
-- An attempt that uses up its token budget stops with `BUDGET-EXHAUSTED`
-  and the setting to raise (`[model] max_run_tokens`), not `RUN-FAILED`
-  with `Exhausted(Recorded { … })`.
-- An attempt is told that a change the task or its acceptance tests need
-  outside the task's paths (an entry point, a module it imports) is in
-  scope and shown to the reviewer, not a reason to stop.
+- `list_files` and `search_code` read `"."` as the workspace instead of
+  refusing it (`empty path`): an agent no longer takes the project for
+  empty.
+- A spent token budget stops the task with `BUDGET-EXHAUSTED` and the
+  setting to raise, not `RUN-FAILED` with `Exhausted(Recorded { … })`.
+- A change the task or its acceptance tests need outside the task's
+  paths (an entry point, a module they import) is in scope and shown to
+  the reviewer; the agent no longer stops for it.
 
 ## [0.6.0] - 2026-10-30
 
