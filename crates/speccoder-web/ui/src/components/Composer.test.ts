@@ -55,11 +55,11 @@ afterEach(() => {
 });
 
 describe("Composer", () => {
-  it("is a dialog with the four rungs", async () => {
+  it("is a dialog with the five rungs", async () => {
     const d = document.querySelector('[role="dialog"]')!;
     expect(d.getAttribute("aria-modal")).toBe("true");
     const rows = [...document.querySelectorAll('[role="radio"]')];
-    expect(rows.map((r) => r.querySelector(".label")?.textContent)).toEqual(["Bug fix", "Quick change", "Feature", "Just ask"]);
+    expect(rows.map((r) => r.querySelector(".label")?.textContent)).toEqual(["Bug fix", "Quick change", "Feature", "Explore", "Just ask"]);
     expect(rows[3]!.getAttribute("aria-disabled")).toBe("false");
     expect(rows.some((r) => r.getAttribute("aria-checked") === "true")).toBe(false);
     expect(await violations()).toEqual([]);

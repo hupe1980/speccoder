@@ -43,6 +43,13 @@ adheres to [Semantic Versioning](https://semver.org/).
   are a question: streamed, sources as links, a suggested change a
   permission dialog that only **Record** records.
 
+- **Explore** (`speccoder spec explore`, the composer's Explore rung,
+  *Not sure yet? Explore first*): an idea thought through read-only by
+  the format's own exploration skill or speccoder's, ending in
+  approaches to choose from. Your choice composes a brief with a digest;
+  *Start spec from this brief* is plan through with it, word for word,
+  and the new unit's origin names the session.
+
 ### Changed
 
 - An agent's stop must carry evidence speccoder checks: a refused call,
@@ -57,6 +64,8 @@ adheres to [Semantic Versioning](https://semver.org/).
   a branch re-attached after its worktree went brings in the checkout's
   spec too, and task lists that conflict only beside ticked tasks merge
   with the checkout's words and the branch's ticks.
+- `speccoder spec promote UNIT/TASK --decline` and `--conversation ID`
+  parse (they were refused as unexpected arguments).
 
 ## [0.6.1] - 2026-10-30
 

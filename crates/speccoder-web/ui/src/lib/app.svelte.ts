@@ -78,7 +78,9 @@ class AppState {
   composer = $state<{ text?: string } | null>(null);
   /** The New Feature sheet is open: prefilled text, the source a hand-off
    *  supplied, the *Plan it* choice. */
-  newFeature = $state<{ text?: string; source?: { kind: "issue"; number: number; title: string } | { kind: "promotion"; task: string; conversations: string[]; why: string } | null; through?: Through } | null>(null);
+  newFeature = $state<{ text?: string; source?: { kind: "issue"; number: number; title: string } | { kind: "promotion"; task: string; conversations: string[]; why: string } | { kind: "explore"; session: string; digest: string } | null; through?: Through } | null>(null);
+  /** The Explore sheet: a session to show, or words to start from. */
+  explore = $state<{ id?: string | null; idea?: string } | null>(null);
   /** The New Project sheet is open (`existing`: the folder is the host's own). */
   newProject = $state<{ idea?: string; path?: string; existing?: boolean } | null>(null);
   /** The Clone sheet is open. */
@@ -376,6 +378,7 @@ class AppState {
       case "quick_change": this.quick = true; return;
       case "ask": return ask.toggle(true);
       case "new_feature": this.newFeature = {}; return;
+      case "explore": this.explore = { id: subject ?? null }; return;
       case "new_project": this.newProject = {}; return;
       case "github":
         this.view = "overview";

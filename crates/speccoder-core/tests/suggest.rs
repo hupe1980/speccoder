@@ -117,7 +117,38 @@ fn a_bug_names_its_cue_verbatim() {
     assert!(s.available);
     assert_eq!(
         s.alternatives,
-        vec![RungPick::Quick, RungPick::Feature, RungPick::Ask]
+        vec![
+            RungPick::Quick,
+            RungPick::Feature,
+            RungPick::Explore,
+            RungPick::Ask
+        ]
+    );
+}
+
+/// Words weighing approaches suggest Explore — even as a question — and a
+/// plain "this or that" in a description does not.
+#[test]
+fn weighing_approaches_is_explore_and_a_plain_or_is_not() {
+    for text in [
+        "should we export reports as CSV or PDF?",
+        "which is better for the export: a file or a link",
+        "options for keeping reports fresh",
+        "compare a queue with a cron job for the digest",
+    ] {
+        let s = suggest(text);
+        assert_eq!(s.rung, RungPick::Explore, "{text}");
+        assert_eq!(s.cue.rule, RungCueRule::Weighing, "{text}");
+        assert!(s.reason.contains("Explore"), "{}", s.reason);
+    }
+    assert_eq!(
+        suggest("export reports as CSV or XLSX").rung,
+        RungPick::Quick
+    );
+    assert_eq!(suggest("why is the export slow?").rung, RungPick::Ask);
+    assert_eq!(
+        command_for(RungPick::Explore, "x", None).as_deref(),
+        Some("speccoder spec explore \"x\"")
     );
 }
 
@@ -181,6 +212,6 @@ proptest! {
             prop_assert_eq!(&suggest(&text), &a);
         }
         prop_assert!(a.cue.matched.iter().all(|m| m == "?" || text.contains(m.as_str())));
-        prop_assert_eq!(a.alternatives.len(), if a.rung == RungPick::None { 4 } else { 3 });
+        prop_assert_eq!(a.alternatives.len(), if a.rung == RungPick::None { 5 } else { 4 });
     }
 }

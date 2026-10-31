@@ -684,6 +684,20 @@ pub struct Planning {
     /// The skill that checks the planning files for consistency (Spec
     /// Kit: `analyze`), if the format has one.
     pub checks: Option<&'static str>,
+    /// The skill that explores an idea before a spec (OpenSpec:
+    /// `explore`), if the format has one; `spec explore` hosts it
+    /// read-only, else speccoder's own fallback.
+    pub explores: Option<&'static str>,
+    /// What that skill may write: the format's own exploration artifacts.
+    pub explore_paths: fn(&str) -> bool,
+    /// The read-only commands it may run (argv prefixes).
+    pub explore_commands: &'static [&'static [&'static str]],
+}
+
+/// No exploration artifacts.
+#[must_use]
+pub const fn writes_nothing(_rel: &str) -> bool {
+    false
 }
 
 impl Planning {

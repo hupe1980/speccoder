@@ -1351,6 +1351,91 @@
             "kind",
             "task"
           ]
+        },
+        {
+          "description": "Explore an idea read-only, ending in approaches to choose from; or\nresume a session with more words.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "explore"
+            },
+            "idea": {
+              "description": "The idea (a new session) or the words added (a resumed one).",
+              "type": "string"
+            },
+            "skill": {
+              "description": "The skill to host instead of the format's own (`--skill`).",
+              "type": [
+                "string",
+                "null"
+              ],
+              "default": null
+            },
+            "resume": {
+              "description": "The session to resume.",
+              "type": [
+                "string",
+                "null"
+              ],
+              "default": null
+            }
+          },
+          "required": [
+            "kind",
+            "idea",
+            "skill",
+            "resume"
+          ]
+        },
+        {
+          "description": "The person's choice in a session: an approach, and the constraints\nand open questions they keep or add. It composes the brief.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "explore_choose"
+            },
+            "session": {
+              "description": "The session (`ex-…`).",
+              "type": "string"
+            },
+            "approach": {
+              "description": "1-based, of the session's last approaches.",
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "constraints": {
+              "description": "The constraints, as kept and added.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": []
+            },
+            "questions": {
+              "description": "The open questions, as kept and added.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": []
+            },
+            "flag": {
+              "description": "Chosen by a flag (`--choose N`), not in a prompt or the app.",
+              "type": "boolean",
+              "default": false
+            }
+          },
+          "required": [
+            "kind",
+            "session",
+            "approach",
+            "constraints",
+            "questions",
+            "flag"
+          ]
         }
       ]
     },
@@ -1749,6 +1834,29 @@
             "task",
             "conversations"
           ]
+        },
+        {
+          "description": "An Explore session's brief, verbatim.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "explore"
+            },
+            "session": {
+              "description": "The session (`ex-…`).",
+              "type": "string"
+            },
+            "digest": {
+              "description": "The brief's digest, checked before anything runs.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "session",
+            "digest"
+          ]
         }
       ]
     },
@@ -1937,6 +2045,11 @@
           "description": "`ask`: the Ask panel.",
           "type": "string",
           "const": "ask"
+        },
+        {
+          "description": "`spec explore`: the Explore sheet (`subject`: a session, if one).",
+          "type": "string",
+          "const": "explore"
         }
       ]
     },

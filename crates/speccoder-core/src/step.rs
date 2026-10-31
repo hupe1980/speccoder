@@ -45,6 +45,8 @@ pub enum View {
     Task,
     /// `ask`: the Ask panel.
     Ask,
+    /// `spec explore`: the Explore sheet (`subject`: a session, if one).
+    Explore,
 }
 
 /// How an interface takes a line.
@@ -866,6 +868,16 @@ fn speccoder(argv: &[String], constant: bool) -> How {
         (Some(_), _) if has(a, "-C") => words(Some("it is another project's: run it there")),
         (Some("spec"), Some("archive")) => run_cmd(),
         // The offer lives in Needs You; declining it is one action.
+        // A session is chosen from, resumed and started in the sheet.
+        (Some("spec"), Some("explore")) => view(
+            View::Explore,
+            match positional(a, 2) {
+                Some("choose") => positional(a, 4),
+                Some("resume" | "start") => positional(a, 3),
+                _ => None,
+            }
+            .filter(|s| s.starts_with("ex-")),
+        ),
         (Some("spec"), Some("promote")) => match positional(a, 2) {
             Some(task) if has(a, "--decline") => perform(
                 Runnable::DeclinePromotion {

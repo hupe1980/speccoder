@@ -1379,6 +1379,8 @@ pub(crate) async fn tool_turn(
                     "arguments": asked.arguments,
                     "decision": "allow",
                     "answered": read.as_ref().is_some_and(|r| r.text.is_some()),
+                    // The person's words, as the record of what they said.
+                    "answer": read.as_ref().and_then(|r| r.text.clone()),
                     "operator": by.as_ref().map(Who::view),
                     "via": by.as_ref().map(|w| w.via.clone()),
                 });

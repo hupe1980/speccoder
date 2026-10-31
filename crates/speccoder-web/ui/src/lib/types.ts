@@ -73,6 +73,10 @@ export type {
   StackOption,
   Through,
   View,
+  ExplorePayload,
+  SessionEntry,
+  Approach,
+  Item,
 } from "./schema.gen";
 
 /** A route's envelope, its `data` as the route sends it. */

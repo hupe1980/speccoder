@@ -293,6 +293,33 @@ fn cases() -> Vec<Case> {
             Runnable::Accept { task: task("T006") },
             None,
         ),
+        // Explore: a choice in a session that is not there, and a start
+        // from a brief nobody chose — refused before any model.
+        case(
+            "explore-choose-unknown",
+            Runnable::ExploreChoose {
+                session: "ex-000000000000".to_owned(),
+                approach: 1,
+                constraints: Vec::new(),
+                questions: Vec::new(),
+                flag: false,
+            },
+            None,
+        ),
+        case(
+            "explore-start-unknown",
+            Runnable::PlanThrough {
+                from: speccoder_core::actions::PlanFrom::Create {
+                    description: "a brief".to_owned(),
+                    source: speccoder_core::actions::FeatureSource::Explore {
+                        session: "ex-000000000000".to_owned(),
+                        digest: "0".repeat(64),
+                    },
+                },
+                through: speccoder_core::actions::Through::Spec,
+            },
+            None,
+        ),
         case(
             "accept-blank",
             Runnable::Accept { task: task("T006") },

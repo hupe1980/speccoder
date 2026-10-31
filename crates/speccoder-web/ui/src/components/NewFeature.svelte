@@ -20,6 +20,8 @@
   // A quick change or bug that grew: its requirement, and the Ask
   // conversations that led to it, each the person's to carry or not.
   const promoted = opened.source?.kind === "promotion" ? opened.source : null;
+  // An Explore brief: started verbatim or not at all (its digest is checked).
+  const explored = opened.source?.kind === "explore" ? opened.source : null;
   let carry = $state<string[]>(promoted?.conversations ?? []);
   let titles = $state<Record<string, { title: string; turns: number }>>({});
   $effect(() => {
@@ -127,6 +129,16 @@
     app.view = "documents";
     app.doc = "spec";
     close();
+    if (explored) {
+      return app.perform(
+        offer(
+          { kind: "plan_through", from: { kind: "create", description: opened.text ?? "", source: { kind: "explore", session: explored.session, digest: explored.digest } }, through },
+          { group: "plan", label: `new ${unit} from ${explored.session}`, why: "the brief you chose, verbatim", command: `speccoder spec explore start ${explored.session}` },
+        ),
+        undefined,
+        true,
+      );
+    }
     if (promoted) {
       return app.perform(
         offer(
@@ -186,7 +198,7 @@
 </script>
 
 <div class="d-scrim" role="presentation" onclick={(e) => e.target === e.currentTarget && close()} onkeydown={key}>
-  <div class="d-sheet wide" role="dialog" aria-modal="true" aria-labelledby="nf-title" aria-describedby="nf-lead" use:trap={"textarea"}>
+  <div class="d-sheet wide" role="dialog" aria-modal="true" aria-labelledby="nf-title" aria-describedby="nf-lead" use:trap={explored ? "button.primary" : "textarea"}>
     <header class="d-head">
       <span class="d-badge" aria-hidden="true"><Icon name="sparkle" size={20} weight={2.2} /></span>
       <div>
@@ -197,10 +209,18 @@
 
     <label class="d-field">
       <span class="d-label">What should it do?</span>
-      <textarea rows="3" bind:value={text} oninput={edited} placeholder="Users can export a report as CSV, with the columns they chose" aria-invalid={invalid} aria-describedby={invalid ? "nf-need" : undefined} readonly={!create}></textarea>
+      <textarea rows={explored ? 9 : 3} bind:value={text} oninput={edited} placeholder="Users can export a report as CSV, with the columns they chose" aria-invalid={invalid} aria-describedby={invalid ? "nf-need" : undefined} readonly={!create || !!explored}></textarea>
       {#if invalid}<span id="nf-need" class="d-error">Describe what it should do</span>{/if}
     </label>
-    {#if create}<WritingHelp field="feature" {text} onshaped={(t) => (text = t)} />{/if}
+    {#if create && !explored}<WritingHelp field="feature" {text} onshaped={(t) => (text = t)} />{/if}
+    {#if explored}
+      <div class="d-field explored" aria-label="From an exploration">
+        <span class="d-label">From exploration {explored.session} · brief <code>{explored.digest.slice(0, 12)}</code></span>
+        <span class="d-note">The brief you chose, word for word — the spec records where it came from. To change it, choose again in the exploration.</span>
+      </div>
+    {:else if create}
+      <button type="button" class="link explore-first" onclick={() => { app.explore = { idea: text }; close(); }}><Icon name="sparkle" size={12} /> Not sure yet? Explore first</button>
+    {/if}
 
     {#if handed}
       <div class="d-field" role="radiogroup" aria-label="Start from">
@@ -284,4 +304,7 @@
   details summary { cursor: pointer; font-size: 0.86rem; color: var(--accent-ink); font-weight: 600; }
   details .d-mono { margin-top: 0.4rem; }
   code { font: 0.82rem var(--mono); }
+  .explore-first { justify-self: start; display: inline-flex; align-items: center; gap: 0.35rem; border: 0; background: none; padding: 0; color: #a646d8; font: inherit; font-size: 0.8rem; font-weight: 600; cursor: pointer; }
+  .explore-first:hover { text-decoration: underline; }
+  .explored code { font-size: 0.78rem; }
 </style>

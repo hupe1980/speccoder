@@ -595,7 +595,9 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::CloneRepository
             | K::OpenSample
             | K::SampleChecks
-            | K::DeclinePromotion => Offer::Take,
+            | K::DeclinePromotion
+            | K::Explore
+            | K::ExploreChoose => Offer::Take,
             K::Command => Offer::Refuse,
         },
         // Decisions belong to their own prompt; what leaves the machine
@@ -642,6 +644,8 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::OpenSample
             | K::SampleChecks
             | K::DeclinePromotion
+            | K::Explore
+            | K::ExploreChoose
             | K::Command => Offer::Refuse,
         },
         // What a proposal may be: a quick change, a bug fix, a nudge, an
@@ -686,6 +690,8 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::OpenSample
             | K::SampleChecks
             | K::DeclinePromotion
+            | K::Explore
+            | K::ExploreChoose
             | K::Command => Offer::Refuse,
         },
         // Its keys decide the queue's calls and switch the feature; `n`
@@ -730,6 +736,8 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::OpenSample
             | K::SampleChecks
             | K::DeclinePromotion
+            | K::Explore
+            | K::ExploreChoose
             | K::Command => Offer::Refuse,
         },
         Interface::CliRemedy | Interface::AcpRemedy => match kind {
@@ -776,6 +784,8 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::OpenSample
             | K::SampleChecks
             | K::DeclinePromotion
+            | K::Explore
+            | K::ExploreChoose
             | K::Command => Offer::Refuse,
         },
     }
@@ -1106,6 +1116,33 @@ pub fn perform_in(
         Runnable::CommentsSend { ids } => {
             crate::comments::send(root, feature, ids, via, state, options)
         }
+        Runnable::Explore {
+            idea,
+            skill,
+            resume,
+        } => crate::explore::explore(
+            root,
+            text.unwrap_or(idea),
+            skill.as_deref(),
+            resume.as_deref(),
+            options,
+        ),
+        Runnable::ExploreChoose {
+            session,
+            approach,
+            constraints,
+            questions,
+            flag,
+        } => crate::explore::choose(
+            root,
+            state,
+            session,
+            *approach,
+            constraints,
+            questions,
+            via,
+            if *flag { "flag" } else { "prompt" },
+        ),
         Runnable::RevisionUndo { turn } => {
             crate::comments::undo(root, feature, turn.as_deref(), state)
         }
@@ -1146,6 +1183,19 @@ pub fn perform_in(
                         via,
                         options.progress.as_ref(),
                     );
+                    made
+                }
+                // An Explore brief: verbatim and unchanged since it was
+                // chosen, or nothing runs.
+                speccoder_core::actions::FeatureSource::Explore { session, digest } => {
+                    let Some(s) = state else { return no_state() };
+                    if let Err(refused) =
+                        crate::explore::verify_start(root, s, session, digest, description)
+                    {
+                        return *refused;
+                    }
+                    let made = plan_through(root, description, source, *through, options);
+                    crate::explore::explored(root, s, &made, session, digest, via);
                     made
                 }
                 _ => plan_through(root, description, source, *through, options),

@@ -563,6 +563,27 @@ struct AskQuery {
     feature: Option<String>,
 }
 
+/// The project's explorations, newest first.
+async fn explore_list(State(s): State<Shared>) -> Json<Value> {
+    let root = s.root.get();
+    let r = off(move || speccoder_runtime::service::explore::list(&root, None)).await;
+    envelope(&s, &r)
+}
+
+/// One exploration: its approaches, the choice and the brief.
+async fn explore_session(State(s): State<Shared>, Query(q): Query<AskQuery>) -> Json<Value> {
+    let root = s.root.get();
+    let r = off(move || {
+        speccoder_runtime::service::explore::session(
+            &root,
+            None,
+            q.id.as_deref().unwrap_or_default(),
+        )
+    })
+    .await;
+    envelope(&s, &r)
+}
+
 async fn ask_conversations(State(s): State<Shared>, Query(q): Query<AskQuery>) -> Json<Value> {
     let root = s.root.get();
     let r = off(move || {
@@ -1278,6 +1299,8 @@ pub fn router(s: Shared) -> Router {
         .route("/api/ask/conversation", get(ask_conversation))
         .route("/api/ask/stop", post(ask_stop))
         .route("/api/ask/changed", get(ask_changed))
+        .route("/api/explore", get(explore_list))
+        .route("/api/explore/session", get(explore_session))
         .route("/api/ask/chip", post(ask_chip))
         .route("/api/ask/proposal", post(ask_proposal))
         .route("/api/shape", post(shape))

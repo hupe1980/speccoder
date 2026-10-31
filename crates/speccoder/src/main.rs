@@ -297,6 +297,210 @@ fn promote(
     )
 }
 
+/// `spec explore`: an idea explored read-only, an approach chosen, the
+/// spec started from the brief — each a `Runnable` through `perform`.
+fn explore(
+    path: &std::path::Path,
+    arguments: &[String],
+    through: speccoder_core::actions::Through,
+    asks: bool,
+    options: speccoder_runtime::RunOptions,
+) -> speccoder_core::CommandResult {
+    use speccoder_core::actions::{FeatureSource, PlanFrom, Runnable, Via};
+    use speccoder_core::{CommandData, CommandResult, CommandStatus};
+    let usage =
+        |m: &str| CommandResult::new("explore", CommandStatus::UsageError, m).with_code("USAGE");
+    let (mut words, mut skill, mut choose, mut session, mut resume) =
+        (Vec::new(), None, None, None, None);
+    let (mut constraints, mut questions, mut start, mut list) =
+        (Vec::new(), Vec::new(), None::<Option<String>>, false);
+    // Verbs first (`list`, `choose N [ID]`, `resume ID ["words"]`,
+    // `start [ID]`); otherwise the words are the idea.
+    let mut args = arguments.iter().peekable();
+    match args.peek().map(|a| a.as_str()) {
+        Some("list") => {
+            args.next();
+            list = true;
+        }
+        Some("choose") => {
+            args.next();
+            match args.next().and_then(|n| n.parse::<usize>().ok()) {
+                Some(n) => choose = Some(n),
+                None => {
+                    return usage(
+                        "choose takes the approach's number: `speccoder spec explore choose N [ID]`",
+                    );
+                }
+            }
+            session = args.next_if(|n| !n.starts_with('-')).cloned();
+        }
+        Some("resume") => {
+            args.next();
+            let Some(id) = args.next().cloned() else {
+                return usage(
+                    "resume takes the session: `speccoder spec explore resume ID [\"more words\"]`",
+                );
+            };
+            resume = Some(id);
+        }
+        Some("start") => {
+            args.next();
+            start = Some(args.next_if(|n| !n.starts_with('-')).cloned());
+        }
+        _ => {}
+    }
+    while let Some(a) = args.next() {
+        let mut value = || args.next().cloned();
+        match a.as_str() {
+            "--skill" => skill = value(),
+            "--constraint" => constraints.extend(value()),
+            "--question" => questions.extend(value()),
+            "--choose" => match value().and_then(|n| n.parse::<usize>().ok()) {
+                Some(n) => choose = Some(n),
+                None => return usage("--choose takes the approach's number"),
+            },
+            other if other.starts_with("--") => {
+                return usage(&format!("`{other}` is not an option of spec explore"));
+            }
+            other => words.push(other.to_owned()),
+        }
+    }
+    let idea = words.join(" ");
+    let Some(state) = speccoder_runtime::worktree::state_dir() else {
+        return CommandResult::new("explore", CommandStatus::ConfigError, "no state directory")
+            .with_code("NO-STATE-DIR");
+    };
+    let perform = |run: &Runnable, input: Option<&str>| {
+        speccoder_runtime::actions::perform(
+            path,
+            None,
+            speccoder_runtime::actions::Dispatch {
+                run,
+                input,
+                via: Via::Terminal,
+                options: options.clone(),
+            },
+        )
+    };
+    // The spec, started from the chosen brief — the New feature sheet's way.
+    if let Some(id) = start {
+        let Some(id) =
+            id.or_else(|| speccoder_runtime::explore::newest(path, &state, "chosen").map(|s| s.id))
+        else {
+            return CommandResult::new(
+                "explore",
+                CommandStatus::UsageError,
+                "no chosen brief to start from: `speccoder spec explore choose N`",
+            )
+            .with_code("EXPLORE-NOT-CHOSEN");
+        };
+        let shown = speccoder_runtime::explore::session(path, Some(&state), &id);
+        let Some(CommandData::Explore(p)) = shown.data() else {
+            return shown;
+        };
+        let (Some(brief), Some(c)) = (p.brief.clone(), p.choice.clone()) else {
+            return CommandResult::new(
+                "explore",
+                CommandStatus::UsageError,
+                &format!("choose an approach first: `speccoder spec explore choose N {id}`"),
+            )
+            .with_code("EXPLORE-NOT-CHOSEN");
+        };
+        return perform(
+            &Runnable::PlanThrough {
+                from: PlanFrom::Create {
+                    description: brief,
+                    source: FeatureSource::Explore {
+                        session: id,
+                        digest: c.digest,
+                    },
+                },
+                through,
+            },
+            None,
+        );
+    }
+    if list || (idea.is_empty() && choose.is_none() && resume.is_none()) {
+        return speccoder_runtime::explore::list(path, Some(&state));
+    }
+    // A choice, with what the person keeps and adds.
+    let choose_in = |id: &str, n: usize, flag: bool| {
+        let shown = speccoder_runtime::explore::session(path, Some(&state), id);
+        let Some(CommandData::Explore(p)) = shown.data() else {
+            return shown;
+        };
+        let keep = |items: &[speccoder_core::explore::Item], added: &[String]| -> Vec<String> {
+            items
+                .iter()
+                .map(|i| i.text.clone())
+                .chain(added.iter().cloned())
+                .collect()
+        };
+        perform(
+            &Runnable::ExploreChoose {
+                session: id.to_owned(),
+                approach: n,
+                constraints: keep(&p.constraints, &constraints),
+                questions: keep(&p.open_questions, &questions),
+                flag,
+            },
+            None,
+        )
+    };
+    if idea.is_empty() && resume.is_none() {
+        let Some(n) = choose else {
+            unreachable!("handled above")
+        };
+        let Some(id) = session
+            .or_else(|| speccoder_runtime::explore::newest(path, &state, "open").map(|s| s.id))
+        else {
+            return usage("no open exploration to choose in: `speccoder spec explore \"<idea>\"`");
+        };
+        return choose_in(&id, n, true);
+    }
+    let explored = perform(
+        &Runnable::Explore {
+            idea: idea.clone(),
+            skill,
+            resume,
+        },
+        None,
+    );
+    let Some(CommandData::Explore(p)) = explored.data() else {
+        return explored;
+    };
+    let (Some(s), false) = (p.session.clone(), p.approaches.is_empty()) else {
+        return explored;
+    };
+    if let Some(n) = choose {
+        return choose_in(&s.id, n, true);
+    }
+    if !asks {
+        return explored;
+    }
+    // At a terminal: the approaches, then the person's pick.
+    let _ = crate::output::render(&explored, false);
+    match crate::follow::pick(p.approaches.len()) {
+        crate::follow::Pick::Approach(n) => choose_in(&s.id, n, false),
+        crate::follow::Pick::Resume(more) => perform(
+            &Runnable::Explore {
+                idea: more,
+                skill: None,
+                resume: Some(s.id.clone()),
+            },
+            None,
+        ),
+        crate::follow::Pick::Later => CommandResult::new(
+            "explore",
+            CommandStatus::NeedsHuman,
+            &format!(
+                "left open — choose later: `speccoder spec explore choose N {}`",
+                s.id
+            ),
+        ),
+    }
+}
+
 fn archive(
     cli: &Cli,
     path: &std::path::Path,
@@ -859,7 +1063,7 @@ fn main() {
         let needs = match command {
             Command::Run { return_: false, .. } => true,
             Command::Spec { name: Some(n), .. } => {
-                n != "archive" && n != "promote" && !creates(path, n)
+                n != "archive" && n != "promote" && n != "explore" && !creates(path, n)
             }
             _ => false,
         };
@@ -1537,13 +1741,58 @@ fn main() {
             yes,
             allow_unverified,
             through,
+            decline,
+            conversation,
+            no_conversation,
+            skill,
+            choose,
+            constraint,
+            question,
         } => match name.as_deref() {
             Some("archive") => archive(&cli, path, arguments, *yes, allow_unverified),
+            Some("explore") => {
+                let (progress, _attention) = live_progress(&cli, &notify, events.as_ref());
+                let mut arguments = arguments.clone();
+                if let Some(s) = skill {
+                    arguments.extend(["--skill".to_owned(), s.clone()]);
+                }
+                if let Some(n) = choose {
+                    arguments.extend(["--choose".to_owned(), n.to_string()]);
+                }
+                for c in constraint {
+                    arguments.extend(["--constraint".to_owned(), c.clone()]);
+                }
+                for q in question {
+                    arguments.extend(["--question".to_owned(), q.clone()]);
+                }
+                explore(
+                    path,
+                    &arguments,
+                    through.map_or(speccoder_core::actions::Through::Tasks, Into::into),
+                    asks_here(&cli) && !*no_prompt,
+                    speccoder_runtime::RunOptions {
+                        approver: interactive(*no_prompt)
+                            .then(|| std::sync::Arc::new(prompt::Terminal) as _),
+                        progress,
+                        ..speccoder_runtime::RunOptions::default()
+                    },
+                )
+            }
             Some("promote") => {
                 let (progress, _attention) = live_progress(&cli, &notify, events.as_ref());
+                let mut arguments = arguments.clone();
+                if *decline {
+                    arguments.push("--decline".to_owned());
+                }
+                if *no_conversation {
+                    arguments.push("--no-conversation".to_owned());
+                }
+                for c in conversation {
+                    arguments.extend(["--conversation".to_owned(), c.clone()]);
+                }
                 promote(
                     path,
-                    arguments,
+                    &arguments,
                     speccoder_runtime::RunOptions {
                         approver: interactive(*no_prompt)
                             .then(|| std::sync::Arc::new(prompt::Terminal) as _),
@@ -2072,7 +2321,7 @@ fn offers_next(cli: &Cli) -> bool {
             name: Some(n),
             no_prompt: false,
             ..
-        }) => n != "archive" && n != "promote",
+        }) => n != "archive" && n != "promote" && n != "explore",
         Some(Command::Task { action }) => !matches!(action, cli::TaskAction::Show { .. }),
         Some(Command::Report {
             live: false,

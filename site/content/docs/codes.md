@@ -139,6 +139,14 @@ Every result that is not plainly `ok` names a code — `error[CODE]`, `stopped[C
 | [`BUG-REPRO-WEAK`](#bug-repro-weak) | stop | 23 | a fix that special-cases the reproduction's input passes |
 | [`BUG-CANDIDATE-APPLY`](#bug-candidate-apply) | error | 14 | the candidate patch is not applied |
 | [`BUG-CANDIDATE-JUDGE`](#bug-candidate-judge) | error | 2 | the candidate patch touches what judges it |
+| [`EXPLORE-EMPTY`](#explore-empty) | error | 2 | there is no idea to explore |
+| [`EXPLORE-WROTE`](#explore-wrote) | error | 21 | the exploring skill changed files in the checkout |
+| [`EXPLORE-INCOMPLETE`](#explore-incomplete) | error | 21 | the exploration ended without approaches to choose from |
+| [`EXPLORE-BRIEF-LARGE`](#explore-brief-large) | error | 2 | the brief is larger than 16 KiB |
+| [`EXPLORE-DIGEST`](#explore-digest) | error | 1 | the stored brief changed after it was chosen |
+| [`EXPLORE-NOT-CHOSEN`](#explore-not-chosen) | error | 2 | no approach was chosen in this session yet |
+| [`EXPLORE-STARTED`](#explore-started) | error | 2 | this session already started a spec |
+| [`EXPLORE-EDITED`](#explore-edited) | error | 2 | the description is not the chosen brief |
 | [`EVAL-FAILED`](#eval-failed) | error | 24 | the evaluation found a false completion or a cheat |
 
 ### USAGE
@@ -1223,6 +1231,71 @@ The candidate patch touches what judges it.
 A candidate must not change a frozen reproduction, a held-out path or another judge input (checks, configuration, the intent) — by an edit, a rename, a deletion or a mode change, as git itself reads the patch. It is refused before it is applied.
 
 - Remove those hunks from the patch
+
+### EXPLORE-EMPTY
+
+There is no idea to explore.
+
+`spec explore` explores an idea: some words about what you want, however rough. Nothing ran.
+
+- `speccoder spec explore "<idea>"`
+
+### EXPLORE-WROTE
+
+The exploring skill changed files in the checkout.
+
+Exploring writes nothing outside the format's own exploration artifacts; the files the run changed are named. The session keeps its earlier approaches; review the files with git and undo them.
+
+- `git status`
+- `git diff`
+
+### EXPLORE-INCOMPLETE
+
+The exploration ended without approaches to choose from.
+
+speccoder's own explorer owes at least three approaches that differ, each with a trade-off and a risk; a format's own skill at least one. The run ended without them, so there is no brief. Explore again, or resume the session with more to go on.
+
+- `speccoder spec explore resume <id> "…"`
+
+### EXPLORE-BRIEF-LARGE
+
+The brief is larger than 16 KiB.
+
+A brief is the approach with its constraints and open questions; it is passed verbatim to the skill that writes the spec, so it stays at most 16 KiB.
+
+- Keep fewer or shorter constraints when you choose
+
+### EXPLORE-DIGEST
+
+The stored brief changed after it was chosen.
+
+A spec starts only from the brief the person chose: its digest is checked before anything runs, and it no longer matches. Nothing ran.
+
+- `speccoder spec explore choose N <id>`
+
+### EXPLORE-NOT-CHOSEN
+
+No approach was chosen in this session yet.
+
+A spec starts from a brief, and the brief is made when the person chooses an approach.
+
+- `speccoder spec explore choose N <id>`
+
+### EXPLORE-STARTED
+
+This session already started a spec.
+
+One brief starts one spec; the unit it started is named. Explore again for another.
+
+- `speccoder spec explore "<idea>"`
+
+### EXPLORE-EDITED
+
+The description is not the chosen brief.
+
+A brief starts a spec verbatim or not at all, so the spec records where it came from. To change it, choose again: the new brief gets its own digest.
+
+- `speccoder spec explore choose N <id>`
 
 ### EVAL-FAILED
 

@@ -57,6 +57,7 @@
       app.quickDraft = t;
       app.quick = true;
     } else if (rung === "feature") app.newFeature = { text: t };
+    else if (rung === "explore") app.explore = { idea: t };
     else if (rung === "ask") {
       panel.toggle(true);
       void panel.send(t);
@@ -162,7 +163,8 @@
   .ceremony { color: var(--text-2); font-size: 0.86rem; }
   .reason { margin: 0; min-height: 1.3em; font-size: 0.86rem; color: var(--text-2); }
   .reason.invalid { color: var(--danger); }
-  .foot { display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; }
+  /* min-width 0: the command line shortens with an ellipsis; it never widens the sheet. */
+  .foot { display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; min-width: 0; }
   .where { margin-right: auto; }
   .cli { font: 0.78rem var(--mono); color: var(--muted); max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   @media (max-width: 640px) { .rungs button { grid-template-columns: 1.2rem 1fr auto; } .ceremony { grid-column: 2 / -1; } }

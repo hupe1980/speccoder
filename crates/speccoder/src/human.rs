@@ -2123,6 +2123,93 @@ pub fn ask(r: &speccoder_core::ask::AskReport, look: &crate::style::Look) -> Vec
     out
 }
 
+/// An exploration: the approaches to choose from as numbered cards, what
+/// constrains them and what is open — each by its source — then the brief
+/// once chosen; or the sessions.
+pub fn explore(
+    p: &speccoder_core::explore::ExplorePayload,
+    look: &crate::style::Look,
+) -> Vec<String> {
+    use crate::style::Token;
+    let mut out = Vec::new();
+    if let Some(list) = &p.sessions {
+        for e in list {
+            let mark = match e.state.as_str() {
+                "started" => look.paint(Token::Verified, "started"),
+                "chosen" => look.paint(Token::Accent, "chosen"),
+                _ => look.paint(Token::Muted, "open"),
+            };
+            let unit = e
+                .unit
+                .as_deref()
+                .map_or_else(String::new, |u| format!(" → {u}"));
+            out.push(format!(
+                "  {}  {mark}  {}{unit}",
+                look.paint(Token::Muted, &e.id),
+                e.idea
+            ));
+        }
+        return out;
+    }
+    if let Some(s) = &p.session {
+        let why = match s.selected_because.as_str() {
+            "format" => "the format's own",
+            "flag" => "as asked",
+            _ => "speccoder's own — the format has none",
+        };
+        out.push(look.paint(Token::Muted, &format!("{} · {} ({why})", s.id, s.skill)));
+    }
+    if p.brief.is_none() {
+        for (i, a) in p.approaches.iter().enumerate() {
+            out.push(String::new());
+            out.push(format!(
+                "  {} {}",
+                look.paint(Token::Accent, &format!("{}.", i + 1)),
+                look.paint(Token::Accent, &a.title)
+            ));
+            out.push(format!("     {}", a.summary));
+            for t in &a.tradeoffs {
+                out.push(format!("     {} {t}", look.paint(Token::Muted, "gives up")));
+            }
+            for r in &a.risks {
+                out.push(format!("     {} {r}", look.paint(Token::Attention, "risk")));
+            }
+        }
+        for (title, items) in [
+            ("Constraints", &p.constraints),
+            ("Open questions", &p.open_questions),
+        ] {
+            if items.is_empty() {
+                continue;
+            }
+            out.push(String::new());
+            out.push(look.paint(Token::Muted, title));
+            for i in items {
+                let from = match i.source.as_str() {
+                    "person" => " (you)",
+                    "nobody" => " (nobody could answer)",
+                    _ => "",
+                };
+                out.push(format!("  - {}{from}", i.text));
+            }
+        }
+    }
+    if let (Some(brief), Some(c)) = (&p.brief, &p.choice) {
+        out.push(String::new());
+        out.push(look.paint(
+            Token::Accent,
+            &format!(
+                "Brief · approach {} · {}",
+                c.approach,
+                &c.digest[..c.digest.len().min(12)]
+            ),
+        ));
+        out.extend(brief.lines().skip(1).map(|l| format!("  {l}")));
+    }
+    out.push(String::new());
+    out
+}
+
 /// The conversations, newest first.
 pub fn ask_conversations(
     r: &speccoder_core::ask::AskConversations,

@@ -1258,6 +1258,70 @@ pub const CATALOG: &[Entry] = &[
         ["→ remove those hunks from the patch"]
     ),
     entry!(
+        "EXPLORE-EMPTY",
+        E,
+        S::UsageError,
+        "there is no idea to explore",
+        "`spec explore` explores an idea: some words about what you want, however rough. Nothing ran.",
+        ["speccoder spec explore \"<idea>\""]
+    ),
+    entry!(
+        "EXPLORE-WROTE",
+        E,
+        S::RunFailed,
+        "the exploring skill changed files in the checkout",
+        "Exploring writes nothing outside the format's own exploration artifacts; the files the run changed are named. The session keeps its earlier approaches; review the files with git and undo them.",
+        ["git status", "git diff"]
+    ),
+    entry!(
+        "EXPLORE-INCOMPLETE",
+        E,
+        S::RunFailed,
+        "the exploration ended without approaches to choose from",
+        "speccoder's own explorer owes at least three approaches that differ, each with a trade-off and a risk; a format's own skill at least one. The run ended without them, so there is no brief. Explore again, or resume the session with more to go on.",
+        ["speccoder spec explore resume <id> \"…\""]
+    ),
+    entry!(
+        "EXPLORE-BRIEF-LARGE",
+        E,
+        S::UsageError,
+        "the brief is larger than 16 KiB",
+        "A brief is the approach with its constraints and open questions; it is passed verbatim to the skill that writes the spec, so it stays at most 16 KiB.",
+        ["→ keep fewer or shorter constraints when you choose"]
+    ),
+    entry!(
+        "EXPLORE-DIGEST",
+        E,
+        S::Error,
+        "the stored brief changed after it was chosen",
+        "A spec starts only from the brief the person chose: its digest is checked before anything runs, and it no longer matches. Nothing ran.",
+        ["speccoder spec explore choose N <id>"]
+    ),
+    entry!(
+        "EXPLORE-NOT-CHOSEN",
+        E,
+        S::UsageError,
+        "no approach was chosen in this session yet",
+        "A spec starts from a brief, and the brief is made when the person chooses an approach.",
+        ["speccoder spec explore choose N <id>"]
+    ),
+    entry!(
+        "EXPLORE-STARTED",
+        E,
+        S::UsageError,
+        "this session already started a spec",
+        "One brief starts one spec; the unit it started is named. Explore again for another.",
+        ["speccoder spec explore \"<idea>\""]
+    ),
+    entry!(
+        "EXPLORE-EDITED",
+        E,
+        S::UsageError,
+        "the description is not the chosen brief",
+        "A brief starts a spec verbatim or not at all, so the spec records where it came from. To change it, choose again: the new brief gets its own digest.",
+        ["speccoder spec explore choose N <id>"]
+    ),
+    entry!(
         "EVAL-FAILED",
         E,
         S::EvalFailed,

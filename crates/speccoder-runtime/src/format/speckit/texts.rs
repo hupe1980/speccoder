@@ -156,6 +156,11 @@ pub static PLANNING: Planning = Planning {
     toward_tasks,
     revises: Some("clarify"),
     checks: Some("analyze"),
+    // `assess` (the first-party extension) arrives with spec 096's
+    // inventory and a fixture; until then `spec explore` runs the fallback.
+    explores: None,
+    explore_paths: crate::format::writes_nothing,
+    explore_commands: &[],
 };
 
 fn toward_tasks(has_plan: bool) -> &'static [&'static str] {

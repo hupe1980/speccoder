@@ -23,7 +23,8 @@ describe("the composer's keys", () => {
   it("moves through the available rungs only, wrapping", () => {
     expect(move(null, 1)).toBe("bug");
     expect(move("bug", 1)).toBe("quick");
-    expect(move("feature", 1)).toBe("ask");
+    expect(move("feature", 1)).toBe("explore");
+    expect(move("explore", 1)).toBe("ask");
     expect(move("ask", 1)).toBe("bug");
     expect(move("bug", -1)).toBe("ask");
     expect(move(null, -1)).toBe("ask");

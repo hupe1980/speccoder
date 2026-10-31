@@ -327,6 +327,35 @@ pub enum Runnable {
         /// `<unit>/<task>`.
         task: String,
     },
+    /// Explore an idea read-only, ending in approaches to choose from; or
+    /// resume a session with more words.
+    Explore {
+        /// The idea (a new session) or the words added (a resumed one).
+        idea: String,
+        /// The skill to host instead of the format's own (`--skill`).
+        #[serde(default)]
+        skill: Option<String>,
+        /// The session to resume.
+        #[serde(default)]
+        resume: Option<String>,
+    },
+    /// The person's choice in a session: an approach, and the constraints
+    /// and open questions they keep or add. It composes the brief.
+    ExploreChoose {
+        /// The session (`ex-…`).
+        session: String,
+        /// 1-based, of the session's last approaches.
+        approach: usize,
+        /// The constraints, as kept and added.
+        #[serde(default)]
+        constraints: Vec<String>,
+        /// The open questions, as kept and added.
+        #[serde(default)]
+        questions: Vec<String>,
+        /// Chosen by a flag (`--choose N`), not in a prompt or the app.
+        #[serde(default)]
+        flag: bool,
+    },
 }
 
 /// How far plan through goes.
@@ -387,6 +416,13 @@ pub enum FeatureSource {
         /// Conversation ids (`c-…`).
         #[serde(default)]
         conversations: Vec<String>,
+    },
+    /// An Explore session's brief, verbatim.
+    Explore {
+        /// The session (`ex-…`).
+        session: String,
+        /// The brief's digest, checked before anything runs.
+        digest: String,
     },
 }
 
@@ -573,6 +609,10 @@ pub enum ActionKind {
     SampleChecks,
     /// [`Runnable::DeclinePromotion`].
     DeclinePromotion,
+    /// [`Runnable::Explore`].
+    Explore,
+    /// [`Runnable::ExploreChoose`].
+    ExploreChoose,
     /// No runnable: the person runs the command.
     Command,
 }
@@ -623,6 +663,8 @@ impl ActionKind {
         Self::OpenSample,
         Self::SampleChecks,
         Self::DeclinePromotion,
+        Self::Explore,
+        Self::ExploreChoose,
         Self::Command,
     ];
 
@@ -673,6 +715,8 @@ impl ActionKind {
             Self::OpenSample => "open_sample",
             Self::SampleChecks => "sample_checks",
             Self::DeclinePromotion => "decline_promotion",
+            Self::Explore => "explore",
+            Self::ExploreChoose => "explore_choose",
             Self::Command => "command",
         }
     }
@@ -835,6 +879,18 @@ impl ActionKind {
             Self::DeclinePromotion => Runnable::DeclinePromotion {
                 task: "004-quick-changes/T002".to_owned(),
             },
+            Self::Explore => Runnable::Explore {
+                idea: "export reports as CSV".to_owned(),
+                skill: None,
+                resume: None,
+            },
+            Self::ExploreChoose => Runnable::ExploreChoose {
+                session: "ex-1a2b3c4d5e6f".to_owned(),
+                approach: 2,
+                constraints: vec!["no new dependency".to_owned()],
+                questions: Vec::new(),
+                flag: false,
+            },
             Self::Command => return None,
         })
     }
@@ -894,6 +950,8 @@ impl Runnable {
             Self::OpenSample { .. } => ActionKind::OpenSample,
             Self::SampleChecks => ActionKind::SampleChecks,
             Self::DeclinePromotion { .. } => ActionKind::DeclinePromotion,
+            Self::Explore { .. } => ActionKind::Explore,
+            Self::ExploreChoose { .. } => ActionKind::ExploreChoose,
         }
     }
 }
@@ -947,6 +1005,8 @@ pub fn identity(run: Option<&Runnable>, command: &str) -> ActionId {
         | Runnable::CodeNudge { task, .. }
         | Runnable::AcceptanceAt { task, .. }
         | Runnable::DeclinePromotion { task } => Some(task.clone()),
+        Runnable::Explore { resume, .. } => resume.clone(),
+        Runnable::ExploreChoose { session, .. } => Some(session.clone()),
         Runnable::OracleTests { req, .. } => Some(req.clone()),
         Runnable::ApproveAndRun { mode, .. } => Some(mode.as_str().to_owned()),
         Runnable::Comment { id, .. } => id.clone(),

@@ -107,6 +107,45 @@ pub fn proposal(
     })
 }
 
+/// What the person picked among an exploration's approaches.
+pub enum Pick {
+    /// Approach `n` (1-based).
+    Approach(usize),
+    /// Resume the session with these words.
+    Resume(String),
+    /// Leave it open.
+    Later,
+}
+
+/// Asks which of `n` approaches: a number, `r` to resume with more words,
+/// anything else leaves the session open.
+pub fn pick(n: usize) -> Pick {
+    let read = |prompt: &str| {
+        let mut err = std::io::stderr().lock();
+        let _ = write!(err, "{prompt}");
+        let _ = err.flush();
+        drop(err);
+        let mut line = String::new();
+        std::io::stdin().lock().read_line(&mut line).unwrap_or(0);
+        line.trim().to_owned()
+    };
+    let answer = read(&format!(
+        "Choose 1–{n}, r to resume with more words, q to leave it open: "
+    ));
+    match answer.parse::<usize>() {
+        Ok(k) if (1..=n).contains(&k) => Pick::Approach(k),
+        _ if answer.eq_ignore_ascii_case("r") => {
+            let more = read("What should it know? ");
+            if more.is_empty() {
+                Pick::Later
+            } else {
+                Pick::Resume(more)
+            }
+        }
+        _ => Pick::Later,
+    }
+}
+
 /// Offers `remedy` as a card — what it does, the command it amounts to,
 /// how to undo it — and applies it on a yes. A remedy that writes history
 /// waits for an explicit yes (`[y/N]`). Whether it was applied.

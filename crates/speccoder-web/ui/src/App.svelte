@@ -36,6 +36,7 @@
   import StepSheet from "./components/StepSheet.svelte";
   import HelpSheet from "./components/HelpSheet.svelte";
   import AskPanel from "./components/AskPanel.svelte";
+  import ExploreSheet from "./components/ExploreSheet.svelte";
   import ProposalSheet from "./components/ProposalSheet.svelte";
   import { ask, pointed } from "./lib/ask.svelte";
   import SelectionAsk from "./components/SelectionAsk.svelte";
@@ -122,6 +123,7 @@
       case "view.actions": app.palette = true; return;
       case "view.ask": return ask.toggle(!ask.open || !document.activeElement?.closest(".ask"));
       case "view.askNew": ask.fresh(); return ask.toggle(true);
+      case "file.explore": app.explore = {}; return;
       case "edit.addToAsk": {
         const chip = pointed();
         if (chip) {
@@ -330,6 +332,7 @@
 {#if app.bugSheet}<BugSheet />{/if}
 {#if app.composer}<Composer />{/if}
 {#if app.newFeature}<NewFeature />{/if}
+{#if app.explore}<ExploreSheet />{/if}
 {#if app.newProject}<NewProject />{/if}
 {#if app.clone}<Clone />{/if}
 {#if app.keys}<Keys />{/if}

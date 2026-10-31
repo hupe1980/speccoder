@@ -767,3 +767,92 @@ fn ask_in_json_records_nothing_and_lists_its_context() {
         "nothing is asked without a terminal"
     );
 }
+
+/// `spec explore "…" --choose 1 --json`: explored read-only, chosen in one
+/// command, the brief in the published `explore` payload — nothing in the
+/// checkout; `--events` streams the run like any hosted skill.
+#[test]
+fn explore_chooses_in_one_command_and_streams() {
+    if !has_python() {
+        eprintln!("skipped: no python3");
+        return;
+    }
+    let report = json!({
+        "summary": "ways to export",
+        "status": "done",
+        "approaches": [
+            { "title": "Stream a CSV", "summary": "rows as they come", "tradeoffs": ["no formatting"], "risks": ["long requests"] },
+            { "title": "Build a PDF", "summary": "a rendered file", "tradeoffs": ["a dependency"], "risks": ["layout drift"] },
+            { "title": "A fresh link", "summary": "a live page", "tradeoffs": ["sign-in rules"], "risks": ["not a copy"] }
+        ],
+        "constraints": ["fast"],
+        "open_questions": []
+    });
+    let (_mock, repo, state) =
+        project(&json!([{ "content": report.to_string() }, { "content": report.to_string() }]));
+    let before = Command::new("git")
+        .args(["status", "--porcelain"])
+        .current_dir(repo.path())
+        .output()
+        .unwrap()
+        .stdout;
+    let out = Command::new(env!("CARGO_BIN_EXE_speccoder"))
+        .args([
+            "--json",
+            "spec",
+            "explore",
+            "export reports",
+            "--choose",
+            "1",
+        ])
+        .arg("-C")
+        .arg(repo.path())
+        .env("SPECCODER_STATE_DIR", state.path())
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    let v = support::result(&out.stdout);
+    assert_eq!(v["status"], "ok", "{v}");
+    assert_eq!(v["payload"], "explore");
+    assert_eq!(v["data"]["choice"]["approach"], 1, "{v}");
+    assert_eq!(v["data"]["choice"]["basis"], "flag");
+    assert!(
+        v["data"]["brief"]
+            .as_str()
+            .unwrap()
+            .starts_with("Explore brief "),
+        "{v}"
+    );
+    let after = Command::new("git")
+        .args(["status", "--porcelain"])
+        .current_dir(repo.path())
+        .output()
+        .unwrap()
+        .stdout;
+    assert_eq!(before, after, "exploring writes nothing in the checkout");
+
+    let streamed = Command::new(env!("CARGO_BIN_EXE_speccoder"))
+        .args([
+            "--events",
+            "spec",
+            "explore",
+            "export reports again",
+            "--no-prompt",
+        ])
+        .arg("-C")
+        .arg(repo.path())
+        .env("SPECCODER_STATE_DIR", state.path())
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    let lines: Vec<Value> = String::from_utf8(streamed.stdout)
+        .unwrap()
+        .lines()
+        .map(support::event)
+        .collect();
+    assert!(
+        lines.iter().any(|l| l["type"] == "task.started"),
+        "{lines:?}"
+    );
+    assert_eq!(lines.last().unwrap()["type"], "result");
+}

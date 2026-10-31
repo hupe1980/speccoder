@@ -157,6 +157,18 @@ pub static PLANNING: Planning = Planning {
     toward_tasks,
     revises: None,
     checks: None,
+    // Its explore step may offer to capture a change: that is *Start spec*
+    // here, so it writes nothing; its read-only CLI answers questions.
+    explores: Some("explore"),
+    explore_paths: crate::format::writes_nothing,
+    explore_commands: &[
+        &["openspec", "list"],
+        &["openspec", "show"],
+        &["openspec", "status"],
+        &["openspec", "instructions"],
+        &["openspec", "schemas"],
+        &["openspec", "context"],
+    ],
 };
 
 fn toward_tasks(_has_plan: bool) -> &'static [&'static str] {

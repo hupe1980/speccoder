@@ -384,6 +384,13 @@ fn human_body(
             }
             Ok(())
         }
+        (_, Some(CommandData::Explore(r))) => {
+            let look = crate::style::out();
+            for line in crate::human::explore(r, &look) {
+                writeln!(out, "{line}")?;
+            }
+            writeln!(out, "{}", result.message())
+        }
         (_, Some(CommandData::AskConversations(r))) => {
             let look = crate::style::out();
             for line in crate::human::ask_conversations(r, &look) {

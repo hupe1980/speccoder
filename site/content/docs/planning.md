@@ -27,6 +27,22 @@ A planning skill works **in your checkout**, since the spec belongs on your bran
 
 Results are left **uncommitted**, and speccoder [offers the commit](#the-next-step-taken). A clarifying question is asked at the terminal; with `--no-prompt` it stays in the spec as `[NEEDS CLARIFICATION]`.
 
+## Explore an idea first
+
+Not sure yet what to build? `speccoder spec explore "<idea>"` — or the composer's **Explore** rung, or *Not sure yet? Explore first* in the New feature sheet — thinks it through with you before any spec exists. It runs the format's own exploration skill (OpenSpec: `explore`) or, when the format has none, speccoder's own explorer, **read-only**: it reads the project and may ask you a question, but every write is denied and only the format's read-only commands run (nothing waits for your approval). It ends with approaches that differ, each with what it gives up and what could go wrong, the constraints any of them must respect and the questions still open. speccoder's own explorer owes at least three (`EXPLORE-INCOMPLETE` otherwise).
+
+You choose — the model only proposes. Pick an approach (`spec explore choose N`, `--choose N`, a number key in the app), keep or drop its constraints and open questions and add your own; speccoder composes the **brief** from that and gives it a digest. *Start spec from this brief* (`spec explore start`) is plan through with the brief, word for word: the spec records where it came from, and the new unit's origin names the session and the digest. A brief changed after it was chosen is refused (`EXPLORE-DIGEST`); one brief starts one spec.
+
+```sh
+speccoder spec explore "reports people can take with them"   # approaches, then a numbered choice at a terminal
+speccoder spec explore choose 2 --constraint "no new dependency"
+speccoder spec explore start                                   # the newest chosen brief, through plan through
+speccoder spec explore list                                    # every exploration of the project
+speccoder spec explore resume ex-1a2b3c "also XLSX"             # more to consider: a new run carrying what came before
+```
+
+Sessions live in speccoder's state, never in the checkout.
+
 ## Plan through
 
 ```sh

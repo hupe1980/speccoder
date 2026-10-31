@@ -1405,3 +1405,56 @@ fn run_agent_picks_the_agent_for_this_run_only() {
         .unwrap();
     assert!(!bad.status.success());
 }
+
+/// The flags `spec promote` and `spec explore` document reach them — never
+/// "unexpected argument" from the parser.
+#[test]
+fn the_flags_of_spec_promote_and_explore_parse() {
+    for args in [
+        &["spec", "promote", "002-quick-changes/T001", "--decline"][..],
+        &[
+            "spec",
+            "promote",
+            "002-quick-changes/T001",
+            "--conversation",
+            "c-1",
+            "--conversation",
+            "c-2",
+        ],
+        &[
+            "spec",
+            "promote",
+            "002-quick-changes/T001",
+            "--no-conversation",
+        ],
+        &[
+            "spec",
+            "explore",
+            "an idea",
+            "--skill",
+            "speccoder.explore",
+            "--choose",
+            "2",
+            "--constraint",
+            "fast",
+            "--question",
+            "who?",
+        ],
+        &["spec", "explore", "choose", "2", "ex-1a2b"],
+        &["spec", "explore", "list"],
+    ] {
+        let out = speccoder()
+            .args(["-C", &fixture("valid"), "--json"])
+            .args(args)
+            .output()
+            .unwrap();
+        let v = support::result(&out.stdout);
+        assert!(
+            !v["message"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("unexpected argument"),
+            "{args:?}: {v}"
+        );
+    }
+}

@@ -95,7 +95,16 @@ pub fn run_in(
 ) -> CommandResult {
     let reviews = crate::review::snapshot(path);
     let result = run_unguarded(
-        path, feature, name, arguments, state, provider, secret, options, None,
+        path,
+        feature,
+        name,
+        arguments,
+        state,
+        provider,
+        secret,
+        options,
+        Mode::Plan,
+        None,
     );
     let restored = crate::review::restore(&reviews);
     if restored.is_empty() {
@@ -133,10 +142,54 @@ pub(crate) fn run_scoped(
         provider,
         secret,
         options,
-        Some(rules),
+        Mode::Scoped(rules),
+        None,
     );
     let _ = crate::review::restore(&reviews);
     result
+}
+
+/// How a hosted skill runs.
+#[derive(Clone, Copy)]
+pub(crate) enum Mode {
+    /// A planning skill: the format's planning rules.
+    Plan,
+    /// A format's own step under narrower rules (a bug's assess skill).
+    Scoped(&'static crate::format::Rules),
+    /// Exploring (`spec explore`): read-only, ending in approaches. The
+    /// fallback `speccoder.explore` needs no installed skill.
+    Explore,
+}
+
+/// An exploring run of `name` (the format's exploration skill or
+/// [`speccoder_core::explore::FALLBACK`]) on `idea`: the result, and the
+/// model's closing report as it ended (a claim, checked by the caller).
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn run_exploring(
+    path: &Path,
+    name: &str,
+    idea: &str,
+    state: &Path,
+    provider: Arc<dyn ModelProvider>,
+    secret: Option<&str>,
+    options: &RunOptions,
+) -> (CommandResult, serde_json::Value) {
+    let reviews = crate::review::snapshot(path);
+    let mut report = serde_json::Value::Null;
+    let result = run_unguarded(
+        path,
+        None,
+        name,
+        idea,
+        state,
+        provider,
+        secret,
+        options,
+        Mode::Explore,
+        Some(&mut report),
+    );
+    let _ = crate::review::restore(&reviews);
+    (result, report)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -149,8 +202,14 @@ fn run_unguarded(
     provider: Arc<dyn ModelProvider>,
     secret: Option<&str>,
     options: &RunOptions,
-    scoped: Option<&'static crate::format::Rules>,
+    mode: Mode,
+    report_out: Option<&mut serde_json::Value>,
 ) -> CommandResult {
+    let scoped = match mode {
+        Mode::Scoped(rules) => Some(rules),
+        Mode::Plan | Mode::Explore => None,
+    };
+    let exploring = matches!(mode, Mode::Explore);
     let refuse = |status, m: String| CommandResult::new("skill", status, &redact(&m, secret));
     let s = match crate::setup(path, feature, state, "skill") {
         Ok(s) => s,
@@ -159,10 +218,20 @@ fn run_unguarded(
     let root = PathBuf::from(&s.snapshot.root);
     let planning = s.format.planning();
     let installed = skills::discover_with(&root, planning);
-    let Some(skill) = installed
-        .iter()
-        .find(|k| k.name == name || k.name == format!("{}{name}", planning.prefix))
-    else {
+    // The fallback explorer is speccoder's own instruction, not a file.
+    let fallback =
+        (exploring && name == speccoder_core::explore::FALLBACK).then(|| skills::Skill {
+            name: name.to_owned(),
+            description: "explore an idea: approaches to choose from".to_owned(),
+            path: String::new(),
+            invocable: true,
+            refused: None,
+        });
+    let Some(skill) = fallback.as_ref().or_else(|| {
+        installed
+            .iter()
+            .find(|k| k.name == name || k.name == format!("{}{name}", planning.prefix))
+    }) else {
         return refuse(
             CommandStatus::NotFound,
             format!("no skill `{name}` (see `speccoder spec`)"),
@@ -180,8 +249,11 @@ fn run_unguarded(
             format!("`{}` is marked user-invocable: false", skill.name),
         );
     }
-    // Extension hooks around the format's core skills.
-    let event = core_event(planning, &skill.name).map(str::to_owned);
+    // Extension hooks around the format's core skills (never while
+    // exploring: it writes nothing for a hook to follow).
+    let event = core_event(planning, &skill.name)
+        .filter(|_| !exploring)
+        .map(str::to_owned);
     let mut hook_lines = Vec::new();
     if let Some(e) = &event {
         match run_hooks_in(
@@ -198,7 +270,18 @@ fn run_unguarded(
             Err(stop) => return *stop,
         }
     }
-    let instruction = match skills::instruction(&root, skill, arguments) {
+    let instruction = match if fallback.is_some() {
+        Ok(format!(
+            "{}\n\n# The idea\n\n{arguments}",
+            substrate::host::EXPLORE_FALLBACK
+        ))
+    } else if exploring {
+        // The format's skill, with the idea where it takes its arguments.
+        skills::instruction(&root, skill, arguments)
+            .map(|i| format!("{i}\n\n# The idea\n\n{arguments}"))
+    } else {
+        skills::instruction(&root, skill, arguments)
+    } {
         Ok(i) => i,
         Err(e) => return refuse(CommandStatus::Error, e),
     };
@@ -260,7 +343,7 @@ fn run_unguarded(
         .name
         .strip_prefix(planning.prefix)
         .unwrap_or(&skill.name);
-    let creates = planning.creates.contains(&short);
+    let creates = planning.creates.contains(&short) && !exploring;
     let selected = s.snapshot.feature.as_ref().map(|f| f.feature.dir.clone());
     let env: Vec<(String, String)> = match (planning.current_env, &selected) {
         (Some(var), Some(dir)) if !creates => {
@@ -268,12 +351,19 @@ fn run_unguarded(
         }
         _ => Vec::new(),
     };
-    let server = match tools::WorkspaceTools::new(
-        &root,
+    let server_policy = if exploring {
+        tools::policy::Policy::new(&[], &[])
+            .rules(s.format.rules())
+            .exploring(tools::policy::Exploring {
+                paths: planning.explore_paths,
+                commands: planning.explore_commands,
+            })
+    } else {
         tools::policy::Policy::new(&[], &[])
             .rules(scoped.unwrap_or_else(|| s.format.rules()))
-            .authoring(),
-    ) {
+            .authoring()
+    };
+    let server = match tools::WorkspaceTools::new(&root, server_policy) {
         Ok(t) => Arc::new(t.with_runner(runner).with_env(env)),
         Err(e) => return refuse(CommandStatus::Error, e.to_string()),
     };
@@ -286,6 +376,9 @@ fn run_unguarded(
     );
     if scoped.is_some() {
         input["settings"]["scope"] = serde_json::json!("bug");
+    }
+    if exploring {
+        input["settings"]["mode"] = serde_json::json!("explore");
     }
     let outcome = rt.block_on(async {
         let plane = substrate::Plane::open_with(
@@ -336,6 +429,9 @@ fn run_unguarded(
         .map(|o| o.peek().clone())
         .unwrap_or(serde_json::Value::Null);
     let succeeded = matches!(outcome.status, agentplane::prelude::RunStatus::Succeeded);
+    if let Some(out) = report_out {
+        out.clone_from(&output["report"]);
+    }
     let status = if succeeded {
         output["status"].as_str().unwrap_or("failed").to_owned()
     } else {

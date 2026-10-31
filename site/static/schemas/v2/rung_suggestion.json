@@ -68,6 +68,11 @@
           "const": "ask"
         },
         {
+          "description": "An idea still weighing its approaches (`speccoder spec explore`).",
+          "type": "string",
+          "const": "explore"
+        },
+        {
           "description": "Nothing to suggest: the text is empty.",
           "type": "string",
           "const": "none"
@@ -98,6 +103,11 @@
     "RungCueRule": {
       "description": "The rule that decided a suggestion.",
       "oneOf": [
+        {
+          "description": "Words that weigh approaches (\"should we\", \"which is better\").",
+          "type": "string",
+          "const": "weighing"
+        },
         {
           "description": "An interrogative first word or a trailing `?`.",
           "type": "string",

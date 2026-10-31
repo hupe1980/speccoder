@@ -54,6 +54,11 @@ pub mod ask {
     pub use crate::ask::{Request, changed_since, conversations, new_id, stop, thread, turn};
 }
 
+/// Explore: an idea's sessions, read; writes are actions.
+pub mod explore {
+    pub use crate::explore::{list, session};
+}
+
 /// The next steps a result names.
 pub mod next {
     pub use crate::next::attach;

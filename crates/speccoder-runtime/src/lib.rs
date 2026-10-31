@@ -29,6 +29,7 @@ pub mod documents;
 mod drift;
 pub mod eval;
 pub mod evidence;
+pub mod explore;
 pub mod external;
 pub mod format;
 pub mod git;

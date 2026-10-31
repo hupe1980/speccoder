@@ -32,6 +32,52 @@ Finish with the requested structured report.",
     )
 }
 
+/// What the host tells the model when it explores (`spec explore`).
+pub fn explore_policy(w: &Wording) -> String {
+    format!(
+        "You are speccoder, exploring an idea with a person in their {product} project before any spec exists. You can read the project; you cannot write anything — the person chooses an approach afterwards, speccoder writes the brief, and *Start spec* writes the spec. When you need the person's view, call ask_person with one question at a time; if nobody can answer, list the question under open questions and go on. Look at how the project works today, then end with the structured report: approaches that really differ, each with what it gives up and what could go wrong, the constraints any of them must respect, and the questions still open. Your report is a proposal; you do not choose.",
+        product = w.product,
+    )
+}
+
+/// The instruction `speccoder.explore` runs when the format has no
+/// exploration skill of its own.
+pub const EXPLORE_FALLBACK: &str = "Explore the idea below with the person. Read what the project already has that it touches (code, specs, docs). Ask the person at most a few questions, one at a time, only where the answer changes which approach fits. Then propose at least three approaches that differ in kind, not degree — e.g. the smallest change, the cleanest design, a different way altogether — each with its trade-offs and its risks. Name the constraints any approach must respect and the questions still open. Do not choose: the person does.";
+
+/// The closing report's schema when exploring. Strict decoding takes no
+/// item counts, so how many approaches a report owes is checked after the
+/// run (`explore::validate_fallback`), never trusted to the schema.
+#[must_use]
+pub fn explore_schema() -> Value {
+    let strings = json!({ "type": "array", "items": { "type": "string" } });
+    let some = strings.clone();
+    json!({
+        "type": "object",
+        "properties": {
+            "summary": { "type": "string" },
+            "status": { "type": "string", "enum": ["done", "incomplete"] },
+            "approaches": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "title": { "type": "string" },
+                        "summary": { "type": "string" },
+                        "tradeoffs": some,
+                        "risks": some,
+                    },
+                    "required": ["title", "summary", "tradeoffs", "risks"],
+                    "additionalProperties": false,
+                },
+            },
+            "constraints": strings,
+            "open_questions": strings,
+        },
+        "required": ["summary", "status", "approaches", "constraints", "open_questions"],
+        "additionalProperties": false,
+    })
+}
+
 /// The closing report's schema.
 #[must_use]
 pub fn schema() -> Value {
@@ -99,6 +145,7 @@ impl Skill for Host {
         // Built from labelled parts, so `/system` stays speccoder's trusted
         // instruction after the conversation has read tool output.
         let label = input.label().clone();
+        let exploring = settings["mode"] == "explore";
         let prompt = super::provenance::labelled_prompt(
             {
                 let input = input.peek();
@@ -107,18 +154,23 @@ impl Skill for Host {
                     input["skill"].as_str().unwrap_or_default(),
                     input["instruction"].as_str().unwrap_or_default()
                 );
+                let system = if exploring {
+                    explore_policy(self.format.wording())
+                } else {
+                    policy(self.format.wording())
+                };
                 match style {
                     super::model_config::PromptStyle::OpenAi => json!({
-                        "system": policy(self.format.wording()),
+                        "system": system,
                         "input": [{ "role": "user", "content": [{ "type": "input_text", "text": text }] }],
                     }),
                     super::model_config::PromptStyle::Anthropic
                     | super::model_config::PromptStyle::Chat => json!({
-                        "system": policy(self.format.wording()),
+                        "system": system,
                         "messages": [{ "role": "user", "content": [{ "type": "text", "text": text }] }],
                     }),
                     super::model_config::PromptStyle::Parts { .. } => json!({
-                        "system": policy(self.format.wording()),
+                        "system": system,
                         "input": [{ "type": "text", "text": text }],
                     }),
                 }
@@ -140,19 +192,34 @@ impl Skill for Host {
                 // The account is shown for attempts; these read as documents.
                 reasoning: false,
                 tools,
-                // A format's own bug step writes only its bug's directory.
-                policy: Policy::new(&[], &[])
-                    .rules(if settings["scope"] == "bug" {
-                        self.format
-                            .bug_step()
-                            .map_or(self.format.rules(), |s| s.rules)
-                    } else {
-                        self.format.rules()
-                    })
-                    .authoring(),
+                // A format's own bug step writes only its bug's directory;
+                // exploring writes nothing but the format's own artifacts.
+                policy: if exploring {
+                    let planning = self.format.planning();
+                    Policy::new(&[], &[]).rules(self.format.rules()).exploring(
+                        crate::tools::policy::Exploring {
+                            paths: planning.explore_paths,
+                            commands: planning.explore_commands,
+                        },
+                    )
+                } else {
+                    Policy::new(&[], &[])
+                        .rules(if settings["scope"] == "bug" {
+                            self.format
+                                .bug_step()
+                                .map_or(self.format.rules(), |s| s.rules)
+                        } else {
+                            self.format.rules()
+                        })
+                        .authoring()
+                },
                 max_turns: limit("max_turns", 30).max(1),
                 max_tool_calls: limit("max_tool_calls", 100),
-                schema: Some(schema()),
+                schema: Some(if exploring {
+                    explore_schema()
+                } else {
+                    schema()
+                }),
                 max_tokens: None,
                 reads: None,
                 halt: None,

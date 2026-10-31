@@ -228,6 +228,8 @@ pub enum CommandData {
     RungSuggestion(Box<crate::ladder::RungSuggestion>),
     /// `spec <skill> --through`: plan through, and where it stopped.
     PlanningChain(Box<PlanningChainReport>),
+    /// `spec explore`: a session, its approaches and brief, or the list.
+    Explore(Box<crate::explore::ExplorePayload>),
 }
 
 /// What a prefix entry of `[commands] allow_prefix` or `[sandbox]
@@ -1090,6 +1092,7 @@ impl CommandData {
             Self::Similar(_) => "similar",
             Self::RungSuggestion(_) => "rung_suggestion",
             Self::PlanningChain(_) => "planning_chain",
+            Self::Explore(_) => "explore",
         }
     }
 }
@@ -1144,6 +1147,7 @@ pub const PAYLOADS: &[&str] = &[
     "similar",
     "rung_suggestion",
     "planning_chain",
+    "explore",
 ];
 
 /// What the future oracle of a unit will be made of, counted from its

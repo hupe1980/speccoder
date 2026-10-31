@@ -409,6 +409,27 @@ pub enum Command {
         /// Plan on through the format's own skills (spec, plan, tasks, analyze), stopping where you decide.
         #[arg(long, value_enum, value_name = "STEP")]
         through: Option<ThroughArg>,
+        /// promote: not now — offered again only when another signal holds.
+        #[arg(long)]
+        decline: bool,
+        /// promote: a conversation to carry (repeatable; default: the ones that suggested it).
+        #[arg(long, value_name = "ID")]
+        conversation: Vec<String>,
+        /// promote: carry no conversation.
+        #[arg(long)]
+        no_conversation: bool,
+        /// explore: host this skill instead of the format's own.
+        #[arg(long, value_name = "NAME")]
+        skill: Option<String>,
+        /// explore: choose approach N right away.
+        #[arg(long, value_name = "N")]
+        choose: Option<usize>,
+        /// explore: a constraint to add when choosing (repeatable).
+        #[arg(long, value_name = "TEXT")]
+        constraint: Vec<String>,
+        /// explore: an open question to add when choosing (repeatable).
+        #[arg(long, value_name = "TEXT")]
+        question: Vec<String>,
     },
     /// Work through the feature's ready tasks, or one (`--task T005`); resumes where it stopped.
     Run {

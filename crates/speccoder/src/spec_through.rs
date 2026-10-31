@@ -227,6 +227,7 @@ pub fn render_suggestion(
     match s.rung {
         RungPick::None => writeln!(out, "{}", s.reason),
         RungPick::Ask => writeln!(out, "Just ask (not built yet) — {}", s.reason),
+        RungPick::Explore => writeln!(out, "Explore — {}", s.reason),
         r => writeln!(out, "{} — {}", r.label(), s.reason),
     }
 }

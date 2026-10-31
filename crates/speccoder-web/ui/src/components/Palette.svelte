@@ -24,6 +24,7 @@
     ["edit.addToAsk", "add the selected task to Ask", "as context for the next question (⌘⇧L)"],
     ["file.bug", "report a bug", "reproduced, confirmed by you once, fixed on evidence"],
     ["file.new_feature", "new feature", "the spec tool writes the spec; you review it, then it is planned"],
+    ["file.explore", "explore an idea", "approaches to choose from, then a brief that starts the spec — read-only"],
     ["file.new_project", "new project", "the stack's and the spec format's own tools, then one commit"],
     ["help.doctor", "check the setup", "git, the project, the config, the model key, the sandbox"],
     ["help.bug_report", "copy a bug report", "the setup in Markdown, secrets taken out"],

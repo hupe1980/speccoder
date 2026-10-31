@@ -57,6 +57,19 @@ pub enum Origin {
         /// Unix seconds.
         at: u64,
     },
+    /// Started from an Explore session's brief, verbatim.
+    ExploredFrom {
+        /// The session (`ex-…`).
+        session: String,
+        /// The brief's digest (hex SHA-256 of its body).
+        digest: String,
+        /// Who started it.
+        by: String,
+        /// Through what.
+        via: Via,
+        /// Unix seconds.
+        at: u64,
+    },
     /// Suggested in an Ask conversation and confirmed by a person.
     Asked {
         /// The conversation (`c-…`).
@@ -100,6 +113,12 @@ impl Origin {
                 None => format!("issue #{number}"),
             },
             Self::Asked { conversation, .. } => format!("asked in conversation {conversation}"),
+            Self::ExploredFrom {
+                session, digest, ..
+            } => format!(
+                "explored in {session}, brief {}",
+                digest.get(..12).unwrap_or(digest)
+            ),
             Self::PromotedFrom {
                 from_unit,
                 requirement,
@@ -271,13 +290,21 @@ pub enum RungPick {
     Feature,
     /// A question: a read-only answer.
     Ask,
+    /// An idea still weighing its approaches (`speccoder spec explore`).
+    Explore,
     /// Nothing to suggest: the text is empty.
     None,
 }
 
 impl RungPick {
     /// Every rung, in the composer's order.
-    pub const ORDER: [Self; 4] = [Self::Bug, Self::Quick, Self::Feature, Self::Ask];
+    pub const ORDER: [Self; 5] = [
+        Self::Bug,
+        Self::Quick,
+        Self::Feature,
+        Self::Explore,
+        Self::Ask,
+    ];
 
     /// Its name as serialized (`quick`).
     #[must_use]
@@ -287,6 +314,7 @@ impl RungPick {
             Self::Quick => "quick",
             Self::Feature => "feature",
             Self::Ask => "ask",
+            Self::Explore => "explore",
             Self::None => "none",
         }
     }
@@ -299,6 +327,7 @@ impl RungPick {
             Self::Quick => "Quick change",
             Self::Feature => "Feature",
             Self::Ask => "Just ask",
+            Self::Explore => "Explore",
             Self::None => "Nothing",
         }
     }
@@ -311,6 +340,7 @@ impl RungPick {
             Self::Quick => "one requirement, judged like a task",
             Self::Feature => "the spec tool writes a spec; you review it",
             Self::Ask => "a read-only answer, nothing changes",
+            Self::Explore => "approaches to choose from, then a brief that starts the spec",
             Self::None => "",
         }
     }
@@ -318,7 +348,10 @@ impl RungPick {
     /// Whether this build has the rung.
     #[must_use]
     pub const fn available(self) -> bool {
-        matches!(self, Self::Bug | Self::Quick | Self::Feature | Self::Ask)
+        matches!(
+            self,
+            Self::Bug | Self::Quick | Self::Feature | Self::Ask | Self::Explore
+        )
     }
 }
 
@@ -326,6 +359,8 @@ impl RungPick {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum RungCueRule {
+    /// Words that weigh approaches ("should we", "which is better").
+    Weighing,
     /// An interrogative first word or a trailing `?`.
     Question,
     /// A word for a wrong result of existing behaviour.
@@ -379,6 +414,21 @@ const INTERROGATIVES: &[&str] = &[
 ];
 
 /// Words and phrases for a wrong result of existing behaviour.
+/// Words that weigh approaches rather than name one: an idea to explore.
+const WEIGHING: &[&str] = &[
+    "should we",
+    "should i",
+    "which is better",
+    "how could we",
+    "how should we",
+    "options for",
+    "compare",
+    "or should",
+    "best way to",
+    "trade-offs",
+    "tradeoffs",
+];
+
 const WRONG_RESULT: &[&str] = &[
     "crash",
     "crashes",
@@ -557,6 +607,7 @@ pub fn command_for(rung: RungPick, text: &str, create_skill: Option<&str>) -> Op
         RungPick::Quick => Some(format!("speccoder do {q}")),
         RungPick::Feature => create_skill.map(|s| format!("speccoder spec {s} {q}")),
         RungPick::Ask => Some(format!("speccoder ask {q}")),
+        RungPick::Explore => Some(format!("speccoder spec explore {q}")),
         RungPick::None => None,
     }
 }
@@ -579,8 +630,11 @@ pub fn suggest(text: &str) -> RungSuggestion {
                 .as_deref()
                 .is_some_and(|f| INTERROGATIVES.contains(&f)));
     let joined = joiners(trimmed);
+    let weighing = phrases(&words, WEIGHING);
     let (rung, rule, matched) = if words.is_empty() {
         (RungPick::None, RungCueRule::Default, Vec::new())
+    } else if !weighing.is_empty() {
+        (RungPick::Explore, RungCueRule::Weighing, weighing)
     } else if asks {
         let m = if trimmed.ends_with('?') {
             vec!["?".to_owned()]
@@ -607,6 +661,10 @@ pub fn suggest(text: &str) -> RungSuggestion {
             .join(", ")
     };
     let reason = match rule {
+        RungCueRule::Weighing => format!(
+            "Why \"Explore\": it weighs approaches ({}) — explore them, choose one, then the spec.",
+            shown(&matched)
+        ),
         RungCueRule::Question => "Why \"Just ask\": it reads like a question — Ask answers it from what it reads and changes nothing.".to_owned(),
         RungCueRule::WrongResult => format!(
             "Why \"Bug fix\": the text names a wrong result ({}) of existing behaviour.",

@@ -51,6 +51,8 @@ export const KINDS: Record<ActionKind, { verb: string; icon?: string; holdsWorkt
   open_sample: { verb: "Try the Sample", icon: "play", holdsWorktree: false },
   sample_checks: { verb: "Run the checks", icon: "check", holdsWorktree: false },
   decline_promotion: { verb: "Not now", icon: "minus", holdsWorktree: false },
+  explore: { verb: "Explore", icon: "sparkle", holdsWorktree: true },
+  explore_choose: { verb: "Choose", icon: "check", holdsWorktree: false },
   command: { verb: "Copy", icon: "terminal", holdsWorktree: false },
 };
 

@@ -236,4 +236,28 @@ describe("NewFeature", () => {
       true,
     );
   });
+
+  it("starts from an Explore brief verbatim, read-only, naming its session and digest", async () => {
+    host.get.mockImplementation(async (path: string) => {
+      if (path.startsWith("/api/similar")) return { status: "ok", data: { query: "", compared: 0, limited: false, matches: [] } };
+      if (path.startsWith("/api/skill-cost")) return { cost: null, model: null };
+      throw new Error(path);
+    });
+    const brief = "Explore brief 3f9a0c1d2e4b (session ex-abc)\n\n## Approach\n\nBuild a PDF\n";
+    open({ text: brief, source: { kind: "explore", session: "ex-abc", digest: "3f9a0c1d2e4b5a6b" }, through: "tasks" });
+    await wait();
+    await settle(12);
+    expect(field().readOnly).toBe(true);
+    expect(document.body.textContent).toContain("From exploration ex-abc");
+    expect(document.body.textContent).not.toContain("Explore first");
+    expect(await violations()).toEqual([]);
+    vi.useFakeTimers();
+    button(/^Start/).click();
+    await settle();
+    expect(host.app.perform).toHaveBeenCalledWith(
+      expect.objectContaining({ run: { kind: "plan_through", from: { kind: "create", description: brief, source: { kind: "explore", session: "ex-abc", digest: "3f9a0c1d2e4b5a6b" } }, through: "tasks" } }),
+      undefined,
+      true,
+    );
+  });
 });

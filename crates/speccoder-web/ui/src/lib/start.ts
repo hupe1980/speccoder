@@ -12,6 +12,7 @@ export const RUNGS: { rung: Exclude<RungPick, "none">; label: string; ceremony: 
   { rung: "bug", label: "Bug fix", ceremony: "a reproduction must fail first, then the fix is judged", keys: "⌃⏎" },
   { rung: "quick", label: "Quick change", ceremony: "one requirement, judged like a task", keys: "⌥⏎" },
   { rung: "feature", label: "Feature", ceremony: "the spec tool writes a spec; you review it", keys: "⇧⏎" },
+  { rung: "explore", label: "Explore", ceremony: "approaches to choose from, then a brief that starts the spec", keys: "" },
   { rung: "ask", label: "Just ask", ceremony: "a read-only answer, nothing changes", keys: "⌘⏎" },
 ];
 
@@ -56,6 +57,7 @@ export function composerCommand(rung: RungPick | null, text: string, createSkill
     case "quick": return `speccoder do ${t}`;
     case "feature": return createSkill ? `speccoder spec ${short(createSkill)} ${t}` : null;
     case "ask": return `speccoder ask ${t}`;
+    case "explore": return `speccoder spec explore ${t}`;
     default: return null;
   }
 }

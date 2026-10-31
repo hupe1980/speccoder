@@ -1,0 +1,25 @@
+{
+  "result": {
+    "schema_version": 2,
+    "command": "explore",
+    "status": "not_found",
+    "exit_code": 15,
+    "message": "no exploration ex-000000000000 — see `speccoder spec explore list`",
+    "code": "NOT-FOUND",
+    "fix": [
+      "speccoder report"
+    ],
+    "fix_steps": [
+      {
+        "command": "speccoder report",
+        "how": "view",
+        "view": "report",
+        "subject": null
+      }
+    ],
+    "docs": "https://hupe1980.github.io/speccoder/docs/codes/#not-found"
+  },
+  "head": "init",
+  "status": "",
+  "review": null
+}

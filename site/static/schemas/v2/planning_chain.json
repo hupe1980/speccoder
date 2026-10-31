@@ -537,6 +537,29 @@
             "task",
             "conversations"
           ]
+        },
+        {
+          "description": "An Explore session's brief, verbatim.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "explore"
+            },
+            "session": {
+              "description": "The session (`ex-…`).",
+              "type": "string"
+            },
+            "digest": {
+              "description": "The brief's digest, checked before anything runs.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "session",
+            "digest"
+          ]
         }
       ]
     }

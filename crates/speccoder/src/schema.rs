@@ -106,6 +106,9 @@ const fn describe(payload: &str) -> &'static str {
         b"ask" => "ask: one turn of a read-only conversation, its reads and checked citations",
         b"ask_conversations" => "ask --list: the conversations, newest first",
         b"ask_thread" => "ask: one conversation with its turns",
+        b"explore" => {
+            "explore: an idea's session — its approaches, the person's choice and the brief — or the sessions"
+        }
         b"review" => "review: the spec's requirements and the person's decision on each",
         b"auth" => "auth: who speccoder is on a GitHub host, and where its token comes from",
         b"actions" => "actions: what a person can do now, and the feature's journey",
@@ -194,6 +197,7 @@ published! {
     "ask", "AskReport" => core::ask::AskReport,
     "ask_conversations", "AskConversations" => core::ask::AskConversations,
     "ask_thread", "AskThread" => core::ask::AskThread,
+    "explore", "ExplorePayload" => core::explore::ExplorePayload,
     "review", "ReviewReport" => core::ReviewReport,
     "auth", "AuthReport" => core::AuthReport,
     "actions", "ActionsReport" => core::ActionsReport,

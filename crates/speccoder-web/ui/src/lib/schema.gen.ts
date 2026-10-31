@@ -100,7 +100,7 @@ export interface ActionId {
  * kind arrives with its `Runnable` variant (the *adding a kind* contract
  * of `speccoder_runtime::actions::perform`).
  */
-export type ActionKind = "skill" | "run_task" | "run_feature" | "converge" | "commit" | "approve" | "reject" | "accept" | "skip" | "nudge" | "done" | "hint" | "rule" | "review" | "issue_comment" | "quick_change" | "keep_set_aside" | "drop_set_aside" | "fix_setup" | "feature" | "pull_request" | "bug_fix" | "bug_confirm" | "bug_run" | "bug_keep" | "allow_always" | "widen_policy" | "decide_batch" | "oracle_tests" | "approve_and_run" | "comment" | "comments_send" | "revision_undo" | "code_nudge" | "acceptance_at" | "preset_add" | "plan_through" | "new_project" | "undo_new_project" | "clone_repository" | "open_sample" | "sample_checks" | "decline_promotion" | "command";
+export type ActionKind = "skill" | "run_task" | "run_feature" | "converge" | "commit" | "approve" | "reject" | "accept" | "skip" | "nudge" | "done" | "hint" | "rule" | "review" | "issue_comment" | "quick_change" | "keep_set_aside" | "drop_set_aside" | "fix_setup" | "feature" | "pull_request" | "bug_fix" | "bug_confirm" | "bug_run" | "bug_keep" | "allow_always" | "widen_policy" | "decide_batch" | "oracle_tests" | "approve_and_run" | "comment" | "comments_send" | "revision_undo" | "code_nudge" | "acceptance_at" | "preset_add" | "plan_through" | "new_project" | "undo_new_project" | "clone_repository" | "open_sample" | "sample_checks" | "decline_promotion" | "explore" | "explore_choose" | "command";
 
 /**
  * Result of `speccoder actions`: what a person can do now in the
@@ -205,6 +205,18 @@ export interface Anchor {
   path: string;
   /** 1-based line. */
   line: number;
+}
+
+/** One option the model proposes: a claim, never a decision. */
+export interface Approach {
+  /** A short name. */
+  title: string;
+  /** What it is. */
+  summary: string;
+  /** What it gives up. */
+  tradeoffs: string[];
+  /** What could go wrong. */
+  risks: string[];
 }
 
 /**
@@ -824,6 +836,28 @@ export interface Chip {
   changed: boolean;
 }
 
+/** The person's choice: an approach and what they kept or added. */
+export interface Choice {
+  /** 1-based, of the last report's approaches. */
+  approach: number;
+  /** Kept and added constraints. */
+  constraints: Item[];
+  /** Kept and added open questions. */
+  open_questions: Item[];
+  /** Who chose. */
+  by: string;
+  /** Through what. */
+  via: Via;
+  /** `prompt` (picked at a terminal or in the app) or `flag` (`--choose`). */
+  basis: string;
+  /** Unix seconds. */
+  at: number;
+  /** The brief's digest (hex SHA-256 of its body). */
+  digest: string;
+  /** The brief's size. */
+  bytes: number;
+}
+
 /** A citation marker in the answer, checked against the turn's reads. */
 export interface Citation {
   /** The marker as written (`[r3:12-20]`). */
@@ -894,7 +928,7 @@ export interface CollectionRule {
 }
 
 /** Command-specific payload of a result. */
-export type CommandData = ProjectSnapshot | VerifyReport | WorktreeReport | ProposeReport | ReplayReport | RunReport | EvalReport | FeatureReport | ConvergeReport | StatusReport | ApprovalsReport | ControlReport | CostReport | PrReport | BenchReport | InitReport | SkillsReport | SkillRunReport | ChecklistStatus[] | ArchiveReport | InPlaceReport | AttestReport | ExplainReport | SchemaReport | DoctorReport | FeaturesReport | UiReport | ConfigReport | IssuesReport | InboxReport | ShapeReport | AskReport | AskConversations | AskThread | ReviewReport | AuthReport | BranchReport | EvidenceTour | ActionsReport | BugReport | PolicyCoverage | CommentsView | PresetReport | NewProjectReport | SampleReport | SimilarReport | RungSuggestion | PlanningChainReport;
+export type CommandData = ProjectSnapshot | VerifyReport | WorktreeReport | ProposeReport | ReplayReport | RunReport | EvalReport | FeatureReport | ConvergeReport | StatusReport | ApprovalsReport | ControlReport | CostReport | PrReport | BenchReport | InitReport | SkillsReport | SkillRunReport | ChecklistStatus[] | ArchiveReport | InPlaceReport | AttestReport | ExplainReport | SchemaReport | DoctorReport | FeaturesReport | UiReport | ConfigReport | IssuesReport | InboxReport | ShapeReport | AskReport | AskConversations | AskThread | ReviewReport | AuthReport | BranchReport | EvidenceTour | ActionsReport | BugReport | PolicyCoverage | CommentsView | PresetReport | NewProjectReport | SampleReport | SimilarReport | RungSuggestion | PlanningChainReport | ExplorePayload;
 
 /**
  * The envelope as it is serialised — the schema of [`CommandResult`]
@@ -2207,6 +2241,68 @@ export interface ExplainReport {
   codes: CodeInfo[];
 }
 
+/** `spec explore`'s payload: one session as it stands, or the list. */
+export interface ExplorePayload {
+  /** The session (none for a list). */
+  session?: ExploreSession | null;
+  /** The last run's approaches (the model's). */
+  approaches: Approach[];
+  /** The constraints to keep or drop, by source. */
+  constraints: Item[];
+  /** The open questions, by source. */
+  open_questions: Item[];
+  /** The person's last choice. */
+  choice?: Choice | null;
+  /** The brief it made, verbatim. */
+  brief?: string | null;
+  /** The project's sessions, newest first (`--list`). */
+  sessions?: SessionEntry[] | null;
+}
+
+/** How a run of a session ended: the model's report, schema-checked. */
+export interface ExploreReport {
+  /** The model's summary of the idea. */
+  summary: string;
+  /** `done` or `incomplete`. */
+  status: string;
+  /** The options. */
+  approaches: Approach[];
+  /** What any approach must respect. */
+  constraints: string[];
+  /** What is still open. */
+  open_questions: string[];
+}
+
+/** One exploration of one idea in one project. */
+export interface ExploreSession {
+  /** 1. */
+  version: number;
+  /** `ex-` and hex. */
+  id: string;
+  /** The person's idea. */
+  idea: string;
+  /** The skill that explores. */
+  skill: string;
+  /** `flag`, `format` or `fallback`. */
+  selected_because: string;
+  /** `open`, `chosen` or `started`. */
+  state: string;
+  /** Unix seconds. */
+  created_at: number;
+  /** Unix seconds. */
+  updated_at: number;
+  /** Its runs, in order. */
+  runs: RunRef[];
+  /** Each run's report, in order. */
+  reports: ExploreReport[];
+  /** The questions asked and their answers. */
+  qa: QaItem[];
+  /** The choices made, the last one standing. */
+  choices: Choice[];
+  /** The unit it started, once. */
+  started?: Started | null;
+}
+
 /** A Spec Kit extension the person chose. */
 export interface ExtensionChoice {
   /** A bundled name, a local path or a URL, as given. */
@@ -2324,6 +2420,14 @@ export type FeatureSource =
     task: string;
     /** Conversation ids (`c-…`). */
     conversations: string[];
+  }
+  /** An Explore session's brief, verbatim. */
+  | {
+    kind: "explore";
+    /** The session (`ex-…`). */
+    session: string;
+    /** The brief's digest, checked before anything runs. */
+    digest: string;
   };
 
 /** Result of `speccoder feature`. */
@@ -2818,6 +2922,14 @@ export interface IssuesReport {
    * updated.
    */
   issues: IssueEntry[];
+}
+
+/** A constraint or open question, by its source. */
+export interface Item {
+  /** Its words. */
+  text: string;
+  /** `model`, `person` or `nobody` (a question nobody could answer). */
+  source: string;
 }
 
 /**
@@ -3830,6 +3942,16 @@ export interface PublicUnitPromoted {
   via: string;
 }
 
+/** A question the run asked and how it was answered. */
+export interface QaItem {
+  /** The model's question. */
+  question: string;
+  /** The person's answer; none when nobody could answer. */
+  answer?: string | null;
+  /** Who answered. */
+  by?: string | null;
+}
+
 /** A read the engine issued for a tool call. */
 export interface Read {
   /** `r1`, `r2`, … across the conversation. */
@@ -4311,6 +4433,18 @@ export interface Ruling {
 /** How a run started from the review asks for a person. */
 export type RunMode = "ask" | "autopilot";
 
+/** One run of a session. */
+export interface RunRef {
+  /** The agentplane run. */
+  run_id: string;
+  /** `explore` or `resume`. */
+  kind: string;
+  /** What the person added when resuming. */
+  words?: string | null;
+  /** How it ended. */
+  status: string;
+}
+
 /** Result of `speccoder run`. */
 export interface RunReport {
   /** The agentplane run of the attempt. */
@@ -4419,13 +4553,13 @@ export interface RungCue {
 }
 
 /** The rule that decided a suggestion. */
-export type RungCueRule = "question" | "wrong_result" | "several_capabilities" | "long" | "default";
+export type RungCueRule = "weighing" | "question" | "wrong_result" | "several_capabilities" | "long" | "default";
 
 /**
  * A rung the composer can open for a description: a bug fix, a quick
  * change, a feature, or a question (`ask`); `none` only for an empty text.
  */
-export type RungPick = "bug" | "quick" | "feature" | "ask" | "none";
+export type RungPick = "bug" | "quick" | "feature" | "ask" | "explore" | "none";
 
 /**
  * The composer's suggestion for a text (`rung_suggestion`): computed by
@@ -4861,6 +4995,36 @@ export type Runnable =
     kind: "decline_promotion";
     /** `<unit>/<task>`. */
     task: string;
+  }
+  /**
+   * Explore an idea read-only, ending in approaches to choose from; or
+   * resume a session with more words.
+   */
+  | {
+    kind: "explore";
+    /** The idea (a new session) or the words added (a resumed one). */
+    idea: string;
+    /** The skill to host instead of the format's own (`--skill`). */
+    skill: string | null;
+    /** The session to resume. */
+    resume: string | null;
+  }
+  /**
+   * The person's choice in a session: an approach, and the constraints
+   * and open questions they keep or add. It composes the brief.
+   */
+  | {
+    kind: "explore_choose";
+    /** The session (`ex-…`). */
+    session: string;
+    /** 1-based, of the session's last approaches. */
+    approach: number;
+    /** The constraints, as kept and added. */
+    constraints: string[];
+    /** The open questions, as kept and added. */
+    questions: string[];
+    /** Chosen by a flag (`--choose N`), not in a prompt or the app. */
+    flag: boolean;
   };
 
 /** How the sample was recorded. */
@@ -5010,6 +5174,24 @@ export interface Selection {
 
 /** Why a feature was selected. */
 export type SelectionReason = "argument" | "environment" | "recorded" | "only_feature" | "none";
+
+/** One session in a list. */
+export interface SessionEntry {
+  /** `ex-…`. */
+  id: string;
+  /** The idea. */
+  idea: string;
+  /** The skill that explores it. */
+  skill: string;
+  /** `open`, `chosen` or `started`. */
+  state: string;
+  /** Unix seconds. */
+  updated_at: number;
+  /** The chosen brief's digest. */
+  digest?: string | null;
+  /** The unit it started. */
+  unit?: string | null;
+}
 
 /** Changes saved and set aside so a run could start from the branch tip. */
 export interface SetAside {
@@ -5292,6 +5474,14 @@ export type Stage = "prepare" | "baseline" | "reproduce" | "confirm" | "red" | "
 
 /** Where a stage is. */
 export type StageState = "started" | "passed" | "failed" | "skipped";
+
+/** The unit a session started. */
+export interface Started {
+  /** The unit. */
+  unit: string;
+  /** Unix seconds. */
+  at: number;
+}
 
 /** How far a measurement got. */
 export type State = "measured" | "partial" | "not_measured" | "not_applicable";
@@ -5877,7 +6067,7 @@ export interface VerifyReport {
 export type Via = "terminal" | "web" | "window" | "acp" | "phone" | "ci" | "mcp";
 
 /** A read-only place an interface opens instead of running a command. */
-export type View = "doctor" | "bug_report" | "report" | "live" | "approvals" | "explain" | "review" | "settings" | "setup" | "bug" | "quick_change" | "new_feature" | "new_project" | "github" | "task" | "ask";
+export type View = "doctor" | "bug_report" | "report" | "live" | "approvals" | "explain" | "review" | "settings" | "setup" | "bug" | "quick_change" | "new_feature" | "new_project" | "github" | "task" | "ask" | "explore";
 
 /** A run in progress, this host's or another speccoder process's. */
 export interface WorkingRun {

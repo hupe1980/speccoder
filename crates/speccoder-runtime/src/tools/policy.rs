@@ -455,7 +455,22 @@ pub struct Policy {
     /// An autopilot run: a call that would ask a person, and that
     /// no grant covers, is refused for the run instead.
     autopilot: bool,
+    /// Exploring: the paths it may write (the format's own exploration
+    /// artifacts) and the read-only commands it may run. Nothing asks.
+    exploring: Option<Exploring>,
 }
+
+/// What an exploring run may do beyond reading.
+#[derive(Debug, Clone, Copy)]
+pub struct Exploring {
+    /// Paths (workspace-relative) the format's exploration skill writes.
+    pub paths: fn(&str) -> bool,
+    /// Argv prefixes of its read-only commands.
+    pub commands: &'static [&'static [&'static str]],
+}
+
+/// Why an exploring run's write was refused.
+pub const EXPLORING_WRITE: &str = "exploring writes nothing — the brief is made when the person chooses, and *Start spec* writes the spec";
 
 /// Why an autopilot run refused a call that would have asked a person.
 pub const AUTOPILOT_DENIED: &str = "autopilot: not asked — listed for you";
@@ -630,6 +645,16 @@ impl Policy {
             Decision::Approval(_) if self.autopilot => Decision::Deny(AUTOPILOT_DENIED.to_owned()),
             d => d,
         }
+    }
+
+    /// The explore profile: reading is allowed; a write only inside the
+    /// format's exploration paths (and only where the rules allow it), a
+    /// command only from its read-only list, never with the network —
+    /// and nothing goes to a person: what is not allowed is denied.
+    #[must_use]
+    pub const fn exploring(mut self, e: Exploring) -> Self {
+        self.exploring = Some(e);
+        self
     }
 
     /// The planning profile: the format's artifacts and scripts are the
@@ -839,6 +864,9 @@ impl Policy {
     }
 
     fn base_of(&self, tool: &str, args: &Value) -> Decision {
+        if let Some(e) = self.exploring {
+            return self.explore_of(e, tool, args);
+        }
         if tool.starts_with(MCP_PREFIX) {
             return match self.mcp.get(tool).map(String::as_str) {
                 Some("allow") => Decision::Allow,
@@ -859,6 +887,48 @@ impl Policy {
             "git_log" | "git_show" | "journal_account" | "task_evidence" | "report" | "inbox"
             | "explain" => Decision::Allow,
             other => Decision::Deny(format!("unknown tool `{other}`")),
+        }
+    }
+
+    /// An exploring run's decision: never an approval.
+    fn explore_of(&self, e: Exploring, tool: &str, args: &Value) -> Decision {
+        match tool {
+            "read_file" | "list_files" | "search_code" => self.read(args),
+            "git_status" | "git_diff" => Decision::Allow,
+            "write_file" | "edit_file" => {
+                let rel = args["path"]
+                    .as_str()
+                    .and_then(|p| super::paths::normalise(p).ok());
+                // The format's declared exploration artifacts are its
+                // own to write — never a credential or the person's review.
+                match rel {
+                    Some(rel)
+                        if (e.paths)(&rel)
+                            && !self.protected.is_secret(&rel)
+                            && !self.protected.is_review(&rel) =>
+                    {
+                        Decision::Allow
+                    }
+                    _ => Decision::Deny(EXPLORING_WRITE.to_owned()),
+                }
+            }
+            "run_command" => {
+                let argv = argv_of(args);
+                if args.get("network").and_then(Value::as_bool) == Some(true) {
+                    return Decision::Deny("exploring has no network".to_owned());
+                }
+                if e.commands.iter().any(|p| {
+                    argv.len() >= p.len() && argv.iter().zip(p.iter()).all(|(a, b)| a == b)
+                }) {
+                    Decision::Allow
+                } else {
+                    Decision::Deny(format!(
+                        "exploring runs only the format's read-only commands; `{}` is not one",
+                        argv.join(" ")
+                    ))
+                }
+            }
+            other => Decision::Deny(format!("`{other}` is not used while exploring")),
         }
     }
 
@@ -1821,6 +1891,68 @@ mod tests {
                 proptest::prop_assert_eq!(after, Decision::Allow);
             }
         }
+    }
+
+    const OPENSPEC_READS: &[&[&str]] = &[&["openspec", "list"], &["openspec", "show"]];
+
+    fn exploring() -> Policy {
+        Policy::new(&[vec!["cargo".to_owned(), "test".to_owned()]], &[]).exploring(Exploring {
+            paths: |rel| rel.starts_with(".specify/assessments/"),
+            commands: OPENSPEC_READS,
+        })
+    }
+
+    proptest::proptest! {
+        /// Exploring never asks a person (SC-002): every write outside the
+        /// exploration paths and every unlisted command is denied — even a
+        /// configured check, even with the network.
+        #[test]
+        fn exploring_denies_what_it_does_not_allow_and_never_asks(words in proptest::collection::vec("[a-z]{1,6}", 1..4), tool in 0usize..6) {
+            let p = exploring();
+            let (name, args) = match tool {
+                0 => ("run_command", json!({ "argv": words })),
+                1 => ("run_command", json!({ "argv": ["cargo", "test"] })),
+                2 => ("write_file", json!({ "path": format!("src/{}.rs", words[0]), "content": "" })),
+                3 => ("edit_file", json!({ "path": format!("specs/{}/spec.md", words[0]), "old_string": "a", "new_string": "b" })),
+                4 => ("run_command", json!({ "argv": ["openspec", "list", words[0].clone()], "network": true })),
+                _ => ("mcp__x__y", json!({})),
+            };
+            let d = p.classify(name, &args, None);
+            proptest::prop_assert!(matches!(d, Decision::Deny(_)), "{name} {args} → {d:?}");
+        }
+    }
+
+    #[test]
+    fn exploring_reads_and_runs_the_formats_read_only_commands() {
+        let p = exploring();
+        assert_eq!(
+            p.classify("read_file", &json!({ "path": "src/lib.rs" }), None),
+            Decision::Allow
+        );
+        assert_eq!(
+            p.classify(
+                "run_command",
+                &json!({ "argv": ["openspec", "list", "--json"] }),
+                None
+            ),
+            Decision::Allow
+        );
+        assert_eq!(
+            p.classify(
+                "write_file",
+                &json!({ "path": ".specify/assessments/csv/notes.md", "content": "" }),
+                None
+            ),
+            Decision::Allow
+        );
+        let Decision::Deny(why) = p.classify(
+            "write_file",
+            &json!({ "path": "notes.md", "content": "" }),
+            None,
+        ) else {
+            panic!("a write outside the exploration paths is denied");
+        };
+        assert_eq!(why, EXPLORING_WRITE);
     }
 
     #[test]

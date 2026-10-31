@@ -3566,6 +3566,91 @@
             "kind",
             "task"
           ]
+        },
+        {
+          "description": "Explore an idea read-only, ending in approaches to choose from; or\nresume a session with more words.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "explore"
+            },
+            "idea": {
+              "description": "The idea (a new session) or the words added (a resumed one).",
+              "type": "string"
+            },
+            "skill": {
+              "description": "The skill to host instead of the format's own (`--skill`).",
+              "type": [
+                "string",
+                "null"
+              ],
+              "default": null
+            },
+            "resume": {
+              "description": "The session to resume.",
+              "type": [
+                "string",
+                "null"
+              ],
+              "default": null
+            }
+          },
+          "required": [
+            "kind",
+            "idea",
+            "skill",
+            "resume"
+          ]
+        },
+        {
+          "description": "The person's choice in a session: an approach, and the constraints\nand open questions they keep or add. It composes the brief.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "explore_choose"
+            },
+            "session": {
+              "description": "The session (`ex-…`).",
+              "type": "string"
+            },
+            "approach": {
+              "description": "1-based, of the session's last approaches.",
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "constraints": {
+              "description": "The constraints, as kept and added.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": []
+            },
+            "questions": {
+              "description": "The open questions, as kept and added.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": []
+            },
+            "flag": {
+              "description": "Chosen by a flag (`--choose N`), not in a prompt or the app.",
+              "type": "boolean",
+              "default": false
+            }
+          },
+          "required": [
+            "kind",
+            "session",
+            "approach",
+            "constraints",
+            "questions",
+            "flag"
+          ]
         }
       ]
     },
@@ -3964,6 +4049,29 @@
             "task",
             "conversations"
           ]
+        },
+        {
+          "description": "An Explore session's brief, verbatim.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "explore"
+            },
+            "session": {
+              "description": "The session (`ex-…`).",
+              "type": "string"
+            },
+            "digest": {
+              "description": "The brief's digest, checked before anything runs.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "session",
+            "digest"
+          ]
         }
       ]
     },
@@ -4152,6 +4260,11 @@
           "description": "`ask`: the Ask panel.",
           "type": "string",
           "const": "ask"
+        },
+        {
+          "description": "`spec explore`: the Explore sheet (`subject`: a session, if one).",
+          "type": "string",
+          "const": "explore"
         }
       ]
     },
@@ -4579,6 +4692,10 @@
         {
           "description": "`spec <skill> --through`: plan through, and where it stopped.",
           "$ref": "#/$defs/PlanningChainReport"
+        },
+        {
+          "description": "`spec explore`: a session, its approaches and brief, or the list.",
+          "$ref": "#/$defs/ExplorePayload"
         }
       ]
     },
@@ -12503,6 +12620,16 @@
           "const": "decline_promotion"
         },
         {
+          "description": "[`Runnable::Explore`].",
+          "type": "string",
+          "const": "explore"
+        },
+        {
+          "description": "[`Runnable::ExploreChoose`].",
+          "type": "string",
+          "const": "explore_choose"
+        },
+        {
           "description": "No runnable: the person runs the command.",
           "type": "string",
           "const": "command"
@@ -16502,6 +16629,11 @@
           "const": "ask"
         },
         {
+          "description": "An idea still weighing its approaches (`speccoder spec explore`).",
+          "type": "string",
+          "const": "explore"
+        },
+        {
           "description": "Nothing to suggest: the text is empty.",
           "type": "string",
           "const": "none"
@@ -16532,6 +16664,11 @@
     "RungCueRule": {
       "description": "The rule that decided a suggestion.",
       "oneOf": [
+        {
+          "description": "Words that weigh approaches (\"should we\", \"which is better\").",
+          "type": "string",
+          "const": "weighing"
+        },
         {
           "description": "An interrogative first word or a trailing `?`.",
           "type": "string",
@@ -16781,6 +16918,471 @@
         "code",
         "tasks",
         "detail"
+      ]
+    },
+    "ExplorePayload": {
+      "description": "`spec explore`'s payload: one session as it stands, or the list.",
+      "type": "object",
+      "properties": {
+        "session": {
+          "description": "The session (none for a list).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ExploreSession"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "approaches": {
+          "description": "The last run's approaches (the model's).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Approach"
+          },
+          "default": []
+        },
+        "constraints": {
+          "description": "The constraints to keep or drop, by source.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Item"
+          },
+          "default": []
+        },
+        "open_questions": {
+          "description": "The open questions, by source.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Item"
+          },
+          "default": []
+        },
+        "choice": {
+          "description": "The person's last choice.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Choice"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "brief": {
+          "description": "The brief it made, verbatim.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sessions": {
+          "description": "The project's sessions, newest first (`--list`).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/SessionEntry"
+          }
+        }
+      },
+      "required": [
+        "approaches",
+        "constraints",
+        "open_questions"
+      ]
+    },
+    "ExploreSession": {
+      "description": "One exploration of one idea in one project.",
+      "type": "object",
+      "properties": {
+        "version": {
+          "description": "1.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "id": {
+          "description": "`ex-` and hex.",
+          "type": "string"
+        },
+        "idea": {
+          "description": "The person's idea.",
+          "type": "string"
+        },
+        "skill": {
+          "description": "The skill that explores.",
+          "type": "string"
+        },
+        "selected_because": {
+          "description": "`flag`, `format` or `fallback`.",
+          "type": "string"
+        },
+        "state": {
+          "description": "`open`, `chosen` or `started`.",
+          "type": "string"
+        },
+        "created_at": {
+          "description": "Unix seconds.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "updated_at": {
+          "description": "Unix seconds.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "runs": {
+          "description": "Its runs, in order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RunRef"
+          },
+          "default": []
+        },
+        "reports": {
+          "description": "Each run's report, in order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ExploreReport"
+          },
+          "default": []
+        },
+        "qa": {
+          "description": "The questions asked and their answers.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/QaItem"
+          },
+          "default": []
+        },
+        "choices": {
+          "description": "The choices made, the last one standing.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Choice"
+          },
+          "default": []
+        },
+        "started": {
+          "description": "The unit it started, once.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Started"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "version",
+        "id",
+        "idea",
+        "skill",
+        "selected_because",
+        "state",
+        "created_at",
+        "updated_at",
+        "runs",
+        "reports",
+        "qa",
+        "choices"
+      ]
+    },
+    "RunRef": {
+      "description": "One run of a session.",
+      "type": "object",
+      "properties": {
+        "run_id": {
+          "description": "The agentplane run.",
+          "type": "string"
+        },
+        "kind": {
+          "description": "`explore` or `resume`.",
+          "type": "string"
+        },
+        "words": {
+          "description": "What the person added when resuming.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "description": "How it ended.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "run_id",
+        "kind",
+        "status"
+      ]
+    },
+    "ExploreReport": {
+      "description": "How a run of a session ended: the model's report, schema-checked.",
+      "type": "object",
+      "properties": {
+        "summary": {
+          "description": "The model's summary of the idea.",
+          "type": "string"
+        },
+        "status": {
+          "description": "`done` or `incomplete`.",
+          "type": "string"
+        },
+        "approaches": {
+          "description": "The options.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Approach"
+          },
+          "default": []
+        },
+        "constraints": {
+          "description": "What any approach must respect.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "open_questions": {
+          "description": "What is still open.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "summary",
+        "status",
+        "approaches",
+        "constraints",
+        "open_questions"
+      ]
+    },
+    "Approach": {
+      "description": "One option the model proposes: a claim, never a decision.",
+      "type": "object",
+      "properties": {
+        "title": {
+          "description": "A short name.",
+          "type": "string"
+        },
+        "summary": {
+          "description": "What it is.",
+          "type": "string"
+        },
+        "tradeoffs": {
+          "description": "What it gives up.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "risks": {
+          "description": "What could go wrong.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "title",
+        "summary",
+        "tradeoffs",
+        "risks"
+      ]
+    },
+    "QaItem": {
+      "description": "A question the run asked and how it was answered.",
+      "type": "object",
+      "properties": {
+        "question": {
+          "description": "The model's question.",
+          "type": "string"
+        },
+        "answer": {
+          "description": "The person's answer; none when nobody could answer.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "by": {
+          "description": "Who answered.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "question"
+      ]
+    },
+    "Choice": {
+      "description": "The person's choice: an approach and what they kept or added.",
+      "type": "object",
+      "properties": {
+        "approach": {
+          "description": "1-based, of the last report's approaches.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "constraints": {
+          "description": "Kept and added constraints.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Item"
+          }
+        },
+        "open_questions": {
+          "description": "Kept and added open questions.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Item"
+          }
+        },
+        "by": {
+          "description": "Who chose.",
+          "type": "string"
+        },
+        "via": {
+          "description": "Through what.",
+          "$ref": "#/$defs/Via"
+        },
+        "basis": {
+          "description": "`prompt` (picked at a terminal or in the app) or `flag` (`--choose`).",
+          "type": "string"
+        },
+        "at": {
+          "description": "Unix seconds.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "digest": {
+          "description": "The brief's digest (hex SHA-256 of its body).",
+          "type": "string"
+        },
+        "bytes": {
+          "description": "The brief's size.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "approach",
+        "constraints",
+        "open_questions",
+        "by",
+        "via",
+        "basis",
+        "at",
+        "digest",
+        "bytes"
+      ]
+    },
+    "Item": {
+      "description": "A constraint or open question, by its source.",
+      "type": "object",
+      "properties": {
+        "text": {
+          "description": "Its words.",
+          "type": "string"
+        },
+        "source": {
+          "description": "`model`, `person` or `nobody` (a question nobody could answer).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "source"
+      ]
+    },
+    "Started": {
+      "description": "The unit a session started.",
+      "type": "object",
+      "properties": {
+        "unit": {
+          "description": "The unit.",
+          "type": "string"
+        },
+        "at": {
+          "description": "Unix seconds.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "unit",
+        "at"
+      ]
+    },
+    "SessionEntry": {
+      "description": "One session in a list.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "`ex-…`.",
+          "type": "string"
+        },
+        "idea": {
+          "description": "The idea.",
+          "type": "string"
+        },
+        "skill": {
+          "description": "The skill that explores it.",
+          "type": "string"
+        },
+        "state": {
+          "description": "`open`, `chosen` or `started`.",
+          "type": "string"
+        },
+        "updated_at": {
+          "description": "Unix seconds.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "digest": {
+          "description": "The chosen brief's digest.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "unit": {
+          "description": "The unit it started.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "idea",
+        "skill",
+        "state",
+        "updated_at"
       ]
     }
   },

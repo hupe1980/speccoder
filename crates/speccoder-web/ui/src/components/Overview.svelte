@@ -64,8 +64,11 @@
     <div class="empty">
       <Icon name="doc" size={28} />
       <p><strong>No {app.project?.unit ?? "feature"}s yet</strong></p>
-      <button class="btn primary" onclick={() => (app.newFeature = {})}><Icon name="sparkle" size={13} /> New {app.project?.unit ?? "feature"}</button>
-      <p class="muted">The spec tool's own skill writes the spec from your description; you review it before anything is planned.</p>
+      <div class="first">
+        <button class="btn primary" onclick={() => (app.newFeature = {})}><Icon name="sparkle" size={13} /> New {app.project?.unit ?? "feature"}</button>
+        <button class="btn" onclick={() => (app.explore = {})}>Explore an idea first</button>
+      </div>
+      <p class="muted">The spec tool's own skill writes the spec from your description; you review it before anything is planned. Not sure yet? Explore weighs approaches with you first — read-only.</p>
     </div>
   {:else}
     <div class="cards">
@@ -131,4 +134,5 @@
   .empty { display: grid; justify-items: center; gap: 0.2rem; padding: 3.5rem 1rem; color: var(--muted); }
   .empty p { margin: 0; }
   .empty strong { color: var(--text); }
+  .first { display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: center; }
 </style>
