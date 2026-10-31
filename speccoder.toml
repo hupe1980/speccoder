@@ -19,13 +19,11 @@ timeout_secs = 900
 argv = ["cargo", "deny", "check"]
 tier = "full"
 
-# The model speccoder calls. The API key
-# comes only from the environment (OPENAI_API_KEY for openai,
-# ANTHROPIC_API_KEY for anthropic); speccoder never reads key files. With a
-# gitignored .env:  set -a; . ./.env; set +a
+# The model speccoder calls. The API key comes only from the environment
+# (OPENAI_API_KEY); speccoder never reads key files. With a gitignored .env:
+#   set -a; . ./.env; set +a
 [model]
 provider = "openai"
 model = "gpt-5.4-mini"
 max_output_tokens = 4096
-max_run_tokens = 200000
 cache_ttl = "5m"

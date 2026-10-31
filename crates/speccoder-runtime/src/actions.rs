@@ -29,8 +29,7 @@
 //! action: it adds a kind. Only the interfaces of [`Interface`] call
 //! [`perform`] — never a model tool, a hook, a gate or the engine — so
 //! nothing but a person's command approves, rejects, accepts, rules or
-//! ticks through it. `specs/089-action-contract/quickstart.md` walks
-//! through one such change.
+//! ticks through it.
 
 use std::path::Path;
 

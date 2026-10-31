@@ -156,8 +156,7 @@ pub static PLANNING: Planning = Planning {
     toward_tasks,
     revises: Some("clarify"),
     checks: Some("analyze"),
-    // `assess` (the first-party extension) arrives with spec 096's
-    // inventory and a fixture; until then `spec explore` runs the fallback.
+    // No exploration skill of its own: `spec explore` runs speccoder's.
     explores: None,
     explore_paths: crate::format::writes_nothing,
     explore_commands: &[],

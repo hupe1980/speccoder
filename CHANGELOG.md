@@ -8,64 +8,46 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- **Ask** (⌘L, `speccoder ask`): a read-only conversation about the
-  project. Sources are checked against what was read in the turn; a
-  suggested change is a sheet you confirm, never run. One agentplane run
-  per conversation; its budget is `[ask]`'s.
-- The composer's *Just ask* rung, and questions typed in the palette, go
-  to Ask.
-- Ask's **Stop** (Esc while it answers) stops the turn at once and keeps
-  the words shown so far; a conversation never dead-ends — a stopped,
-  idle or long one goes on carrying its earlier turns.
-- An Ask source opens where it lives: a file with its cited lines marked
-  (and *Changed since Ask read it* when it no longer says that), a
-  task's evidence in its inspector, a run's account in place. The empty
-  panel offers the three most recent conversations.
-- **Add to Ask** from any selection (a pill above selected words) and
-  with ⌘⇧L on evidence rows, requirements, open questions, Needs You
-  items, trace rows and diff files.
-- A quick change or bug confirmed from Ask records the conversation as
-  its origin; `report --cost` and Spend show Ask's tokens apart.
-- **Promotion** (`speccoder spec promote`, Needs You, the task inspector):
-  a quick change or bug fix that grew — more files than `[ladder]
-  promote_files`, two packages, two failures for different reasons,
-  ambiguous words, or a change to what judges — is offered as a spec of
-  its own. Its requirement is carried word for word with the
-  conversations you keep; the earlier tick is inherited, never verified.
-  The offer also shows in Ask when the task is in context.
-- What a proposal confirmed in Ask created shows under its turn and
-  opens where it lives, also when the conversation is reopened; a run's
-  account opens at the turns an answer cites. **New Ask Conversation**
-  (⌥⌘N, the palette). A promoted task still open offers *Skip* first in
-  its inspector. `--events` adds `ladder.offered` and `unit.promoted`.
-- Ask in the terminal offers to record the change it suggests
-  (`[y/N]`, at a terminal only); in an editor (ACP), words without a `/`
-  are a question: streamed, sources as links, a suggested change a
-  permission dialog that only **Record** records.
-
-- **Explore** (`speccoder spec explore`, the composer's Explore rung,
-  *Not sure yet? Explore first*): an idea thought through read-only by
-  the format's own exploration skill or speccoder's, ending in
-  approaches to choose from. Your choice composes a brief with a digest;
-  *Start spec from this brief* is plan through with it, word for word,
-  and the new unit's origin names the session.
+- **Ask** (⌘L, `speccoder ask`, the composer's *Just ask*, a question in
+  the palette): a read-only conversation about the project. Sources are
+  numbered only where speccoder checked the model read them, and open
+  where they live. **Stop** (Esc) ends the answer where it is, billed
+  only that far. A suggested change is a card you review and confirm,
+  never run; what it records names the conversation as its origin. Its
+  budget is `[ask]`'s.
+- **Add to Ask** (⌘⇧L, or the pill above selected words) from evidence,
+  requirements, open questions, Needs You items, trace rows and diffs;
+  **New Ask Conversation** (⌥⌘N). In the terminal Ask offers to record
+  what it suggests (`[y/N]`); in an editor over ACP, words without a `/`
+  are a question.
+- **Promotion** (`speccoder spec promote`, Needs You, the task
+  inspector): a quick change or bug fix that grew — more files than
+  `[ladder] promote_files`, two packages, two failures for different
+  reasons, ambiguous words, a change to what judges — is offered as a
+  spec of its own, its requirement carried word for word. The earlier
+  tick is inherited, never verified.
+- **Explore** (`speccoder spec explore`, the composer's *Explore*, *Not
+  sure yet? Explore first*): an idea thought through read-only, ending in
+  approaches to choose from. Your choice makes a brief with a digest;
+  *Start spec from this brief* plans from it word for word, and the spec
+  records where it came from.
+- `--events` adds `ladder.offered` and `unit.promoted`; `report --cost`
+  and Spend show Ask's tokens apart.
 
 ### Changed
 
 - An agent's stop must carry evidence speccoder checks: a refused call,
   the spec's exact words, a frozen test or a question. A stop without it
-  ("beyond the task's scope") is answered and the attempt goes on; a
-  checked one is asked about once before it stands.
+  ("beyond the task's scope") is answered and the attempt goes on.
+- Built on agentplane 0.57.0.
 
 ### Fixed
 
-- A task recorded in the checkout while its unit's branch waited (a
-  second quick change before the first was handed off) reaches the run:
-  a branch re-attached after its worktree went brings in the checkout's
-  spec too, and task lists that conflict only beside ticked tasks merge
-  with the checkout's words and the branch's ticks.
-- `speccoder spec promote UNIT/TASK --decline` and `--conversation ID`
-  parse (they were refused as unexpected arguments).
+- A second quick change recorded before the first was handed off reaches
+  its run: the branch takes the checkout's task list, keeping its ticks.
+- An expired or missing `aws login` or SSO session on Bedrock stops the
+  task with `PROVIDER-REFUSED` and the renewal command, not as a run
+  failure after retries.
 
 ## [0.6.1] - 2026-10-30
 

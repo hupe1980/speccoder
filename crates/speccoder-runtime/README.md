@@ -10,6 +10,8 @@ Entry points:
 - `convergence::converge_with` — a finished feature assessed against its spec, gaps appended as tasks.
 - `replay_with` — whether a recorded run reproduces.
 - `progress::status_with` — what a running or finished run is doing.
+- `ask::turn_with` — one Ask turn: a read-only answer whose sources are checked against what it read.
+- `explore::explore_in`, `explore::choose` — an idea explored read-only, and the brief chosen from it.
 
 This is an internal crate of speccoder. Its version follows speccoder's, and its API may change in any minor release; depend on it only together with speccoder.
 

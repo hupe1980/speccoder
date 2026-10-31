@@ -305,7 +305,7 @@ class AppState {
       this.toast({ tone: "warn", text: a.blocked });
       return;
     }
-    // Every way to start a spec lands in the one New feature sheet (D-131):
+    // Every way to start a spec lands in the one New feature sheet:
     // a promotion opens it with the requirement and its conversations.
     const r = a.run;
     if (!confirmed && r.kind === "plan_through" && r.from.kind === "create" && r.from.source.kind === "promotion") {

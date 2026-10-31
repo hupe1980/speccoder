@@ -85,6 +85,7 @@ Then, as you need them:
 - 👀 **Watch and decide.** At a terminal, `run` is a live dashboard that asks approvals with one key; [the app](#-the-app) shows the same work. The model's reasoning and words appear beside its calls — its account, never evidence.
 - ⚙️ **Automate.** Every command takes `--json` or `--events`, both with [published schemas](https://hupe1980.github.io/speccoder/docs/cli/#json-output); every failure names a [code](https://hupe1980.github.io/speccoder/docs/codes/) and the command that fixes it.
 - 🐙 **Work from GitHub.** `speccoder auth login` once; `speccoder issue start 42` specifies a feature from an issue, `speccoder pr` opens a draft whose description is the evidence. No `gh` needed.
+- 💬 **Ask, explore.** `speccoder ask "why is T004 blocked?"` (⌘L in the app) answers from what it read, each source checked against the reads, and changes nothing; `speccoder spec explore "…"` weighs approaches before there is a spec and starts one from the brief you chose.
 - 📝 **Plan with your spec tool.** `speccoder spec specify "…" --through tasks` runs Spec Kit's own skills in order — `specify`, then `plan` and `tasks` once you approved the spec — stopping for open questions and your review (OpenSpec: `propose`).
 
 ## 📸 The app
