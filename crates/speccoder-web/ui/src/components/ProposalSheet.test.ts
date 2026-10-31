@@ -72,6 +72,9 @@ describe("ProposalSheet", () => {
     expect(document.querySelector<HTMLInputElement>('input[aria-label="Done when, 1"]')?.value).toBe("a trailing space is ignored");
     expect(document.querySelector(".record code")?.textContent).toContain('speccoder do "trim the login name"');
     expect(button("Record and Run").disabled).toBe(false);
+    // The sheet takes the focus: its first field, ready to edit.
+    await settle();
+    expect(document.activeElement).toBe(document.querySelector("textarea"));
     expect(await violations()).toEqual([]);
   });
 

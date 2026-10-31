@@ -6,6 +6,7 @@
   import { ask } from "../lib/ask.svelte";
   import { offer } from "../lib/actions";
   import { post } from "../lib/api";
+  import { trap } from "../lib/sheet";
   import type { Proposal, ProposalFields } from "../lib/schema.gen";
   import Icon from "./Icon.svelte";
   import WritingHelp from "./WritingHelp.svelte";
@@ -95,7 +96,7 @@
 <svelte:window onkeydown={key} />
 
 <div class="scrim" role="presentation" onclick={(e) => e.target === e.currentTarget && close()}>
-  <div class="sheet glass" role="dialog" aria-modal="true" aria-labelledby="ps-title">
+  <div class="sheet glass" role="dialog" aria-modal="true" aria-labelledby="ps-title" use:trap={"textarea, input"}>
     <header>
       <span class="badge" aria-hidden="true"><Icon name={icon} size={20} weight={2.2} /></span>
       <div>

@@ -56,6 +56,10 @@ fn repo() -> tempfile::TempDir {
         fs::write(r.join(p), t).unwrap();
     }
     git(r, &["init", "-q", "-b", "main"]);
+    // speccoder commits as the repository's person: one is configured
+    // here, not left to the machine's global settings.
+    git(r, &["config", "user.name", "Ada"]);
+    git(r, &["config", "user.email", "ada@example.com"]);
     git(r, &["add", "-A"]);
     git(r, &["commit", "-qm", "init"]);
     let res = speccoder_runtime::quick::change(
