@@ -314,3 +314,160 @@ fn the_readers_answer_and_are_named() {
         t.citations
     );
 }
+
+/// The scripted model, and a person who presses Stop while its `at`-th
+/// answer is being written.
+#[derive(Debug)]
+struct StopsMidTurn {
+    inner: Arc<FakeProvider>,
+    at: usize,
+    seen: std::sync::Mutex<usize>,
+    conversation: std::sync::Mutex<Option<String>>,
+}
+
+#[agentplane::prelude::async_trait]
+impl ModelProvider for StopsMidTurn {
+    async fn complete(
+        &self,
+        request: agentplane::model::Request<'_>,
+    ) -> Result<agentplane::model::Completion, agentplane::model::ModelError> {
+        let n = {
+            let mut seen = self.seen.lock().unwrap();
+            *seen += 1;
+            *seen
+        };
+        if n == self.at {
+            let id = self.conversation.lock().unwrap().clone().unwrap();
+            assert!(ask::stop(Some(&id)), "no turn in flight to stop");
+        }
+        self.inner.complete(request).await
+    }
+
+    fn gen_ai_provider(&self) -> Option<&str> {
+        None
+    }
+}
+
+/// Stop ends the turn at its next step and the run with it; the next
+/// question goes on in the same conversation, carrying the earlier words.
+#[test]
+fn a_stopped_turn_keeps_its_words_and_the_conversation_goes_on() {
+    let r = repo();
+    let state = tempfile::tempdir().unwrap();
+    let f = FakeProvider::new();
+    let stops = Arc::new(StopsMidTurn {
+        inner: Arc::clone(&f),
+        at: 2,
+        seen: std::sync::Mutex::new(0),
+        conversation: std::sync::Mutex::new(None),
+    });
+    let d = Arc::clone(&stops) as Arc<dyn ModelProvider>;
+    f.will_say("notes.txt has four lines.");
+    let (_, first) = ask(r.path(), state.path(), &d, None, "what is in notes.txt?");
+    *stops.conversation.lock().unwrap() = Some(first.conversation.clone());
+
+    // Stopped while the second turn's first answer is written: the
+    // tool it asked for never runs.
+    f.will_call_tool("a", "read_file", json!({ "path": "notes.txt" }));
+    let (s, second) = ask(
+        r.path(),
+        state.path(),
+        &d,
+        Some(&first.conversation),
+        "and the last line?",
+    );
+    assert_eq!(s, CommandStatus::Ok);
+    assert_eq!(second.end, "stopped", "{second:?}");
+    assert!(second.reads.is_empty(), "{:?}", second.reads);
+    assert_eq!(f.calls(), 2, "the stopped turn called the model again");
+
+    f.will_say("The last line is four.");
+    let (s, third) = ask(
+        r.path(),
+        state.path(),
+        &d,
+        Some(&first.conversation),
+        "the last line, please",
+    );
+    assert_eq!(s, CommandStatus::Ok, "{third:?}");
+    assert_eq!(third.conversation, first.conversation);
+    assert_eq!(third.turn, 3);
+    assert_eq!(third.answer, "The last line is four.");
+    let told = f.asked().last().unwrap().told.join("\n");
+    assert!(
+        told.contains("<context id=\"earlier\"")
+            && told.contains("Q: what is in notes.txt?\nA: notes.txt has four lines."),
+        "the new run did not carry the earlier turns: {told}"
+    );
+    assert!(!ask::stop(None), "a turn is still listed in flight");
+}
+
+/// Each kind is checked against the project now; a blocked one says why
+/// and carries nothing to run.
+#[test]
+fn each_kind_of_proposal_is_checked_now() {
+    let r = repo();
+    let check = |args: serde_json::Value| ask::proposal::validate(r.path(), None, "c-1", &args);
+
+    let open = check(
+        json!({ "kind": "nudge", "title": "t", "target": "T005", "note": "use the fixture" }),
+    );
+    assert!(open.blocked.is_none(), "{open:?}");
+    assert_eq!(open.input.as_deref(), Some("use the fixture"));
+    assert_eq!(
+        open.command,
+        "speccoder task nudge T005 --note \"use the fixture\""
+    );
+    for (target, why) in [("T001", "already ticked"), ("T099", "no task T099")] {
+        let p = check(json!({ "kind": "nudge", "target": target, "note": "x" }));
+        assert!(p.runnable.is_none(), "{p:?}");
+        assert!(
+            p.blocked.as_deref().unwrap_or_default().contains(why),
+            "{p:?}"
+        );
+    }
+
+    let bug = check(json!({
+        "kind": "bug_fix",
+        "symptom": "login fails on a trailing space",
+        "expected": ["a trailing space is trimmed"],
+        "unchanged": ["passwords keep their spaces"],
+    }));
+    assert_eq!(
+        bug.runnable,
+        Some(speccoder_core::actions::Runnable::BugFix {
+            symptom: "login fails on a trailing space".to_owned(),
+            expected: vec!["a trailing space is trimmed".to_owned()],
+            unchanged: vec!["passwords keep their spaces".to_owned()],
+            issue: None,
+            tests: Vec::new(),
+            candidate: None,
+            slug: None,
+            run: true,
+            asked: Some("c-1".to_owned()),
+        })
+    );
+    let vague = check(json!({ "kind": "bug_fix", "symptom": "it breaks" }));
+    assert!(vague.runnable.is_none());
+    assert!(vague.blocked.unwrap().contains("should happen instead"));
+
+    let spec = check(json!({ "kind": "start_spec", "description": "profiles get avatars" }));
+    assert!(matches!(
+        spec.runnable,
+        Some(speccoder_core::actions::Runnable::PlanThrough { .. })
+    ));
+
+    let question = check(json!({ "kind": "answer", "target": "Q9", "answer": "yes" }));
+    assert!(question.runnable.is_none(), "{question:?}");
+
+    let unknown = check(json!({ "kind": "delete_everything" }));
+    assert!(unknown.blocked.unwrap().contains("not a kind of proposal"));
+
+    // The person's edit is checked again: a request added unblocks it.
+    let mut edited = check(json!({ "kind": "quick_change" }));
+    assert!(edited.blocked.is_some());
+    edited.fields.request = Some("trim the login name".to_owned());
+    let now = ask::proposal::revalidate(r.path(), None, &edited);
+    assert!(now.blocked.is_none(), "{now:?}");
+    assert_eq!(now.command, "speccoder do \"trim the login name\"");
+}

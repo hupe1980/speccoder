@@ -34,6 +34,9 @@ pub struct Extra {
     /// Through what.
     #[serde(default)]
     pub via: Option<speccoder_core::actions::Via>,
+    /// The Ask conversation that suggested it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub asked: Option<String>,
 }
 
 fn key(task: &str) -> String {

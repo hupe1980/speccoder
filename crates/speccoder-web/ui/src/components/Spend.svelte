@@ -46,6 +46,9 @@
         </li>
       {/each}
     </ul>
+    {#if cost.ask.input_tokens || cost.ask.output_tokens}
+      <p class="ask muted"><Icon name="bubble" size={12} /> Ask · {n(cost.ask.input_tokens)} in · {n(cost.ask.output_tokens)} out{priced ? ` · ${usd(cost.ask.usd)}` : ""} <span>— its own budget, not in the total</span></p>
+    {/if}
     {#if !priced}
       <p class="hint muted">Set prices in <button class="link" onclick={() => (app.view = "settings")}>Settings › Model</button> to see money, not only tokens.</p>
     {/if}
@@ -56,6 +59,8 @@
   .card { background: var(--surface); border-radius: var(--radius-lg); box-shadow: var(--shadow); padding: 1.15rem 1.35rem 1.25rem; grid-column: 1 / -1; }
   h3 { margin: 0 0 0.9rem; font: 650 1.02rem/1.3 var(--display); display: flex; align-items: center; gap: 0.4rem; }
   h3 .muted { font: 500 0.82rem var(--font); margin-left: 0.25rem; }
+  .ask { display: flex; align-items: center; gap: 0.35rem; margin: 0.8rem 0 0; font-size: 0.8rem; }
+  .ask span { opacity: 0.8; }
   .totals { display: flex; flex-wrap: wrap; gap: 0.5rem 2rem; margin-bottom: 1rem; }
   .totals div { display: grid; }
   .big { font: 700 1.6rem/1.1 var(--rounded); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }

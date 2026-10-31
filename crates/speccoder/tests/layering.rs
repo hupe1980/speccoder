@@ -653,6 +653,10 @@ const WRITES_WITHOUT_A_KIND: &[(&str, &str)] = &[
         "a read-only turn: it writes only the Ask plane's journal and the conversation's thread; a proposal is performed through /api/run",
     ),
     (
+        "ask_stop",
+        "stops a turn in flight in this process; the run's cancellation is the Ask plane's own record",
+    ),
+    (
         "ask_chip",
         "a body, not a write: resolves a chip and records nothing",
     ),

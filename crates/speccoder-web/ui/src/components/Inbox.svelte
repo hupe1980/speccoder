@@ -4,6 +4,7 @@
   // riskiest evidence first), Working, Idle. A kind is a row's label; each
   // row decides in place; Open shows it with its evidence.
   import { app } from "../lib/app.svelte";
+  import { askable } from "../lib/ask.svelte";
   import { KINDS, key } from "../lib/actions";
   import type { Action, InboxItem } from "../lib/types";
   import Code from "./Code.svelte";
@@ -173,7 +174,7 @@
                 <StopCard task={i.task} claim={i.detail || null} actions={i.actions} />
               </li>
             {:else}
-            <li class:picked={picked.includes(id(i))}>
+            <li class:picked={picked.includes(id(i))} {...askable("inbox_item", { feature: i.feature, task: i.task ?? null, kind: i.kind }, `${k.title}${i.task ? ` ${i.task}` : ""}`, `${k.title}: ${i.title}${i.detail ? `\n${i.detail}` : ""}${i.task ? `\ntask ${i.task}` : ""} (${i.feature})`)}>
               {#if i.kind === "approval" && i.tool}
                 <input type="checkbox" class="pick" aria-label="Select {i.task}" checked={picked.includes(id(i))} onchange={() => toggle(i)} />
               {/if}

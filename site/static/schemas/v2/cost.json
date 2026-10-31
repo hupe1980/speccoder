@@ -29,6 +29,10 @@
         "string",
         "null"
       ]
+    },
+    "ask": {
+      "description": "Ask's conversations about the feature, apart from `total`: Ask has\na budget of its own (`[ask]`).",
+      "$ref": "#/$defs/Usage"
     }
   },
   "required": [
@@ -36,7 +40,8 @@
     "tasks",
     "convergence",
     "total",
-    "priced_model"
+    "priced_model",
+    "ask"
   ],
   "$defs": {
     "TaskCost": {

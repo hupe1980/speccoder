@@ -88,6 +88,38 @@ describe("AskPanel", () => {
     expect(await violations()).toEqual([]);
   });
 
+  it("stops a turn in flight: Send becomes Stop, Escape stops first, the words stay", async () => {
+    let answer: (v: unknown) => void = () => {};
+    host.post.mockImplementation((path: string) =>
+      path === "/api/ask" ? new Promise((r) => (answer = r)) : Promise.resolve({ stopped: true }),
+    );
+    ask.toggle(true);
+    shown = mount(AskPanel, { target: document.body });
+    flushSync();
+    button(/What is left in 001-graph/).click();
+    flushSync();
+    ask.event({ event: "ask_text", delta: "Parsing is" });
+    flushSync();
+    expect(document.querySelector('button[aria-label="Send"]')).toBeNull();
+    expect(await violations()).toEqual([]);
+    press("Escape", {}, document.querySelector("textarea")!);
+    flushSync();
+    expect(host.post).toHaveBeenCalledWith("/api/ask/stop", { conversation: null });
+    expect(ask.open).toBe(true);
+    expect(document.body.textContent).toContain("Stopping after this step");
+    expect(document.querySelector<HTMLButtonElement>('button[aria-label="Stop"]')?.disabled).toBe(true);
+    // Words after the stop are not shown.
+    ask.event({ event: "ask_text", delta: " more" });
+    answer({ status: "ok", message: "stopped", data: { ...report, answer: "Parsing is", citations: [], proposal: null, end: "stopped", reason: "stopped by you — ask again to go on" } });
+    await settle();
+    expect(document.body.textContent).toContain("Parsing is");
+    expect(document.body.textContent).toContain("Stopped — the words so far");
+    expect(document.body.textContent).not.toContain("more");
+    // The conversation goes on: no dead end, Send is back.
+    expect(document.querySelector('button[aria-label="Send"]')).not.toBeNull();
+    expect(ask.conversation).toBe("c-1");
+  });
+
   it("closes on Escape outside the question field", () => {
     ask.toggle(true);
     shown = mount(AskPanel, { target: document.body });

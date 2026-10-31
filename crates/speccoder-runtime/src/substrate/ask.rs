@@ -74,6 +74,8 @@ pub struct AskWiring {
     pub progress: Option<Arc<dyn crate::progress::Progress>>,
     /// The answer's words as they arrive.
     pub stream: Option<Arc<dyn RunStreamObserver>>,
+    /// Set when the person stops the turn in flight.
+    pub halt: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl Plane {
@@ -94,6 +96,7 @@ impl Plane {
         let agent = Agent::new(&manifest).skill(crate::ask::skill::Ask {
             style: model.prompt_style(),
             progress: wiring.progress,
+            halt: wiring.halt,
         });
         let workspace: Arc<dyn agentplane::tools::ToolClient> = wiring.workspace;
         let mut builder = Runtime::builder_on(store)
@@ -160,5 +163,21 @@ impl Plane {
             Ok(_) => Ok(false),
             Err(e) => Err(PlaneError(e.to_string())),
         }
+    }
+
+    /// Stops conversation run `run` at its next step boundary, on the
+    /// record (`by`): the turn in flight ends and the run with it.
+    ///
+    /// # Errors
+    ///
+    /// `run` is not a run id, or the stop cannot be recorded.
+    pub async fn ask_stop(&self, run: &str, by: &str) -> Result<(), PlaneError> {
+        let run = agentplane::core::RunId::parse(run).map_err(|e| PlaneError(e.to_string()))?;
+        let by = agentplane::core::Operator::asserted(by).map_err(|e| PlaneError(e.to_string()))?;
+        self.runtime
+            .request_cancel(run, &by, "stopped by the person asking")
+            .await
+            .map(|_| ())
+            .map_err(|e| PlaneError(e.to_string()))
     }
 }

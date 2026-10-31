@@ -108,6 +108,9 @@ pub enum Runnable {
         checks: Vec<String>,
         /// Run it once recorded.
         run: bool,
+        /// The Ask conversation that suggested it, recorded as its origin.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        asked: Option<String>,
     },
     /// Commit the changes set aside before the task's run onto the
     /// feature's branch, as the person's own.
@@ -147,6 +150,9 @@ pub enum Runnable {
         slug: Option<String>,
         /// Reproduce it once recorded.
         run: bool,
+        /// The Ask conversation that suggested it, recorded as its origin.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        asked: Option<String>,
     },
     /// Confirm (or, with `reject`, reject: the input is the reason) a
     /// bug's reproductions, bound to the digest shown.
@@ -702,6 +708,7 @@ impl ActionKind {
                 request: "a change".to_owned(),
                 checks: Vec::new(),
                 run: false,
+                asked: None,
             },
             Self::KeepSetAside => Runnable::KeepSetAside { task: task() },
             Self::DropSetAside => Runnable::DropSetAside { task: task() },
@@ -717,6 +724,7 @@ impl ActionKind {
                 candidate: None,
                 slug: None,
                 run: false,
+                asked: None,
             },
             Self::BugConfirm => Runnable::BugConfirm {
                 task: "007-bugfixes/T001".to_owned(),

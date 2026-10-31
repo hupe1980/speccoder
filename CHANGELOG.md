@@ -14,6 +14,14 @@ adheres to [Semantic Versioning](https://semver.org/).
   per conversation; its budget is `[ask]`'s.
 - The composer's *Just ask* rung, and questions typed in the palette, go
   to Ask.
+- Ask's **Stop** (Esc while it answers) ends the turn after its current
+  step and keeps the words so far; a conversation never dead-ends — a
+  stopped, idle or long one goes on carrying its earlier turns.
+- **Add to Ask** from any selection (a pill above selected words) and
+  with ⌘⇧L on evidence rows, requirements, open questions, Needs You
+  items, trace rows and diff files.
+- A quick change or bug confirmed from Ask records the conversation as
+  its origin; `report --cost` and Spend show Ask's tokens apart.
 
 ### Changed
 

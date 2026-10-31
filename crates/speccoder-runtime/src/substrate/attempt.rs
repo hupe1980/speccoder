@@ -827,6 +827,7 @@ impl Skill for Attempt {
                 schema: Some(report_schema()),
                 max_tokens: None,
                 reads: None,
+                halt: None,
                 routes,
                 root: settings["root"].as_str().map(str::to_owned),
                 frozen_additions: settings["frozen_additions"] == true,
@@ -1087,6 +1088,10 @@ pub(crate) struct LoopSpec {
     pub max_tokens: Option<u64>,
     /// The first read id to issue (`r<n>`), when the answer cites reads.
     pub reads: Option<u32>,
+    /// Set when a person stops the turn (Ask): it ends after the model call
+    /// in flight, running none of its calls. Never journaled — the run is
+    /// cancelled with it and never replayed further.
+    pub halt: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
 }
 
 /// A run's asking budget as an attempt sees it (all journaled).
@@ -1158,6 +1163,7 @@ pub(crate) async fn tool_turn(
         stop,
         max_tokens,
         reads,
+        halt,
     } = spec;
     // The next read id this turn issues, when reads are cited.
     let mut next_read = reads;
@@ -1268,6 +1274,19 @@ pub(crate) async fn tool_turn(
                 turn: turn + 1,
                 text,
             });
+        }
+        if halt
+            .as_ref()
+            .is_some_and(|h| h.load(std::sync::atomic::Ordering::SeqCst))
+        {
+            return end(
+                "stopped",
+                json!({ "text": completion.peek().text }),
+                &log,
+                usage,
+                &conversation,
+                prompted,
+            );
         }
         if completion.peek().truncated {
             return Ok(Outcome::fail(

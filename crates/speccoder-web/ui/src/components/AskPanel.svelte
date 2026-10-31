@@ -40,7 +40,7 @@
     const last = ask.turns.at(-1);
     if (!last) return;
     const n = last.citations.filter((c) => c.state === "read").length;
-    announce = last.end === "answered" ? `Answer ready, ${n} ${n === 1 ? "source" : "sources"}` : (last.reason ?? "The turn stopped");
+    announce = last.end === "answered" ? `Answer ready, ${n} ${n === 1 ? "source" : "sources"}` : last.end === "stopped" ? "Stopped" : (last.reason ?? "The turn stopped");
   });
 
   async function send(q = text) {
@@ -52,7 +52,8 @@
   function keydown(e: KeyboardEvent) {
     if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
       e.preventDefault();
-      void send();
+      // While a turn is answered, Enter keeps the draft for the next one.
+      if (!ask.pending) void send();
     } else if (e.key === "ArrowUp" && !text) {
       const last = ask.turns.at(-1)?.question ?? ask.failed?.question;
       if (last) {
@@ -69,6 +70,8 @@
     if (e.key === "Escape") {
       e.stopPropagation();
       if (ask.sheet) return;
+      // The first Escape stops a turn in flight; the next leaves.
+      if (ask.pending && !ask.pending.stopping) return void ask.stop();
       if (e.target === box) (document.querySelector("main") as HTMLElement | null)?.focus();
       else ask.toggle(false);
     } else if (e.key === "n" && e.altKey && (e.metaKey || e.ctrlKey)) {
@@ -182,7 +185,7 @@
         {#each ask.list as c (c.id)}
           <button class="conv" onclick={() => void ask.resume(c.id)}>
             <span class="ct">{c.title}</span>
-            <span class="cm">{new Date(c.at * 1000).toLocaleDateString(undefined, { month: "short", day: "numeric" })} · {c.turns} {c.turns === 1 ? "turn" : "turns"}{c.open ? "" : " · ended"}</span>
+            <span class="cm">{new Date(c.at * 1000).toLocaleDateString(undefined, { month: "short", day: "numeric" })} · {c.turns} {c.turns === 1 ? "turn" : "turns"}</span>
           </button>
         {:else}
           <p class="quiet">No conversations yet. What you ask is kept here, for this project.</p>
@@ -233,7 +236,9 @@
               <p class="unread-note"><Icon name="exclaim" size={12} /> {unread(t).length} {unread(t).length === 1 ? "citation names" : "citations name"} something not read this turn: {unread(t).map((c) => c.marker).join(", ")}</p>
             {/if}
           {/if}
-          {#if t.end !== "answered"}
+          {#if t.end === "stopped"}
+            <p class="halted"><Icon name="stop" size={11} /> Stopped{t.answer ? " — the words so far" : ""}</p>
+          {:else if t.end !== "answered"}
             <div class="stopped" class:budget={t.end === "budget"}>
               <Icon name={t.end === "budget" ? "gauge" : "xoctagon"} size={14} />
               <span>{t.reason ?? "The turn stopped"}</span>
@@ -261,7 +266,7 @@
         <article class="a live" aria-busy="true">
           <ul class="steps live">
             {#each ask.pending.steps as s, i (i)}<li class:refused={s.refused}><Icon name={s.refused ? "xmark" : "check"} size={11} /> {stepWords(s)}</li>{/each}
-            {#if !ask.pending.words}<li class="thinking"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span> {ask.pending.steps.length ? "Reading" : "Thinking"}</li>{/if}
+            {#if ask.pending.stopping}<li class="thinking">Stopping after this step…</li>{:else if !ask.pending.words}<li class="thinking"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span> {ask.pending.steps.length ? "Reading" : "Thinking"}</li>{/if}
           </ul>
           {#if ask.pending.words}<div class="said">{@render words(ask.pending.words, null)}</div>{/if}
         </article>
@@ -272,14 +277,7 @@
         <div class="stopped">
           <Icon name="xoctagon" size={14} />
           <span>{ask.failed.message}</span>
-          {#if !ask.ended}<button class="link" onclick={() => { const f = ask.failed!; ask.failed = null; void send(f.question); }}>Retry</button>{/if}
-        </div>
-      {/if}
-
-      {#if ask.ended && !ask.pending}
-        <div class="full">
-          <p>This conversation is complete — Ask never summarises one to go on.</p>
-          <button class="btn small" onclick={() => ask.fresh()}><Icon name="plus" size={12} /> New conversation</button>
+          <button class="link" onclick={() => { const f = ask.failed!; ask.failed = null; void send(f.question); }}>Retry</button>
         </div>
       {/if}
     {/if}
@@ -305,16 +303,19 @@
         bind:this={box}
         bind:value={text}
         rows="1"
-        placeholder={ask.ended ? "Ask in a new conversation…" : ask.turns.length ? "Ask a follow-up…" : "Ask about the specs, the code, a run…"}
+        placeholder={ask.turns.length ? "Ask a follow-up…" : "Ask about the specs, the code, a run…"}
         aria-label="Your question"
         onkeydown={keydown}
-        disabled={!!ask.pending}
       ></textarea>
-      <button class="send" type="submit" aria-label="Send" disabled={!text.trim() || !!ask.pending}>
-        {#if ask.pending}<span class="spin" aria-hidden="true"></span>{:else}<Icon name="arrowup" size={15} weight={2.4} />{/if}
-      </button>
+      {#if ask.pending}
+        <button class="send stop" type="button" aria-label="Stop" title="Stop (Esc)" disabled={!!ask.pending.stopping} onclick={() => void ask.stop()}>
+          <span class="ring" aria-hidden="true"></span><span class="sq" aria-hidden="true"></span>
+        </button>
+      {:else}
+        <button class="send" type="submit" aria-label="Send" disabled={!text.trim()}><Icon name="arrowup" size={15} weight={2.4} /></button>
+      {/if}
     </div>
-    <p class="hint">Enter to send · ⇧Enter for a new line · reads only, changes nothing</p>
+    <p class="hint">{ask.pending ? "Esc to stop · keep typing, it waits for you" : "Enter to send · ⇧Enter for a new line · reads only, changes nothing"}</p>
   </form>
 </aside>
 
@@ -396,8 +397,6 @@
   .stopped.budget { background: color-mix(in srgb, var(--attention) 12%, var(--surface)); }
   .stopped span { flex: 1; }
   .link { border: 0; background: none; padding: 0; color: var(--accent-ink); font-weight: 600; cursor: pointer; }
-  .full { display: grid; justify-items: center; gap: 0.5rem; padding: 0.8rem; text-align: center; border-radius: 12px; background: var(--fill); }
-  .full p { margin: 0; font-size: 0.8rem; color: var(--text-2); }
 
   .list { display: grid; gap: 0.25rem; }
   .list h3 { margin: 0 0 0.3rem; font: 650 0.8rem var(--display); color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
@@ -419,8 +418,13 @@
   .send { width: 30px; height: 30px; flex: none; border: 0; border-radius: 10px; display: grid; place-items: center; background: var(--accent); color: #fff; cursor: pointer; transition: opacity var(--speed) var(--ease), transform 120ms var(--ease); }
   .send:disabled { opacity: 0.35; cursor: default; }
   .send:not(:disabled):active { transform: scale(0.94); }
-  .spin { width: 13px; height: 13px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.45); border-top-color: #fff; animation: spin 800ms linear infinite; }
+  .send.stop { position: relative; background: var(--text); }
+  .send.stop:disabled { opacity: 0.5; }
+  .sq { width: 9px; height: 9px; border-radius: 2.5px; background: var(--surface); }
+  .ring { position: absolute; inset: 3px; border-radius: 50%; border: 2px solid transparent; border-top-color: var(--surface); opacity: 0.55; animation: spin 900ms linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .ring { animation: none; } }
+  .halted { margin: 0; display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.74rem; color: var(--muted); }
   .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
   @media (prefers-color-scheme: dark) { .ck { color: #da8fff; } }
   @media (max-width: 720px) { .ask { top: 56px; right: 0; bottom: 0; width: 100vw; border-radius: 0; } .grip { display: none; } }

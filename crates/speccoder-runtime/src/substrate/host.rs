@@ -155,6 +155,7 @@ impl Skill for Host {
                 schema: Some(schema()),
                 max_tokens: None,
                 reads: None,
+                halt: None,
                 routes: Vec::new(),
                 root: settings["root"].as_str().map(str::to_owned),
                 frozen_additions: false,

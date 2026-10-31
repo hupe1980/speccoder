@@ -254,6 +254,7 @@ impl Skill for Converge {
                 schema: Some(schema()),
                 max_tokens: None,
                 reads: None,
+                halt: None,
                 ask: None,
                 run_approved: Vec::new(),
                 once: Vec::new(),

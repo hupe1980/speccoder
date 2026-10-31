@@ -7,6 +7,7 @@
   // answered in place; a requirement is reworded here; what changed since
   // the last commit and how the spec evolved are beside it.
   import { app } from "../lib/app.svelte";
+  import { askable } from "../lib/ask.svelte";
   import { byKind, offer, type Offer } from "../lib/actions";
   import { get, latest, q } from "../lib/api";
   import type { Action, Reply, Review, ReviewItem } from "../lib/types";
@@ -170,7 +171,7 @@
           {#if r.revise_with}<button class="btn small ghost" disabled={!!app.job?.running} onclick={clarify}><Icon name="sparkle" size={10} weight={2.2} /> Ask Me with {r.revise_with}</button>{/if}
         </h3>
         {#each r.questions as q (q.id)}
-          <div class="q">
+          <div class="q" {...askable("open_question", { id: q.id, file: q.file, line: q.line }, `${q.id} (open question)`, `${q.id} at ${q.file}:${q.line}: ${q.text}`)}>
             <div class="qtop"><span class="id mono">{q.id}</span><span class="where muted">{q.near ?? ""} · {q.file.split("/").pop()}:{q.line}</span></div>
             <p class="qtext">{q.text}</p>
             <button class="btn small ghost addc" onclick={() => { finding = { id: q.id, text: q.text }; findingWords = ""; }}>Add to Comments</button>
@@ -190,7 +191,7 @@
     {/if}
     <ol class="cards">
       {#each r.requirements as i (i.id)}
-        <li class="card s-{tone[i.state]}-edge">
+        <li class="card s-{tone[i.state]}-edge" {...askable("requirement", { id: i.id }, i.id, `${i.id} (${words[i.state]}): ${i.text}`)}>
           <div class="top">
             <span class="id mono">{i.id}</span>
             <span class="chip s-{tone[i.state]}">{words[i.state]}</span>

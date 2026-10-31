@@ -967,6 +967,7 @@ fn main() {
                 !*no_run,
                 speccoder_core::actions::Via::Terminal,
                 &options,
+                None,
             );
             if let Some(a) = &attention {
                 a.finish(&result);
@@ -1040,6 +1041,7 @@ fn main() {
                         slug: slug.clone(),
                         run: !*no_run,
                         github: None,
+                        asked: None,
                     };
                     speccoder_runtime::bug::bug(path, &req, via, None, &options(*no_prompt))
                 }

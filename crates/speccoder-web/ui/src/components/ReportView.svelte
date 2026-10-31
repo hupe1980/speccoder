@@ -1,5 +1,6 @@
 <script lang="ts">
   import { app } from "../lib/app.svelte";
+  import { askable } from "../lib/ask.svelte";
   import { byKind, byRole } from "../lib/actions";
   import { ORDER, symbol, word } from "../lib/marks";
   import Icon from "./Icon.svelte";
@@ -83,7 +84,7 @@
       {:else}
         <ul class="matrix">
           {#each matrix as m (m.requirement)}
-            <li class:open={!m.tasks.length}>
+            <li class:open={!m.tasks.length} {...askable("trace_row", { requirement: m.requirement }, `${m.requirement} in the trace`, `${m.requirement}: ${m.tasks.length ? m.tasks.map((t) => `${t.task} ${t.verdict ?? "open"}${t.changed ? " (against an earlier wording)" : ""}`).join(", ") : "no task cites it"}`)}>
               <span class="req mono">{m.requirement}</span>
               <span class="tasks">
                 {#each m.tasks as t (t.task)}

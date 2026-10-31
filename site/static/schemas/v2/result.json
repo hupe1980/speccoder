@@ -711,6 +711,13 @@
             "run": {
               "description": "Run it once recorded.",
               "type": "boolean"
+            },
+            "asked": {
+              "description": "The Ask conversation that suggested it, recorded as its origin.",
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           "required": [
@@ -854,6 +861,13 @@
             "run": {
               "description": "Reproduce it once recorded.",
               "type": "boolean"
+            },
+            "asked": {
+              "description": "The Ask conversation that suggested it, recorded as its origin.",
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           "required": [
@@ -8314,6 +8328,10 @@
             "string",
             "null"
           ]
+        },
+        "ask": {
+          "description": "Ask's conversations about the feature, apart from `total`: Ask has\na budget of its own (`[ask]`).",
+          "$ref": "#/$defs/Usage"
         }
       },
       "required": [
@@ -8321,7 +8339,8 @@
         "tasks",
         "convergence",
         "total",
-        "priced_model"
+        "priced_model",
+        "ask"
       ]
     },
     "TaskCost": {
@@ -11044,7 +11063,7 @@
           "$ref": "#/$defs/AskUsage"
         },
         "end": {
-          "description": "How the turn ended: `answered`, `stopped`, `budget`, `full` or `failed`.",
+          "description": "How the turn ended: `answered`, `stopped`, `budget` or `failed`.",
           "type": "string"
         },
         "reason": {
@@ -11264,6 +11283,13 @@
         "command": {
           "description": "The same action as a command.",
           "type": "string"
+        },
+        "conversation": {
+          "description": "The conversation that suggested it.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
@@ -11419,7 +11445,7 @@
           "minimum": 0
         },
         "open": {
-          "description": "Whether it takes another turn (`false`: ended, idle or full).",
+          "description": "Whether its run waits for the next message (`false`: stopped, idle\nor full — the next message goes on in a new run that carries the\nearlier turns' words).",
           "type": "boolean"
         }
       },
@@ -11445,11 +11471,26 @@
           "items": {
             "$ref": "#/$defs/AskReport"
           }
+        },
+        "segment": {
+          "description": "How many runs it has handed over to a new one.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0,
+          "default": 0
+        },
+        "run": {
+          "description": "The run that takes the next message.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
         "conversation",
-        "turns"
+        "turns",
+        "segment"
       ]
     },
     "ReviewReport": {

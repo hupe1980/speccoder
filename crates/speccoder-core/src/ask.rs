@@ -30,7 +30,7 @@ pub struct AskReport {
     pub proposal: Option<Proposal>,
     /// Tokens the turn used (input and output, cache reads apart).
     pub usage: AskUsage,
-    /// How the turn ended: `answered`, `stopped`, `budget`, `full` or `failed`.
+    /// How the turn ended: `answered`, `stopped`, `budget` or `failed`.
     pub end: String,
     /// Why it ended so, when it did not answer.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -141,6 +141,9 @@ pub struct Proposal {
     pub blocked: Option<String>,
     /// The same action as a command.
     pub command: String,
+    /// The conversation that suggested it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub conversation: Option<String>,
 }
 
 /// A proposal's words; which ones a kind uses is the kind's.
@@ -189,7 +192,9 @@ pub struct Conversation {
     pub at: u64,
     /// How many turns it has.
     pub turns: u32,
-    /// Whether it takes another turn (`false`: ended, idle or full).
+    /// Whether its run waits for the next message (`false`: stopped, idle
+    /// or full — the next message goes on in a new run that carries the
+    /// earlier turns' words).
     pub open: bool,
 }
 
@@ -207,6 +212,12 @@ pub struct AskThread {
     pub conversation: Conversation,
     /// Its turns, in order.
     pub turns: Vec<AskReport>,
+    /// How many runs it has handed over to a new one.
+    #[serde(default)]
+    pub segment: u32,
+    /// The run that takes the next message.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run: Option<String>,
 }
 
 /// A marker found in an answer.

@@ -31,9 +31,15 @@ fn list(v: &Value, key: &str, max: usize) -> Vec<String> {
         .collect()
 }
 
-/// The proposal for `arguments`, checked against the project at `root`.
+/// The proposal for `arguments`, suggested in `conversation`, checked
+/// against the project at `root`.
 #[must_use]
-pub fn validate(root: &Path, feature: Option<&str>, arguments: &Value) -> Proposal {
+pub fn validate(
+    root: &Path,
+    feature: Option<&str>,
+    conversation: &str,
+    arguments: &Value,
+) -> Proposal {
     let kind = arguments["kind"].as_str().unwrap_or_default().to_owned();
     let title = text(arguments, "title", 120).unwrap_or_else(|| kind.replace('_', " "));
     let fields = ProposalFields {
@@ -55,6 +61,7 @@ pub fn validate(root: &Path, feature: Option<&str>, arguments: &Value) -> Propos
         input: None,
         blocked: None,
         command: String::new(),
+        conversation: Some(conversation.to_owned()),
     };
     let result = build(root, feature, &mut p);
     if let Err(why) = result {
@@ -94,6 +101,7 @@ fn build(root: &Path, feature: Option<&str>, p: &mut Proposal) -> Result<(), Str
                 request,
                 checks: f.checks.clone(),
                 run: true,
+                asked: p.conversation.clone(),
             });
         }
         "bug_fix" => {
@@ -121,14 +129,16 @@ fn build(root: &Path, feature: Option<&str>, p: &mut Proposal) -> Result<(), Str
                 candidate: None,
                 slug: None,
                 run: true,
+                asked: p.conversation.clone(),
             });
         }
         "nudge" => {
             let task = f.target.clone().ok_or("a nudge names its task")?;
             let note = f.note.clone().ok_or("a nudge needs its note")?;
-            let open = task_state(root, feature, &task)?;
-            if open == "verified" || open == "attested" {
-                return Err(format!("{task} is already done"));
+            match task_state(root, feature, &task)?.as_str() {
+                "ready" | "blocked" => {}
+                "skipped" => return Err(format!("{task} is skipped")),
+                _ => return Err(format!("{task} is already ticked")),
             }
             p.command = format!("speccoder task nudge {task} --note {}", quoted(&note));
             p.runnable = Some(Runnable::Nudge { task });

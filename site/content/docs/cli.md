@@ -96,7 +96,7 @@ Every stop and finish ends with a `Next:` block of commands to copy (`next` in J
 | Command | What it does |
 |---|---|
 | `speccoder inbox` | What waits, in every feature (or `--feature`): *Blocked on you* (oldest first), *Ready to review* (riskiest first, with its reasons), *Working*, *Idle*; each item with its command |
-| `speccoder ask "QUESTION" [--task T]… [--file PATH[:A-B]]… [--continue [ID]] [--list]` | [Ask](@/docs/web.md#ask) about the project: a read-only answer with numbered sources speccoder checked against what was read; a suggested change is printed with its command, never run (payload `ask`) |
+| `speccoder ask "QUESTION" [--task T]… [--file PATH[:A-B]]… [--continue [ID]] [--list]` | [Ask](@/docs/web.md#ask) about the project: a read-only answer with numbered sources speccoder checked against what was read; a suggested change is printed with its command, never run. `--continue` goes on even after Ctrl-C or a long pause, carrying the earlier turns (payload `ask`) |
 | `speccoder report` | Every task and the evidence behind its tick, the requirement trace, and what is open |
 | `speccoder report --live` | What the current or last run is doing, from another terminal |
 | `speccoder report --approvals` | Calls waiting for a person, and the decisions made |

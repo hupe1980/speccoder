@@ -964,14 +964,6 @@ pub const CATALOG: &[Entry] = &[
         ["→ raise the limit the stop names in speccoder.toml, or ask again tomorrow"]
     ),
     entry!(
-        "ASK-FULL",
-        P,
-        S::NeedsHuman,
-        "the conversation is too long for another turn",
-        "Ask never summarises a conversation: when its history alone would fill a turn, it ends. A new conversation starts with the same context chips.",
-        ["→ start a new conversation (⌥⌘N); its chips come along"]
-    ),
-    entry!(
         "BUDGET-EXHAUSTED",
         P,
         S::NeedsHuman,

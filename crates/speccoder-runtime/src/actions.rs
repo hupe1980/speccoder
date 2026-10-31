@@ -851,7 +851,16 @@ pub fn perform_in(
             request,
             checks,
             run,
-        } => quick_change(root, request, checks, *run, via, options),
+            asked,
+        } => quick_change(
+            root,
+            request,
+            checks,
+            *run,
+            via,
+            options,
+            asked.as_deref().zip(state),
+        ),
         Runnable::KeepSetAside { task } => crate::controls::restore(root, feature, task),
         Runnable::DropSetAside { task } => crate::controls::drop_set_aside(root, feature, task),
         Runnable::FixSetup => crate::code::fix_setup(root, feature),
@@ -868,18 +877,22 @@ pub fn perform_in(
             candidate,
             slug,
             run,
+            asked,
         } => bug_fix(
             root,
-            &crate::bug::Request::of(
-                symptom,
-                expected,
-                unchanged,
-                *issue,
-                tests,
-                candidate.as_deref(),
-                slug.as_deref(),
-                *run,
-            ),
+            &crate::bug::Request {
+                asked: asked.clone(),
+                ..crate::bug::Request::of(
+                    symptom,
+                    expected,
+                    unchanged,
+                    *issue,
+                    tests,
+                    candidate.as_deref(),
+                    slug.as_deref(),
+                    *run,
+                )
+            },
             via,
             state,
             options,
@@ -1197,8 +1210,9 @@ fn quick_change(
     run: bool,
     via: Via,
     options: &RunOptions,
+    asked: Option<(&str, &Path)>,
 ) -> CommandResult {
-    crate::quick::change(root, request, checks, run, via, options)
+    crate::quick::change(root, request, checks, run, via, options, asked)
 }
 
 #[cfg(test)]

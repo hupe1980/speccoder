@@ -59,7 +59,7 @@
       "$ref": "#/$defs/AskUsage"
     },
     "end": {
-      "description": "How the turn ended: `answered`, `stopped`, `budget`, `full` or `failed`.",
+      "description": "How the turn ended: `answered`, `stopped`, `budget` or `failed`.",
       "type": "string"
     },
     "reason": {
@@ -279,6 +279,13 @@
         "command": {
           "description": "The same action as a command.",
           "type": "string"
+        },
+        "conversation": {
+          "description": "The conversation that suggested it.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
@@ -682,6 +689,13 @@
             "run": {
               "description": "Run it once recorded.",
               "type": "boolean"
+            },
+            "asked": {
+              "description": "The Ask conversation that suggested it, recorded as its origin.",
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           "required": [
@@ -825,6 +839,13 @@
             "run": {
               "description": "Reproduce it once recorded.",
               "type": "boolean"
+            },
+            "asked": {
+              "description": "The Ask conversation that suggested it, recorded as its origin.",
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           "required": [

@@ -36,6 +36,13 @@ pub enum Origin {
         /// The digest of its context-manifest entry.
         context_sha256: Option<String>,
     },
+    /// Suggested in an Ask conversation and confirmed by a person.
+    Asked {
+        /// The conversation (`c-…`).
+        conversation: String,
+        /// Unix seconds.
+        at: u64,
+    },
 }
 
 impl Origin {
@@ -53,6 +60,7 @@ impl Origin {
                 Some(r) => format!("issue {r}#{number}"),
                 None => format!("issue #{number}"),
             },
+            Self::Asked { conversation, .. } => format!("asked in conversation {conversation}"),
         }
     }
 }

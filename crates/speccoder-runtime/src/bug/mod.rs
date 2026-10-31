@@ -54,6 +54,8 @@ pub struct Request {
     /// The GitHub to read the issue or pull request from (default: the
     /// environment's).
     pub github: Option<crate::github::Ctx>,
+    /// The Ask conversation that suggested it.
+    pub asked: Option<String>,
 }
 
 impl Request {
@@ -80,6 +82,7 @@ impl Request {
             slug: slug.map(str::to_owned),
             run,
             github: None,
+            asked: None,
         }
     }
 }
@@ -366,6 +369,7 @@ pub fn bug_with(
             state::Extra {
                 by: Some(by),
                 via: Some(via),
+                asked: req.asked.clone(),
                 ..state::Extra::default()
             },
             via,
@@ -426,6 +430,7 @@ pub fn bug_with(
     let mut extra = state::Extra {
         by: Some(by.clone()),
         via: Some(via),
+        asked: req.asked.clone(),
         ..state::Extra::default()
     };
     let mut candidate = None;
@@ -833,6 +838,12 @@ fn finish_record(
             number: i.number,
             repo: i.repo.clone(),
             context_sha256: i.context_digest.clone(),
+        });
+    }
+    if let Some(conversation) = &extra.asked {
+        origins.push(Origin::Asked {
+            conversation: conversation.clone(),
+            at: confirm::now(),
         });
     }
     // Exactly one origin: one already there for the same words

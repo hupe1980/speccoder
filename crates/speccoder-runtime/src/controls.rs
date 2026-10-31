@@ -986,6 +986,14 @@ pub fn cost(path: &Path, feature: Option<&str>) -> CommandResult {
         .filter_map(|u| u.usd)
         .collect();
     total.usd = (!priced.is_empty()).then(|| priced.iter().sum());
+    let asked = crate::ask::spent(&root, None, &feature);
+    let mut ask = Usage {
+        input_tokens: asked.input,
+        output_tokens: asked.output,
+        cache_read_tokens: asked.cache_read,
+        ..Usage::default()
+    };
+    price(&mut ask, prices);
     let message = match total.usd {
         Some(usd) => format!(
             "{} tokens in, {} out ({} from the cache): ${usd:.4}",
@@ -1003,6 +1011,7 @@ pub fn cost(path: &Path, feature: Option<&str>) -> CommandResult {
             convergence,
             total,
             priced_model: prices.and(model.map(|m| format!("{}/{}", m.provider, m.model))),
+            ask,
         },
     )))
 }

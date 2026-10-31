@@ -37,7 +37,8 @@
   import HelpSheet from "./components/HelpSheet.svelte";
   import AskPanel from "./components/AskPanel.svelte";
   import ProposalSheet from "./components/ProposalSheet.svelte";
-  import { ask } from "./lib/ask.svelte";
+  import { ask, pointed } from "./lib/ask.svelte";
+  import SelectionAsk from "./components/SelectionAsk.svelte";
   import { typing as inField } from "./lib/start";
 
   let theme = $state<string>(localStorage.getItem("speccoder-theme") ?? "auto");
@@ -121,7 +122,12 @@
       case "view.actions": app.palette = true; return;
       case "view.ask": return ask.toggle(!ask.open || !document.activeElement?.closest(".ask"));
       case "edit.addToAsk": {
-        if (!app.selected) return app.toast({ tone: "warn", text: "Select a task to add it to Ask (click its card)" });
+        const chip = pointed();
+        if (chip) {
+          window.getSelection()?.removeAllRanges();
+          return ask.add(chip);
+        }
+        if (!app.selected) return app.toast({ tone: "warn", text: "Select words, a task or a row to add it to Ask" });
         const t = app.report?.data?.tasks.find((x) => x.id === app.selected);
         return ask.add({ kind: "task", reference: { task: app.selected, feature: app.report?.data?.feature ?? null }, label: t ? `${t.id} ${t.title}` : app.selected });
       }
@@ -329,6 +335,7 @@
 {#if app.help}<HelpSheet />{/if}
 {#if ask.open && !app.welcome}<AskPanel />{/if}
 {#if ask.sheet}<ProposalSheet />{/if}
+{#if !app.welcome}<SelectionAsk />{/if}
 {#if app.personStep}<StepSheet />{/if}
 <!-- Over the sheet whose field it shapes. -->
 {#if app.shape}<ShapeSheet />{/if}

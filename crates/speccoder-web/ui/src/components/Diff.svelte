@@ -3,6 +3,7 @@
   // its additions and removals, old and new line numbers in the gutter, and
   // hunks as dividers. Long lines scroll; wrapping is a toggle.
   import FileIcon from "./FileIcon.svelte";
+  import { askable } from "../lib/ask.svelte";
   import Icon from "./Icon.svelte";
   import Source from "./Source.svelte";
   import { language } from "../lib/highlight";
@@ -99,7 +100,7 @@
       <label class="wrap"><input type="checkbox" bind:checked={wrap} /> Wrap lines</label>
     </div>
     {#each only ? parsed.files.filter((f) => f.name === only) : parsed.files as f (f.name)}
-      <section class="file">
+      <section class="file" {...askable("file_range", { path: f.name }, f.name)}>
         <button class="fhead" onclick={() => (folded = { ...folded, [f.name]: !folded[f.name] })} aria-expanded={!folded[f.name]}>
           <Icon name={folded[f.name] ? "chevron" : "down"} size={12} weight={2.2} />
           <FileIcon path={f.name} size={15} />

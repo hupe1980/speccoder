@@ -18,6 +18,7 @@ pub fn change(
     run: bool,
     via: speccoder_core::actions::Via,
     options: &crate::RunOptions,
+    asked: Option<(&str, &Path)>,
 ) -> CommandResult {
     let format = crate::format::at(path);
     let Some(root) = format.detect(path) else {
@@ -45,6 +46,17 @@ pub fn change(
     );
     if approved.status() != CommandStatus::Ok {
         return CommandResult::carried("do", &approved);
+    }
+    // Suggested in Ask: the conversation is where it came from.
+    if let Some((conversation, state)) = asked {
+        let _ = crate::ladder::record_origin(
+            &crate::worktree::project_state_dir(state, &root),
+            &speccoder_core::ladder::subject(&rec.feature, &rec.requirement),
+            vec![speccoder_core::ladder::Origin::Asked {
+                conversation: conversation.to_owned(),
+                at: crate::bug::confirm::now(),
+            }],
+        );
     }
     // A run reads committed files: exactly this unit's planning files.
     let files = crate::hosting::uncommitted(&root, Some(&rec.feature));

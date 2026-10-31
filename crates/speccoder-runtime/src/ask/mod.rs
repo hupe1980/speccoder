@@ -34,8 +34,103 @@ pub const PROPOSE: &str = "propose";
 pub const MAX_QUESTION: usize = 8_000;
 
 /// A turn whose input alone is this large leaves no room for another: the
-/// conversation is full (Ask never summarises).
+/// next message goes on in a new run (Ask never summarises).
 const FULL_AT: u64 = 150_000;
+
+/// The most of the earlier turns' words a new run carries.
+const CARRIED: usize = 24_000;
+
+/// The run of conversation `id`'s `segment`, as its messages correlate.
+fn segment_key(id: &str, segment: u32) -> String {
+    if segment == 0 {
+        id.to_owned()
+    } else {
+        format!("{id}.{segment}")
+    }
+}
+
+/// The earlier turns, newest kept first, as context for a new run.
+fn earlier(turns: &[AskReport]) -> String {
+    let mut kept: Vec<String> = Vec::new();
+    let mut size = 0;
+    for t in turns.iter().rev() {
+        let answer = if t.answer.is_empty() {
+            "(no answer)"
+        } else {
+            &t.answer
+        };
+        let block = format!("Q: {}\nA: {answer}\n", t.question);
+        size += block.len();
+        if size > CARRIED {
+            break;
+        }
+        kept.push(block);
+    }
+    kept.reverse();
+    format!(
+        "<context id=\"earlier\" kind=\"conversation\">\nThe conversation so far, carried over from \
+its earlier run. What it read then is not read again: read before you cite.\n\n{}</context>\n\n",
+        kept.join("\n")
+    )
+}
+
+/// Turns in flight in this process, by conversation, so a person can
+/// stop one.
+type Halt = (Arc<tokio::sync::Notify>, Arc<std::sync::atomic::AtomicBool>);
+static LIVE: std::sync::LazyLock<Mutex<std::collections::HashMap<String, Halt>>> =
+    std::sync::LazyLock::new(Mutex::default);
+
+/// A turn's place in [`LIVE`], left when it ends.
+struct Live {
+    id: String,
+    halt: Arc<tokio::sync::Notify>,
+}
+
+impl Live {
+    fn enter(id: &str, flag: &Arc<std::sync::atomic::AtomicBool>) -> Self {
+        let halt = Arc::new(tokio::sync::Notify::new());
+        if let Ok(mut live) = LIVE.lock() {
+            live.insert(id.to_owned(), (Arc::clone(&halt), Arc::clone(flag)));
+        }
+        Self {
+            id: id.to_owned(),
+            halt,
+        }
+    }
+
+    async fn notified(&self) {
+        self.halt.notified().await;
+    }
+}
+
+impl Drop for Live {
+    fn drop(&mut self) {
+        if let Ok(mut live) = LIVE.lock() {
+            live.remove(&self.id);
+        }
+    }
+}
+
+/// Stops conversation `id`'s turn in flight in this process (`None`: every
+/// one — a new conversation has no id until its first turn ends): it ends
+/// after the model call it is in, keeping its words. `false`: none was.
+#[must_use]
+pub fn stop(id: Option<&str>) -> bool {
+    let halts: Vec<Halt> = LIVE.lock().map_or_else(
+        |_| Vec::new(),
+        |live| {
+            live.iter()
+                .filter(|(k, _)| id.is_none_or(|id| *k == id))
+                .map(|(_, h)| h.clone())
+                .collect()
+        },
+    );
+    for (halt, flag) in &halts {
+        flag.store(true, std::sync::atomic::Ordering::SeqCst);
+        halt.notify_one();
+    }
+    !halts.is_empty()
+}
 
 /// `[ask]` in `speccoder.toml`.
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
@@ -346,7 +441,14 @@ impl Progress for Collector {
 struct Words {
     conversation: String,
     turn: u32,
-    sink: Arc<dyn Progress>,
+    sink: Option<Arc<dyn Progress>>,
+    text: Mutex<String>,
+}
+
+impl Words {
+    fn text(&self) -> String {
+        self.text.lock().map(|t| t.clone()).unwrap_or_default()
+    }
 }
 
 impl agentplane::runtime::RunStreamObserver for Words {
@@ -356,11 +458,16 @@ impl agentplane::runtime::RunStreamObserver for Words {
         event: agentplane::core::Tainted<agentplane::model::ModelStreamEvent>,
     ) {
         if let agentplane::model::ModelStreamEvent::TextDelta(delta) = event.peek() {
-            self.sink.event(&Event::AskText {
-                conversation: self.conversation.clone(),
-                turn: self.turn,
-                delta: delta.clone(),
-            });
+            if let Ok(mut t) = self.text.lock() {
+                t.push_str(delta);
+            }
+            if let Some(sink) = &self.sink {
+                sink.event(&Event::AskText {
+                    conversation: self.conversation.clone(),
+                    turn: self.turn,
+                    delta: delta.clone(),
+                });
+            }
         }
     }
 }
@@ -402,17 +509,9 @@ pub fn turn_with(
         Ok(d) => d,
         Err(e) => return *e,
     };
-    let fresh = request.conversation.is_none();
     let mut thread = match &request.conversation {
         Some(id) => match load(&dir, id) {
-            Some(t) if t.conversation.open => t,
-            Some(_) => {
-                return refuse(
-                    CommandStatus::UsageError,
-                    "ASK-FULL",
-                    "this conversation has ended; start a new one — its chips come along",
-                );
-            }
+            Some(t) => t,
             None => {
                 return refuse(
                     CommandStatus::NotFound,
@@ -431,6 +530,8 @@ pub fn turn_with(
                 open: true,
             },
             turns: Vec::new(),
+            segment: 0,
+            run: None,
         },
     };
     let id = thread.conversation.id.clone();
@@ -489,57 +590,101 @@ pub fn turn_with(
             Ok(t) => Arc::new(t),
             Err(e) => return refuse(CommandStatus::Error, "ERROR", &e.to_string()),
         };
+    let words = Arc::new(Words {
+        conversation: id.clone(),
+        turn: n,
+        sink: sink.clone(),
+        text: Mutex::new(String::new()),
+    });
+    let flag = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let wiring = substrate::ask::AskWiring {
+        halt: Arc::clone(&flag),
         workspace,
         readers: Arc::new(tools::AskTools::new(&root, &journal)),
         progress: Some(Arc::clone(&collector) as Arc<dyn Progress>),
-        stream: sink.clone().map(|s| {
-            Arc::new(Words {
-                conversation: id.clone(),
-                turn: n,
-                sink: s,
-            }) as Arc<dyn agentplane::runtime::RunStreamObserver>
-        }),
+        stream: Some(Arc::clone(&words) as Arc<dyn agentplane::runtime::RunStreamObserver>),
     };
     let format = crate::format::at(&root);
     let rt = match crate::pipeline::tokio_runtime() {
         Ok(rt) => rt,
         Err(e) => return refuse(CommandStatus::Error, "ERROR", &e),
     };
-    let payload = json!({
-        "text": chips::message(text, &resolved),
-        "turn": n,
-        "limit": ask.max_turn_tokens.min(left),
-        "reads": reads_from,
+    let message = chips::message(text, &resolved);
+    let payload = |carried: bool| {
+        let text = if carried {
+            format!("{}{message}", earlier(&thread.turns))
+        } else {
+            message.clone()
+        };
+        json!({
+            "text": text,
+            "tag": turn_tag(&id, n),
+            "limit": ask.max_turn_tokens.min(left),
+            "reads": reads_from,
+        })
+    };
+    let start = json!({
+        "root": root.to_string_lossy(),
+        "format": format.kind().name(),
+        "feature": request.feature,
     });
+    let halt = Live::enter(&id, &flag);
+    let by = crate::approvals::who_in(&root);
+    // A run that no longer waits (stopped, idle, full, or left behind by a
+    // process that died mid-turn) hands over to a new one, carrying the
+    // earlier turns' words: a conversation never dead-ends.
+    let mut segment = thread.segment;
+    let mut run = thread.run.clone().filter(|_| thread.conversation.open);
     let waited = rt.block_on(async {
         let plane = substrate::Plane::open_ask(&dir, model, provider, wiring)?;
-        if fresh {
-            plane
-                .ask_start(
-                    &id,
-                    agentplane::core::Tainted::trusted(json!({
-                        "conversation": id,
-                        "root": root.to_string_lossy(),
-                        "format": format.kind().name(),
-                        "feature": request.feature,
-                    })),
-                )
-                .await?;
+        loop {
+            let carried = run.is_none() && !thread.turns.is_empty();
+            let started_now = run.is_none();
+            if run.is_none() {
+                if !thread.turns.is_empty() {
+                    segment += 1;
+                }
+                let key = segment_key(&id, segment);
+                let mut input = start.clone();
+                input["conversation"] = json!(key);
+                let started = plane
+                    .ask_start(&key, agentplane::core::Tainted::trusted(input))
+                    .await?;
+                run = Some(started.run_id.to_string());
+            }
+            let key = segment_key(&id, segment);
+            let message_id = format!("{key}-{n}");
+            let deliver = plane.ask_deliver(&key, &message_id, payload(carried));
+            tokio::pin!(deliver);
+            let resumed = tokio::select! {
+                r = &mut deliver => r?,
+                () = halt.notified() => {
+                    if let Some(r) = &run {
+                        plane.ask_stop(r, &by).await?;
+                    }
+                    let _ = deliver.await;
+                    return Ok(true);
+                }
+            };
+            if resumed {
+                return Ok(false);
+            }
+            if started_now {
+                return Err(substrate::PlaneError(
+                    "a new run of the conversation did not take the message".to_owned(),
+                ));
+            }
+            run = None;
         }
-        plane.ask_deliver(&id, &format!("{id}-{n}"), payload).await
     });
+    drop(halt);
+    thread.segment = segment;
+    thread.run.clone_from(&run);
+    thread.conversation.open = true;
     match waited {
-        Ok(true) => {}
-        Ok(false) => {
-            thread.conversation.open = false;
-            let _ = save(&dir, &thread);
-            return refuse(
-                CommandStatus::UsageError,
-                "ASK-FULL",
-                "this conversation went idle and ended; start a new one — its chips come along",
-            );
-        }
+        Ok(false) => {}
+        // Stopped: the run was cancelled with the turn.
+        Ok(true) => thread.conversation.open = false,
         Err(e) if e.0.contains("another speccoder is working") => {
             return refuse(
                 CommandStatus::UsageError,
@@ -574,6 +719,7 @@ pub fn turn_with(
         report.proposal = Some(proposal::validate(
             &root,
             request.feature.as_deref(),
+            &id,
             &p["arguments"],
         ));
     }
@@ -584,6 +730,13 @@ pub fn turn_with(
                 .unwrap_or_default()
                 .trim()
                 .to_owned()
+        }
+        Some("stopped") => {
+            report.end = "stopped".to_owned();
+            report.answer = output["text"]
+                .as_str()
+                .map_or_else(|| words.text().trim().to_owned(), |t| t.trim().to_owned());
+            report.reason = Some("stopped by you — ask again to go on".to_owned());
         }
         Some("budget") => {
             report.end = "budget".to_owned();
@@ -607,6 +760,7 @@ pub fn turn_with(
     }
     report.citations = speccoder_core::ask::check(&report.answer, &report.reads, &report.chips);
     add_today(&dir, report.usage.billed());
+    // A run whose history alone fills a turn hands over to a new one.
     if report.usage.input + report.usage.cache_read > FULL_AT {
         thread.conversation.open = false;
     }
@@ -640,18 +794,12 @@ fn finish(
         .filter(|c| c.state == "read")
         .count();
     let (status, code, message) = match report.end.as_str() {
-        "answered" if !thread.conversation.open => (
-            CommandStatus::Ok,
-            None,
-            format!(
-                "answered with {sources} sources; the conversation is full — a new one keeps its chips"
-            ),
-        ),
         "answered" => (
             CommandStatus::Ok,
             None,
             format!("answered with {sources} sources"),
         ),
+        "stopped" => (CommandStatus::Ok, None, "stopped".to_owned()),
         "budget" => (
             CommandStatus::NeedsHuman,
             Some("ASK-BUDGET"),
@@ -668,6 +816,36 @@ fn finish(
         result = result.with_code(code);
     }
     result.with_data(CommandData::Ask(Box::new(report)))
+}
+
+/// The tokens Ask's conversations about `feature` used: input, output and
+/// cache reads.
+#[must_use]
+pub fn spent(path: &Path, state: Option<&Path>, feature: &str) -> AskUsage {
+    let mut total = AskUsage::default();
+    let Some(dir) = state_or(state)
+        .ok()
+        .and_then(|s| plane_dir(path, &s).ok())
+        .map(|(_, d)| d)
+    else {
+        return total;
+    };
+    let threads = std::fs::read_dir(dir.join("threads"))
+        .into_iter()
+        .flatten()
+        .flatten();
+    for t in threads.filter_map(|e| {
+        serde_json::from_str::<AskThread>(&std::fs::read_to_string(e.path()).ok()?).ok()
+    }) {
+        if t.conversation.feature.as_deref() == Some(feature) {
+            for turn in &t.turns {
+                total.input += turn.usage.input;
+                total.output += turn.usage.output;
+                total.cache_read += turn.usage.cache_read;
+            }
+        }
+    }
+    total
 }
 
 /// The project's conversations, newest first; `feature` narrows them.

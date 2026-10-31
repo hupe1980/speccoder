@@ -48,7 +48,7 @@
           "minimum": 0
         },
         "open": {
-          "description": "Whether it takes another turn (`false`: ended, idle or full).",
+          "description": "Whether its run waits for the next message (`false`: stopped, idle\nor full — the next message goes on in a new run that carries the\nearlier turns' words).",
           "type": "boolean"
         }
       },

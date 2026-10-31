@@ -3073,6 +3073,13 @@
             "run": {
               "description": "Run it once recorded.",
               "type": "boolean"
+            },
+            "asked": {
+              "description": "The Ask conversation that suggested it, recorded as its origin.",
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           "required": [
@@ -3216,6 +3223,13 @@
             "run": {
               "description": "Reproduce it once recorded.",
               "type": "boolean"
+            },
+            "asked": {
+              "description": "The Ask conversation that suggested it, recorded as its origin.",
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           "required": [

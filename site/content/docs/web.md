@@ -110,7 +110,9 @@ A run that stops on uncommitted setup shows a card with the fix, its command and
 
 **Ask** (⌘L, the toolbar's speech bubble, or a question typed in the palette or the composer) opens a conversation beside the view. It answers from what it reads — files, history, a run's account, a task's evidence, Needs You, the codes — and changes nothing. Its sources are numbered only where speccoder checked the model read them in that turn; a citation to anything else is marked *not read*. Click a source to open it at its lines.
 
-The view's subject (the selected task, else the feature) rides along as a chip; **Add to Ask** (⌘⇧L, a task card's menu, the code viewer's **Ask**) adds more. A suggested change — a quick change, a bug fix, a nudge, an answer, a new spec — is a card: **Review…** opens a sheet with every word editable and the command it records, and only **Confirm** performs it. Conversations are kept per project (the list button); a long one ends rather than being summarised, and a new one keeps its chips. Its budget is [`[ask]`](@/docs/configuration.md#ask)'s, never a run's.
+The view's subject (the selected task, else the feature) rides along as a chip. **Add to Ask** adds more: select words anywhere and click the **Ask** pill above them, or press ⌘⇧L on a task card, an evidence row, a requirement, an open question, a Needs You item, a trace row or a file in a diff; a task card's menu and the code viewer's **Ask** do the same. Selected words remember where they were selected.
+
+While it answers, **Send** becomes **Stop** (Esc): the turn ends after the step it is in and keeps the words so far; ask again to go on. A suggested change — a quick change, a bug fix, a nudge, an answer, a new spec — is a card: **Review…** opens a sheet with every word editable and the command it records, and only **Confirm** performs it; a quick change or bug recorded so names the conversation as its origin. Conversations are kept per project (the list button) and never dead-end: one that was stopped, sat idle or grew too long goes on in a fresh run carrying its earlier questions and answers word for word — Ask never summarises. Its budget is [`[ask]`](@/docs/configuration.md#ask)'s, never a run's; Spend shows it on its own line.
 
 ### Bug sheet
 
@@ -160,7 +162,7 @@ A call that needs a person opens as a sheet with what the [inline prompt](@/docs
 | `?` | Every key |
 | `,` | Settings |
 | ⌘K / Ctrl+K | The palette: every action, filtered as you type |
-| ⌘L / ⇧⌘L | Ask / add the selected task to Ask |
+| ⌘L / ⇧⌘L | Ask / add the selection, the focused row or the selected task to Ask |
 | ⇧⌘T / ⇧⌘↵ | Write Tests / send the comments |
 | `Esc` | Close the task |
 

@@ -1928,6 +1928,9 @@ pub struct CostReport {
     pub total: Usage,
     /// The model the prices apply to, when prices are configured.
     pub priced_model: Option<String>,
+    /// Ask's conversations about the feature, apart from `total`: Ask has
+    /// a budget of its own (`[ask]`).
+    pub ask: Usage,
 }
 
 /// One task's cost.

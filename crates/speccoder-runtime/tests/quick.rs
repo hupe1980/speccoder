@@ -81,6 +81,7 @@ fn record(r: &Path, request: &str, checks: &[&str]) -> speccoder_core::CommandRe
         false,
         speccoder_core::actions::Via::Terminal,
         &speccoder_runtime::RunOptions::default(),
+        None,
     )
 }
 
@@ -201,4 +202,39 @@ fn the_acceptance_author_reads_the_change_and_its_conditions() {
         "{}",
         second.story
     );
+}
+
+/// Confirmed from an Ask proposal: the conversation is the requirement's
+/// origin, written once beside the others.
+#[test]
+fn a_quick_change_from_ask_records_its_conversation() {
+    let r = repo();
+    let state = tempfile::tempdir().unwrap();
+    let res = speccoder_runtime::quick::change(
+        r.path(),
+        "Log every sign-in",
+        &[],
+        false,
+        speccoder_core::actions::Via::Web,
+        &speccoder_runtime::RunOptions::default(),
+        Some(("c-18f", state.path())),
+    );
+    assert_eq!(
+        res.status(),
+        speccoder_core::CommandStatus::Ok,
+        "{}",
+        res.message()
+    );
+    let plane = speccoder_runtime::worktree::project_state_dir(state.path(), r.path());
+    let origins = speccoder_runtime::ladder::origins(&plane);
+    let asked: Vec<_> = origins
+        .iter()
+        .filter(|(_, o)| {
+            o.iter().any(|o| {
+                matches!(o, speccoder_core::ladder::Origin::Asked { conversation, .. } if conversation == "c-18f")
+            })
+        })
+        .collect();
+    assert_eq!(asked.len(), 1, "{origins:?}");
+    assert_eq!(asked[0].0, "002-quick-changes/FR-001");
 }

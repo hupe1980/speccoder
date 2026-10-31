@@ -2,6 +2,7 @@
   // A task's inspector: its verdict, the evidence behind it as a grouped
   // list, the diff that ticked it, and what can be done with it.
   import { app } from "../lib/app.svelte";
+  import { askable } from "../lib/ask.svelte";
   import { get, latest, q } from "../lib/api";
   const evidenceOf = latest();
   const patchOf = latest();
@@ -148,7 +149,7 @@
     {#if tab === "evidence"}
       <dl class="grouped">
         {#each data.rows as r, n (r.label + r.text)}
-          <div class="row" class:claim={r.label === "Model says"}>
+          <div class="row" class:claim={r.label === "Model says"} {...askable("evidence_row", { task: app.selected, label: r.label }, `${app.selected} · ${r.label}`, `Evidence of ${app.selected}, ${r.label}: ${r.text}`)}>
             <dt><span class="dot s-{r.mark}"><Icon name={symbol(r.mark)} size={11} weight={2.4} /></span>{r.label}</dt>
             <dd><Code text={r.text} />{#if n === 0 && culprit}{" "}<button class="link" aria-label="Open task {culprit}" onclick={() => app.selectTask(culprit)}>Open {culprit}</button>{/if}</dd>
           </div>

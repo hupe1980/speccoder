@@ -354,7 +354,7 @@ export interface AskReport {
   proposal?: Proposal | null;
   /** Tokens the turn used (input and output, cache reads apart). */
   usage: AskUsage;
-  /** How the turn ended: `answered`, `stopped`, `budget`, `full` or `failed`. */
+  /** How the turn ended: `answered`, `stopped`, `budget` or `failed`. */
   end: string;
   /** Why it ended so, when it did not answer. */
   reason?: string | null;
@@ -366,6 +366,10 @@ export interface AskThread {
   conversation: Conversation;
   /** Its turns, in order. */
   turns: AskReport[];
+  /** How many runs it has handed over to a new one. */
+  segment: number;
+  /** The run that takes the next message. */
+  run?: string | null;
 }
 
 /** Tokens a turn used. */
@@ -1213,7 +1217,11 @@ export interface Conversation {
   at: number;
   /** How many turns it has. */
   turns: number;
-  /** Whether it takes another turn (`false`: ended, idle or full). */
+  /**
+   * Whether its run waits for the next message (`false`: stopped, idle
+   * or full — the next message goes on in a new run that carries the
+   * earlier turns' words).
+   */
   open: boolean;
 }
 
@@ -1229,6 +1237,11 @@ export interface CostReport {
   total: Usage;
   /** The model the prices apply to, when prices are configured. */
   priced_model: string | null;
+  /**
+   * Ask's conversations about the feature, apart from `total`: Ask has
+   * a budget of its own (`[ask]`).
+   */
+  ask: Usage;
 }
 
 /** Rejected of judged, for one source. */
@@ -3553,6 +3566,8 @@ export interface Proposal {
   blocked?: string | null;
   /** The same action as a command. */
   command: string;
+  /** The conversation that suggested it. */
+  conversation?: string | null;
 }
 
 /** A proposal's words; which ones a kind uses is the kind's. */
@@ -4453,6 +4468,8 @@ export type Runnable =
     checks: string[];
     /** Run it once recorded. */
     run: boolean;
+    /** The Ask conversation that suggested it, recorded as its origin. */
+    asked?: string | null;
   }
   /**
    * Commit the changes set aside before the task's run onto the
@@ -4509,6 +4526,8 @@ export type Runnable =
     slug: string | null;
     /** Reproduce it once recorded. */
     run: boolean;
+    /** The Ask conversation that suggested it, recorded as its origin. */
+    asked?: string | null;
   }
   /**
    * Confirm (or, with `reject`, reject: the input is the reason) a

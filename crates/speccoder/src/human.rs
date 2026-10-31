@@ -693,6 +693,9 @@ pub fn cost(w: &mut impl Write, c: &CostReport, message: &str) -> io::Result<()>
         line(w, "convergence", "", &c.convergence)?;
     }
     line(w, "total", "", &c.total)?;
+    if c.ask.input_tokens + c.ask.output_tokens > 0 {
+        line(w, "ask", "apart", &c.ask)?;
+    }
     if let Some(m) = &c.priced_model {
         writeln!(w, "Prices     {m}, from speccoder.toml")?;
     }

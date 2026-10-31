@@ -547,6 +547,17 @@ async fn ask(
 }
 
 #[derive(Debug, Deserialize)]
+struct StopBody {
+    conversation: Option<String>,
+}
+
+/// Stops the turn in flight: it ends after the model call it is in,
+/// keeping its words; the conversation goes on with the next question.
+async fn ask_stop(Json(b): Json<StopBody>) -> Json<Value> {
+    Json(json!({ "stopped": speccoder_runtime::service::ask::stop(b.conversation.as_deref()) }))
+}
+
+#[derive(Debug, Deserialize)]
 struct AskQuery {
     id: Option<String>,
     feature: Option<String>,
@@ -1245,6 +1256,7 @@ pub fn router(s: Shared) -> Router {
         .route("/api/ask", post(ask))
         .route("/api/ask/conversations", get(ask_conversations))
         .route("/api/ask/conversation", get(ask_conversation))
+        .route("/api/ask/stop", post(ask_stop))
         .route("/api/ask/chip", post(ask_chip))
         .route("/api/ask/proposal", post(ask_proposal))
         .route("/api/shape", post(shape))

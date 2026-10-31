@@ -31,6 +31,45 @@ const write = (k: string, v: string) => {
   }
 };
 
+/** Marks an element as something Ask can take: ⌘⇧L on it, or words
+ *  selected inside it. Kinds the engine resolves (`task`, `feature`,
+ *  `file_range`) are read fresh; any other carries `text`. */
+export function askable(kind: string, reference: Record<string, unknown>, label: string, text?: string) {
+  return { "data-ask": JSON.stringify({ kind, reference, label, text }) };
+}
+
+const marked = (el: Element | null | undefined): ChipRef | null => {
+  const raw = el?.closest("[data-ask]")?.getAttribute("data-ask");
+  try {
+    return raw ? (JSON.parse(raw) as ChipRef) : null;
+  } catch {
+    return null;
+  }
+};
+
+/** The words selected outside Ask, and where they are from. */
+export function selected(): { text: string; from: ChipRef | null; rect: DOMRect | null } | null {
+  const sel = typeof window === "undefined" ? null : window.getSelection();
+  const text = sel?.toString().trim() ?? "";
+  if (!sel || !text || sel.isCollapsed || !sel.rangeCount) return null;
+  const node = sel.anchorNode;
+  const el = node instanceof Element ? node : node?.parentElement;
+  if (!el || el.closest(".ask, textarea, input, [contenteditable]")) return null;
+  const range = sel.getRangeAt(0);
+  return { text: text.slice(0, 4000), from: marked(el), rect: typeof range.getBoundingClientRect === "function" ? range.getBoundingClientRect() : null };
+}
+
+/** The chip for what the person points at: selected words, else the
+ *  focused item, else nothing. */
+export function pointed(): ChipRef | null {
+  const s = selected();
+  if (s) {
+    const excerpt = s.text.length > 36 ? `${s.text.slice(0, 34).trimEnd()}…` : s.text;
+    return { kind: "selection", reference: s.from ? { from: s.from.label ?? s.from.kind } : {}, label: `“${excerpt}”`, text: s.from ? `${s.text}\n\n(selected in ${s.from.label ?? s.from.kind})` : s.text };
+  }
+  return marked(typeof document === "undefined" ? null : document.activeElement);
+}
+
 /** What a step reads as: "Read notes.txt 1–3". */
 export function stepWords(s: Step): string {
   const verb: Record<string, string> = {
@@ -56,14 +95,12 @@ class AskState {
   width = $state(Math.min(640, Math.max(320, Number(read("speccoder-ask-width")) || 400)));
   conversation = $state<string | null>(null);
   turns = $state<AskReport[]>([]);
-  /** The conversation takes no more turns (ended, idle or full). */
-  ended = $state(false);
   /** Chips the person added. */
   chips = $state<ChipRef[]>([]);
   /** The view's own chip was removed for this conversation. */
   viewDropped = $state(false);
   /** The turn being answered. */
-  pending = $state<{ question: string; steps: Step[]; words: string } | null>(null);
+  pending = $state<{ question: string; steps: Step[]; words: string; stopping?: boolean } | null>(null);
   failed = $state<{ question: string; message: string } | null>(null);
   /** The conversations list, when shown. */
   list = $state<Conversation[] | null>(null);
@@ -133,7 +170,6 @@ class AskState {
   fresh() {
     this.conversation = null;
     this.turns = [];
-    this.ended = false;
     this.failed = null;
     this.list = null;
     this.viewDropped = false;
@@ -143,7 +179,6 @@ class AskState {
   async send(question: string) {
     const text = question.trim();
     if (!text || this.pending) return;
-    if (this.ended) this.fresh();
     const chips = [...(this.viewChip ? [this.viewChip] : []), ...this.chips];
     this.failed = null;
     this.list = null;
@@ -159,9 +194,7 @@ class AskState {
         this.conversation = r.data.conversation;
         this.turns = [...this.turns, r.data];
         this.chips = [];
-        if (r.message.includes("full")) this.ended = true;
       } else {
-        if (r.code === "ASK-FULL") this.ended = true;
         this.failed = { question: text, message: r.message };
       }
     } catch (e) {
@@ -171,12 +204,25 @@ class AskState {
     }
   }
 
+  /** Stops the turn in flight: it ends after the model call it is in and
+   * keeps its words; the next question goes on in the same conversation. */
+  async stop() {
+    const p = this.pending;
+    if (!p || p.stopping) return;
+    this.pending = { ...p, stopping: true };
+    try {
+      await post("/api/ask/stop", { conversation: this.conversation });
+    } catch {
+      /* the turn ends on its own */
+    }
+  }
+
   /** An event from the stream, for the turn being answered. */
   event(ev: { event: string; conversation?: string; tool?: string; target?: string; refused?: boolean; delta?: string }) {
     const p = this.pending;
     if (!p) return;
     if (ev.event === "ask_step") this.pending = { ...p, steps: [...p.steps, { tool: ev.tool ?? "", target: ev.target ?? "", refused: !!ev.refused }] };
-    if (ev.event === "ask_text") this.pending = { ...p, words: p.words + (ev.delta ?? "") };
+    if (ev.event === "ask_text" && !p.stopping) this.pending = { ...p, words: p.words + (ev.delta ?? "") };
   }
 
   async showList() {
@@ -194,7 +240,6 @@ class AskState {
       if (!r.data) return;
       this.conversation = r.data.conversation.id;
       this.turns = r.data.turns;
-      this.ended = !r.data.conversation.open;
       this.list = null;
       this.focus++;
     } catch {

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { app } from "../lib/app.svelte";
-  import { ask } from "../lib/ask.svelte";
+  import { ask, askable } from "../lib/ask.svelte";
   import { phaseLabel as short, symbol, word } from "../lib/marks";
   import { get, q } from "../lib/api";
   import { KINDS, offer, ofTask } from "../lib/actions";
@@ -91,7 +91,7 @@
           {@const live = running === t.id}
           {@const why = regressionLabel(t)}
           {@const never = neverRan(t)}
-          <article class="card" class:on={app.selected === t.id} class:live role="listitem" oncontextmenu={(e) => menu(t, e)}>
+          <article class="card" class:on={app.selected === t.id} class:live role="listitem" oncontextmenu={(e) => menu(t, e)} {...askable("task", { task: t.id, feature: app.feature }, `${t.id} ${t.title}`)}>
             <button class="open" onclick={() => app.selectTask(t.id)} aria-label="{t.id} {t.title}, {why ?? word(laneOf(t))}" title={why ?? undefined}>
               <span class="row"><span class="id mono">{t.id}</span>{#if t.lane === "planning"}<span class="who planning" title="Planning work: design documents in the feature's folder, judged by the checks">📐 Planning</span>{:else if t.lane === "yours"}<span class="who yours" title="A step only you can take: open it to say you did it, give a hint, or skip it">🙋 Yours</span>{/if}{#if t.phase}<span class="phase" title={t.phase}>{short(t.phase)}</span>{/if}</span>
               <span class="t"><Code text={t.title} /></span>

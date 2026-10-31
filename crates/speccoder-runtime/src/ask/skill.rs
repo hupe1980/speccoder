@@ -70,6 +70,8 @@ pub struct Ask {
     pub style: PromptStyle,
     /// Live steps and each turn's end (never journaled).
     pub progress: Option<Arc<dyn crate::progress::Progress>>,
+    /// Set when the person stops the turn in flight.
+    pub halt: Arc<std::sync::atomic::AtomicBool>,
 }
 
 #[async_trait]
@@ -105,7 +107,7 @@ impl Skill for Ask {
             if m["end"] == true {
                 return Ok(Outcome::done(Tainted::trusted(json!({ "ended": true }))));
             }
-            let turn = u32::try_from(m["turn"].as_u64().unwrap_or(0)).unwrap_or(u32::MAX);
+            let tag = m["tag"].as_str().unwrap_or_default().to_owned();
             let text = message.map(|v| v["text"].as_str().unwrap_or_default().to_owned());
             transcript.told(&text);
             let tools = crate::tools::declarations()
@@ -135,10 +137,7 @@ impl Skill for Ask {
                     ask: None,
                     run_approved: Vec::new(),
                     once: Vec::new(),
-                    observer: self
-                        .progress
-                        .clone()
-                        .map(|p| (super::turn_tag(&id, turn), p)),
+                    observer: self.progress.clone().map(|p| (tag.clone(), p)),
                     run: None,
                     asking: Asking::default(),
                     parts: Vec::new(),
@@ -146,6 +145,7 @@ impl Skill for Ask {
                     stop: StopGate::default(),
                     max_tokens: m["limit"].as_u64(),
                     reads: Some(reads),
+                    halt: Some(Arc::clone(&self.halt)),
                 },
                 &mut transcript,
             )
@@ -163,7 +163,7 @@ impl Skill for Ask {
             };
             if let Some(p) = &self.progress {
                 p.event(&crate::progress::Event::AskTurnEnded {
-                    tag: super::turn_tag(&id, turn),
+                    tag: tag.clone(),
                     output: Box::new(output),
                 });
             }

@@ -51,7 +51,7 @@ pub mod shape {
 pub mod ask {
     pub use crate::ask::chips::{ChipRef, resolve as chip};
     pub use crate::ask::proposal::revalidate as proposal;
-    pub use crate::ask::{Request, conversations, thread, turn};
+    pub use crate::ask::{Request, conversations, stop, thread, turn};
 }
 
 /// The next steps a result names.
