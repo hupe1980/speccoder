@@ -102,7 +102,7 @@ class AskState {
   viewDropped = $state(false);
   /** The turn being answered. */
   pending = $state<{ question: string; steps: Step[]; words: string; stopping?: boolean } | null>(null);
-  /** The next question, asked while a stopped turn's last model call ends:
+  /** The next question, asked while a stopped turn is still ending:
    * it goes as soon as that call lands. */
   queued = $state<string | null>(null);
   /** The id a new conversation takes with its first question. */

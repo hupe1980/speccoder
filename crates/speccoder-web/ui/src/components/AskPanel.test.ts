@@ -131,7 +131,7 @@ describe("AskPanel", () => {
     ask.event({ event: "ask_text", delta: " more" });
     flushSync();
     expect(document.body.textContent).not.toContain("more");
-    // A question asked now waits for the model's last call, then goes.
+    // A question asked now waits for the stop to land, then goes.
     const box = document.querySelector("textarea")!;
     box.value = "and the tests?";
     box.dispatchEvent(new Event("input", { bubbles: true }));

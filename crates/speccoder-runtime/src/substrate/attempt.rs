@@ -1088,10 +1088,10 @@ pub(crate) struct LoopSpec {
     pub max_tokens: Option<u64>,
     /// The first read id to issue (`r<n>`), when the answer cites reads.
     pub reads: Option<u32>,
-    /// Set when a person stops the turn (Ask): it ends after the model call
-    /// in flight, running none of its calls. Never journaled — the run is
-    /// cancelled with it and never replayed further.
-    pub halt: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
+    /// Pressed when a person stops the turn (Ask): the model call streaming
+    /// ends where it is (a recorded, metered completion) and none of its
+    /// calls run. Not effect identity — replay returns the recorded call.
+    pub halt: Option<agentplane::model::Stop>,
 }
 
 /// A run's asking budget as an attempt sees it (all journaled).
@@ -1232,9 +1232,14 @@ pub(crate) async fn tool_turn(
         let tools_now = tools.clone();
         let schema_now = schema.clone();
         let read_so_far = &*transcript;
+        let stop_now = halt.clone();
         let completion = cx
             .complete_with(prompt, move |call| {
                 let call = call.with_tools(tools_now).continuing(read_so_far);
+                let call = match stop_now {
+                    Some(stop) => call.stopped_by(stop),
+                    None => call,
+                };
                 let call = match schema_now {
                     Some(schema) => call.expecting(schema),
                     None => call,
@@ -1275,9 +1280,10 @@ pub(crate) async fn tool_turn(
                 text,
             });
         }
-        if halt
-            .as_ref()
-            .is_some_and(|h| h.load(std::sync::atomic::Ordering::SeqCst))
+        if completion.peek().stopped
+            || halt
+                .as_ref()
+                .is_some_and(agentplane::model::Stop::is_stopped)
         {
             return end(
                 "stopped",

@@ -79,7 +79,7 @@
   async function send(q = text) {
     if (!q.trim()) return;
     if (ask.pending?.stopping) {
-      // Stopped, its last model call still ending: the question waits for it.
+      // Stopped, the stop still landing: the question waits for it.
       ask.queued = q.trim();
       text = "";
       return;
@@ -189,7 +189,7 @@
       // as Needs You, carrying this conversation too (FR-025).
       const o = ask.offer;
       if (o) return void promote(o);
-      // Every way to start a spec lands in the one New feature sheet (D-131).
+      // Every way to start a spec lands in the one New feature sheet.
       app.newFeature = { text: p.fields.description ?? p.title, through: "tasks" };
       return;
     }
@@ -375,7 +375,7 @@
           {#if ask.pending.words}<div class="said">{@render words(ask.pending.words, null, !ask.pending.stopping)}</div>{/if}
           {#if ask.pending.stopping}<p class="halted"><Icon name="stop" size={11} /> Stopped{ask.pending.words ? " — the words so far" : ""}</p>{/if}
         </article>
-        {#if ask.queued}<div class="q queued" title="Sent as soon as the stopped turn's last model call ends">{ask.queued}</div>{/if}
+        {#if ask.queued}<div class="q queued" title="Sent as soon as the stopped turn has ended">{ask.queued}</div>{/if}
       {/if}
 
       {#if ask.failed}
@@ -437,7 +437,7 @@
         <button class="send" type="submit" aria-label="Send" disabled={!text.trim() || !!ask.queued}><Icon name="arrowup" size={15} weight={2.4} /></button>
       {/if}
     </div>
-    <p class="hint">{ask.pending?.stopping ? (ask.queued ? "Asked — it goes as soon as the model's last call ends" : "Stopped · Enter asks next — it goes as soon as the model's last call ends") : ask.pending ? "Esc to stop · keep typing, it waits for you" : "Enter to send · ⇧Enter for a new line · reads only, changes nothing"}</p>
+    <p class="hint">{ask.pending?.stopping ? (ask.queued ? "Asked — it goes as soon as the stop lands" : "Stopped · Enter asks next") : ask.pending ? "Esc to stop · keep typing, it waits for you" : "Enter to send · ⇧Enter for a new line · reads only, changes nothing"}</p>
   </form>
 </aside>
 

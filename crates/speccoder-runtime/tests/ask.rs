@@ -686,3 +686,61 @@ fn conversation_ids_are_the_planes_own() {
     assert_eq!(t.conversation, "c-abc123");
     assert!(ask::valid_id("c-abc123") && !ask::valid_id("c-") && !ask::valid_id("c-xyz"));
 }
+
+/// A person who presses Stop when the answer's first words show.
+#[derive(Debug, Default)]
+struct StopsAtFirstWords;
+impl speccoder_runtime::progress::Progress for StopsAtFirstWords {
+    fn event(&self, event: &speccoder_runtime::progress::Event) {
+        if let speccoder_runtime::progress::Event::AskText { conversation, .. } = event {
+            let _ = ask::stop(Some(conversation));
+        }
+    }
+}
+
+/// Stop ends the model call while it streams: the answer keeps the words
+/// shown, and the turn is billed for them, not for the whole answer.
+#[test]
+fn stop_ends_the_model_call_where_its_words_are() {
+    let r = repo();
+    let state = tempfile::tempdir().unwrap();
+    let f = FakeProvider::new();
+    f.streaming();
+    let long = "notes.txt has four lines and the last one says four, which is the whole file.";
+    f.will_say(long);
+    let d = Arc::clone(&f) as Arc<dyn ModelProvider>;
+    let request = Request {
+        text: "what is in notes.txt?".to_owned(),
+        ..Request::default()
+    };
+    let res = ask::turn_with(
+        r.path(),
+        &request,
+        state.path(),
+        &Settings::default(),
+        &model(),
+        d,
+        Some(Arc::new(StopsAtFirstWords)),
+    );
+    let Some(CommandData::Ask(t)) = res.data() else {
+        panic!("{}", res.message());
+    };
+    assert_eq!(t.end, "stopped", "{t:?}");
+    assert_eq!(t.answer, "notes.txt", "{t:?}");
+    let full = FakeProvider::new();
+    full.will_say(long);
+    let (_, whole) = ask(
+        r.path(),
+        tempfile::tempdir().unwrap().path(),
+        &(full as Arc<dyn ModelProvider>),
+        None,
+        "what is in notes.txt?",
+    );
+    assert!(
+        t.usage.output < whole.usage.output,
+        "stopped {} vs whole {}",
+        t.usage.output,
+        whole.usage.output
+    );
+    assert!(!ask::stop(None), "a turn is still listed in flight");
+}

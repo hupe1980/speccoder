@@ -78,38 +78,37 @@ its earlier run. What it read then is not read again: read before you cite.\n\n{
 
 /// Turns in flight in this process, by conversation, so a person can
 /// stop one.
-type Halt = (Arc<tokio::sync::Notify>, Arc<std::sync::atomic::AtomicBool>);
+type Halt = agentplane::model::Stop;
 static LIVE: std::sync::LazyLock<Mutex<std::collections::HashMap<String, Halt>>> =
     std::sync::LazyLock::new(Mutex::default);
 
 /// A turn's place in [`LIVE`], left when it ends.
 struct Live {
     id: String,
-    halt: Arc<tokio::sync::Notify>,
+    halt: Halt,
     /// It holds the entry: a second request for a conversation whose turn
     /// is in flight (refused by the plane's claim) never takes it.
     owned: bool,
 }
 
 impl Live {
-    fn enter(id: &str, flag: &Arc<std::sync::atomic::AtomicBool>) -> Self {
-        let halt = Arc::new(tokio::sync::Notify::new());
+    fn enter(id: &str, halt: &Halt) -> Self {
         let owned = LIVE.lock().is_ok_and(|mut live| {
             if live.contains_key(id) {
                 return false;
             }
-            live.insert(id.to_owned(), (Arc::clone(&halt), Arc::clone(flag)));
+            live.insert(id.to_owned(), halt.clone());
             true
         });
         Self {
             id: id.to_owned(),
-            halt,
+            halt: halt.clone(),
             owned,
         }
     }
 
     async fn notified(&self) {
-        self.halt.notified().await;
+        self.halt.stopped().await;
     }
 }
 
@@ -125,8 +124,9 @@ impl Drop for Live {
 }
 
 /// Stops conversation `id`'s turn in flight in this process (`None`: every
-/// one — a new conversation has no id until its first turn ends): it ends
-/// after the model call it is in, keeping its words. `false`: none was.
+/// one — a new conversation has no id until its first turn ends): the
+/// model call streaming ends where it is, recorded and metered to there,
+/// with its words. `false`: none was.
 #[must_use]
 pub fn stop(id: Option<&str>) -> bool {
     let halts: Vec<Halt> = LIVE.lock().map_or_else(
@@ -138,9 +138,8 @@ pub fn stop(id: Option<&str>) -> bool {
                 .collect()
         },
     );
-    for (halt, flag) in &halts {
-        flag.store(true, std::sync::atomic::Ordering::SeqCst);
-        halt.notify_one();
+    for halt in &halts {
+        halt.stop();
     }
     !halts.is_empty()
 }
@@ -573,9 +572,8 @@ struct Words {
     turn: u32,
     sink: Option<Arc<dyn Progress>>,
     text: Mutex<String>,
-    /// Set by Stop: the words end where the person saw them end, though the
-    /// model call they came from runs to its end.
-    halt: Arc<std::sync::atomic::AtomicBool>,
+    /// Set by Stop: the words end where the person saw them end.
+    halt: Halt,
 }
 
 impl Words {
@@ -590,7 +588,7 @@ impl agentplane::runtime::RunStreamObserver for Words {
         _run: agentplane::core::RunId,
         event: agentplane::core::Tainted<agentplane::model::ModelStreamEvent>,
     ) {
-        if self.halt.load(std::sync::atomic::Ordering::SeqCst) {
+        if self.halt.is_stopped() {
             return;
         }
         if let agentplane::model::ModelStreamEvent::TextDelta(delta) = event.peek() {
@@ -735,16 +733,16 @@ pub fn turn_with(
             Ok(t) => Arc::new(t),
             Err(e) => return refuse(CommandStatus::Error, "ERROR", &e.to_string()),
         };
-    let flag = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let flag = Halt::new();
     let words = Arc::new(Words {
         conversation: id.clone(),
         turn: n,
         sink: sink.clone(),
         text: Mutex::new(String::new()),
-        halt: Arc::clone(&flag),
+        halt: flag.clone(),
     });
     let wiring = substrate::ask::AskWiring {
-        halt: Arc::clone(&flag),
+        halt: flag.clone(),
         workspace,
         readers: Arc::new(tools::AskTools::new(&root, &journal)),
         progress: Some(Arc::clone(&collector) as Arc<dyn Progress>),

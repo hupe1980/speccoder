@@ -655,6 +655,7 @@ fn bedrock_takes_a_list_and_a_failed_tool_result() {
         continuation: None,
         compaction: None,
         stream: None,
+        stop: None,
     }));
     let answer =
         answer.unwrap_or_else(|e| panic!("Bedrock refused a list or a failed tool result: {e}"));

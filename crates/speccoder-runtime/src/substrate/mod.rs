@@ -34,7 +34,7 @@ use self::propose::{CAPABILITY, Propose};
 
 /// The agentplane release speccoder is built against (the exact pin in the
 /// workspace `Cargo.toml`), named in every verification summary.
-pub const AGENTPLANE_VERSION: &str = "0.56.1";
+pub const AGENTPLANE_VERSION: &str = "0.57.0";
 
 /// The journal file inside a project's state directory.
 pub const JOURNAL: &str = "journal.redb";
@@ -384,7 +384,13 @@ pub fn exhausted(limit: &agentplane::core::BudgetExceeded) -> String {
         agentplane::core::BudgetExceeded::Recorded { limit, .. } => limit.clone(),
         other => other.to_string(),
     };
-    let raise = if said.starts_with("token") {
+    // The ceiling the plane names; a record an older build wrote names
+    // none, and its words still say which.
+    let tokens = limit.ceiling().map_or_else(
+        || said.starts_with("token"),
+        |c| c == agentplane::core::Ceiling::Tokens,
+    );
+    let raise = if tokens {
         "; raise `[model] max_run_tokens`, or split the task"
     } else {
         ""
@@ -1313,6 +1319,12 @@ mod tests {
             r,
             "credit_balance_exhausted: You have no credits remaining. Add credits at https://platform.openai.com/settings/organization/billing/."
         );
+        // As agentplane 0.57 records it: the failure in its own words.
+        let own = "effect ek:21 was refused on attempt 1, and the refusal is an answer rather than a fault ('openai/gpt-5.4-mini' refused the request: insufficient_quota: You exceeded your current quota.); no retry would change it";
+        assert_eq!(
+            provider_refusal(own).as_deref(),
+            Some("insufficient_quota: You exceeded your current quota.")
+        );
         assert_eq!(provider_refusal("Failed(\"timeout\")"), None);
     }
 
@@ -1326,6 +1338,11 @@ mod tests {
         let timeout =
             RunStatus::Failed("effect ek:9 failed on attempt 2 of 2: timed out".to_owned());
         assert_eq!(why_not(&timeout), "timed out");
+        let own = RunStatus::Failed("effect ek:774b failed on attempt 1 of 1: 'openai/gpt-5.4-mini' returned an unusable answer: not JSON".to_owned());
+        assert_eq!(
+            why_not(&own),
+            "'openai/gpt-5.4-mini' returned an unusable answer: not JSON"
+        );
         assert_eq!(why_not(&RunStatus::Succeeded), "succeeded");
     }
 

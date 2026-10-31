@@ -71,7 +71,7 @@ pub struct Ask {
     /// Live steps and each turn's end (never journaled).
     pub progress: Option<Arc<dyn crate::progress::Progress>>,
     /// Set when the person stops the turn in flight.
-    pub halt: Arc<std::sync::atomic::AtomicBool>,
+    pub halt: agentplane::model::Stop,
 }
 
 #[async_trait]
@@ -145,7 +145,7 @@ impl Skill for Ask {
                     stop: StopGate::default(),
                     max_tokens: m["limit"].as_u64(),
                     reads: Some(reads),
-                    halt: Some(Arc::clone(&self.halt)),
+                    halt: Some(self.halt.clone()),
                 },
                 &mut transcript,
             )

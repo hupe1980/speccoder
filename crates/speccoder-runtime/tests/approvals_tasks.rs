@@ -629,15 +629,8 @@ fn a_run_in_another_process_leaves_the_journal_readable() {
             arguments: json!({ "path": "package.json", "content": "{}\n" }),
         }],
         text: "I'll add the manifest.".to_owned(),
-        model: None,
-        usage: agentplane::model::Usage::default(),
         stop_reason: Some("tool_use".to_owned()),
-        truncated: false,
-        commentary: None,
-        compacted: None,
-        structured: None,
-        continuation: None,
-        reasoning: None,
+        ..agentplane::model::Completion::default()
     });
     let first = speccoder_runtime::run_with(r.path(), None, "T005", state.path(), d, None);
     assert_eq!(
@@ -778,15 +771,9 @@ fn a_waiting_call_shows_the_model_s_commentary() {
             arguments: json!({ "path": "package.json", "content": "{}\n" }),
         }],
         text: String::new(),
-        model: None,
-        usage: agentplane::model::Usage::default(),
         stop_reason: None,
-        truncated: false,
         commentary: Some("The manifest comes first.".to_owned()),
-        compacted: None,
-        structured: None,
-        continuation: None,
-        reasoning: None,
+        ..agentplane::model::Completion::default()
     });
     let first = speccoder_runtime::run_with(r.path(), None, "T005", state.path(), d, None);
     assert_eq!(

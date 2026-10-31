@@ -432,7 +432,7 @@ fn the_token_budget_is_a_budget_stop_in_words() {
     git(r.path(), &["commit", "-qam", "a small budget"]);
     let state = tempfile::tempdir().unwrap();
     let (f, d) = fake();
-    // A turn as a real model reports it: `will_call_tool` counts nothing.
+    // Turns as a long-context model reports them: 9 000 tokens each.
     for i in 0..4 {
         f.will_answer(agentplane::model::Completion {
             tool_calls: vec![agentplane::model::ToolCall {
@@ -445,15 +445,8 @@ fn the_token_budget_is_a_budget_stop_in_words() {
                 output_tokens: 100,
                 ..Default::default()
             },
-            text: String::new(),
-            model: None,
             stop_reason: Some("tool_use".to_owned()),
-            truncated: false,
-            structured: None,
-            continuation: None,
-            reasoning: None,
-            commentary: None,
-            compacted: None,
+            ..agentplane::model::Completion::default()
         });
     }
     let res = run(r.path(), state.path(), "T005", d);
@@ -3771,15 +3764,9 @@ fn the_model_s_account_is_live_and_kept() {
             arguments: json!({ "path": "src/lib.rs", "old_string": "pub fn ok() {}", "new_string": "pub fn ok() {}\npub fn login() {}" }),
         }],
         text: "I'll add login() next to ok(), the smallest change the test needs.\n\x1b[31mred\x1b[0m".to_owned(),
-        model: None,
-        usage: agentplane::model::Usage::default(),
         stop_reason: Some("tool_use".to_owned()),
-        truncated: false,
-        commentary: None,
-        compacted: None,
-        structured: None,
-        continuation: None,
         reasoning: Some("The test only needs login() to exist.\nSo the smallest change is a new empty function.".to_owned()),
+        ..agentplane::model::Completion::default()
     });
     f.will_structure(done("added login"));
     let rec = Arc::new(Recorder::default());
@@ -3923,15 +3910,9 @@ fn the_model_s_commentary_is_what_it_said() {
                 structured: Option<Value>| agentplane::model::Completion {
         tool_calls: calls,
         text: text.to_owned(),
-        model: None,
-        usage: agentplane::model::Usage::default(),
-        stop_reason: None,
-        truncated: false,
         commentary: Some(commentary.to_owned()),
-        compacted: None,
         structured,
-        continuation: None,
-        reasoning: None,
+        ..agentplane::model::Completion::default()
     };
     f.will_answer(turn(
         "",

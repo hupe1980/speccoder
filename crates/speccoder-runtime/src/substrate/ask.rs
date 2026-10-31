@@ -75,7 +75,7 @@ pub struct AskWiring {
     /// The answer's words as they arrive.
     pub stream: Option<Arc<dyn RunStreamObserver>>,
     /// Set when the person stops the turn in flight.
-    pub halt: Arc<std::sync::atomic::AtomicBool>,
+    pub halt: agentplane::model::Stop,
 }
 
 impl Plane {
