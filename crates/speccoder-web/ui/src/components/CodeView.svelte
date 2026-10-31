@@ -98,6 +98,11 @@
   let text = $state<{ text?: string; html?: string; error?: string } | null>(null);
   // Markdown opens as its preview; the switch shows the source.
   let preview = $state(true);
+  // An Ask citation: its lines are marked, in the source, while its file is open.
+  const cited = $derived(app.codeCited?.path === open ? app.codeCited : null);
+  $effect(() => {
+    if (cited) preview = false;
+  });
   let loading = $state(false);
 
   const changesOf = latest();
@@ -243,6 +248,8 @@
     {#if changes?.branch}
       <span class="ref"><Icon name="branch" size={13} /><span class="mono">{changes.branch}</span>{#if changes.base}<span class="muted">from <span class="mono">{changes.base.slice(0, 8)}</span></span>{/if}</span>
       <span class="stat"><span class="a">+{total.add}</span><span class="d">−{total.del}</span> in {changes.files.length} {changes.files.length === 1 ? "file" : "files"}</span>
+    {:else if changes && !app.feature}
+      <span class="muted">The project at <span class="mono">HEAD</span> — pick a feature for its branch.</span>
     {:else if changes}
       <span class="muted">speccoder has not worked on this feature yet — no branch to show.</span>
     {/if}
@@ -357,7 +364,14 @@
                   <button role="tab" aria-selected={!preview} class:on={!preview} onclick={() => (preview = false)}>Source</button>
                 </div>
               {/if}
-              <span class="muted">{lines.length} lines</span>
+              {#if cited}
+                <span class="cite-pill" class:changed={cited.changed} title={cited.changed ? `Ask read lines ${cited.from}–${cited.to} as they were then; the file says something else now` : `The lines an answer in Ask cites`}>
+                  <Icon name={cited.changed ? "exclaim" : "bubble"} size={11} />
+                  {cited.changed ? "Changed since Ask read it" : `Ask read ${cited.from === cited.to ? `line ${cited.from}` : `lines ${cited.from}–${cited.to}`}`}
+                  <button aria-label="Unmark the cited lines" onclick={() => (app.codeCited = null)}><Icon name="xmark" size={9} weight={2.4} /></button>
+                </span>
+              {/if}
+              {#if !cited}<span class="muted">{lines.length} lines</span>{/if}
               <button class="ask-this" title="Add {app.codeLine ? `lines around ${app.codeLine}` : "this file"} to Ask (⌘⇧L)" onclick={() => {
                 const n = app.codeLine;
                 const [a, b] = n ? [Math.max(1, n - 20), Math.min(lines.length, n + 20)] : [1, lines.length];
@@ -388,7 +402,7 @@
                 <tbody>
                   {#each lines as l, i}
                     {@const n = i + 1}
-                    <tr data-line={n} class:sel={app.codeLine === n} class:hit={hits.includes(n)} class:cur={hits[at] === n}>
+                    <tr data-line={n} class:sel={app.codeLine === n} class:cited={!!cited && n >= cited.from && n <= cited.to} class:stale={!!cited?.changed} class:hit={hits.includes(n)} class:cur={hits[at] === n}>
                       <td class="ln"><button tabindex="-1" title="Link to line {n}" onclick={() => pickLine(n)}>{n}</button></td>
                       <td class="src"><Source line={l} lang={language(open)} /></td>
                     </tr>
@@ -430,6 +444,8 @@
   .a { color: var(--add); font-weight: 600; font-variant-numeric: tabular-nums; }
   .d { color: var(--del); font-weight: 600; font-variant-numeric: tabular-nums; margin-left: 0.3rem; }
   .split { display: grid; grid-template-columns: 19rem minmax(0, 1fr); gap: 1.25rem; align-items: start; }
+  /* Beside Ask, the tree gives the code the room. */
+  :global(.shell.asking) .split { grid-template-columns: 13rem minmax(0, 1fr); gap: 0.8rem; }
   .side { position: sticky; top: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.4rem; max-height: calc(100vh - 9rem); overflow: auto; padding-right: 0.25rem; }
   ul { list-style: none; margin: 0 0 0.6rem; padding: 0; display: grid; gap: 1px; }
   .commits button { width: 100%; text-align: left; border: 0; background: none; padding: 0.4rem 0.55rem; border-radius: 8px; cursor: pointer; display: grid; gap: 0.1rem; }
@@ -490,6 +506,14 @@
   .ln button { all: unset; cursor: pointer; display: block; text-align: right; }
   .ln button:hover { color: var(--accent-ink); text-decoration: underline; }
   tr.sel { background: color-mix(in srgb, #ffcc00 22%, transparent); }
+  tr.cited .src { background: color-mix(in srgb, #bf5af2 9%, transparent); }
+  tr.cited .ln { box-shadow: inset 2px 0 #bf5af2; color: #bf5af2; }
+  tr.cited.stale .src { background: color-mix(in srgb, var(--attention-fill) 12%, transparent); }
+  tr.cited.stale .ln { box-shadow: inset 2px 0 var(--attention-fill); color: var(--attention); }
+  .cite-pill { flex: none; white-space: nowrap; display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.1rem 0.2rem 0.1rem 0.5rem; border-radius: 999px; font-size: 0.72rem; font-weight: 600; background: color-mix(in srgb, #bf5af2 14%, transparent); color: #a646d8; }
+  .cite-pill.changed { background: color-mix(in srgb, var(--attention-fill) 16%, transparent); color: var(--attention); }
+  .cite-pill button { width: 16px; height: 16px; border: 0; border-radius: 50%; display: grid; place-items: center; background: none; color: inherit; cursor: pointer; opacity: 0.7; }
+  .cite-pill button:hover { opacity: 1; background: var(--fill-2); }
   tr.sel .ln { color: var(--text); font-weight: 600; }
   tr.hit .src { background: color-mix(in srgb, #ffcc00 14%, transparent); }
   tr.cur .src { background: color-mix(in srgb, #ff9500 30%, transparent); }

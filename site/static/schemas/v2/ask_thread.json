@@ -250,6 +250,20 @@
         "digest": {
           "description": "The digest of what it returned.",
           "type": "string"
+        },
+        "content_sha256": {
+          "description": "The digest of the lines a file read returned, to tell whether the\nfile still says that.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "subject": {
+          "description": "The task (`task_evidence`) or run (`journal_account`) it read.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [

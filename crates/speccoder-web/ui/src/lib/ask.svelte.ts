@@ -4,7 +4,8 @@
 // a proposal is performed only from its sheet.
 import { get, post, q } from "./api";
 import { app } from "./app.svelte";
-import type { AskReport, AskThread, Conversation, Proposal } from "./schema.gen";
+import type { AskReport, AskThread, Conversation, InboxItem, Proposal } from "./schema.gen";
+import type { AccountTurn } from "./types";
 
 export type ChipRef = {
   kind: string;
@@ -107,6 +108,10 @@ class AskState {
   failed = $state<{ question: string; message: string } | null>(null);
   /** The conversations list, when shown. */
   list = $state<Conversation[] | null>(null);
+  /** The three most recent conversations, for the empty panel. */
+  recent = $state<Conversation[]>([]);
+  /** A run's account a citation names, shown in place. */
+  peek = $state<{ run: string; turns: AccountTurn[] | null; error?: string } | null>(null);
   /** The proposal sheet. */
   sheet = $state<{ proposal: Proposal; turn: number } | null>(null);
   /** Focus the composer (set by ⌘L, cleared by it). */
@@ -133,6 +138,32 @@ class AskState {
     }
     if (feature) return { kind: "feature", reference: { feature }, label: feature, from_view: true };
     return null;
+  }
+
+  /** The tasks in context: the view's and the person's chips. */
+  get tasks(): { feature: unknown; task: unknown }[] {
+    return [this.viewChip, ...this.chips].filter((c): c is ChipRef => c?.kind === "task").map((c) => ({ feature: c.reference.feature, task: c.reference.task }));
+  }
+
+  /** A task in context that grew: its promotion offer, as Needs You lists it. */
+  get offer(): InboxItem | null {
+    const items = app.inbox?.data?.items ?? [];
+    return items.find((i) => i.kind === "promote" && this.tasks.some((t) => t.task === i.task && (!t.feature || t.feature === i.feature))) ?? null;
+  }
+
+  async loadRecent() {
+    try {
+      const r = await get<{ data?: { conversations: Conversation[] } }>("/api/ask/conversations");
+      this.recent = (r.data?.conversations ?? []).slice(0, 3);
+    } catch {
+      this.recent = [];
+    }
+  }
+
+  async peekAccount(run: string) {
+    this.peek = { run, turns: null };
+    const r = await get<{ turns?: AccountTurn[]; error?: string }>(`/api/account${q({ run })}`).catch((e) => ({ turns: undefined, error: String(e) }));
+    if (this.peek?.run === run) this.peek = { run, turns: r.turns ?? [], error: r.error };
   }
 
   /** Questions that fit the view; computed, never a model call. */

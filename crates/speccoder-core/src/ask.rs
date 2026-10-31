@@ -100,6 +100,13 @@ pub struct Read {
     pub end: Option<u32>,
     /// The digest of what it returned.
     pub digest: String,
+    /// The digest of the lines a file read returned, to tell whether the
+    /// file still says that.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_sha256: Option<String>,
+    /// The task (`task_evidence`) or run (`journal_account`) it read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subject: Option<String>,
 }
 
 /// A citation marker in the answer, checked against the turn's reads.
@@ -329,6 +336,8 @@ mod tests {
             start: Some(start),
             end: Some(end),
             digest: "d".to_owned(),
+            content_sha256: None,
+            subject: None,
         }
     }
 

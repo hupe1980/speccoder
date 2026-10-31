@@ -3,7 +3,7 @@
 // something not read marked as such, a proposal as a card — and the panel
 // accessible in each state.
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { flushSync, mount, unmount } from "svelte";
 import { button, press, settle, violations } from "../test/dom";
 import { blocks } from "../lib/ask-text";
@@ -19,6 +19,9 @@ const host = vi.hoisted(() => ({
     codeMode: "changes",
     codeFile: null as string | null,
     codeLine: null as number | null,
+    codeCited: null as unknown,
+    inbox: null as unknown,
+    perform: vi.fn(),
     selectTask: vi.fn(),
     toast: vi.fn(),
   },
@@ -36,7 +39,7 @@ const report = {
   turn: 1,
   question: "What is left in 001-graph?",
   chips: [],
-  reads: [{ id: "r1", tool: "read_file", target: "notes.txt", path: "notes.txt", start: 1, end: 3, digest: "d" }],
+  reads: [{ id: "r1", tool: "read_file", target: "notes.txt", path: "notes.txt", start: 1, end: 3, digest: "d", content_sha256: "abc" }],
   answer: "Parsing is left [r1:1-2]; see [r9].",
   citations: [
     { marker: "[r1:1-2]", id: "r1", lines: [1, 2], state: "read", path: "notes.txt", label: "notes.txt 1–2" },
@@ -48,12 +51,17 @@ const report = {
 };
 
 let shown: ReturnType<typeof mount> | null = null;
+beforeEach(() => host.get.mockResolvedValue({}));
 afterEach(() => {
   if (shown) unmount(shown);
   shown = null;
   document.body.innerHTML = "";
   ask.fresh();
+  ask.recent = [];
   host.post.mockReset();
+  host.get.mockReset();
+  host.app.selected = null;
+  host.app.inbox = null;
 });
 
 describe("AskPanel", () => {
@@ -85,6 +93,10 @@ describe("AskPanel", () => {
     // A source opens where it lives.
     cite!.click();
     expect([host.app.view, host.app.codeFile, host.app.codeLine]).toEqual(["code", "notes.txt", 1]);
+    // Its lines are marked, and whether the file still says that is asked
+    // of the same read, over the whole range it returned.
+    expect(host.app.codeCited).toEqual({ path: "notes.txt", from: 1, to: 2, changed: null });
+    expect(host.get).toHaveBeenCalledWith("/api/ask/changed?path=notes.txt&start=1&end=3&sha=abc");
     expect(await violations()).toEqual([]);
   });
 
@@ -152,5 +164,43 @@ describe("answer text", () => {
     expect(b.map((x) => x.kind)).toEqual(["p", "li", "pre"]);
     expect(b[0]).toMatchObject({ parts: [{ t: "text", text: "A " }, { t: "bold", text: "b" }, { t: "text", text: " " }, { t: "code", text: "c" }, { t: "text", text: " " }, { t: "cite", n: 1 }] });
     expect(b[2]).toEqual({ kind: "pre", text: "<x>" });
+  });
+
+  it("picks up where you left off: the three most recent conversations", async () => {
+    const conv = (n: number) => ({ id: `c-${n}`, title: `Question ${n}`, at: 1_790_000_000 + n, turns: n, open: true });
+    host.get.mockImplementation(async (path: string) => {
+      if (path.startsWith("/api/ask/conversations")) return { data: { conversations: [conv(4), conv(3), conv(2), conv(1)] } };
+      if (path.startsWith("/api/ask/conversation")) return { data: { conversation: { id: "c-3" }, turns: [{ ...report, conversation: "c-3", question: "Question 3" }] } };
+      throw new Error(path);
+    });
+    ask.toggle(true);
+    shown = mount(AskPanel, { target: document.body });
+    await settle();
+    const rows = [...document.querySelectorAll(".recent .conv")].map((b) => b.querySelector(".ct")?.textContent);
+    expect(rows).toEqual(["Question 4", "Question 3", "Question 2"]);
+    expect(await violations()).toEqual([]);
+    document.querySelectorAll<HTMLButtonElement>(".recent .conv")[1]!.click();
+    await settle();
+    expect(ask.conversation).toBe("c-3");
+  });
+
+  it("offers promotion for a task in context that grew; Start a spec carries this conversation", async () => {
+    const start = { label: "Start a spec from T001", command: "speccoder spec promote 001-graph/T001", run: { kind: "plan_through", from: { kind: "create", description: "Parse the graph", source: { kind: "promotion", task: "001-graph/T001", conversations: ["c-0"] } }, through: "tasks" } };
+    const later = { label: "Not now", command: "speccoder spec promote 001-graph/T001 --decline", run: { kind: "decline_promotion", task: "001-graph/T001" } };
+    host.app.selected = "T001";
+    host.app.inbox = { data: { items: [{ kind: "promote", group: "ready_to_review", feature: "001-graph", task: "T001", title: "T001 grew past a quick change", detail: "11 files changed (more than 8)", since: null, actions: [start, later] }] } };
+    ask.conversation = "c-1";
+    ask.toggle(true);
+    shown = mount(AskPanel, { target: document.body });
+    flushSync();
+    expect(document.querySelector(".offer")?.textContent).toContain("11 files changed (more than 8)");
+    expect(await violations()).toEqual([]);
+    button(/^Start a spec$/).click();
+    expect(host.app.perform).toHaveBeenLastCalledWith(expect.objectContaining({
+      run: { ...start.run, from: { ...start.run.from, source: { ...start.run.from.source, conversations: ["c-1", "c-0"] } } },
+      command: "speccoder spec promote 001-graph/T001 --conversation c-1 --conversation c-0",
+    }));
+    button(/^Not now$/).click();
+    expect(host.app.perform).toHaveBeenLastCalledWith(later);
   });
 });

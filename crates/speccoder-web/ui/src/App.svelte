@@ -304,7 +304,7 @@
       <Welcome />
     {:else}
       {#if app.project?.sample}<SamplePlayback sample={app.project.sample} />{/if}
-      {#if app.view === "setup" || needsSetup}<Setup />{:else if app.view === "inbox"}<Inbox />{:else if app.view === "overview"}<Overview />{:else if app.view === "settings"}<Settings />{:else}<Hero compact={app.view !== "board"} />{/if}
+      {#if app.view === "setup" || needsSetup}<Setup />{:else if app.view === "inbox"}<Inbox />{:else if app.view === "overview"}<Overview />{:else if app.view === "settings"}<Settings />{:else if app.view === "code" && !report}<CodeView />{:else}<Hero compact={app.view !== "board"} />{/if}
       {#if report && !needsSetup && app.view !== "setup" && app.view !== "overview" && app.view !== "inbox" && app.view !== "settings"}
         {#if app.view === "board"}<Board />{/if}
         {#if app.view === "code"}<CodeView />{/if}

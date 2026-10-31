@@ -17,6 +17,7 @@
   import Icon from "./Icon.svelte";
   import Tour from "./Tour.svelte";
   import StopCard from "./StopCard.svelte";
+  import PromoteOffer from "./PromoteOffer.svelte";
 
   let tab = $state<"evidence" | "tour" | "diff">("evidence");
   let data = $state<{ task: Task; banner: { mark: string; words: string }; rows: Row[] } | null>(null);
@@ -68,6 +69,8 @@
 
   // The selected task's own actions, by their subject: "Accept", "Skip"…
   const actions = $derived(app.selected ? ofTask(app.actions, app.selected) : []);
+  // A quick change or bug fix that grew: its offer, as Needs You lists it.
+  const grew = $derived((app.inbox?.data?.items ?? []).find((i) => i.kind === "promote" && i.task === app.selected && i.feature === app.feature) ?? null);
   const verdictTitle = $derived(data ? word(data.banner.mark).replace(/^./, (c) => c.toUpperCase()) : "");
   // The runtime's banner words, unless they only repeat the verdict.
   const verdictWords = $derived.by(() => {
@@ -121,6 +124,7 @@
       <span><strong>{verdictTitle}</strong>{#if verdictWords}<span class="words">{verdictWords}</span>{/if}</span>
     </div>
     {#if drift}<Drift {drift} />{/if}
+    {#if grew}<PromoteOffer item={grew} />{/if}
     {#if stopOf(data.task) && app.selected}
       <!-- A step only the person can take: the three ways on, in place. -->
       <StopCard task={app.selected} claim={stopOf(data.task)?.claim ?? null} actions={stopOffers(app.selected, app.report?.data?.tasks ?? [], app.report?.data?.uncommitted?.length ? "commit the planning files first" : app.approvals[0] ? `${app.approvals[0].task} waits for your decision and holds the worktree: decide it first` : null)} />

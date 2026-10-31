@@ -223,6 +223,16 @@ pub fn read_of(id: &str, tool: &str, arguments: &Value, output: &Value) -> Read 
         },
         _ => crate::progress::target(tool, arguments),
     };
+    let content_sha256 = (tool == "read_file")
+        .then(|| output["content"].as_str())
+        .flatten()
+        .map(|c| crate::integrity::sha256_hex(c.as_bytes()));
+    let subject = match tool {
+        "task_evidence" => Some(a("task")),
+        "journal_account" => Some(a("run")),
+        _ => None,
+    }
+    .filter(|s| !s.is_empty());
     Read {
         id: id.to_owned(),
         tool: tool.to_owned(),
@@ -231,7 +241,31 @@ pub fn read_of(id: &str, tool: &str, arguments: &Value, output: &Value) -> Read 
         start,
         end,
         digest,
+        content_sha256,
+        subject,
     }
+}
+
+/// Whether `path` lines `start`–`end` no longer say what a read returned
+/// (`content_sha256`): read again with the same tool, so masking and the
+/// read cap are the same. `None` when the file cannot be read now.
+#[must_use]
+pub fn changed_since(
+    root: &Path,
+    path: &str,
+    start: Option<u32>,
+    end: Option<u32>,
+    content_sha256: &str,
+) -> Option<bool> {
+    let tools =
+        crate::tools::WorkspaceTools::new(root, crate::tools::policy::Policy::new(&[], &[]))
+            .ok()?;
+    let args = json!({ "path": path, "start_line": start, "end_line": end });
+    let out = crate::pipeline::tokio_runtime()
+        .ok()?
+        .block_on(tools.run("read_file", &args));
+    let now = out["content"].as_str()?;
+    Some(crate::integrity::sha256_hex(now.as_bytes()) != content_sha256)
 }
 
 /// A person's message for a conversation.

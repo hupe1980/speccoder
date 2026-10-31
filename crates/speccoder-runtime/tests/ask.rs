@@ -471,3 +471,44 @@ fn each_kind_of_proposal_is_checked_now() {
     assert!(now.blocked.is_none(), "{now:?}");
     assert_eq!(now.command, "speccoder do \"trim the login name\"");
 }
+
+/// A cited file range says whether the file still says what was read:
+/// read again with the same tool, so masking and the cap match.
+#[test]
+fn a_cited_range_knows_when_its_file_changed() {
+    let dir = tempfile::tempdir().unwrap();
+    let r = dir.path();
+    fs::write(r.join("notes.txt"), "one\ntwo\nthree\nfour\n").unwrap();
+    let tools = speccoder_runtime::tools::WorkspaceTools::new(
+        r,
+        speccoder_runtime::tools::policy::Policy::new(&[], &[]),
+    )
+    .unwrap();
+    let args = serde_json::json!({ "path": "notes.txt", "start_line": 2, "end_line": 3 });
+    let out = tokio::runtime::Builder::new_current_thread()
+        .build()
+        .unwrap()
+        .block_on(tools.run("read_file", &args));
+    let read = ask::read_of("r1", "read_file", &args, &out);
+    let sha = read
+        .content_sha256
+        .clone()
+        .expect("a file read keeps its lines' digest");
+    let changed = || ask::changed_since(r, "notes.txt", read.start, read.end, &sha);
+    assert_eq!(changed(), Some(false));
+    // Outside the range: still what was read.
+    fs::write(r.join("notes.txt"), "ONE\ntwo\nthree\nFOUR\n").unwrap();
+    assert_eq!(changed(), Some(false));
+    fs::write(r.join("notes.txt"), "one\n2\nthree\nfour\n").unwrap();
+    assert_eq!(changed(), Some(true));
+    fs::remove_file(r.join("notes.txt")).unwrap();
+    assert_eq!(changed(), None);
+    // Evidence and accounts name what they read.
+    let e = ask::read_of(
+        "r2",
+        "task_evidence",
+        &serde_json::json!({ "task": "T004" }),
+        &serde_json::json!({}),
+    );
+    assert_eq!(e.subject.as_deref(), Some("T004"));
+}

@@ -581,6 +581,26 @@ async fn ask_conversation(State(s): State<Shared>, Query(q): Query<AskQuery>) ->
     envelope(&s, &r)
 }
 
+#[derive(Debug, Deserialize)]
+struct ChangedQuery {
+    path: String,
+    start: Option<u32>,
+    end: Option<u32>,
+    sha: String,
+}
+
+/// Whether the lines a citation names still say what Ask read
+/// (`changed`: null when the file cannot be read now).
+async fn ask_changed(State(s): State<Shared>, Query(q): Query<ChangedQuery>) -> Json<Value> {
+    let root = s.root.get();
+    Json(json!({
+        "changed": off(move || {
+            speccoder_runtime::service::ask::changed_since(&root, &q.path, q.start, q.end, &q.sha)
+        })
+        .await
+    }))
+}
+
 /// A chip resolved now: its label, digest and words; records nothing.
 async fn ask_chip(
     State(s): State<Shared>,
@@ -1257,6 +1277,7 @@ pub fn router(s: Shared) -> Router {
         .route("/api/ask/conversations", get(ask_conversations))
         .route("/api/ask/conversation", get(ask_conversation))
         .route("/api/ask/stop", post(ask_stop))
+        .route("/api/ask/changed", get(ask_changed))
         .route("/api/ask/chip", post(ask_chip))
         .route("/api/ask/proposal", post(ask_proposal))
         .route("/api/shape", post(shape))

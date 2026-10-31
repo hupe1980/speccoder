@@ -141,6 +141,9 @@ class AppState {
   codeMode = $state<"changes" | "files">("changes");
   codeFile = $state<string | null>(null);
   codeLine = $state<number | null>(null);
+  /** The lines an Ask citation names in the open file, and whether the
+   * file still says what was read (`changed`: null while unknown). */
+  codeCited = $state<{ path: string; from: number; to: number; changed: boolean | null } | null>(null);
   input = $state<{ action: Action | Offer } | null>(null);
   palette = $state(false);
   view = $state<"inbox" | "overview" | "board" | "code" | "documents" | "report" | "settings" | "setup">("inbox");

@@ -3769,6 +3769,13 @@ export interface Read {
   end?: number | null;
   /** The digest of what it returned. */
   digest: string;
+  /**
+   * The digest of the lines a file read returned, to tell whether the
+   * file still says that.
+   */
+  content_sha256?: string | null;
+  /** The task (`task_evidence`) or run (`journal_account`) it read. */
+  subject?: string | null;
 }
 
 /**

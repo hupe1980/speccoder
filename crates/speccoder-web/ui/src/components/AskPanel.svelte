@@ -5,10 +5,14 @@
   // changes the project.
   import { tick } from "svelte";
   import { app } from "../lib/app.svelte";
+  import { get, q } from "../lib/api";
+  import { offer } from "../lib/actions";
   import { ask, stepWords, type ChipRef } from "../lib/ask.svelte";
   import { blocks, type Part } from "../lib/ask-text";
   import type { AskReport, Citation, Proposal } from "../lib/schema.gen";
+  import Account from "./Account.svelte";
   import Icon from "./Icon.svelte";
+  import PromoteOffer from "./PromoteOffer.svelte";
 
   let text = $state("");
   let box = $state<HTMLTextAreaElement>();
@@ -29,6 +33,27 @@
     void ask.focus;
     void tick().then(() => box?.focus());
   });
+  // An empty panel offers the conversations to go back to.
+  $effect(() => {
+    if (!ask.turns.length && !ask.list) void ask.loadRecent();
+  });
+  // The list takes ↑↓; the first conversation has focus when it opens.
+  let listEl = $state<HTMLElement>();
+  $effect(() => {
+    if (ask.list?.length) void tick().then(() => listEl?.querySelector<HTMLElement>(".conv")?.focus());
+  });
+  function listKey(e: KeyboardEvent) {
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    const all = [...(listEl?.querySelectorAll<HTMLElement>(".conv") ?? [])];
+    const i = all.indexOf(document.activeElement as HTMLElement);
+    const next = all[Math.min(all.length - 1, Math.max(0, i + (e.key === "ArrowDown" ? 1 : -1)))];
+    if (next) {
+      e.preventDefault();
+      next.focus();
+    }
+  }
+  const when = (at: number) => new Date(at * 1000).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+
   // The newest turn in view; one announcement per answer, never per word.
   $effect(() => {
     void ask.turns.length;
@@ -112,18 +137,33 @@
   }
 
   /** A source opens where it lives: a file at its lines in Code, a chip's task in the inspector. */
+  // A source opens where it lives: a file at its lines (marked, and said
+  // when the file no longer says what was read), evidence in the task's
+  // inspector, a run's account in place.
   function openSource(c: Citation, turn: AskReport) {
     if (c.state !== "read") return;
     const read = turn.reads.find((r) => r.id === c.id);
     const chip = turn.chips.find((x) => x.id === c.id);
     const path = c.path ?? read?.path ?? null;
     if (path) {
+      const from = c.lines?.[0] ?? read?.start ?? 1;
+      const to = c.lines?.[1] ?? read?.end ?? from;
       app.codeMode = "files";
       app.codeFile = path;
-      app.codeLine = c.lines?.[0] ?? read?.start ?? null;
+      app.codeLine = from;
+      app.codeCited = { path, from, to, changed: null };
       app.view = "code";
+      if (read?.content_sha256 && read.path) {
+        void get<{ changed: boolean | null }>(`/api/ask/changed${q({ path: read.path, start: read.start?.toString(), end: read.end?.toString(), sha: read.content_sha256 })}`)
+          .then((r) => {
+            if (app.codeCited?.path === path) app.codeCited = { ...app.codeCited, changed: r.changed };
+          })
+          .catch(() => {});
+      }
       return;
     }
+    if (read?.tool === "task_evidence" && read.subject) return void app.selectTask(read.subject);
+    if (read?.tool === "journal_account" && read.subject) return void ask.peekAccount(read.subject);
     const task = (chip?.reference as { task?: string } | undefined)?.task;
     if (task) void app.selectTask(task);
   }
@@ -134,11 +174,28 @@
 
   function review(p: Proposal, turn: number) {
     if (p.kind === "start_spec") {
+      // A quick change or bug in context that grew: the same promotion path
+      // as Needs You, carrying this conversation too (FR-025).
+      const o = ask.offer;
+      if (o) return void promote(o);
       // Every way to start a spec lands in the one New feature sheet (D-131).
       app.newFeature = { text: p.fields.description ?? p.title, through: "tasks" };
       return;
     }
     ask.sheet = { proposal: p, turn };
+  }
+
+  /** Promote a task in context: the New feature sheet, with this
+   * conversation among those it carries. */
+  function promote(o: NonNullable<typeof ask.offer>) {
+    const a = o.actions[0];
+    const r = a?.run;
+    if (!a || !r || r.kind !== "plan_through" || r.from.kind !== "create" || r.from.source.kind !== "promotion") return void (a && app.perform(a));
+    const carried = r.from.source.conversations ?? [];
+    const conversations = ask.conversation && !carried.includes(ask.conversation) ? [ask.conversation, ...carried] : carried;
+    const task = r.from.source.task;
+    const command = `speccoder spec promote ${task}${conversations.map((c) => ` --conversation ${c}`).join("")}`;
+    void app.perform(offer({ ...r, from: { ...r.from, source: { ...r.from.source, conversations } } }, { group: "review", label: a.label, why: o.detail, command }));
   }
 
   const sourcesOf = (t: AskReport) => t.citations.filter((c) => c.state === "read");
@@ -187,12 +244,13 @@
 
   <div class="log" role="log" bind:this={log}>
     {#if ask.list}
-      <div class="list">
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div class="list" bind:this={listEl} onkeydown={listKey}>
         <h3>Conversations</h3>
         {#each ask.list as c (c.id)}
           <button class="conv" onclick={() => void ask.resume(c.id)}>
             <span class="ct">{c.title}</span>
-            <span class="cm">{new Date(c.at * 1000).toLocaleDateString(undefined, { month: "short", day: "numeric" })} · {c.turns} {c.turns === 1 ? "turn" : "turns"}</span>
+            <span class="cm">{when(c.at)} · {c.turns} {c.turns === 1 ? "turn" : "turns"}</span>
           </button>
         {:else}
           <p class="quiet">No conversations yet. What you ask is kept here, for this project.</p>
@@ -207,6 +265,18 @@
           <div class="sugg">
             {#each ask.suggestions as s (s)}
               <button onclick={() => void send(s)}>{s}</button>
+            {/each}
+          </div>
+        {/if}
+        {#if ask.recent.length}
+          <div class="recent" aria-label="Pick up where you left off">
+            <span class="rh">Pick up where you left off</span>
+            {#each ask.recent as c (c.id)}
+              <button class="conv" onclick={() => void ask.resume(c.id)}>
+                <Icon name="bubble" size={12} />
+                <span class="ct">{c.title}</span>
+                <span class="cm">{when(c.at)}</span>
+              </button>
             {/each}
           </div>
         {/if}
@@ -293,7 +363,23 @@
   </div>
   <div class="sr" aria-live="polite">{announce}</div>
 
+  {#if ask.peek}
+    <div class="peek" role="dialog" aria-label="Account of run {ask.peek.run}">
+      <div class="ph">
+        <div><strong>The run's account</strong><span>the implementing model's words — a claim, never evidence</span></div>
+        <button class="hbtn" aria-label="Close the account" onclick={() => (ask.peek = null)}><Icon name="xmark" size={12} weight={2.2} /></button>
+      </div>
+      <div class="pb">
+        {#if !ask.peek.turns}<span class="spinner"></span>{:else if ask.peek.error}<p class="quiet">{ask.peek.error}</p>{:else if !ask.peek.turns.length}<p class="quiet">This run kept no words of its own.</p>{:else}<Account turns={ask.peek.turns} />{/if}
+      </div>
+    </div>
+  {/if}
+
   <form class="composer" onsubmit={(e) => { e.preventDefault(); void send(); }}>
+    {#if ask.offer}
+      {@const o = ask.offer}
+      <PromoteOffer item={o} compact onstart={() => promote(o)} />
+    {/if}
     {#if ask.viewChip || ask.chips.length}
       <div class="chips" aria-label="Context">
         {#if ask.viewChip}
@@ -435,6 +521,17 @@
   @keyframes spin { to { transform: rotate(360deg); } }
   @media (prefers-reduced-motion: reduce) { .ring { animation: none; } }
   .q.queued { opacity: 0.6; }
+  .recent { display: grid; gap: 0.15rem; width: 100%; margin-top: 0.9rem; text-align: left; }
+  .rh { font-size: 0.68rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); padding: 0 0.5rem 0.2rem; }
+  .recent .conv { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 0.5rem; color: var(--muted); }
+  .recent .conv .ct { color: var(--text); }
+  @keyframes rise { from { transform: translateY(6px); opacity: 0; } }
+  .peek { position: absolute; inset: 56px 0 0; z-index: 2; display: grid; grid-template-rows: auto 1fr; background: var(--glass-strong); backdrop-filter: var(--blur); animation: rise 260ms var(--spring); }
+  .ph { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.5rem; padding: 0.7rem 0.85rem; border-bottom: 0.5px solid var(--separator); }
+  .ph div { display: grid; }
+  .ph strong { font-size: 0.86rem; }
+  .ph span { font-size: 0.72rem; color: var(--muted); }
+  .pb { overflow: auto; padding: 0.75rem 0.85rem; }
   .halted { margin: 0; display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.74rem; color: var(--muted); }
   .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
   @media (prefers-color-scheme: dark) { .ck { color: #da8fff; } }
