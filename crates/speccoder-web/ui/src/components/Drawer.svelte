@@ -206,7 +206,7 @@
   .aside-card .row { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.15rem; }
   .danger { color: var(--danger); }
   .inspector {
-    position: fixed; top: 64px; right: 10px; bottom: 10px; width: min(500px, calc(100vw - 20px)); z-index: 12;
+    position: fixed; top: 64px; right: 10px; bottom: var(--panel-bottom); width: min(500px, calc(100vw - 20px)); z-index: 12;
     border-radius: var(--radius-lg); background: var(--glass-strong); box-shadow: var(--shadow-lg), var(--glass-edge);
     overflow: auto; padding: 1.1rem 1.15rem 1.25rem; display: grid; align-content: start; gap: 1rem;
     animation: slide 380ms var(--spring);

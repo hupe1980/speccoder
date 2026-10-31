@@ -1696,9 +1696,15 @@ fn inbox_item(out: &mut Vec<String>, i: &speccoder_core::InboxItem, look: &crate
             "            {}",
             look.paint(Token::Accent, &format!("→ {}", first.command))
         ));
-        let others: Vec<&str> = rest
+        // Each by its whole label, lowered: "or: not now".
+        let others: Vec<String> = rest
             .iter()
-            .map(|a| a.label.split(' ').next().unwrap_or_default())
+            .map(|a| {
+                let mut c = a.label.chars();
+                c.next().map_or_else(String::new, |f| {
+                    f.to_lowercase().chain(c).collect::<String>()
+                })
+            })
             .collect();
         if !others.is_empty() {
             out.push(format!("            or: {}", others.join(", ")));

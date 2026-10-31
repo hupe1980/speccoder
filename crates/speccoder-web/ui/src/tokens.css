@@ -188,6 +188,9 @@ kbd {
   background: var(--fill); color: var(--muted); font: 600 0.72em/1 var(--font); letter-spacing: 0;
 }
 :focus { outline: none; }
+/* Floating panels end above the status bar, when it shows. */
+:root { --panel-bottom: 10px; }
+:root:has(.shell:not(.nostatus)) { --panel-bottom: 36px; }
 :focus-visible { outline: none; box-shadow: 0 0 0 3.5px var(--focus); border-radius: var(--radius-sm); }
 ::selection { background: var(--accent-soft); }
 
@@ -251,7 +254,7 @@ kbd {
    share the sheets' look: glass over a scrim, a header badge, fields,
    the primary button last. Every state says itself with a glyph and a word. */
 .d-scrim { position: fixed; inset: 0; background: var(--scrim); display: grid; place-items: center; z-index: 22; backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); padding: 1rem; }
-.d-sheet { width: min(680px, 100%); max-height: calc(100vh - 2rem); overflow: auto; border-radius: var(--radius-xl); background: var(--glass-strong); box-shadow: var(--shadow-lg), var(--glass-edge); padding: 1.4rem 1.5rem 1.2rem; display: grid; gap: 0.95rem; animation: d-sheet 360ms var(--spring); }
+.d-sheet { width: min(680px, 100%); max-height: calc(100vh - 2rem); overflow: auto; border-radius: var(--radius-xl); background: var(--glass-strong); backdrop-filter: var(--blur); box-shadow: var(--shadow-lg), var(--glass-edge); padding: 1.4rem 1.5rem 1.2rem; display: grid; gap: 0.95rem; animation: d-sheet 360ms var(--spring); }
 .d-sheet.wide { width: min(760px, 100%); }
 @keyframes d-sheet { from { transform: scale(0.96) translateY(8px); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .d-sheet { animation: none; } }

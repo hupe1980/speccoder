@@ -443,6 +443,9 @@ struct Words {
     turn: u32,
     sink: Option<Arc<dyn Progress>>,
     text: Mutex<String>,
+    /// Set by Stop: the words end where the person saw them end, though the
+    /// model call they came from runs to its end.
+    halt: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl Words {
@@ -457,6 +460,9 @@ impl agentplane::runtime::RunStreamObserver for Words {
         _run: agentplane::core::RunId,
         event: agentplane::core::Tainted<agentplane::model::ModelStreamEvent>,
     ) {
+        if self.halt.load(std::sync::atomic::Ordering::SeqCst) {
+            return;
+        }
         if let agentplane::model::ModelStreamEvent::TextDelta(delta) = event.peek() {
             if let Ok(mut t) = self.text.lock() {
                 t.push_str(delta);
@@ -590,13 +596,14 @@ pub fn turn_with(
             Ok(t) => Arc::new(t),
             Err(e) => return refuse(CommandStatus::Error, "ERROR", &e.to_string()),
         };
+    let flag = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let words = Arc::new(Words {
         conversation: id.clone(),
         turn: n,
         sink: sink.clone(),
         text: Mutex::new(String::new()),
+        halt: Arc::clone(&flag),
     });
-    let flag = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let wiring = substrate::ask::AskWiring {
         halt: Arc::clone(&flag),
         workspace,
@@ -733,9 +740,9 @@ pub fn turn_with(
         }
         Some("stopped") => {
             report.end = "stopped".to_owned();
-            report.answer = output["text"]
-                .as_str()
-                .map_or_else(|| words.text().trim().to_owned(), |t| t.trim().to_owned());
+            // What the person saw when they stopped it, not what the model
+            // went on writing.
+            report.answer = words.text().trim().to_owned();
             report.reason = Some("stopped by you — ask again to go on".to_owned());
         }
         Some("budget") => {

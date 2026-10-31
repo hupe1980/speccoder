@@ -75,7 +75,9 @@
     if (t.trim().length < 8) return void (matches = []);
     try {
       const r = await get<Reply<SimilarReport>>(`/api/similar${q({ text: t })}`);
-      matches = r.data?.matches ?? [];
+      // A promotion is its source's requirement on purpose: never "close" to it.
+      const from = promoted?.task.split("/")[0];
+      matches = (r.data?.matches ?? []).filter((m) => m.unit !== from);
       limited = !!r.data?.limited;
     } catch {
       matches = [];
@@ -96,7 +98,7 @@
   });
   const costLine = $derived.by(() => {
     const c = cost?.cost;
-    if (!c) return `cost: unknown until it runs${cost?.model ? ` — ${cost.model}` : ""}`;
+    if (!c) return `unknown until it runs${cost?.model ? ` — ${cost.model}` : ""}`;
     const tokens = c.tokens >= 1000 ? `${Math.round(c.tokens / 1000)}k tokens` : `${c.tokens} tokens`;
     const calls = c.calls != null ? `about ${plural(c.calls, "model call")} · ` : "about ";
     return `${calls}${tokens}${c.usd != null ? ` · ~$${c.usd.toFixed(2)}` : ""} (from your last ${plural(c.runs, "run")} of these skills)`;

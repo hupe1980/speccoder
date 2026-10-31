@@ -83,7 +83,7 @@ describe("NewFeature", () => {
     expect(text).toContain("Spec Kit specify → (your review) → plan → tasks");
     expect(text).toContain("specs/004-…/");
     expect(text).toContain("planning files are left for you to commit");
-    expect(text).toContain("cost: unknown until it runs — gpt-5.4-mini");
+    expect(text).toContain("unknown until it runs — gpt-5.4-mini");
     expect(text).toContain('speccoder spec specify "Users can export a report as CSV" --through tasks');
     const d = document.querySelector('[role="dialog"]')!;
     expect(d.getAttribute("aria-modal")).toBe("true");
@@ -209,7 +209,8 @@ describe("NewFeature", () => {
   it("promotes with the requirement verbatim and the conversations the person keeps", async () => {
     host.get.mockImplementation(async (path: string) => {
       if (path.startsWith("/api/ask/conversations")) return { status: "ok", data: { conversations: [{ id: "c-1", title: "Why does sign-in log twice?", turns: 3 }] } };
-      if (path.startsWith("/api/similar")) return { status: "ok", data: { query: "", compared: 0, limited: false, matches: [] } };
+      // Its own source is close by construction: never offered instead.
+      if (path.startsWith("/api/similar")) return { status: "ok", data: { query: "", compared: 2, limited: false, matches: [{ unit: "002-quick-changes", requirement: "FR-001", text: "Log every sign-in", level: "very_close", shared: ["log", "sign"] }] } };
       if (path.startsWith("/api/skill-cost")) return { cost: null, model: null };
       throw new Error(path);
     });
@@ -218,6 +219,7 @@ describe("NewFeature", () => {
     await settle(12);
     expect(field().value).toBe("Log every sign-in");
     expect(document.body.textContent).toContain("Promoted from 002-quick-changes/T001");
+    expect(document.body.textContent).not.toContain("Very close");
     expect(document.querySelector(".carry")?.textContent?.replace(/\s+/g, " ").trim()).toBe("Why does sign-in log twice? · 3 turns");
     expect(document.body.textContent).toContain("speccoder spec promote 002-quick-changes/T001 --conversation c-1");
     expect(await violations()).toEqual([]);

@@ -44,7 +44,14 @@
   });
 
   async function send(q = text) {
-    if (!q.trim() || ask.pending) return;
+    if (!q.trim()) return;
+    if (ask.pending?.stopping) {
+      // Stopped, its last model call still ending: the question waits for it.
+      ask.queued = q.trim();
+      text = "";
+      return;
+    }
+    if (ask.pending) return;
     text = "";
     await ask.send(q);
   }
@@ -53,7 +60,7 @@
     if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
       e.preventDefault();
       // While a turn is answered, Enter keeps the draft for the next one.
-      if (!ask.pending) void send();
+      if (!ask.pending || ask.pending.stopping) void send();
     } else if (e.key === "ArrowUp" && !text) {
       const last = ask.turns.at(-1)?.question ?? ask.failed?.question;
       if (last) {
@@ -141,12 +148,12 @@
 
 {#snippet line(parts: Part[], turn: AskReport | null)}
   {#each parts as p, i (i)}
-    {#if p.t === "text"}{p.text}{:else if p.t === "code"}<code>{p.text}</code>{:else if p.t === "bold"}<strong>{p.text}</strong>{:else if p.n !== null && turn}<button class="cite" title={p.citation.label} aria-label="Source {p.n}: {p.citation.label}" onclick={() => openSource(p.citation, turn)}>{p.n}</button>{:else}<span class="cite unread" title="Not among what was read this turn" aria-label="A citation to something not read this turn">?</span>{/if}
+    {#if p.t === "text"}{p.text}{:else if p.t === "code"}<code>{p.text}</code>{:else if p.t === "bold"}<strong>{p.text}</strong>{:else if p.t === "mark"}<span class="cite live" aria-hidden="true"></span>{:else if p.n !== null && turn}<button class="cite" title={p.citation.label} aria-label="Source {p.n}: {p.citation.label}" onclick={() => openSource(p.citation, turn)}>{p.n}</button>{:else}<span class="cite unread" title="Not among what was read this turn" aria-label="A citation to something not read this turn">?</span>{/if}
   {/each}
 {/snippet}
 
-{#snippet words(text: string, turn: AskReport | null)}
-  {#each blocks(text, turn?.citations ?? []) as b, i (i)}
+{#snippet words(text: string, turn: AskReport | null, live = false)}
+  {#each blocks(text, turn?.citations ?? [], live) as b, i (i)}
     {#if b.kind === "pre"}<pre>{b.text}</pre>{:else if b.kind === "h"}<h4>{@render line(b.parts, turn)}</h4>{:else if b.kind === "li" || b.kind === "ol"}<div class="li" class:ol={b.kind === "ol"}>{@render line(b.parts, turn)}</div>{:else}<p>{@render line(b.parts, turn)}</p>{/if}
   {/each}
 {/snippet}
@@ -212,7 +219,7 @@
         <article class="a" aria-label="Answer {t.turn}">
           {#if t.reads.length}
             <button class="steps-t" aria-expanded={!!openSteps[t.turn]} onclick={() => (openSteps[t.turn] = !openSteps[t.turn])}>
-              <Icon name="chevron" size={11} /> Read {t.reads.length} {t.reads.length === 1 ? "thing" : "things"}
+              <Icon name="chevron" size={11} /> {t.reads.length === 1 ? stepWords({ tool: t.reads[0]!.tool, target: t.reads[0]!.target, refused: false }) : `Read ${t.reads.length} sources`}
             </button>
             {#if openSteps[t.turn]}
               <ul class="steps">{#each t.reads as r (r.id)}<li><span class="rid">{r.id}</span> {stepWords({ tool: r.tool, target: r.target, refused: false })}</li>{/each}</ul>
@@ -229,7 +236,7 @@
                   <button class="src" onclick={() => openSource(c, t)} title="Open {c.label}"><span class="n">{i + 1}</span><span class="sl">{c.label}</span></button>
                 {/each}
               </div>
-            {:else}
+            {:else if t.end !== "stopped"}
               <p class="nosrc">No sources — the model's words only.</p>
             {/if}
             {#if unread(t).length}
@@ -266,10 +273,12 @@
         <article class="a live" aria-busy="true">
           <ul class="steps live">
             {#each ask.pending.steps as s, i (i)}<li class:refused={s.refused}><Icon name={s.refused ? "xmark" : "check"} size={11} /> {stepWords(s)}</li>{/each}
-            {#if ask.pending.stopping}<li class="thinking">Stopping after this step…</li>{:else if !ask.pending.words}<li class="thinking"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span> {ask.pending.steps.length ? "Reading" : "Thinking"}</li>{/if}
+            {#if ask.pending.stopping}{:else if !ask.pending.words}<li class="thinking"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span> {ask.pending.steps.length ? "Reading" : "Thinking"}</li>{/if}
           </ul>
-          {#if ask.pending.words}<div class="said">{@render words(ask.pending.words, null)}</div>{/if}
+          {#if ask.pending.words}<div class="said">{@render words(ask.pending.words, null, !ask.pending.stopping)}</div>{/if}
+          {#if ask.pending.stopping}<p class="halted"><Icon name="stop" size={11} /> Stopped{ask.pending.words ? " — the words so far" : ""}</p>{/if}
         </article>
+        {#if ask.queued}<div class="q queued" title="Sent as soon as the stopped turn's last model call ends">{ask.queued}</div>{/if}
       {/if}
 
       {#if ask.failed}
@@ -307,21 +316,21 @@
         aria-label="Your question"
         onkeydown={keydown}
       ></textarea>
-      {#if ask.pending}
-        <button class="send stop" type="button" aria-label="Stop" title="Stop (Esc)" disabled={!!ask.pending.stopping} onclick={() => void ask.stop()}>
+      {#if ask.pending && !ask.pending.stopping}
+        <button class="send stop" type="button" aria-label="Stop" title="Stop (Esc)" onclick={() => void ask.stop()}>
           <span class="ring" aria-hidden="true"></span><span class="sq" aria-hidden="true"></span>
         </button>
       {:else}
-        <button class="send" type="submit" aria-label="Send" disabled={!text.trim()}><Icon name="arrowup" size={15} weight={2.4} /></button>
+        <button class="send" type="submit" aria-label="Send" disabled={!text.trim() || !!ask.queued}><Icon name="arrowup" size={15} weight={2.4} /></button>
       {/if}
     </div>
-    <p class="hint">{ask.pending ? "Esc to stop · keep typing, it waits for you" : "Enter to send · ⇧Enter for a new line · reads only, changes nothing"}</p>
+    <p class="hint">{ask.pending?.stopping ? (ask.queued ? "Asked — it goes as soon as the model's last call ends" : "Stopped · Enter asks next — it goes as soon as the model's last call ends") : ask.pending ? "Esc to stop · keep typing, it waits for you" : "Enter to send · ⇧Enter for a new line · reads only, changes nothing"}</p>
   </form>
 </aside>
 
 <style>
   .ask {
-    position: fixed; top: 64px; right: 10px; bottom: 10px; width: min(var(--w), calc(100vw - 20px)); z-index: 13;
+    position: fixed; top: 64px; right: 10px; bottom: var(--panel-bottom); width: min(var(--w), calc(100vw - 20px)); z-index: 13;
     display: grid; grid-template-rows: auto 1fr auto; border-radius: var(--radius-lg);
     background: var(--glass-strong); box-shadow: var(--shadow-lg), var(--glass-edge); overflow: hidden;
     animation: enter 360ms var(--spring);
@@ -360,6 +369,7 @@
   .said pre { margin: 0; padding: 0.6rem 0.7rem; border-radius: 9px; background: var(--fill); font: 0.78rem/1.45 var(--mono); overflow: auto; }
   .cite { display: inline-grid; place-items: center; min-width: 1.05rem; height: 1.05rem; padding: 0 0.25rem; margin: 0 0.1rem; vertical-align: 0.15em; border: 0; border-radius: 5px; font: 700 0.64rem/1 var(--rounded); background: var(--accent-soft); color: var(--accent-ink); cursor: pointer; }
   .cite:hover { background: var(--accent); color: #fff; }
+  .cite.live { min-width: 0.9rem; background: var(--fill-2); cursor: default; }
   .cite.unread { background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--danger); cursor: help; }
 
   .sources { display: flex; flex-wrap: wrap; gap: 0.3rem; }
@@ -414,16 +424,17 @@
   .chip button:hover { opacity: 1; background: var(--fill-2); }
   .field { display: flex; align-items: flex-end; gap: 0.4rem; padding: 0.35rem 0.35rem 0.35rem 0.7rem; border-radius: 14px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--separator); transition: box-shadow var(--speed) var(--ease); }
   .field:focus-within { box-shadow: inset 0 0 0 1px var(--accent), 0 0 0 3px var(--accent-soft); }
+  textarea, textarea:focus-visible { box-shadow: none; }
   textarea { flex: 1; resize: none; border: 0; outline: none; background: none; color: var(--text); font: inherit; font-size: 0.88rem; line-height: 1.4; max-height: 10rem; field-sizing: content; padding: 0.25rem 0; }
   .send { width: 30px; height: 30px; flex: none; border: 0; border-radius: 10px; display: grid; place-items: center; background: var(--accent); color: #fff; cursor: pointer; transition: opacity var(--speed) var(--ease), transform 120ms var(--ease); }
   .send:disabled { opacity: 0.35; cursor: default; }
   .send:not(:disabled):active { transform: scale(0.94); }
   .send.stop { position: relative; background: var(--text); }
-  .send.stop:disabled { opacity: 0.5; }
   .sq { width: 9px; height: 9px; border-radius: 2.5px; background: var(--surface); }
   .ring { position: absolute; inset: 3px; border-radius: 50%; border: 2px solid transparent; border-top-color: var(--surface); opacity: 0.55; animation: spin 900ms linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
   @media (prefers-reduced-motion: reduce) { .ring { animation: none; } }
+  .q.queued { opacity: 0.6; }
   .halted { margin: 0; display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.74rem; color: var(--muted); }
   .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
   @media (prefers-color-scheme: dark) { .ck { color: #da8fff; } }

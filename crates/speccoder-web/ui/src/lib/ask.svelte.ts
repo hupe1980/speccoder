@@ -101,6 +101,9 @@ class AskState {
   viewDropped = $state(false);
   /** The turn being answered. */
   pending = $state<{ question: string; steps: Step[]; words: string; stopping?: boolean } | null>(null);
+  /** The next question, asked while a stopped turn's last model call ends:
+   * it goes as soon as that call lands. */
+  queued = $state<string | null>(null);
   failed = $state<{ question: string; message: string } | null>(null);
   /** The conversations list, when shown. */
   list = $state<Conversation[] | null>(null);
@@ -201,11 +204,14 @@ class AskState {
       this.failed = { question: text, message: String((e as Error).message ?? e) };
     } finally {
       this.pending = null;
+      const next = this.queued;
+      this.queued = null;
+      if (next) void this.send(next);
     }
   }
 
-  /** Stops the turn in flight: it ends after the model call it is in and
-   * keeps its words; the next question goes on in the same conversation. */
+  /** Stops the turn in flight: its words end where they are now, nothing
+   * more runs, and the next question goes on in the same conversation. */
   async stop() {
     const p = this.pending;
     if (!p || p.stopping) return;

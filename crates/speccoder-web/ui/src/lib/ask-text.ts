@@ -7,13 +7,16 @@ export type Part =
   | { t: "text"; text: string }
   | { t: "code"; text: string }
   | { t: "bold"; text: string }
-  | { t: "cite"; n: number | null; citation: Citation };
+  | { t: "cite"; n: number | null; citation: Citation }
+  | { t: "mark" };
 export type Block = { kind: "p" | "li" | "ol" | "h"; parts: Part[] } | { kind: "pre"; text: string };
 
 const MARK = /\[(?:r|c)\d+(?::\d+(?:-\d+)?)?\]/g;
 
-/** Inline parts of one line: `code`, **bold**, then [r3] markers. */
-export function inline(line: string, citations: Citation[]): Part[] {
+/** Inline parts of one line: `code`, **bold**, then [r3] markers — while
+ * the words still stream (`live`), a marker is a placeholder until the
+ * turn's sources are checked. */
+export function inline(line: string, citations: Citation[], live = false): Part[] {
   const read = citations.filter((c) => c.state === "read");
   const out: Part[] = [];
   const pieces = line.split(/(`[^`]+`|\*\*[^*]+\*\*)/);
@@ -31,7 +34,7 @@ export function inline(line: string, citations: Citation[]): Part[] {
         if (c) {
           const i = read.findIndex((x) => x.marker === c.marker);
           out.push({ t: "cite", n: i >= 0 ? i + 1 : null, citation: c });
-        } else out.push({ t: "text", text: m[0] });
+        } else out.push(live ? { t: "mark" } : { t: "text", text: m[0] });
         at = m.index! + m[0].length;
       }
       if (at < piece.length) out.push({ t: "text", text: piece.slice(at) });
@@ -40,13 +43,14 @@ export function inline(line: string, citations: Citation[]): Part[] {
   return out;
 }
 
-/** The answer as blocks. */
-export function blocks(text: string, citations: Citation[]): Block[] {
+/** The answer as blocks; `live` while it streams (a marker cut mid-way
+ * waits for its end). */
+export function blocks(text: string, citations: Citation[], live = false): Block[] {
   const out: Block[] = [];
-  const lines = text.replace(/\r/g, "").split("\n");
+  const lines = (live ? text.replace(/\[(?:[rc]\d*(?::\d*(?:-\d*)?)?)?$/, "") : text).replace(/\r/g, "").split("\n");
   let para: string[] = [];
   const flush = () => {
-    if (para.length) out.push({ kind: "p", parts: inline(para.join(" "), citations) });
+    if (para.length) out.push({ kind: "p", parts: inline(para.join(" "), citations, live) });
     para = [];
   };
   for (let i = 0; i < lines.length; i++) {
@@ -63,7 +67,7 @@ export function blocks(text: string, citations: Citation[]): Block[] {
     const h = line.match(/^#{1,4}\s+(.*)$/);
     if (li || ol || h) {
       flush();
-      out.push({ kind: li ? "li" : ol ? "ol" : "h", parts: inline((li ?? ol ?? h)?.[1] ?? "", citations) });
+      out.push({ kind: li ? "li" : ol ? "ol" : "h", parts: inline((li ?? ol ?? h)?.[1] ?? "", citations, live) });
     } else if (!line.trim()) flush();
     else para.push(line.trim());
   }
