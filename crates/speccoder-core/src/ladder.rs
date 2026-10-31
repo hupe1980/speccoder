@@ -529,11 +529,22 @@ fn joiners(text: &str) -> Vec<String> {
     out
 }
 
-/// The text as one argument of a command line (double quotes escaped).
+/// The text as one argument of a command line: in double quotes, with
+/// what a shell would still expand there (`\`, `"`, `$`, `` ` ``)
+/// escaped — model-written words pasted into a shell stay words.
 #[must_use]
 pub fn quoted(text: &str) -> String {
     let one: String = text.split_whitespace().collect::<Vec<_>>().join(" ");
-    format!("\"{}\"", one.replace('\\', "\\\\").replace('"', "\\\""))
+    let mut out = String::with_capacity(one.len() + 2);
+    out.push('"');
+    for c in one.chars() {
+        if matches!(c, '\\' | '"' | '$' | '`') {
+            out.push('\\');
+        }
+        out.push(c);
+    }
+    out.push('"');
+    out
 }
 
 /// The command that takes `rung` for `text`, with the format's creating
@@ -626,6 +637,15 @@ pub fn suggest(text: &str) -> RungSuggestion {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_quoted_argument_expands_nothing_in_a_shell() {
+        assert_eq!(quoted("log  every\nsign-in"), "\"log every sign-in\"");
+        assert_eq!(
+            quoted("run $(curl x|sh) and `id` \"now\" \\"),
+            "\"run \\$(curl x|sh) and \\`id\\` \\\"now\\\" \\\\\""
+        );
+    }
+
     use super::*;
 
     #[test]

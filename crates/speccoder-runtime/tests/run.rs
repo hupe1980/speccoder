@@ -4472,3 +4472,67 @@ fn accepting_a_collection_unknown_stop_ticks_the_attempt_s_code() {
     let shown = git_out(Path::new(&worktree), &["show", "HEAD:tests/greet_name.rs"]);
     assert!(shown.contains("fn greets"), "{shown}");
 }
+
+/// A conversation is never evidence (SC-006): the same run, with an Ask
+/// conversation about the task and without one, reaches the same verdict,
+/// tick, changes and checks.
+#[test]
+fn a_conversation_never_changes_a_verdict() {
+    let outcome = |asked: bool| {
+        let r = two_task_repo();
+        let state = tempfile::tempdir().unwrap();
+        if asked {
+            let (f, d) = fake();
+            f.will_say("T002 only needs a login function.");
+            let request = speccoder_runtime::ask::Request {
+                text: "what does T002 need?".to_owned(),
+                chips: vec![speccoder_runtime::ask::chips::ChipRef {
+                    kind: "task".to_owned(),
+                    reference: json!({ "task": "T002" }),
+                    label: None,
+                    text: None,
+                    digest: None,
+                    from_view: false,
+                }],
+                ..speccoder_runtime::ask::Request::default()
+            };
+            let model = speccoder_runtime::substrate::model_config::parse(
+                "[model]\nprovider = \"openai\"\nmodel = \"gpt-5.4-mini\"\n",
+            )
+            .unwrap()
+            .unwrap();
+            let asked = speccoder_runtime::ask::turn_with(
+                r.path(),
+                &request,
+                state.path(),
+                &speccoder_runtime::ask::Settings::default(),
+                &model,
+                d,
+                None,
+            );
+            assert_eq!(asked.status(), CommandStatus::Ok, "{}", asked.message());
+        }
+        let (f, d) = fake();
+        let (id, args) = edit("T002", "pub fn ok() {}\npub fn login() {}");
+        f.will_call_tool(&id, "edit_file", args);
+        f.will_structure(done("login"));
+        let res = run(r.path(), state.path(), "T002", d);
+        let rep = report(&res);
+        (
+            res.status(),
+            rep.verdict.clone(),
+            rep.ticked,
+            rep.attempt_status.clone(),
+            rep.changes.clone(),
+            // The checks as decided; their timing is the machine's.
+            rep.verification.as_ref().map(|v| {
+                let mut checks = serde_json::to_value(&v.checks).unwrap();
+                for c in checks.as_array_mut().unwrap() {
+                    c.as_object_mut().unwrap().remove("duration_ms");
+                }
+                checks
+            }),
+        )
+    };
+    assert_eq!(outcome(false), outcome(true));
+}

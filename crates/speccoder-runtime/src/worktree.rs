@@ -296,10 +296,12 @@ fn bring_spec_changes(
     Ok(())
 }
 
-/// Resolves a merge whose conflicted files differ only in ticks — the
-/// branch ticked tasks, the checkout added or reworded others: each takes
-/// the checkout's version with the branch's ticks kept where the words are
-/// the same. Anything else in conflict is the person's to resolve.
+/// Resolves a merge whose conflicted files the branch changed only by
+/// ticking boxes — the checkout added or reworded tasks meanwhile: each
+/// takes the checkout's version with the branch's ticks kept where the
+/// words are the same, so nothing the branch did is lost. Any other change
+/// on the branch (a deletion, an edit, a file without a merge base) leaves
+/// the conflict to the person.
 fn resolve_task_lists(worktree: &Path) -> Result<Vec<u8>, ()> {
     let wt = Git::at(worktree);
     let conflicted = wt
@@ -315,8 +317,8 @@ fn resolve_task_lists(worktree: &Path) -> Result<Vec<u8>, ()> {
                 .map(|b| String::from_utf8_lossy(&b).into_owned())
                 .map_err(|_| ())
         };
-        let (ours, theirs) = (side(2)?, side(3)?);
-        if !only_ticks_apart(&ours, &theirs) {
+        let (base, ours, theirs) = (side(1)?, side(2)?, side(3)?);
+        if !only_ticked(&base, &ours) {
             return Err(());
         }
         let text = keep_ticks(&ours, &theirs);
@@ -337,15 +339,14 @@ fn resolve_task_lists(worktree: &Path) -> Result<Vec<u8>, ()> {
     .map_err(|_| ())
 }
 
-/// Whether `ours` is `theirs` but for ticks and lines `theirs` added: each
-/// of its lines, unticked, is found in `theirs` in order.
-fn only_ticks_apart(ours: &str, theirs: &str) -> bool {
+/// Whether `ours` is `base` with boxes ticked and nothing else changed.
+#[must_use]
+pub fn only_ticked(base: &str, ours: &str) -> bool {
     let untick = |l: &str| {
         l.replacen("- [x] ", "- [ ] ", 1)
             .replacen("- [X] ", "- [ ] ", 1)
     };
-    let mut rest = theirs.lines().map(untick);
-    ours.lines().map(untick).all(|l| rest.any(|t| t == l))
+    base != ours && base.lines().map(untick).eq(ours.lines().map(untick))
 }
 
 /// `theirs` with every checkbox `ours` ticked ticked too, where the line's

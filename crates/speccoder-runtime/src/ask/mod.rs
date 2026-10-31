@@ -86,17 +86,25 @@ static LIVE: std::sync::LazyLock<Mutex<std::collections::HashMap<String, Halt>>>
 struct Live {
     id: String,
     halt: Arc<tokio::sync::Notify>,
+    /// It holds the entry: a second request for a conversation whose turn
+    /// is in flight (refused by the plane's claim) never takes it.
+    owned: bool,
 }
 
 impl Live {
     fn enter(id: &str, flag: &Arc<std::sync::atomic::AtomicBool>) -> Self {
         let halt = Arc::new(tokio::sync::Notify::new());
-        if let Ok(mut live) = LIVE.lock() {
+        let owned = LIVE.lock().is_ok_and(|mut live| {
+            if live.contains_key(id) {
+                return false;
+            }
             live.insert(id.to_owned(), (Arc::clone(&halt), Arc::clone(flag)));
-        }
+            true
+        });
         Self {
             id: id.to_owned(),
             halt,
+            owned,
         }
     }
 
@@ -107,6 +115,9 @@ impl Live {
 
 impl Drop for Live {
     fn drop(&mut self) {
+        if !self.owned {
+            return;
+        }
         if let Ok(mut live) = LIVE.lock() {
             live.remove(&self.id);
         }
@@ -199,7 +210,8 @@ pub fn read_of(id: &str, tool: &str, arguments: &Value, output: &Value) -> Read 
             line(&output["start_line"]),
             line(&output["end_line"]),
         ),
-        "git_show" => (arguments["path"].as_str().map(str::to_owned), None, None),
+        // At a revision: not the file as it is now, so it opens nothing.
+        "git_show" => (None, None, None),
         // A run's account: the turns it read.
         "journal_account" => (None, line(&arguments["from"]), line(&arguments["to"])),
         _ => (None, None, None),
@@ -340,6 +352,10 @@ pub fn changed_since(
 pub struct Request {
     /// The conversation to continue; a new one when absent.
     pub conversation: Option<String>,
+    /// The id a new conversation takes (`c-…`), chosen by the caller so
+    /// its first turn can be stopped before it ends; generated when absent.
+    #[serde(default)]
+    pub id: Option<String>,
     /// The person's words.
     pub text: String,
     /// Context from the screen.
@@ -383,7 +399,18 @@ fn thread_path(dir: &Path, id: &str) -> PathBuf {
     dir.join("threads").join(format!("{id}.json"))
 }
 
+/// Whether `id` has the shape speccoder gives a conversation (`c-` and
+/// hex): anything else names no file of the plane.
+#[must_use]
+pub fn valid_id(id: &str) -> bool {
+    id.strip_prefix("c-")
+        .is_some_and(|h| !h.is_empty() && h.len() <= 40 && h.bytes().all(|b| b.is_ascii_hexdigit()))
+}
+
 fn load(dir: &Path, id: &str) -> Option<AskThread> {
+    if !valid_id(id) {
+        return None;
+    }
     serde_json::from_str(&std::fs::read_to_string(thread_path(dir, id)).ok()?).ok()
 }
 
@@ -428,7 +455,9 @@ fn add_today(dir: &Path, tokens: u64) {
     );
 }
 
-fn new_id() -> String {
+/// A new conversation's id (`c-…`).
+#[must_use]
+pub fn new_id() -> String {
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_nanos());
@@ -627,9 +656,16 @@ pub fn turn_with(
                 );
             }
         },
+        None if request.id.as_deref().is_some_and(|i| !valid_id(i)) => {
+            return refuse(
+                CommandStatus::UsageError,
+                "USAGE",
+                "a conversation id is `c-` and hex digits",
+            );
+        }
         None => AskThread {
             conversation: Conversation {
-                id: new_id(),
+                id: request.id.clone().unwrap_or_else(new_id),
                 feature: request.feature.clone(),
                 title: text.chars().take(120).collect(),
                 at: now(),
@@ -780,8 +816,9 @@ pub fn turn_with(
             let message_id = format!("{key}-{n}");
             let deliver = plane.ask_deliver(&key, &message_id, payload(carried));
             tokio::pin!(deliver);
+            // A Stop that lands as the answer does still cancels the run.
             let resumed = tokio::select! {
-                r = &mut deliver => r?,
+                biased;
                 () = halt.notified() => {
                     if let Some(r) = &run {
                         plane.ask_stop(r, &by).await?;
@@ -789,6 +826,7 @@ pub fn turn_with(
                     let _ = deliver.await;
                     return Ok(true);
                 }
+                r = &mut deliver => r?,
             };
             if resumed {
                 return Ok(false);
@@ -824,6 +862,10 @@ pub fn turn_with(
         .ok()
         .and_then(|e| e.clone())
         .unwrap_or(Value::Null);
+    // Stopped, however the race fell: the next message starts a new run.
+    if output["status"] == "stopped" {
+        thread.conversation.open = false;
+    }
     let u = &output["usage"];
     let n_of = |k: &str| u[k].as_u64().unwrap_or(0);
     report.usage = AskUsage {

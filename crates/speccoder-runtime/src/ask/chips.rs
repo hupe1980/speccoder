@@ -145,11 +145,18 @@ fn file(root: &Path, reference: &Value) -> Result<(String, String), String> {
         .as_str()
         .ok_or("a file chip names its path")?;
     let rel = crate::tools::paths::normalise(path).map_err(|e| e.0)?;
+    // Resolved as the workspace's own reads are: a link out of the project
+    // is refused, and the credential check is on what it points at.
+    let root = std::fs::canonicalize(root).map_err(|e| e.to_string())?;
+    let full = crate::tools::paths::resolve_existing(&root, &rel).map_err(|e| e.0)?;
+    let target = full
+        .strip_prefix(&root)
+        .map_or_else(|_| rel.clone(), |p| p.to_string_lossy().into_owned());
     let policy = crate::tools::policy::Policy::new(&[], &[]);
-    if policy.protected().is_secret(&rel) {
+    if policy.protected().is_secret(&rel) || policy.protected().is_secret(&target) {
         return Err(format!("`{rel}` looks like a credential"));
     }
-    let text = std::fs::read_to_string(root.join(&rel)).map_err(|e| format!("`{rel}`: {e}"))?;
+    let text = std::fs::read_to_string(&full).map_err(|e| format!("`{rel}`: {e}"))?;
     let lines: Vec<&str> = text.lines().collect();
     let line = |k: &str| reference[k].as_u64().and_then(|n| usize::try_from(n).ok());
     let start = line("start").unwrap_or(1).max(1);

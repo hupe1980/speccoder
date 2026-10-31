@@ -332,11 +332,22 @@ pub fn check(answer: &str, reads: &[Read], chips: &[Chip]) -> Vec<Citation> {
                 };
                 (inside, r.path.clone(), label)
             }
-            (None, Some(c)) => (
-                true,
-                c.reference["path"].as_str().map(str::to_owned),
-                c.label.clone(),
-            ),
+            (None, Some(c)) => {
+                // Lines only of a file chip, and only inside its own range.
+                let at = |k: &str| c.reference[k].as_u64().and_then(|n| u32::try_from(n).ok());
+                let inside = match m.lines {
+                    None => true,
+                    Some((a, b)) if c.kind == "file_range" => {
+                        a <= b && a >= at("start").unwrap_or(1) && at("end").is_none_or(|e| b <= e)
+                    }
+                    Some(_) => false,
+                };
+                (
+                    inside,
+                    c.reference["path"].as_str().map(str::to_owned),
+                    c.label.clone(),
+                )
+            }
             (None, None) => (false, None, m.text.clone()),
         };
         out.push(Citation {
@@ -425,10 +436,26 @@ mod tests {
             from_view: true,
             changed: false,
         };
-        let c = check("as [c1] says", &[], &[chip]);
+        let c = check("as [c1] says, not [c1:3]", &[], &[chip]);
         assert_eq!(
             (c[0].state.as_str(), c[0].label.as_str()),
             ("read", "T004 Handle Unicode")
+        );
+        assert_eq!(c[1].state, "not_read", "a task chip has no lines");
+        // A file chip's lines: inside its range only.
+        let file = Chip {
+            id: "c2".to_owned(),
+            kind: "file_range".to_owned(),
+            label: "src/a.rs 10–20".to_owned(),
+            reference: serde_json::json!({ "path": "src/a.rs", "start": 10, "end": 20 }),
+            digest: "d".to_owned(),
+            from_view: false,
+            changed: false,
+        };
+        let c = check("[c2:12-14] and [c2:500-600]", &[], &[file]);
+        assert_eq!(
+            (c[0].state.as_str(), c[1].state.as_str()),
+            ("read", "not_read")
         );
     }
 }

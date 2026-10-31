@@ -25,24 +25,43 @@
   const [title, icon, about] = TITLE[start.kind] ?? [start.kind, "sparkle", ""];
 
   // Code checks the edited words again (the target may have moved on).
-  $effect(() => {
-    const fields = $state.snapshot(f) as ProposalFields;
-    clearTimeout(timer);
-    timer = setTimeout(async () => {
-      checking = true;
-      try {
-        const r = await post<{ proposal: Proposal }>("/api/ask/proposal", { proposal: { ...start, fields }, feature: app.report?.data?.feature ?? null });
+  // `checkedFor` is the words `p` was checked for: only the newest reply
+  // counts, and Confirm performs nothing but the words on screen.
+  let seq = 0;
+  let checkedFor = $state(JSON.stringify($state.snapshot(start.fields)));
+  const words = () => $state.snapshot(f) as ProposalFields;
+  async function check(fields: ProposalFields) {
+    const n = ++seq;
+    checking = true;
+    try {
+      const r = await post<{ proposal: Proposal }>("/api/ask/proposal", { proposal: { ...start, fields }, feature: app.report?.data?.feature ?? null });
+      if (n === seq) {
         p = r.proposal;
-      } finally {
-        checking = false;
+        checkedFor = JSON.stringify(fields);
       }
-    }, 300);
+    } finally {
+      if (n === seq) checking = false;
+    }
+  }
+  $effect(() => {
+    const fields = words();
+    if (JSON.stringify(fields) === checkedFor) return;
+    checking = true;
+    clearTimeout(timer);
+    timer = setTimeout(() => void check(fields), 300);
     return () => clearTimeout(timer);
   });
 
   const close = () => (ask.sheet = null);
   async function confirm() {
-    if (!p.runnable || p.blocked || checking) return;
+    if (app.job?.running) return;
+    // Words typed since the last check are checked before anything runs.
+    const now = words();
+    if (JSON.stringify(now) !== checkedFor) {
+      clearTimeout(timer);
+      await check(now);
+    }
+    if (JSON.stringify(words()) !== checkedFor || !p.runnable || p.blocked) return;
     const run = p.runnable;
     const turn = ask.sheet!.turn;
     close();

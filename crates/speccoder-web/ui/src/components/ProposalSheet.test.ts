@@ -124,4 +124,26 @@ describe("ProposalSheet", () => {
     open(quick);
     expect(button("Record and Run").disabled).toBe(true);
   });
+
+  it("performs the words on screen, never the model's: an edit then ⌘↩ at once is checked first", async () => {
+    checks();
+    open(quick);
+    type(document.querySelector("textarea")!, "trim the login name and log it");
+    // No wait for the debounce: the person confirms straight away.
+    press("Enter", { metaKey: true });
+    await settle();
+    expect(host.app.perform).toHaveBeenCalledWith(
+      expect.objectContaining({ run: expect.objectContaining({ request: "trim the login name and log it" }) }),
+      undefined,
+    );
+  });
+
+  it("does not confirm with ⌘↩ while a run holds the project", async () => {
+    checks();
+    host.app.job = { running: true };
+    open(quick);
+    press("Enter", { metaKey: true });
+    await settle();
+    expect(host.app.perform).not.toHaveBeenCalled();
+  });
 });

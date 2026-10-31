@@ -17,6 +17,9 @@
   }
 
   function add(e: MouseEvent) {
+    // The mouse acts on mousedown (keeping the selection); Enter or Space on
+    // the focused pill is a click with no pointer (`detail` 0).
+    if (e.type === "click" && e.detail !== 0) return;
     e.preventDefault();
     const chip = pointed();
     at = null;
@@ -31,7 +34,7 @@
 
 {#if at}
   <!-- mousedown keeps the selection the click is about -->
-  <button class="pill" style="left:{at.x}px; top:{at.y}px" title="Add the selection to Ask (⌘⇧L)" aria-label="Ask about the selection" onmousedown={add}>
+  <button class="pill" style="left:{at.x}px; top:{at.y}px" title="Add the selection to Ask (⌘⇧L)" aria-label="Ask about the selection" onmousedown={add} onclick={add}>
     <Icon name="bubble" size={12} weight={2.2} /> Ask <kbd>⌘⇧L</kbd>
   </button>
 {/if}

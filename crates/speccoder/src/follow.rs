@@ -61,6 +61,52 @@ pub fn offer(
     code
 }
 
+/// After an Ask turn at a terminal: the proposal it printed, recorded on
+/// an explicit yes (`[y/N]`) through the same action the app's sheet takes.
+/// The exit code of what ran, or `None` when nothing did.
+pub fn proposal(
+    path: &Path,
+    feature: Option<&str>,
+    p: &speccoder_core::ask::Proposal,
+    verbosity: crate::progress::Verbosity,
+) -> Option<ExitCode> {
+    use speccoder_runtime::actions::{Dispatch, Interface, perform_for};
+    let run = p.runnable.as_ref().filter(|_| p.blocked.is_none())?;
+    let target = p.fields.target.as_deref().unwrap_or("the task");
+    let question = match p.kind.as_str() {
+        "quick_change" => "Record this quick change and run it?".to_owned(),
+        "bug_fix" => "Record this bug fix and run it?".to_owned(),
+        "nudge" => format!("Nudge {target} with this note?"),
+        "answer" => format!("Record this answer to {target}?"),
+        "start_spec" => "Start this spec?".to_owned(),
+        other => format!("Take this {other}?"),
+    };
+    let mut err = std::io::stderr().lock();
+    let _ = write!(err, "{question} [y/N] ");
+    let _ = err.flush();
+    drop(err);
+    let mut line = String::new();
+    if std::io::stdin().lock().read_line(&mut line).unwrap_or(0) == 0
+        || !matches!(line.trim().to_lowercase().as_str(), "y" | "yes")
+    {
+        return None;
+    }
+    let approver: std::sync::Arc<dyn speccoder_runtime::approvals::Approver> =
+        std::sync::Arc::new(crate::prompt::Terminal);
+    let progress: std::sync::Arc<dyn speccoder_runtime::progress::Progress> =
+        std::sync::Arc::new(crate::progress::Printer::new(verbosity));
+    let mut step = Dispatch::new(run, Via::Terminal);
+    step.input = p.input.as_deref();
+    step.options.approver = Some(approver);
+    step.options.progress = Some(progress);
+    let result = perform_for(Interface::AskProposal, path, feature, step)
+        .unwrap_or_else(|| Interface::AskProposal.refusal());
+    Some(match crate::output::render(&result, false) {
+        Ok(()) => result.exit_code(),
+        Err(_) => ExitCode::INTERNAL,
+    })
+}
+
 /// Offers `remedy` as a card — what it does, the command it amounts to,
 /// how to undo it — and applies it on a yes. A remedy that writes history
 /// waits for an explicit yes (`[y/N]`). Whether it was applied.

@@ -105,6 +105,8 @@ class AskState {
   /** The next question, asked while a stopped turn's last model call ends:
    * it goes as soon as that call lands. */
   queued = $state<string | null>(null);
+  /** The id a new conversation takes with its first question. */
+  starting: string | null = null;
   failed = $state<{ question: string; message: string } | null>(null);
   /** The conversations list, when shown. */
   list = $state<Conversation[] | null>(null);
@@ -234,9 +236,13 @@ class AskState {
     this.failed = null;
     this.list = null;
     this.pending = { question: text, steps: [], words: "" };
+    // A new conversation's id is chosen here, so Stop on its first question
+    // stops that turn and no other.
+    if (!this.conversation) this.starting = `c-${Date.now().toString(16)}${Math.floor(Math.random() * 0x10000).toString(16).padStart(4, "0")}`;
     try {
       const r = await post<{ status: string; message: string; code?: string; data?: AskReport }>("/api/ask", {
         conversation: this.conversation,
+        id: this.conversation ? null : this.starting,
         text,
         chips,
         feature: app.report?.data?.feature ?? null,
@@ -265,7 +271,7 @@ class AskState {
     if (!p || p.stopping) return;
     this.pending = { ...p, stopping: true };
     try {
-      await post("/api/ask/stop", { conversation: this.conversation });
+      await post("/api/ask/stop", { conversation: this.conversation ?? this.starting });
     } catch {
       /* the turn ends on its own */
     }

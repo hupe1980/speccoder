@@ -39,6 +39,11 @@ const COMMANDS: &[(&str, &str, Option<&str>)] = &[
         "What waits for your decision, in every feature",
         None,
     ),
+    (
+        "ask",
+        "A question about the project, answered from what it reads",
+        Some("a question"),
+    ),
     ("report", "Each task's evidence", None),
     ("status", "The current or last run", None),
     ("cost", "Tokens and money per task", None),
@@ -226,6 +231,25 @@ impl Progress for Updates {
             // The model's reasoning is the protocol's thought stream, its
             // words beside its calls are its message: an editor shows each
             // where it belongs, apart from results.
+            // An Ask turn: its words as they are written, each read as a
+            // tool call the editor shows.
+            Event::AskText { delta, .. } => {
+                c.update(
+                    &self.session,
+                    json!({ "sessionUpdate": "agent_message_chunk", "content": { "type": "text", "text": delta } }),
+                );
+            }
+            Event::AskStep {
+                tool,
+                target,
+                refused,
+                ..
+            } => {
+                c.update(
+                    &self.session,
+                    json!({ "sessionUpdate": "tool_call", "toolCallId": c.id("read"), "title": format!("{tool} {target}"), "kind": if tool.starts_with("search") || tool.starts_with("git_log") { "search" } else { "read" }, "status": if *refused { "failed" } else { "completed" } }),
+                );
+            }
             Event::Reasoning { text, .. } => {
                 c.update(
                     &self.session,
@@ -492,13 +516,10 @@ fn prompt(
         c.update(session, json!({ "sessionUpdate": "agent_message_chunk", "content": { "type": "text", "text": t } }))
     };
     let line = line.trim();
+    // Words without a `/` are a question: an Ask turn in this session's
+    // conversation.
     let Some(command) = line.strip_prefix('/') else {
-        let names: Vec<String> = COMMANDS.iter().map(|(n, ..)| format!("/{n}")).collect();
-        say(&format!(
-            "speccoder implements spec-driven work and decides each task by evidence. Use a command: {}.",
-            names.join(", ")
-        ));
-        return;
+        return ask(conn, session, cwd, line, cancel);
     };
     let (name, args) = command
         .split_once(char::is_whitespace)
@@ -545,6 +566,7 @@ fn prompt(
                 ),
             }
         }
+        "ask" => return ask(conn, session, cwd, args, cancel),
         "converge" => speccoder_runtime::converge(cwd, None),
         "inbox" => speccoder_runtime::inbox::inbox(cwd, None),
         "report" => speccoder_runtime::status::report(cwd, None),
@@ -583,6 +605,160 @@ fn prompt(
             prompt(conn, session, cwd, line, cancel);
         }
     }
+}
+
+/// A sink that notes whether any of an answer's words streamed.
+#[derive(Debug)]
+struct Streamed(Arc<dyn Progress>, AtomicBool);
+
+impl Progress for Streamed {
+    fn event(&self, event: &Event) {
+        if matches!(event, Event::AskText { .. }) {
+            self.1.store(true, Ordering::SeqCst);
+        }
+        self.0.event(event);
+    }
+}
+
+/// Each session's Ask conversation, once it has one.
+static CONVERSATIONS: std::sync::LazyLock<Mutex<HashMap<String, String>>> =
+    std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
+
+/// An Ask turn over ACP: the answer streamed, each source a resource link,
+/// a proposal a permission request whose only recording option records it.
+/// Cancelling the prompt stops the turn.
+fn ask(
+    conn: &Arc<ConnRef>,
+    session: &str,
+    cwd: &std::path::Path,
+    question: &str,
+    cancel: &Arc<AtomicBool>,
+) {
+    use speccoder_runtime::service::ask as service;
+    let c = &conn.0;
+    let say = |t: &str| {
+        c.update(session, json!({ "sessionUpdate": "agent_message_chunk", "content": { "type": "text", "text": t } }))
+    };
+    if question.is_empty() {
+        say("Ask a question about the project — its specs, code, runs and evidence.");
+        return;
+    }
+    let progress: Arc<dyn Progress> = Arc::new(Updates {
+        conn: Arc::clone(conn),
+        session: session.to_owned(),
+        tasks: Mutex::new(HashMap::new()),
+        plan: Mutex::new(Vec::new()),
+    });
+    let conversation = CONVERSATIONS
+        .lock()
+        .ok()
+        .and_then(|m| m.get(session).cloned());
+    // A new conversation's id is chosen here, so cancelling its first
+    // question stops that turn and no other.
+    let id = conversation.is_none().then(service::new_id);
+    let request = service::Request {
+        id: id.clone(),
+        conversation,
+        text: question.to_owned(),
+        chips: Vec::new(),
+        feature: None,
+    };
+    // The editor's cancel is the panel's Esc.
+    let done = Arc::new(AtomicBool::new(false));
+    let watch = {
+        let (cancel, done) = (Arc::clone(cancel), Arc::clone(&done));
+        let conversation = request.conversation.clone().or(id);
+        std::thread::spawn(move || {
+            while !done.load(Ordering::SeqCst) {
+                if cancel.load(Ordering::SeqCst) {
+                    let _ = service::stop(conversation.as_deref());
+                    return;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+        })
+    };
+    let streamed = Arc::new(Streamed(Arc::clone(&progress), AtomicBool::new(false)));
+    let result = service::turn(
+        cwd,
+        &request,
+        None,
+        Some(Arc::clone(&streamed) as Arc<dyn Progress>),
+    );
+    done.store(true, Ordering::SeqCst);
+    let _ = watch.join();
+    let Some(speccoder_core::CommandData::Ask(r)) = result.data() else {
+        say(result.message());
+        return;
+    };
+    if let Ok(mut m) = CONVERSATIONS.lock() {
+        m.insert(session.to_owned(), r.conversation.clone());
+    }
+    if !streamed.1.load(Ordering::SeqCst) && !r.answer.is_empty() {
+        say(&r.answer);
+    }
+    if r.end != "answered" {
+        say(&format!(
+            "\n\n_{}_",
+            r.reason.as_deref().unwrap_or("stopped")
+        ));
+    }
+    // The sources: what this turn read, as links; anything else, marked.
+    for (n, cite) in r.citations.iter().filter(|x| x.state == "read").enumerate() {
+        match &cite.path {
+            Some(path) => c.update(
+                session,
+                json!({ "sessionUpdate": "agent_message_chunk", "content": { "type": "resource_link", "uri": format!("file://{}", cwd.join(path).display()), "name": format!("[{}] {}", n + 1, cite.label) } }),
+            ),
+            None => say(&format!("\n[{}] {}", n + 1, cite.label)),
+        }
+    }
+    for cite in r.citations.iter().filter(|x| x.state != "read") {
+        say(&format!("\n{} (not among what was read)", cite.marker));
+    }
+    let Some(p) = r.proposal.as_ref() else { return };
+    let Some(run) = p.runnable.as_ref().filter(|_| p.blocked.is_none()) else {
+        if let Some(why) = &p.blocked {
+            say(&format!("\n\nSuggested: {} — cannot now: {why}", p.title));
+        }
+        return;
+    };
+    let reply = c.request(
+        "session/request_permission",
+        json!({
+            "sessionId": session,
+            "toolCall": {
+                "toolCallId": c.id("propose"),
+                "title": p.title,
+                "kind": "edit",
+                "status": "pending",
+                "rawInput": { "command": p.command },
+                "content": [{ "type": "content", "content": { "type": "text", "text": format!("What will be recorded:\n$ {}", p.command) } }],
+            },
+            "options": [
+                { "optionId": "record", "name": "Record", "kind": "allow_once" },
+                { "optionId": "dismiss", "name": "Not now", "kind": "reject_once" },
+            ],
+        }),
+    );
+    if !reply.is_some_and(|x| x["result"]["outcome"]["optionId"] == "record")
+        || cancel.load(Ordering::SeqCst)
+    {
+        return;
+    }
+    use speccoder_runtime::actions::{Dispatch, Interface, perform_for};
+    let mut step = Dispatch::new(run, speccoder_core::actions::Via::Acp);
+    step.input = p.input.as_deref();
+    step.options.approver = Some(Arc::new(Permissions {
+        conn: Arc::clone(conn),
+        session: session.to_owned(),
+        cancel: Arc::clone(cancel),
+    }));
+    step.options.progress = Some(progress);
+    step.options.cancel = Some(Arc::clone(cancel));
+    let done = perform_for(Interface::AskProposal, cwd, None, step)
+        .unwrap_or_else(|| Interface::AskProposal.refusal());
+    say(&format!("\n\n{}", done.message()));
 }
 
 /// Asks the editor whether to apply `remedy`: its effect, the exact

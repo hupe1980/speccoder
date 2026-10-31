@@ -703,3 +703,67 @@ fn ctrl_c_stops_the_web_host_with_a_page_listening() {
     }
     drop(page);
 }
+
+/// `speccoder ask --json`: an answer whose citations name what it read,
+/// each chip in its context, a proposal shown with its command — and
+/// nothing recorded, nothing asked (no terminal).
+#[test]
+fn ask_in_json_records_nothing_and_lists_its_context() {
+    if !has_python() {
+        eprintln!("skipped: no python3");
+        return;
+    }
+    let propose = json!({
+        "kind": "quick_change", "title": "Log a failed login", "target": null,
+        "request": "Log every failed login with its reason.", "checks": ["a failed login writes one line"],
+        "note": null, "answer": null, "description": null, "symptom": null, "expected": null, "unchanged": null
+    });
+    let (_mock, repo, state) = project(&json!([
+        { "tool": "read_file", "args": { "path": "src/lib.rs" } },
+        { "tool": "propose", "args": propose },
+        { "content": "It defines ok [r1]; I proposed a quick change." },
+    ]));
+    let before = std::process::Command::new("git")
+        .args(["status", "--porcelain"])
+        .current_dir(repo.path())
+        .output()
+        .unwrap()
+        .stdout;
+    let out = Command::new(env!("CARGO_BIN_EXE_speccoder"))
+        .args([
+            "--json",
+            "ask",
+            "what is in src/lib.rs?",
+            "--file",
+            "src/lib.rs:1-1",
+        ])
+        .arg("-C")
+        .arg(repo.path())
+        .env("SPECCODER_STATE_DIR", state.path())
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    let v = support::result(&out.stdout);
+    assert_eq!(v["status"], "ok", "{v}");
+    let ask = &v["data"];
+    assert_eq!(ask["citations"][0]["state"], "read", "{ask}");
+    assert_eq!(ask["context"]["entries"][0]["kind"], "chip", "{ask}");
+    assert_eq!(ask["proposal"]["kind"], "quick_change", "{ask}");
+    assert!(
+        ask["proposal"]["command"]
+            .as_str()
+            .unwrap()
+            .starts_with("speccoder do ")
+    );
+    let after = std::process::Command::new("git")
+        .args(["status", "--porcelain"])
+        .current_dir(repo.path())
+        .output()
+        .unwrap()
+        .stdout;
+    assert_eq!(before, after, "an answer changes nothing");
+    assert!(
+        !String::from_utf8_lossy(&out.stderr).contains("[y/N]"),
+        "nothing is asked without a terminal"
+    );
+}

@@ -573,8 +573,14 @@ fn chips_are_read_fresh_bounded_and_listed_as_context() {
     fs::write(r.path().join("notes.txt"), "one\n2\nthree\nfour\n").unwrap();
     assert!(resolve(&again).unwrap().0.changed);
 
-    // Only this project's files.
-    for path in ["../outside.txt", "/etc/hosts"] {
+    // Only this project's files — a link out of it neither.
+    let outside = tempfile::tempdir().unwrap();
+    fs::write(outside.path().join("secret.txt"), "key\n").unwrap();
+    std::os::unix::fs::symlink(outside.path().join("secret.txt"), r.path().join("link.txt"))
+        .unwrap();
+    std::os::unix::fs::symlink(".env", r.path().join("env-link.txt")).unwrap();
+    fs::write(r.path().join(".env"), "TOKEN=x\n").unwrap();
+    for path in ["../outside.txt", "/etc/hosts", "link.txt", "env-link.txt"] {
         assert!(
             resolve(&chip_ref("file_range", json!({ "path": path }))).is_err(),
             "{path}"
@@ -631,4 +637,52 @@ fn chips_are_read_fresh_bounded_and_listed_as_context() {
         None,
     );
     assert_eq!(res.status(), CommandStatus::UsageError, "{}", res.message());
+}
+
+/// A conversation id names a thread of this plane only: `c-` and hex. A
+/// caller may choose a new conversation's id, so it can stop that turn.
+#[test]
+fn conversation_ids_are_the_planes_own() {
+    let r = repo();
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_say("Hello.");
+    let turn = |request: &Request| {
+        ask::turn_with(
+            r.path(),
+            request,
+            state.path(),
+            &Settings::default(),
+            &model(),
+            Arc::clone(&d),
+            None,
+        )
+    };
+    let escape = turn(&Request {
+        conversation: Some("../../ask/threads/x".to_owned()),
+        text: "hi".to_owned(),
+        ..Request::default()
+    });
+    assert_eq!(
+        escape.status(),
+        CommandStatus::NotFound,
+        "{}",
+        escape.message()
+    );
+    let odd = turn(&Request {
+        id: Some("../x".to_owned()),
+        text: "hi".to_owned(),
+        ..Request::default()
+    });
+    assert_eq!(odd.status(), CommandStatus::UsageError, "{}", odd.message());
+    let chosen = turn(&Request {
+        id: Some("c-abc123".to_owned()),
+        text: "hi".to_owned(),
+        ..Request::default()
+    });
+    let Some(CommandData::Ask(t)) = chosen.data() else {
+        panic!("{}", chosen.message())
+    };
+    assert_eq!(t.conversation, "c-abc123");
+    assert!(ask::valid_id("c-abc123") && !ask::valid_id("c-") && !ask::valid_id("c-xyz"));
 }

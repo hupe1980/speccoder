@@ -1811,6 +1811,14 @@ fn finish(
         });
         std::process::exit(again.ok().and_then(|s| s.code()).unwrap_or(1));
     }
+    // At a terminal, what Ask proposed is offered, one explicit yes.
+    if let Some(speccoder_core::CommandData::Ask(r)) = result.data()
+        && let Some(p) = &r.proposal
+        && asks_here(cli)
+        && let Some(ran) = follow::proposal(path, feature, p, verbosity(cli))
+    {
+        std::process::exit(i32::from(ran.code()));
+    }
     // At a terminal, the next step is offered rather than only printed.
     let code = if result.status() == speccoder_core::CommandStatus::Ok && offers_next(cli) {
         follow::offer(path, feature, verbosity(cli), code)
@@ -1818,6 +1826,13 @@ fn finish(
         code
     };
     std::process::exit(i32::from(code.code()));
+}
+
+/// Whether a person is at this terminal to answer (never with `--json`,
+/// `--events` or piped input).
+fn asks_here(cli: &Cli) -> bool {
+    use std::io::IsTerminal;
+    !(cli.json || cli.events) && std::io::stdin().is_terminal() && std::io::stderr().is_terminal()
 }
 
 /// Whether a remedy is offered after this command: a run or a quick change
@@ -2403,6 +2418,7 @@ fn ask_command(
         });
     }
     let request = ask::Request {
+        id: None,
         conversation,
         text: words,
         chips,

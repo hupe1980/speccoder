@@ -489,6 +489,8 @@ pub enum Interface {
     AcpRemedy,
     /// The dashboard's own keys (its `n` hands off to [`Interface::CliFollow`]).
     Dashboard,
+    /// An Ask proposal a person confirmed in the terminal or an editor.
+    AskProposal,
 }
 
 impl Interface {
@@ -499,6 +501,7 @@ impl Interface {
         Self::CliRemedy,
         Self::AcpRemedy,
         Self::Dashboard,
+        Self::AskProposal,
     ];
 
     /// What it answers for a kind it does not offer.
@@ -519,6 +522,11 @@ impl Interface {
                 "job",
                 CommandStatus::UsageError,
                 "not something the web app runs",
+            ),
+            Self::AskProposal => CommandResult::new(
+                "ask",
+                CommandStatus::UsageError,
+                "not something an Ask proposal records",
             ),
             Self::CliRemedy | Self::AcpRemedy => CommandResult::new(
                 "fix",
@@ -614,6 +622,50 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::Feature
             | K::PullRequest
             | K::BugFix
+            | K::BugConfirm
+            | K::BugRun
+            | K::BugKeep
+            | K::AllowAlways
+            | K::WidenPolicy
+            | K::DecideBatch
+            | K::OracleTests
+            | K::ApproveAndRun
+            | K::Comment
+            | K::CommentsSend
+            | K::RevisionUndo
+            | K::CodeNudge
+            | K::AcceptanceAt
+            | K::PresetAdd
+            | K::NewProject
+            | K::UndoNewProject
+            | K::CloneRepository
+            | K::OpenSample
+            | K::SampleChecks
+            | K::DeclinePromotion
+            | K::Command => Offer::Refuse,
+        },
+        // What a proposal may be: a quick change, a bug fix, a nudge, an
+        // answer to an open question, a new spec. Nothing else.
+        Interface::AskProposal => match kind {
+            K::QuickChange | K::BugFix | K::Nudge | K::Review | K::PlanThrough => Offer::Take,
+            K::Skill
+            | K::RunTask
+            | K::RunFeature
+            | K::Converge
+            | K::Commit
+            | K::Approve
+            | K::Reject
+            | K::Accept
+            | K::Skip
+            | K::Done
+            | K::Hint
+            | K::Rule
+            | K::IssueComment
+            | K::KeepSetAside
+            | K::DropSetAside
+            | K::FixSetup
+            | K::Feature
+            | K::PullRequest
             | K::BugConfirm
             | K::BugRun
             | K::BugKeep
@@ -1321,8 +1373,9 @@ mod tests {
         // it offers (plan through's continuation among them); the remedies
         // only the setup's fix.
         let runnable = Runnable::examples().len();
-        // The dashboard also decides Always Allow and batches.
-        assert_eq!(taken, runnable + 6 + 5 + 2);
+        // The dashboard also decides Always Allow and batches; an Ask
+        // proposal is one of five kinds.
+        assert_eq!(taken, runnable + 6 + 5 + 2 + 5);
         assert_eq!(
             offered(Interface::CliFollow, ActionKind::PullRequest),
             Offer::Refuse

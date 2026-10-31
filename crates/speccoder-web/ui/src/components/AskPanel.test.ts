@@ -117,7 +117,11 @@ describe("AskPanel", () => {
     expect(await violations()).toEqual([]);
     press("Escape", {}, document.querySelector("textarea")!);
     flushSync();
-    expect(host.post).toHaveBeenCalledWith("/api/ask/stop", { conversation: null });
+    // A new conversation's id is chosen before its first question, so Stop
+    // names exactly that turn.
+    const asked = host.post.mock.calls.find((c) => c[0] === "/api/ask")![1] as { id: string };
+    expect(asked.id).toMatch(/^c-[0-9a-f]+$/);
+    expect(host.post).toHaveBeenCalledWith("/api/ask/stop", { conversation: asked.id });
     expect(ask.open).toBe(true);
     // Stopped at once: no waiting line, Send is back, the words stay.
     expect(document.body.textContent).toContain("Stopped — the words so far");

@@ -376,6 +376,21 @@ fn restore_without_changes_is_a_no_op() {
     assert!(restore(repo.path(), tmp.path(), &c).unwrap().is_empty());
 }
 
+/// Only a branch that ticked boxes and changed nothing else is merged for
+/// the person: a deletion or an edit on the branch is never undone.
+#[test]
+fn only_a_branch_that_only_ticked_is_merged_for_you() {
+    use speccoder_runtime::worktree::only_ticked;
+    let base = "- [ ] T001 a\n- [ ] T002 b\n";
+    assert!(only_ticked(base, "- [x] T001 a\n- [ ] T002 b\n"));
+    assert!(!only_ticked(base, "- [ ] T001 a\n"), "a deletion");
+    assert!(
+        !only_ticked(base, "- [x] T001 a\n- [ ] T002 c\n"),
+        "an edit"
+    );
+    assert!(!only_ticked(base, base), "nothing to keep");
+}
+
 #[test]
 fn ticks_carry_only_where_the_words_are_the_same() {
     let ours = "## Phase 1\n- [x] T001 a\n- [X] T002 old words\n- [ ] T003 c\n";

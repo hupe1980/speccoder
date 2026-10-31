@@ -38,6 +38,10 @@ adheres to [Semantic Versioning](https://semver.org/).
   account opens at the turns an answer cites. **New Ask Conversation**
   (⌥⌘N, the palette). A promoted task still open offers *Skip* first in
   its inspector. `--events` adds `ladder.offered` and `unit.promoted`.
+- Ask in the terminal offers to record the change it suggests
+  (`[y/N]`, at a terminal only); in an editor (ACP), words without a `/`
+  are a question: streamed, sources as links, a suggested change a
+  permission dialog that only **Record** records.
 
 ### Changed
 

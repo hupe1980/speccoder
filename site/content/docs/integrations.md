@@ -26,10 +26,12 @@ group = "Use"
 | `/inbox` | What waits for your decision, in every feature |
 | `/report`, `/status`, `/cost` | The evidence, the current or last run, tokens and money |
 | `/specify <what to build>`, `/clarify`, `/plan`, `/tasks`, `/analyze` | Spec Kit's planning skills |
+| any words without `/`, or `/ask <question>` | [Ask](@/docs/web.md#ask) about the project, in the session's conversation |
 
 - Tasks and the model's tool calls appear as the editor's tool calls; during `/run` the feature's tasks are the editor's plan.
 - A call that needs a person becomes the editor's permission dialog, with the [inline prompt](@/docs/approvals.md#inline)'s content and choices. Rejecting asks for a reason in a form when the editor can show one; dismissing the dialog stops the task.
-- Cancelling stops a feature run before its next task.
+- A question streams its answer; what it read shows as tool calls and each source it cites as a link to the file. A change it suggests is a permission dialog showing the command it would record: only **Record** records it; **Not now** leaves everything as it was.
+- Cancelling stops a feature run before its next task, and an Ask answer at once.
 - The model and key come from `speccoder.toml` and the environment, as on the command line.
 
 ## MCP servers
