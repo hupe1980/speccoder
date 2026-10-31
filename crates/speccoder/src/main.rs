@@ -225,6 +225,78 @@ fn attest_branch(
 
 /// `speccoder spec archive [<change>] [--yes] [--allow-unverified TASK]…`:
 /// flags given after the change are read from the trailing arguments too.
+/// `speccoder spec promote <unit>/<task> [--conversation ID]… [--no-conversation] [--decline]`.
+fn promote(
+    path: &std::path::Path,
+    arguments: &[String],
+    options: speccoder_runtime::RunOptions,
+) -> speccoder_core::CommandResult {
+    use speccoder_core::{CommandResult, CommandStatus};
+    let (mut task, mut chosen, mut none, mut decline) = (None, Vec::new(), false, false);
+    let mut args = arguments.iter();
+    while let Some(a) = args.next() {
+        match a.as_str() {
+            "--decline" => decline = true,
+            "--no-conversation" => none = true,
+            "--conversation" => chosen.extend(args.next().cloned()),
+            other if other.starts_with("--conversation=") => {
+                chosen.push(other["--conversation=".len()..].to_owned());
+            }
+            other if task.is_none() && !other.starts_with('-') => task = Some(other.to_owned()),
+            other => {
+                return CommandResult::new(
+                    "promote",
+                    CommandStatus::UsageError,
+                    &format!("`{other}` is not an option of spec promote"),
+                )
+                .with_code("USAGE");
+            }
+        }
+    }
+    let Some(task) = task else {
+        return CommandResult::new(
+            "promote",
+            CommandStatus::UsageError,
+            "name the task: speccoder spec promote <unit>/<task> (Needs You lists the offers)",
+        )
+        .with_code("USAGE");
+    };
+    let Some(state) = speccoder_runtime::worktree::state_dir() else {
+        return CommandResult::new("promote", CommandStatus::ConfigError, "no state directory")
+            .with_code("NO-STATE-DIR");
+    };
+    let run = if decline {
+        speccoder_core::actions::Runnable::DeclinePromotion { task: task.clone() }
+    } else {
+        let plane = speccoder_runtime::worktree::project_state_dir(&state, path);
+        let Some(offer) = speccoder_runtime::ladder::offer_for(path, &plane, &task) else {
+            return CommandResult::new(
+                "promote",
+                CommandStatus::NotFound,
+                &format!(
+                    "no promotion is offered for {task}: none of its signals holds, or it was declined on the same ones"
+                ),
+            );
+        };
+        let conversations = match (none, chosen.is_empty()) {
+            (true, _) => Vec::new(),
+            (false, true) => speccoder_runtime::ladder::suggested_by(&plane, &offer),
+            (false, false) => chosen,
+        };
+        speccoder_runtime::ladder::promotion(&offer, conversations)
+    };
+    speccoder_runtime::actions::perform(
+        path,
+        None,
+        speccoder_runtime::actions::Dispatch {
+            run: &run,
+            input: None,
+            via: speccoder_core::actions::Via::Terminal,
+            options,
+        },
+    )
+}
+
 fn archive(
     cli: &Cli,
     path: &std::path::Path,
@@ -786,7 +858,9 @@ fn main() {
     if feature.is_none() && !machine && interactive(false) {
         let needs = match command {
             Command::Run { return_: false, .. } => true,
-            Command::Spec { name: Some(n), .. } => n != "archive" && !creates(path, n),
+            Command::Spec { name: Some(n), .. } => {
+                n != "archive" && n != "promote" && !creates(path, n)
+            }
             _ => false,
         };
         if needs {
@@ -1465,6 +1539,19 @@ fn main() {
             through,
         } => match name.as_deref() {
             Some("archive") => archive(&cli, path, arguments, *yes, allow_unverified),
+            Some("promote") => {
+                let (progress, _attention) = live_progress(&cli, &notify, events.as_ref());
+                promote(
+                    path,
+                    arguments,
+                    speccoder_runtime::RunOptions {
+                        approver: interactive(*no_prompt)
+                            .then(|| std::sync::Arc::new(prompt::Terminal) as _),
+                        progress,
+                        ..speccoder_runtime::RunOptions::default()
+                    },
+                )
+            }
             None => speccoder_runtime::hosting::list(path),
             Some(name) => {
                 let (progress, _attention) = live_progress(&cli, &notify, events.as_ref());
@@ -1970,7 +2057,7 @@ fn offers_next(cli: &Cli) -> bool {
             name: Some(n),
             no_prompt: false,
             ..
-        }) => n != "archive",
+        }) => n != "archive" && n != "promote",
         Some(Command::Task { action }) => !matches!(action, cli::TaskAction::Show { .. }),
         Some(Command::Report {
             live: false,

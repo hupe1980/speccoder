@@ -742,6 +742,26 @@
           "tables": []
         },
         {
+          "name": "ladder",
+          "title": "Promotion",
+          "about": "When a quick change or bug that grew is offered as a spec of its own.",
+          "named": false,
+          "keys": [
+            {
+              "key": "promote_files",
+              "kind": "integer",
+              "about": "More files changed than this offers promotion",
+              "default": 8,
+              "value": null,
+              "choices": [],
+              "min": 1.0,
+              "max": 10000.0,
+              "required": false
+            }
+          ],
+          "tables": []
+        },
+        {
           "name": "converge",
           "title": "Convergence",
           "about": "How often a feature may be brought back to its spec.",

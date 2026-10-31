@@ -78,7 +78,7 @@ class AppState {
   composer = $state<{ text?: string } | null>(null);
   /** The New Feature sheet is open: prefilled text, the source a hand-off
    *  supplied, the *Plan it* choice. */
-  newFeature = $state<{ text?: string; source?: { kind: "issue"; number: number; title: string } | null; through?: Through } | null>(null);
+  newFeature = $state<{ text?: string; source?: { kind: "issue"; number: number; title: string } | { kind: "promotion"; task: string; conversations: string[]; why: string } | null; through?: Through } | null>(null);
   /** The New Project sheet is open (`existing`: the folder is the host's own). */
   newProject = $state<{ idea?: string; path?: string; existing?: boolean } | null>(null);
   /** The Clone sheet is open. */
@@ -298,6 +298,13 @@ class AppState {
     }
     if (a.blocked) {
       this.toast({ tone: "warn", text: a.blocked });
+      return;
+    }
+    // Every way to start a spec lands in the one New feature sheet (D-131):
+    // a promotion opens it with the requirement and its conversations.
+    const r = a.run;
+    if (!confirmed && r.kind === "plan_through" && r.from.kind === "create" && r.from.source.kind === "promotion") {
+      this.newFeature = { text: r.from.description, source: { kind: "promotion", task: r.from.source.task, conversations: r.from.source.conversations ?? [], why: a.why }, through: r.through };
       return;
     }
     // One run per project: another process holds the worktree and journal.

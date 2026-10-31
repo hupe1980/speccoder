@@ -764,6 +764,7 @@ fn trace(
                 task: None,
                 verdict: None,
                 changed: false,
+                inherited: None,
             });
         }
         for r in citing {
@@ -774,6 +775,7 @@ fn trace(
                 task: Some(r.tick.task.clone()),
                 verdict: Some(word(r)),
                 changed: r.stale.iter().any(|d| d.id == *id),
+                inherited: None,
             });
         }
     }
@@ -789,6 +791,7 @@ fn trace(
                 task: Some(r.tick.task.clone()),
                 verdict: Some(word(r)),
                 changed: false,
+                inherited: None,
             });
         }
     }

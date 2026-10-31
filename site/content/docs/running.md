@@ -88,6 +88,20 @@ speccoder do "Make the login button blue" --no-run      # record it; prints the 
 
 `do` records the change in a standing feature, `NNN-quick-changes`: a user story (your words, each `--check` as an acceptance scenario), an approved requirement and a task citing it. It commits exactly those files (`spec(NNN-quick-changes): quick change: …`) and runs the task. Quick changes do not wait for each other. In the [app](@/docs/web.md): **Quick Change**, or `q`. Bugs go through [`speccoder bug`](@/docs/bugs.md).
 
+## Promotion
+
+A quick change or bug fix that grew past one requirement is offered as a spec of its own — on what speccoder measured, never on a model's opinion. A signal holds when the task's change touches more files than [`[ladder] promote_files`](@/docs/configuration.md#ladder) (8) or more than one package, when two of its attempts failed for different reasons, when its requirement has ambiguous words, or when it changes what judges (`speccoder.toml`, CI workflows). The unit's own planning files do not count.
+
+The offer is in Needs You (*Ready to review*; it never notifies) and in the task's inspector, naming each signal with its value and threshold. **Start a spec** opens the New feature sheet with the requirement word for word and the Ask conversations that suggested it, each yours to keep or drop; **Not now** holds until a signal that did not hold then holds.
+
+```sh
+speccoder spec promote 002-quick-changes/T004                       # the conversation that suggested it comes along
+speccoder spec promote 002-quick-changes/T004 --no-conversation
+speccoder spec promote 002-quick-changes/T004 --decline
+```
+
+The new unit's origin is recorded once in speccoder's state, never in a spec file. Its trace shows the earlier tick as *inherited, proven against an earlier wording*, linked to its evidence; nothing is verified in the new unit until it is proven there. The lower unit stays as it was. There is no way back down: to drop a spec, use `task drop` or archive it.
+
 ## Outcomes
 
 | Outcome | Exit | Meaning | What to do |

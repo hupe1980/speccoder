@@ -16,7 +16,23 @@
   const opened = app.newFeature ?? {};
   let text = $state(opened.text ?? "");
   // The hand-off's source, while its text is unchanged.
-  const handed = opened.source ?? null;
+  const handed = opened.source?.kind === "issue" ? opened.source : null;
+  // A quick change or bug that grew: its requirement, and the Ask
+  // conversations that led to it, each the person's to carry or not.
+  const promoted = opened.source?.kind === "promotion" ? opened.source : null;
+  let carry = $state<string[]>(promoted?.conversations ?? []);
+  let titles = $state<Record<string, { title: string; turns: number }>>({});
+  $effect(() => {
+    if (!promoted?.conversations.length) return;
+    void get<Reply<{ conversations: { id: string; title: string; turns: number }[] }>>("/api/ask/conversations")
+      .then((r) => (titles = Object.fromEntries((r.data?.conversations ?? []).map((c) => [c.id, c]))))
+      .catch(() => {});
+  });
+  const promoteCommand = $derived(
+    promoted
+      ? `speccoder spec promote ${promoted.task}${carry.length ? carry.map((c) => ` --conversation ${c}`).join("") : promoted.conversations.length ? " --no-conversation" : ""}`
+      : "",
+  );
   let source = $state<"description" | "issue">(handed ? "issue" : "description");
   let through = $state<Through>(opened.through ?? "tasks");
   let commands = $state(false);
@@ -109,6 +125,16 @@
     app.view = "documents";
     app.doc = "spec";
     close();
+    if (promoted) {
+      return app.perform(
+        offer(
+          { kind: "plan_through", from: { kind: "create", description, source: { kind: "promotion", task: promoted.task, conversations: carry } }, through },
+          { group: "plan", label: `new ${unit} from ${promoted.task}`, why: promoted.why, command: promoteCommand },
+        ),
+        undefined,
+        true,
+      );
+    }
     await app.perform(
       offer(
         { kind: "plan_through", from: { kind: "create", description, source: issue ? { kind: "issue", number: issue } : { kind: "description" } }, through },
@@ -184,6 +210,17 @@
       </div>
     {/if}
 
+    {#if promoted}
+      <div class="d-field promoted" aria-label="Promoted from">
+        <span class="d-label">Promoted from {promoted.task}</span>
+        <span class="d-note">Its requirement, word for word. Its tick comes along as <em>inherited, proven against an earlier wording</em> — never counted verified here until it is re-proven.</span>
+        {#each promoted.conversations as c (c)}
+          <label class="carry"><input type="checkbox" checked={carry.includes(c)} onchange={(e) => (carry = (e.target as HTMLInputElement).checked ? [...carry, c] : carry.filter((x) => x !== c))} /> <Icon name="bubble" size={12} /> {titles[c]?.title ?? c}{#if titles[c]}{" "}<span class="muted">· {titles[c].turns} {titles[c].turns === 1 ? "turn" : "turns"}</span>{/if}</label>
+        {/each}
+        {#if promoted.conversations.length}<span class="d-note">A ticked conversation is given to the skill word for word.</span>{/if}
+      </div>
+    {/if}
+
     {#if matches.length}
       <div class="similar" role="status" aria-live="polite">
         {#each matches as m (m.unit + m.requirement)}
@@ -218,7 +255,7 @@
 
     <details bind:open={commands}>
       <summary>Show commands</summary>
-      <div class="d-mono">{featureCommands(create, text, through, issue).join("\n") || "speccoder spec"}</div>
+      <div class="d-mono">{promoted ? promoteCommand : featureCommands(create, text, through, issue).join("\n") || "speccoder spec"}</div>
     </details>
 
     {#if blocked}
@@ -238,6 +275,8 @@
 </div>
 
 <style>
+  .promoted { gap: 0.35rem; }
+  .carry { display: flex; align-items: center; gap: 0.4rem; font-size: 0.88rem; }
   .similar { display: grid; gap: 0.35rem; }
   .similar .d-warn { grid-template-columns: 1fr auto; align-items: center; }
   details summary { cursor: pointer; font-size: 0.86rem; color: var(--accent-ink); font-weight: 600; }

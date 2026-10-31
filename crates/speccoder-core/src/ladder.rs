@@ -36,6 +36,27 @@ pub enum Origin {
         /// The digest of its context-manifest entry.
         context_sha256: Option<String>,
     },
+    /// A unit started from a quick change or bug that grew (promotion).
+    PromotedFrom {
+        /// The lower unit.
+        from_unit: String,
+        /// Its requirement, carried verbatim.
+        requirement: String,
+        /// The task that showed the signals.
+        task: String,
+        /// The requirement's words' digest when promoted.
+        requirement_sha256: String,
+        /// The Ask conversations carried, `id` and digest.
+        conversations: Vec<(String, String)>,
+        /// The signals that held.
+        signals: Vec<String>,
+        /// Who.
+        by: String,
+        /// Through what.
+        via: Via,
+        /// Unix seconds.
+        at: u64,
+    },
     /// Suggested in an Ask conversation and confirmed by a person.
     Asked {
         /// The conversation (`c-…`).
@@ -61,6 +82,12 @@ impl Origin {
                 None => format!("issue #{number}"),
             },
             Self::Asked { conversation, .. } => format!("asked in conversation {conversation}"),
+            Self::PromotedFrom {
+                from_unit,
+                requirement,
+                by,
+                ..
+            } => format!("promoted from {from_unit}/{requirement} by {by}"),
         }
     }
 }
@@ -106,6 +133,105 @@ pub fn rung_of(unit: &str, standing: &[(String, Rung)]) -> Rung {
                     .is_some_and(|rest| rest.starts_with('/'))
         })
         .map_or(Rung::Feature, |(_, r)| *r)
+}
+
+/// What promotion signals are computed from: facts speccoder recorded,
+/// never a model's opinion.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SignalInput {
+    /// Files the task's change touched.
+    pub files_changed: u64,
+    /// Packages (manifest roots) among them.
+    pub packages_changed: u64,
+    /// The causes of its failed attempts, one per attempt.
+    pub red_causes: Vec<String>,
+    /// Ambiguity markers in its requirement's words.
+    pub ambiguity_markers: u64,
+    /// Files among them that decide verdicts (the checks' configuration).
+    pub judge_paths: Vec<String>,
+    /// `[ladder] promote_files`.
+    pub promote_files: u64,
+}
+
+/// A promotion signal that holds, with what was measured.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct Signal {
+    /// `S1` (size), `S2` (repeated distinct failures), `S3` (ambiguous
+    /// words), `S4` (touches what judges).
+    pub id: String,
+    /// What it measured, in a line.
+    pub text: String,
+    /// The measured value.
+    pub value: u64,
+    /// The threshold it passed.
+    pub threshold: u64,
+}
+
+/// The signals that hold for `i`: a quick change or bug that grew past
+/// one requirement's ceremony. Pure and deterministic.
+#[must_use]
+pub fn signals(i: &SignalInput) -> Vec<Signal> {
+    let mut out = Vec::new();
+    let sig = |id: &str, text: String, value: u64, threshold: u64| Signal {
+        id: id.to_owned(),
+        text,
+        value,
+        threshold,
+    };
+    if i.files_changed > i.promote_files {
+        out.push(sig(
+            "S1",
+            format!(
+                "{} files changed (more than {})",
+                i.files_changed, i.promote_files
+            ),
+            i.files_changed,
+            i.promote_files,
+        ));
+    } else if i.packages_changed > 1 {
+        out.push(sig(
+            "S1",
+            format!("{} packages changed (more than 1)", i.packages_changed),
+            i.packages_changed,
+            1,
+        ));
+    }
+    let mut causes: Vec<&str> = i.red_causes.iter().map(String::as_str).collect();
+    causes.sort_unstable();
+    causes.dedup();
+    if causes.len() >= 2 {
+        out.push(sig(
+            "S2",
+            format!("{} failed attempts, each for another reason", causes.len()),
+            causes.len() as u64,
+            2,
+        ));
+    }
+    if i.ambiguity_markers > 0 {
+        out.push(sig(
+            "S3",
+            format!(
+                "{} ambiguous {} in the requirement",
+                i.ambiguity_markers,
+                if i.ambiguity_markers == 1 {
+                    "word"
+                } else {
+                    "words"
+                }
+            ),
+            i.ambiguity_markers,
+            0,
+        ));
+    }
+    if !i.judge_paths.is_empty() {
+        out.push(sig(
+            "S4",
+            format!("changes what judges: {}", i.judge_paths.join(", ")),
+            i.judge_paths.len() as u64,
+            0,
+        ));
+    }
+    out
 }
 
 /// The subject a bug's origin is recorded for: `<unit>/<requirement>`.
@@ -512,5 +638,43 @@ mod tests {
         assert_eq!(rung_of("001-greet", &standing), Rung::Feature);
         assert_eq!(rung_of("001-greet", &[]), Rung::Feature);
         assert_eq!(Rung::Quick.as_str(), "quick");
+    }
+
+    fn input(files: u64) -> SignalInput {
+        SignalInput {
+            files_changed: files,
+            promote_files: 8,
+            ..SignalInput::default()
+        }
+    }
+
+    #[test]
+    fn signals_hold_on_recorded_facts_only() {
+        assert!(signals(&SignalInput::default()).is_empty());
+        assert!(signals(&input(8)).is_empty());
+        let s = signals(&input(11));
+        assert_eq!(
+            (s[0].id.as_str(), s[0].value, s[0].threshold),
+            ("S1", 11, 8)
+        );
+        // Monotone in files: past the threshold it keeps holding.
+        for n in 9..40 {
+            assert_eq!(signals(&input(n)).len(), 1);
+        }
+        let two = SignalInput {
+            red_causes: vec!["a test failed".into(), "a test failed".into()],
+            ..input(1)
+        };
+        assert!(signals(&two).is_empty(), "the same cause twice is one");
+        let distinct = SignalInput {
+            red_causes: vec!["a test failed".into(), "the build broke".into()],
+            ambiguity_markers: 1,
+            judge_paths: vec!["speccoder.toml".into()],
+            packages_changed: 2,
+            ..input(3)
+        };
+        let ids: Vec<String> = signals(&distinct).into_iter().map(|s| s.id).collect();
+        assert_eq!(ids, ["S1", "S2", "S3", "S4"]);
+        assert_eq!(signals(&distinct), signals(&distinct.clone()));
     }
 }

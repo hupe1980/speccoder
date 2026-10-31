@@ -158,6 +158,14 @@ speccoder config set commands.allow_prefix npm run          # shows it, then: ty
 | `[ask] max_turn_tokens` | `100000` | Tokens one question may use, cache reads apart (`ASK-BUDGET`) |
 | `[ask] daily_tokens` | `1000000` | Tokens Ask may use in a UTC day (`ASK-BUDGET`) |
 
+## `[ladder]`
+
+A quick change or bug that grew is [offered as a spec of its own](@/docs/running.md#promotion).
+
+| Key | Default | Meaning |
+|---|---|---|
+| `[ladder] promote_files` | `8` | More files changed than this offers promotion (so do two packages, two failed attempts for different reasons, ambiguous words in the requirement, or a change to what judges) |
+
 ## `[bug]`
 
 [`speccoder bug`](@/docs/bugs.md). Project settings only: the same keys in your user config are ignored, with a warning naming them.

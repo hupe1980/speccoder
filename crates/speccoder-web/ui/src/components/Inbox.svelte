@@ -33,6 +33,7 @@
     stuck: { title: "Did Not Pass", icon: "xoctagon", tone: "failed", why: "Decide: run again, leave a note, skip or accept." },
     aside: { title: "Changes Set Aside", icon: "tray", tone: "needs_approval", why: "Found in the worktree when a run started — keep them on the branch, or let them go." },
     commit: { title: "Plans to Commit", icon: "doc", tone: "ready", why: "A run reads committed files only." },
+    promote: { title: "Grew Past Its Rung", icon: "sparkle", tone: "ready", why: "Measured, not guessed: it touched more than one requirement's worth. Start a spec from it — its tick is inherited, not verified — or not now." },
     handoff: { title: "Ready to Hand Off", icon: "arrowup", tone: "verified", why: "Every task is done — review the branch." },
   };
   // A kind the page does not know is shown under its own name, never dropped.

@@ -321,6 +321,12 @@ pub enum Runnable {
     /// Run the sample's own checks, offline, in its copy (the sample's
     /// end card, *Run the checks yourself*).
     SampleChecks,
+    /// Decline a promotion offer: it returns only when a signal that did
+    /// not hold now holds.
+    DeclinePromotion {
+        /// `<unit>/<task>`.
+        task: String,
+    },
 }
 
 /// How far plan through goes.
@@ -372,6 +378,15 @@ pub enum FeatureSource {
     Issue {
         /// Its number.
         number: u64,
+    },
+    /// A quick change or bug that grew: its requirement verbatim, and the
+    /// Ask conversations the person chose to carry.
+    Promotion {
+        /// `<unit>/<task>`.
+        task: String,
+        /// Conversation ids (`c-…`).
+        #[serde(default)]
+        conversations: Vec<String>,
     },
 }
 
@@ -556,6 +571,8 @@ pub enum ActionKind {
     OpenSample,
     /// [`Runnable::SampleChecks`].
     SampleChecks,
+    /// [`Runnable::DeclinePromotion`].
+    DeclinePromotion,
     /// No runnable: the person runs the command.
     Command,
 }
@@ -605,6 +622,7 @@ impl ActionKind {
         Self::CloneRepository,
         Self::OpenSample,
         Self::SampleChecks,
+        Self::DeclinePromotion,
         Self::Command,
     ];
 
@@ -654,6 +672,7 @@ impl ActionKind {
             Self::CloneRepository => "clone_repository",
             Self::OpenSample => "open_sample",
             Self::SampleChecks => "sample_checks",
+            Self::DeclinePromotion => "decline_promotion",
             Self::Command => "command",
         }
     }
@@ -813,6 +832,9 @@ impl ActionKind {
             },
             Self::OpenSample => Runnable::OpenSample { fresh: false },
             Self::SampleChecks => Runnable::SampleChecks,
+            Self::DeclinePromotion => Runnable::DeclinePromotion {
+                task: "004-quick-changes/T002".to_owned(),
+            },
             Self::Command => return None,
         })
     }
@@ -871,6 +893,7 @@ impl Runnable {
             Self::CloneRepository { .. } => ActionKind::CloneRepository,
             Self::OpenSample { .. } => ActionKind::OpenSample,
             Self::SampleChecks => ActionKind::SampleChecks,
+            Self::DeclinePromotion { .. } => ActionKind::DeclinePromotion,
         }
     }
 }
@@ -922,7 +945,8 @@ pub fn identity(run: Option<&Runnable>, command: &str) -> ActionId {
         | Runnable::DropSetAside { task }
         | Runnable::AllowAlways { task, .. }
         | Runnable::CodeNudge { task, .. }
-        | Runnable::AcceptanceAt { task, .. } => Some(task.clone()),
+        | Runnable::AcceptanceAt { task, .. }
+        | Runnable::DeclinePromotion { task } => Some(task.clone()),
         Runnable::OracleTests { req, .. } => Some(req.clone()),
         Runnable::ApproveAndRun { mode, .. } => Some(mode.as_str().to_owned()),
         Runnable::Comment { id, .. } => id.clone(),

@@ -865,6 +865,16 @@ fn speccoder(argv: &[String], constant: bool) -> How {
         // Another project's: run there.
         (Some(_), _) if has(a, "-C") => words(Some("it is another project's: run it there")),
         (Some("spec"), Some("archive")) => run_cmd(),
+        // The offer lives in Needs You; declining it is one action.
+        (Some("spec"), Some("promote")) => match positional(a, 2) {
+            Some(task) if has(a, "--decline") => perform(
+                Runnable::DeclinePromotion {
+                    task: task.to_owned(),
+                },
+                a,
+            ),
+            _ => view(View::Approvals, None),
+        },
         (Some("spec"), Some(name)) if !has_blank(name) && !name.starts_with('-') => {
             let given = positional(a, 2);
             if let Some(through) = flag(a, "--through").and_then(Through::parse) {

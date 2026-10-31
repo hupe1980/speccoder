@@ -14,10 +14,10 @@
   const uncited = $derived((r?.trace ?? []).filter((t) => !t.task));
   // One row per requirement, the tasks that prove it beside it.
   const matrix = $derived.by(() => {
-    const rows = new Map<string, { task: string; verdict: string | null; test: string | null; changed: boolean }[]>();
+    const rows = new Map<string, { task: string; verdict: string | null; test: string | null; changed: boolean; from: string | null }[]>();
     for (const t of r?.trace ?? []) {
       const row = rows.get(t.requirement) ?? [];
-      if (t.task) row.push({ task: t.task, verdict: t.verdict, test: t.test, changed: !!t.changed });
+      if (t.task) row.push({ task: t.inherited ? t.inherited.task : t.task, verdict: t.verdict, test: t.test, changed: !!t.changed, from: t.inherited?.unit ?? null });
       rows.set(t.requirement, row);
     }
     return [...rows].map(([requirement, tasks]) => ({ requirement, tasks }));
@@ -88,7 +88,7 @@
               <span class="req mono">{m.requirement}</span>
               <span class="tasks">
                 {#each m.tasks as t (t.task)}
-                  <button class="chip s-{t.changed ? 'needs_approval' : (t.verdict ?? 'blocked')}" title="{t.changed ? `${word(t.verdict ?? 'blocked')} against an earlier wording — the requirement changed since` : word(t.verdict ?? 'blocked')}{t.test ? ` · ${t.test}` : ''}" onclick={() => { app.view = 'board'; void app.selectTask(t.task); }}><Icon name={t.changed ? "exclaim" : symbol(t.verdict ?? "blocked")} size={11} weight={2.4} /> {t.task}{#if t.changed}<span class="was">earlier wording</span>{/if}</button>
+                  <button class="chip s-{t.changed ? 'needs_approval' : (t.verdict ?? 'blocked')}" title="{t.changed ? `${word(t.verdict ?? 'blocked')} against an earlier wording — the requirement changed since` : word(t.verdict ?? 'blocked')}{t.test ? ` · ${t.test}` : ''}" onclick={async () => { if (t.from) await app.selectFeature(t.from); app.view = 'board'; void app.selectTask(t.task); }}><Icon name={t.changed ? "exclaim" : symbol(t.verdict ?? "blocked")} size={11} weight={2.4} /> {t.task}{#if t.from}<span class="was">inherited from {t.from.replace(/^\d+-/, "")} · earlier wording</span>{:else if t.changed}<span class="was">earlier wording</span>{/if}</button>
                 {:else}<span class="muted small">no task cites it</span>{/each}
               </span>
             </li>

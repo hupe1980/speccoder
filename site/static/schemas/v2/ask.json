@@ -1393,6 +1393,24 @@
           "required": [
             "kind"
           ]
+        },
+        {
+          "description": "Decline a promotion offer: it returns only when a signal that did\nnot hold now holds.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "decline_promotion"
+            },
+            "task": {
+              "description": "`<unit>/<task>`.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "task"
+          ]
         }
       ]
     },
@@ -1763,6 +1781,33 @@
           "required": [
             "kind",
             "number"
+          ]
+        },
+        {
+          "description": "A quick change or bug that grew: its requirement verbatim, and the\nAsk conversations the person chose to carry.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "promotion"
+            },
+            "task": {
+              "description": "`<unit>/<task>`.",
+              "type": "string"
+            },
+            "conversations": {
+              "description": "Conversation ids (`c-…`).",
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": []
+            }
+          },
+          "required": [
+            "kind",
+            "task",
+            "conversations"
           ]
         }
       ]

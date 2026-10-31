@@ -205,4 +205,33 @@ describe("NewFeature", () => {
     await wait();
     expect(document.body.textContent).not.toContain("Close to");
   });
+
+  it("promotes with the requirement verbatim and the conversations the person keeps", async () => {
+    host.get.mockImplementation(async (path: string) => {
+      if (path.startsWith("/api/ask/conversations")) return { status: "ok", data: { conversations: [{ id: "c-1", title: "Why does sign-in log twice?", turns: 3 }] } };
+      if (path.startsWith("/api/similar")) return { status: "ok", data: { query: "", compared: 0, limited: false, matches: [] } };
+      if (path.startsWith("/api/skill-cost")) return { cost: null, model: null };
+      throw new Error(path);
+    });
+    open({ text: "Log every sign-in", source: { kind: "promotion", task: "002-quick-changes/T001", conversations: ["c-1"], why: "11 files changed" }, through: "tasks" });
+    await wait();
+    await settle(12);
+    expect(field().value).toBe("Log every sign-in");
+    expect(document.body.textContent).toContain("Promoted from 002-quick-changes/T001");
+    expect(document.querySelector(".carry")?.textContent?.replace(/\s+/g, " ").trim()).toBe("Why does sign-in log twice? · 3 turns");
+    expect(document.body.textContent).toContain("speccoder spec promote 002-quick-changes/T001 --conversation c-1");
+    expect(await violations()).toEqual([]);
+    vi.useFakeTimers();
+    const box = document.querySelector<HTMLInputElement>(".carry input")!;
+    box.click();
+    flushSync();
+    expect(document.body.textContent).toContain("speccoder spec promote 002-quick-changes/T001 --no-conversation");
+    button(/^Start/).click();
+    await settle();
+    expect(host.app.perform).toHaveBeenCalledWith(
+      expect.objectContaining({ run: { kind: "plan_through", from: { kind: "create", description: "Log every sign-in", source: { kind: "promotion", task: "002-quick-changes/T001", conversations: [] } }, through: "tasks" } }),
+      undefined,
+      true,
+    );
+  });
 });

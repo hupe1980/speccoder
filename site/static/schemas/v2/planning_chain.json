@@ -510,6 +510,33 @@
             "kind",
             "number"
           ]
+        },
+        {
+          "description": "A quick change or bug that grew: its requirement verbatim, and the\nAsk conversations the person chose to carry.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "promotion"
+            },
+            "task": {
+              "description": "`<unit>/<task>`.",
+              "type": "string"
+            },
+            "conversations": {
+              "description": "Conversation ids (`c-…`).",
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": []
+            }
+          },
+          "required": [
+            "kind",
+            "task",
+            "conversations"
+          ]
         }
       ]
     }

@@ -491,7 +491,8 @@ pub fn report(path: &Path, feature: Option<&str>) -> CommandResult {
             }
         }
     }
-    let trace = trace(&format.requirement_ids(root, &f.feature.dir), &tasks);
+    let mut trace = trace(&format.requirement_ids(root, &f.feature.dir), &tasks);
+    trace.extend(inherited(root, &name));
     let totals = totals(&tasks);
     let finished = totals.verified
         + totals.regression_only
@@ -648,6 +649,52 @@ pub fn show(path: &Path, feature: Option<&str>, task: &str) -> CommandResult {
     CommandResult::ok("task show", &message).with_data(CommandData::Report(Box::new(one)))
 }
 
+/// A promoted unit's rows from where it came from: the lower unit's ticks
+/// of the carried requirement, proven against its earlier wording.
+fn inherited(root: &Path, unit: &str) -> Vec<TraceRow> {
+    let Some(state) = crate::worktree::state_dir() else {
+        return Vec::new();
+    };
+    let plane = crate::worktree::project_state_dir(&state, root);
+    let Some((from_unit, requirement, task)) = crate::ladder::of(&plane, unit)
+        .into_iter()
+        .find_map(|o| match o {
+            speccoder_core::ladder::Origin::PromotedFrom {
+                from_unit,
+                requirement,
+                task,
+                ..
+            } => Some((from_unit, requirement, task)),
+            _ => None,
+        })
+    else {
+        return Vec::new();
+    };
+    let lower = report(root, Some(&from_unit));
+    let Some(CommandData::Report(r)) = lower.data() else {
+        return Vec::new();
+    };
+    r.tasks
+        .iter()
+        .filter(|t| t.id == task && t.commit.is_some())
+        .map(|t| TraceRow {
+            // The lower unit's requirement, never one of this unit's.
+            requirement: format!("{from_unit}/{requirement}"),
+            scenario: None,
+            test: None,
+            task: Some(format!("{from_unit}/{}", t.id)),
+            verdict: Some(t.state.clone()),
+            changed: true,
+            inherited: Some(speccoder_core::Inherited {
+                unit: from_unit.clone(),
+                requirement: requirement.clone(),
+                task: t.id.clone(),
+                commit: t.commit.clone(),
+            }),
+        })
+        .collect()
+}
+
 /// One row per requirement and task citing it (by its identifier as a word
 /// in the title); a requirement no task cites is a row of its own.
 fn trace(requirements: &[(String, String)], tasks: &[TaskStatus]) -> Vec<TraceRow> {
@@ -667,6 +714,7 @@ fn trace(requirements: &[(String, String)], tasks: &[TaskStatus]) -> Vec<TraceRo
                         .drift
                         .as_ref()
                         .is_some_and(|d| d.requirements.iter().any(|r| r.id == *id)),
+                    inherited: None,
                 })
                 .collect();
             if rows.is_empty() {
@@ -677,6 +725,7 @@ fn trace(requirements: &[(String, String)], tasks: &[TaskStatus]) -> Vec<TraceRo
                     task: None,
                     verdict: None,
                     changed: false,
+                    inherited: None,
                 }]
             } else {
                 rows

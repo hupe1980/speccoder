@@ -58,6 +58,7 @@ fn snapshot() -> Snapshot {
                 task: None,
                 verdict: None,
                 changed: false,
+                inherited: None,
             }],
             totals: StatusTotals {
                 verified: 1,

@@ -818,6 +818,22 @@ fn finish(
     result.with_data(CommandData::Ask(Box::new(report)))
 }
 
+/// Conversation `id`'s questions and answers, word for word, and their
+/// digest: what promotion carries into a new spec.
+#[must_use]
+pub fn words(path: &Path, state: &Path, id: &str) -> Option<(String, String)> {
+    let (_, dir) = plane_dir(path, state).ok()?;
+    let t = load(&dir, id)?;
+    let text: String = t
+        .turns
+        .iter()
+        .map(|t| format!("Q: {}\nA: {}\n", t.question, t.answer))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let digest = crate::integrity::sha256_hex(text.as_bytes());
+    Some((text, digest))
+}
+
 /// The tokens Ask's conversations about `feature` used: input, output and
 /// cache reads.
 #[must_use]

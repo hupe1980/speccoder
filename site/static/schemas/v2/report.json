@@ -752,6 +752,17 @@
           "description": "The requirement changed since that task's tick: the verdict is for\nits earlier wording.",
           "type": "boolean",
           "default": false
+        },
+        "inherited": {
+          "description": "A tick made in the unit this one was promoted from: proven against\nan earlier wording, never counted as verified here.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Inherited"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -761,6 +772,37 @@
         "task",
         "verdict",
         "changed"
+      ]
+    },
+    "Inherited": {
+      "description": "Where an inherited trace row was proven.",
+      "type": "object",
+      "properties": {
+        "unit": {
+          "description": "The lower unit.",
+          "type": "string"
+        },
+        "requirement": {
+          "description": "Its requirement.",
+          "type": "string"
+        },
+        "task": {
+          "description": "Its task.",
+          "type": "string"
+        },
+        "commit": {
+          "description": "The commit that holds the evidence.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "unit",
+        "requirement",
+        "task",
+        "commit"
       ]
     },
     "StatusTotals": {

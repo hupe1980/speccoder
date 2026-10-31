@@ -22,6 +22,12 @@ adheres to [Semantic Versioning](https://semver.org/).
   items, trace rows and diff files.
 - A quick change or bug confirmed from Ask records the conversation as
   its origin; `report --cost` and Spend show Ask's tokens apart.
+- **Promotion** (`speccoder spec promote`, Needs You, the task inspector):
+  a quick change or bug fix that grew — more files than `[ladder]
+  promote_files`, two packages, two failures for different reasons,
+  ambiguous words, or a change to what judges — is offered as a spec of
+  its own. Its requirement is carried word for word with the
+  conversations you keep; the earlier tick is inherited, never verified.
 
 ### Changed
 

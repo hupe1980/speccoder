@@ -201,6 +201,7 @@ fn counted(kind: &str, n: usize) -> String {
         "aside" => ("set-aside change", "set-aside changes"),
         "commit" => ("plan to commit", "plans to commit"),
         "handoff" => ("branch to hand off", "branches to hand off"),
+        "promote" => ("change that grew", "changes that grew"),
         "bug_confirm" => (
             "bug reproduction to confirm",
             "bug reproductions to confirm",
@@ -607,6 +608,17 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
             ),
             vec![keep, drop],
         ));
+    }
+
+    // A quick change or bug that grew: one offer per task, on recorded
+    // facts (never a model's opinion), never a notification.
+    if let Some(state) = state {
+        let plane = crate::worktree::project_state_dir(state, path);
+        for o in crate::ladder::offers(path, &plane, feature) {
+            out.push(promote_item(&plane, &o, |t, d, a| {
+                item("promote", Some(&o.task), t, d, a)
+            }));
+        }
     }
 
     let stale: Vec<String> = r
@@ -1020,6 +1032,43 @@ fn of_feature(path: &Path, feature: &str, state: Option<&Path>, several: bool) -
         }
     }
     out
+}
+
+/// The offer to start a spec from `o`, the conversation that suggested it
+/// preselected.
+fn promote_item(
+    plane: &Path,
+    o: &crate::ladder::Offer,
+    item: impl Fn(String, String, Vec<Action>) -> InboxItem,
+) -> InboxItem {
+    let at = format!("{}/{}", o.unit, o.task);
+    let promote = action(
+        "review",
+        format!("start a spec from {}", o.task),
+        "its requirement, word for word, becomes a spec of its own; the earlier tick is inherited, not verified",
+        format!("speccoder spec promote {at}"),
+    )
+    .with_run(crate::ladder::promotion(o, crate::ladder::suggested_by(plane, o)));
+    let not_now = action(
+        "review",
+        "not now",
+        "offered again only when another signal holds",
+        format!("speccoder spec promote {at} --decline"),
+    )
+    .with_run(Runnable::DeclinePromotion { task: at });
+    item(
+        format!(
+            "{} grew past a {}",
+            o.task,
+            if o.bug { "bug fix" } else { "quick change" }
+        ),
+        o.signals
+            .iter()
+            .map(|s| s.text.clone())
+            .collect::<Vec<_>>()
+            .join(" · "),
+        vec![promote, not_now],
+    )
 }
 
 /// The kinds about finished work, whose order follows its evidence.

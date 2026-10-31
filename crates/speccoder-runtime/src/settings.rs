@@ -472,6 +472,18 @@ pub const CATALOGUE: &[Section] = &[
         ],
     },
     Section {
+        name: "ladder",
+        title: "Promotion",
+        about: "When a quick change or bug that grew is offered as a spec of its own.",
+        named: false,
+        keys: &[k(
+            "promote_files",
+            Kind::Int(1, 10_000),
+            Some("8"),
+            "More files changed than this offers promotion",
+        )],
+    },
+    Section {
         name: "converge",
         title: "Convergence",
         about: "How often a feature may be brought back to its spec.",

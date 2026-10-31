@@ -100,7 +100,7 @@ export interface ActionId {
  * kind arrives with its `Runnable` variant (the *adding a kind* contract
  * of `speccoder_runtime::actions::perform`).
  */
-export type ActionKind = "skill" | "run_task" | "run_feature" | "converge" | "commit" | "approve" | "reject" | "accept" | "skip" | "nudge" | "done" | "hint" | "rule" | "review" | "issue_comment" | "quick_change" | "keep_set_aside" | "drop_set_aside" | "fix_setup" | "feature" | "pull_request" | "bug_fix" | "bug_confirm" | "bug_run" | "bug_keep" | "allow_always" | "widen_policy" | "decide_batch" | "oracle_tests" | "approve_and_run" | "comment" | "comments_send" | "revision_undo" | "code_nudge" | "acceptance_at" | "preset_add" | "plan_through" | "new_project" | "undo_new_project" | "clone_repository" | "open_sample" | "sample_checks" | "command";
+export type ActionKind = "skill" | "run_task" | "run_feature" | "converge" | "commit" | "approve" | "reject" | "accept" | "skip" | "nudge" | "done" | "hint" | "rule" | "review" | "issue_comment" | "quick_change" | "keep_set_aside" | "drop_set_aside" | "fix_setup" | "feature" | "pull_request" | "bug_fix" | "bug_confirm" | "bug_run" | "bug_keep" | "allow_always" | "widen_policy" | "decide_batch" | "oracle_tests" | "approve_and_run" | "comment" | "comments_send" | "revision_undo" | "code_nudge" | "acceptance_at" | "preset_add" | "plan_through" | "new_project" | "undo_new_project" | "clone_repository" | "open_sample" | "sample_checks" | "decline_promotion" | "command";
 
 /**
  * Result of `speccoder actions`: what a person can do now in the
@@ -2260,6 +2260,17 @@ export type FeatureSource =
     kind: "issue";
     /** Its number. */
     number: number;
+  }
+  /**
+   * A quick change or bug that grew: its requirement verbatim, and the
+   * Ask conversations the person chose to carry.
+   */
+  | {
+    kind: "promotion";
+    /** `<unit>/<task>`. */
+    task: string;
+    /** Conversation ids (`c-…`). */
+    conversations: string[];
   };
 
 /** Result of `speccoder feature`. */
@@ -2607,6 +2618,18 @@ export interface InboxReport {
   working: WorkingRun[];
   /** Features with nothing running and nothing waiting. */
   idle: string[];
+}
+
+/** Where an inherited trace row was proven. */
+export interface Inherited {
+  /** The lower unit. */
+  unit: string;
+  /** Its requirement. */
+  requirement: string;
+  /** Its task. */
+  task: string;
+  /** The commit that holds the evidence. */
+  commit: string | null;
 }
 
 /** One detected check. */
@@ -4745,6 +4768,15 @@ export type Runnable =
    */
   | {
     kind: "sample_checks";
+  }
+  /**
+   * Decline a promotion offer: it returns only when a signal that did
+   * not hold now holds.
+   */
+  | {
+    kind: "decline_promotion";
+    /** `<unit>/<task>`. */
+    task: string;
   };
 
 /** How the sample was recorded. */
@@ -5613,6 +5645,11 @@ export interface TraceRow {
    * its earlier wording.
    */
   changed: boolean;
+  /**
+   * A tick made in the unit this one was promoted from: proven against
+   * an earlier wording, never counted as verified here.
+   */
+  inherited?: Inherited | null;
 }
 
 /** The person's three statements about a bug. */

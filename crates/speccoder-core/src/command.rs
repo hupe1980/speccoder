@@ -2285,6 +2285,23 @@ pub struct TraceRow {
     /// its earlier wording.
     #[serde(default)]
     pub changed: bool,
+    /// A tick made in the unit this one was promoted from: proven against
+    /// an earlier wording, never counted as verified here.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inherited: Option<Inherited>,
+}
+
+/// Where an inherited trace row was proven.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct Inherited {
+    /// The lower unit.
+    pub unit: String,
+    /// Its requirement.
+    pub requirement: String,
+    /// Its task.
+    pub task: String,
+    /// The commit that holds the evidence.
+    pub commit: Option<String>,
 }
 
 /// What changed since a tick: the tick's commit holds the intent

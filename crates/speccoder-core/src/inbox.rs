@@ -170,6 +170,8 @@ pub enum Kind {
     BugAlreadySatisfied,
     /// Changes a run set aside.
     Aside,
+    /// A quick change or bug that grew: start a spec from it.
+    Promote,
     /// Planning files a run cannot read yet.
     Commit,
     /// Every task done: review and hand it off.
@@ -178,7 +180,7 @@ pub enum Kind {
 
 impl Kind {
     /// Every kind, the most urgent first.
-    pub const ALL: [Self; 22] = [
+    pub const ALL: [Self; 23] = [
         Self::Unknown,
         Self::Approval,
         Self::ApprovalBatch,
@@ -199,6 +201,7 @@ impl Kind {
         Self::AutopilotDenied,
         Self::BugAlreadySatisfied,
         Self::Aside,
+        Self::Promote,
         Self::Commit,
         Self::Handoff,
     ];
@@ -227,6 +230,7 @@ impl Kind {
             Self::AutopilotDenied => "autopilot_denied",
             Self::BugAlreadySatisfied => "bug_already_satisfied",
             Self::Aside => "aside",
+            Self::Promote => "promote",
             Self::Commit => "commit",
             Self::Handoff => "handoff",
         }
@@ -257,6 +261,7 @@ impl Kind {
             | Self::Review
             | Self::BugAlreadySatisfied
             | Self::Aside
+            | Self::Promote
             | Self::Handoff => Group::ReadyToReview,
         }
     }
@@ -278,7 +283,7 @@ impl Kind {
 
     /// Every recorded name, the most urgent first.
     #[must_use]
-    pub fn names() -> [&'static str; 22] {
+    pub fn names() -> [&'static str; 23] {
         Self::ALL.map(Self::as_str)
     }
 }
@@ -312,7 +317,7 @@ mod tests {
                 !n.starts_with("bug_")
                     && !matches!(
                         *n,
-                        "ambiguous" | "autopilot_denied" | "unverified" | "yours"
+                        "ambiguous" | "autopilot_denied" | "unverified" | "yours" | "promote"
                     )
             })
             .collect();

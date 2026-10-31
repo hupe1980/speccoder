@@ -290,6 +290,44 @@ pub fn available_with(
             a.blocked = run_blocked.clone();
             out.push(a);
         }
+        // A quick change or bug that grew: start a spec from it, or not now.
+        if let (Some(r), Some(state)) = (report, crate::worktree::state_dir()) {
+            let plane = crate::worktree::project_state_dir(&state, path);
+            if let Some(o) =
+                crate::ladder::offer_for(path, &plane, &format!("{}/{}", r.feature, t.id))
+            {
+                let at = format!("{}/{}", o.unit, o.task);
+                out.push(
+                    action(
+                        "review",
+                        format!("start a spec from {}", t.id),
+                        o.signals
+                            .iter()
+                            .map(|s| s.text.clone())
+                            .collect::<Vec<_>>()
+                            .join(" · "),
+                        format!("speccoder spec promote {at}"),
+                    )
+                    .with_run(crate::ladder::promotion(
+                        &o,
+                        crate::ladder::suggested_by(&plane, &o),
+                    )),
+                );
+                out.push(
+                    action(
+                        "review",
+                        format!(
+                            "not now: keep {} a {}",
+                            t.id,
+                            if o.bug { "bug fix" } else { "quick change" }
+                        ),
+                        "offered again only when another signal holds",
+                        format!("speccoder spec promote {at} --decline"),
+                    )
+                    .with_run(Runnable::DeclinePromotion { task: at }),
+                );
+            }
+        }
         // ── task: the selected one ────────────────────────────────────
         if !matches!(
             t.state.as_str(),
@@ -532,7 +570,8 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::UndoNewProject
             | K::CloneRepository
             | K::OpenSample
-            | K::SampleChecks => Offer::Take,
+            | K::SampleChecks
+            | K::DeclinePromotion => Offer::Take,
             K::Command => Offer::Refuse,
         },
         // Decisions belong to their own prompt; what leaves the machine
@@ -578,6 +617,7 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::CloneRepository
             | K::OpenSample
             | K::SampleChecks
+            | K::DeclinePromotion
             | K::Command => Offer::Refuse,
         },
         // Its keys decide the queue's calls and switch the feature; `n`
@@ -621,6 +661,7 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::CloneRepository
             | K::OpenSample
             | K::SampleChecks
+            | K::DeclinePromotion
             | K::Command => Offer::Refuse,
         },
         Interface::CliRemedy | Interface::AcpRemedy => match kind {
@@ -666,6 +707,7 @@ pub const fn offered(interface: Interface, kind: ActionKind) -> Offer {
             | K::CloneRepository
             | K::OpenSample
             | K::SampleChecks
+            | K::DeclinePromotion
             | K::Command => Offer::Refuse,
         },
     }
@@ -1017,7 +1059,21 @@ pub fn perform_in(
             } else {
                 description.as_str()
             };
-            plan_through(root, description, source, *through, options)
+            match source {
+                // The conversations carried come from their own record;
+                // the new unit's origin is written once it exists.
+                speccoder_core::actions::FeatureSource::Promotion {
+                    task,
+                    conversations,
+                } => {
+                    let Some(s) = state else { return no_state() };
+                    let input = crate::ladder::promotion_input(root, s, description, conversations);
+                    let made = plan_through(root, &input, source, *through, options);
+                    crate::ladder::promoted(root, s, &made, task, conversations, via);
+                    made
+                }
+                _ => plan_through(root, description, source, *through, options),
+            }
         }
         Runnable::PlanThrough {
             from: speccoder_core::actions::PlanFrom::Continue,
@@ -1053,6 +1109,10 @@ pub fn perform_in(
         },
         Runnable::SampleChecks => match state {
             Some(s) => crate::sample::run_checks(s, root),
+            None => no_state(),
+        },
+        Runnable::DeclinePromotion { task } => match state {
+            Some(s) => crate::ladder::decline_task(root, s, task),
             None => no_state(),
         },
         // The interface has confirmed it (the action's `confirm`): push
