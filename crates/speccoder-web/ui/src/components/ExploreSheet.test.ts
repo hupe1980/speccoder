@@ -55,7 +55,7 @@ afterEach(() => {
 
 describe("ExploreSheet", () => {
   it("explores an idea, picks a card by its number, and makes the brief from what was kept", async () => {
-    host.app.run.mockResolvedValueOnce({ status: "needs_human", message: "3 approaches", data: explored });
+    host.app.run.mockResolvedValueOnce({ status: "ok", message: "3 approaches", data: explored });
     open({ idea: "reports people can take with them" });
     expect(await violations()).toEqual([]);
     press("Enter", { metaKey: true });
@@ -102,6 +102,36 @@ describe("ExploreSheet", () => {
     flushSync();
     expect(document.body.textContent).toContain("choose again");
     expect(button(/Make the brief again/)).toBeTruthy();
+  });
+
+  it("says why exploring further failed, though the earlier approaches stay", async () => {
+    host.get.mockImplementation(async (path?: string) => (String(path).startsWith("/api/explore/session") ? { data: explored } : { data: { sessions: [] } }));
+    host.app.run.mockResolvedValueOnce({ status: "run_failed", message: "speccoder.explore ended without its report", code: "EXPLORE-INCOMPLETE", data: explored });
+    open({ id: "ex-abc" });
+    await settle();
+    document.querySelector<HTMLDetailsElement>("details.further")!.open = true;
+    type(document.querySelector<HTMLInputElement>('input[aria-label="What should it also consider?"]')!, "also XLSX");
+    flushSync();
+    button(/^Explore further$/).click();
+    await settle();
+    await settle();
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain("ended without its report");
+    expect(document.querySelectorAll('[role="radio"]')).toHaveLength(3);
+  });
+
+  it("ignores ⌘↩ while a run is on, as the buttons do", async () => {
+    let finish: (r: unknown) => void = () => {};
+    host.app.run.mockImplementationOnce(() => new Promise((r) => (finish = r)));
+    open({ idea: "reports" });
+    await settle();
+    press("Enter", { metaKey: true });
+    flushSync();
+    press("Enter", { metaKey: true });
+    flushSync();
+    expect(host.app.run).toHaveBeenCalledTimes(1);
+    expect(document.querySelector(".working")).toBeTruthy();
+    finish({ status: "ok", message: "3 approaches", data: explored });
+    await settle();
   });
 
   it("lists explorations to pick up when it opens empty", async () => {

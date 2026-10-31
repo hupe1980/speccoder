@@ -594,3 +594,104 @@ fn openspec_explores_with_its_own_skill_and_only_reads() {
     );
     assert_eq!(payload(&res).session.as_ref().unwrap().skill, FALLBACK);
 }
+
+/// "Explore further" after a choice puts new approaches on the table: the
+/// old brief no longer starts a spec, and the person's own additions stay.
+#[test]
+fn a_resume_takes_back_the_choice_until_the_person_chooses_again() {
+    let r = repo();
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_structure(report(3));
+    let first = explore::explore_in(
+        r.path(),
+        "export reports as CSV",
+        None,
+        None,
+        state.path(),
+        d,
+        None,
+        &RunOptions::default(),
+    );
+    let id = payload(&first).session.as_ref().unwrap().id.clone();
+    let chosen = explore::choose(
+        r.path(),
+        Some(state.path()),
+        &id,
+        2,
+        &["no new dependency".to_owned()],
+        &[],
+        Via::Web,
+        "prompt",
+    );
+    let brief = payload(&chosen).brief.clone().unwrap();
+    let digest = payload(&chosen).choice.as_ref().unwrap().digest.clone();
+
+    let (f, d) = fake();
+    f.will_structure(report(4));
+    let resumed = explore::explore_in(
+        r.path(),
+        "also XLSX",
+        None,
+        Some(&id),
+        state.path(),
+        d,
+        None,
+        &RunOptions::default(),
+    );
+    assert_eq!(resumed.status(), CommandStatus::Ok, "{}", resumed.message());
+    let p = payload(&resumed);
+    assert_eq!((p.choice.is_none(), p.brief.is_none()), (true, true));
+    assert!(
+        p.constraints
+            .iter()
+            .any(|i| i.text == "no new dependency" && i.source == "person"),
+        "{:?}",
+        p.constraints
+    );
+    let stale = explore::verify_start(r.path(), state.path(), &id, &digest, &brief).unwrap_err();
+    assert_eq!(stale.code().map(|c| c.name), Some("EXPLORE-NOT-CHOSEN"));
+}
+
+/// The person saves a file while the run waits on their answer: the
+/// change is named, never blamed on the skill, and the approaches stand.
+#[test]
+fn a_file_changed_during_the_run_is_named_and_the_approaches_stand() {
+    #[derive(Debug)]
+    struct Editing(PathBuf);
+    impl Approver for Editing {
+        fn ask(&self, _: &speccoder_runtime::approvals::Presentation) -> Answer {
+            Answer::reject("no", None)
+        }
+        fn answer(&self, _: &str) -> Option<String> {
+            fs::write(self.0.join("NOTES.md"), "mine\n").unwrap();
+            Some("only the visible columns".to_owned())
+        }
+    }
+    let r = repo();
+    let state = tempfile::tempdir().unwrap();
+    let (f, d) = fake();
+    f.will_call_tool(
+        "q",
+        "ask_person",
+        json!({ "question": "Which columns matter?" }),
+    );
+    f.will_structure(report(3));
+    let res = explore::explore_in(
+        r.path(),
+        "export reports as CSV",
+        None,
+        None,
+        state.path(),
+        d,
+        None,
+        &RunOptions {
+            approver: Some(Arc::new(Editing(r.path().to_path_buf()))),
+            ..RunOptions::default()
+        },
+    );
+    assert_eq!(res.status(), CommandStatus::Ok, "{}", res.message());
+    assert_eq!(res.code().map(|c| c.name), Some("EXPLORE-WROTE"));
+    assert!(res.message().contains("NOTES.md"), "{}", res.message());
+    assert_eq!(payload(&res).session.as_ref().unwrap().reports.len(), 1);
+}

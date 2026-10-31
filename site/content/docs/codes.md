@@ -140,7 +140,7 @@ Every result that is not plainly `ok` names a code — `error[CODE]`, `stopped[C
 | [`BUG-CANDIDATE-APPLY`](#bug-candidate-apply) | error | 14 | the candidate patch is not applied |
 | [`BUG-CANDIDATE-JUDGE`](#bug-candidate-judge) | error | 2 | the candidate patch touches what judges it |
 | [`EXPLORE-EMPTY`](#explore-empty) | error | 2 | there is no idea to explore |
-| [`EXPLORE-WROTE`](#explore-wrote) | error | 21 | the exploring skill changed files in the checkout |
+| [`EXPLORE-WROTE`](#explore-wrote) | warning | 0 | files changed in the checkout during an exploring run |
 | [`EXPLORE-INCOMPLETE`](#explore-incomplete) | error | 21 | the exploration ended without approaches to choose from |
 | [`EXPLORE-BRIEF-LARGE`](#explore-brief-large) | error | 2 | the brief is larger than 16 KiB |
 | [`EXPLORE-DIGEST`](#explore-digest) | error | 1 | the stored brief changed after it was chosen |
@@ -1242,9 +1242,9 @@ There is no idea to explore.
 
 ### EXPLORE-WROTE
 
-The exploring skill changed files in the checkout.
+Files changed in the checkout during an exploring run.
 
-Exploring writes nothing outside the format's own exploration artifacts; the files the run changed are named. The session keeps its earlier approaches; review the files with git and undo them.
+Every write is refused while exploring, so these changes came from outside the run — an editor, another process. The files are named and the approaches stand; check the files with git if the changes are not yours.
 
 - `git status`
 - `git diff`

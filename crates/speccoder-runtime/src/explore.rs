@@ -98,12 +98,16 @@ fn sessions(dir: &Path) -> Vec<ExploreSession> {
 
 fn payload(dir: &Path, s: ExploreSession) -> ExplorePayload {
     let (approaches, constraints, open_questions) = s.on_the_table();
-    let brief = s
-        .choices
-        .last()
+    // A choice and its brief stand until a resume puts new approaches on
+    // the table: then the person chooses again.
+    let choice = (s.state != "open")
+        .then(|| s.choices.last().cloned())
+        .flatten();
+    let brief = choice
+        .as_ref()
         .and_then(|_| std::fs::read_to_string(brief_path(dir, &s.id)).ok());
     ExplorePayload {
-        choice: s.choices.last().cloned(),
+        choice,
         session: Some(s),
         approaches,
         constraints,
@@ -312,8 +316,9 @@ pub fn explore_in(
     let Some(CommandData::Skill(run)) = ran.data() else {
         return ran;
     };
-    // Read-only, proven: anything written outside the format's own
-    // exploration paths fails the session.
+    // Every write is refused while exploring, so a file that changed in
+    // the checkout meanwhile changed outside the run (an editor, another
+    // process): said, never blamed on the skill, and the report stands.
     let planning = crate::format::at(&root).planning();
     let wrote: Vec<String> = run
         .changes
@@ -331,7 +336,7 @@ pub fn explore_in(
             Ok(())
         }
     });
-    let ok = wrote.is_empty() && matches!(checked, Some(Ok(())));
+    let ok = matches!(checked, Some(Ok(())));
     session.runs.push(RunRef {
         run_id: run.run_id.clone(),
         kind: kind.to_owned(),
@@ -352,20 +357,19 @@ pub fn explore_in(
     let id = session.id.clone();
     let skill_name = session.skill.clone();
     let p = payload(&dir, session);
-    if !wrote.is_empty() {
-        return result(
-            CommandStatus::RunFailed,
+    match checked {
+        // Approaches to choose from: the next step is the person's, nothing
+        // is blocked.
+        Some(Ok(())) if !wrote.is_empty() => result(
+            CommandStatus::Ok,
             &format!(
-                "{skill_name} wrote while exploring ({}) — exploring writes nothing; the session keeps its earlier approaches",
+                "{} approaches from {skill_name} — choose one: `speccoder spec explore choose N {id}`; {} changed in the checkout during the run, not by it (exploring writes nothing)",
+                p.approaches.len(),
                 wrote.join(", ")
             ),
             p,
         )
-        .with_code("EXPLORE-WROTE");
-    }
-    match checked {
-        // Approaches to choose from: the next step is the person's, nothing
-        // is blocked.
+        .with_code("EXPLORE-WROTE"),
         Some(Ok(())) => result(
             CommandStatus::Ok,
             &format!(
@@ -522,12 +526,18 @@ pub fn verify_start(
             ),
         )));
     }
-    let Some(chosen) = s.choices.last() else {
-        return Err(Box::new(refuse(
-            CommandStatus::UsageError,
-            "EXPLORE-NOT-CHOSEN",
-            &format!("choose an approach first: `speccoder spec explore choose N {id}`"),
-        )));
+    let chosen = match (
+        core::next_state(&s.state, core::Event::Start),
+        s.choices.last(),
+    ) {
+        (Ok(_), Some(c)) => c,
+        _ => {
+            return Err(Box::new(refuse(
+                CommandStatus::UsageError,
+                "EXPLORE-NOT-CHOSEN",
+                &format!("choose an approach first: `speccoder spec explore choose N {id}`"),
+            )));
+        }
     };
     let stored = std::fs::read_to_string(brief_path(&dir, id)).unwrap_or_default();
     let now_digest = core::body_digest(&stored, crate::integrity::sha256_hex);

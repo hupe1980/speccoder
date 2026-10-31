@@ -24,8 +24,11 @@
 
   let more = $state("");
   let cards = $state<HTMLElement>();
-  /** Why the last run gave nothing to choose from, in its own words. */
+  /** Why the last run failed, in its own words. */
   let failed = $state<string | null>(null);
+  /** What the last run noticed besides its approaches (files someone else
+   *  changed meanwhile). */
+  let note = $state<string | null>(null);
 
   const session = $derived(p?.session ?? null);
   const approaches = $derived(p?.approaches ?? []);
@@ -68,7 +71,10 @@
    *  to choose from — said here, not in a toast. */
   function answered(r: Reply<ExplorePayload> | null) {
     if (r?.data?.session) take(r.data);
-    failed = r && !r.data?.approaches?.length ? r.message : null;
+    // A failed "Explore further" still carries the earlier approaches: the
+    // status says it failed, not an empty list.
+    failed = r && (r.status !== "ok" || !r.data?.approaches?.length) ? r.message : null;
+    note = r?.status === "ok" && r.code ? r.message : null;
     waiting = null;
   }
 
@@ -143,6 +149,8 @@
       cards?.querySelectorAll<HTMLElement>("[role=radio]")[picked]?.focus();
     } else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
+      // As the buttons: nothing while a run is on.
+      if (waiting || app.job?.running) return;
       if (!session) void explore();
       else if (brief && !edited) start();
       else if (approaches.length) void choose();
@@ -188,18 +196,20 @@
       {/if}
       {#if failed}
         <p class="d-warn attention" role="alert"><Icon name="exclaim" size={13} /> {failed}</p>
+      {:else if note}
+        <p class="d-warn" role="status"><Icon name="exclaim" size={13} /> {note}</p>
       {/if}
 
       <div class="d-field">
         <span class="d-label" id="ex-approaches">Approaches <span class="muted">— the model's; you choose</span></span>
         <div class="cards" role="radiogroup" aria-labelledby="ex-approaches" bind:this={cards}>
-          {#each approaches as a, i (a.title)}
+          {#each approaches as a, i (`${i}:${a.title}`)}
             <div class="card" class:on={picked === i} role="radio" aria-checked={picked === i} tabindex={picked === i ? 0 : -1} onclick={() => (picked = i)} onkeydown={(e) => (e.key === " " || e.key === "Enter") && !e.metaKey && !e.ctrlKey && (e.preventDefault(), (picked = i))}>
               <span class="n" aria-hidden="true">{i + 1}</span>
               <strong>{a.title}</strong>
               <p>{a.summary}</p>
-              {#each a.tradeoffs as t (t)}<span class="tag give"><Icon name="minus" size={10} /> {t}</span>{/each}
-              {#each a.risks as r (r)}<span class="tag risk"><Icon name="exclaim" size={10} /> {r}</span>{/each}
+              {#each a.tradeoffs as t, j (j)}<span class="tag give"><Icon name="minus" size={10} /> {t}</span>{/each}
+              {#each a.risks as r, j (j)}<span class="tag risk"><Icon name="exclaim" size={10} /> {r}</span>{/each}
             </div>
           {/each}
         </div>

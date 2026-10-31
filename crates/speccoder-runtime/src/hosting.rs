@@ -174,7 +174,8 @@ pub(crate) fn run_exploring(
     secret: Option<&str>,
     options: &RunOptions,
 ) -> (CommandResult, serde_json::Value) {
-    let reviews = crate::review::snapshot(path);
+    // No review record is restored afterwards: exploring may not write
+    // one, so a restore could only undo the person's own.
     let mut report = serde_json::Value::Null;
     let result = run_unguarded(
         path,
@@ -188,7 +189,6 @@ pub(crate) fn run_exploring(
         Mode::Explore,
         Some(&mut report),
     );
-    let _ = crate::review::restore(&reviews);
     (result, report)
 }
 

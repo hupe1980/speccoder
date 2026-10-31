@@ -1267,10 +1267,10 @@ pub const CATALOG: &[Entry] = &[
     ),
     entry!(
         "EXPLORE-WROTE",
-        E,
-        S::RunFailed,
-        "the exploring skill changed files in the checkout",
-        "Exploring writes nothing outside the format's own exploration artifacts; the files the run changed are named. The session keeps its earlier approaches; review the files with git and undo them.",
+        W,
+        S::Ok,
+        "files changed in the checkout during an exploring run",
+        "Every write is refused while exploring, so these changes came from outside the run — an editor, another process. The files are named and the approaches stand; check the files with git if the changes are not yours.",
         ["git status", "git diff"]
     ),
     entry!(

@@ -203,7 +203,8 @@ pub struct ExplorePayload {
 impl ExploreSession {
     /// What the person chooses from now: the last report's approaches and
     /// its constraints and open questions (with the questions nobody
-    /// could answer).
+    /// could answer), and what the person added at their last choice —
+    /// a resume keeps their words.
     #[must_use]
     pub fn on_the_table(&self) -> (Vec<Approach>, Vec<Item>, Vec<Item>) {
         let Some(r) = self.reports.last() else {
@@ -219,11 +220,20 @@ impl ExploreSession {
                 questions.push(item(&q.question, "nobody"));
             }
         }
-        (
-            r.approaches.clone(),
-            r.constraints.iter().map(|c| item(c, "model")).collect(),
-            questions,
-        )
+        let mut constraints: Vec<Item> = r.constraints.iter().map(|c| item(c, "model")).collect();
+        if let Some(c) = self.choices.last() {
+            for (kept, mine) in [
+                (&mut constraints, &c.constraints),
+                (&mut questions, &c.open_questions),
+            ] {
+                for i in mine.iter().filter(|i| i.source == "person") {
+                    if !kept.iter().any(|k| k.text == i.text) {
+                        kept.push(i.clone());
+                    }
+                }
+            }
+        }
+        (r.approaches.clone(), constraints, questions)
     }
 
     /// Its line in a list.
